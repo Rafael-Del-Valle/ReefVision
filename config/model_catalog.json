@@ -1,0 +1,3044 @@
+{
+  "schema_version": 2,
+  "catalog_version": "2.0.0",
+  "models": [
+    {
+      "catalog_id": "ultralytics/yolo11/detect/n",
+      "display_name": "YOLO11 Nano",
+      "display_summary": "Official YOLO11 Nano pretrained object detector, managed and verified by ReefVision.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLO11",
+      "model_variant": "detect",
+      "model_size": "n",
+      "task": "detect",
+      "trainable": true,
+      "inference": true,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolo11n.pt",
+      "checkpoint_source": "trusted_https_release",
+      "expected_checksum": "0ebbc80d4a7680d14987a577cd21342b65ecfd94632bd9a8da63ae6417644ee1",
+      "expected_file_size": 5613764,
+      "model_weight_license": "Official Ultralytics YOLO11 pretrained weights; review Ultralytics licensing before use.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": "ultralytics-base",
+      "required_package_versions": [
+        "python==3.12.x",
+        "torch==2.5.1+cu121",
+        "torchvision==0.20.1+cu121",
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 8.0,
+      "minimum_recommended_vram_gb": 4.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "pinned_stack_preflight_available",
+      "deprecation_status": "active",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Installation requires network access for the initial trusted download.",
+        "Ultralytics must be available in the bundled provider runtime before training or inference."
+      ],
+      "installation_state": "Not Installed",
+      "installation_reason": "The verified pretrained checkpoint is not installed yet.",
+      "advanced_only": false,
+      "requires_confirmation": true,
+      "selection_kind": "managed_catalog_model",
+      "architecture_reference": "yolo11n.yaml",
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLO11",
+      "variant": "n",
+      "inference_supported": true,
+      "download_source_type": "trusted_https_release",
+      "expected_files": [
+        {
+          "filename": "yolo11n.pt",
+          "source_url": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n.pt",
+          "revision": "ultralytics-assets-v8.3.0",
+          "sha256": "0ebbc80d4a7680d14987a577cd21342b65ecfd94632bd9a8da63ae6417644ee1",
+          "size_bytes": 5613764
+        }
+      ],
+      "expected_size": 5613764,
+      "license_summary": "Ultralytics pretrained weights; AGPL-3.0 or an applicable Ultralytics enterprise license.",
+      "provider_pack_id": "ultralytics-base",
+      "recommended_ram": 8.0,
+      "recommended_vram": 4.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "available"
+    },
+    {
+      "catalog_id": "ultralytics/yolo11/detect/s",
+      "display_name": "YOLO11 Small",
+      "display_summary": "Official YOLO11 Small pretrained object detector, managed and verified by ReefVision.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLO11",
+      "model_variant": "detect",
+      "model_size": "s",
+      "task": "detect",
+      "trainable": true,
+      "inference": true,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolo11s.pt",
+      "checkpoint_source": "trusted_https_release",
+      "expected_checksum": "85a76fe86dd8afe384648546b56a7a78580c7cb7b404fc595f97969322d502d5",
+      "expected_file_size": 19313732,
+      "model_weight_license": "Official Ultralytics YOLO11 pretrained weights; review Ultralytics licensing before use.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": "ultralytics-base",
+      "required_package_versions": [
+        "python==3.12.x",
+        "torch==2.5.1+cu121",
+        "torchvision==0.20.1+cu121",
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 10.0,
+      "minimum_recommended_vram_gb": 6.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "pinned_stack_preflight_available",
+      "deprecation_status": "active",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Installation requires network access for the initial trusted download.",
+        "Ultralytics must be available in the bundled provider runtime before training or inference."
+      ],
+      "installation_state": "Not Installed",
+      "installation_reason": "The verified pretrained checkpoint is not installed yet.",
+      "advanced_only": false,
+      "requires_confirmation": true,
+      "selection_kind": "managed_catalog_model",
+      "architecture_reference": "yolo11s.yaml",
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLO11",
+      "variant": "s",
+      "inference_supported": true,
+      "download_source_type": "trusted_https_release",
+      "expected_files": [
+        {
+          "filename": "yolo11s.pt",
+          "source_url": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11s.pt",
+          "revision": "ultralytics-assets-v8.3.0",
+          "sha256": "85a76fe86dd8afe384648546b56a7a78580c7cb7b404fc595f97969322d502d5",
+          "size_bytes": 19313732
+        }
+      ],
+      "expected_size": 19313732,
+      "license_summary": "Ultralytics pretrained weights; AGPL-3.0 or an applicable Ultralytics enterprise license.",
+      "provider_pack_id": "ultralytics-base",
+      "recommended_ram": 10.0,
+      "recommended_vram": 6.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "available"
+    },
+    {
+      "catalog_id": "ultralytics/yolo11/detect/m",
+      "display_name": "YOLO11 Medium",
+      "display_summary": "Official YOLO11 Medium pretrained object detector, managed and verified by ReefVision.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLO11",
+      "model_variant": "detect",
+      "model_size": "m",
+      "task": "detect",
+      "trainable": true,
+      "inference": true,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolo11m.pt",
+      "checkpoint_source": "trusted_https_release",
+      "expected_checksum": "d5ffc1a674953a08e11a8d21e022781b1b23a19b730afc309290bd9fb5305b95",
+      "expected_file_size": 40684120,
+      "model_weight_license": "Official Ultralytics YOLO11 pretrained weights; review Ultralytics licensing before use.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": "ultralytics-base",
+      "required_package_versions": [
+        "python==3.12.x",
+        "torch==2.5.1+cu121",
+        "torchvision==0.20.1+cu121",
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 12.0,
+      "minimum_recommended_vram_gb": 8.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "pinned_stack_preflight_available",
+      "deprecation_status": "active",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Installation requires network access for the initial trusted download.",
+        "Ultralytics must be available in the bundled provider runtime before training or inference."
+      ],
+      "installation_state": "Not Installed",
+      "installation_reason": "The verified pretrained checkpoint is not installed yet.",
+      "advanced_only": false,
+      "requires_confirmation": true,
+      "selection_kind": "managed_catalog_model",
+      "architecture_reference": "yolo11m.yaml",
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLO11",
+      "variant": "m",
+      "inference_supported": true,
+      "download_source_type": "trusted_https_release",
+      "expected_files": [
+        {
+          "filename": "yolo11m.pt",
+          "source_url": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11m.pt",
+          "revision": "ultralytics-assets-v8.3.0",
+          "sha256": "d5ffc1a674953a08e11a8d21e022781b1b23a19b730afc309290bd9fb5305b95",
+          "size_bytes": 40684120
+        }
+      ],
+      "expected_size": 40684120,
+      "license_summary": "Ultralytics pretrained weights; AGPL-3.0 or an applicable Ultralytics enterprise license.",
+      "provider_pack_id": "ultralytics-base",
+      "recommended_ram": 12.0,
+      "recommended_vram": 8.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "available"
+    },
+    {
+      "catalog_id": "ultralytics/yolo11/detect/l",
+      "display_name": "YOLO11 Large",
+      "display_summary": "Official YOLO11 Large pretrained object detector, managed and verified by ReefVision.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLO11",
+      "model_variant": "detect",
+      "model_size": "l",
+      "task": "detect",
+      "trainable": true,
+      "inference": true,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolo11l.pt",
+      "checkpoint_source": "trusted_https_release",
+      "expected_checksum": "9ebd0e09d59811db4b1d61e2bc6730649608b1ac47f8dd01e2da6bca7c20023f",
+      "expected_file_size": 51387343,
+      "model_weight_license": "Official Ultralytics YOLO11 pretrained weights; review Ultralytics licensing before use.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": "ultralytics-base",
+      "required_package_versions": [
+        "python==3.12.x",
+        "torch==2.5.1+cu121",
+        "torchvision==0.20.1+cu121",
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 16.0,
+      "minimum_recommended_vram_gb": 10.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "pinned_stack_preflight_available",
+      "deprecation_status": "active",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Installation requires network access for the initial trusted download.",
+        "Ultralytics must be available in the bundled provider runtime before training or inference."
+      ],
+      "installation_state": "Not Installed",
+      "installation_reason": "The verified pretrained checkpoint is not installed yet.",
+      "advanced_only": false,
+      "requires_confirmation": true,
+      "selection_kind": "managed_catalog_model",
+      "architecture_reference": "yolo11l.yaml",
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLO11",
+      "variant": "l",
+      "inference_supported": true,
+      "download_source_type": "trusted_https_release",
+      "expected_files": [
+        {
+          "filename": "yolo11l.pt",
+          "source_url": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11l.pt",
+          "revision": "ultralytics-assets-v8.3.0",
+          "sha256": "9ebd0e09d59811db4b1d61e2bc6730649608b1ac47f8dd01e2da6bca7c20023f",
+          "size_bytes": 51387343
+        }
+      ],
+      "expected_size": 51387343,
+      "license_summary": "Ultralytics pretrained weights; AGPL-3.0 or an applicable Ultralytics enterprise license.",
+      "provider_pack_id": "ultralytics-base",
+      "recommended_ram": 16.0,
+      "recommended_vram": 10.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "available"
+    },
+    {
+      "catalog_id": "ultralytics/yolo11/detect/x",
+      "display_name": "YOLO11 X",
+      "display_summary": "Official YOLO11 X pretrained object detector, managed and verified by ReefVision.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLO11",
+      "model_variant": "detect",
+      "model_size": "x",
+      "task": "detect",
+      "trainable": true,
+      "inference": true,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolo11x.pt",
+      "checkpoint_source": "trusted_https_release",
+      "expected_checksum": "7bc158aa95c0ebfdd87f70f01653c1131b93e92522dbe15c228bcd742e773a24",
+      "expected_file_size": 114636239,
+      "model_weight_license": "Official Ultralytics YOLO11 pretrained weights; review Ultralytics licensing before use.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": "ultralytics-base",
+      "required_package_versions": [
+        "python==3.12.x",
+        "torch==2.5.1+cu121",
+        "torchvision==0.20.1+cu121",
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 24.0,
+      "minimum_recommended_vram_gb": 12.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "pinned_stack_preflight_available",
+      "deprecation_status": "active",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Installation requires network access for the initial trusted download.",
+        "Ultralytics must be available in the bundled provider runtime before training or inference."
+      ],
+      "installation_state": "Not Installed",
+      "installation_reason": "The verified pretrained checkpoint is not installed yet.",
+      "advanced_only": false,
+      "requires_confirmation": true,
+      "selection_kind": "managed_catalog_model",
+      "architecture_reference": "yolo11x.yaml",
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLO11",
+      "variant": "x",
+      "inference_supported": true,
+      "download_source_type": "trusted_https_release",
+      "expected_files": [
+        {
+          "filename": "yolo11x.pt",
+          "source_url": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11x.pt",
+          "revision": "ultralytics-assets-v8.3.0",
+          "sha256": "7bc158aa95c0ebfdd87f70f01653c1131b93e92522dbe15c228bcd742e773a24",
+          "size_bytes": 114636239
+        }
+      ],
+      "expected_size": 114636239,
+      "license_summary": "Ultralytics pretrained weights; AGPL-3.0 or an applicable Ultralytics enterprise license.",
+      "provider_pack_id": "ultralytics-base",
+      "recommended_ram": 24.0,
+      "recommended_vram": 12.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "available"
+    },
+    {
+      "catalog_id": "ultralytics/yolov8/detect/n",
+      "display_name": "YOLOv8 Nano",
+      "display_summary": "Fastest YOLOv8 detection architecture preset for compatibility workflows.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLOv8",
+      "model_variant": "detect",
+      "model_size": "n",
+      "task": "detect",
+      "trainable": true,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolov8n.yaml",
+      "checkpoint_source": "bundled_ultralytics_architecture",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "No pretrained weights are bundled; ReefVision initializes this architecture locally.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "python==3.12.x",
+        "torch==2.5.1+cu121",
+        "torchvision==0.20.1+cu121",
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 8.0,
+      "minimum_recommended_vram_gb": 4.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "pinned_stack_preflight_available",
+      "deprecation_status": "active",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "This preset starts from a bundled architecture definition rather than an installed pretrained checkpoint.",
+        "Training execution is currently limited to object detection in ReefVision."
+      ],
+      "installation_state": "Ready",
+      "installation_reason": "Bundled architecture preset resolves offline without downloading weights.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "builtin_architecture",
+      "architecture_reference": "yolov8n.yaml",
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLOv8",
+      "variant": "n",
+      "inference_supported": false,
+      "download_source_type": "bundled_ultralytics_architecture",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "No pretrained weights are bundled; ReefVision initializes this architecture locally.",
+      "provider_pack_id": null,
+      "recommended_ram": 8.0,
+      "recommended_vram": 4.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "available"
+    },
+    {
+      "catalog_id": "ultralytics/yolov8/detect/s",
+      "display_name": "YOLOv8 Small",
+      "display_summary": "Smaller balanced YOLOv8 detection architecture preset for compatibility workflows.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLOv8",
+      "model_variant": "detect",
+      "model_size": "s",
+      "task": "detect",
+      "trainable": true,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolov8s.yaml",
+      "checkpoint_source": "bundled_ultralytics_architecture",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "No pretrained weights are bundled; ReefVision initializes this architecture locally.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "python==3.12.x",
+        "torch==2.5.1+cu121",
+        "torchvision==0.20.1+cu121",
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 10.0,
+      "minimum_recommended_vram_gb": 6.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "pinned_stack_preflight_available",
+      "deprecation_status": "active",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "This preset starts from a bundled architecture definition rather than an installed pretrained checkpoint.",
+        "Training execution is currently limited to object detection in ReefVision."
+      ],
+      "installation_state": "Ready",
+      "installation_reason": "Bundled architecture preset resolves offline without downloading weights.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "builtin_architecture",
+      "architecture_reference": "yolov8s.yaml",
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLOv8",
+      "variant": "s",
+      "inference_supported": false,
+      "download_source_type": "bundled_ultralytics_architecture",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "No pretrained weights are bundled; ReefVision initializes this architecture locally.",
+      "provider_pack_id": null,
+      "recommended_ram": 10.0,
+      "recommended_vram": 6.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "available"
+    },
+    {
+      "catalog_id": "ultralytics/yolov8/detect/m",
+      "display_name": "YOLOv8 Medium",
+      "display_summary": "Balanced YOLOv8 detection architecture preset for compatibility workflows.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLOv8",
+      "model_variant": "detect",
+      "model_size": "m",
+      "task": "detect",
+      "trainable": true,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolov8m.yaml",
+      "checkpoint_source": "bundled_ultralytics_architecture",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "No pretrained weights are bundled; ReefVision initializes this architecture locally.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "python==3.12.x",
+        "torch==2.5.1+cu121",
+        "torchvision==0.20.1+cu121",
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 12.0,
+      "minimum_recommended_vram_gb": 8.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "pinned_stack_preflight_available",
+      "deprecation_status": "active",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "This preset starts from a bundled architecture definition rather than an installed pretrained checkpoint.",
+        "Training execution is currently limited to object detection in ReefVision."
+      ],
+      "installation_state": "Ready",
+      "installation_reason": "Bundled architecture preset resolves offline without downloading weights.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "builtin_architecture",
+      "architecture_reference": "yolov8m.yaml",
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLOv8",
+      "variant": "m",
+      "inference_supported": false,
+      "download_source_type": "bundled_ultralytics_architecture",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "No pretrained weights are bundled; ReefVision initializes this architecture locally.",
+      "provider_pack_id": null,
+      "recommended_ram": 12.0,
+      "recommended_vram": 8.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "available"
+    },
+    {
+      "catalog_id": "ultralytics/yolov8/detect/l",
+      "display_name": "YOLOv8 Large",
+      "display_summary": "Higher-capacity YOLOv8 detection architecture preset for compatibility workflows.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLOv8",
+      "model_variant": "detect",
+      "model_size": "l",
+      "task": "detect",
+      "trainable": true,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolov8l.yaml",
+      "checkpoint_source": "bundled_ultralytics_architecture",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "No pretrained weights are bundled; ReefVision initializes this architecture locally.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "python==3.12.x",
+        "torch==2.5.1+cu121",
+        "torchvision==0.20.1+cu121",
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 16.0,
+      "minimum_recommended_vram_gb": 10.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "pinned_stack_preflight_available",
+      "deprecation_status": "active",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "This preset starts from a bundled architecture definition rather than an installed pretrained checkpoint.",
+        "Training execution is currently limited to object detection in ReefVision."
+      ],
+      "installation_state": "Ready",
+      "installation_reason": "Bundled architecture preset resolves offline without downloading weights.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "builtin_architecture",
+      "architecture_reference": "yolov8l.yaml",
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLOv8",
+      "variant": "l",
+      "inference_supported": false,
+      "download_source_type": "bundled_ultralytics_architecture",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "No pretrained weights are bundled; ReefVision initializes this architecture locally.",
+      "provider_pack_id": null,
+      "recommended_ram": 16.0,
+      "recommended_vram": 10.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "available"
+    },
+    {
+      "catalog_id": "ultralytics/yolov8/detect/x",
+      "display_name": "YOLOv8 X",
+      "display_summary": "Largest YOLOv8 detection architecture preset for compatibility workflows.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLOv8",
+      "model_variant": "detect",
+      "model_size": "x",
+      "task": "detect",
+      "trainable": true,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolov8x.yaml",
+      "checkpoint_source": "bundled_ultralytics_architecture",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "No pretrained weights are bundled; ReefVision initializes this architecture locally.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "python==3.12.x",
+        "torch==2.5.1+cu121",
+        "torchvision==0.20.1+cu121",
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 24.0,
+      "minimum_recommended_vram_gb": 12.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "pinned_stack_preflight_available",
+      "deprecation_status": "active",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "This preset starts from a bundled architecture definition rather than an installed pretrained checkpoint.",
+        "Training execution is currently limited to object detection in ReefVision."
+      ],
+      "installation_state": "Ready",
+      "installation_reason": "Bundled architecture preset resolves offline without downloading weights.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "builtin_architecture",
+      "architecture_reference": "yolov8x.yaml",
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLOv8",
+      "variant": "x",
+      "inference_supported": false,
+      "download_source_type": "bundled_ultralytics_architecture",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "No pretrained weights are bundled; ReefVision initializes this architecture locally.",
+      "provider_pack_id": null,
+      "recommended_ram": 24.0,
+      "recommended_vram": 12.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "available"
+    },
+    {
+      "catalog_id": "ultralytics/yolo11/segment/n",
+      "display_name": "YOLO11 Nano Segmentation",
+      "display_summary": "Instance segmentation catalog stub for future validated YOLO11 segmentation packaging.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLO11",
+      "model_variant": "segment",
+      "model_size": "n",
+      "task": "segment",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolo11n-seg.yaml",
+      "checkpoint_source": "planned_catalog_entry",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 8.0,
+      "minimum_recommended_vram_gb": 4.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Segmentation training and packaged checkpoint installation have not been validated in ReefVision yet."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "Segmentation model packaging is cataloged but not yet verified for plug-and-play desktop use.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLO11",
+      "variant": "n",
+      "inference_supported": false,
+      "download_source_type": "planned_catalog_entry",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "provider_pack_id": null,
+      "recommended_ram": 8.0,
+      "recommended_vram": 4.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "ultralytics/yolo11/segment/s",
+      "display_name": "YOLO11 Small Segmentation",
+      "display_summary": "Instance segmentation catalog stub for future validated YOLO11 segmentation packaging.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLO11",
+      "model_variant": "segment",
+      "model_size": "s",
+      "task": "segment",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolo11s-seg.yaml",
+      "checkpoint_source": "planned_catalog_entry",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 10.0,
+      "minimum_recommended_vram_gb": 6.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Segmentation training and packaged checkpoint installation have not been validated in ReefVision yet."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "Segmentation model packaging is cataloged but not yet verified for plug-and-play desktop use.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLO11",
+      "variant": "s",
+      "inference_supported": false,
+      "download_source_type": "planned_catalog_entry",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "provider_pack_id": null,
+      "recommended_ram": 10.0,
+      "recommended_vram": 6.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "ultralytics/yolo11/segment/m",
+      "display_name": "YOLO11 Medium Segmentation",
+      "display_summary": "Instance segmentation catalog stub for future validated YOLO11 segmentation packaging.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLO11",
+      "model_variant": "segment",
+      "model_size": "m",
+      "task": "segment",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolo11m-seg.yaml",
+      "checkpoint_source": "planned_catalog_entry",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 12.0,
+      "minimum_recommended_vram_gb": 8.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Segmentation training and packaged checkpoint installation have not been validated in ReefVision yet."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "Segmentation model packaging is cataloged but not yet verified for plug-and-play desktop use.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLO11",
+      "variant": "m",
+      "inference_supported": false,
+      "download_source_type": "planned_catalog_entry",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "provider_pack_id": null,
+      "recommended_ram": 12.0,
+      "recommended_vram": 8.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "ultralytics/yolo11/segment/l",
+      "display_name": "YOLO11 Large Segmentation",
+      "display_summary": "Instance segmentation catalog stub for future validated YOLO11 segmentation packaging.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLO11",
+      "model_variant": "segment",
+      "model_size": "l",
+      "task": "segment",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolo11l-seg.yaml",
+      "checkpoint_source": "planned_catalog_entry",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 16.0,
+      "minimum_recommended_vram_gb": 10.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Segmentation training and packaged checkpoint installation have not been validated in ReefVision yet."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "Segmentation model packaging is cataloged but not yet verified for plug-and-play desktop use.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLO11",
+      "variant": "l",
+      "inference_supported": false,
+      "download_source_type": "planned_catalog_entry",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "provider_pack_id": null,
+      "recommended_ram": 16.0,
+      "recommended_vram": 10.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "ultralytics/yolo11/segment/x",
+      "display_name": "YOLO11 X Segmentation",
+      "display_summary": "Instance segmentation catalog stub for future validated YOLO11 segmentation packaging.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLO11",
+      "model_variant": "segment",
+      "model_size": "x",
+      "task": "segment",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolo11x-seg.yaml",
+      "checkpoint_source": "planned_catalog_entry",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 24.0,
+      "minimum_recommended_vram_gb": 12.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Segmentation training and packaged checkpoint installation have not been validated in ReefVision yet."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "Segmentation model packaging is cataloged but not yet verified for plug-and-play desktop use.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLO11",
+      "variant": "x",
+      "inference_supported": false,
+      "download_source_type": "planned_catalog_entry",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "provider_pack_id": null,
+      "recommended_ram": 24.0,
+      "recommended_vram": 12.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "ultralytics/yolov8/segment/n",
+      "display_name": "YOLOv8 Nano Segmentation",
+      "display_summary": "Instance segmentation catalog stub for future validated YOLOv8 segmentation packaging.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLOv8",
+      "model_variant": "segment",
+      "model_size": "n",
+      "task": "segment",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolov8n-seg.yaml",
+      "checkpoint_source": "planned_catalog_entry",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 8.0,
+      "minimum_recommended_vram_gb": 4.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Segmentation training and packaged checkpoint installation have not been validated in ReefVision yet."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "Segmentation model packaging is cataloged but not yet verified for plug-and-play desktop use.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLOv8",
+      "variant": "n",
+      "inference_supported": false,
+      "download_source_type": "planned_catalog_entry",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "provider_pack_id": null,
+      "recommended_ram": 8.0,
+      "recommended_vram": 4.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "ultralytics/yolov8/segment/s",
+      "display_name": "YOLOv8 Small Segmentation",
+      "display_summary": "Instance segmentation catalog stub for future validated YOLOv8 segmentation packaging.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLOv8",
+      "model_variant": "segment",
+      "model_size": "s",
+      "task": "segment",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolov8s-seg.yaml",
+      "checkpoint_source": "planned_catalog_entry",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 10.0,
+      "minimum_recommended_vram_gb": 6.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Segmentation training and packaged checkpoint installation have not been validated in ReefVision yet."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "Segmentation model packaging is cataloged but not yet verified for plug-and-play desktop use.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLOv8",
+      "variant": "s",
+      "inference_supported": false,
+      "download_source_type": "planned_catalog_entry",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "provider_pack_id": null,
+      "recommended_ram": 10.0,
+      "recommended_vram": 6.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "ultralytics/yolov8/segment/m",
+      "display_name": "YOLOv8 Medium Segmentation",
+      "display_summary": "Instance segmentation catalog stub for future validated YOLOv8 segmentation packaging.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLOv8",
+      "model_variant": "segment",
+      "model_size": "m",
+      "task": "segment",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolov8m-seg.yaml",
+      "checkpoint_source": "planned_catalog_entry",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 12.0,
+      "minimum_recommended_vram_gb": 8.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Segmentation training and packaged checkpoint installation have not been validated in ReefVision yet."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "Segmentation model packaging is cataloged but not yet verified for plug-and-play desktop use.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLOv8",
+      "variant": "m",
+      "inference_supported": false,
+      "download_source_type": "planned_catalog_entry",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "provider_pack_id": null,
+      "recommended_ram": 12.0,
+      "recommended_vram": 8.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "ultralytics/yolov8/segment/l",
+      "display_name": "YOLOv8 Large Segmentation",
+      "display_summary": "Instance segmentation catalog stub for future validated YOLOv8 segmentation packaging.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLOv8",
+      "model_variant": "segment",
+      "model_size": "l",
+      "task": "segment",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolov8l-seg.yaml",
+      "checkpoint_source": "planned_catalog_entry",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 16.0,
+      "minimum_recommended_vram_gb": 10.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Segmentation training and packaged checkpoint installation have not been validated in ReefVision yet."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "Segmentation model packaging is cataloged but not yet verified for plug-and-play desktop use.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLOv8",
+      "variant": "l",
+      "inference_supported": false,
+      "download_source_type": "planned_catalog_entry",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "provider_pack_id": null,
+      "recommended_ram": 16.0,
+      "recommended_vram": 10.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "ultralytics/yolov8/segment/x",
+      "display_name": "YOLOv8 X Segmentation",
+      "display_summary": "Instance segmentation catalog stub for future validated YOLOv8 segmentation packaging.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLOv8",
+      "model_variant": "segment",
+      "model_size": "x",
+      "task": "segment",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolov8x-seg.yaml",
+      "checkpoint_source": "planned_catalog_entry",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "amp"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 24.0,
+      "minimum_recommended_vram_gb": 12.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Segmentation training and packaged checkpoint installation have not been validated in ReefVision yet."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "Segmentation model packaging is cataloged but not yet verified for plug-and-play desktop use.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLOv8",
+      "variant": "x",
+      "inference_supported": false,
+      "download_source_type": "planned_catalog_entry",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "provider_pack_id": null,
+      "recommended_ram": 24.0,
+      "recommended_vram": 12.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "ultralytics/rtdetr/l",
+      "display_name": "RT-DETR Large",
+      "display_summary": "RT-DETR catalog stub for future validated dense-object detector integration.",
+      "category": "pretrained_catalog",
+      "provider": "rt_detr",
+      "provider_version": "planned",
+      "architecture_family": "RT-DETR",
+      "model_variant": "detect",
+      "model_size": "l",
+      "task": "detect",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "rtdetr-l.yaml",
+      "checkpoint_source": "planned_catalog_entry",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "package_license": "Would depend on the validated RT-DETR runtime path.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 12.0,
+      "minimum_recommended_vram_gb": 8.0,
+      "desktop_package_status": "not_packaged",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "RT-DETR is not yet implemented as a formal ReefVision provider."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "RT-DETR support is cataloged but not yet packaged or validated in ReefVision.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "rt_detr",
+      "architecture": "RT-DETR",
+      "variant": "l",
+      "inference_supported": false,
+      "download_source_type": "planned_catalog_entry",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "provider_pack_id": null,
+      "recommended_ram": 12.0,
+      "recommended_vram": 8.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "not_packaged",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "ultralytics/rtdetr/x",
+      "display_name": "RT-DETR XLarge",
+      "display_summary": "RT-DETR catalog stub for future validated dense-object detector integration.",
+      "category": "pretrained_catalog",
+      "provider": "rt_detr",
+      "provider_version": "planned",
+      "architecture_family": "RT-DETR",
+      "model_variant": "detect",
+      "model_size": "x",
+      "task": "detect",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "rtdetr-x.yaml",
+      "checkpoint_source": "planned_catalog_entry",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "package_license": "Would depend on the validated RT-DETR runtime path.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 16.0,
+      "minimum_recommended_vram_gb": 10.0,
+      "desktop_package_status": "not_packaged",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "RT-DETR is not yet implemented as a formal ReefVision provider."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "RT-DETR support is cataloged but not yet packaged or validated in ReefVision.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "rt_detr",
+      "architecture": "RT-DETR",
+      "variant": "x",
+      "inference_supported": false,
+      "download_source_type": "planned_catalog_entry",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "provider_pack_id": null,
+      "recommended_ram": 16.0,
+      "recommended_vram": 10.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "not_packaged",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "transformers/grounding_dino/tiny",
+      "display_name": "Grounding DINO Tiny",
+      "display_summary": "Prompt-assist text-guided detection catalog stub for future validated packaging.",
+      "category": "pretrained_catalog",
+      "provider": "grounding_dino",
+      "provider_version": "planned",
+      "architecture_family": "Grounding DINO",
+      "model_variant": "text_guided_detection",
+      "model_size": "tiny",
+      "task": "open_vocabulary_detect",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": true,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "grounding-dino-tiny",
+      "checkpoint_source": "planned_provider_pack",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Checkpoint redistribution terms must be reviewed before packaging.",
+      "package_license": "Would depend on a pinned Transformers prompt-model pack.",
+      "required_provider_pack": "prompt_models",
+      "required_package_versions": [
+        "transformers (not pinned)",
+        "accelerate (not pinned)",
+        "safetensors (not pinned)"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "fp16"
+      ],
+      "expected_input_size": null,
+      "minimum_recommended_ram_gb": 12.0,
+      "minimum_recommended_vram_gb": 8.0,
+      "desktop_package_status": "optional_pack_required",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Grounding DINO is not yet implemented in ReefVision.",
+        "Prompt-model packaging is not pinned for desktop use yet."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "Prompt-model provider pack support is not yet verified in ReefVision.",
+      "advanced_only": false,
+      "requires_confirmation": true,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "grounding_dino",
+      "architecture": "Grounding DINO",
+      "variant": "tiny",
+      "inference_supported": false,
+      "download_source_type": "planned_provider_pack",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Checkpoint redistribution terms must be reviewed before packaging.",
+      "provider_pack_id": "prompt_models",
+      "recommended_ram": 12.0,
+      "recommended_vram": 8.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "optional_pack_required",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "transformers/grounding_dino/base",
+      "display_name": "Grounding DINO Base",
+      "display_summary": "Prompt-assist text-guided detection catalog stub for future validated packaging.",
+      "category": "pretrained_catalog",
+      "provider": "grounding_dino",
+      "provider_version": "planned",
+      "architecture_family": "Grounding DINO",
+      "model_variant": "text_guided_detection",
+      "model_size": "base",
+      "task": "open_vocabulary_detect",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": true,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "grounding-dino-base",
+      "checkpoint_source": "planned_provider_pack",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Checkpoint redistribution terms must be reviewed before packaging.",
+      "package_license": "Would depend on a pinned Transformers prompt-model pack.",
+      "required_provider_pack": "prompt_models",
+      "required_package_versions": [
+        "transformers (not pinned)",
+        "accelerate (not pinned)",
+        "safetensors (not pinned)"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "fp16"
+      ],
+      "expected_input_size": null,
+      "minimum_recommended_ram_gb": 16.0,
+      "minimum_recommended_vram_gb": 10.0,
+      "desktop_package_status": "optional_pack_required",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Grounding DINO is not yet implemented in ReefVision.",
+        "Prompt-model packaging is not pinned for desktop use yet."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "Prompt-model provider pack support is not yet verified in ReefVision.",
+      "advanced_only": false,
+      "requires_confirmation": true,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "grounding_dino",
+      "architecture": "Grounding DINO",
+      "variant": "base",
+      "inference_supported": false,
+      "download_source_type": "planned_provider_pack",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Checkpoint redistribution terms must be reviewed before packaging.",
+      "provider_pack_id": "prompt_models",
+      "recommended_ram": 16.0,
+      "recommended_vram": 10.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "optional_pack_required",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "transformers/owlv2/base",
+      "display_name": "OWLv2 Base",
+      "display_summary": "Open-vocabulary detection catalog stub for future validated packaging.",
+      "category": "pretrained_catalog",
+      "provider": "owlv2",
+      "provider_version": "planned",
+      "architecture_family": "OWLv2",
+      "model_variant": "open_vocabulary_detection",
+      "model_size": "base",
+      "task": "example_guided_detect",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": true,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "owlv2-base",
+      "checkpoint_source": "planned_provider_pack",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Checkpoint redistribution terms must be reviewed before packaging.",
+      "package_license": "Would depend on a pinned Transformers prompt-model pack.",
+      "required_provider_pack": "prompt_models",
+      "required_package_versions": [
+        "transformers (not pinned)",
+        "accelerate (not pinned)",
+        "safetensors (not pinned)"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "fp16"
+      ],
+      "expected_input_size": null,
+      "minimum_recommended_ram_gb": 12.0,
+      "minimum_recommended_vram_gb": 8.0,
+      "desktop_package_status": "optional_pack_required",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "OWLv2 is not yet implemented in ReefVision."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "Prompt-model provider pack support is not yet verified in ReefVision.",
+      "advanced_only": false,
+      "requires_confirmation": true,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "owlv2",
+      "architecture": "OWLv2",
+      "variant": "base",
+      "inference_supported": false,
+      "download_source_type": "planned_provider_pack",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Checkpoint redistribution terms must be reviewed before packaging.",
+      "provider_pack_id": "prompt_models",
+      "recommended_ram": 12.0,
+      "recommended_vram": 8.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "optional_pack_required",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "transformers/owlv2/large",
+      "display_name": "OWLv2 Large",
+      "display_summary": "Open-vocabulary detection catalog stub for future validated packaging.",
+      "category": "pretrained_catalog",
+      "provider": "owlv2",
+      "provider_version": "planned",
+      "architecture_family": "OWLv2",
+      "model_variant": "open_vocabulary_detection",
+      "model_size": "large",
+      "task": "example_guided_detect",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": true,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "owlv2-large",
+      "checkpoint_source": "planned_provider_pack",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Checkpoint redistribution terms must be reviewed before packaging.",
+      "package_license": "Would depend on a pinned Transformers prompt-model pack.",
+      "required_provider_pack": "prompt_models",
+      "required_package_versions": [
+        "transformers (not pinned)",
+        "accelerate (not pinned)",
+        "safetensors (not pinned)"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "fp16"
+      ],
+      "expected_input_size": null,
+      "minimum_recommended_ram_gb": 16.0,
+      "minimum_recommended_vram_gb": 10.0,
+      "desktop_package_status": "optional_pack_required",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "OWLv2 is not yet implemented in ReefVision."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "Prompt-model provider pack support is not yet verified in ReefVision.",
+      "advanced_only": false,
+      "requires_confirmation": true,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "owlv2",
+      "architecture": "OWLv2",
+      "variant": "large",
+      "inference_supported": false,
+      "download_source_type": "planned_provider_pack",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Checkpoint redistribution terms must be reviewed before packaging.",
+      "provider_pack_id": "prompt_models",
+      "recommended_ram": 16.0,
+      "recommended_vram": 10.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "optional_pack_required",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "transformers/florence2/base",
+      "display_name": "Florence-2 Base",
+      "display_summary": "Vision-language prompt-assist catalog stub for future validated packaging.",
+      "category": "pretrained_catalog",
+      "provider": "florence2",
+      "provider_version": "planned",
+      "architecture_family": "Florence-2",
+      "model_variant": "vision_language",
+      "model_size": "base",
+      "task": "phrase_grounding",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": true,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "florence-2-base",
+      "checkpoint_source": "planned_provider_pack",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Checkpoint redistribution terms must be reviewed before packaging.",
+      "package_license": "Would depend on a pinned Transformers prompt-model pack.",
+      "required_provider_pack": "prompt_models",
+      "required_package_versions": [
+        "transformers (not pinned)",
+        "accelerate (not pinned)",
+        "safetensors (not pinned)"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "fp16"
+      ],
+      "expected_input_size": null,
+      "minimum_recommended_ram_gb": 12.0,
+      "minimum_recommended_vram_gb": 8.0,
+      "desktop_package_status": "optional_pack_required",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Florence-2 is not yet implemented in ReefVision."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "Prompt-model provider pack support is not yet verified in ReefVision.",
+      "advanced_only": false,
+      "requires_confirmation": true,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "florence2",
+      "architecture": "Florence-2",
+      "variant": "base",
+      "inference_supported": false,
+      "download_source_type": "planned_provider_pack",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Checkpoint redistribution terms must be reviewed before packaging.",
+      "provider_pack_id": "prompt_models",
+      "recommended_ram": 12.0,
+      "recommended_vram": 8.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "optional_pack_required",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "transformers/florence2/large",
+      "display_name": "Florence-2 Large",
+      "display_summary": "Vision-language prompt-assist catalog stub for future validated packaging.",
+      "category": "pretrained_catalog",
+      "provider": "florence2",
+      "provider_version": "planned",
+      "architecture_family": "Florence-2",
+      "model_variant": "vision_language",
+      "model_size": "large",
+      "task": "caption",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": true,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "florence-2-large",
+      "checkpoint_source": "planned_provider_pack",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Checkpoint redistribution terms must be reviewed before packaging.",
+      "package_license": "Would depend on a pinned Transformers prompt-model pack.",
+      "required_provider_pack": "prompt_models",
+      "required_package_versions": [
+        "transformers (not pinned)",
+        "accelerate (not pinned)",
+        "safetensors (not pinned)"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "fp16"
+      ],
+      "expected_input_size": null,
+      "minimum_recommended_ram_gb": 16.0,
+      "minimum_recommended_vram_gb": 10.0,
+      "desktop_package_status": "optional_pack_required",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Florence-2 is not yet implemented in ReefVision."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "Prompt-model provider pack support is not yet verified in ReefVision.",
+      "advanced_only": false,
+      "requires_confirmation": true,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "florence2",
+      "architecture": "Florence-2",
+      "variant": "large",
+      "inference_supported": false,
+      "download_source_type": "planned_provider_pack",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Checkpoint redistribution terms must be reviewed before packaging.",
+      "provider_pack_id": "prompt_models",
+      "recommended_ram": 16.0,
+      "recommended_vram": 10.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "optional_pack_required",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "sam/original/vit_b",
+      "display_name": "SAM ViT-B",
+      "display_summary": "Interactive masking catalog stub for future validated official SAM checkpoint packaging.",
+      "category": "pretrained_catalog",
+      "provider": "segment_anything",
+      "provider_version": "1.0",
+      "architecture_family": "SAM",
+      "model_variant": "interactive_masking",
+      "model_size": "vit_b",
+      "task": "assist_segmentation",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": true,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "sam_vit_b",
+      "checkpoint_source": "planned_provider_pack",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "package_license": "See the installed Segment Anything package metadata.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "torch==2.5.1+cu121",
+        "torchvision==0.20.1+cu121",
+        "segment-anything==1.0"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32"
+      ],
+      "expected_input_size": {
+        "width": 1024,
+        "height": 1024
+      },
+      "minimum_recommended_ram_gb": 8.0,
+      "minimum_recommended_vram_gb": 8.0,
+      "desktop_package_status": "base_sidecar_provider",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Official SAM catalog installs are not yet pinned for plug-and-play desktop packaging."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "Official SAM checkpoint installation is not yet verified in ReefVision.",
+      "advanced_only": false,
+      "requires_confirmation": true,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "segment_anything",
+      "architecture": "SAM",
+      "variant": "vit_b",
+      "inference_supported": false,
+      "download_source_type": "planned_provider_pack",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "provider_pack_id": null,
+      "recommended_ram": 8.0,
+      "recommended_vram": 8.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "base_sidecar_provider",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "sam2/image/base",
+      "display_name": "SAM 2 Image",
+      "display_summary": "Image masking catalog stub for future validated SAM 2 packaging.",
+      "category": "pretrained_catalog",
+      "provider": "sam2",
+      "provider_version": "planned",
+      "architecture_family": "SAM 2",
+      "model_variant": "interactive_masking",
+      "model_size": "base",
+      "task": "assist_segmentation",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": true,
+      "prompt_assist_compatibility": true,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "sam2-image",
+      "checkpoint_source": "planned_provider_pack",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "package_license": "Would depend on the validated SAM 2 runtime path.",
+      "required_provider_pack": "sam2_video",
+      "required_package_versions": [
+        "torch==2.5.1+cu121"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32",
+        "fp16"
+      ],
+      "expected_input_size": null,
+      "minimum_recommended_ram_gb": 16.0,
+      "minimum_recommended_vram_gb": 10.0,
+      "desktop_package_status": "blocked_pending_windows_validation",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "SAM 2 is not yet implemented or validated for the packaged Windows desktop app."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "SAM 2 packaging has not been validated in ReefVision.",
+      "advanced_only": false,
+      "requires_confirmation": true,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "sam2",
+      "architecture": "SAM 2",
+      "variant": "base",
+      "inference_supported": false,
+      "download_source_type": "planned_provider_pack",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "provider_pack_id": "sam2_video",
+      "recommended_ram": 16.0,
+      "recommended_vram": 10.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "blocked_pending_windows_validation",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "mobilesam/default",
+      "display_name": "MobileSAM",
+      "display_summary": "Lightweight interactive masking catalog stub for future validated packaging.",
+      "category": "pretrained_catalog",
+      "provider": "mobilesam",
+      "provider_version": "planned",
+      "architecture_family": "MobileSAM",
+      "model_variant": "interactive_masking",
+      "model_size": "default",
+      "task": "assist_segmentation",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": true,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "mobilesam",
+      "checkpoint_source": "planned_provider_pack",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "package_license": "Would depend on the validated MobileSAM runtime path.",
+      "required_provider_pack": "sam_family",
+      "required_package_versions": [
+        "torch==2.5.1+cu121"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32"
+      ],
+      "expected_input_size": null,
+      "minimum_recommended_ram_gb": 8.0,
+      "minimum_recommended_vram_gb": 4.0,
+      "desktop_package_status": "optional_pack_required",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "MobileSAM is not yet implemented in ReefVision."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "MobileSAM packaging has not been validated in ReefVision.",
+      "advanced_only": false,
+      "requires_confirmation": true,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "mobilesam",
+      "architecture": "MobileSAM",
+      "variant": "default",
+      "inference_supported": false,
+      "download_source_type": "planned_provider_pack",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "provider_pack_id": "sam_family",
+      "recommended_ram": 8.0,
+      "recommended_vram": 4.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "optional_pack_required",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "fastsam/default",
+      "display_name": "FastSAM",
+      "display_summary": "Fast whole-image segmentation catalog stub for future validated packaging.",
+      "category": "pretrained_catalog",
+      "provider": "fastsam",
+      "provider_version": "planned",
+      "architecture_family": "FastSAM",
+      "model_variant": "interactive_masking",
+      "model_size": "default",
+      "task": "assist_segmentation",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": true,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "fastsam",
+      "checkpoint_source": "planned_provider_pack",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "package_license": "Would depend on the validated FastSAM runtime path.",
+      "required_provider_pack": "sam_family",
+      "required_package_versions": [
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32"
+      ],
+      "expected_input_size": null,
+      "minimum_recommended_ram_gb": 8.0,
+      "minimum_recommended_vram_gb": 4.0,
+      "desktop_package_status": "not_packaged",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "FastSAM is not yet integrated into ReefVision workflows."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "FastSAM packaging has not been validated in ReefVision.",
+      "advanced_only": false,
+      "requires_confirmation": true,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "fastsam",
+      "architecture": "FastSAM",
+      "variant": "default",
+      "inference_supported": false,
+      "download_source_type": "planned_provider_pack",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "provider_pack_id": "sam_family",
+      "recommended_ram": 8.0,
+      "recommended_vram": 4.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "not_packaged",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "reefvision/unet/nano",
+      "display_name": "U-Net Nano",
+      "display_summary": "Semantic segmentation architecture preset stub for future ReefVision-native U-Net training.",
+      "category": "pretrained_catalog",
+      "provider": "reefvision_unet",
+      "provider_version": "planned",
+      "architecture_family": "ReefVision U-Net",
+      "model_variant": "semantic_segment",
+      "model_size": "nano",
+      "task": "semantic_segment",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "reefvision-unet-nano",
+      "checkpoint_source": "planned_catalog_entry",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "ReefVision-native U-Net presets are not implemented yet.",
+      "package_license": "Would be defined with the formal ReefVision U-Net provider.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "torch==2.5.1+cu121"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32"
+      ],
+      "expected_input_size": null,
+      "minimum_recommended_ram_gb": 8.0,
+      "minimum_recommended_vram_gb": 4.0,
+      "desktop_package_status": "not_packaged",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "No formal ReefVision U-Net provider exists in the repository yet."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "ReefVision U-Net is cataloged but not yet implemented.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "reefvision_unet",
+      "architecture": "ReefVision U-Net",
+      "variant": "nano",
+      "inference_supported": false,
+      "download_source_type": "planned_catalog_entry",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "ReefVision-native U-Net presets are not implemented yet.",
+      "provider_pack_id": null,
+      "recommended_ram": 8.0,
+      "recommended_vram": 4.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "not_packaged",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "reefvision/unet/small",
+      "display_name": "U-Net Small",
+      "display_summary": "Semantic segmentation architecture preset stub for future ReefVision-native U-Net training.",
+      "category": "pretrained_catalog",
+      "provider": "reefvision_unet",
+      "provider_version": "planned",
+      "architecture_family": "ReefVision U-Net",
+      "model_variant": "semantic_segment",
+      "model_size": "small",
+      "task": "semantic_segment",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "reefvision-unet-small",
+      "checkpoint_source": "planned_catalog_entry",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "ReefVision-native U-Net presets are not implemented yet.",
+      "package_license": "Would be defined with the formal ReefVision U-Net provider.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "torch==2.5.1+cu121"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32"
+      ],
+      "expected_input_size": null,
+      "minimum_recommended_ram_gb": 10.0,
+      "minimum_recommended_vram_gb": 6.0,
+      "desktop_package_status": "not_packaged",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "No formal ReefVision U-Net provider exists in the repository yet."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "ReefVision U-Net is cataloged but not yet implemented.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "reefvision_unet",
+      "architecture": "ReefVision U-Net",
+      "variant": "small",
+      "inference_supported": false,
+      "download_source_type": "planned_catalog_entry",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "ReefVision-native U-Net presets are not implemented yet.",
+      "provider_pack_id": null,
+      "recommended_ram": 10.0,
+      "recommended_vram": 6.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "not_packaged",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "reefvision/unet/medium",
+      "display_name": "U-Net Medium",
+      "display_summary": "Semantic segmentation architecture preset stub for future ReefVision-native U-Net training.",
+      "category": "pretrained_catalog",
+      "provider": "reefvision_unet",
+      "provider_version": "planned",
+      "architecture_family": "ReefVision U-Net",
+      "model_variant": "semantic_segment",
+      "model_size": "medium",
+      "task": "semantic_segment",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "reefvision-unet-medium",
+      "checkpoint_source": "planned_catalog_entry",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "ReefVision-native U-Net presets are not implemented yet.",
+      "package_license": "Would be defined with the formal ReefVision U-Net provider.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "torch==2.5.1+cu121"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32"
+      ],
+      "expected_input_size": null,
+      "minimum_recommended_ram_gb": 12.0,
+      "minimum_recommended_vram_gb": 8.0,
+      "desktop_package_status": "not_packaged",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "No formal ReefVision U-Net provider exists in the repository yet."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "ReefVision U-Net is cataloged but not yet implemented.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "reefvision_unet",
+      "architecture": "ReefVision U-Net",
+      "variant": "medium",
+      "inference_supported": false,
+      "download_source_type": "planned_catalog_entry",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "ReefVision-native U-Net presets are not implemented yet.",
+      "provider_pack_id": null,
+      "recommended_ram": 12.0,
+      "recommended_vram": 8.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "not_packaged",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "reefvision/unet/large",
+      "display_name": "U-Net Large",
+      "display_summary": "Semantic segmentation architecture preset stub for future ReefVision-native U-Net training.",
+      "category": "pretrained_catalog",
+      "provider": "reefvision_unet",
+      "provider_version": "planned",
+      "architecture_family": "ReefVision U-Net",
+      "model_variant": "semantic_segment",
+      "model_size": "large",
+      "task": "semantic_segment",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "reefvision-unet-large",
+      "checkpoint_source": "planned_catalog_entry",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "ReefVision-native U-Net presets are not implemented yet.",
+      "package_license": "Would be defined with the formal ReefVision U-Net provider.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "torch==2.5.1+cu121"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32"
+      ],
+      "expected_input_size": null,
+      "minimum_recommended_ram_gb": 16.0,
+      "minimum_recommended_vram_gb": 10.0,
+      "desktop_package_status": "not_packaged",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "No formal ReefVision U-Net provider exists in the repository yet."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "ReefVision U-Net is cataloged but not yet implemented.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "reefvision_unet",
+      "architecture": "ReefVision U-Net",
+      "variant": "large",
+      "inference_supported": false,
+      "download_source_type": "planned_catalog_entry",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "ReefVision-native U-Net presets are not implemented yet.",
+      "provider_pack_id": null,
+      "recommended_ram": 16.0,
+      "recommended_vram": 10.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "not_packaged",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "reefvision/unet/xlarge",
+      "display_name": "U-Net XLarge",
+      "display_summary": "Semantic segmentation architecture preset stub for future ReefVision-native U-Net training.",
+      "category": "pretrained_catalog",
+      "provider": "reefvision_unet",
+      "provider_version": "planned",
+      "architecture_family": "ReefVision U-Net",
+      "model_variant": "semantic_segment",
+      "model_size": "xlarge",
+      "task": "semantic_segment",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "reefvision-unet-xlarge",
+      "checkpoint_source": "planned_catalog_entry",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "ReefVision-native U-Net presets are not implemented yet.",
+      "package_license": "Would be defined with the formal ReefVision U-Net provider.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "torch==2.5.1+cu121"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32"
+      ],
+      "expected_input_size": null,
+      "minimum_recommended_ram_gb": 24.0,
+      "minimum_recommended_vram_gb": 12.0,
+      "desktop_package_status": "not_packaged",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "No formal ReefVision U-Net provider exists in the repository yet."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "ReefVision U-Net is cataloged but not yet implemented.",
+      "advanced_only": false,
+      "requires_confirmation": false,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "reefvision_unet",
+      "architecture": "ReefVision U-Net",
+      "variant": "xlarge",
+      "inference_supported": false,
+      "download_source_type": "planned_catalog_entry",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "ReefVision-native U-Net presets are not implemented yet.",
+      "provider_pack_id": null,
+      "recommended_ram": 24.0,
+      "recommended_vram": 12.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "not_packaged",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "nnunet/automatic/default",
+      "display_name": "nnU-Net Automatic Configuration",
+      "display_summary": "Optional semantic-segmentation provider-pack catalog stub for future validated packaging.",
+      "category": "pretrained_catalog",
+      "provider": "nnunet",
+      "provider_version": "planned",
+      "architecture_family": "nnU-Net",
+      "model_variant": "automatic_configuration",
+      "model_size": "default",
+      "task": "semantic_segment",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "nnunet-automatic",
+      "checkpoint_source": "planned_provider_pack",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Package and checkpoint terms must be reviewed before packaging.",
+      "package_license": "Would depend on a validated nnU-Net provider pack.",
+      "required_provider_pack": "nnunet",
+      "required_package_versions": [
+        "nnunetv2 (not pinned)"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32"
+      ],
+      "expected_input_size": null,
+      "minimum_recommended_ram_gb": 16.0,
+      "minimum_recommended_vram_gb": 10.0,
+      "desktop_package_status": "optional_pack_required",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "nnU-Net is not yet packaged or verified in ReefVision."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "The optional nnU-Net provider pack is not yet verified in ReefVision.",
+      "advanced_only": false,
+      "requires_confirmation": true,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "nnunet",
+      "architecture": "nnU-Net",
+      "variant": "default",
+      "inference_supported": false,
+      "download_source_type": "planned_provider_pack",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Package and checkpoint terms must be reviewed before packaging.",
+      "provider_pack_id": "nnunet",
+      "recommended_ram": 16.0,
+      "recommended_vram": 10.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "optional_pack_required",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "ultralytics/yolo_world/base",
+      "display_name": "YOLO-World",
+      "display_summary": "Open-vocabulary detection catalog stub for future validated packaging.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLO-World",
+      "model_variant": "open_vocabulary_detection",
+      "model_size": "base",
+      "task": "open_vocabulary_detect",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": true,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yolov8-world",
+      "checkpoint_source": "planned_provider_pack",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": "prompt_models",
+      "required_package_versions": [
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 12.0,
+      "minimum_recommended_vram_gb": 8.0,
+      "desktop_package_status": "not_packaged",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "YOLO-World is not yet integrated into ReefVision prompt-assist workflows."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "YOLO-World packaging has not been validated in ReefVision.",
+      "advanced_only": false,
+      "requires_confirmation": true,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLO-World",
+      "variant": "base",
+      "inference_supported": false,
+      "download_source_type": "planned_provider_pack",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "provider_pack_id": "prompt_models",
+      "recommended_ram": 12.0,
+      "recommended_vram": 8.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "not_packaged",
+      "availability": "unavailable"
+    },
+    {
+      "catalog_id": "ultralytics/yoloe/base",
+      "display_name": "YOLOE",
+      "display_summary": "Open-vocabulary detection catalog stub for future validated packaging.",
+      "category": "pretrained_catalog",
+      "provider": "ultralytics",
+      "provider_version": "8.3.228",
+      "architecture_family": "YOLOE",
+      "model_variant": "open_vocabulary_detection",
+      "model_size": "base",
+      "task": "open_vocabulary_detect",
+      "trainable": false,
+      "inference": false,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": true,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "yoloe",
+      "checkpoint_source": "planned_provider_pack",
+      "expected_checksum": null,
+      "expected_file_size": null,
+      "model_weight_license": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "package_license": "See the installed Ultralytics package metadata.",
+      "required_provider_pack": "prompt_models",
+      "required_package_versions": [
+        "ultralytics==8.3.228"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32"
+      ],
+      "expected_input_size": {
+        "width": 640,
+        "height": 640
+      },
+      "minimum_recommended_ram_gb": 12.0,
+      "minimum_recommended_vram_gb": 8.0,
+      "desktop_package_status": "not_packaged",
+      "clean_machine_verification_status": "not_verified",
+      "deprecation_status": "experimental",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "YOLOE is not yet integrated into ReefVision prompt-assist workflows."
+      ],
+      "installation_state": "Unavailable",
+      "installation_reason": "YOLOE packaging has not been validated in ReefVision.",
+      "advanced_only": false,
+      "requires_confirmation": true,
+      "selection_kind": "planned_unavailable",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "ultralytics",
+      "architecture": "YOLOE",
+      "variant": "base",
+      "inference_supported": false,
+      "download_source_type": "planned_provider_pack",
+      "expected_files": [],
+      "expected_size": null,
+      "license_summary": "Official pretrained checkpoint metadata has not been pinned in this catalog yet.",
+      "provider_pack_id": "prompt_models",
+      "recommended_ram": 12.0,
+      "recommended_vram": 8.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "not_packaged",
+      "availability": "unavailable"
+    }
+  ]
+}

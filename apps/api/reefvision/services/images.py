@@ -1,0 +1,249 @@
+"""Image import, query, and update services."""
+
+from __future__ import annotations
+
+from math import ceil
+from pathlib import Path
+from typing import BinaryIO
+from uuid import uuid4
+
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from reefvision.config import Settings
+from reefvision.db.models import ImageAsset, Job, Project
+from reefvision.domain.enums import ANNOTATION_STATUSES
+from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.repositories.images import ImageRepository
+from reefvision.repositories.jobs import JobRepository
+from reefvision.repositories.projects import ProjectRepository
+from reefvision.schemas.images import (
+    ImageImportResponse,
+    ImageListItemResponse,
+    ImagePageResponse,
+    ImageResponse,
+    ImageUpdate,
+    ImportItemResponse,
+)
+from reefvision.storage.images import (
+    InvalidImageError,
+    UnsupportedImageError,
+    commit_staged_image,
+    ensure_supported_extension,
+    inspect_staged_image,
+    project_image_directories,
+    safe_original_name,
+    stream_to_staging,
+)
+from reefvision.storage.projects import resolve_managed_project_path
+
+
+class ImageService:
+    def __init__(self, session: Session, settings: Settings) -> None:
+        self.session = session
+        self.settings = settings
+        self.projects = ProjectRepository(session)
+        self.images = ImageRepository(session)
+        self.jobs = JobRepository(session)
+
+    def _project(self, project_id: str) -> Project:
+        project = self.projects.get(project_id)
+        if project is None:
+            raise NotFoundError("Project not found")
+        return project
+
+    def import_streams(
+        self,
+        project_id: str,
+        uploads: list[tuple[str | None, BinaryIO]],
+        relative_paths: list[str] | None = None,
+    ) -> ImageImportResponse:
+        project = self._project(project_id)
+        directories = project_image_directories(self.settings, project.storage_root)
+        paths = relative_paths or []
+        report: dict[str, list[ImportItemResponse]] = {
+            "successful": [],
+            "duplicates": [],
+            "unsupported": [],
+            "failed": [],
+        }
+
+        for index, (raw_filename, source) in enumerate(uploads):
+            filename = safe_original_name(raw_filename)
+            relative_path = paths[index] if index < len(paths) and paths[index] else None
+            staging = directories["staging"] / f"{uuid4()}.part"
+            managed_destination: Path | None = None
+            try:
+                ensure_supported_extension(filename)
+                sha256, size = stream_to_staging(source, staging)
+                inspected = inspect_staged_image(staging, sha256, size)
+                duplicate = self.images.find_duplicate(project_id, sha256)
+                if duplicate is not None:
+                    staging.unlink(missing_ok=True)
+                    report["duplicates"].append(
+                        ImportItemResponse(
+                            filename=filename,
+                            relative_path=relative_path,
+                            status="duplicate",
+                            detail="Exact file already exists in this project",
+                            duplicate_image_id=duplicate.id,
+                        )
+                    )
+                    continue
+
+                image_id = str(uuid4())
+                relative_managed = (
+                    f"{project.storage_root}/images/originals/{image_id}{inspected.extension}"
+                )
+                relative_thumbnail = f"{project.storage_root}/images/thumbnails/{image_id}.jpg"
+                managed_destination = resolve_managed_project_path(self.settings, relative_managed)
+                commit_staged_image(staging, managed_destination)
+                image = ImageAsset(
+                    id=image_id,
+                    project_id=project_id,
+                    original_filename=filename,
+                    managed_path=relative_managed,
+                    sha256=inspected.sha256,
+                    width_px=inspected.width_px,
+                    height_px=inspected.height_px,
+                    file_size_bytes=inspected.file_size_bytes,
+                    media_type=inspected.media_type,
+                    import_source=relative_path or filename,
+                    capture_timestamp=inspected.capture_timestamp,
+                    metadata_json=inspected.metadata,
+                )
+                job = Job(
+                    project_id=project_id,
+                    job_type="thumbnail",
+                    status="queued",
+                    progress_total=1,
+                    request_json={
+                        "image_id": image_id,
+                        "source_path": relative_managed,
+                        "thumbnail_path": relative_thumbnail,
+                    },
+                )
+                self.images.add(image)
+                self.jobs.add(job)
+                self.session.commit()
+                self.session.refresh(image)
+                self.session.refresh(job)
+                report["successful"].append(
+                    ImportItemResponse(
+                        filename=filename,
+                        relative_path=relative_path,
+                        status="successful",
+                        image_id=image.id,
+                        thumbnail_job_id=job.id,
+                    )
+                )
+            except UnsupportedImageError as exc:
+                self.session.rollback()
+                staging.unlink(missing_ok=True)
+                report["unsupported"].append(
+                    ImportItemResponse(
+                        filename=filename,
+                        relative_path=relative_path,
+                        status="unsupported",
+                        detail=str(exc),
+                    )
+                )
+            except (InvalidImageError, OSError, IntegrityError, ValidationError) as exc:
+                self.session.rollback()
+                staging.unlink(missing_ok=True)
+                if managed_destination is not None:
+                    managed_destination.unlink(missing_ok=True)
+                report["failed"].append(
+                    ImportItemResponse(
+                        filename=filename,
+                        relative_path=relative_path,
+                        status="failed",
+                        detail=str(exc),
+                    )
+                )
+            except Exception as exc:
+                self.session.rollback()
+                staging.unlink(missing_ok=True)
+                if managed_destination is not None:
+                    managed_destination.unlink(missing_ok=True)
+                report["failed"].append(
+                    ImportItemResponse(
+                        filename=filename,
+                        relative_path=relative_path,
+                        status="failed",
+                        detail=f"Unexpected import failure: {exc}",
+                    )
+                )
+
+        return ImageImportResponse(project_id=project_id, **report)
+
+    def list_images(
+        self,
+        project_id: str,
+        *,
+        page: int,
+        page_size: int,
+        filename: str | None,
+        annotation_status: str | None,
+        group_key: str | None,
+    ) -> ImagePageResponse:
+        self._project(project_id)
+        if annotation_status and annotation_status not in ANNOTATION_STATUSES:
+            raise ValidationError("Unknown annotation status")
+        items, total = self.images.list_page(
+            project_id,
+            page=page,
+            page_size=page_size,
+            filename=filename,
+            annotation_status=annotation_status,
+            group_key=group_key,
+        )
+        return ImagePageResponse(
+            items=[ImageListItemResponse.model_validate(item) for item in items],
+            total=total,
+            page=page,
+            page_size=page_size,
+            pages=ceil(total / page_size) if total else 0,
+        )
+
+    def get_image(self, image_id: str) -> ImageAsset:
+        image = self.images.get(image_id)
+        if image is None:
+            raise NotFoundError("Image not found")
+        return image
+
+    def get_image_record(self, image_id: str) -> ImageAsset:
+        image = self.images.get_basic(image_id)
+        if image is None:
+            raise NotFoundError("Image not found")
+        return image
+
+    def update_image(self, image_id: str, payload: ImageUpdate) -> ImageAsset:
+        image = self.get_image(image_id)
+        changes = payload.model_dump(exclude_unset=True)
+        if "annotation_status" in changes and changes["annotation_status"] is None:
+            changes.pop("annotation_status")
+        status_changed = (
+            "annotation_status" in changes
+            and changes["annotation_status"] != image.annotation_status
+        )
+        for key, value in changes.items():
+            setattr(image, key, value)
+        if status_changed:
+            image.annotation_revision += 1
+        self.session.commit()
+        self.session.refresh(image)
+        return image
+
+    def content_path_for_image(self, image: ImageAsset, *, thumbnail: bool = False) -> Path:
+        relative = image.thumbnail_path if thumbnail else image.managed_path
+        if relative is None:
+            raise NotFoundError("Thumbnail is not available yet")
+        path = resolve_managed_project_path(self.settings, relative)
+        if not path.is_file():
+            raise NotFoundError("Managed image file is missing")
+        return path
+
+    def content_path(self, image_id: str, *, thumbnail: bool = False) -> Path:
+        image = self.get_image_record(image_id)
+        return self.content_path_for_image(image, thumbnail=thumbnail)

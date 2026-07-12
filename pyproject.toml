@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reefvision"
+version = "1.6.0"
+description = "Local-first scientific image annotation and computer vision platform"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "Rafael Del Valle" }]
+dependencies = [
+  "alembic>=1.14,<2",
+  "fastapi>=0.139,<1",
+  "pydantic-settings>=2.7,<3",
+  "pillow>=11,<13",
+  "python-multipart>=0.0.20,<1",
+  "sqlalchemy>=2.0,<3",
+  "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2,<2",
+  "httpx>=0.28,<1",
+  "mypy>=1.14,<2",
+  "pyinstaller>=6.21,<7",
+  "pytest>=8.3,<9",
+  "pytest-cov>=6,<7",
+  "ruff>=0.9,<1",
+]
+
+[tool.setuptools]
+package-dir = {"" = "apps/api"}
+
+[tool.setuptools.packages.find]
+where = ["apps/api"]
+include = ["reefvision*"]
+exclude = ["reefvision.tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["apps/api/reefvision/tests"]
+addopts = "-ra --strict-markers --strict-config"
+filterwarnings = [
+  "error::DeprecationWarning",
+  "error::ResourceWarning",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["apps/api"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+packages = ["reefvision"]
+mypy_path = "apps/api"
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "alembic.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["cv2", "numpy", "segment_anything", "torch", "ultralytics"]
+ignore_missing_imports = true

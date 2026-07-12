@@ -1,0 +1,179 @@
+"""Safe managed image and thumbnail filesystem operations."""
+
+from __future__ import annotations
+
+import hashlib
+import os
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, BinaryIO
+
+from PIL import ExifTags, Image, ImageOps, UnidentifiedImageError
+
+from reefvision.config import Settings
+from reefvision.domain.errors import ValidationError
+from reefvision.storage.projects import resolve_managed_project_path
+
+SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp"}
+FORMAT_DETAILS = {
+    "JPEG": (".jpg", "image/jpeg"),
+    "PNG": (".png", "image/png"),
+    "TIFF": (".tiff", "image/tiff"),
+    "WEBP": (".webp", "image/webp"),
+}
+
+
+class UnsupportedImageError(ValueError):
+    """File extension or decoded format is outside Milestone 2 support."""
+
+
+class InvalidImageError(ValueError):
+    """The file cannot be decoded as a valid image."""
+
+
+@dataclass(frozen=True)
+class InspectedImage:
+    sha256: str
+    width_px: int
+    height_px: int
+    file_size_bytes: int
+    media_type: str
+    extension: str
+    metadata: dict[str, Any]
+    capture_timestamp: datetime | None
+
+
+def project_image_directories(settings: Settings, project_storage_root: str) -> dict[str, Path]:
+    root = resolve_managed_project_path(settings, project_storage_root)
+    directories = {
+        "originals": root / "images" / "originals",
+        "thumbnails": root / "images" / "thumbnails",
+        "staging": root / ".imports",
+    }
+    for directory in directories.values():
+        directory.mkdir(parents=True, exist_ok=True)
+    return directories
+
+
+def safe_original_name(filename: str | None) -> str:
+    if not filename:
+        return "unnamed-image"
+    return Path(filename.replace("\\", "/")).name or "unnamed-image"
+
+
+def ensure_supported_extension(filename: str) -> None:
+    if Path(filename).suffix.lower() not in SUPPORTED_EXTENSIONS:
+        raise UnsupportedImageError("Supported image types are JPEG, PNG, TIFF, and WebP")
+
+
+def stream_to_staging(source: BinaryIO, destination: Path) -> tuple[str, int]:
+    """Write a staged file completely, fsync it, and return checksum and byte count."""
+
+    digest = hashlib.sha256()
+    total = 0
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with destination.open("xb") as output:
+            while chunk := source.read(1024 * 1024):
+                output.write(chunk)
+                digest.update(chunk)
+                total += len(chunk)
+            output.flush()
+            os.fsync(output.fileno())
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+    return digest.hexdigest(), total
+
+
+def _json_safe(value: object) -> object | None:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, (tuple, list)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    return str(value) if not isinstance(value, bytes) else None
+
+
+def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
+    for key in (36867, 36868, 306):
+        raw = exif.get(key)
+        if isinstance(raw, str):
+            try:
+                return datetime.strptime(raw, "%Y:%m:%d %H:%M:%S").replace(tzinfo=UTC)
+            except ValueError:
+                continue
+    return None
+
+
+def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> InspectedImage:
+    try:
+        with Image.open(path) as image:
+            decoded_format = image.format
+            image.verify()
+        if decoded_format not in FORMAT_DETAILS:
+            raise UnsupportedImageError("Decoded image format is not supported")
+        extension, media_type = FORMAT_DETAILS[decoded_format]
+        with Image.open(path) as image:
+            width, height = image.size
+            if width <= 0 or height <= 0:
+                raise InvalidImageError("Image dimensions must be greater than zero")
+            exif = dict(image.getexif())
+            named_exif = {
+                ExifTags.TAGS.get(key, str(key)): _json_safe(value)
+                for key, value in exif.items()
+                if _json_safe(value) is not None
+            }
+            safe_info = {
+                str(key): converted
+                for key, value in image.info.items()
+                if (converted := _json_safe(value)) is not None
+            }
+            metadata: dict[str, Any] = {
+                "format": decoded_format,
+                "mode": image.mode,
+                "info": safe_info,
+                "exif": named_exif,
+            }
+            return InspectedImage(
+                sha256=sha256,
+                width_px=width,
+                height_px=height,
+                file_size_bytes=file_size_bytes,
+                media_type=media_type,
+                extension=extension,
+                metadata=metadata,
+                capture_timestamp=_capture_timestamp(exif),
+            )
+    except UnsupportedImageError:
+        raise
+    except (UnidentifiedImageError, OSError, SyntaxError, ValueError) as exc:
+        raise InvalidImageError("File is not a readable image") from exc
+
+
+def commit_staged_image(staged_path: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        raise ValidationError("Managed image destination already exists")
+    os.replace(staged_path, destination)
+
+
+def create_thumbnail(source: Path, destination: Path, *, max_width: int, max_height: int) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(destination.suffix + ".part")
+    temporary.unlink(missing_ok=True)
+    try:
+        with Image.open(source) as image:
+            oriented = ImageOps.exif_transpose(image)
+            if oriented.mode not in {"RGB", "L"}:
+                oriented = oriented.convert("RGB")
+            oriented.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
+            if oriented.mode == "L":
+                oriented = oriented.convert("RGB")
+            oriented.save(temporary, format="JPEG", quality=85, optimize=True)
+        os.replace(temporary, destination)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise

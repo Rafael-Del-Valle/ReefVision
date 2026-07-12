@@ -1,0 +1,249 @@
+"""Desktop sidecar entrypoint for the packaged ReefVision backend."""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import logging
+import os
+import sys
+import threading
+from collections.abc import Sequence
+from contextlib import suppress
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Protocol, TextIO, cast
+
+import uvicorn
+from alembic import command
+from alembic.config import Config
+
+from reefvision.config import Settings, clear_settings_cache, get_settings
+from reefvision.logging_utils import configure_rotating_json_logging
+
+LOGGER = logging.getLogger("reefvision.desktop")
+_WINDOWED_STREAMS: list[TextIO] = []
+
+
+class SupportsShouldExit(Protocol):
+    should_exit: bool
+
+
+@dataclass(frozen=True)
+class DesktopLaunchOptions:
+    host: str
+    port: int
+    data_dir: Path
+    log_file: Path | None
+    context_file: Path | None
+    run_migrations: bool
+
+
+def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
+    parser = argparse.ArgumentParser(description="Run the ReefVision desktop API sidecar")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=0)
+    parser.add_argument("--data-dir", type=Path, default=Path(".reefvision"))
+    parser.add_argument("--log-file", type=Path, default=None)
+    parser.add_argument("--context-file", type=Path, default=None)
+    parser.add_argument("--skip-migrations", action="store_false", dest="run_migrations")
+    namespace = parser.parse_args(argv)
+    return DesktopLaunchOptions(
+        host=namespace.host,
+        port=namespace.port,
+        data_dir=namespace.data_dir,
+        log_file=namespace.log_file,
+        context_file=namespace.context_file,
+        run_migrations=namespace.run_migrations,
+    )
+
+
+def project_root() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
+def is_frozen_bundle() -> bool:
+    return bool(vars(sys).get("frozen", False))
+
+
+def resolve_alembic_paths(resource_root: Path | None = None) -> tuple[Path, Path]:
+    root = resource_root or (
+        Path(str(vars(sys)["_MEIPASS"])).resolve() if is_frozen_bundle() else project_root()
+    )
+    if is_frozen_bundle():
+        alembic_root = root / "alembic"
+        return alembic_root / "alembic.ini", alembic_root / "migrations"
+    api_root = root / "apps" / "api"
+    return api_root / "alembic.ini", api_root / "migrations"
+
+
+def configure_logging(log_file: Path | None) -> None:
+    if log_file is None:
+        return
+    configure_rotating_json_logging(
+        log_file,
+        default_component="desktop",
+        max_bytes=1_048_576,
+        backup_count=5,
+    )
+
+
+def ensure_standard_streams() -> None:
+    for stream_name in ("stdout", "stderr"):
+        if getattr(sys, stream_name, None) is None:
+            stream = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
+            _WINDOWED_STREAMS.append(stream)
+            setattr(sys, stream_name, stream)
+
+
+def apply_desktop_environment(options: DesktopLaunchOptions) -> None:
+    os.environ["REEFVISION_ENV"] = "desktop"
+    os.environ["REEFVISION_API_HOST"] = options.host
+    os.environ["REEFVISION_API_PORT"] = str(options.port)
+    os.environ["REEFVISION_DATA_DIR"] = str(options.data_dir)
+    clear_settings_cache()
+
+
+def build_settings(options: DesktopLaunchOptions) -> Settings:
+    apply_desktop_environment(options)
+    return get_settings()
+
+
+def write_runtime_port(context_file: Path | None, port: int) -> None:
+    if context_file is None:
+        return
+    context_file.parent.mkdir(parents=True, exist_ok=True)
+    temporary = context_file.with_suffix(context_file.suffix + ".tmp")
+    temporary.write_text(f"{port}\n", encoding="utf-8")
+    os.replace(temporary, context_file)
+
+
+def request_server_shutdown(server: object, reason: str) -> None:
+    managed_server = cast(SupportsShouldExit, server)
+    if getattr(managed_server, "should_exit", False):
+        return
+    LOGGER.info(reason)
+    managed_server.should_exit = True
+
+
+def watch_shutdown_stream(stream: TextIO, server: object) -> None:
+    while not getattr(server, "should_exit", False):
+        line = stream.readline()
+        if line == "":
+            request_server_shutdown(
+                server,
+                "ReefVision desktop closed the sidecar control channel; requesting shutdown",
+            )
+            return
+        if line.strip().lower() == "shutdown":
+            request_server_shutdown(server, "ReefVision desktop requested backend shutdown")
+            return
+
+
+def start_shutdown_monitor(
+    server: uvicorn.Server,
+    stream: TextIO | None = None,
+) -> threading.Thread | None:
+    shutdown_stream = stream or sys.stdin
+    if shutdown_stream is None:
+        return None
+
+    thread = threading.Thread(
+        target=watch_shutdown_stream,
+        args=(shutdown_stream, server),
+        name="reefvision-desktop-shutdown",
+        daemon=True,
+    )
+    thread.start()
+    return thread
+
+
+def run_pending_migrations(settings: Settings) -> None:
+    alembic_ini, migrations_dir = resolve_alembic_paths()
+    config = Config(str(alembic_ini))
+    config.attributes["configure_logger"] = False
+    config.set_main_option("script_location", str(migrations_dir))
+    config.set_main_option("sqlalchemy.url", settings.resolved_database_url)
+    command.upgrade(config, "head")
+
+
+def resolve_server_port(server: object, requested_port: int) -> int:
+    servers = getattr(server, "servers", ())
+    for active_server in servers:
+        sockets = getattr(active_server, "sockets", ()) or ()
+        for listener in sockets:
+            sockname = listener.getsockname()
+            if isinstance(sockname, tuple) and len(sockname) >= 2:
+                port = int(sockname[1])
+                if port > 0:
+                    return port
+
+    if requested_port > 0:
+        return requested_port
+
+    raise RuntimeError("ReefVision desktop API did not expose its loopback port")
+
+
+async def publish_runtime_port_when_ready(
+    server: uvicorn.Server,
+    context_file: Path | None,
+    requested_port: int,
+) -> None:
+    while not server.started:
+        if server.should_exit:
+            raise RuntimeError("ReefVision desktop API exited before startup completed")
+        await asyncio.sleep(0.05)
+    write_runtime_port(context_file, resolve_server_port(server, requested_port))
+
+
+async def run_api_server(settings: Settings, options: DesktopLaunchOptions) -> int:
+    from reefvision.main import create_app
+
+    LOGGER.info("Creating FastAPI application instance")
+    app = create_app(settings)
+    config = uvicorn.Config(
+        app,
+        host=settings.api_host,
+        port=settings.api_port,
+        access_log=False,
+    )
+    server = uvicorn.Server(config)
+    start_shutdown_monitor(server)
+    port_publisher = asyncio.create_task(
+        publish_runtime_port_when_ready(server, options.context_file, settings.api_port)
+    )
+
+    try:
+        LOGGER.info("Launching Uvicorn server")
+        await server.serve()
+        if not server.started:
+            raise RuntimeError("ReefVision desktop API failed before reporting readiness")
+        await port_publisher
+        return 0
+    finally:
+        if not port_publisher.done():
+            port_publisher.cancel()
+            with suppress(asyncio.CancelledError):
+                await port_publisher
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    options = parse_args(argv)
+    ensure_standard_streams()
+    configure_logging(options.log_file)
+    try:
+        settings = build_settings(options)
+        settings.ensure_directories()
+        LOGGER.info("Starting ReefVision desktop API on %s:%s", options.host, options.port)
+        if options.run_migrations:
+            LOGGER.info("Applying pending Alembic migrations")
+            run_pending_migrations(settings)
+        LOGGER.info("Loading FastAPI application factory")
+        return asyncio.run(run_api_server(settings, options))
+    except Exception:
+        LOGGER.exception("ReefVision desktop API failed to start")
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,140 @@
+"""In-process and standalone thumbnail worker."""
+
+from __future__ import annotations
+
+import asyncio
+from contextlib import suppress
+from datetime import UTC, datetime
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session, sessionmaker
+
+from reefvision.config import Settings
+from reefvision.db.models import BackupRecord, ImageAsset, Job, QualityControlRun
+from reefvision.jobs.backups import process_backup_job
+from reefvision.jobs.diagnostics import process_diagnostics_job
+from reefvision.jobs.export import process_export_job
+from reefvision.jobs.inference import process_inference_job
+from reefvision.jobs.model_install import process_model_install_job
+from reefvision.jobs.quality_control import process_quality_control_job
+from reefvision.jobs.restores import process_restore_job
+from reefvision.jobs.training import process_training_job
+from reefvision.repositories.jobs import JobRepository
+from reefvision.storage.images import create_thumbnail
+from reefvision.storage.projects import resolve_managed_project_path
+
+
+def recover_interrupted_jobs(factory: sessionmaker[Session]) -> int:
+    with factory() as session:
+        count = JobRepository(session).recover_interrupted_jobs()
+        for run in session.scalars(
+            select(QualityControlRun).where(
+                QualityControlRun.status.in_(("running", "cancel_requested"))
+            )
+        ):
+            run.status = "queued"
+            run.error_message = "Recovered after interruption"
+            run.started_at = None
+        for backup in session.scalars(
+            select(BackupRecord).where(BackupRecord.status.in_(("running", "verifying")))
+        ):
+            backup.status = "queued"
+            backup.error_message = "Recovered after interruption"
+            backup.started_at = None
+        session.commit()
+        return count
+
+
+def _fail_job(factory: sessionmaker[Session], job_id: str, message: str) -> None:
+    with factory() as session:
+        job = session.get(Job, job_id)
+        if job is None:
+            return
+        job.status = "failed"
+        job.error_message = message
+        job.completed_at = datetime.now(UTC)
+        session.commit()
+
+
+def process_thumbnail_job(settings: Settings, factory: sessionmaker[Session], job_id: str) -> bool:
+    with factory() as session:
+        job = session.get(Job, job_id)
+        if job is None or job.job_type != "thumbnail" or job.status != "queued":
+            return False
+        job.status = "running"
+        job.started_at = datetime.now(UTC)
+        job.error_message = None
+        session.commit()
+        request = dict(job.request_json)
+
+    try:
+        image_id = str(request["image_id"])
+        source_relative = str(request["source_path"])
+        thumbnail_relative = str(request["thumbnail_path"])
+        source = resolve_managed_project_path(settings, source_relative)
+        destination = resolve_managed_project_path(settings, thumbnail_relative)
+        if not source.is_file():
+            raise FileNotFoundError(f"Managed source image is missing: {source_relative}")
+        create_thumbnail(
+            source,
+            destination,
+            max_width=settings.thumbnail_max_width,
+            max_height=settings.thumbnail_max_height,
+        )
+        with factory() as session:
+            job = session.get(Job, job_id)
+            image = session.get(ImageAsset, image_id)
+            if job is None or image is None:
+                destination.unlink(missing_ok=True)
+                raise RuntimeError("Thumbnail job references missing database records")
+            image.thumbnail_path = thumbnail_relative
+            job.status = "succeeded"
+            job.progress_current = 1
+            job.result_json = {"thumbnail_path": thumbnail_relative}
+            job.completed_at = datetime.now(UTC)
+            session.commit()
+        return True
+    except Exception as exc:
+        _fail_job(factory, job_id, str(exc))
+        return False
+
+
+def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session]) -> bool:
+    with factory() as session:
+        job = JobRepository(session).next_queued()
+        job_id = job.id if job is not None else None
+        job_type = job.job_type if job is not None else None
+    if job_id is None:
+        return False
+    if job_type == "thumbnail":
+        return process_thumbnail_job(settings, factory, job_id)
+    if job_type == "inference":
+        return process_inference_job(settings, factory, job_id)
+    if job_type == "export":
+        return process_export_job(settings, factory, job_id)
+    if job_type == "qc":
+        return process_quality_control_job(settings, factory, job_id)
+    if job_type == "backup":
+        return process_backup_job(settings, factory, job_id)
+    if job_type == "restore":
+        return process_restore_job(settings, factory, job_id)
+    if job_type == "diagnostics":
+        return process_diagnostics_job(settings, factory, job_id)
+    if job_type == "training":
+        return process_training_job(settings, factory, job_id)
+    if job_type == "model_install":
+        return process_model_install_job(settings, factory, job_id)
+    return False
+
+
+async def thumbnail_worker_loop(
+    settings: Settings,
+    factory: sessionmaker[Session],
+    stop_event: asyncio.Event,
+) -> None:
+    recover_interrupted_jobs(factory)
+    while not stop_event.is_set():
+        processed = await asyncio.to_thread(process_next_thumbnail_job, settings, factory)
+        if not processed:
+            with suppress(TimeoutError):
+                await asyncio.wait_for(stop_event.wait(), timeout=settings.worker_poll_seconds)

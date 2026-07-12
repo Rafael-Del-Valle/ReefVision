@@ -1,0 +1,589 @@
+param(
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$Arguments
+)
+
+$ErrorActionPreference = "Stop"
+
+$helperPath = Join-Path $PSScriptRoot "reefvision-commands.ps1"
+if (-not (Test-Path $helperPath -PathType Leaf)) {
+    $helperPath = Join-Path $PSScriptRoot "lib\reefvision-commands.ps1"
+}
+. $helperPath
+
+$Arguments = @($Arguments | Where-Object {
+    $null -ne $_ -and -not [string]::IsNullOrWhiteSpace([string]$_)
+})
+
+function Show-UpdateReefVisionHelp {
+    @"
+update-reefvision v$script:ReefVisionCommandVersion
+
+Usage:
+  update-reefvision
+  update-reefvision --help
+  update-reefvision --status
+  update-reefvision --configure-repo PATH
+  update-reefvision --setup
+  update-reefvision --skip-setup
+  update-reefvision --build-only
+  update-reefvision --install-only
+  update-reefvision --no-launch
+  update-reefvision --clean-build
+  update-reefvision --verbose
+  update-reefvision --dry-run
+  update-reefvision --test
+"@
+}
+
+function Get-UpdateDependencyFiles {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoPath
+    )
+
+    @(
+        (Join-Path $RepoPath "pyproject.toml"),
+        (Join-Path $RepoPath "apps\web\package.json"),
+        (Join-Path $RepoPath "apps\web\package-lock.json"),
+        (Join-Path $RepoPath "apps\web\src-tauri\Cargo.toml"),
+        (Join-Path $RepoPath "apps\web\src-tauri\tauri.conf.json"),
+        (Join-Path $RepoPath "requirements\providers-windows-cu121-py312.txt")
+    ) | Where-Object { Test-Path $_ -PathType Leaf }
+}
+
+function Get-UpdateDependencySignature {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoPath
+    )
+
+    $parts = @(foreach ($file in (Get-UpdateDependencyFiles -RepoPath $RepoPath)) {
+        $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+        $relative = $file.Substring($RepoPath.Length).TrimStart("\", "/")
+        "$relative=$hash"
+    })
+    if ($parts.Count -eq 0) {
+        return $null
+    }
+    $payload = ($parts | Sort-Object) -join "`n"
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
+    $stream = New-Object System.IO.MemoryStream(, $bytes)
+    try {
+        return (Get-FileHash -InputStream $stream -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
+function Get-ReefVisionVersionSources {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoPath
+    )
+
+    $pyproject = Get-Content -LiteralPath (Join-Path $RepoPath "pyproject.toml") -Raw
+    $pyprojectVersion = ([regex]::Match($pyproject, 'version\s*=\s*"([^"]+)"')).Groups[1].Value
+
+    $packageVersion = (Get-Content -LiteralPath (Join-Path $RepoPath "apps\web\package.json") -Raw | ConvertFrom-Json).version
+    $tauriVersion = (Get-Content -LiteralPath (Join-Path $RepoPath "apps\web\src-tauri\tauri.conf.json") -Raw | ConvertFrom-Json).version
+    $cargo = Get-Content -LiteralPath (Join-Path $RepoPath "apps\web\src-tauri\Cargo.toml") -Raw
+    $cargoVersion = ([regex]::Match($cargo, 'version\s*=\s*"([^"]+)"')).Groups[1].Value
+    $apiInit = Get-Content -LiteralPath (Join-Path $RepoPath "apps\api\reefvision\__init__.py") -Raw
+    $apiVersion = ([regex]::Match($apiInit, '__version__\s*=\s*"([^"]+)"')).Groups[1].Value
+
+    return [ordered]@{
+        pyproject = $pyprojectVersion
+        web_package = $packageVersion
+        tauri = $tauriVersion
+        cargo = $cargoVersion
+        api = $apiVersion
+    }
+}
+
+function Assert-ReefVisionVersionConsistency {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoPath
+    )
+
+    $versions = Get-ReefVisionVersionSources -RepoPath $RepoPath
+    $distinct = @($versions.Values | Select-Object -Unique)
+    if ($distinct.Count -ne 1) {
+        throw "ReefVision version metadata is inconsistent: $($versions | ConvertTo-Json -Compress)"
+    }
+    return $distinct[0]
+}
+
+function Get-ReefVisionNsisDirectory {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoPath
+    )
+
+    return Join-Path $RepoPath "apps\web\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis"
+}
+
+function Get-ReefVisionLatestInstaller {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoPath,
+        [Parameter(Mandatory = $true)]
+        [string]$ExpectedVersion
+    )
+
+    $nsisDir = Get-ReefVisionNsisDirectory -RepoPath $RepoPath
+    if (-not (Test-Path $nsisDir -PathType Container)) {
+        return $null
+    }
+
+    return Get-ChildItem -Path $nsisDir -Filter "ReefVision_${ExpectedVersion}_*-setup.exe" -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTimeUtc -Descending |
+        Select-Object -First 1
+}
+
+function Get-ReefVisionFreshInstaller {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoPath,
+        [Parameter(Mandatory = $true)]
+        [string]$ExpectedVersion,
+        [Parameter(Mandatory = $true)]
+        [datetime]$BuildStartedAtUtc
+    )
+
+    $candidate = Get-ReefVisionLatestInstaller -RepoPath $RepoPath -ExpectedVersion $ExpectedVersion
+    if ($null -eq $candidate) {
+        return $null
+    }
+    if ($candidate.LastWriteTimeUtc -lt $BuildStartedAtUtc) {
+        return $null
+    }
+    return $candidate
+}
+
+function Get-ReefVisionReleaseArtifacts {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoPath,
+        [Parameter(Mandatory = $true)]
+        [string]$ExpectedVersion
+    )
+
+    $releaseDir = Join-Path $RepoPath "apps\web\src-tauri\target\x86_64-pc-windows-msvc\release"
+    $desktopExecutablePath = Join-Path $releaseDir "reefvision-desktop.exe"
+    $backendDirectory = Join-Path $RepoPath "apps\web\src-tauri\binaries"
+    $apiExecutablePath = Join-Path $backendDirectory "reefvision-api\reefvision-api.exe"
+    foreach ($path in @($desktopExecutablePath, $apiExecutablePath)) {
+        if (-not (Test-Path $path -PathType Leaf)) {
+            throw "Expected release artifact is missing: $path"
+        }
+    }
+    if (-not (Test-Path $backendDirectory -PathType Container)) {
+        throw "Expected packaged backend resource directory is missing: $backendDirectory"
+    }
+
+    $desktopVersion = Get-ReefVisionExecutableVersion -ExecutablePath $desktopExecutablePath
+    if ($desktopVersion -ne $ExpectedVersion) {
+        throw "The built ReefVision desktop executable version is '$desktopVersion', expected '$ExpectedVersion'."
+    }
+
+    return [pscustomobject]@{
+        release_dir = $releaseDir
+        desktop_executable = $desktopExecutablePath
+        api_executable = $apiExecutablePath
+        backend_directory = $backendDirectory
+        desktop_version = $desktopVersion
+    }
+}
+
+function Get-ReefVisionCurrentUserRegistrationPaths {
+    @(
+        "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\ReefVision",
+        "HKCU:\Software\reefvision\ReefVision"
+    )
+}
+
+function Test-ReefVisionCurrentUserInstallRegistration {
+    foreach ($path in Get-ReefVisionCurrentUserRegistrationPaths) {
+        if (Test-Path $path) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Resolve-ReefVisionPortableInstallDirectory {
+    param(
+        [string]$PreferredExecutablePath
+    )
+
+    $resolved = Resolve-ReefVisionInstalledDirectory -PreferredExecutablePath $PreferredExecutablePath
+    if ($resolved) {
+        return $resolved
+    }
+    if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+        return $null
+    }
+    return Join-Path $env:LOCALAPPDATA "ReefVision"
+}
+
+function Test-ReefVisionInstalledBackendBundle {
+    param(
+        [string]$InstallDirectory
+    )
+
+    if ([string]::IsNullOrWhiteSpace($InstallDirectory)) {
+        return $false
+    }
+    return Test-Path (Join-Path $InstallDirectory "backend\reefvision-api\reefvision-api.exe") -PathType Leaf
+}
+
+function Sync-ReefVisionPortableInstall {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoPath,
+        [Parameter(Mandatory = $true)]
+        [string]$ExpectedVersion,
+        [Parameter(Mandatory = $true)]
+        [string]$InstallDirectory
+    )
+
+    $artifacts = Get-ReefVisionReleaseArtifacts -RepoPath $RepoPath -ExpectedVersion $ExpectedVersion
+    $normalizedInstallDirectory = [System.IO.Path]::GetFullPath($InstallDirectory).TrimEnd("\")
+    $allowedRoots = @(
+        (Join-Path $env:LOCALAPPDATA "ReefVision"),
+        (Join-Path $env:LOCALAPPDATA "Programs\ReefVision")
+    ) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        ForEach-Object { [System.IO.Path]::GetFullPath($_).TrimEnd("\") }
+
+    $allowed = $false
+    foreach ($root in $allowedRoots) {
+        if ($normalizedInstallDirectory -eq $root) {
+            $allowed = $true
+            break
+        }
+    }
+    if (-not $allowed) {
+        throw "Refusing to repair a portable ReefVision install outside the approved user locations: $normalizedInstallDirectory"
+    }
+
+    New-Item -ItemType Directory -Path $normalizedInstallDirectory -Force | Out-Null
+    $desktopTarget = Join-Path $normalizedInstallDirectory "reefvision-desktop.exe"
+    $apiTarget = Join-Path $normalizedInstallDirectory "reefvision-api.exe"
+    $backendTarget = Join-Path $normalizedInstallDirectory "backend"
+
+    Copy-Item -LiteralPath $artifacts.desktop_executable -Destination $desktopTarget -Force
+    Copy-Item -LiteralPath $artifacts.api_executable -Destination $apiTarget -Force
+    if (Test-Path $backendTarget -PathType Container) {
+        Get-ChildItem -LiteralPath $backendTarget -Force | Remove-Item -Recurse -Force
+    }
+    else {
+        New-Item -ItemType Directory -Path $backendTarget -Force | Out-Null
+    }
+    Get-ChildItem -LiteralPath $artifacts.backend_directory -Force | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination $backendTarget -Recurse -Force
+    }
+
+    $installedVersion = Get-ReefVisionExecutableVersion -ExecutablePath $desktopTarget
+    if ($installedVersion -ne $ExpectedVersion) {
+        throw "The repaired ReefVision desktop executable version is '$installedVersion', expected '$ExpectedVersion'."
+    }
+    if (-not (Test-ReefVisionInstalledBackendBundle -InstallDirectory $normalizedInstallDirectory)) {
+        throw "The packaged ReefVision backend bundle is still missing after the repair step: $(Join-Path $normalizedInstallDirectory 'backend\reefvision-api\reefvision-api.exe')"
+    }
+
+    Set-ReefVisionInstalledDesktopPath -ExecutablePath $desktopTarget
+    return [pscustomobject]@{
+        install_directory = $normalizedInstallDirectory
+        desktop_executable = $desktopTarget
+        api_executable = $apiTarget
+        backend_directory = $backendTarget
+        installed_version = $installedVersion
+    }
+}
+
+$showHelp = $false
+$showStatus = $false
+$runSetup = $false
+$skipSetup = $false
+$buildOnly = $false
+$installOnly = $false
+$noLaunch = $false
+$cleanBuild = $false
+$verbose = $false
+$dryRun = $false
+$runTests = $false
+$configureRepoPath = $null
+
+for ($index = 0; $index -lt $Arguments.Count; $index += 1) {
+    switch ($Arguments[$index]) {
+        "--help" { $showHelp = $true }
+        "--status" { $showStatus = $true }
+        "--setup" { $runSetup = $true }
+        "--skip-setup" { $skipSetup = $true }
+        "--build-only" { $buildOnly = $true }
+        "--install-only" { $installOnly = $true }
+        "--no-launch" { $noLaunch = $true }
+        "--clean-build" { $cleanBuild = $true }
+        "--verbose" { $verbose = $true }
+        "--dry-run" { $dryRun = $true }
+        "--test" { $runTests = $true }
+        "--configure-repo" {
+            $index += 1
+            if ($index -ge $Arguments.Count) {
+                throw "--configure-repo requires a repository path."
+            }
+            $configureRepoPath = $Arguments[$index]
+        }
+        default {
+            throw "Unknown update-reefvision option: $($Arguments[$index])"
+        }
+    }
+}
+
+if ($showHelp) {
+    Show-UpdateReefVisionHelp
+    exit 0
+}
+
+if ($configureRepoPath) {
+    $resolved = Set-ReefVisionRepoPath -RepoPath $configureRepoPath
+    Write-ReefVisionCommandNote "Configured ReefVision repository: $resolved"
+    if (-not $showStatus) {
+        exit 0
+    }
+}
+
+if ($buildOnly -and $installOnly) {
+    throw "--build-only and --install-only cannot be used together."
+}
+
+if ($runSetup -and $skipSetup) {
+    throw "--setup and --skip-setup cannot be used together."
+}
+
+$repoPath = Resolve-ReefVisionRepoPath
+if ($null -eq $repoPath) {
+    throw "A ReefVision repository is required. Run update-reefvision --configure-repo PATH first."
+}
+
+$expectedVersion = Assert-ReefVisionVersionConsistency -RepoPath $repoPath
+$dependencySignature = Get-UpdateDependencySignature -RepoPath $repoPath
+$config = Get-ReefVisionCommandConfig
+$nsisDir = Get-ReefVisionNsisDirectory -RepoPath $repoPath
+$latestInstaller = Get-ReefVisionLatestInstaller -RepoPath $repoPath -ExpectedVersion $expectedVersion
+$installedDesktopPath = Resolve-ReefVisionInstalledDesktopPath
+$installedVersion = Get-ReefVisionExecutableVersion -ExecutablePath $installedDesktopPath
+$registeredInstall = Test-ReefVisionCurrentUserInstallRegistration
+$portableInstallDirectory = Resolve-ReefVisionPortableInstallDirectory -PreferredExecutablePath $installedDesktopPath
+$installedBackendBundlePresent = Test-ReefVisionInstalledBackendBundle -InstallDirectory $portableInstallDirectory
+
+if ($showStatus) {
+    [pscustomobject]@{
+        command_version = $script:ReefVisionCommandVersion
+        repo_path = $repoPath
+        reefvision_version = $expectedVersion
+        dependency_signature = $dependencySignature
+        stored_dependency_signature = $config.dependency_signature
+        registered_current_user_install = $registeredInstall
+        installed_desktop = $installedDesktopPath
+        installed_version = $installedVersion
+        portable_install_directory = $portableInstallDirectory
+        installed_backend_bundle_present = $installedBackendBundlePresent
+        latest_installer = if ($latestInstaller) { $latestInstaller.FullName } else { $null }
+        latest_installer_written_at = if ($latestInstaller) { $latestInstaller.LastWriteTimeUtc } else { $null }
+        nsis_directory = $nsisDir
+    } | ConvertTo-Json -Depth 4
+    exit 0
+}
+
+$lock = $null
+if (-not $dryRun) {
+    $lock = New-ReefVisionUpdateLock
+}
+
+try {
+    Write-ReefVisionCommandStep "Preparing ReefVision update"
+    Write-ReefVisionCommandNote "Repository: $repoPath"
+    Write-ReefVisionCommandNote "Version: $expectedVersion"
+
+    $gitStatus = "unavailable"
+    if (Get-Command git -ErrorAction SilentlyContinue) {
+        try {
+            Push-Location $repoPath
+            $gitStatus = (& git status --short)
+        }
+        catch {
+            $gitStatus = "unavailable"
+        }
+        finally {
+            Pop-Location
+        }
+    }
+    if ($verbose) {
+        Write-ReefVisionCommandNote "Git status: $gitStatus"
+    }
+
+    $setupNeeded = $runSetup -or (-not $skipSetup -and (
+        $dependencySignature -ne $config.dependency_signature -or
+        -not (Test-Path (Join-Path $repoPath ".venv") -PathType Container) -or
+        -not (Test-Path (Join-Path $repoPath "apps\web\node_modules") -PathType Container)
+    ))
+
+    if ($dryRun) {
+        [pscustomobject]@{
+            repo_path = $repoPath
+            reefvision_version = $expectedVersion
+            setup_needed = $setupNeeded
+            build_only = $buildOnly
+            install_only = $installOnly
+            clean_build = $cleanBuild
+            tests = $runTests
+            registered_current_user_install = $registeredInstall
+            installed_desktop = $installedDesktopPath
+            installed_version = $installedVersion
+            portable_install_directory = $portableInstallDirectory
+            installed_backend_bundle_present = $installedBackendBundlePresent
+            latest_installer = if ($latestInstaller) { $latestInstaller.FullName } else { $null }
+        } | ConvertTo-Json -Depth 4
+        exit 0
+    }
+
+    if ($cleanBuild) {
+        $resolvedNsisDir = Resolve-Path -LiteralPath $nsisDir -ErrorAction SilentlyContinue
+        if ($null -ne $resolvedNsisDir -and $resolvedNsisDir.Path -like "$repoPath*") {
+            Write-ReefVisionCommandStep "Cleaning the NSIS bundle directory"
+            if (Test-Path $nsisDir -PathType Container) {
+                Remove-Item -LiteralPath $nsisDir -Recurse -Force
+            }
+        }
+        else {
+            throw "Refusing to clean an installer directory outside the configured repository: $nsisDir"
+        }
+    }
+
+    if ($runTests) {
+        Write-ReefVisionCommandStep "Running ReefVision tests"
+        & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoPath "scripts\test.ps1")
+        if ($LASTEXITCODE -ne 0) {
+            throw "ReefVision tests failed."
+        }
+    }
+
+    if ($setupNeeded) {
+        Write-ReefVisionCommandStep "Running ReefVision setup"
+        & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoPath "scripts\bootstrap.ps1") -ProviderRequirementsFile "requirements/providers-windows-cu121-py312.txt"
+        if ($LASTEXITCODE -ne 0) {
+            throw "ReefVision setup failed."
+        }
+        $config = Get-ReefVisionCommandConfig
+        $config.dependency_signature = $dependencySignature
+        Save-ReefVisionCommandConfig -Config $config
+    }
+
+    $installer = $null
+    if (-not $installOnly) {
+        $buildStartedAtUtc = (Get-Date).ToUniversalTime().AddSeconds(-1)
+        Write-ReefVisionCommandStep "Building the ReefVision desktop installer"
+        & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoPath "scripts\build-desktop.ps1")
+        if ($LASTEXITCODE -ne 0) {
+            throw "The ReefVision desktop build failed."
+        }
+
+        $installer = Get-ReefVisionFreshInstaller -RepoPath $repoPath -ExpectedVersion $expectedVersion -BuildStartedAtUtc $buildStartedAtUtc
+        if ($null -eq $installer) {
+            throw "No fresh ReefVision v$expectedVersion installer was produced by the completed build. Stale installers were rejected."
+        }
+
+        $installerSha = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash
+        $config = Get-ReefVisionCommandConfig
+        $config.last_installer_path = $installer.FullName
+        $config.last_installer_sha256 = $installerSha
+        Save-ReefVisionCommandConfig -Config $config
+
+        Write-ReefVisionCommandNote "Fresh installer: $($installer.FullName)"
+        Write-ReefVisionCommandNote "SHA-256: $installerSha"
+    }
+
+    if ($buildOnly) {
+        exit 0
+    }
+
+    if ($installOnly) {
+        if (-not [string]::IsNullOrWhiteSpace($config.last_installer_path) -and (Test-Path $config.last_installer_path -PathType Leaf)) {
+            $installer = Get-Item -LiteralPath $config.last_installer_path
+        }
+        elseif ($latestInstaller) {
+            $installer = $latestInstaller
+        }
+        else {
+            throw "No existing ReefVision v$expectedVersion installer is available for --install-only."
+        }
+    }
+
+    if ($null -eq $installer) {
+        throw "No ReefVision installer is available to install."
+    }
+
+    if ($installer.Name -notlike "ReefVision_${expectedVersion}_*-setup.exe") {
+        throw "The selected installer does not match ReefVision v${expectedVersion}: $($installer.FullName)"
+    }
+
+    Write-ReefVisionCommandStep "Stopping running ReefVision processes"
+    Stop-ReefVisionRunningProcesses
+    Start-Sleep -Milliseconds 500
+
+    $portableSync = $null
+    $canRepairPortableInstall = (
+        -not [string]::IsNullOrWhiteSpace($portableInstallDirectory) -and
+        (Test-Path $portableInstallDirectory -PathType Container)
+    )
+
+    if ($canRepairPortableInstall) {
+        Write-ReefVisionCommandStep "Repairing the existing ReefVision app files"
+        if ($registeredInstall) {
+            Write-ReefVisionCommandNote "Refreshing the existing user-local ReefVision installation in place."
+        }
+        else {
+            Write-ReefVisionCommandNote "No registered current-user ReefVision installation was found. Updating the existing user-local app files in place."
+        }
+        $portableSync = Sync-ReefVisionPortableInstall -RepoPath $repoPath -ExpectedVersion $expectedVersion -InstallDirectory $portableInstallDirectory
+    }
+    else {
+        Write-ReefVisionCommandStep "Installing ReefVision"
+        $installProcess = Start-Process -FilePath $installer.FullName -ArgumentList "/S" -PassThru -Wait
+        if ($installProcess.ExitCode -ne 0) {
+            throw "The ReefVision installer exited with code $($installProcess.ExitCode)."
+        }
+
+        $installedDesktopPath = Resolve-ReefVisionInstalledDesktopPath
+        $installedVersion = Get-ReefVisionExecutableVersion -ExecutablePath $installedDesktopPath
+        $installedBackendBundlePresent = Test-ReefVisionInstalledBackendBundle -InstallDirectory $portableInstallDirectory
+        if (($installedVersion -ne $expectedVersion -or -not $installedBackendBundlePresent) -and -not [string]::IsNullOrWhiteSpace($portableInstallDirectory)) {
+            Write-ReefVisionCommandStep "Repairing ReefVision app files"
+            Write-ReefVisionCommandNote "Installer completed but the installed app files are incomplete or stale. Repairing the user-local app files directly."
+            $portableSync = Sync-ReefVisionPortableInstall -RepoPath $repoPath -ExpectedVersion $expectedVersion -InstallDirectory $portableInstallDirectory
+        }
+    }
+
+    if ($portableSync) {
+        Write-ReefVisionCommandNote "Desktop executable: $($portableSync.desktop_executable)"
+        Write-ReefVisionCommandNote "Installed version: $($portableSync.installed_version)"
+    }
+
+    if (-not $noLaunch) {
+        Write-ReefVisionCommandStep "Launching the updated ReefVision desktop app"
+        & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoPath "scripts\start-reefvision.ps1") --no-wait
+        if ($LASTEXITCODE -ne 0) {
+            throw "The updated ReefVision desktop app did not launch successfully."
+        }
+    }
+}
+finally {
+    if ($lock) {
+        Close-ReefVisionUpdateLock -Lock $lock
+    }
+}

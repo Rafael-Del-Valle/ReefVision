@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "catalog_version": "1.0.0",
+  "trackers": [
+    {
+      "tracker_id": "bytetrack/default",
+      "display_name": "ByteTrack",
+      "provider": "bytetrack",
+      "provider_version": "planned",
+      "task": "track",
+      "installation_state": "Unavailable",
+      "installation_reason": "ByteTrack is cataloged but not yet implemented as a standalone ReefVision tracking provider.",
+      "supported_runtime": ["pytorch"],
+      "supported_devices": ["cpu", "cuda"],
+      "desktop_package_status": "not_packaged",
+      "clean_machine_verification_status": "not_verified",
+      "known_limitations": ["Trackers are cataloged separately from detectors and are not wired into a video workflow yet."],
+      "required_package_versions": ["lap==0.5.13"]
+    },
+    {
+      "tracker_id": "botsort/default",
+      "display_name": "BoT-SORT",
+      "provider": "botsort",
+      "provider_version": "planned",
+      "task": "track",
+      "installation_state": "Unavailable",
+      "installation_reason": "BoT-SORT is cataloged but not yet implemented as a standalone ReefVision tracking provider.",
+      "supported_runtime": ["pytorch"],
+      "supported_devices": ["cpu", "cuda"],
+      "desktop_package_status": "not_packaged",
+      "clean_machine_verification_status": "not_verified",
+      "known_limitations": ["Trackers are cataloged separately from detectors and are not wired into a video workflow yet."],
+      "required_package_versions": ["lap==0.5.13"]
+    }
+  ]
+}

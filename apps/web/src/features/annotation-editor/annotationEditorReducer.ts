@@ -1,0 +1,305 @@
+import type {
+  AnnotationSavePayload,
+  AnnotationSaveResponse,
+  AnnotationSession,
+} from "../../api/client";
+import type {
+  AnnotationDocument,
+  AnnotationEditorState,
+  EditorAnnotation,
+  EditorTool,
+} from "./types";
+import { toEditorAnnotation } from "./types";
+
+const HISTORY_LIMIT = 100;
+
+export const initialAnnotationEditorState: AnnotationEditorState = {
+  baseRevision: 0,
+  documentVersion: 0,
+  lastCommittedVersion: 0,
+  document: {
+    annotation_status: "unannotated",
+    annotations: [],
+  },
+  history: [],
+  future: [],
+  selectedIds: [],
+  activeClassId: null,
+  hiddenClassIds: [],
+  tool: "select",
+  saveState: "idle",
+  saveMessage: null,
+};
+
+type AnnotationEditorAction =
+  | { type: "loadSession"; session: AnnotationSession }
+  | { type: "setTool"; tool: EditorTool }
+  | { type: "setSelection"; selection: string[] }
+  | { type: "setActiveClassId"; classId: string | null }
+  | { type: "toggleHiddenClassId"; classId: string }
+  | { type: "showAllClasses" }
+  | { type: "hideAllClasses"; classIds: string[] }
+  | { type: "invertHiddenClasses"; classIds: string[] }
+  | { type: "soloClass"; classId: string; classIds: string[] }
+  | { type: "resetVisibility" }
+  | {
+      type: "commitDocument";
+      document: AnnotationDocument;
+      selection?: string[];
+    }
+  | { type: "undo" }
+  | { type: "redo" }
+  | { type: "saveStarted"; sentVersion: number }
+  | {
+      type: "saveSucceeded";
+      sentVersion: number;
+      response: AnnotationSaveResponse;
+    }
+  | {
+      type: "saveFailed";
+      message: string;
+      conflict: boolean;
+    };
+
+function annotationsEqual(
+  left: EditorAnnotation[],
+  right: EditorAnnotation[],
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((annotation, index) => {
+    const other = right[index];
+    return (
+      annotation.id === other.id &&
+      annotation.label_class_id === other.label_class_id &&
+      annotation.x_min === other.x_min &&
+      annotation.y_min === other.y_min &&
+      annotation.x_max === other.x_max &&
+      annotation.y_max === other.y_max
+    );
+  });
+}
+
+function documentsEqual(
+  left: AnnotationDocument,
+  right: AnnotationDocument,
+): boolean {
+  return (
+    left.annotation_status === right.annotation_status &&
+    annotationsEqual(left.annotations, right.annotations)
+  );
+}
+
+function validSelection(
+  document: AnnotationDocument,
+  selection: string[],
+): string[] {
+  const ids = new Set(document.annotations.map((annotation) => annotation.id));
+  return Array.from(new Set(selection)).filter((id) => ids.has(id));
+}
+
+export function isDirty(state: AnnotationEditorState): boolean {
+  return state.documentVersion > state.lastCommittedVersion;
+}
+
+export function documentFromSession(
+  session: AnnotationSession,
+): AnnotationDocument {
+  return {
+    annotation_status: session.image.annotation_status,
+    annotations: session.annotations.map(toEditorAnnotation),
+  };
+}
+
+function documentFromSaveResponse(
+  response: AnnotationSaveResponse,
+): AnnotationDocument {
+  return {
+    annotation_status: response.image.annotation_status,
+    annotations: response.annotations.map(toEditorAnnotation),
+  };
+}
+
+function nextHistory(
+  history: AnnotationDocument[],
+  current: AnnotationDocument,
+) {
+  const withCurrent = [...history, current];
+  return withCurrent.slice(-HISTORY_LIMIT);
+}
+
+export function toAnnotationSavePayload(
+  state: AnnotationEditorState,
+): AnnotationSavePayload {
+  return {
+    base_revision: state.baseRevision,
+    annotation_status: state.document.annotation_status,
+    annotations: state.document.annotations.map((annotation) => ({
+      id: annotation.id,
+      label_class_id: annotation.label_class_id,
+      x_min: annotation.x_min,
+      y_min: annotation.y_min,
+      x_max: annotation.x_max,
+      y_max: annotation.y_max,
+    })),
+  };
+}
+
+export function annotationEditorReducer(
+  state: AnnotationEditorState,
+  action: AnnotationEditorAction,
+): AnnotationEditorState {
+  switch (action.type) {
+    case "loadSession": {
+      const nextDocument = documentFromSession(action.session);
+      const activeClassId =
+        action.session.label_classes.find((item) => item.is_active)?.id ??
+        action.session.label_classes[0]?.id ??
+        null;
+      return {
+        ...initialAnnotationEditorState,
+        baseRevision: action.session.image.annotation_revision,
+        document: nextDocument,
+        activeClassId,
+      };
+    }
+    case "setTool":
+      return {
+        ...state,
+        tool: action.tool,
+      };
+    case "setSelection":
+      return {
+        ...state,
+        selectedIds: validSelection(state.document, action.selection),
+      };
+    case "setActiveClassId":
+      return {
+        ...state,
+        activeClassId: action.classId,
+      };
+    case "toggleHiddenClassId": {
+      const hidden = state.hiddenClassIds.includes(action.classId)
+        ? state.hiddenClassIds.filter((item) => item !== action.classId)
+        : [...state.hiddenClassIds, action.classId];
+      return {
+        ...state,
+        hiddenClassIds: hidden,
+      };
+    }
+    case "showAllClasses":
+      return {
+        ...state,
+        hiddenClassIds: [],
+      };
+    case "hideAllClasses":
+      return {
+        ...state,
+        hiddenClassIds: Array.from(new Set(action.classIds)),
+      };
+    case "invertHiddenClasses": {
+      const hidden = new Set(state.hiddenClassIds);
+      return {
+        ...state,
+        hiddenClassIds: action.classIds.filter((classId) => !hidden.has(classId)),
+      };
+    }
+    case "soloClass":
+      return {
+        ...state,
+        hiddenClassIds: action.classIds.filter((classId) => classId !== action.classId),
+      };
+    case "resetVisibility":
+      return {
+        ...state,
+        hiddenClassIds: [],
+      };
+    case "commitDocument": {
+      const nextDocument = action.document;
+      const nextSelection = validSelection(
+        nextDocument,
+        action.selection ?? state.selectedIds,
+      );
+      if (documentsEqual(state.document, nextDocument)) {
+        return {
+          ...state,
+          selectedIds: nextSelection,
+        };
+      }
+      return {
+        ...state,
+        document: nextDocument,
+        history: nextHistory(state.history, state.document),
+        future: [],
+        selectedIds: nextSelection,
+        documentVersion: state.documentVersion + 1,
+        saveState: state.saveState === "saving" ? "saving" : "dirty",
+        saveMessage: null,
+      };
+    }
+    case "undo": {
+      const previous = state.history[state.history.length - 1];
+      if (!previous) {
+        return state;
+      }
+      return {
+        ...state,
+        document: previous,
+        history: state.history.slice(0, -1),
+        future: [state.document, ...state.future],
+        selectedIds: validSelection(previous, state.selectedIds),
+        documentVersion: state.documentVersion + 1,
+        saveState: state.saveState === "saving" ? "saving" : "dirty",
+        saveMessage: null,
+      };
+    }
+    case "redo": {
+      const next = state.future[0];
+      if (!next) {
+        return state;
+      }
+      return {
+        ...state,
+        document: next,
+        history: nextHistory(state.history, state.document),
+        future: state.future.slice(1),
+        selectedIds: validSelection(next, state.selectedIds),
+        documentVersion: state.documentVersion + 1,
+        saveState: state.saveState === "saving" ? "saving" : "dirty",
+        saveMessage: null,
+      };
+    }
+    case "saveStarted":
+      return {
+        ...state,
+        saveState: "saving",
+        saveMessage: null,
+      };
+    case "saveSucceeded": {
+      const currentHasNewerChanges = state.documentVersion > action.sentVersion;
+      const nextDocument = documentFromSaveResponse(action.response);
+      const document = currentHasNewerChanges ? state.document : nextDocument;
+      return {
+        ...state,
+        baseRevision: action.response.image.annotation_revision,
+        lastCommittedVersion: Math.max(
+          state.lastCommittedVersion,
+          action.sentVersion,
+        ),
+        document,
+        selectedIds: validSelection(document, state.selectedIds),
+        saveState: currentHasNewerChanges ? "dirty" : "saved",
+        saveMessage: currentHasNewerChanges ? null : "Saved",
+      };
+    }
+    case "saveFailed":
+      return {
+        ...state,
+        saveState: action.conflict ? "conflict" : "error",
+        saveMessage: action.message,
+      };
+    default:
+      return state;
+  }
+}

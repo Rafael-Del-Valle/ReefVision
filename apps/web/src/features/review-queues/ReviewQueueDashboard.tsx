@@ -1,0 +1,535 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+
+import {
+  completeReviewQueueItem,
+  createDatasetVersionReviewQueue,
+  createReviewQueue,
+  getDatasetVersionQualityControlRuns,
+  getDatasetVersionReviewQueues,
+  getDatasetVersions,
+  getQualityControlRuns,
+  getReviewQueueItems,
+  getReviewQueues,
+  regenerateReviewQueue,
+  returnReviewQueueItem,
+  skipReviewQueueItem,
+  startReviewQueueItem,
+  type Project,
+  type ReviewQueueItem,
+  type ReviewQueueRecord,
+  type ReviewScoreWeights,
+} from "../../api/client";
+
+const defaultWeights: ReviewScoreWeights = {
+  low_mean_confidence: 24,
+  low_min_confidence: 12,
+  pending_proposals: 14,
+  rejection_rate: 8,
+  count_disagreement: 12,
+  unresolved_qc_severity: 18,
+  rare_class_presence: 5,
+  edited_acceptance_rate: 6,
+  unreviewed_state: 10,
+  missing_group_metadata: 4,
+  incomplete_provenance: 5,
+  recent_import: 4,
+  stale_review_state: 6,
+};
+
+function queueLabel(queue: ReviewQueueRecord): string {
+  return `${queue.status} | ${queue.item_count} ranked images`;
+}
+
+export function ReviewQueueDashboard({
+  project,
+  onOpenImage,
+}: {
+  project: Project;
+  onOpenImage: (item: ReviewQueueItem) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [scopeType, setScopeType] = useState<"project" | "dataset_version">(
+    "project",
+  );
+  const [datasetVersionId, setDatasetVersionId] = useState("");
+  const [selectedQueueId, setSelectedQueueId] = useState("");
+  const [selectedRunId, setSelectedRunId] = useState("");
+  const [page, setPage] = useState(1);
+  const [labelClassId, setLabelClassId] = useState("");
+  const [split, setSplit] = useState("");
+  const [qcSeverity, setQcSeverity] = useState("");
+  const [reviewState, setReviewState] = useState("");
+  const [modelId, setModelId] = useState("");
+  const [weights, setWeights] = useState<ReviewScoreWeights>(defaultWeights);
+
+  const versions = useQuery({
+    queryKey: ["dataset_versions", project.id],
+    queryFn: ({ signal }) => getDatasetVersions(project.id, signal),
+  });
+  const runs = useQuery({
+    queryKey: ["quality_control_runs", project.id, scopeType, datasetVersionId],
+    queryFn: ({ signal }) =>
+      scopeType === "dataset_version" && datasetVersionId
+        ? getDatasetVersionQualityControlRuns(datasetVersionId, signal)
+        : getQualityControlRuns(project.id, signal),
+  });
+  const queues = useQuery({
+    queryKey: ["review_queues", project.id, scopeType, datasetVersionId],
+    queryFn: ({ signal }) =>
+      scopeType === "dataset_version" && datasetVersionId
+        ? getDatasetVersionReviewQueues(datasetVersionId, signal)
+        : getReviewQueues(project.id, signal),
+  });
+  const items = useQuery({
+    queryKey: [
+      "review_queue_items",
+      selectedQueueId,
+      page,
+      labelClassId,
+      split,
+      qcSeverity,
+      reviewState,
+      modelId,
+    ],
+    queryFn: ({ signal }) =>
+      getReviewQueueItems(
+        selectedQueueId,
+        {
+          page,
+          pageSize: 25,
+          labelClassId: labelClassId || undefined,
+          split: split || undefined,
+          qcSeverity: qcSeverity || undefined,
+          reviewState: reviewState || undefined,
+          modelId: modelId.trim() || undefined,
+        },
+        signal,
+      ),
+    enabled: selectedQueueId.length > 0,
+  });
+
+  useEffect(() => {
+    if (!queues.data?.length) {
+      setSelectedQueueId("");
+      return;
+    }
+    if (!selectedQueueId) {
+      setSelectedQueueId(queues.data[0].id);
+    }
+  }, [queues.data, selectedQueueId]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [labelClassId, split, qcSeverity, reviewState, modelId]);
+
+  const createQueue = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        source_quality_control_run_id: selectedRunId || undefined,
+        signal_weights: weights,
+      };
+      return scopeType === "dataset_version" && datasetVersionId
+        ? createDatasetVersionReviewQueue(datasetVersionId, payload)
+        : createReviewQueue(project.id, payload);
+    },
+    onSuccess: async (queue) => {
+      setSelectedQueueId(queue.id);
+      await queryClient.invalidateQueries({
+        queryKey: ["review_queues", project.id],
+      });
+    },
+  });
+  const regenerateQueue = useMutation({
+    mutationFn: (queueId: string) => regenerateReviewQueue(queueId),
+    onSuccess: async (queue) => {
+      setSelectedQueueId(queue.id);
+      await queryClient.invalidateQueries({
+        queryKey: ["review_queues", project.id],
+      });
+    },
+  });
+  const startItem = useMutation({
+    mutationFn: (itemId: string) => startReviewQueueItem(itemId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["review_queue_items", selectedQueueId],
+      });
+    },
+  });
+  const completeItem = useMutation({
+    mutationFn: (itemId: string) => completeReviewQueueItem(itemId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["review_queue_items", selectedQueueId],
+      });
+    },
+  });
+  const skipItem = useMutation({
+    mutationFn: async (itemId: string) => {
+      const reason = window.prompt("Skip reason");
+      if (!reason?.trim()) {
+        throw new Error("A skip reason is required");
+      }
+      return skipReviewQueueItem(itemId, reason.trim());
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["review_queue_items", selectedQueueId],
+      });
+    },
+  });
+  const returnItem = useMutation({
+    mutationFn: (itemId: string) => returnReviewQueueItem(itemId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["review_queue_items", selectedQueueId],
+      });
+    },
+  });
+
+  const selectedQueue = useMemo(
+    () => queues.data?.find((queue) => queue.id === selectedQueueId) ?? null,
+    [queues.data, selectedQueueId],
+  );
+
+  return (
+    <section className="dashboard-panel">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Milestone 7</p>
+          <h3>Review Queue</h3>
+          <span>{queues.data?.length ?? 0} historical queues</span>
+        </div>
+      </div>
+
+      <div className="dashboard-layout">
+        <div className="dashboard-sidebar">
+          <div className="dashboard-card">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Queue configuration</p>
+                <h4>Generate ranking</h4>
+              </div>
+            </div>
+            <label>
+              Scope
+              <select
+                value={scopeType}
+                onChange={(event) =>
+                  setScopeType(
+                    event.target.value as "project" | "dataset_version",
+                  )
+                }
+              >
+                <option value="project">Entire project</option>
+                <option value="dataset_version">Dataset version</option>
+              </select>
+            </label>
+            {scopeType === "dataset_version" && (
+              <label>
+                Dataset version
+                <select
+                  value={datasetVersionId}
+                  onChange={(event) => setDatasetVersionId(event.target.value)}
+                >
+                  <option value="">Choose a version</option>
+                  {versions.data?.map((version) => (
+                    <option key={version.id} value={version.id}>
+                      v{version.version_number} - {version.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label>
+              Source QC run
+              <select
+                value={selectedRunId}
+                onChange={(event) => setSelectedRunId(event.target.value)}
+              >
+                <option value="">Latest completed run</option>
+                {runs.data?.map((run) => (
+                  <option key={run.id} value={run.id}>
+                    {new Date(run.created_at).toLocaleString()} | {run.status}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="dashboard-grid compact-grid">
+              {Object.entries(weights).map(([key, value]) => (
+                <label key={key}>
+                  {key.replaceAll("_", " ")}
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={value}
+                    onChange={(event) =>
+                      setWeights((current) => ({
+                        ...current,
+                        [key]: Number(event.target.value),
+                      }))
+                    }
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="version-actions">
+              <button
+                type="button"
+                disabled={
+                  createQueue.isPending ||
+                  (scopeType === "dataset_version" && !datasetVersionId)
+                }
+                onClick={() => createQueue.mutate()}
+              >
+                {createQueue.isPending ? "Generating..." : "Generate queue"}
+              </button>
+              {selectedQueue && (
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => regenerateQueue.mutate(selectedQueue.id)}
+                >
+                  Regenerate
+                </button>
+              )}
+            </div>
+            {(createQueue.error || regenerateQueue.error) && (
+              <p className="form-error">
+                {(createQueue.error ?? regenerateQueue.error)?.message}
+              </p>
+            )}
+          </div>
+
+          <div className="dashboard-card">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Queue history</p>
+                <h4>Generated queues</h4>
+              </div>
+            </div>
+            <div className="version-list">
+              {queues.data?.map((queue) => (
+                <button
+                  key={queue.id}
+                  type="button"
+                  className={`version-card ${
+                    selectedQueueId === queue.id ? "selected" : ""
+                  }`}
+                  onClick={() => setSelectedQueueId(queue.id)}
+                >
+                  <strong>{new Date(queue.created_at).toLocaleString()}</strong>
+                  <span>{queueLabel(queue)}</span>
+                  <small>{queue.formula_id}</small>
+                </button>
+              ))}
+            </div>
+            {queues.error && (
+              <p className="form-error">{queues.error.message}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="dashboard-main">
+          {selectedQueue && (
+            <div className="dashboard-card">
+              <div className="section-heading">
+                <div>
+                  <p className="eyebrow">Selected queue</p>
+                  <h4>{selectedQueue.formula_id}</h4>
+                </div>
+                <span>{selectedQueue.item_count} images</span>
+              </div>
+              <div className="version-preview-metrics">
+                <span>Status: {selectedQueue.status}</span>
+                <span>
+                  Created: {new Date(selectedQueue.created_at).toLocaleString()}
+                </span>
+                <span>Formula version: {selectedQueue.formula_version}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="dashboard-card">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Queue filters</p>
+                <h4>Ranked images</h4>
+              </div>
+              <span>{items.data?.total ?? 0} matches</span>
+            </div>
+            <div className="dashboard-grid compact-grid">
+              <label>
+                Class
+                <select
+                  value={labelClassId}
+                  onChange={(event) => setLabelClassId(event.target.value)}
+                >
+                  <option value="">All classes</option>
+                  {project.label_classes.map((labelClass) => (
+                    <option key={labelClass.id} value={labelClass.id}>
+                      {labelClass.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Split
+                <select
+                  value={split}
+                  onChange={(event) => setSplit(event.target.value)}
+                >
+                  <option value="">All splits</option>
+                  <option value="train">Train</option>
+                  <option value="validation">Validation</option>
+                  <option value="test">Test</option>
+                  <option value="unassigned">Unassigned</option>
+                </select>
+              </label>
+              <label>
+                QC severity
+                <select
+                  value={qcSeverity}
+                  onChange={(event) => setQcSeverity(event.target.value)}
+                >
+                  <option value="">All severities</option>
+                  <option value="error">Error</option>
+                  <option value="warning">Warning</option>
+                  <option value="info">Info</option>
+                </select>
+              </label>
+              <label>
+                Review state
+                <select
+                  value={reviewState}
+                  onChange={(event) => setReviewState(event.target.value)}
+                >
+                  <option value="">All states</option>
+                  <option value="pending">Pending</option>
+                  <option value="in_progress">In progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="skipped">Skipped</option>
+                </select>
+              </label>
+              <label>
+                Model ID
+                <input
+                  value={modelId}
+                  onChange={(event) => setModelId(event.target.value)}
+                  placeholder="Filter model id"
+                />
+              </label>
+            </div>
+            {items.isPending && <p>Loading review queue items...</p>}
+            {items.error && <p className="form-error">{items.error.message}</p>}
+            <div className="dashboard-list">
+              {items.data?.items.map((item) => (
+                <article key={item.id} className="dashboard-row">
+                  <div>
+                    <div className="image-card-topline">
+                      <strong>Rank #{item.rank_position}</strong>
+                      <span className="count-chip">
+                        Score {item.score.toFixed(2)}
+                      </span>
+                      {item.highest_qc_severity && (
+                        <span className="count-chip secondary-chip">
+                          {item.highest_qc_severity}
+                        </span>
+                      )}
+                      <span className="count-chip secondary-chip">
+                        {item.review_state}
+                      </span>
+                    </div>
+                    <p>
+                      {item.reason_summary || "No score summary available."}
+                    </p>
+                    <small>
+                      Image {item.image_id}
+                      {item.split ? ` | ${item.split}` : ""}
+                    </small>
+                    <div className="annotation-selection-list">
+                      {item.score_breakdown_json.slice(0, 4).map((entry) => (
+                        <div
+                          key={`${item.id}-${entry.signal_id}`}
+                          className="annotation-selection-row"
+                        >
+                          <strong>{entry.label}</strong>
+                          <span>+{entry.contribution.toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="dashboard-actions">
+                    <button type="button" onClick={() => onOpenImage(item)}>
+                      Open image
+                    </button>
+                    {item.review_state === "pending" && (
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => startItem.mutate(item.id)}
+                      >
+                        Start review
+                      </button>
+                    )}
+                    {item.review_state !== "completed" && (
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => completeItem.mutate(item.id)}
+                      >
+                        Mark complete
+                      </button>
+                    )}
+                    {item.review_state !== "skipped" ? (
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => skipItem.mutate(item.id)}
+                      >
+                        Skip
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => returnItem.mutate(item.id)}
+                      >
+                        Return to queue
+                      </button>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+            {items.data && items.data.pages > 1 && (
+              <nav className="pagination" aria-label="Review queue item pages">
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={page === 1}
+                  onClick={() => setPage((current) => current - 1)}
+                >
+                  Previous
+                </button>
+                <span>
+                  Page {items.data.page} of {items.data.pages}
+                </span>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={page === items.data.pages}
+                  onClick={() => setPage((current) => current + 1)}
+                >
+                  Next
+                </button>
+              </nav>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}

@@ -1,0 +1,74 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Node
+node_modules/
+apps/web/dist/
+apps/web/coverage/
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/src-tauri/binaries/
+apps/web/src-tauri/gen/
+apps/web/src-tauri/target/
+
+# ReefVision local data
+.reefvision/
+reefvision-data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment and IDE
+.env
+.env.local
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+build/
+dist/
+.desktop/
+
+# ReefVision generated runtime files
+.runtime/
+tmp_dataset_debug/
+
+# Local logs
+*.log
+
+# Model weights and training artifacts
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.engine
+checkpoints/
+weights/
+runs/
+models/
+
+# Local research data and backups
+datasets/
+backups/
+uploads/
+managed-media/
+
+# Signing keys and credentials
+*.key
+*.pem
+*.p12
+*.pfx
+signing-keys/
+private-keys/

@@ -1,0 +1,188 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import type { Project, ProjectImage } from "../../api/client";
+import { Gallery } from "./Gallery";
+
+const project: Project = {
+  id: "project-1",
+  name: "CPT Coral Study",
+  slug: "cpt-coral-study",
+  description: null,
+  storage_root: "projects/project-1",
+  default_annotation_type: "bbox",
+  created_at: "2026-07-08T00:00:00Z",
+  updated_at: "2026-07-08T00:00:00Z",
+  archived_at: null,
+  label_classes: [],
+};
+
+const image: ProjectImage = {
+  id: "image-1",
+  project_id: project.id,
+  original_filename: "swiftia-01.png",
+  managed_path: "projects/project-1/images/originals/image-1.png",
+  thumbnail_path: null,
+  sha256: "a".repeat(64),
+  width_px: 1600,
+  height_px: 1200,
+  file_size_bytes: 1000,
+  media_type: "image/png",
+  import_source: "trial/swiftia-01.png",
+  capture_timestamp: null,
+  group_key: null,
+  metadata_json: {},
+  annotation_status: "unannotated",
+  annotation_revision: 0,
+  annotation_count: 0,
+  created_at: "2026-07-08T00:00:00Z",
+  updated_at: "2026-07-08T00:00:00Z",
+};
+
+function jsonResponse(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function renderGallery(onOpenAnnotation?: (imageId: string) => void) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <Gallery project={project} onOpenAnnotation={onOpenAnnotation} />
+    </QueryClientProvider>,
+  );
+}
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+describe("Gallery", () => {
+  it("edits image grouping and annotation status", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.includes(`/projects/${project.id}/images`)) {
+          return jsonResponse({
+            items: [image],
+            total: 1,
+            page: 1,
+            page_size: 24,
+            pages: 1,
+          });
+        }
+        if (url.endsWith(`/images/${image.id}`) && init?.method === "PATCH") {
+          return jsonResponse({
+            ...image,
+            group_key: "whole-image-7",
+            annotation_status: "reviewed",
+            annotation_revision: 1,
+          });
+        }
+        throw new Error(`Unhandled request ${init?.method ?? "GET"} ${url}`);
+      });
+
+    renderGallery();
+    expect(await screen.findByText("swiftia-01.png")).toBeInTheDocument();
+    await userEvent.type(
+      screen.getByPlaceholderText("e.g. source-image-001"),
+      "whole-image-7",
+    );
+    await userEvent.selectOptions(
+      screen.getByLabelText("Image status"),
+      "reviewed",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save metadata" }),
+    );
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/images\/image-1$/),
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({
+            group_key: "whole-image-7",
+            annotation_status: "reviewed",
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("opens the annotation editor for a selected image", async () => {
+    const onOpenAnnotation = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes(`/projects/${project.id}/images`)) {
+        return jsonResponse({
+          items: [image],
+          total: 1,
+          page: 1,
+          page_size: 24,
+          pages: 1,
+        });
+      }
+      throw new Error(`Unhandled request GET ${url}`);
+    });
+
+    renderGallery(onOpenAnnotation);
+    await screen.findByText("swiftia-01.png");
+    await userEvent.click(screen.getByRole("button", { name: "Annotate" }));
+
+    expect(onOpenAnnotation).toHaveBeenCalledWith("image-1");
+  });
+
+  it("uploads selected files and shows the structured import report", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes(`/projects/${project.id}/images`)) {
+        return jsonResponse({
+          items: [],
+          total: 0,
+          page: 1,
+          page_size: 24,
+          pages: 0,
+        });
+      }
+      if (url.endsWith(`/projects/${project.id}/imports/images`)) {
+        expect(init?.method).toBe("POST");
+        expect(init?.body).toBeInstanceOf(FormData);
+        return jsonResponse({
+          project_id: project.id,
+          successful: [
+            {
+              filename: "coral.png",
+              relative_path: "coral.png",
+              status: "successful",
+              detail: null,
+              image_id: "image-2",
+              duplicate_image_id: null,
+              thumbnail_job_id: "job-1",
+            },
+          ],
+          duplicates: [],
+          unsupported: [],
+          failed: [],
+        });
+      }
+      throw new Error(`Unhandled request ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderGallery();
+    await screen.findByText("No matching images");
+    const file = new File(["image bytes"], "coral.png", { type: "image/png" });
+    await userEvent.upload(screen.getByLabelText("Import files"), file);
+
+    expect(await screen.findByText("1 files processed")).toBeInTheDocument();
+    expect(screen.getByText("1 imported")).toBeInTheDocument();
+  });
+});
