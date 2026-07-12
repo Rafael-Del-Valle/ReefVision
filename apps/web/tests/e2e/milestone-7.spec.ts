@@ -68,7 +68,19 @@ async function mountBuiltApp(page: Parameters<typeof test>[0]["page"]) {
     readFile(path.join(assetDirectory, scriptName), "utf8"),
     readFile(path.join(assetDirectory, styleName), "utf8"),
   ]);
-  await page.setContent('<main id="root"></main>');
+  await page.route("http://127.0.0.1:8000/", async (route) => {
+    await route.fulfill({
+      contentType: "text/html",
+      body: '<main id="root"></main>',
+    });
+  });
+  await page.goto("http://127.0.0.1:8000/");
+  await page.evaluate(() => {
+    window.localStorage.setItem(
+      "reefvision.onboarding.dismissed.1.6.0",
+      "true",
+    );
+  });
   await page.addStyleTag({ content: style });
   await page.addScriptTag({ content: script, type: "module" });
 }
@@ -171,8 +183,34 @@ test("quality-control workflow opens the flagged image and returns to the QC das
       await route.fulfill({ json: { status: "ok", version: "1.6.0" } });
       return;
     }
-    if (url.pathname.endsWith("/projects") && request.method() === "GET") {
-      await route.fulfill({ json: [project] });
+    if (
+      url.pathname.endsWith("/project-summaries") &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({
+        json: [
+          {
+            id: project.id,
+            name: project.name,
+            slug: project.slug,
+            description: project.description,
+            storage_root: project.storage_root,
+            default_annotation_type: project.default_annotation_type,
+            created_at: project.created_at,
+            updated_at: project.updated_at,
+            archived_at: project.archived_at,
+            label_class_count: project.label_classes.length,
+            active_label_class_count: project.label_classes.length,
+          },
+        ],
+      });
+      return;
+    }
+    if (
+      url.pathname.endsWith(`/projects/${project.id}`) &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({ json: project });
       return;
     }
     if (url.pathname.endsWith(`/projects/${project.id}/images`)) {
@@ -252,16 +290,22 @@ test("quality-control workflow opens the flagged image and returns to the QC das
 
   await mountBuiltApp(page);
   await page.getByRole("button", { name: /CPT Coral Study/ }).click();
-  await page.getByRole("button", { name: "Quality Control" }).click();
+  await page.getByRole("tab", { name: "Quality Control" }).click();
   await page.getByRole("button", { name: "Run quality control" }).click();
 
-  await expect(page.getByText("Exact duplicate bounding boxes")).toBeVisible();
+  await expect(
+    page.getByText("Exact duplicate bounding boxes").last(),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Open image" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "swiftia-frame.png" }),
+    page
+      .getByTestId("annotation-editor")
+      .getByRole("heading", { name: "swiftia-frame.png" }),
   ).toBeVisible();
-  await expect(page.getByText("Exact duplicate bounding boxes")).toBeVisible();
+  await expect(
+    page.getByText("Exact duplicate bounding boxes").last(),
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Back to Quality Control" }),
   ).toBeVisible();
@@ -270,7 +314,9 @@ test("quality-control workflow opens the flagged image and returns to the QC das
   await expect(
     page.getByRole("heading", { name: "Quality Control" }),
   ).toBeVisible();
-  await expect(page.getByText("Exact duplicate bounding boxes")).toBeVisible();
+  await expect(
+    page.getByText("Exact duplicate bounding boxes").last(),
+  ).toBeVisible();
 });
 
 test("review-queue workflow preserves score context and item state transitions", async ({
@@ -388,8 +434,34 @@ test("review-queue workflow preserves score context and item state transitions",
       await route.fulfill({ json: { status: "ok", version: "1.6.0" } });
       return;
     }
-    if (url.pathname.endsWith("/projects") && request.method() === "GET") {
-      await route.fulfill({ json: [project] });
+    if (
+      url.pathname.endsWith("/project-summaries") &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({
+        json: [
+          {
+            id: project.id,
+            name: project.name,
+            slug: project.slug,
+            description: project.description,
+            storage_root: project.storage_root,
+            default_annotation_type: project.default_annotation_type,
+            created_at: project.created_at,
+            updated_at: project.updated_at,
+            archived_at: project.archived_at,
+            label_class_count: project.label_classes.length,
+            active_label_class_count: project.label_classes.length,
+          },
+        ],
+      });
+      return;
+    }
+    if (
+      url.pathname.endsWith(`/projects/${project.id}`) &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({ json: project });
       return;
     }
     if (url.pathname.endsWith(`/projects/${project.id}/images`)) {
@@ -478,11 +550,13 @@ test("review-queue workflow preserves score context and item state transitions",
 
   await mountBuiltApp(page);
   await page.getByRole("button", { name: /CPT Coral Study/ }).click();
-  await page.getByRole("button", { name: "Review Queue" }).click();
+  await page.getByRole("tab", { name: "Review Queue" }).click();
   await page.getByRole("button", { name: "Generate queue" }).click();
 
   await expect(page.getByText("Rank #1")).toBeVisible();
-  await expect(page.getByText(/Unresolved QC severity/)).toBeVisible();
+  await expect(
+    page.getByText("Unresolved QC severity", { exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Start review" }).click();
   await expect(page.getByText("in_progress")).toBeVisible();
 

@@ -81,7 +81,19 @@ async function mountBuiltApp(page: Parameters<typeof test>[0]["page"]) {
     readFile(path.join(assetDirectory, scriptName), "utf8"),
     readFile(path.join(assetDirectory, styleName), "utf8"),
   ]);
-  await page.setContent('<main id="root"></main>');
+  await page.route("http://127.0.0.1:8000/", async (route) => {
+    await route.fulfill({
+      contentType: "text/html",
+      body: '<main id="root"></main>',
+    });
+  });
+  await page.goto("http://127.0.0.1:8000/");
+  await page.evaluate(() => {
+    window.localStorage.setItem(
+      "reefvision.onboarding.dismissed.1.6.0",
+      "true",
+    );
+  });
   await page.addStyleTag({ content: style });
   await page.addScriptTag({ content: script, type: "module" });
 }
@@ -109,8 +121,34 @@ test("stores source-image coordinates correctly after zooming and reloads saved 
       await route.fulfill({ json: { status: "ok", version: "1.6.0" } });
       return;
     }
-    if (url.pathname.endsWith("/projects") && request.method() === "GET") {
-      await route.fulfill({ json: [project] });
+    if (
+      url.pathname.endsWith("/project-summaries") &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({
+        json: [
+          {
+            id: project.id,
+            name: project.name,
+            slug: project.slug,
+            description: project.description,
+            storage_root: project.storage_root,
+            default_annotation_type: project.default_annotation_type,
+            created_at: project.created_at,
+            updated_at: project.updated_at,
+            archived_at: project.archived_at,
+            label_class_count: project.label_classes.length,
+            active_label_class_count: project.label_classes.length,
+          },
+        ],
+      });
+      return;
+    }
+    if (
+      url.pathname.endsWith(`/projects/${project.id}`) &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({ json: project });
       return;
     }
     if (url.pathname.endsWith(`/projects/${project.id}/images`)) {
@@ -192,31 +230,101 @@ test("stores source-image coordinates correctly after zooming and reloads saved 
   await page.getByRole("button", { name: /CPT Coral Study/ }).click();
   await page.getByRole("button", { name: "Annotate" }).click();
   await expect(
-    page.getByRole("heading", { name: "swiftia-frame.png" }),
+    page
+      .getByTestId("annotation-editor")
+      .getByRole("heading", { name: "swiftia-frame.png" }),
   ).toBeVisible();
 
   const canvas = page.getByTestId("annotation-canvas");
+  const viewportGroup = canvas.locator("g").first();
+  const transformBeforeZoom = await viewportGroup.getAttribute("transform");
+
   await canvas.hover();
   await page.mouse.wheel(0, -500);
-  const imageBox = await page.locator("svg image").boundingBox();
-  if (!imageBox) {
-    throw new Error("The editor image did not render");
-  }
 
-  const start = {
-    x: imageBox.x + imageBox.width * 0.2,
-    y: imageBox.y + imageBox.height * 0.25,
-  };
-  const end = {
-    x: imageBox.x + imageBox.width * 0.55,
-    y: imageBox.y + imageBox.height * 0.65,
-  };
+  await expect
+    .poll(() => viewportGroup.getAttribute("transform"))
+    .not.toBe(transformBeforeZoom);
+  const geometry = await page
+    .getByTestId("annotation-canvas")
+    .evaluate((svg) => {
+      if (!(svg instanceof SVGSVGElement)) {
+        throw new Error("Annotation canvas is not an SVG element");
+      }
+
+      const viewportGroup = svg.querySelector<SVGGElement>("g");
+      const canvasRect = svg.getBoundingClientRect();
+      const matrix = viewportGroup?.transform.baseVal.consolidate()?.matrix;
+
+      if (
+        !viewportGroup ||
+        !matrix ||
+        canvasRect.width <= 0 ||
+        canvasRect.height <= 0
+      ) {
+        throw new Error("Annotation canvas geometry is unavailable");
+      }
+
+      const startLocal = {
+        x: canvasRect.width * 0.35,
+        y: canvasRect.height * 0.35,
+      };
+      const endLocal = {
+        x: canvasRect.width * 0.65,
+        y: canvasRect.height * 0.65,
+      };
+
+      const start = {
+        x: canvasRect.left + startLocal.x,
+        y: canvasRect.top + startLocal.y,
+      };
+      const end = {
+        x: canvasRect.left + endLocal.x,
+        y: canvasRect.top + endLocal.y,
+      };
+
+      const inverse = matrix.inverse();
+      const sourceStartPoint = new DOMPoint(
+        startLocal.x,
+        startLocal.y,
+      ).matrixTransform(inverse);
+      const sourceEndPoint = new DOMPoint(
+        endLocal.x,
+        endLocal.y,
+      ).matrixTransform(inverse);
+
+      return {
+        start,
+        end,
+        sourceStart: {
+          x: sourceStartPoint.x,
+          y: sourceStartPoint.y,
+        },
+        sourceEnd: {
+          x: sourceEndPoint.x,
+          y: sourceEndPoint.y,
+        },
+      };
+    });
+
+  const { start, end, sourceStart, sourceEnd } = geometry;
 
   await page.getByRole("button", { name: "Box (B)" }).click();
+  await expect(page.getByTestId("annotation-canvas")).toHaveClass(/tool-box/);
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
-  await page.mouse.move(end.x, end.y);
+  await page.mouse.move(end.x, end.y, { steps: 10 });
+
+  await expect(
+    page.getByTestId("annotation-canvas").locator("rect[stroke-dasharray]"),
+  ).toHaveCount(1);
+
   await page.mouse.up();
+  await expect(
+    page
+      .getByTestId("annotation-canvas")
+      .locator("[data-testid^='annotation-']"),
+  ).toHaveCount(1);
   await page.getByRole("button", { name: "Save now" }).click();
   await expect(page.getByTestId("annotation-save-state")).toHaveText("Saved");
 
@@ -225,26 +333,32 @@ test("stores source-image coordinates correctly after zooming and reloads saved 
     lastSavePayload?.annotations as Array<Record<string, number | string>>
   )[0];
   expect(savedAnnotation.x_min as number).toBeCloseTo(
-    ((start.x - imageBox.x) / imageBox.width) * baseImage.width_px,
+    Math.min(sourceStart.x, sourceEnd.x),
     1,
   );
   expect(savedAnnotation.y_min as number).toBeCloseTo(
-    ((start.y - imageBox.y) / imageBox.height) * baseImage.height_px,
+    Math.min(sourceStart.y, sourceEnd.y),
     1,
   );
   expect(savedAnnotation.x_max as number).toBeCloseTo(
-    ((end.x - imageBox.x) / imageBox.width) * baseImage.width_px,
+    Math.max(sourceStart.x, sourceEnd.x),
     1,
   );
   expect(savedAnnotation.y_max as number).toBeCloseTo(
-    ((end.y - imageBox.y) / imageBox.height) * baseImage.height_px,
+    Math.max(sourceStart.y, sourceEnd.y),
     1,
   );
 
   const savedId = String(savedAnnotation.id);
   await page.getByRole("button", { name: "Back to gallery" }).click();
+
+  await mountBuiltApp(page);
+  await page.getByRole("button", { name: /CPT Coral Study/ }).click();
   await page.getByRole("button", { name: "Annotate" }).click();
-  await expect(page.getByTestId(`annotation-${savedId}`)).toBeVisible();
+
+  await expect(
+    page.getByTestId("annotation-canvas").getByTestId(`annotation-${savedId}`),
+  ).toBeVisible();
 });
 
 test("keeps unsaved boxes visible after a failed save and allows retry", async ({
@@ -270,8 +384,34 @@ test("keeps unsaved boxes visible after a failed save and allows retry", async (
       await route.fulfill({ json: { status: "ok", version: "1.6.0" } });
       return;
     }
-    if (url.pathname.endsWith("/projects") && request.method() === "GET") {
-      await route.fulfill({ json: [project] });
+    if (
+      url.pathname.endsWith("/project-summaries") &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({
+        json: [
+          {
+            id: project.id,
+            name: project.name,
+            slug: project.slug,
+            description: project.description,
+            storage_root: project.storage_root,
+            default_annotation_type: project.default_annotation_type,
+            created_at: project.created_at,
+            updated_at: project.updated_at,
+            archived_at: project.archived_at,
+            label_class_count: project.label_classes.length,
+            active_label_class_count: project.label_classes.length,
+          },
+        ],
+      });
+      return;
+    }
+    if (
+      url.pathname.endsWith(`/projects/${project.id}`) &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({ json: project });
       return;
     }
     if (url.pathname.endsWith(`/projects/${project.id}/images`)) {
@@ -360,30 +500,95 @@ test("keeps unsaved boxes visible after a failed save and allows retry", async (
   await page.getByRole("button", { name: /CPT Coral Study/ }).click();
   await page.getByRole("button", { name: "Annotate" }).click();
   await page.getByRole("button", { name: "Box (B)" }).click();
+  await expect(page.getByTestId("annotation-canvas")).toHaveClass(/tool-box/);
 
-  const imageBox = await page.locator("svg image").boundingBox();
-  if (!imageBox) {
-    throw new Error("The editor image did not render");
-  }
-  const start = {
-    x: imageBox.x + imageBox.width * 0.3,
-    y: imageBox.y + imageBox.height * 0.3,
-  };
-  const end = {
-    x: imageBox.x + imageBox.width * 0.5,
-    y: imageBox.y + imageBox.height * 0.5,
-  };
+  const geometry = await page
+    .getByTestId("annotation-canvas")
+    .evaluate((svg) => {
+      if (!(svg instanceof SVGSVGElement)) {
+        throw new Error("Annotation canvas is not an SVG element");
+      }
+
+      const viewportGroup = svg.querySelector<SVGGElement>("g");
+      const canvasRect = svg.getBoundingClientRect();
+      const matrix = viewportGroup?.transform.baseVal.consolidate()?.matrix;
+
+      if (
+        !viewportGroup ||
+        !matrix ||
+        canvasRect.width <= 0 ||
+        canvasRect.height <= 0
+      ) {
+        throw new Error("Annotation canvas geometry is unavailable");
+      }
+
+      const startLocal = {
+        x: canvasRect.width * 0.35,
+        y: canvasRect.height * 0.35,
+      };
+      const endLocal = {
+        x: canvasRect.width * 0.65,
+        y: canvasRect.height * 0.65,
+      };
+
+      const start = {
+        x: canvasRect.left + startLocal.x,
+        y: canvasRect.top + startLocal.y,
+      };
+      const end = {
+        x: canvasRect.left + endLocal.x,
+        y: canvasRect.top + endLocal.y,
+      };
+
+      const inverse = matrix.inverse();
+      const sourceStartPoint = new DOMPoint(
+        startLocal.x,
+        startLocal.y,
+      ).matrixTransform(inverse);
+      const sourceEndPoint = new DOMPoint(
+        endLocal.x,
+        endLocal.y,
+      ).matrixTransform(inverse);
+
+      return {
+        start,
+        end,
+        sourceStart: {
+          x: sourceStartPoint.x,
+          y: sourceStartPoint.y,
+        },
+        sourceEnd: {
+          x: sourceEndPoint.x,
+          y: sourceEndPoint.y,
+        },
+      };
+    });
+
+  const { start, end, sourceStart, sourceEnd } = geometry;
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
-  await page.mouse.move(end.x, end.y);
+  await page.mouse.move(end.x, end.y, { steps: 10 });
+
+  await expect(
+    page.getByTestId("annotation-canvas").locator("rect[stroke-dasharray]"),
+  ).toHaveCount(1);
+
   await page.mouse.up();
-  await expect(page.locator("[data-testid^='annotation-']")).toHaveCount(1);
+  await expect(
+    page
+      .getByTestId("annotation-canvas")
+      .locator("[data-testid^='annotation-']"),
+  ).toHaveCount(1);
 
   await page.getByRole("button", { name: "Save now" }).click();
   await expect(page.getByTestId("annotation-save-state")).toHaveText(
     /Temporary save failure/,
   );
-  await expect(page.locator("[data-testid^='annotation-']")).toHaveCount(1);
+  await expect(
+    page
+      .getByTestId("annotation-canvas")
+      .locator("[data-testid^='annotation-']"),
+  ).toHaveCount(1);
 
   await page.getByRole("button", { name: "Retry save" }).click();
   await expect(page.getByTestId("annotation-save-state")).toHaveText("Saved");
@@ -415,8 +620,34 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
       await route.fulfill({ json: { status: "ok", version: "1.6.0" } });
       return;
     }
-    if (url.pathname.endsWith("/projects") && request.method() === "GET") {
-      await route.fulfill({ json: [project] });
+    if (
+      url.pathname.endsWith("/project-summaries") &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({
+        json: [
+          {
+            id: project.id,
+            name: project.name,
+            slug: project.slug,
+            description: project.description,
+            storage_root: project.storage_root,
+            default_annotation_type: project.default_annotation_type,
+            created_at: project.created_at,
+            updated_at: project.updated_at,
+            archived_at: project.archived_at,
+            label_class_count: project.label_classes.length,
+            active_label_class_count: project.label_classes.length,
+          },
+        ],
+      });
+      return;
+    }
+    if (
+      url.pathname.endsWith(`/projects/${project.id}`) &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({ json: project });
       return;
     }
     if (url.pathname.endsWith(`/projects/${project.id}/images`)) {
@@ -464,8 +695,17 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
   await page.getByRole("button", { name: /CPT Coral Study/ }).click();
   await page.getByRole("button", { name: "Annotate" }).click();
 
-  const allAnnotations = page.locator("[data-testid^='annotation-']");
+  const allAnnotations = page
+    .getByTestId("annotation-canvas")
+    .locator("[data-testid^='annotation-']");
   await expect(allAnnotations).toHaveCount(1500, { timeout: 15000 });
-  await page.getByTestId("annotation-1").click();
+  await allAnnotations.first().dispatchEvent("pointerdown", {
+    button: 0,
+    buttons: 1,
+    clientX: 1,
+    clientY: 1,
+    pointerId: 1,
+    pointerType: "mouse",
+  });
   await expect(page.getByRole("heading", { name: "1 selected" })).toBeVisible();
 });

@@ -50,8 +50,34 @@ test("imports an image and updates leakage-group metadata", async ({
       await route.fulfill({ json: { status: "ok", version: "1.6.0" } });
       return;
     }
-    if (url.pathname.endsWith("/projects") && request.method() === "GET") {
-      await route.fulfill({ json: [project] });
+    if (
+      url.pathname.endsWith("/project-summaries") &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({
+        json: [
+          {
+            id: project.id,
+            name: project.name,
+            slug: project.slug,
+            description: project.description,
+            storage_root: project.storage_root,
+            default_annotation_type: project.default_annotation_type,
+            created_at: project.created_at,
+            updated_at: project.updated_at,
+            archived_at: project.archived_at,
+            label_class_count: project.label_classes.length,
+            active_label_class_count: project.label_classes.length,
+          },
+        ],
+      });
+      return;
+    }
+    if (
+      url.pathname.endsWith(`/projects/${project.id}`) &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({ json: project });
       return;
     }
     if (url.pathname.endsWith(`/projects/${project.id}/images`)) {
@@ -133,7 +159,19 @@ test("imports an image and updates leakage-group metadata", async ({
     readFile(path.join(assetDirectory, scriptName), "utf8"),
     readFile(path.join(assetDirectory, styleName), "utf8"),
   ]);
-  await page.setContent('<main id="root"></main>');
+  await page.route("http://127.0.0.1:8000/", async (route) => {
+    await route.fulfill({
+      contentType: "text/html",
+      body: '<main id="root"></main>',
+    });
+  });
+  await page.goto("http://127.0.0.1:8000/");
+  await page.evaluate(() => {
+    window.localStorage.setItem(
+      "reefvision.onboarding.dismissed.1.6.0",
+      "true",
+    );
+  });
   await page.addStyleTag({ content: style });
   await page.addScriptTag({ content: script, type: "module" });
 
