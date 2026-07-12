@@ -241,8 +241,7 @@ function ClassRow({
     runReassignDelete.error ??
     usage.error;
 
-  const usageRows =
-    usage.data?.counts.filter((item) => item.count > 0) ?? [];
+  const usageRows = usage.data?.counts.filter((item) => item.count > 0) ?? [];
   const canDelete = usage.data?.can_delete ?? true;
 
   return (
@@ -303,7 +302,11 @@ function ClassRow({
       </label>
 
       <div className="class-row-actions">
-        <button type="button" className="secondary" onClick={() => update.mutate()}>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => update.mutate()}
+        >
           Save
         </button>
         <button
@@ -313,7 +316,11 @@ function ClassRow({
         >
           {showUsage ? "Hide usage" : "Usage"}
         </button>
-        <button type="button" className="secondary" onClick={() => archive.mutate()}>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => archive.mutate()}
+        >
           {labelClass.is_active ? "Archive" : "Restore"}
         </button>
         <button
@@ -499,7 +506,10 @@ function ClassRow({
       )}
 
       {reassignPreview && (
-        <OperationSummary operation={reassignPreview} title="Reassign preview" />
+        <OperationSummary
+          operation={reassignPreview}
+          title="Reassign preview"
+        />
       )}
 
       {reassignDeletePreview && (
@@ -509,10 +519,12 @@ function ClassRow({
         />
       )}
 
-      {latestOperation &&
-        latestOperation.status !== "previewed" && (
-          <OperationSummary operation={latestOperation} title="Latest operation" />
-        )}
+      {latestOperation && latestOperation.status !== "previewed" && (
+        <OperationSummary
+          operation={latestOperation}
+          title="Latest operation"
+        />
+      )}
 
       {merge.data && (
         <div className="class-usage-card">
@@ -558,7 +570,9 @@ function NewClassForm({ project }: { project: Project }) {
       setName("");
       setClassIndex((current) => current + 1);
       setDescription("");
-      await queryClient.invalidateQueries({ queryKey: ["project", project.id] });
+      await queryClient.invalidateQueries({
+        queryKey: ["project", project.id],
+      });
       await queryClient.invalidateQueries({ queryKey: ["project_summaries"] });
     },
   });

@@ -612,9 +612,7 @@ export function SystemPanel({
             <div>
               <dt>Repository path</dt>
               <dd>
-                <code>
-                  {commandShortcutData.repo_path ?? "Not configured"}
-                </code>
+                <code>{commandShortcutData.repo_path ?? "Not configured"}</code>
               </dd>
             </div>
           </dl>
@@ -637,9 +635,7 @@ export function SystemPanel({
             </button>
           </div>
           {repairCommandsMutation.error && (
-            <p className="form-error">
-              {repairCommandsMutation.error.message}
-            </p>
+            <p className="form-error">{repairCommandsMutation.error.message}</p>
           )}
           {repairCommandsMutation.data && (
             <div className="system-verification-report">

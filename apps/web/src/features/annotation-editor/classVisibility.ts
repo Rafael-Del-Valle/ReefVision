@@ -5,10 +5,7 @@ import type {
 } from "../../api/client";
 
 export type VisibilitySource =
-  | "session"
-  | "my_preference"
-  | "project_default"
-  | "visible_by_default";
+  "session" | "my_preference" | "project_default" | "visible_by_default";
 
 export type VisibilityScopeKey = "user_preferences" | "project_defaults";
 
@@ -66,7 +63,9 @@ const EMPTY_SCOPE_STATE: ClassVisibilityScopeState = {
   updated_by_identity: null,
 };
 
-export function visibilityLayerLabel(layerType: ClassVisibilityLayerType): string {
+export function visibilityLayerLabel(
+  layerType: ClassVisibilityLayerType,
+): string {
   return (
     visibilityLayerOptions.find((option) => option.id === layerType)?.label ??
     layerType

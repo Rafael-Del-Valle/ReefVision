@@ -202,13 +202,17 @@ export function annotationEditorReducer(
       const hidden = new Set(state.hiddenClassIds);
       return {
         ...state,
-        hiddenClassIds: action.classIds.filter((classId) => !hidden.has(classId)),
+        hiddenClassIds: action.classIds.filter(
+          (classId) => !hidden.has(classId),
+        ),
       };
     }
     case "soloClass":
       return {
         ...state,
-        hiddenClassIds: action.classIds.filter((classId) => classId !== action.classId),
+        hiddenClassIds: action.classIds.filter(
+          (classId) => classId !== action.classId,
+        ),
       };
     case "resetVisibility":
       return {

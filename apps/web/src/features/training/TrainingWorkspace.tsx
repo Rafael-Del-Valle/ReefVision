@@ -107,7 +107,11 @@ function taskLabel(task: string | null): string {
 }
 
 function fileSizeLabel(sizeBytes: number | null): string {
-  if (typeof sizeBytes !== "number" || !Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+  if (
+    typeof sizeBytes !== "number" ||
+    !Number.isFinite(sizeBytes) ||
+    sizeBytes <= 0
+  ) {
     return "Managed by provider";
   }
   if (sizeBytes >= 1024 * 1024 * 1024) {
@@ -173,7 +177,9 @@ function toDraftSummary(draft: TrainingDraft): TrainingDraftSummary {
   };
 }
 
-function toTrainingPreflightPayload(draft: TrainingDraft): Record<string, unknown> {
+function toTrainingPreflightPayload(
+  draft: TrainingDraft,
+): Record<string, unknown> {
   return {
     name: draft.name,
     run_name: draft.run_name,
@@ -219,14 +225,17 @@ function applyDraftSummaryPatch(
         ? (patch.run_name as string | null)
         : draft.run_name,
     dataset_version_id:
-      typeof patch.dataset_version_id === "string" || patch.dataset_version_id === null
+      typeof patch.dataset_version_id === "string" ||
+      patch.dataset_version_id === null
         ? (patch.dataset_version_id as string | null)
         : draft.dataset_version_id,
-    task: typeof patch.task === "string" || patch.task === null
-      ? (patch.task as string | null)
-      : draft.task,
+    task:
+      typeof patch.task === "string" || patch.task === null
+        ? (patch.task as string | null)
+        : draft.task,
     catalog_model_id:
-      typeof patch.catalog_model_id === "string" || patch.catalog_model_id === null
+      typeof patch.catalog_model_id === "string" ||
+      patch.catalog_model_id === null
         ? (patch.catalog_model_id as string | null)
         : draft.catalog_model_id,
     provider_id:
@@ -334,12 +343,13 @@ export function TrainingWorkspace({
     [modelCatalog?.models],
   );
   const catalogEntryById = useMemo(
-    () => new Map(trainingCatalogEntries.map((item) => [item.catalog_id, item])),
+    () =>
+      new Map(trainingCatalogEntries.map((item) => [item.catalog_id, item])),
     [trainingCatalogEntries],
   );
   const selectedCatalogEntry =
     (selectedDraft?.catalog_model_id
-      ? catalogEntryById.get(selectedDraft.catalog_model_id) ?? null
+      ? (catalogEntryById.get(selectedDraft.catalog_model_id) ?? null)
       : null) ?? null;
   const pretrainedTrainingEntries = useMemo(
     () =>
@@ -350,8 +360,10 @@ export function TrainingWorkspace({
   );
   const selectablePretrainedEntries = useMemo(
     () =>
-      pretrainedTrainingEntries.filter((item) =>
-        item.installation_state === "Ready" || item.installation_state === "Available",
+      pretrainedTrainingEntries.filter(
+        (item) =>
+          item.installation_state === "Ready" ||
+          item.installation_state === "Available",
       ),
     [pretrainedTrainingEntries],
   );
@@ -360,7 +372,8 @@ export function TrainingWorkspace({
       trainingCatalogEntries.filter(
         (item) =>
           item.category === "my_trained_models" &&
-          (item.installation_state === "Ready" || item.installation_state === "Available"),
+          (item.installation_state === "Ready" ||
+            item.installation_state === "Available"),
       ),
     [trainingCatalogEntries],
   );
@@ -370,21 +383,22 @@ export function TrainingWorkspace({
         (item) =>
           item.category === "imported_custom_models" &&
           item.advanced_only &&
-          (item.installation_state === "Ready" || item.installation_state === "Available"),
+          (item.installation_state === "Ready" ||
+            item.installation_state === "Available"),
       ),
     [trainingCatalogEntries],
   );
   const taskOptions = useMemo(
     () =>
-      Array.from(new Set(selectablePretrainedEntries.map((item) => item.task))).sort(
-        (left, right) => taskLabel(left).localeCompare(taskLabel(right)),
-      ),
+      Array.from(
+        new Set(selectablePretrainedEntries.map((item) => item.task)),
+      ).sort((left, right) => taskLabel(left).localeCompare(taskLabel(right))),
     [selectablePretrainedEntries],
   );
   const selectedTaskForCatalog =
     selectedCatalogEntry?.category === "pretrained_catalog"
       ? selectedCatalogEntry.task
-      : taskOptions[0] ?? "detect";
+      : (taskOptions[0] ?? "detect");
   const architectureFamilies = useMemo(
     () =>
       Array.from(
@@ -400,7 +414,7 @@ export function TrainingWorkspace({
     selectedCatalogEntry?.category === "pretrained_catalog" &&
     selectedCatalogEntry.task === selectedTaskForCatalog
       ? selectedCatalogEntry.architecture_family
-      : architectureFamilies[0] ?? "";
+      : (architectureFamilies[0] ?? "");
   const presetOptions = useMemo(
     () =>
       selectablePretrainedEntries
@@ -410,7 +424,8 @@ export function TrainingWorkspace({
             item.architecture_family === selectedArchitectureFamily,
         )
         .sort((left, right) => {
-          const delta = catalogSizeSortValue(left) - catalogSizeSortValue(right);
+          const delta =
+            catalogSizeSortValue(left) - catalogSizeSortValue(right);
           return delta || left.display_name.localeCompare(right.display_name);
         }),
     [
@@ -429,8 +444,9 @@ export function TrainingWorkspace({
           providers[0]?.provider_id),
     ) ?? null;
   const selectedVersion =
-    versions.data?.find((item) => item.id === selectedDraft?.dataset_version_id) ??
-    null;
+    versions.data?.find(
+      (item) => item.id === selectedDraft?.dataset_version_id,
+    ) ?? null;
   const preflight = asPreflight(selectedDraft?.validation_state);
 
   const providerParameters = useQuery({
@@ -463,13 +479,15 @@ export function TrainingWorkspace({
 
   useEffect(() => {
     const initialDraftId =
-      workspaceBootstrap.data?.selected_draft?.id ??
-      drafts.data?.[0]?.id ??
-      "";
+      workspaceBootstrap.data?.selected_draft?.id ?? drafts.data?.[0]?.id ?? "";
     if (initialDraftId && !selectedDraftId) {
       setSelectedDraftId(initialDraftId);
     }
-  }, [drafts.data, selectedDraftId, workspaceBootstrap.data?.selected_draft?.id]);
+  }, [
+    drafts.data,
+    selectedDraftId,
+    workspaceBootstrap.data?.selected_draft?.id,
+  ]);
 
   const createDraftMutation = useMutation({
     mutationFn: (catalogModelId?: string) =>
@@ -541,12 +559,17 @@ export function TrainingWorkspace({
         ...selectedDraft,
         validation_state: preflightResult,
       };
-      queryClient.setQueryData(["training_draft", selectedDraft.id], updatedDraft);
+      queryClient.setQueryData(
+        ["training_draft", selectedDraft.id],
+        updatedDraft,
+      );
       queryClient.setQueryData<TrainingDraftSummary[]>(
         ["training_draft_summaries", project.id],
         (current) =>
           current?.map((draft) =>
-            draft.id === selectedDraft.id ? toDraftSummary(updatedDraft) : draft,
+            draft.id === selectedDraft.id
+              ? toDraftSummary(updatedDraft)
+              : draft,
           ) ?? [],
       );
       if (preflightResult.status === "blocked") {
@@ -643,7 +666,10 @@ export function TrainingWorkspace({
         setDraftSaveMessage(null);
       }
     } catch (error) {
-      pendingDraftPatchRef.current = { ...patch, ...pendingDraftPatchRef.current };
+      pendingDraftPatchRef.current = {
+        ...patch,
+        ...pendingDraftPatchRef.current,
+      };
       setDraftSaveState("error");
       setDraftSaveMessage(
         error instanceof Error ? error.message : "Draft save failed",
@@ -664,11 +690,17 @@ export function TrainingWorkspace({
     if (!selectedDraft) {
       return;
     }
-    if (pendingDraftIdRef.current && pendingDraftIdRef.current !== selectedDraft.id) {
+    if (
+      pendingDraftIdRef.current &&
+      pendingDraftIdRef.current !== selectedDraft.id
+    ) {
       void flushPendingDraftSave();
     }
     pendingDraftIdRef.current = selectedDraft.id;
-    pendingDraftPatchRef.current = { ...pendingDraftPatchRef.current, ...patch };
+    pendingDraftPatchRef.current = {
+      ...pendingDraftPatchRef.current,
+      ...patch,
+    };
     queryClient.setQueryData<TrainingDraft>(
       ["training_draft", selectedDraft.id],
       (current) => (current ? applyDraftPatch(current, patch) : current),
@@ -677,7 +709,9 @@ export function TrainingWorkspace({
       ["training_draft_summaries", project.id],
       (current) =>
         current?.map((draft) =>
-          draft.id === selectedDraft.id ? applyDraftSummaryPatch(draft, patch) : draft,
+          draft.id === selectedDraft.id
+            ? applyDraftSummaryPatch(draft, patch)
+            : draft,
         ) ?? [],
     );
     setDraftSaveState("unsaved");
@@ -739,7 +773,9 @@ export function TrainingWorkspace({
 
   function selectArchitecturePreset(architectureFamily: string) {
     const nextEntry =
-      presetOptions.find((item) => item.architecture_family === architectureFamily) ??
+      presetOptions.find(
+        (item) => item.architecture_family === architectureFamily,
+      ) ??
       selectablePretrainedEntries.find(
         (item) =>
           item.task === selectedTaskForCatalog &&
@@ -769,14 +805,17 @@ export function TrainingWorkspace({
   }
 
   const metricsPreview = useMemo(() => {
-    const run = runs.data?.find((item) => item.status === "running") ?? runs.data?.[0];
+    const run =
+      runs.data?.find((item) => item.status === "running") ?? runs.data?.[0];
     return run ? Object.entries(run.metrics).slice(0, 6) : [];
   }, [runs.data]);
 
   const registeredRunModels = useMemo(() => {
     const mapped = new Map<string, ModelRegistration>();
     models.data?.forEach((model) => {
-      const runId = stringValue(asRecord(model.metadata_json).source_training_run_id);
+      const runId = stringValue(
+        asRecord(model.metadata_json).source_training_run_id,
+      );
       if (runId) {
         mapped.set(runId, model);
       }
@@ -820,7 +859,10 @@ export function TrainingWorkspace({
             </button>
           )}
           {selectedDraftId && (
-            <span className="status-chip" data-testid="training-draft-save-state">
+            <span
+              className="status-chip"
+              data-testid="training-draft-save-state"
+            >
               {saveStateLabel(draftSaveState, draftSaveMessage)}
             </span>
           )}
@@ -845,14 +887,20 @@ export function TrainingWorkspace({
               ))}
             </select>
           </label>
-          <div className="training-section-list" role="tablist" aria-label="Training sections">
+          <div
+            className="training-section-list"
+            role="tablist"
+            aria-label="Training sections"
+          >
             {sections.map((section) => (
               <button
                 key={section.id}
                 type="button"
                 role="tab"
                 aria-selected={activeSection === section.id}
-                className={activeSection === section.id ? "active" : "secondary"}
+                className={
+                  activeSection === section.id ? "active" : "secondary"
+                }
                 onClick={() => setActiveSection(section.id)}
               >
                 {section.label}
@@ -865,12 +913,17 @@ export function TrainingWorkspace({
         </aside>
 
         <div className="training-content">
-          {selectedDraftId && !selectedDraft && selectedDraftQuery.isPending && (
-            <div className="empty-state">
-              <h4>Loading training draft</h4>
-              <p>Fetching the selected draft configuration and validation state.</p>
-            </div>
-          )}
+          {selectedDraftId &&
+            !selectedDraft &&
+            selectedDraftQuery.isPending && (
+              <div className="empty-state">
+                <h4>Loading training draft</h4>
+                <p>
+                  Fetching the selected draft configuration and validation
+                  state.
+                </p>
+              </div>
+            )}
           {selectedDraftId && selectedDraftQuery.error && (
             <div className="empty-state">
               <h4>Training draft unavailable</h4>
@@ -880,7 +933,9 @@ export function TrainingWorkspace({
           {!selectedDraft && !selectedDraftId && (
             <div className="empty-state">
               <h4>No training draft selected</h4>
-              <p>Create a draft to start configuring an immutable training run.</p>
+              <p>
+                Create a draft to start configuring an immutable training run.
+              </p>
             </div>
           )}
 
@@ -891,7 +946,8 @@ export function TrainingWorkspace({
                   Preflight: {preflight?.status ?? "not ready"}
                 </div>
                 <div className="status-chip">
-                  Task: {taskLabel(selectedCatalogEntry?.task ?? selectedDraft.task)}
+                  Task:{" "}
+                  {taskLabel(selectedCatalogEntry?.task ?? selectedDraft.task)}
                 </div>
                 <div className="status-chip">
                   Dataset: {selectedVersion?.name ?? "Unselected"}
@@ -958,7 +1014,9 @@ export function TrainingWorkspace({
                       </p>
                     )}
                     {workspaceBootstrap.error && !modelCatalog && (
-                      <p className="form-error">{workspaceBootstrap.error.message}</p>
+                      <p className="form-error">
+                        {workspaceBootstrap.error.message}
+                      </p>
                     )}
                     {taskOptions.length > 0 ? (
                       <>
@@ -967,7 +1025,9 @@ export function TrainingWorkspace({
                           <select
                             value={selectedTaskForCatalog}
                             onChange={(event) =>
-                              selectTaskPreset(event.target.value as ModelCatalogTask)
+                              selectTaskPreset(
+                                event.target.value as ModelCatalogTask,
+                              )
                             }
                           >
                             {taskOptions.map((task) => (
@@ -996,20 +1056,27 @@ export function TrainingWorkspace({
                           Model size or preset
                           <select
                             value={
-                              selectedCatalogEntry?.category === "pretrained_catalog"
+                              selectedCatalogEntry?.category ===
+                              "pretrained_catalog"
                                 ? selectedCatalogEntry.catalog_id
-                                : presetOptions[0]?.catalog_id ?? ""
+                                : (presetOptions[0]?.catalog_id ?? "")
                             }
                             onChange={(event) => {
-                              const next = catalogEntryById.get(event.target.value);
+                              const next = catalogEntryById.get(
+                                event.target.value,
+                              );
                               if (next) {
                                 applyCatalogSelection(next);
                               }
                             }}
                           >
                             {presetOptions.map((entry) => (
-                              <option key={entry.catalog_id} value={entry.catalog_id}>
-                                {entry.display_name} | {entry.installation_state}
+                              <option
+                                key={entry.catalog_id}
+                                value={entry.catalog_id}
+                              >
+                                {entry.display_name} |{" "}
+                                {entry.installation_state}
                               </option>
                             ))}
                           </select>
@@ -1042,19 +1109,25 @@ export function TrainingWorkspace({
                         <div className="annotation-selection-row">
                           <strong>Disk</strong>
                           <span>
-                            {fileSizeLabel(selectedCatalogEntry.expected_file_size)}
+                            {fileSizeLabel(
+                              selectedCatalogEntry.expected_file_size,
+                            )}
                           </span>
                         </div>
                         <div className="annotation-selection-row">
                           <strong>Recommended VRAM</strong>
                           <span>
-                            {selectedCatalogEntry.minimum_recommended_vram_gb ?? "n/a"} GB
+                            {selectedCatalogEntry.minimum_recommended_vram_gb ??
+                              "n/a"}{" "}
+                            GB
                           </span>
                         </div>
                         <div className="annotation-selection-row">
                           <strong>Trainable</strong>
                           <span>
-                            {selectedCatalogEntry.trainable ? "Yes" : "Inference only"}
+                            {selectedCatalogEntry.trainable
+                              ? "Yes"
+                              : "Inference only"}
                           </span>
                         </div>
                       </div>
@@ -1065,12 +1138,15 @@ export function TrainingWorkspace({
                         My trained models
                         <select
                           value={
-                            selectedCatalogEntry?.category === "my_trained_models"
+                            selectedCatalogEntry?.category ===
+                            "my_trained_models"
                               ? selectedCatalogEntry.catalog_id
                               : ""
                           }
                           onChange={(event) => {
-                            const next = catalogEntryById.get(event.target.value);
+                            const next = catalogEntryById.get(
+                              event.target.value,
+                            );
                             if (next) {
                               applyCatalogSelection(next);
                             }
@@ -1078,7 +1154,10 @@ export function TrainingWorkspace({
                         >
                           <option value="">Keep current catalog preset</option>
                           {myTrainedEntries.map((entry) => (
-                            <option key={entry.catalog_id} value={entry.catalog_id}>
+                            <option
+                              key={entry.catalog_id}
+                              value={entry.catalog_id}
+                            >
                               {entry.display_name}
                             </option>
                           ))}
@@ -1093,20 +1172,28 @@ export function TrainingWorkspace({
                           Imported custom detector
                           <select
                             value={
-                              selectedCatalogEntry?.category === "imported_custom_models"
+                              selectedCatalogEntry?.category ===
+                              "imported_custom_models"
                                 ? selectedCatalogEntry.catalog_id
                                 : ""
                             }
                             onChange={(event) => {
-                              const next = catalogEntryById.get(event.target.value);
+                              const next = catalogEntryById.get(
+                                event.target.value,
+                              );
                               if (next) {
                                 applyCatalogSelection(next);
                               }
                             }}
                           >
-                            <option value="">Select imported custom model</option>
+                            <option value="">
+                              Select imported custom model
+                            </option>
                             {importedCustomEntries.map((entry) => (
-                              <option key={entry.catalog_id} value={entry.catalog_id}>
+                              <option
+                                key={entry.catalog_id}
+                                value={entry.catalog_id}
+                              >
                                 {entry.display_name}
                               </option>
                             ))}
@@ -1114,12 +1201,13 @@ export function TrainingWorkspace({
                         </label>
                       ) : (
                         <p className="system-subtle">
-                          No imported custom detector models are registered for this project.
+                          No imported custom detector models are registered for
+                          this project.
                         </p>
                       )}
                       <p className="system-subtle">
-                        Imported checkpoints stay outside the normal pretrained workflow and
-                        remain part of the advanced path.
+                        Imported checkpoints stay outside the normal pretrained
+                        workflow and remain part of the advanced path.
                       </p>
                     </details>
                   </article>
@@ -1229,7 +1317,9 @@ export function TrainingWorkspace({
                     <dl className="training-kv-grid">
                       <div>
                         <dt>Split checksum</dt>
-                        <dd>{preflight?.dataset.split_manifest_sha256 ?? "N/A"}</dd>
+                        <dd>
+                          {preflight?.dataset.split_manifest_sha256 ?? "N/A"}
+                        </dd>
                       </div>
                       <div>
                         <dt>Group count</dt>
@@ -1237,11 +1327,15 @@ export function TrainingWorkspace({
                       </div>
                       <div>
                         <dt>Image leakage</dt>
-                        <dd>{preflight?.leakage_audit.image_leak_count ?? 0}</dd>
+                        <dd>
+                          {preflight?.leakage_audit.image_leak_count ?? 0}
+                        </dd>
                       </div>
                       <div>
                         <dt>Group leakage</dt>
-                        <dd>{preflight?.leakage_audit.group_leak_count ?? 0}</dd>
+                        <dd>
+                          {preflight?.leakage_audit.group_leak_count ?? 0}
+                        </dd>
                       </div>
                     </dl>
                     {(preflight?.dataset.warnings.length ?? 0) > 0 && (
@@ -1269,9 +1363,15 @@ export function TrainingWorkspace({
                     <label>
                       Mode
                       <select
-                        value={String(asRecord(selectedDraft.tiling_config).mode ?? "none")}
+                        value={String(
+                          asRecord(selectedDraft.tiling_config).mode ?? "none",
+                        )}
                         onChange={(event) =>
-                          patchConfig("tiling_config", "mode", event.target.value)
+                          patchConfig(
+                            "tiling_config",
+                            "mode",
+                            event.target.value,
+                          )
                         }
                       >
                         <option value="none">No tiling baseline</option>
@@ -1283,7 +1383,10 @@ export function TrainingWorkspace({
                       Tile width
                       <input
                         type="number"
-                        value={numberValue(asRecord(selectedDraft.tiling_config).tile_width, 640)}
+                        value={numberValue(
+                          asRecord(selectedDraft.tiling_config).tile_width,
+                          640,
+                        )}
                         onChange={(event) =>
                           patchConfig(
                             "tiling_config",
@@ -1297,7 +1400,10 @@ export function TrainingWorkspace({
                       Tile height
                       <input
                         type="number"
-                        value={numberValue(asRecord(selectedDraft.tiling_config).tile_height, 640)}
+                        value={numberValue(
+                          asRecord(selectedDraft.tiling_config).tile_height,
+                          640,
+                        )}
                         onChange={(event) =>
                           patchConfig(
                             "tiling_config",
@@ -1311,7 +1417,10 @@ export function TrainingWorkspace({
                       Horizontal overlap
                       <input
                         type="number"
-                        value={numberValue(asRecord(selectedDraft.tiling_config).overlap_x, 0)}
+                        value={numberValue(
+                          asRecord(selectedDraft.tiling_config).overlap_x,
+                          0,
+                        )}
                         onChange={(event) =>
                           patchConfig(
                             "tiling_config",
@@ -1325,7 +1434,10 @@ export function TrainingWorkspace({
                       Vertical overlap
                       <input
                         type="number"
-                        value={numberValue(asRecord(selectedDraft.tiling_config).overlap_y, 0)}
+                        value={numberValue(
+                          asRecord(selectedDraft.tiling_config).overlap_y,
+                          0,
+                        )}
                         onChange={(event) =>
                           patchConfig(
                             "tiling_config",
@@ -1351,7 +1463,12 @@ export function TrainingWorkspace({
 
                   <article className="system-card">
                     <h4>Estimate</h4>
-                    {!tilingEstimate && <p className="system-subtle">Run the estimator to preview tile counts and representative tiles.</p>}
+                    {!tilingEstimate && (
+                      <p className="system-subtle">
+                        Run the estimator to preview tile counts and
+                        representative tiles.
+                      </p>
+                    )}
                     {tilingEstimate && (
                       <>
                         <dl className="training-kv-grid">
@@ -1387,10 +1504,14 @@ export function TrainingWorkspace({
                         )}
                         <div className="training-preview-list">
                           {tilingEstimate.preview_tiles.map((tile) => (
-                            <div key={`${tile.image_id}-${tile.x}-${tile.y}`} className="system-record-card">
+                            <div
+                              key={`${tile.image_id}-${tile.x}-${tile.y}`}
+                              className="system-record-card"
+                            >
                               <strong>{tile.image_id}</strong>
                               <span>
-                                {tile.width}x{tile.height} at ({tile.x}, {tile.y})
+                                {tile.width}x{tile.height} at ({tile.x},{" "}
+                                {tile.y})
                               </span>
                               <small>
                                 {tile.split} | retained annotations:{" "}
@@ -1414,7 +1535,10 @@ export function TrainingWorkspace({
                         Epochs
                         <input
                           type="number"
-                          value={numberValue(asRecord(selectedDraft.training_config).epochs, 50)}
+                          value={numberValue(
+                            asRecord(selectedDraft.training_config).epochs,
+                            50,
+                          )}
                           onChange={(event) =>
                             patchConfig(
                               "training_config",
@@ -1428,7 +1552,10 @@ export function TrainingWorkspace({
                         Patience
                         <input
                           type="number"
-                          value={numberValue(asRecord(selectedDraft.training_config).patience, 20)}
+                          value={numberValue(
+                            asRecord(selectedDraft.training_config).patience,
+                            20,
+                          )}
                           onChange={(event) =>
                             patchConfig(
                               "training_config",
@@ -1442,7 +1569,10 @@ export function TrainingWorkspace({
                         Batch
                         <input
                           type="number"
-                          value={numberValue(asRecord(selectedDraft.training_config).batch, 8)}
+                          value={numberValue(
+                            asRecord(selectedDraft.training_config).batch,
+                            8,
+                          )}
                           onChange={(event) =>
                             patchConfig(
                               "training_config",
@@ -1456,7 +1586,10 @@ export function TrainingWorkspace({
                         Image size
                         <input
                           type="number"
-                          value={numberValue(asRecord(selectedDraft.training_config).imgsz, 640)}
+                          value={numberValue(
+                            asRecord(selectedDraft.training_config).imgsz,
+                            640,
+                          )}
                           onChange={(event) =>
                             patchConfig(
                               "training_config",
@@ -1469,7 +1602,10 @@ export function TrainingWorkspace({
                       <label>
                         Optimizer
                         <select
-                          value={String(asRecord(selectedDraft.training_config).optimizer ?? "auto")}
+                          value={String(
+                            asRecord(selectedDraft.training_config).optimizer ??
+                              "auto",
+                          )}
                           onChange={(event) =>
                             patchConfig(
                               "training_config",
@@ -1488,7 +1624,10 @@ export function TrainingWorkspace({
                         Workers
                         <input
                           type="number"
-                          value={numberValue(asRecord(selectedDraft.training_config).workers, 2)}
+                          value={numberValue(
+                            asRecord(selectedDraft.training_config).workers,
+                            2,
+                          )}
                           onChange={(event) =>
                             patchConfig(
                               "training_config",
@@ -1503,7 +1642,9 @@ export function TrainingWorkspace({
 
                   <article className="system-card">
                     <h4>Expert registry</h4>
-                    {providerParameters.isPending && <p>Loading pinned registry...</p>}
+                    {providerParameters.isPending && (
+                      <p>Loading pinned registry...</p>
+                    )}
                     {providerParameters.error && (
                       <p className="form-error">
                         {providerParameters.error.message}
@@ -1526,7 +1667,10 @@ export function TrainingWorkspace({
                             )
                             .slice(0, 12)
                             .map((item) => (
-                              <div key={item.name} className="system-record-card">
+                              <div
+                                key={item.name}
+                                className="system-record-card"
+                              >
                                 <strong>{item.display_name}</strong>
                                 <span>{item.name}</span>
                                 <small>
@@ -1549,9 +1693,16 @@ export function TrainingWorkspace({
                     <label>
                       Mode
                       <select
-                        value={String(asRecord(selectedDraft.tuning_config).mode ?? "disabled")}
+                        value={String(
+                          asRecord(selectedDraft.tuning_config).mode ??
+                            "disabled",
+                        )}
                         onChange={(event) =>
-                          patchConfig("tuning_config", "mode", event.target.value)
+                          patchConfig(
+                            "tuning_config",
+                            "mode",
+                            event.target.value,
+                          )
                         }
                       >
                         <option value="disabled">Disabled</option>
@@ -1593,7 +1744,8 @@ export function TrainingWorkspace({
                             </span>
                           </div>
                           <small>
-                            Progress {run.progress_epoch}/{run.progress_total_epochs}
+                            Progress {run.progress_epoch}/
+                            {run.progress_total_epochs}
                           </small>
                           {run.result_checkpoint_path && (
                             <small>
@@ -1607,7 +1759,9 @@ export function TrainingWorkspace({
                             <button
                               type="button"
                               className="secondary"
-                              onClick={() => setSelectedDraftId(run.draft_id ?? "")}
+                              onClick={() =>
+                                setSelectedDraftId(run.draft_id ?? "")
+                              }
                               disabled={!run.draft_id}
                             >
                               Open draft
@@ -1660,7 +1814,10 @@ export function TrainingWorkspace({
                     )}
                     <div className="training-run-list">
                       {experiments.data?.map((experiment) => (
-                        <label key={experiment.id} className="system-record-card training-compare-card">
+                        <label
+                          key={experiment.id}
+                          className="system-record-card training-compare-card"
+                        >
                           <input
                             type="checkbox"
                             checked={compareSelection.includes(experiment.id)}
@@ -1668,7 +1825,9 @@ export function TrainingWorkspace({
                               setCompareSelection((current) =>
                                 event.target.checked
                                   ? [...current, experiment.id].slice(-4)
-                                  : current.filter((item) => item !== experiment.id),
+                                  : current.filter(
+                                      (item) => item !== experiment.id,
+                                    ),
                               );
                             }}
                           />
@@ -1721,7 +1880,8 @@ export function TrainingWorkspace({
                             <strong>{run.run_name}</strong>
                             <small>{run.result_checkpoint_path}</small>
                             <span>
-                              Dataset checksum: {run.dataset_manifest_sha256.slice(0, 12)}...
+                              Dataset checksum:{" "}
+                              {run.dataset_manifest_sha256.slice(0, 12)}...
                             </span>
                             <span>Status: {run.status}</span>
                             {registeredRunModels.get(run.id) ? (
@@ -1746,7 +1906,8 @@ export function TrainingWorkspace({
                                 }
                               >
                                 {registerRunModelMutation.isPending &&
-                                registerRunModelMutation.variables?.runId === run.id
+                                registerRunModelMutation.variables?.runId ===
+                                  run.id
                                   ? "Registering..."
                                   : "Register as detector model"}
                               </button>

@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -24,7 +30,9 @@ const project: Project = {
   label_classes: [],
 };
 
-function entry(state: ModelCatalogEntry["installation_state"]): ModelCatalogEntry {
+function entry(
+  state: ModelCatalogEntry["installation_state"],
+): ModelCatalogEntry {
   return {
     catalog_id: "ultralytics/yolo11/detect/x",
     display_name: "YOLO11 X",
@@ -90,7 +98,8 @@ function entry(state: ModelCatalogEntry["installation_state"]): ModelCatalogEntr
     installation_job_id: null,
     installed_asset_id:
       state === "Ready" ? "catalog_model:ultralytics/yolo11/detect/x" : null,
-    installed_path: state === "Ready" ? "models/catalog-models/yolo11x.pt" : null,
+    installed_path:
+      state === "Ready" ? "models/catalog-models/yolo11x.pt" : null,
     installed_checksum: state === "Ready" ? "7".repeat(64) : null,
     advanced_only: false,
     requires_confirmation: true,
@@ -100,7 +109,9 @@ function entry(state: ModelCatalogEntry["installation_state"]): ModelCatalogEntr
   };
 }
 
-function catalog(state: ModelCatalogEntry["installation_state"]): ModelCatalogResponse {
+function catalog(
+  state: ModelCatalogEntry["installation_state"],
+): ModelCatalogResponse {
   return {
     schema_version: 2,
     catalog_version: "2.0.0",
@@ -145,7 +156,10 @@ function renderManager(onSelectCatalogModel = vi.fn()) {
   });
   render(
     <QueryClientProvider client={queryClient}>
-      <ModelManager project={project} onSelectCatalogModel={onSelectCatalogModel} />
+      <ModelManager
+        project={project}
+        onSelectCatalogModel={onSelectCatalogModel}
+      />
     </QueryClientProvider>,
   );
   return onSelectCatalogModel;
@@ -174,12 +188,18 @@ describe("ModelManager catalog", () => {
     expect(screen.queryByText("0 catalog entries")).not.toBeInTheDocument();
 
     resolveCatalog?.(jsonResponse(catalog("Not Installed")));
-    expect(await screen.findByRole("heading", { name: "YOLO11 X" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "YOLO11 X" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("1 catalog entries")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Install" })).toBeInTheDocument();
-    const pretrained = screen.getByRole("heading", { name: "Validated presets" }).closest("section");
+    const pretrained = screen
+      .getByRole("heading", { name: "Validated presets" })
+      .closest("section");
     expect(pretrained).not.toBeNull();
-    expect(within(pretrained as HTMLElement).queryByLabelText(/Checkpoint file/i)).toBeNull();
+    expect(
+      within(pretrained as HTMLElement).queryByLabelText(/Checkpoint file/i),
+    ).toBeNull();
   });
 
   it("confirms installation, shows progress, and cancels the background job", async () => {
@@ -202,14 +222,20 @@ describe("ModelManager catalog", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.includes("/model-catalog")) return jsonResponse(modelCatalog);
-      if (url.includes("/model-hub/bootstrap")) return jsonResponse(bootstrap(modelCatalog));
-      if (url.includes("/models/provider-preflight")) return jsonResponse({ providers: [] });
+      if (url.includes("/model-hub/bootstrap"))
+        return jsonResponse(bootstrap(modelCatalog));
+      if (url.includes("/models/provider-preflight"))
+        return jsonResponse({ providers: [] });
       if (url.includes("/runtime-providers/status")) return jsonResponse([]);
-      if (url.includes("/training-registry/summary")) return new Promise<Response>(() => undefined);
+      if (url.includes("/training-registry/summary"))
+        return new Promise<Response>(() => undefined);
       if (url.includes("/model-installs/") && init?.method === "POST") {
         return jsonResponse(job);
       }
-      if (url.endsWith("/jobs/job-1") && (!init?.method || init.method === "GET")) {
+      if (
+        url.endsWith("/jobs/job-1") &&
+        (!init?.method || init.method === "GET")
+      ) {
         return jsonResponse({
           ...job,
           status: jobStatus,
@@ -219,18 +245,28 @@ describe("ModelManager catalog", () => {
       }
       if (url.endsWith("/jobs/job-1/cancel")) {
         jobStatus = "cancelled";
-        return jsonResponse({ ...job, status: "cancelled", result_json: { stage: "cancelled" } });
+        return jsonResponse({
+          ...job,
+          status: "cancelled",
+          result_json: { stage: "cancelled" },
+        });
       }
       return jsonResponse({ detail: "Unexpected request" }, 404);
     });
     renderManager();
 
-    await userEvent.click(await screen.findByRole("button", { name: "Install" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Install" }),
+    );
     const dialog = screen.getByRole("dialog", { name: "YOLO11 X" });
     expect(dialog).toBeInTheDocument();
     expect(within(dialog).getByText(/109\.3 MB/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Confirm Install" }));
-    expect(await screen.findByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Confirm Install" }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "Cancel" }),
+    ).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText(/50%/)).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(jobStatus).toBe("cancelled"));
@@ -241,14 +277,18 @@ describe("ModelManager catalog", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
       if (url.includes("/model-catalog")) return jsonResponse(modelCatalog);
-      if (url.includes("/model-hub/bootstrap")) return jsonResponse(bootstrap(modelCatalog));
-      if (url.includes("/models/provider-preflight")) return jsonResponse({ providers: [] });
+      if (url.includes("/model-hub/bootstrap"))
+        return jsonResponse(bootstrap(modelCatalog));
+      if (url.includes("/models/provider-preflight"))
+        return jsonResponse({ providers: [] });
       if (url.includes("/runtime-providers/status")) return jsonResponse([]);
       return new Promise<Response>(() => undefined);
     });
     const onSelect = renderManager();
 
-    await userEvent.click(await screen.findByRole("button", { name: "Select" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Select" }),
+    );
 
     expect(onSelect).toHaveBeenCalledWith("ultralytics/yolo11/detect/x");
   });

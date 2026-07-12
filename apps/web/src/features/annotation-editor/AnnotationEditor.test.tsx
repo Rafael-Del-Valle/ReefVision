@@ -168,9 +168,7 @@ function buildVisibilityBundle(options?: {
     annotations: {
       saved: Boolean(hiddenByLayer?.annotations),
       hidden_class_ids: hiddenByLayer?.annotations ?? [],
-      updated_at: hiddenByLayer?.annotations
-        ? "2026-07-10T00:00:00Z"
-        : null,
+      updated_at: hiddenByLayer?.annotations ? "2026-07-10T00:00:00Z" : null,
       updated_by_identity: hiddenByLayer?.annotations
         ? "local-user:test"
         : null,
@@ -178,9 +176,7 @@ function buildVisibilityBundle(options?: {
     predictions: {
       saved: Boolean(hiddenByLayer?.predictions),
       hidden_class_ids: hiddenByLayer?.predictions ?? [],
-      updated_at: hiddenByLayer?.predictions
-        ? "2026-07-10T00:00:00Z"
-        : null,
+      updated_at: hiddenByLayer?.predictions ? "2026-07-10T00:00:00Z" : null,
       updated_by_identity: hiddenByLayer?.predictions
         ? "local-user:test"
         : null,
@@ -188,9 +184,7 @@ function buildVisibilityBundle(options?: {
     qc_overlays: {
       saved: Boolean(hiddenByLayer?.qc_overlays),
       hidden_class_ids: hiddenByLayer?.qc_overlays ?? [],
-      updated_at: hiddenByLayer?.qc_overlays
-        ? "2026-07-10T00:00:00Z"
-        : null,
+      updated_at: hiddenByLayer?.qc_overlays ? "2026-07-10T00:00:00Z" : null,
       updated_by_identity: hiddenByLayer?.qc_overlays
         ? "local-user:test"
         : null,
@@ -198,9 +192,7 @@ function buildVisibilityBundle(options?: {
     video_tracks: {
       saved: Boolean(hiddenByLayer?.video_tracks),
       hidden_class_ids: hiddenByLayer?.video_tracks ?? [],
-      updated_at: hiddenByLayer?.video_tracks
-        ? "2026-07-10T00:00:00Z"
-        : null,
+      updated_at: hiddenByLayer?.video_tracks ? "2026-07-10T00:00:00Z" : null,
       updated_by_identity: hiddenByLayer?.video_tracks
         ? "local-user:test"
         : null,
@@ -439,23 +431,23 @@ describe("AnnotationEditor", () => {
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input, init) => {
         const url = String(input);
-      if (
-        url.endsWith(`/images/${session.image.id}/annotations`) &&
-        (!init?.method || init.method === "GET")
-      ) {
-        return jsonResponse(session);
-      }
-      if (
-        url.endsWith(`/projects/${project.id}/class-visibility`) &&
-        (!init?.method || init.method === "GET")
-      ) {
-        return jsonResponse(buildVisibilityBundle());
-      }
-      if (
-        url.includes(`/images/${session.image.id}/prediction-proposals`) &&
-        (!init?.method || init.method === "GET")
-      ) {
-        return jsonResponse({
+        if (
+          url.endsWith(`/images/${session.image.id}/annotations`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse(session);
+        }
+        if (
+          url.endsWith(`/projects/${project.id}/class-visibility`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse(buildVisibilityBundle());
+        }
+        if (
+          url.includes(`/images/${session.image.id}/prediction-proposals`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse({
             items: [pendingProposal],
             counts: { pending: 1 },
           });
@@ -577,16 +569,18 @@ describe("AnnotationEditor", () => {
     );
 
     await waitFor(() =>
-      expect(
-        screen.getByTestId("class-visibility-status"),
-      ).toHaveTextContent("Saved my preference for Annotations."),
+      expect(screen.getByTestId("class-visibility-status")).toHaveTextContent(
+        "Saved my preference for Annotations.",
+      ),
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Reset Session" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Reset Session" }),
+    );
     await waitFor(() =>
-      expect(
-        screen.getByTestId("class-visibility-status"),
-      ).toHaveTextContent("Reset the session override for Annotations."),
+      expect(screen.getByTestId("class-visibility-status")).toHaveTextContent(
+        "Reset the session override for Annotations.",
+      ),
     );
     expect(
       screen.queryByTestId("annotation-annotation-1"),
@@ -640,9 +634,7 @@ describe("AnnotationEditor", () => {
       name: session.image.original_filename,
     });
 
-    expect(
-      screen.getByTestId("annotation-annotation-1"),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
     expect(
       screen.queryByTestId(`prediction-row-${pendingProposal.id}`),
     ).not.toBeInTheDocument();

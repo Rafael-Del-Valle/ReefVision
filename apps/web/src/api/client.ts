@@ -383,9 +383,7 @@ export interface ModelRegistration {
 }
 
 export type ModelCatalogCategory =
-  | "pretrained_catalog"
-  | "my_trained_models"
-  | "imported_custom_models";
+  "pretrained_catalog" | "my_trained_models" | "imported_custom_models";
 
 export type ModelCatalogTask =
   | "detect"
@@ -420,11 +418,7 @@ export type ModelCatalogSelectionKind =
   | "planned_unavailable";
 
 export type ModelCatalogWorkflow =
-  | "training"
-  | "prompt_assist"
-  | "smart_mask"
-  | "video"
-  | "model_hub";
+  "training" | "prompt_assist" | "smart_mask" | "video" | "model_hub";
 
 export interface ModelCatalogEntry {
   catalog_id: string;
@@ -1651,10 +1645,7 @@ export async function createLabelClass(
 export async function updateLabelClass(
   classId: string,
   payload: Partial<
-    Pick<
-      LabelClass,
-      "name" | "display_order" | "display_color" | "description"
-    >
+    Pick<LabelClass, "name" | "display_order" | "display_color" | "description">
   >,
 ): Promise<LabelClass> {
   return request<LabelClass>(`/classes/${classId}`, {
@@ -1695,9 +1686,12 @@ export async function getProjectLabelClassUsage(
   classId: string,
   signal?: AbortSignal,
 ): Promise<LabelClassUsage> {
-  return request<LabelClassUsage>(`/projects/${projectId}/classes/${classId}/usage`, {
-    signal,
-  });
+  return request<LabelClassUsage>(
+    `/projects/${projectId}/classes/${classId}/usage`,
+    {
+      signal,
+    },
+  );
 }
 
 export async function deleteLabelClass(classId: string): Promise<void> {
@@ -2015,9 +2009,12 @@ export async function getModels(
   const search = new URLSearchParams();
   if (purpose) search.set("purpose", purpose);
   const suffix = search.size ? `?${search}` : "";
-  return request<ModelRegistration[]>(`/projects/${projectId}/models${suffix}`, {
-    signal,
-  });
+  return request<ModelRegistration[]>(
+    `/projects/${projectId}/models${suffix}`,
+    {
+      signal,
+    },
+  );
 }
 
 export async function getProjectModelCatalog(
@@ -2107,9 +2104,10 @@ export async function getTrackerCatalog(): Promise<TrackerCatalogResponse> {
   return request<TrackerCatalogResponse>("/tracker-catalog");
 }
 
-export async function getModelProviderPreflight(
-  options?: { refresh?: boolean; signal?: AbortSignal },
-): Promise<ProviderDependencyPreflightResponse> {
+export async function getModelProviderPreflight(options?: {
+  refresh?: boolean;
+  signal?: AbortSignal;
+}): Promise<ProviderDependencyPreflightResponse> {
   const search = new URLSearchParams();
   if (options?.refresh) {
     search.set("refresh", "true");
@@ -2121,9 +2119,10 @@ export async function getModelProviderPreflight(
   );
 }
 
-export async function getModelProviders(
-  options?: { refresh?: boolean; signal?: AbortSignal },
-): Promise<ModelProvider[]> {
+export async function getModelProviders(options?: {
+  refresh?: boolean;
+  signal?: AbortSignal;
+}): Promise<ModelProvider[]> {
   const search = new URLSearchParams();
   if (options?.refresh) {
     search.set("refresh", "true");
@@ -2134,24 +2133,27 @@ export async function getModelProviders(
   });
 }
 
-export async function getRuntimeProviderStatuses(
-  options?: { refresh?: boolean; signal?: AbortSignal },
-): Promise<
-  RuntimeProviderStatus[]
-> {
+export async function getRuntimeProviderStatuses(options?: {
+  refresh?: boolean;
+  signal?: AbortSignal;
+}): Promise<RuntimeProviderStatus[]> {
   const search = new URLSearchParams();
   if (options?.refresh) {
     search.set("refresh", "true");
   }
   const suffix = search.size ? `?${search}` : "";
-  return request<RuntimeProviderStatus[]>(`/runtime-providers/status${suffix}`, {
-    signal: options?.signal,
-  });
+  return request<RuntimeProviderStatus[]>(
+    `/runtime-providers/status${suffix}`,
+    {
+      signal: options?.signal,
+    },
+  );
 }
 
-export async function getUltralyticsTrainingRegistrySummary(
-  options?: { refresh?: boolean; signal?: AbortSignal },
-): Promise<UltralyticsTrainingRegistrySummarySnapshot> {
+export async function getUltralyticsTrainingRegistrySummary(options?: {
+  refresh?: boolean;
+  signal?: AbortSignal;
+}): Promise<UltralyticsTrainingRegistrySummarySnapshot> {
   const search = new URLSearchParams();
   if (options?.refresh) {
     search.set("refresh", "true");
@@ -2232,7 +2234,8 @@ export async function createTrainingDraft(
     catalog_model_id?: string | null;
     provider_id?: string | null;
     architecture?: string | null;
-    initial_checkpoint_source?: "scratch" | "registered_model" | "managed_catalog";
+    initial_checkpoint_source?:
+      "scratch" | "registered_model" | "managed_catalog";
     initial_checkpoint_model_id?: string | null;
     device?: string;
     precision?: string;
@@ -2268,10 +2271,13 @@ export async function runTrainingPreflight(
   projectId: string,
   payload: Record<string, unknown>,
 ): Promise<TrainingPreflight> {
-  return request<TrainingPreflight>(`/projects/${projectId}/training-preflight`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  return request<TrainingPreflight>(
+    `/projects/${projectId}/training-preflight`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export async function estimateTrainingTiling(

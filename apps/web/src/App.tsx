@@ -42,7 +42,9 @@ export function App() {
   const [showCreate, setShowCreate] = useState(false);
   const [editorLaunch, setEditorLaunch] =
     useState<AnnotationLaunchState | null>(null);
-  const [trainingCatalogModelId, setTrainingCatalogModelId] = useState<string | null>(null);
+  const [trainingCatalogModelId, setTrainingCatalogModelId] = useState<
+    string | null
+  >(null);
   const [activeView, setActiveView] = useState<
     | "gallery"
     | "versions"
@@ -96,8 +98,9 @@ export function App() {
 
   const selectedProjectSummary = useMemo(
     () =>
-      projectSummaries.data?.find((project) => project.id === selectedProjectId) ??
-      null,
+      projectSummaries.data?.find(
+        (project) => project.id === selectedProjectId,
+      ) ?? null,
     [projectSummaries.data, selectedProjectId],
   );
   const selectedProject = selectedProjectQuery.data ?? null;
@@ -216,13 +219,15 @@ export function App() {
               </p>
             </div>
           )}
-          {selectedProjectId && !selectedProject && selectedProjectQuery.isPending && (
-            <div className="welcome-panel">
-              <p className="eyebrow">Opening project</p>
-              <h2>{selectedProjectSummary?.name ?? "Loading project"}</h2>
-              <p>Loading classes, settings, and workspace details.</p>
-            </div>
-          )}
+          {selectedProjectId &&
+            !selectedProject &&
+            selectedProjectQuery.isPending && (
+              <div className="welcome-panel">
+                <p className="eyebrow">Opening project</p>
+                <h2>{selectedProjectSummary?.name ?? "Loading project"}</h2>
+                <p>Loading classes, settings, and workspace details.</p>
+              </div>
+            )}
           {selectedProjectId && selectedProjectQuery.error && (
             <div className="welcome-panel">
               <p className="eyebrow">Project unavailable</p>
@@ -355,7 +360,9 @@ export function App() {
                 <TrainingWorkspace
                   project={selectedProject}
                   initialCatalogModelId={trainingCatalogModelId}
-                  onCatalogSelectionConsumed={() => setTrainingCatalogModelId(null)}
+                  onCatalogSelectionConsumed={() =>
+                    setTrainingCatalogModelId(null)
+                  }
                 />
               )}
               {activeView === "quality_control" && (

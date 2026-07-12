@@ -379,8 +379,9 @@ export function AnnotationEditor({
     [assistModels.data?.models],
   );
   const selectedAssistCatalogEntry =
-    readyAssistModels.find((model) => model.resolved_model_id === assistModelId) ??
-    null;
+    readyAssistModels.find(
+      (model) => model.resolved_model_id === assistModelId,
+    ) ?? null;
 
   useEffect(() => {
     const storageKey = `reefvision:smart-mask-model:${project.id}`;
@@ -394,7 +395,9 @@ export function AnnotationEditor({
     const storageKey = `reefvision:smart-mask-model:${project.id}`;
     if (
       assistModelId &&
-      readyAssistModels.some((model) => model.resolved_model_id === assistModelId)
+      readyAssistModels.some(
+        (model) => model.resolved_model_id === assistModelId,
+      )
     ) {
       window.localStorage.setItem(storageKey, assistModelId);
       return;
@@ -526,7 +529,8 @@ export function AnnotationEditor({
     );
   }, [project.label_classes, sessionQuery.data?.label_classes]);
   const labelClassesById = useMemo(
-    () => new Map(labelClasses.map((labelClass) => [labelClass.id, labelClass])),
+    () =>
+      new Map(labelClasses.map((labelClass) => [labelClass.id, labelClass])),
     [labelClasses],
   );
   const allClassIds = useMemo(
@@ -672,14 +676,15 @@ export function AnnotationEditor({
   const allPredictions = predictionQuery.data?.items ?? [];
   const selectedPrediction =
     selectedPredictionIds.length === 1
-      ? allPredictions.find((proposal) => proposal.id === selectedPredictionIds[0]) ??
-        null
+      ? (allPredictions.find(
+          (proposal) => proposal.id === selectedPredictionIds[0],
+        ) ?? null)
       : null;
   const assistSourcePrediction =
     (assistSession?.source_prediction_id
-      ? allPredictions.find(
+      ? (allPredictions.find(
           (proposal) => proposal.id === assistSession.source_prediction_id,
-        ) ?? null
+        ) ?? null)
       : null) ?? selectedPrediction;
   const visibleAnnotations = useMemo(
     () =>
@@ -731,7 +736,11 @@ export function AnnotationEditor({
         };
       });
     },
-    [allClassIds, currentLayerVisibility.hiddenClassIds, selectedVisibilityLayer],
+    [
+      allClassIds,
+      currentLayerVisibility.hiddenClassIds,
+      selectedVisibilityLayer,
+    ],
   );
 
   const visibilityMutation = useMutation({
@@ -889,12 +898,14 @@ export function AnnotationEditor({
     mutationFn: async () => {
       const session = assistSessionRef.current;
       if (!session || !session.candidate_box) {
-        throw new Error("Run Prompt Assist on a proposal before accepting a mask");
+        throw new Error(
+          "Run Prompt Assist on a proposal before accepting a mask",
+        );
       }
       const labelClassId =
         (assistSourcePrediction
-          ? predictionClassOverrides[assistSourcePrediction.id] ??
-            assistSourcePrediction.label_class_id
+          ? (predictionClassOverrides[assistSourcePrediction.id] ??
+            assistSourcePrediction.label_class_id)
           : null) ?? activeClassId;
       if (!labelClassId) {
         throw new Error("Choose an annotation class before accepting the mask");
@@ -1627,8 +1638,8 @@ export function AnnotationEditor({
       : imageContentUrl(image.id);
   const assistAcceptLabelClassId =
     (assistSourcePrediction
-      ? predictionClassOverrides[assistSourcePrediction.id] ??
-        assistSourcePrediction.label_class_id
+      ? (predictionClassOverrides[assistSourcePrediction.id] ??
+        assistSourcePrediction.label_class_id)
       : null) ?? activeClassId;
   const assistAcceptLabelClass =
     (assistAcceptLabelClassId
@@ -1989,7 +2000,9 @@ export function AnnotationEditor({
                 </div>
                 <div className="annotation-selection-row">
                   <strong>Accept as</strong>
-                  <span>{assistAcceptLabelClass?.name ?? "Choose a class"}</span>
+                  <span>
+                    {assistAcceptLabelClass?.name ?? "Choose a class"}
+                  </span>
                 </div>
               </div>
             ) : (
@@ -2017,10 +2030,15 @@ export function AnnotationEditor({
               <button
                 type="button"
                 className="secondary"
-                disabled={!assistSession?.candidate_box || acceptAssistMutation.isPending}
+                disabled={
+                  !assistSession?.candidate_box ||
+                  acceptAssistMutation.isPending
+                }
                 onClick={() => acceptAssistMutation.mutate()}
               >
-                {acceptAssistMutation.isPending ? "Accepting..." : "Accept mask"}
+                {acceptAssistMutation.isPending
+                  ? "Accepting..."
+                  : "Accept mask"}
               </button>
               <button
                 type="button"
@@ -2047,7 +2065,9 @@ export function AnnotationEditor({
               <p className="form-error">{acceptAssistMutation.error.message}</p>
             )}
             {discardAssistMutation.error && (
-              <p className="form-error">{discardAssistMutation.error.message}</p>
+              <p className="form-error">
+                {discardAssistMutation.error.message}
+              </p>
             )}
           </section>
 
@@ -2089,8 +2109,8 @@ export function AnnotationEditor({
               </p>
               {visibilityQuery.error && (
                 <p className="form-error">
-                  Saved visibility preferences could not be loaded. ReefVision is
-                  using session-visible defaults until the request succeeds.
+                  Saved visibility preferences could not be loaded. ReefVision
+                  is using session-visible defaults until the request succeeds.
                 </p>
               )}
               <p className="annotation-helper">
@@ -2108,9 +2128,7 @@ export function AnnotationEditor({
                 <button
                   type="button"
                   className="secondary"
-                  onClick={() =>
-                    updateSelectedLayerVisibility(() => [])
-                  }
+                  onClick={() => updateSelectedLayerVisibility(() => [])}
                 >
                   Show all
                 </button>
@@ -2129,7 +2147,9 @@ export function AnnotationEditor({
                   onClick={() =>
                     updateSelectedLayerVisibility((currentHiddenClassIds) => {
                       const hidden = new Set(currentHiddenClassIds);
-                      return allClassIds.filter((classId) => !hidden.has(classId));
+                      return allClassIds.filter(
+                        (classId) => !hidden.has(classId),
+                      );
                     })
                   }
                 >
@@ -2319,7 +2339,9 @@ export function AnnotationEditor({
             <div className="annotation-selection-list">
               {selectedAnnotations.length === 0 && <p>No boxes selected.</p>}
               {selectedAnnotations.map((annotation) => {
-                const labelClass = labelClassesById.get(annotation.label_class_id);
+                const labelClass = labelClassesById.get(
+                  annotation.label_class_id,
+                );
                 return (
                   <div key={annotation.id} className="annotation-selection-row">
                     <strong>{labelClass?.name ?? "Unknown class"}</strong>
@@ -2466,91 +2488,89 @@ export function AnnotationEditor({
                   })}
                 {!hideAnnotations &&
                   visibleAnnotations.map((annotation) => {
-                      const labelClass = labelClassesById.get(
-                        annotation.label_class_id,
-                      );
-                      const selected = state.selectedIds.includes(
-                        annotation.id,
-                      );
-                      const highlighted = highlightedAnnotationIds.has(
-                        annotation.id,
-                      );
-                      return (
-                        <g key={annotation.id}>
-                          <rect
-                            data-testid={`annotation-${annotation.id}`}
-                            x={annotation.x_min}
-                            y={annotation.y_min}
-                            width={annotation.x_max - annotation.x_min}
-                            height={annotation.y_max - annotation.y_min}
-                            fill={
-                              selected
-                                ? "rgba(255,255,255,0.10)"
-                                : highlighted
-                                  ? "rgba(114, 219, 201, 0.15)"
-                                  : "rgba(255,255,255,0.03)"
-                            }
-                            stroke={labelClass?.display_color ?? "#72dbc9"}
-                            strokeWidth={highlighted ? 2.5 : 1.5}
-                            vectorEffect="non-scaling-stroke"
-                            onPointerDown={(event) =>
-                              handleAnnotationPointerDown(event, annotation.id)
-                            }
-                          />
-                          <text
-                            x={annotation.x_min + 4 * strokeScale}
-                            y={annotation.y_min + 14 * strokeScale}
-                            fill={labelClass?.display_color ?? "#72dbc9"}
-                            fontSize={12 * strokeScale}
-                          >
-                            {labelClass?.name ?? annotation.label_class_id}
-                          </text>
-                          {selected &&
-                            (
-                              [
-                                {
-                                  handle: "nw",
-                                  x: annotation.x_min,
-                                  y: annotation.y_min,
-                                },
-                                {
-                                  handle: "ne",
-                                  x: annotation.x_max,
-                                  y: annotation.y_min,
-                                },
-                                {
-                                  handle: "sw",
-                                  x: annotation.x_min,
-                                  y: annotation.y_max,
-                                },
-                                {
-                                  handle: "se",
-                                  x: annotation.x_max,
-                                  y: annotation.y_max,
-                                },
-                              ] as const
-                            ).map((corner) => (
-                              <circle
-                                key={`${annotation.id}-${corner.handle}`}
-                                cx={corner.x}
-                                cy={corner.y}
-                                r={handleRadius}
-                                fill="#ffffff"
-                                stroke={labelClass?.display_color ?? "#72dbc9"}
-                                strokeWidth={1.5}
-                                vectorEffect="non-scaling-stroke"
-                                onPointerDown={(event) =>
-                                  handleResizePointerDown(
-                                    event,
-                                    annotation,
-                                    corner.handle,
-                                  )
-                                }
-                              />
-                            ))}
-                        </g>
-                      );
-                    })}
+                    const labelClass = labelClassesById.get(
+                      annotation.label_class_id,
+                    );
+                    const selected = state.selectedIds.includes(annotation.id);
+                    const highlighted = highlightedAnnotationIds.has(
+                      annotation.id,
+                    );
+                    return (
+                      <g key={annotation.id}>
+                        <rect
+                          data-testid={`annotation-${annotation.id}`}
+                          x={annotation.x_min}
+                          y={annotation.y_min}
+                          width={annotation.x_max - annotation.x_min}
+                          height={annotation.y_max - annotation.y_min}
+                          fill={
+                            selected
+                              ? "rgba(255,255,255,0.10)"
+                              : highlighted
+                                ? "rgba(114, 219, 201, 0.15)"
+                                : "rgba(255,255,255,0.03)"
+                          }
+                          stroke={labelClass?.display_color ?? "#72dbc9"}
+                          strokeWidth={highlighted ? 2.5 : 1.5}
+                          vectorEffect="non-scaling-stroke"
+                          onPointerDown={(event) =>
+                            handleAnnotationPointerDown(event, annotation.id)
+                          }
+                        />
+                        <text
+                          x={annotation.x_min + 4 * strokeScale}
+                          y={annotation.y_min + 14 * strokeScale}
+                          fill={labelClass?.display_color ?? "#72dbc9"}
+                          fontSize={12 * strokeScale}
+                        >
+                          {labelClass?.name ?? annotation.label_class_id}
+                        </text>
+                        {selected &&
+                          (
+                            [
+                              {
+                                handle: "nw",
+                                x: annotation.x_min,
+                                y: annotation.y_min,
+                              },
+                              {
+                                handle: "ne",
+                                x: annotation.x_max,
+                                y: annotation.y_min,
+                              },
+                              {
+                                handle: "sw",
+                                x: annotation.x_min,
+                                y: annotation.y_max,
+                              },
+                              {
+                                handle: "se",
+                                x: annotation.x_max,
+                                y: annotation.y_max,
+                              },
+                            ] as const
+                          ).map((corner) => (
+                            <circle
+                              key={`${annotation.id}-${corner.handle}`}
+                              cx={corner.x}
+                              cy={corner.y}
+                              r={handleRadius}
+                              fill="#ffffff"
+                              stroke={labelClass?.display_color ?? "#72dbc9"}
+                              strokeWidth={1.5}
+                              vectorEffect="non-scaling-stroke"
+                              onPointerDown={(event) =>
+                                handleResizePointerDown(
+                                  event,
+                                  annotation,
+                                  corner.handle,
+                                )
+                              }
+                            />
+                          ))}
+                      </g>
+                    );
+                  })}
                 {!hideAnnotations &&
                   draftBox &&
                   boxArea({

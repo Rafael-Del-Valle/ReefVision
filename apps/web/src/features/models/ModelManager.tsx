@@ -141,9 +141,7 @@ function CatalogModelCard({
         <small>
           Provider {model.provider} {model.provider_version}
         </small>
-        <small>
-          Runtime: {runtimes.join(", ") || "Not declared"}
-        </small>
+        <small>Runtime: {runtimes.join(", ") || "Not declared"}</small>
         <small>
           Devices: {model.supported_devices.join(", ") || "Not declared"}
         </small>
@@ -187,53 +185,89 @@ function CatalogModelCard({
           </div>
         )}
         <div className="image-card-actions">
-          {(state === "Not Installed" || state === "Provider Required") && onInstall && (
-            <button type="button" onClick={() => onInstall(model)}>
-              {state === "Provider Required" ? "Install Provider and Model" : "Install"}
-            </button>
-          )}
+          {(state === "Not Installed" || state === "Provider Required") &&
+            onInstall && (
+              <button type="button" onClick={() => onInstall(model)}>
+                {state === "Provider Required"
+                  ? "Install Provider and Model"
+                  : "Install"}
+              </button>
+            )}
           {state === "Update Available" && onInstall && (
-            <button type="button" onClick={() => onInstall(model)}>Update</button>
+            <button type="button" onClick={() => onInstall(model)}>
+              Update
+            </button>
           )}
           {state === "Ready" && (
             <>
               {model.trainable && onSelect && (
-                <button type="button" onClick={() => onSelect(model)}>Select</button>
+                <button type="button" onClick={() => onSelect(model)}>
+                  Select
+                </button>
               )}
               {onVerify && (
-                <button type="button" className="secondary" onClick={() => onVerify(model)}>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => onVerify(model)}
+                >
                   Verify
                 </button>
               )}
               {onRemove && (
-                <button type="button" className="danger-ghost" onClick={() => onRemove(model)}>
+                <button
+                  type="button"
+                  className="danger-ghost"
+                  onClick={() => onRemove(model)}
+                >
                   Remove
                 </button>
               )}
             </>
           )}
           {active && job && onCancel && (
-            <button type="button" className="danger-ghost" onClick={() => onCancel(job.id)}>
+            <button
+              type="button"
+              className="danger-ghost"
+              onClick={() => onCancel(job.id)}
+            >
               Cancel
             </button>
           )}
           {state === "Corrupted" && onInstall && onRemove && (
             <>
-              <button type="button" onClick={() => onInstall(model)}>Repair</button>
-              <button type="button" className="danger-ghost" onClick={() => onRemove(model)}>
+              <button type="button" onClick={() => onInstall(model)}>
+                Repair
+              </button>
+              <button
+                type="button"
+                className="danger-ghost"
+                onClick={() => onRemove(model)}
+              >
                 Remove
               </button>
             </>
           )}
-          {(state === "Unavailable" || state === "Incompatible") && onViewReason && (
-            <button type="button" className="secondary" onClick={() => onViewReason(model)}>
-              View Reason
-            </button>
-          )}
+          {(state === "Unavailable" || state === "Incompatible") &&
+            onViewReason && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => onViewReason(model)}
+              >
+                View Reason
+              </button>
+            )}
           {state === "Blocked" && onInstall && onViewReason && (
             <>
-              <button type="button" onClick={() => onInstall(model)}>Retry</button>
-              <button type="button" className="secondary" onClick={() => onViewReason(model)}>
+              <button type="button" onClick={() => onInstall(model)}>
+                Retry
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => onViewReason(model)}
+              >
                 View Reason
               </button>
             </>
@@ -244,7 +278,9 @@ function CatalogModelCard({
   );
 }
 
-function formatCheckedAt(value: string | number | null | undefined): string | null {
+function formatCheckedAt(
+  value: string | number | null | undefined,
+): string | null {
   if (value == null) {
     return null;
   }
@@ -267,7 +303,9 @@ function loadCachedCatalog(projectId: string): ModelCatalogResponse | null {
     const raw = window.localStorage.getItem(cachedCatalogKey(projectId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as ModelCatalogResponse;
-    return Array.isArray(parsed.models) && parsed.models.length > 0 ? parsed : null;
+    return Array.isArray(parsed.models) && parsed.models.length > 0
+      ? parsed
+      : null;
   } catch {
     return null;
   }
@@ -276,7 +314,8 @@ function loadCachedCatalog(projectId: string): ModelCatalogResponse | null {
 function jobState(job: JobRecord): ModelCatalogEntry["installation_state"] {
   const stage = String(job.result_json?.stage ?? "downloading");
   if (stage === "verifying") return "Verifying";
-  if (stage === "finalizing" || stage === "provider_preflight") return "Installing";
+  if (stage === "finalizing" || stage === "provider_preflight")
+    return "Installing";
   return "Downloading";
 }
 
@@ -293,11 +332,13 @@ export function ModelManager({
   const [providerName, setProviderName] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [notes, setNotes] = useState("");
-  const [cachedCatalog, setCachedCatalog] = useState<ModelCatalogResponse | null>(() =>
-    loadCachedCatalog(project.id),
+  const [cachedCatalog, setCachedCatalog] =
+    useState<ModelCatalogResponse | null>(() => loadCachedCatalog(project.id));
+  const [confirmationModel, setConfirmationModel] =
+    useState<ModelCatalogEntry | null>(null);
+  const [reasonModel, setReasonModel] = useState<ModelCatalogEntry | null>(
+    null,
   );
-  const [confirmationModel, setConfirmationModel] = useState<ModelCatalogEntry | null>(null);
-  const [reasonModel, setReasonModel] = useState<ModelCatalogEntry | null>(null);
   const [installJobs, setInstallJobs] = useState<Record<string, JobRecord>>({});
   const [operationMessage, setOperationMessage] = useState<string | null>(null);
 
@@ -344,14 +385,16 @@ export function ModelManager({
   });
   const models = modelHubBootstrap.data?.models ?? [];
   const modelCatalog =
-    catalogQuery.data ?? cachedCatalog ?? modelHubBootstrap.data?.catalog ?? null;
+    catalogQuery.data ??
+    cachedCatalog ??
+    modelHubBootstrap.data?.catalog ??
+    null;
   const providerCatalog = modelHubBootstrap.data?.providers ?? [];
   const registerableProviders = useMemo(
     () =>
       providerCatalog.filter(
         (item) =>
-          item.registerable &&
-          item.default_registration_purpose === purpose,
+          item.registerable && item.default_registration_purpose === purpose,
       ),
     [providerCatalog, purpose],
   );
@@ -370,7 +413,7 @@ export function ModelManager({
     registerableProviders[0] ??
     null;
   const selectedProviderPreflight = selectedProvider
-    ? preflightByName.get(selectedProvider.provider_id) ?? null
+    ? (preflightByName.get(selectedProvider.provider_id) ?? null)
     : null;
   const pretrainedCatalogModels = useMemo(
     () =>
@@ -409,20 +452,28 @@ export function ModelManager({
       const localJob = installJobs[model.catalog_id];
       const jobId = localJob?.id ?? model.installation_job_id;
       const status = localJob?.status;
-      if (jobId && (!status || ["queued", "running", "cancel_requested"].includes(status))) {
+      if (
+        jobId &&
+        (!status || ["queued", "running", "cancel_requested"].includes(status))
+      ) {
         entries.set(model.catalog_id, jobId);
       }
     }
     return Array.from(entries.entries());
   }, [installJobs, modelCatalog?.models]);
-  const activeJobSignature = activeJobEntries.map(([catalogId, jobId]) => `${catalogId}:${jobId}`).join("|");
+  const activeJobSignature = activeJobEntries
+    .map(([catalogId, jobId]) => `${catalogId}:${jobId}`)
+    .join("|");
 
   useEffect(() => {
     if (!activeJobSignature) return;
     let stopped = false;
     const refresh = async () => {
       const updates = await Promise.all(
-        activeJobEntries.map(async ([catalogId, jobId]) => [catalogId, await getJob(jobId)] as const),
+        activeJobEntries.map(
+          async ([catalogId, jobId]) =>
+            [catalogId, await getJob(jobId)] as const,
+        ),
       );
       if (stopped) return;
       setInstallJobs((current) => {
@@ -430,9 +481,18 @@ export function ModelManager({
         for (const [catalogId, job] of updates) next[catalogId] = job;
         return next;
       });
-      if (updates.some(([, job]) => !["queued", "running", "cancel_requested"].includes(job.status))) {
-        void queryClient.invalidateQueries({ queryKey: ["model_catalog", project.id] });
-        void queryClient.invalidateQueries({ queryKey: ["model_hub_bootstrap", project.id] });
+      if (
+        updates.some(
+          ([, job]) =>
+            !["queued", "running", "cancel_requested"].includes(job.status),
+        )
+      ) {
+        void queryClient.invalidateQueries({
+          queryKey: ["model_catalog", project.id],
+        });
+        void queryClient.invalidateQueries({
+          queryKey: ["model_hub_bootstrap", project.id],
+        });
       }
     };
     void refresh();
@@ -497,14 +557,18 @@ export function ModelManager({
       setConfirmationModel(null);
       setOperationMessage(`Installation started for ${model.display_name}.`);
       setInstallJobs((current) => ({ ...current, [model.catalog_id]: job }));
-      void queryClient.invalidateQueries({ queryKey: ["model_catalog", project.id] });
+      void queryClient.invalidateQueries({
+        queryKey: ["model_catalog", project.id],
+      });
     },
   });
 
   const cancelInstallMutation = useMutation({
     mutationFn: (jobId: string) => cancelJob(jobId),
     onSuccess: (job) => {
-      setOperationMessage("Cancellation requested. Partial downloads will be removed safely.");
+      setOperationMessage(
+        "Cancellation requested. Partial downloads will be removed safely.",
+      );
       setInstallJobs((current) => {
         const next = { ...current };
         for (const [catalogId, currentJob] of Object.entries(next)) {
@@ -522,9 +586,11 @@ export function ModelManager({
       setOperationMessage(
         result.verified
           ? "Managed checkpoint verification passed."
-          : result.reason ?? "Managed checkpoint verification failed.",
+          : (result.reason ?? "Managed checkpoint verification failed."),
       );
-      void queryClient.invalidateQueries({ queryKey: ["model_catalog", project.id] });
+      void queryClient.invalidateQueries({
+        queryKey: ["model_catalog", project.id],
+      });
     },
   });
 
@@ -532,9 +598,15 @@ export function ModelManager({
     mutationFn: (model: ModelCatalogEntry) =>
       removeCatalogModel(project.id, model.catalog_id),
     onSuccess: () => {
-      setOperationMessage("Managed catalog model removed. The definition remains available.");
-      void queryClient.invalidateQueries({ queryKey: ["model_catalog", project.id] });
-      void queryClient.invalidateQueries({ queryKey: ["training_workspace_bootstrap", project.id] });
+      setOperationMessage(
+        "Managed catalog model removed. The definition remains available.",
+      );
+      void queryClient.invalidateQueries({
+        queryKey: ["model_catalog", project.id],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["training_workspace_bootstrap", project.id],
+      });
     },
   });
 
@@ -558,7 +630,9 @@ export function ModelManager({
     formatCheckedAt(trainingCompatibility.dataUpdatedAt) ??
     formatCheckedAt(modelHubBootstrap.data?.training_compatibility_checked_at);
   const catalogErrorDetails =
-    catalogQuery.error instanceof ApiRequestError ? catalogQuery.error.details : null;
+    catalogQuery.error instanceof ApiRequestError
+      ? catalogQuery.error.details
+      : null;
   const operationError =
     installMutation.error ??
     cancelInstallMutation.error ??
@@ -615,18 +689,24 @@ export function ModelManager({
             Refresh catalog
           </button>
         </div>
-        {catalogQuery.isPending && !modelCatalog && <p>Loading model catalog...</p>}
+        {catalogQuery.isPending && !modelCatalog && (
+          <p>Loading model catalog...</p>
+        )}
         {catalogQuery.error && (
           <div className="empty-state gallery-empty" role="alert">
             <h4>Model catalog failed to load</h4>
             <p className="form-error">{catalogQuery.error.message}</p>
             {typeof catalogErrorDetails?.expected_path === "string" && (
-              <small>Expected location: {catalogErrorDetails.expected_path}</small>
+              <small>
+                Expected location: {catalogErrorDetails.expected_path}
+              </small>
             )}
             {typeof catalogErrorDetails?.recovery_action === "string" && (
               <p>{catalogErrorDetails.recovery_action}</p>
             )}
-            {modelCatalog && <small>Showing the last validated cached catalog.</small>}
+            {modelCatalog && (
+              <small>Showing the last validated cached catalog.</small>
+            )}
             <button type="button" onClick={() => void catalogQuery.refetch()}>
               Retry
             </button>
@@ -635,20 +715,28 @@ export function ModelManager({
         {modelCatalog && modelCatalog.rejected_entries > 0 && (
           <details className="form-error">
             <summary>
-              Catalog loaded, but {modelCatalog.rejected_entries} entries were rejected
+              Catalog loaded, but {modelCatalog.rejected_entries} entries were
+              rejected
             </summary>
             {modelCatalog.validation_warnings.map((warning) => (
               <p key={warning}>{warning}</p>
             ))}
           </details>
         )}
-        {operationMessage && <p className="annotation-helper" aria-live="polite">{operationMessage}</p>}
-        {operationError && <p className="form-error">{operationError.message}</p>}
+        {operationMessage && (
+          <p className="annotation-helper" aria-live="polite">
+            {operationMessage}
+          </p>
+        )}
+        {operationError && (
+          <p className="form-error">{operationError.message}</p>
+        )}
         <div className="image-grid">
           {pretrainedCatalogModels.map((model) => {
             const job = installJobs[model.catalog_id];
             const displayedModel =
-              job && ["queued", "running", "cancel_requested"].includes(job.status)
+              job &&
+              ["queued", "running", "cancel_requested"].includes(job.status)
                 ? {
                     ...model,
                     installation_state: jobState(job),
@@ -664,12 +752,18 @@ export function ModelManager({
                 onCancel={(jobId) => cancelInstallMutation.mutate(jobId)}
                 onVerify={(item) => verifyMutation.mutate(item)}
                 onRemove={(item) => {
-                  if (window.confirm(`Remove the managed ${item.display_name} checkpoint?`)) {
+                  if (
+                    window.confirm(
+                      `Remove the managed ${item.display_name} checkpoint?`,
+                    )
+                  ) {
                     removeCatalogMutation.mutate(item);
                   }
                 }}
                 onSelect={(item) => {
-                  setOperationMessage(`${item.display_name} selected for a new training draft.`);
+                  setOperationMessage(
+                    `${item.display_name} selected for a new training draft.`,
+                  );
                   void queryClient.invalidateQueries({
                     queryKey: ["training_workspace_bootstrap", project.id],
                   });
@@ -682,7 +776,12 @@ export function ModelManager({
         </div>
         {confirmationModel && (
           <div className="modal-backdrop" role="presentation">
-            <section className="modal" role="dialog" aria-modal="true" aria-labelledby="model-install-title">
+            <section
+              className="modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="model-install-title"
+            >
               <p className="eyebrow">Confirm managed installation</p>
               <h3 id="model-install-title">{confirmationModel.display_name}</h3>
               <p>{confirmationModel.license_summary}</p>
@@ -700,12 +799,16 @@ export function ModelManager({
                 </div>
                 <div className="annotation-selection-row">
                   <strong>Provider pack</strong>
-                  <span>{confirmationModel.provider_pack_id ?? "Bundled base runtime"}</span>
+                  <span>
+                    {confirmationModel.provider_pack_id ??
+                      "Bundled base runtime"}
+                  </span>
                 </div>
               </div>
               <p className="annotation-helper">
-                ReefVision will download from the declared trusted source, verify the pinned SHA-256,
-                and store the finalized checkpoint in application data.
+                ReefVision will download from the declared trusted source,
+                verify the pinned SHA-256, and store the finalized checkpoint in
+                application data.
               </p>
               <div className="image-card-actions">
                 <button
@@ -713,9 +816,15 @@ export function ModelManager({
                   onClick={() => installMutation.mutate(confirmationModel)}
                   disabled={installMutation.isPending}
                 >
-                  {installMutation.isPending ? "Starting..." : "Confirm Install"}
+                  {installMutation.isPending
+                    ? "Starting..."
+                    : "Confirm Install"}
                 </button>
-                <button type="button" className="secondary" onClick={() => setConfirmationModel(null)}>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setConfirmationModel(null)}
+                >
                   Cancel
                 </button>
               </div>
@@ -724,13 +833,25 @@ export function ModelManager({
         )}
         {reasonModel && (
           <div className="modal-backdrop" role="presentation">
-            <section className="modal" role="dialog" aria-modal="true" aria-labelledby="model-reason-title">
+            <section
+              className="modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="model-reason-title"
+            >
               <h3 id="model-reason-title">{reasonModel.display_name}</h3>
-              <p>{reasonModel.installation_reason ?? "No additional reason was provided."}</p>
+              <p>
+                {reasonModel.installation_reason ??
+                  "No additional reason was provided."}
+              </p>
               {reasonModel.known_limitations.map((limitation) => (
-                <p key={limitation} className="annotation-helper">{limitation}</p>
+                <p key={limitation} className="annotation-helper">
+                  {limitation}
+                </p>
               ))}
-              <button type="button" onClick={() => setReasonModel(null)}>Close</button>
+              <button type="button" onClick={() => setReasonModel(null)}>
+                Close
+              </button>
             </section>
           </div>
         )}
@@ -761,12 +882,15 @@ export function ModelManager({
           <div>
             <p className="eyebrow">Imported Custom Models</p>
             <h3>Advanced project imports</h3>
-            <span>Custom checkpoints stay outside the normal pretrained flow</span>
+            <span>
+              Custom checkpoints stay outside the normal pretrained flow
+            </span>
           </div>
         </div>
         {!importedCatalogModels.length && (
           <p className="system-subtle">
-            Import a custom checkpoint from the advanced workflow to surface it here.
+            Import a custom checkpoint from the advanced workflow to surface it
+            here.
           </p>
         )}
         <div className="image-grid">
@@ -929,7 +1053,9 @@ export function ModelManager({
               disabled={registerableProviders.length === 0}
             >
               {registerableProviders.length === 0 && (
-                <option value="">No registerable providers for this purpose</option>
+                <option value="">
+                  No registerable providers for this purpose
+                </option>
               )}
               {registerableProviders.map((provider) => (
                 <option key={provider.provider_id} value={provider.provider_id}>
@@ -963,13 +1089,14 @@ export function ModelManager({
             />
           </label>
           <p className="annotation-helper">
-            Imported custom models remain part of the advanced workflow. The normal
-            pretrained selector comes from the validated Model Catalog instead.
+            Imported custom models remain part of the advanced workflow. The
+            normal pretrained selector comes from the validated Model Catalog
+            instead.
           </p>
           {selectedProvider && (
             <p className="annotation-helper">
-              Selected provider: {selectedProvider.display_name}. Supported tasks:{" "}
-              {selectedProvider.supported_tasks.join(", ")}. Runtime:{" "}
+              Selected provider: {selectedProvider.display_name}. Supported
+              tasks: {selectedProvider.supported_tasks.join(", ")}. Runtime:{" "}
               {selectedProvider.supported_execution_runtimes.join(", ")}.
             </p>
           )}
@@ -984,10 +1111,14 @@ export function ModelManager({
             disabled={
               registerMutation.isPending ||
               !selectedProvider ||
-              Boolean(selectedProviderPreflight && !selectedProviderPreflight.ready)
+              Boolean(
+                selectedProviderPreflight && !selectedProviderPreflight.ready,
+              )
             }
           >
-            {registerMutation.isPending ? "Importing..." : "Import custom model"}
+            {registerMutation.isPending
+              ? "Importing..."
+              : "Import custom model"}
           </button>
           {registerMutation.error && (
             <p className="form-error">{registerMutation.error.message}</p>
@@ -995,7 +1126,9 @@ export function ModelManager({
         </form>
       </details>
 
-      {modelHubBootstrap.isPending && models.length === 0 && <p>Loading registered models...</p>}
+      {modelHubBootstrap.isPending && models.length === 0 && (
+        <p>Loading registered models...</p>
+      )}
       {modelHubBootstrap.error && models.length === 0 && (
         <p className="form-error">{modelHubBootstrap.error.message}</p>
       )}
@@ -1153,11 +1286,7 @@ function ProviderReadinessCard({
   );
 }
 
-function RuntimeProviderCard({
-  runtime,
-}: {
-  runtime: RuntimeProviderStatus;
-}) {
+function RuntimeProviderCard({ runtime }: { runtime: RuntimeProviderStatus }) {
   return (
     <article className="image-card">
       <div className="image-card-body">
@@ -1198,7 +1327,9 @@ function UltralyticsTrainingCompatibility({
       <div className="image-card-body">
         <div>
           <h4>Ultralytics {registry.provider_version}</h4>
-          <p>Detect and segment parameter registry for the pinned desktop build</p>
+          <p>
+            Detect and segment parameter registry for the pinned desktop build
+          </p>
         </div>
         <small>
           Installed package {registry.ultralytics_version ?? "missing"} |{" "}

@@ -136,8 +136,9 @@ function toProjectSummary(value: Project): ProjectSummary {
     updated_at: value.updated_at,
     archived_at: value.archived_at,
     label_class_count: value.label_classes.length,
-    active_label_class_count: value.label_classes.filter((item) => item.is_active)
-      .length,
+    active_label_class_count: value.label_classes.filter(
+      (item) => item.is_active,
+    ).length,
   };
 }
 
@@ -608,7 +609,8 @@ const ultralyticsTrainingRegistry = {
   method_signatures: {
     train: "(self, trainer=None, **kwargs: 'Any')",
     val: "(self, validator=None, **kwargs: 'Any')",
-    predict: "(self, source=None, stream=False, predictor=None, **kwargs: 'Any')",
+    predict:
+      "(self, source=None, stream=False, predictor=None, **kwargs: 'Any')",
     export: "(self, **kwargs: 'Any') -> 'str'",
     tune: "(self, use_ray=False, iterations=10, *args: 'Any', **kwargs: 'Any')",
   },
@@ -834,7 +836,9 @@ function mockApi({
   backupHistory?: unknown[];
   shortcutStatus?: typeof systemCommandShortcuts;
 } = {}) {
-  const trainingDraftSummaries = savedTrainingDrafts.map(toTrainingDraftSummary);
+  const trainingDraftSummaries = savedTrainingDrafts.map(
+    toTrainingDraftSummary,
+  );
   const trainingWorkspaceBootstrap = {
     draft_summaries: trainingDraftSummaries,
     selected_draft: savedTrainingDrafts[0] ?? null,
@@ -1015,8 +1019,7 @@ function mockApi({
             provider_id: draft.provider_id,
             architecture: draft.architecture,
             initial_checkpoint_source: draft.initial_checkpoint_source,
-            validation_status:
-              draft.validation_state?.status ?? null,
+            validation_status: draft.validation_state?.status ?? null,
             warning_count: draft.validation_state?.warnings?.length ?? 0,
             blocker_count: draft.validation_state?.blockers?.length ?? 0,
             created_at: draft.created_at,
@@ -1266,7 +1269,9 @@ describe("App", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Pinned-provider workflow")).toBeInTheDocument();
     expect(screen.getByLabelText("Active draft")).toHaveValue("draft-1");
-    expect(await screen.findByText("Launch background run")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Launch background run"),
+    ).toBeInTheDocument();
   });
 
   it("opens the models workspace and shows Ultralytics training compatibility", async () => {
@@ -1285,12 +1290,16 @@ describe("App", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Ultralytics 8.3.228")).toBeInTheDocument();
     expect(
-      screen.getByText(/versioned registry and strict argument validation foundation/i),
+      screen.getByText(
+        /versioned registry and strict argument validation foundation/i,
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByText("Advanced -> Import Custom Model"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Model provider catalog" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Model provider catalog" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Grounding DINO")).toBeInTheDocument();
   });
 

@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -263,7 +269,9 @@ describe("ClassManagerPanel", () => {
 
     renderPanel();
     await userEvent.click(
-      within(sourceClassRow()).getByRole("button", { name: "Preview reassign" }),
+      within(sourceClassRow()).getByRole("button", {
+        name: "Preview reassign",
+      }),
     );
 
     expect(await screen.findByText("Reassign preview")).toBeInTheDocument();
@@ -279,8 +287,9 @@ describe("ClassManagerPanel", () => {
 
     const executeCall = fetchMock.mock.calls.find(
       ([request, requestInit]) =>
-        String(request).endsWith(`/projects/${project.id}/classes/class-1/reassign`) &&
-        requestInit?.method === "POST",
+        String(request).endsWith(
+          `/projects/${project.id}/classes/class-1/reassign`,
+        ) && requestInit?.method === "POST",
     );
     expect(executeCall).toBeDefined();
     expect(executeCall?.[1]?.body).toContain("operation-1");
