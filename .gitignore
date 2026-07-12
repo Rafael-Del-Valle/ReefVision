@@ -54,21 +54,21 @@ tmp_dataset_debug/
 *.safetensors
 *.onnx
 *.engine
-checkpoints/
-weights/
-runs/
-models/
+/checkpoints/
+/weights/
+/runs/
+/models/
 
 # Local research data and backups
-datasets/
-backups/
-uploads/
-managed-media/
+/datasets/
+/backups/
+/uploads/
+/managed-media/
 
 # Signing keys and credentials
 *.key
 *.pem
 *.p12
 *.pfx
-signing-keys/
-private-keys/
+/signing-keys/
+/private-keys/
