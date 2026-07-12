@@ -149,8 +149,7 @@ class ImageRepository:
         }
 
         items: list[ImageAsset] = []
-        for image in page_items:
-            item = cast(ImageAsset, image)
+        for item in page_items:
             item.__dict__["annotation_count"] = annotation_counts.get(item.id, 0)
             items.append(item)
         return items, total

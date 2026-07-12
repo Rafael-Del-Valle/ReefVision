@@ -43,12 +43,18 @@ def upgrade() -> None:
         sa.Column("validation_state_json", sa.JSON(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["dataset_version_id"], ["dataset_versions.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(["initial_checkpoint_model_id"], ["model_registrations.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(
+            ["dataset_version_id"], ["dataset_versions.id"], ondelete="SET NULL"
+        ),
+        sa.ForeignKeyConstraint(
+            ["initial_checkpoint_model_id"], ["model_registrations.id"], ondelete="SET NULL"
+        ),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_training_drafts_project_id"), "training_drafts", ["project_id"], unique=False)
+    op.create_index(
+        op.f("ix_training_drafts_project_id"), "training_drafts", ["project_id"], unique=False
+    )
     op.create_index(
         "ix_training_drafts_project_updated",
         "training_drafts",
@@ -103,15 +109,21 @@ def upgrade() -> None:
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["dataset_version_id"], ["dataset_versions.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(
+            ["dataset_version_id"], ["dataset_versions.id"], ondelete="SET NULL"
+        ),
         sa.ForeignKeyConstraint(["draft_id"], ["training_drafts.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(["initial_checkpoint_model_id"], ["model_registrations.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(
+            ["initial_checkpoint_model_id"], ["model_registrations.id"], ondelete="SET NULL"
+        ),
         sa.ForeignKeyConstraint(["job_id"], ["jobs.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("job_id", name="uq_training_runs_job_id"),
     )
-    op.create_index(op.f("ix_training_runs_project_id"), "training_runs", ["project_id"], unique=False)
+    op.create_index(
+        op.f("ix_training_runs_project_id"), "training_runs", ["project_id"], unique=False
+    )
     op.create_index(op.f("ix_training_runs_draft_id"), "training_runs", ["draft_id"], unique=False)
     op.create_index(
         op.f("ix_training_runs_dataset_version_id"),
@@ -149,7 +161,9 @@ def upgrade() -> None:
         sa.Column("artifact_manifest_json", sa.JSON(), nullable=False),
         sa.Column("package_versions_json", sa.JSON(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["dataset_version_id"], ["dataset_versions.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(
+            ["dataset_version_id"], ["dataset_versions.id"], ondelete="SET NULL"
+        ),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["training_run_id"], ["training_runs.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),

@@ -31,7 +31,10 @@ class TrainingRun(Base):
         String(36), ForeignKey("training_drafts.id", ondelete="SET NULL"), nullable=True, index=True
     )
     dataset_version_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("dataset_versions.id", ondelete="SET NULL"), nullable=True, index=True
+        String(36),
+        ForeignKey("dataset_versions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     dataset_manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     split_manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -60,7 +63,9 @@ class TrainingRun(Base):
         JSON, nullable=False, default=dict
     )
     resource_limits_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    preflight_report_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    preflight_report_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     draft_snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="queued")
     stage: Mapped[str] = mapped_column(String(60), nullable=False, default="queued")
@@ -69,7 +74,9 @@ class TrainingRun(Base):
     metrics_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     metrics_history_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     warnings_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
-    artifact_manifest_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    artifact_manifest_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     logs_path: Mapped[str | None] = mapped_column(String(700), nullable=True)
     result_checkpoint_path: Mapped[str | None] = mapped_column(String(700), nullable=True)
     job_id: Mapped[str | None] = mapped_column(

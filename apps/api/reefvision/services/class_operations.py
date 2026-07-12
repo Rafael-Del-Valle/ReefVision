@@ -40,10 +40,8 @@ from reefvision.schemas.class_operations import (
 from reefvision.schemas.projects import LabelClassUsageResponse
 from reefvision.services.annotations import annotation_snapshot
 from reefvision.services.projects import (
-    LabelClassUsageCountResponse,
-    ProjectService,
     USAGE_CATEGORY_META,
-    USAGE_CATEGORY_ORDER,
+    ProjectService,
 )
 from reefvision.storage.identity import get_local_user_identity
 
@@ -129,12 +127,14 @@ class ClassOperationsService:
 
     def usage_for_class(self, project_id: str, class_id: str) -> LabelClassUsageResponse:
         label_class = self._class(project_id, class_id)
-        return self.project_service._usage_response(  # noqa: SLF001
+        return self.project_service._usage_response(
             label_class,
-            self.project_service._usage_snapshot(label_class),  # noqa: SLF001
+            self.project_service._usage_snapshot(label_class),
         )
 
-    def _group(self, key: str, label: str, record_ids: list[str]) -> ClassOperationRecordGroupResponse:
+    def _group(
+        self, key: str, label: str, record_ids: list[str]
+    ) -> ClassOperationRecordGroupResponse:
         return ClassOperationRecordGroupResponse(
             key=key,
             label=label,
@@ -247,9 +247,7 @@ class ClassOperationsService:
 
         review_queue_items = list(
             self.session.scalars(
-                select(ReviewQueueItem).where(
-                    ReviewQueueItem.project_id == source_class.project_id
-                )
+                select(ReviewQueueItem).where(ReviewQueueItem.project_id == source_class.project_id)
             )
         )
         mutable_review_queue_ids = sorted(
@@ -342,7 +340,8 @@ class ClassOperationsService:
 
         if source_class.archived_at is not None:
             warnings.append(
-                "The source class is already archived. Reassignment still preserves immutable history."
+                "The source class is already archived. Reassignment still "
+                "preserves immutable history."
             )
         if target_class.archived_at is not None or not target_class.is_active:
             blockers.append("Restore the target class before reassigning records into it.")
@@ -356,14 +355,13 @@ class ClassOperationsService:
                 "Registered model class maps remain unchanged and may need explicit remapping."
             )
         if annotation_event_ids:
-            warnings.append(
-                "Historical annotation events remain unchanged for auditability."
-            )
+            warnings.append("Historical annotation events remain unchanged for auditability.")
 
         if operation_type == "reassign_delete":
             if deleted_annotation_ids:
                 blockers.append(
-                    "Deleted annotations still reference this class and would be removed by a hard delete."
+                    "Deleted annotations still reference this class and would be "
+                    "removed by a hard delete."
                 )
                 blocking_records.append(
                     self._group(
@@ -374,7 +372,8 @@ class ClassOperationsService:
                 )
             if protected_prediction_ids:
                 blockers.append(
-                    "Historical prediction proposals still reference this class and would lose their class link if the source class were deleted."
+                    "Historical prediction proposals still reference this class and "
+                    "would lose their class link if the source class were deleted."
                 )
                 blocking_records.append(
                     self._group(
@@ -410,12 +409,10 @@ class ClassOperationsService:
                 {"key": item.key, "record_ids": item.record_ids} for item in plan.mutable_records
             ],
             "protected_records": [
-                {"key": item.key, "record_ids": item.record_ids}
-                for item in plan.protected_records
+                {"key": item.key, "record_ids": item.record_ids} for item in plan.protected_records
             ],
             "blocking_records": [
-                {"key": item.key, "record_ids": item.record_ids}
-                for item in plan.blocking_records
+                {"key": item.key, "record_ids": item.record_ids} for item in plan.blocking_records
             ],
             "compatibility_impacts": [
                 {
@@ -438,8 +435,8 @@ class ClassOperationsService:
             project_id=operation.project_id,
             source_class_id=operation.source_class_id,
             target_class_id=operation.target_class_id,
-            operation_type=operation.operation_type,  # type: ignore[arg-type]
-            status=operation.status,  # type: ignore[arg-type]
+            operation_type=operation.operation_type,
+            status=operation.status,
             preview_checksum=operation.preview_checksum,
             requested_by_identity=operation.requested_by_identity,
             source_class=ClassOperationClassSnapshotResponse.model_validate(
@@ -721,7 +718,8 @@ class ClassOperationsService:
                 )
                 if remaining_annotations or remaining_historical_predictions:
                     raise ConflictError(
-                        "The source class still has protected references and cannot be deleted safely."
+                        "The source class still has protected references and cannot be "
+                        "deleted safely."
                     )
                 self.session.delete(source_class)
                 final_state = "reassigned_and_deleted"

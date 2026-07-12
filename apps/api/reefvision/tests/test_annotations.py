@@ -33,9 +33,7 @@ def import_one(
 ) -> dict[str, Any]:
     response = client.post(
         f"/api/v1/projects/{project_id}/imports/images",
-        files=[
-            ("files", (filename, image_bytes(size=size), "application/octet-stream"))
-        ],
+        files=[("files", (filename, image_bytes(size=size), "application/octet-stream"))],
         data={"relative_paths": relative_path},
     )
     assert response.status_code == 200, response.text

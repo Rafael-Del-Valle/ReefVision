@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from reefvision.config import Settings
 from reefvision.db.models import (
     DatasetVersion,
+    DatasetVersionItem,
     Job,
     ModelRegistration,
     Project,
@@ -21,6 +22,7 @@ from reefvision.db.models import (
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.ml.dependencies import configure_provider_runtime, provider_preflight, provider_spec
 from reefvision.ml.ultralytics_registry import (
+    UltralyticsRegistrySnapshot,
     ultralytics_training_registry,
     validate_ultralytics_training_configuration,
 )
@@ -158,7 +160,7 @@ class TrainingService:
             )
         ]
 
-    def get_provider_parameters(self, provider_id: str):
+    def get_provider_parameters(self, provider_id: str) -> UltralyticsRegistrySnapshot:
         if provider_id != TRAINABLE_PROVIDER_ID:
             raise NotFoundError("Training provider not found")
         return ultralytics_training_registry(self.settings)
@@ -378,6 +380,7 @@ class TrainingService:
                 task="detect",
                 mode="train",
                 parameters=training_config,
+                search_space=[],
                 expected_ultralytics_version=provider_spec(TRAINABLE_PROVIDER_ID).provider_version,
                 settings=self.settings,
             )
@@ -721,7 +724,7 @@ class TrainingService:
     def _split_manifest_sha(
         self,
         version: DatasetVersion,
-        items: list | None = None,
+        items: list[DatasetVersionItem] | None = None,
     ) -> str:
         items = items if items is not None else self.versions.items_for_version(version.id)
         payload = [
@@ -739,7 +742,7 @@ class TrainingService:
         self,
         version: DatasetVersion | None,
         *,
-        items: list | None = None,
+        items: list[DatasetVersionItem] | None = None,
     ) -> TrainingDatasetSummaryResponse:
         if version is None:
             return TrainingDatasetSummaryResponse(
@@ -772,7 +775,7 @@ class TrainingService:
         self,
         version: DatasetVersion | None,
         *,
-        items: list | None = None,
+        items: list[DatasetVersionItem] | None = None,
     ) -> TrainingLeakageAuditResponse:
         if version is None:
             return TrainingLeakageAuditResponse(
@@ -851,7 +854,7 @@ class TrainingService:
         version: DatasetVersion,
         tiling_config: dict[str, Any],
         *,
-        items: list | None = None,
+        items: list[DatasetVersionItem] | None = None,
     ) -> TrainingTilingEstimateResponse:
         mode = str(tiling_config.get("mode", "none"))
         resolved_items = items if items is not None else self.versions.items_for_version(version.id)
@@ -991,7 +994,7 @@ class TrainingService:
             catalog_model_id=draft.catalog_model_id,
             provider_id=draft.provider_id,
             architecture=draft.architecture,
-            initial_checkpoint_source=draft.initial_checkpoint_source,  # type: ignore[arg-type]
+            initial_checkpoint_source=draft.initial_checkpoint_source,
             initial_checkpoint_model_id=draft.initial_checkpoint_model_id,
             device=draft.device,
             precision=draft.precision,

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from importlib import import_module
 from importlib.metadata import PackageNotFoundError, version
 from importlib.resources import files
-from typing import Any
+from typing import Any, TypedDict
 
 from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
@@ -292,7 +292,16 @@ TUNABLE_PARAMETER_RULES: dict[str, dict[str, Any]] = {
     "iou": {"minimum": 0.0, "maximum": 1.0},
     "max_det": {"minimum": 1, "maximum": 3000, "integer": True},
 }
-NATIVE_TUNE_SPACE: dict[str, dict[str, float]] = {
+
+
+class NativeTuneRule(TypedDict, total=False):
+    minimum: float
+    maximum: float
+    gain: float
+    scale: str
+
+
+NATIVE_TUNE_SPACE: dict[str, NativeTuneRule] = {
     "lr0": {"minimum": 1e-5, "maximum": 1e-1, "scale": "log"},
     "lrf": {"minimum": 0.0001, "maximum": 0.1, "scale": "log"},
     "momentum": {"minimum": 0.7, "maximum": 0.98, "gain": 0.3, "scale": "linear"},
@@ -566,9 +575,7 @@ def validate_ultralytics_training_configuration(
     for name, value in parameters.items():
         record = record_by_name.get(name)
         if record is None:
-            raise ValidationError(
-                f"'{name}' is not a valid {ULTRALYTICS_VERSION_LABEL} argument."
-            )
+            raise ValidationError(f"'{name}' is not a valid {ULTRALYTICS_VERSION_LABEL} argument.")
         if not record.reefvision_supported:
             raise ValidationError(
                 f"'{name}' is not exposed by ReefVision for its supported detect "
@@ -730,18 +737,14 @@ def _dependency_rules(name: str) -> tuple[str, ...]:
             "implement classify training."
         )
     if name in POSE_ONLY_KEYS:
-        rules.append(
-            "Pose-only parameter. ReefVision does not currently implement pose training."
-        )
+        rules.append("Pose-only parameter. ReefVision does not currently implement pose training.")
     if name in TRACK_ONLY_KEYS:
         rules.append(
-            "Tracking-only parameter. ReefVision does not currently implement "
-            "tracking workflows."
+            "Tracking-only parameter. ReefVision does not currently implement tracking workflows."
         )
     if name == "momentum":
         rules.append(
-            "Meaningful primarily when the optimizer uses momentum or Adam "
-            "beta1 semantics."
+            "Meaningful primarily when the optimizer uses momentum or Adam beta1 semantics."
         )
     if name == "copy_paste_mode":
         rules.append("Only applies when copy_paste is enabled for segment training.")
@@ -795,7 +798,7 @@ def _installed_ultralytics_version() -> str | None:
         return None
 
 
-def _import_ultralytics_runtime(settings: Settings | None):
+def _import_ultralytics_runtime(settings: Settings | None) -> tuple[Any, Any]:
     configure_provider_runtime(settings)
     try:
         cfg_module = import_module("ultralytics.cfg")

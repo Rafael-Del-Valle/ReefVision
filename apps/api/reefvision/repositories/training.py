@@ -79,7 +79,9 @@ class TrainingRepository:
         return self.session.get(ExperimentRecord, experiment_id)
 
     def get_experiment_for_run(self, training_run_id: str) -> ExperimentRecord | None:
-        statement = select(ExperimentRecord).where(ExperimentRecord.training_run_id == training_run_id)
+        statement = select(ExperimentRecord).where(
+            ExperimentRecord.training_run_id == training_run_id
+        )
         return self.session.scalar(statement)
 
     def list_experiments(self, project_id: str) -> list[ExperimentRecord]:

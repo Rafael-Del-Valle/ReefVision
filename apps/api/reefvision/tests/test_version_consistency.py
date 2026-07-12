@@ -15,9 +15,7 @@ def test_authoritative_version_sources_match_release_line() -> None:
     pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
     workspace_package = json.loads((root / "package.json").read_text(encoding="utf-8"))
     web_package = json.loads((root / "apps" / "web" / "package.json").read_text(encoding="utf-8"))
-    web_lock = json.loads(
-        (root / "apps" / "web" / "package-lock.json").read_text(encoding="utf-8")
-    )
+    web_lock = json.loads((root / "apps" / "web" / "package-lock.json").read_text(encoding="utf-8"))
     tauri_config = json.loads(
         (root / "apps" / "web" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
     )

@@ -51,9 +51,7 @@ def list_project_summaries(
     session: DbSession,
     include_archived: Annotated[bool, Query()] = False,
 ) -> list[ProjectSummaryResponse]:
-    return service(request, session).list_project_summaries(
-        include_archived=include_archived
-    )
+    return service(request, session).list_project_summaries(include_archived=include_archived)
 
 
 @router.get("/projects/{project_id}", response_model=ProjectResponse)

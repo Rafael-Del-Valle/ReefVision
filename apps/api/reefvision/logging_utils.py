@@ -85,4 +85,3 @@ def configure_rotating_json_logging(
     setattr(handler, _MANAGED_HANDLER_ATTRIBUTE, True)
     handler.setFormatter(StructuredJsonFormatter(default_component=default_component))
     root_logger.addHandler(handler)
-

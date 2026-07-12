@@ -21,7 +21,6 @@ from reefvision.schemas.images import (
     ImageImportResponse,
     ImageListItemResponse,
     ImagePageResponse,
-    ImageResponse,
     ImageUpdate,
     ImportItemResponse,
 )

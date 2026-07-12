@@ -73,9 +73,7 @@ def test_class_visibility_preferences_persist_across_restart(tmp_path: Path) -> 
         payload = bundle.json()
         assert payload["user_identity"] == first_identity
         assert payload["user_preferences"]["annotations"]["saved"] is True
-        assert payload["user_preferences"]["annotations"]["hidden_class_ids"] == [
-            label_class["id"]
-        ]
+        assert payload["user_preferences"]["annotations"]["hidden_class_ids"] == [label_class["id"]]
         assert (settings.resolved_data_dir / "local-user-id.txt").is_file()
         Base.metadata.drop_all(second_app.state.engine)
 

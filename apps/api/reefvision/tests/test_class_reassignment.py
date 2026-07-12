@@ -363,16 +363,12 @@ def test_reassign_preview_and_execution_updates_only_mutable_records(client: Tes
     assert preview_payload["status"] == "previewed"
     assert preview_payload["operation_type"] == "reassign"
     assert preview_payload["preview_checksum"]
-    mutable_groups = {
-        item["key"]: item for item in preview_payload["plan"]["mutable_records"]
-    }
+    mutable_groups = {item["key"]: item for item in preview_payload["plan"]["mutable_records"]}
     assert mutable_groups["annotations_active"]["record_ids"] == ["annotation-active"]
     assert mutable_groups["prediction_proposals_pending"]["record_ids"] == ["proposal-pending"]
     assert mutable_groups["quality_control_issues_open"]["record_ids"] == ["qc-issue-open"]
     assert mutable_groups["review_queue_items_open"]["record_ids"] == ["queue-item-pending"]
-    protected_groups = {
-        item["key"]: item for item in preview_payload["plan"]["protected_records"]
-    }
+    protected_groups = {item["key"]: item for item in preview_payload["plan"]["protected_records"]}
     assert protected_groups["annotations_deleted"]["record_ids"] == ["annotation-deleted"]
     assert protected_groups["prediction_proposals_historical"]["record_ids"] == [
         "proposal-accepted"
@@ -407,9 +403,7 @@ def test_reassign_preview_and_execution_updates_only_mutable_records(client: Tes
         latest_operation = session.get(ClassOperation, preview_payload["id"])
         events = list(
             session.scalars(
-                select(AnnotationEvent).where(
-                    AnnotationEvent.annotation_id == "annotation-active"
-                )
+                select(AnnotationEvent).where(AnnotationEvent.annotation_id == "annotation-active")
             )
         )
 

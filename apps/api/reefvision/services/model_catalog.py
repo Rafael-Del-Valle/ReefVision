@@ -527,6 +527,9 @@ class ModelCatalogService:
             metadata.get("source_architecture_family") or model.framework or model.provider_name
         )
         model_size = metadata.get("source_model_size")
+        input_size = (
+            model.input_size_json.get("imgsz") if isinstance(model.input_size_json, dict) else None
+        )
         supported_runtimes = [model.framework]
         license_summary = (
             "User-managed checkpoint; ReefVision does not infer redistribution rights."
@@ -580,13 +583,7 @@ class ModelCatalogService:
             supported_runtime=supported_runtimes,
             supported_precision=["fp32"],
             expected_input_size=(
-                {
-                    "width": int(model.input_size_json.get("imgsz")),
-                    "height": int(model.input_size_json.get("imgsz")),
-                }
-                if isinstance(model.input_size_json, dict)
-                and isinstance(model.input_size_json.get("imgsz"), int)
-                else None
+                {"width": input_size, "height": input_size} if isinstance(input_size, int) else None
             ),
             minimum_recommended_ram_gb=None,
             minimum_recommended_vram_gb=None,

@@ -7,7 +7,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 ClassOperationType = Literal["reassign", "reassign_delete"]
 ClassOperationStatus = Literal[
     "previewed",

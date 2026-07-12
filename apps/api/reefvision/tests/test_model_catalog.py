@@ -58,9 +58,7 @@ def test_source_catalog_is_schema_v2_and_contains_required_models() -> None:
 def test_project_model_catalog_returns_all_definitions(client: TestClient) -> None:
     project = create_project(client, "Catalog study")
 
-    response = client.get(
-        f"/api/v1/projects/{project['id']}/model-catalog?workflow=model_hub"
-    )
+    response = client.get(f"/api/v1/projects/{project['id']}/model-catalog?workflow=model_hub")
 
     assert response.status_code == 200, response.text
     payload = response.json()
@@ -92,9 +90,7 @@ def test_missing_provider_does_not_hide_entries(
     assert response.status_code == 200, response.text
     payload = response.json()
     yolo11x = next(
-        item
-        for item in payload["models"]
-        if item["catalog_id"] == "ultralytics/yolo11/detect/x"
+        item for item in payload["models"] if item["catalog_id"] == "ultralytics/yolo11/detect/x"
     )
     assert len(payload["models"]) == 40
     assert yolo11x["installation_state"] == "Provider Required"
@@ -103,9 +99,7 @@ def test_missing_provider_does_not_hide_entries(
 def test_smart_mask_catalog_filters_only_by_task(client: TestClient) -> None:
     project = create_project(client, "Mask catalog study")
 
-    response = client.get(
-        f"/api/v1/projects/{project['id']}/model-catalog?workflow=smart_mask"
-    )
+    response = client.get(f"/api/v1/projects/{project['id']}/model-catalog?workflow=smart_mask")
 
     assert response.status_code == 200, response.text
     payload = response.json()

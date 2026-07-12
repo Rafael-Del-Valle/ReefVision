@@ -136,22 +136,13 @@ class QualityControlRepository:
         if status is not None:
             filters.append(QualityControlIssue.status == status)
         if class_id is not None:
-            class_values = func.json_each(QualityControlIssue.class_ids_json).table_valued(
-                "value"
-            )
+            class_values = func.json_each(QualityControlIssue.class_ids_json).table_valued("value")
             filters.append(
-                exists(
-                    select(1)
-                    .select_from(class_values)
-                    .where(class_values.c.value == class_id)
-                )
+                exists(select(1).select_from(class_values).where(class_values.c.value == class_id))
             )
         base_statement = select(QualityControlIssue).where(*filters)
         total = int(
-            self.session.scalar(
-                select(func.count()).select_from(base_statement.subquery())
-            )
-            or 0
+            self.session.scalar(select(func.count()).select_from(base_statement.subquery())) or 0
         )
         pages = max(1, ceil(total / page_size)) if total else 1
         start = (page - 1) * page_size

@@ -30,7 +30,10 @@ class ExperimentRecord(Base):
         String(36), ForeignKey("training_runs.id", ondelete="CASCADE"), nullable=False, index=True
     )
     dataset_version_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("dataset_versions.id", ondelete="SET NULL"), nullable=True, index=True
+        String(36),
+        ForeignKey("dataset_versions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     dataset_manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     split_manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -39,8 +42,12 @@ class ExperimentRecord(Base):
     architecture: Mapped[str] = mapped_column(String(200), nullable=False)
     summary_metrics_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     comparison_warnings_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
-    artifact_manifest_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    package_versions_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    artifact_manifest_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    package_versions_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )

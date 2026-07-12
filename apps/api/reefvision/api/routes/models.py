@@ -8,37 +8,37 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
-from reefvision.ml.dependencies import cached_lightweight_provider_preflight
+from reefvision.ml.dependencies import (
+    ProviderPreflightReport,
+    cached_lightweight_provider_preflight,
+)
 from reefvision.ml.provider_hub import (
     cached_model_provider_catalog,
     cached_runtime_provider_statuses,
     get_model_provider,
     get_model_provider_capabilities,
-    list_model_providers,
 )
 from reefvision.ml.ultralytics_registry import (
     cached_ultralytics_training_registry_summary,
     ultralytics_training_registry,
-    ultralytics_training_registry_summary,
     validate_ultralytics_training_configuration,
 )
+from reefvision.schemas.bootstrap import UltralyticsTrainingRegistrySummarySnapshotResponse
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.models import (
     InferenceJobCreateRequest,
     ModelProviderCapabilityMatrixResponse,
     ModelProviderResponse,
     ModelRegistrationResponse,
-    RegisterModelFromRunRequest,
     ProviderDependencyPackageResponse,
     ProviderDependencyPreflightResponse,
     ProviderDependencyStatusResponse,
+    RegisterModelFromRunRequest,
     RuntimeProviderStatusResponse,
     UltralyticsTrainingConfigurationValidationRequest,
     UltralyticsTrainingConfigurationValidationResponse,
     UltralyticsTrainingRegistryResponse,
-    UltralyticsTrainingRegistrySummaryResponse,
 )
-from reefvision.schemas.bootstrap import UltralyticsTrainingRegistrySummarySnapshotResponse
 from reefvision.services.models import ModelService
 
 router = APIRouter(tags=["models"])
@@ -78,9 +78,7 @@ def get_model_provider_detail(
     request: Request,
 ) -> ModelProviderResponse:
     settings: Settings = request.app.state.settings
-    return ModelProviderResponse.model_validate(
-        asdict(get_model_provider(provider_id, settings))
-    )
+    return ModelProviderResponse.model_validate(asdict(get_model_provider(provider_id, settings)))
 
 
 @router.get(
@@ -218,7 +216,9 @@ def create_inference_job(
     return service(request, session).create_inference_job(project_id, payload)
 
 
-def _serialize_provider_preflight(reports) -> ProviderDependencyPreflightResponse:
+def _serialize_provider_preflight(
+    reports: list[ProviderPreflightReport],
+) -> ProviderDependencyPreflightResponse:
     return ProviderDependencyPreflightResponse(
         providers=[
             ProviderDependencyStatusResponse(

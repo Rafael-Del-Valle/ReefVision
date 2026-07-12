@@ -27,9 +27,9 @@ from reefvision.logging_utils import default_logs_dir
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.system import (
     SchemaStatus,
-    SystemCompatibilityResponse,
     SystemCommandShortcutRepairResponse,
     SystemCommandShortcutStatusResponse,
+    SystemCompatibilityResponse,
     SystemDiagnosticsCreateRequest,
     SystemDiagnosticsCreateResponse,
     SystemDiagnosticsStatusResponse,
@@ -212,7 +212,9 @@ class SystemService:
         notes: list[str] = []
         path_contains = str(command_dir) in user_path_entries
         if not path_contains:
-            notes.append("The ReefVision command directory is not present in the current user's PATH.")
+            notes.append(
+                "The ReefVision command directory is not present in the current user's PATH."
+            )
         if repo_path is None:
             notes.append("No ReefVision repository path is configured for update workflows.")
 
@@ -235,7 +237,9 @@ class SystemService:
             verification = "ready"
         elif (start_exists and not start_managed) or (update_exists and not update_managed):
             verification = "conflict"
-            notes.append("One or more command wrapper names are already in use by a non-ReefVision file.")
+            notes.append(
+                "One or more command wrapper names are already in use by a non-ReefVision file."
+            )
         else:
             verification = "repair_required"
 
@@ -405,7 +409,7 @@ class SystemService:
         return None
 
     def _user_path_entries(self) -> set[str]:
-        raw = os.environ.get("Path") or ""
+        raw = os.environ.get("PATH") or ""
         return {entry.strip() for entry in raw.split(";") if entry.strip()}
 
     def _managed_wrapper(self, path: Path) -> bool:

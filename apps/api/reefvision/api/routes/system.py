@@ -5,9 +5,9 @@ from sqlalchemy.engine import Engine
 
 from reefvision.config import Settings
 from reefvision.schemas.system import (
-    SystemCompatibilityResponse,
     SystemCommandShortcutRepairResponse,
     SystemCommandShortcutStatusResponse,
+    SystemCompatibilityResponse,
     SystemDiagnosticsCreateRequest,
     SystemDiagnosticsCreateResponse,
     SystemDiagnosticsStatusResponse,

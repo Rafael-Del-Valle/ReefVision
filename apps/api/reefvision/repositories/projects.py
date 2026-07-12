@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 from typing import NamedTuple
 
 from sqlalchemy import case, func, select
@@ -20,15 +21,15 @@ class ProjectRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def list(self, *, include_archived: bool = False) -> list[Project]:
+    def list(self, *, include_archived: bool = False) -> builtins.list[Project]:
         statement = (
             select(Project).options(selectinload(Project.label_classes)).order_by(Project.name)
         )
         if not include_archived:
             statement = statement.where(Project.archived_at.is_(None))
-        return list(self.session.scalars(statement).unique())
+        return builtins.list(self.session.scalars(statement).unique())
 
-    def list_summaries(self, *, include_archived: bool = False) -> list[ProjectSummaryRow]:
+    def list_summaries(self, *, include_archived: bool = False) -> builtins.list[ProjectSummaryRow]:
         active_count = func.sum(case((LabelClass.is_active.is_(True), 1), else_=0))
         statement = (
             select(

@@ -425,10 +425,7 @@ def test_assist_box_prompt_accepts_selected_prediction_as_provenance_source(
     assert annotation["source_type"] == "assist_mask"
     assert annotation["source_model_id"] == assist_model["id"]
     assert annotation["source_prediction_id"] == proposal["id"]
-    assert (
-        annotation["provenance_json"]["source_prediction"]["proposal_id"]
-        == proposal["id"]
-    )
+    assert annotation["provenance_json"]["source_prediction"]["proposal_id"] == proposal["id"]
 
     refreshed = client.get(f"/api/v1/images/{image_id}/prediction-proposals").json()["items"][0]
     assert refreshed["review_status"] == "edited_and_accepted"

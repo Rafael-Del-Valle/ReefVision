@@ -17,9 +17,7 @@ class TrainingDraft(Base):
     """A saved but not yet launched training configuration."""
 
     __tablename__ = "training_drafts"
-    __table_args__ = (
-        Index("ix_training_drafts_project_updated", "project_id", "updated_at"),
-    )
+    __table_args__ = (Index("ix_training_drafts_project_updated", "project_id", "updated_at"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     project_id: Mapped[str] = mapped_column(
@@ -29,7 +27,10 @@ class TrainingDraft(Base):
     run_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     dataset_version_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("dataset_versions.id", ondelete="SET NULL"), nullable=True, index=True
+        String(36),
+        ForeignKey("dataset_versions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     dataset_manifest_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     split_manifest_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -58,7 +59,9 @@ class TrainingDraft(Base):
         JSON, nullable=False, default=dict
     )
     resource_limits_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    validation_state_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    validation_state_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )

@@ -117,9 +117,7 @@ class AssistService:
             raise ValidationError("Assist sessions require an assist model from the same project")
         source_prediction_id = None
         if payload.source_prediction_id:
-            source_prediction_id = self._source_prediction(
-                image, payload.source_prediction_id
-            ).id
+            source_prediction_id = self._source_prediction(image, payload.source_prediction_id).id
         image_path = resolve_managed_project_path(self.settings, image.managed_path)
         model_path = resolve_managed_project_path(self.settings, model.managed_path)
         session_state = self.runtime.create_session(

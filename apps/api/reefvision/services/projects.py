@@ -91,17 +91,13 @@ class LabelClassUsageSnapshot:
     @property
     def mutable_reference_count(self) -> int:
         return sum(
-            count
-            for key, count in self.counts.items()
-            if count > 0 and USAGE_CATEGORY_META[key][1]
+            count for key, count in self.counts.items() if count > 0 and USAGE_CATEGORY_META[key][1]
         )
 
     @property
     def immutable_reference_count(self) -> int:
         return sum(
-            count
-            for key, count in self.counts.items()
-            if count > 0 and USAGE_CATEGORY_META[key][2]
+            count for key, count in self.counts.items() if count > 0 and USAGE_CATEGORY_META[key][2]
         )
 
     @property
@@ -286,9 +282,7 @@ class ProjectService:
         counts["review_queue_items"] = sum(
             1
             for item in self.session.scalars(
-                select(ReviewQueueItem).where(
-                    ReviewQueueItem.project_id == label_class.project_id
-                )
+                select(ReviewQueueItem).where(ReviewQueueItem.project_id == label_class.project_id)
             )
             if label_class.id in item.label_class_ids_json
         )
@@ -322,29 +316,17 @@ class ProjectService:
                 "Active annotations still use this class. Reassign or merge them first."
             )
         if counts["annotations_deleted"] > 0 or counts["annotation_history"] > 0:
-            delete_blockers.append(
-                "Historical annotation records still reference this class."
-            )
+            delete_blockers.append("Historical annotation records still reference this class.")
         if counts["prediction_proposals"] > 0:
-            delete_blockers.append(
-                "Prediction proposals still reference this class."
-            )
+            delete_blockers.append("Prediction proposals still reference this class.")
         if counts["quality_control_issues"] > 0:
-            delete_blockers.append(
-                "Quality-control issues still reference this class."
-            )
+            delete_blockers.append("Quality-control issues still reference this class.")
         if counts["review_queue_items"] > 0:
-            delete_blockers.append(
-                "Review-queue items still reference this class."
-            )
+            delete_blockers.append("Review-queue items still reference this class.")
         if counts["dataset_versions"] > 0:
-            delete_blockers.append(
-                "Immutable dataset versions still include this class."
-            )
+            delete_blockers.append("Immutable dataset versions still include this class.")
         if counts["model_registrations"] > 0:
-            delete_blockers.append(
-                "Registered model class maps still reference this class."
-            )
+            delete_blockers.append("Registered model class maps still reference this class.")
 
         compatibility_warnings: list[str] = []
         if counts["dataset_versions"] > 0:
@@ -554,9 +536,7 @@ class ProjectService:
 
         review_queue_items = list(
             self.session.scalars(
-                select(ReviewQueueItem).where(
-                    ReviewQueueItem.project_id == source_class.project_id
-                )
+                select(ReviewQueueItem).where(ReviewQueueItem.project_id == source_class.project_id)
             )
         )
         for item in review_queue_items:

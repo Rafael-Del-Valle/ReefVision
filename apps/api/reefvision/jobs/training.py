@@ -212,7 +212,10 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
             job = session.get(Job, job_id)
             if run is None or job is None:
                 raise RuntimeError("Training run disappeared after execution")
-            save_dir = Path(str(model.trainer.save_dir)).resolve()
+            trainer = model.trainer
+            if trainer is None:
+                raise RuntimeError("Ultralytics trainer unavailable after execution")
+            save_dir = Path(str(trainer.save_dir)).resolve()
             results_csv = save_dir / "results.csv"
             weights_dir = save_dir / "weights"
             best_ckpt = weights_dir / "best.pt"

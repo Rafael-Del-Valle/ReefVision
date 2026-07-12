@@ -8,7 +8,7 @@ import re
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
@@ -73,7 +73,7 @@ def load_catalog_manifest(settings: Settings) -> dict[str, Any]:
     assets = payload.get("assets")
     if payload.get("manifest_version") != MANIFEST_VERSION or not isinstance(assets, dict):
         return {"manifest_version": MANIFEST_VERSION, "assets": {}, "corrupted": True}
-    return payload
+    return cast(dict[str, Any], payload)
 
 
 def catalog_manifest_record(settings: Settings, catalog_id: str) -> dict[str, Any] | None:

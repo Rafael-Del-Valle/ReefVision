@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
@@ -44,7 +42,7 @@ class ClassVisibilityService:
     def _layer_type(self, layer_type: str) -> ClassVisibilityLayerType:
         if layer_type not in SUPPORTED_CLASS_VISIBILITY_LAYER_TYPES:
             raise ValidationError("Unsupported class-visibility layer type")
-        return cast(ClassVisibilityLayerType, layer_type)
+        return layer_type
 
     def _project_class_ids(self, project_id: str) -> tuple[str, ...]:
         return tuple(label_class.id for label_class in self.classes.list_for_project(project_id))
@@ -93,8 +91,7 @@ class ClassVisibilityService:
             for item in self.preferences.list_for_project_user(project_id, user_identity)
         }
         defaults_by_layer = {
-            item.layer_type: item
-            for item in self.project_defaults.list_for_project(project_id)
+            item.layer_type: item for item in self.project_defaults.list_for_project(project_id)
         }
 
         user_preferences: dict[ClassVisibilityLayerType, ClassVisibilityScopeStateResponse] = {}

@@ -79,9 +79,7 @@ class ModelService:
             raise NotFoundError("Model not found")
         return model
 
-    def _provider_for_purpose(
-        self, purpose: str
-    ) -> DetectionProvider | AnnotationAssistProvider:
+    def _provider_for_purpose(self, purpose: str) -> DetectionProvider | AnnotationAssistProvider:
         if purpose not in MODEL_PURPOSES:
             raise ValidationError("Unknown model purpose")
         return provider_for_registration(purpose, settings=self.settings)
@@ -220,9 +218,7 @@ class ModelService:
         directories = project_model_directories(self.settings, project.storage_root)
         staging_path = directories["staging"] / f"{uuid4()}{Path(filename).suffix.lower()}"
         try:
-            stage_model_upload(
-                upload_stream, staging_path, self.settings.model_max_upload_bytes
-            )
+            stage_model_upload(upload_stream, staging_path, self.settings.model_max_upload_bytes)
             response = self._register_model_path(
                 project_id,
                 purpose=purpose,

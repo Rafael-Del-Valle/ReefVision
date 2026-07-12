@@ -508,9 +508,7 @@ def test_used_class_delete_is_blocked_and_usage_is_reported(client: TestClient) 
         source_model = session.get(ModelRegistration, "model-1")
         events = list(
             session.scalars(
-                select(AnnotationEvent).where(
-                    AnnotationEvent.annotation_id == "annotation-active"
-                )
+                select(AnnotationEvent).where(AnnotationEvent.annotation_id == "annotation-active")
             )
         )
 

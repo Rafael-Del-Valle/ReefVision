@@ -7,6 +7,7 @@ from reefvision.db.models.class_operation import ClassOperation
 from reefvision.db.models.class_visibility_preference import ClassVisibilityPreference
 from reefvision.db.models.dataset_version import DatasetVersion
 from reefvision.db.models.dataset_version_item import DatasetVersionItem
+from reefvision.db.models.experiment_record import ExperimentRecord
 from reefvision.db.models.export_record import ExportRecord
 from reefvision.db.models.image import ImageAsset
 from reefvision.db.models.job import Job
@@ -21,7 +22,6 @@ from reefvision.db.models.review_queue import ReviewQueue
 from reefvision.db.models.review_queue_item import ReviewQueueItem
 from reefvision.db.models.training_draft import TrainingDraft
 from reefvision.db.models.training_run import TrainingRun
-from reefvision.db.models.experiment_record import ExperimentRecord
 
 __all__ = [
     "Annotation",
@@ -31,6 +31,7 @@ __all__ = [
     "ClassVisibilityPreference",
     "DatasetVersion",
     "DatasetVersionItem",
+    "ExperimentRecord",
     "ExportRecord",
     "ImageAsset",
     "Job",
@@ -45,5 +46,4 @@ __all__ = [
     "ReviewQueueItem",
     "TrainingDraft",
     "TrainingRun",
-    "ExperimentRecord",
 ]

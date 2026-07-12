@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from threading import Lock
-from typing import Callable, Generic, TypeVar
+from typing import Generic, TypeVar
 
 T = TypeVar("T")
 
@@ -35,7 +36,7 @@ def get_cached_snapshot(
     ttl_seconds: int | None,
     refresh: bool = False,
 ) -> CachedSnapshot[T]:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     with _LOCK:
         cached = _CACHE.get(key)
 
@@ -58,7 +59,7 @@ def get_cached_snapshot(
             error=str(exc),
         )
 
-    checked_at = datetime.now(timezone.utc)
+    checked_at = datetime.now(UTC)
     with _LOCK:
         _CACHE[key] = _CacheEntry(value=value, checked_at=checked_at)
     return CachedSnapshot(value=value, checked_at=checked_at, stale=False)

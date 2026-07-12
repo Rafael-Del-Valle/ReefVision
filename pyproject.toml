@@ -65,11 +65,12 @@ strict = true
 packages = ["reefvision"]
 mypy_path = "apps/api"
 plugins = ["pydantic.mypy"]
+exclude = ["apps/api/reefvision/tests/"]
 
 [[tool.mypy.overrides]]
 module = "alembic.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["cv2", "numpy", "segment_anything", "torch", "ultralytics"]
+module = ["cv2", "numpy", "psutil", "segment_anything", "torch", "ultralytics"]
 ignore_missing_imports = true

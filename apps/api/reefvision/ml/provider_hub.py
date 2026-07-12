@@ -111,7 +111,9 @@ def _package_version(distribution_name: str) -> str | None:
         return None
 
 
-def _packages_from_preflight(report: ProviderPreflightReport) -> tuple[ProviderPackageDescriptor, ...]:
+def _packages_from_preflight(
+    report: ProviderPreflightReport,
+) -> tuple[ProviderPackageDescriptor, ...]:
     return tuple(
         ProviderPackageDescriptor(
             distribution_name=item.distribution_name,
@@ -421,7 +423,9 @@ def _list_model_providers_uncached(
             required_model_files=(".pt",),
             code_license="See the installed Ultralytics package license metadata.",
             weight_license="Varies by checkpoint; users must verify checkpoint redistribution terms.",
-            memory_recommendations=("Use the pinned Ultralytics runtime stack when this provider is implemented.",),
+            memory_recommendations=(
+                "Use the pinned Ultralytics runtime stack when this provider is implemented.",
+            ),
             known_limitations=(
                 "ReefVision does not yet register or execute RT-DETR checkpoints through a formal provider.",
             ),
@@ -456,7 +460,9 @@ def _list_model_providers_uncached(
             required_model_files=(".safetensors", ".bin"),
             code_license="Would depend on the pinned Transformers implementation and package metadata.",
             weight_license="Varies by checkpoint; users must verify checkpoint redistribution terms.",
-            memory_recommendations=("Text-grounding checkpoints should be isolated behind an optional provider pack.",),
+            memory_recommendations=(
+                "Text-grounding checkpoints should be isolated behind an optional provider pack.",
+            ),
             known_limitations=(
                 "Transformers is not pinned or installed in the current desktop provider stack.",
                 "No Grounding DINO provider implementation exists in ReefVision yet.",
@@ -493,7 +499,9 @@ def _list_model_providers_uncached(
             required_model_files=(".safetensors", ".bin"),
             code_license="Would depend on the pinned Transformers implementation and package metadata.",
             weight_license="Varies by checkpoint; users must verify checkpoint redistribution terms.",
-            memory_recommendations=("Use one large vision-language checkpoint at a time on 12 GB desktop GPUs.",),
+            memory_recommendations=(
+                "Use one large vision-language checkpoint at a time on 12 GB desktop GPUs.",
+            ),
             known_limitations=(
                 "OWLv2 is not implemented in ReefVision.",
                 "Image-guided search and prompt provenance storage are not yet wired into the review workflow.",
@@ -531,7 +539,9 @@ def _list_model_providers_uncached(
             required_model_files=(".safetensors", ".bin"),
             code_license="Would depend on the pinned Transformers implementation and package metadata.",
             weight_license="Varies by checkpoint; users must verify checkpoint redistribution terms.",
-            memory_recommendations=("Treat Florence-2 as an optional provider-pack candidate until packaging is validated.",),
+            memory_recommendations=(
+                "Treat Florence-2 as an optional provider-pack candidate until packaging is validated.",
+            ),
             known_limitations=(
                 "Florence-2 is not implemented in ReefVision.",
                 "The current desktop stack does not include a pinned safe Florence-2 dependency path.",
@@ -568,7 +578,9 @@ def _list_model_providers_uncached(
             required_model_files=(".pt", ".pth"),
             code_license="Would depend on the selected SAM 2 package implementation.",
             weight_license="Varies by checkpoint; users must verify checkpoint redistribution terms.",
-            memory_recommendations=("SAM 2 video propagation needs explicit Windows packaging validation before desktop claims.",),
+            memory_recommendations=(
+                "SAM 2 video propagation needs explicit Windows packaging validation before desktop claims.",
+            ),
             known_limitations=(
                 "SAM 2 image and video workflows are not implemented in ReefVision.",
             ),
@@ -605,7 +617,9 @@ def _list_model_providers_uncached(
             required_model_files=(".pt", ".pth"),
             code_license="Would depend on the selected MobileSAM package implementation.",
             weight_license="Varies by checkpoint; users must verify checkpoint redistribution terms.",
-            memory_recommendations=("A lighter assist model belongs in an optional provider pack until it is pinned and validated.",),
+            memory_recommendations=(
+                "A lighter assist model belongs in an optional provider pack until it is pinned and validated.",
+            ),
             known_limitations=("MobileSAM is not implemented in ReefVision.",),
             desktop_packaging_state="optional_pack_required",
             clean_machine_verification_state="not_verified",
@@ -639,7 +653,9 @@ def _list_model_providers_uncached(
             required_model_files=(".pt", ".pth"),
             code_license="See the installed Ultralytics package license metadata.",
             weight_license="Varies by checkpoint; users must verify checkpoint redistribution terms.",
-            memory_recommendations=("FastSAM needs a dedicated ReefVision provider implementation before it can be exposed.",),
+            memory_recommendations=(
+                "FastSAM needs a dedicated ReefVision provider implementation before it can be exposed.",
+            ),
             known_limitations=("FastSAM is not implemented in ReefVision.",),
             desktop_packaging_state="not_packaged",
             clean_machine_verification_state="not_verified",
@@ -673,7 +689,9 @@ def _list_model_providers_uncached(
             required_model_files=(".pt", ".pth", ".onnx"),
             code_license="Would be defined by ReefVision once a U-Net provider is added.",
             weight_license="Varies by checkpoint; users must verify checkpoint redistribution terms.",
-            memory_recommendations=("Semantic segmentation checkpoints need explicit architecture metadata before safe loading.",),
+            memory_recommendations=(
+                "Semantic segmentation checkpoints need explicit architecture metadata before safe loading.",
+            ),
             known_limitations=(
                 "No ReefVision U-Net implementation or checkpoint validator exists in the current repository.",
             ),
@@ -708,7 +726,9 @@ def _list_model_providers_uncached(
             required_model_files=(),
             code_license="Would depend on the selected ByteTrack implementation.",
             weight_license="Trackers do not ship universal checkpoint licenses in ReefVision yet.",
-            memory_recommendations=("Trackers should remain separate from detector registration and loading.",),
+            memory_recommendations=(
+                "Trackers should remain separate from detector registration and loading.",
+            ),
             known_limitations=(
                 "ByteTrack is not exposed as a formal ReefVision tracking provider.",
             ),
@@ -743,8 +763,12 @@ def _list_model_providers_uncached(
             required_model_files=(),
             code_license="Would depend on the selected BoT-SORT implementation.",
             weight_license="Trackers do not ship universal checkpoint licenses in ReefVision yet.",
-            memory_recommendations=("Trackers should remain separate from detector registration and loading.",),
-            known_limitations=("BoT-SORT is not exposed as a formal ReefVision tracking provider.",),
+            memory_recommendations=(
+                "Trackers should remain separate from detector registration and loading.",
+            ),
+            known_limitations=(
+                "BoT-SORT is not exposed as a formal ReefVision tracking provider.",
+            ),
             desktop_packaging_state="not_packaged",
             clean_machine_verification_state="not_verified",
             availability_reason=(
@@ -761,7 +785,9 @@ def _list_model_providers_uncached(
     return providers
 
 
-def get_model_provider(provider_id: str, settings: Settings | None = None) -> ModelProviderDescriptor:
+def get_model_provider(
+    provider_id: str, settings: Settings | None = None
+) -> ModelProviderDescriptor:
     for provider in list_model_providers(settings):
         if provider.provider_id == provider_id:
             return provider
@@ -882,14 +908,22 @@ def provider_for_registration(
     if purpose == "detector":
         if normalized in {"", "ultralytics"}:
             descriptor = get_model_provider("ultralytics", settings)
-            if descriptor.availability_status not in {"ready", "dependency_missing", "dependency_incompatible"}:
+            if descriptor.availability_status not in {
+                "ready",
+                "dependency_missing",
+                "dependency_incompatible",
+            }:
                 raise ValidationError("Ultralytics registration is not available")
             return UltralyticsDetectionProvider()
         raise ValidationError(f"Unsupported detector provider: {provider_name}")
     if purpose == "assist":
         if normalized in {"", "segment_anything"}:
             descriptor = get_model_provider("segment_anything", settings)
-            if descriptor.availability_status not in {"ready", "dependency_missing", "dependency_incompatible"}:
+            if descriptor.availability_status not in {
+                "ready",
+                "dependency_missing",
+                "dependency_incompatible",
+            }:
                 raise ValidationError("Segment Anything registration is not available")
             return SegmentAnythingAssistProvider()
         raise ValidationError(f"Unsupported assist provider: {provider_name}")
