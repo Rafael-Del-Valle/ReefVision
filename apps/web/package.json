@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build --config vite.config.mjs --configLoader runner",
     "preview": "vite preview --config vite.config.mjs --configLoader runner",
     "desktop:dev": "tauri dev",
-    "desktop:build": "tauri build --bundles nsis",
+    "desktop:build": "tauri build --bundles msi",
     "lockfile:check": "node ./scripts/check-lockfile.mjs",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run --config vite.config.mjs --configLoader runner",
