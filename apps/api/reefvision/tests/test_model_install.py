@@ -228,3 +228,20 @@ def test_ready_catalog_model_resolves_training_provenance(
     assert selection.initial_checkpoint_source == "managed_catalog"
     assert selection.resolved_model_asset_id == f"catalog_model:{entry.catalog_id}"
     assert selection.resolved_model_checksum == expected.sha256
+
+
+def test_install_is_rejected_in_safe_mode(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entry = _mini_entry(b"safe-mode-checkpoint")
+    _patch_entry(monkeypatch, entry)
+    monkeypatch.setattr(client.app.state.settings, "safe_mode", True)
+
+    project = create_project(client, "Safe mode install")
+    endpoint = f"/api/v1/projects/{project['id']}/model-installs/ultralytics%2Fyolo11%2Fdetect%2Fn"
+
+    response = client.post(endpoint, json={"confirmed": True})
+
+    assert response.status_code == 409
+    assert "Safe Mode" in response.json()["detail"]

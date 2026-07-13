@@ -36,6 +36,11 @@ class ModelInstallService:
     def create_install_job(
         self, project_id: str, catalog_id: str, *, confirmed: bool
     ) -> JobResponse:
+        if self.settings.safe_mode:
+            raise ConflictError(
+                "Model installation is unavailable in Safe Mode. "
+                "Restart ReefVision normally and try again."
+            )
         if not confirmed:
             raise ValidationError("Confirm the model license, hardware, and download information")
         entry = self.catalog.get_project_catalog_item(project_id, catalog_id)

@@ -37,6 +37,7 @@ class DesktopLaunchOptions:
     log_file: Path | None
     context_file: Path | None
     run_migrations: bool
+    safe_mode: bool = False
 
 
 def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
@@ -47,6 +48,11 @@ def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
     parser.add_argument("--log-file", type=Path, default=None)
     parser.add_argument("--context-file", type=Path, default=None)
     parser.add_argument("--skip-migrations", action="store_false", dest="run_migrations")
+    parser.add_argument(
+        "--safe-mode",
+        action="store_true",
+        help="Start without background job processing",
+    )
     namespace = parser.parse_args(argv)
     return DesktopLaunchOptions(
         host=namespace.host,
@@ -55,6 +61,7 @@ def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
         log_file=namespace.log_file,
         context_file=namespace.context_file,
         run_migrations=namespace.run_migrations,
+        safe_mode=namespace.safe_mode,
     )
 
 
@@ -64,6 +71,19 @@ def project_root() -> Path:
 
 def is_frozen_bundle() -> bool:
     return bool(vars(sys).get("frozen", False))
+
+
+def configure_windows_event_loop_policy() -> None:
+    """Use the selector event loop for the frozen Windows API sidecar."""
+    if sys.platform != "win32" or not is_frozen_bundle():
+        return
+
+    policy_factory = getattr(asyncio, "WindowsSelectorEventLoopPolicy", None)
+    if policy_factory is None:
+        LOGGER.warning("Windows selector event loop policy is unavailable")
+        return
+
+    asyncio.set_event_loop_policy(policy_factory())
 
 
 def resolve_alembic_paths(resource_root: Path | None = None) -> tuple[Path, Path]:
@@ -101,6 +121,8 @@ def apply_desktop_environment(options: DesktopLaunchOptions) -> None:
     os.environ["REEFVISION_API_HOST"] = options.host
     os.environ["REEFVISION_API_PORT"] = str(options.port)
     os.environ["REEFVISION_DATA_DIR"] = str(options.data_dir)
+    os.environ["REEFVISION_SAFE_MODE"] = "true" if options.safe_mode else "false"
+    os.environ["REEFVISION_BACKGROUND_WORKER_ENABLED"] = "false" if options.safe_mode else "true"
     clear_settings_cache()
 
 
@@ -238,6 +260,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if options.run_migrations:
             LOGGER.info("Applying pending Alembic migrations")
             run_pending_migrations(settings)
+        configure_windows_event_loop_policy()
         LOGGER.info("Loading FastAPI application factory")
         return asyncio.run(run_api_server(settings, options))
     except Exception:
