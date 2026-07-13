@@ -1,6 +1,6 @@
 [package]
 name = "reefvision-desktop"
-version = "1.6.0"
+version = "1.6.1"
 description = "ReefVision desktop shell"
 authors = ["Rafael Del Valle"]
 license = "MIT"

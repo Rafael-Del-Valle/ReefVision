@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "ReefVision",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "identifier": "org.reefvision.desktop",
   "build": {
     "beforeDevCommand": "npm run dev -- --host 127.0.0.1 --port 5173",
@@ -27,7 +27,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "shortDescription": "Local-first scientific image annotation and computer vision platform.",
     "resources": {
       "binaries/": "backend/"
