@@ -4,16 +4,23 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 
 import pytest
 
-from reefvision.schemas.model_catalog import CatalogExpectedFile, ModelCatalogResponse
+from reefvision.schemas.model_catalog import (
+    CatalogExpectedFile,
+    ModelCatalogEntryResponse,
+    ModelCatalogResponse,
+)
 from reefvision.services import bundled_models
 from reefvision.services.model_catalog import ModelCatalogService, _load_static_model_catalog
 from reefvision.storage.catalog_models import catalog_asset_path, catalog_manifest_record
 
 
-def _bundle_catalog(monkeypatch: pytest.MonkeyPatch, payload: bytes) -> tuple[str, object]:
+def _bundle_catalog(
+    monkeypatch: pytest.MonkeyPatch, payload: bytes
+) -> tuple[str, ModelCatalogEntryResponse]:
     original_catalog = _load_static_model_catalog()
     original = next(
         entry
@@ -47,7 +54,12 @@ def _bundle_catalog(monkeypatch: pytest.MonkeyPatch, payload: bytes) -> tuple[st
     return checksum, entry
 
 
-def _write_bundle(bundle_root, entry, payload: bytes, checksum: str) -> None:
+def _write_bundle(
+    bundle_root: Path,
+    entry: ModelCatalogEntryResponse,
+    payload: bytes,
+    checksum: str,
+) -> None:
     expected = entry.expected_files[0]
     relative_path = f"{entry.catalog_id}/{expected.filename}"
     checkpoint = bundle_root / relative_path
@@ -80,7 +92,7 @@ def _write_bundle(bundle_root, entry, payload: bytes, checksum: str) -> None:
 
 
 def test_bundled_checkpoint_is_seeded_and_ready(
-    client, monkeypatch: pytest.MonkeyPatch, tmp_path
+    client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     payload = b"installer-bundled-checkpoint"
     checksum, entry = _bundle_catalog(monkeypatch, payload)
@@ -116,12 +128,12 @@ def test_bundled_checkpoint_is_seeded_and_ready(
 
 
 def test_corrupt_bundled_checkpoint_is_rejected(
-    client, monkeypatch: pytest.MonkeyPatch, tmp_path
+    client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     expected_payload = b"expected-checkpoint"
     checksum, entry = _bundle_catalog(monkeypatch, expected_payload)
     bundle_root = tmp_path / "corrupt-bundle"
-    _write_bundle(bundle_root, entry, b"corrupt-checkpoint!", checksum)
+    _write_bundle(bundle_root, entry, b"short", checksum)
     monkeypatch.setenv("REEFVISION_BUNDLED_MODELS_DIR", str(bundle_root))
 
     installed, warnings = bundled_models.install_bundled_catalog_models(
