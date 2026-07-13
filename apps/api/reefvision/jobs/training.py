@@ -155,7 +155,7 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
             job.result_json = {"stage": "training", "dataset_output_path": dataset_output_path}
             session.commit()
 
-        from ultralytics import YOLO  # type: ignore[attr-defined]
+        from ultralytics import YOLO
 
         cancellation_requested = {"value": False}
         model = YOLO(checkpoint_source)
