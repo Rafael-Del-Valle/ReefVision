@@ -205,7 +205,7 @@ if ($DependencyPaths.Count -gt 0) {
         Write-Host "  $dependencyPath" -ForegroundColor DarkGray
     }
 }
-if ($BundledRuntimeLibraries.Count -gt 0) {
+if (@($BundledRuntimeLibraries).Count -gt 0) {
     Write-Host "Bundling explicit runtime libraries:" -ForegroundColor DarkGray
     foreach ($library in $BundledRuntimeLibraries) {
         Write-Host "  $library" -ForegroundColor DarkGray
