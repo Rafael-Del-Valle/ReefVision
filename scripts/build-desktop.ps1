@@ -49,7 +49,7 @@ Write-Host "Bundling $($BundleMetadata.asset_count) verified checkpoints ($([mat
 
 & (Join-Path $PSScriptRoot "build-desktop-backend.ps1") -TargetTriple $TargetTriple
 
-Write-ReefVisionStep "Building the Tauri NSIS installer"
+Write-ReefVisionStep "Building the Tauri MSI installer"
 Invoke-ReefVisionNpm -NodeTools $NodeTools -Arguments @(
     "--prefix",
     "apps/web",
@@ -62,13 +62,13 @@ Invoke-ReefVisionNpm -NodeTools $NodeTools -Arguments @(
     (Split-Path -Parent $RustTools.Cargo)
 )
 
-$InstallerDirectory = Join-Path $Root "apps\web\src-tauri\target\$TargetTriple\release\bundle\nsis"
+$InstallerDirectory = Join-Path $Root "apps\web\src-tauri\target\$TargetTriple\release\bundle\msi"
 $StagedCatalog = Join-Path $Root "apps\web\src-tauri\binaries\reefvision-api\_internal\config\model_catalog.json"
 if (-not (Test-Path $StagedCatalog -PathType Leaf)) {
     throw "Desktop packaging lost the required Model Hub catalog: $StagedCatalog"
 }
-$Installers = @(Get-ChildItem -LiteralPath $InstallerDirectory -Filter '*.exe' -File -ErrorAction SilentlyContinue)
+$Installers = @(Get-ChildItem -LiteralPath $InstallerDirectory -Filter '*.msi' -File -ErrorAction SilentlyContinue)
 if ($Installers.Count -eq 0) {
-    throw "Tauri did not produce an NSIS installer in $InstallerDirectory"
+    throw "Tauri did not produce an MSI installer in $InstallerDirectory"
 }
 Write-Host "Desktop installer output: $InstallerDirectory" -ForegroundColor Green
