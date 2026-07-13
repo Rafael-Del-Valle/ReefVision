@@ -30,7 +30,8 @@
     "targets": ["nsis"],
     "shortDescription": "Local-first scientific image annotation and computer vision platform.",
     "resources": {
-      "binaries/": "backend/"
+      "binaries/": "backend/",
+      "../../../.desktop/bundled-models/": "bundled-models/"
     },
     "icon": [
       "icons/32x32.png",
