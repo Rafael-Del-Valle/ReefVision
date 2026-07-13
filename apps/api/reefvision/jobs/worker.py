@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextlib import suppress
 from datetime import UTC, datetime
 
@@ -22,6 +23,8 @@ from reefvision.jobs.training import process_training_job
 from reefvision.repositories.jobs import JobRepository
 from reefvision.storage.images import create_thumbnail
 from reefvision.storage.projects import resolve_managed_project_path
+
+LOGGER = logging.getLogger("reefvision.worker")
 
 
 def recover_interrupted_jobs(factory: sessionmaker[Session]) -> int:
@@ -106,25 +109,53 @@ def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session
         job_type = job.job_type if job is not None else None
     if job_id is None:
         return False
-    if job_type == "thumbnail":
-        return process_thumbnail_job(settings, factory, job_id)
-    if job_type == "inference":
-        return process_inference_job(settings, factory, job_id)
-    if job_type == "export":
-        return process_export_job(settings, factory, job_id)
-    if job_type == "qc":
-        return process_quality_control_job(settings, factory, job_id)
-    if job_type == "backup":
-        return process_backup_job(settings, factory, job_id)
-    if job_type == "restore":
-        return process_restore_job(settings, factory, job_id)
-    if job_type == "diagnostics":
-        return process_diagnostics_job(settings, factory, job_id)
-    if job_type == "training":
-        return process_training_job(settings, factory, job_id)
-    if job_type == "model_install":
-        return process_model_install_job(settings, factory, job_id)
-    return False
+
+    try:
+        if job_type == "thumbnail":
+            return process_thumbnail_job(settings, factory, job_id)
+        if job_type == "inference":
+            return process_inference_job(settings, factory, job_id)
+        if job_type == "export":
+            return process_export_job(settings, factory, job_id)
+        if job_type == "qc":
+            return process_quality_control_job(settings, factory, job_id)
+        if job_type == "backup":
+            return process_backup_job(settings, factory, job_id)
+        if job_type == "restore":
+            return process_restore_job(settings, factory, job_id)
+        if job_type == "diagnostics":
+            return process_diagnostics_job(settings, factory, job_id)
+        if job_type == "training":
+            return process_training_job(settings, factory, job_id)
+        if job_type == "model_install":
+            return process_model_install_job(settings, factory, job_id)
+
+        message = f"Unsupported queued job type: {job_type}"
+        _fail_job(factory, job_id, message)
+        LOGGER.error(
+            message,
+            extra={
+                "event_id": "background_job_unsupported",
+                "component": "worker",
+                "job_id": job_id,
+                "job_type": job_type,
+            },
+        )
+        return True
+    except Exception as exc:
+        # A single malformed or unexpected job must never terminate the only
+        # background worker or block every later model installation at 0%.
+        _fail_job(factory, job_id, f"Unexpected background job failure: {exc}")
+        LOGGER.exception(
+            "Background job failed unexpectedly",
+            extra={
+                "event_id": "background_job_unexpected_failure",
+                "component": "worker",
+                "job_id": job_id,
+                "job_type": job_type,
+            },
+        )
+        return True
 
 
 async def thumbnail_worker_loop(
@@ -134,7 +165,19 @@ async def thumbnail_worker_loop(
 ) -> None:
     recover_interrupted_jobs(factory)
     while not stop_event.is_set():
-        processed = await asyncio.to_thread(process_next_thumbnail_job, settings, factory)
+        try:
+            processed = await asyncio.to_thread(process_next_thumbnail_job, settings, factory)
+        except Exception:
+            # Protect the long-lived worker task itself from infrastructure-level
+            # failures that occur outside an individual job handler.
+            LOGGER.exception(
+                "Background worker iteration failed",
+                extra={
+                    "event_id": "background_worker_iteration_failure",
+                    "component": "worker",
+                },
+            )
+            processed = False
         if not processed:
             with suppress(TimeoutError):
                 await asyncio.wait_for(stop_event.wait(), timeout=settings.worker_poll_seconds)
