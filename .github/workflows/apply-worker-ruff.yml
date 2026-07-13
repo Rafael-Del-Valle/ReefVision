@@ -24,6 +24,11 @@ jobs:
       - run: python -m pip install "ruff>=0.9,<1"
       - name: Apply Ruff fixes
         run: |
+          python -m ruff format \
+            apps/api/reefvision/api/routes/model_catalog.py \
+            apps/api/reefvision/jobs/model_install.py \
+            apps/api/reefvision/jobs/worker.py \
+            apps/api/reefvision/tests/test_worker_resilience.py
           python -m ruff check --fix \
             apps/api/reefvision/api/routes/model_catalog.py \
             apps/api/reefvision/jobs/model_install.py \
