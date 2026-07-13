@@ -205,6 +205,8 @@ describe("ModelManager catalog", () => {
   it("confirms installation, shows progress, and cancels the background job", async () => {
     const modelCatalog = catalog("Not Installed");
     let jobStatus: JobRecord["status"] = "running";
+    let jobPollUrl = "";
+    let jobPollCache: RequestCache | undefined;
     const job: JobRecord = {
       id: "job-1",
       project_id: project.id,
@@ -233,9 +235,11 @@ describe("ModelManager catalog", () => {
         return jsonResponse(job);
       }
       if (
-        url.endsWith("/jobs/job-1") &&
+        url.includes("/jobs/job-1?poll=") &&
         (!init?.method || init.method === "GET")
       ) {
+        jobPollUrl = url;
+        jobPollCache = init?.cache;
         return jsonResponse({
           ...job,
           status: jobStatus,
@@ -268,6 +272,8 @@ describe("ModelManager catalog", () => {
       await screen.findByRole("button", { name: "Cancel" }),
     ).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText(/50%/)).toBeInTheDocument());
+    expect(jobPollUrl).toContain("/jobs/job-1?poll=");
+    expect(jobPollCache).toBe("no-store");
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(jobStatus).toBe("cancelled"));
   });

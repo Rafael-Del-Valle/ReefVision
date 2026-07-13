@@ -246,3 +246,21 @@ def test_install_is_rejected_in_safe_mode(
 
     assert response.status_code == 409
     assert "Safe Mode" in response.json()["detail"]
+
+def test_job_status_response_disables_http_caching(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    entry = _mini_entry(b"live-progress")
+    _patch_entry(monkeypatch, entry)
+    project = create_project(client, "Live install progress")
+    endpoint = f"/api/v1/projects/{project['id']}/model-installs/ultralytics%2Fyolo11%2Fdetect%2Fn"
+    created = client.post(endpoint, json={"confirmed": True})
+    assert created.status_code == 200, created.text
+
+    response = client.get(f"/api/v1/jobs/{created.json()['id']}?poll=1")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store, no-cache, must-revalidate"
+    assert response.headers["pragma"] == "no-cache"
+    assert response.headers["expires"] == "0"
+

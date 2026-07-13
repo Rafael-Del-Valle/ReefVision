@@ -2427,7 +2427,14 @@ export async function getJob(
   jobId: string,
   signal?: AbortSignal,
 ): Promise<JobRecord> {
-  return request<JobRecord>(`/jobs/${jobId}`, { signal });
+  // Job state changes continuously while a download is active. A unique
+  // query value plus fetch cache bypass prevents desktop webviews from
+  // reusing the first queued/zero-byte response.
+  const pollToken = Date.now();
+  return request<JobRecord>(`/jobs/${jobId}?poll=${pollToken}`, {
+    signal,
+    cache: "no-store",
+  });
 }
 
 export async function retryJob(jobId: string): Promise<JobRecord> {

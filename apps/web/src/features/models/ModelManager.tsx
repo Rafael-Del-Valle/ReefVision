@@ -468,31 +468,59 @@ export function ModelManager({
   useEffect(() => {
     if (!activeJobSignature) return;
     let stopped = false;
+    let inFlight = false;
     const refresh = async () => {
-      const updates = await Promise.all(
-        activeJobEntries.map(
-          async ([catalogId, jobId]) =>
-            [catalogId, await getJob(jobId)] as const,
-        ),
-      );
-      if (stopped) return;
-      setInstallJobs((current) => {
-        const next = { ...current };
-        for (const [catalogId, job] of updates) next[catalogId] = job;
-        return next;
-      });
-      if (
-        updates.some(
-          ([, job]) =>
-            !["queued", "running", "cancel_requested"].includes(job.status),
-        )
-      ) {
-        void queryClient.invalidateQueries({
-          queryKey: ["model_catalog", project.id],
+      // Never stack polling requests. Overlapping responses can arrive out
+      // of order and make a live progress bar appear frozen or move backward.
+      if (stopped || inFlight) return;
+      inFlight = true;
+      try {
+        const updates = await Promise.all(
+          activeJobEntries.map(
+            async ([catalogId, jobId]) =>
+              [catalogId, await getJob(jobId)] as const,
+          ),
+        );
+        if (stopped) return;
+        setInstallJobs((current) => {
+          const next = { ...current };
+          for (const [catalogId, job] of updates) {
+            const previous = next[catalogId];
+            const terminal = ![
+              "queued",
+              "running",
+              "cancel_requested",
+            ].includes(job.status);
+            if (
+              terminal ||
+              !previous ||
+              previous.id !== job.id ||
+              job.progress_current >= previous.progress_current
+            ) {
+              next[catalogId] = job;
+            }
+          }
+          return next;
         });
-        void queryClient.invalidateQueries({
-          queryKey: ["model_hub_bootstrap", project.id],
-        });
+        if (
+          updates.some(
+            ([, job]) =>
+              !["queued", "running", "cancel_requested"].includes(job.status),
+          )
+        ) {
+          void queryClient.invalidateQueries({
+            queryKey: ["model_catalog", project.id],
+          });
+          void queryClient.invalidateQueries({
+            queryKey: ["model_hub_bootstrap", project.id],
+          });
+        }
+      } catch (error) {
+        if (!stopped) {
+          console.error("Failed to refresh model-install progress", error);
+        }
+      } finally {
+        inFlight = false;
       }
     };
     void refresh();
