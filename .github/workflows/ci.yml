@@ -17,6 +17,8 @@ jobs:
       - run: python -m ruff check apps/api
       - run: python -m ruff format --check apps/api
       - name: Run mypy
+        id: mypy
+        continue-on-error: true
         shell: pwsh
         run: |
           python -m mypy apps/api/reefvision 2>&1 | Tee-Object -FilePath mypy-report.txt
@@ -28,6 +30,32 @@ jobs:
         with:
           name: backend-mypy-report
           path: mypy-report.txt
+      - name: Generate backend type-check fixes
+        if: steps.mypy.outcome == 'failure'
+        shell: pwsh
+        run: |
+          $files = @(
+            "apps/api/reefvision/ml/providers.py",
+            "apps/api/reefvision/jobs/training.py"
+          )
+          foreach ($file in $files) {
+            $content = Get-Content -LiteralPath $file -Raw
+            $content = $content.Replace("from ultralytics import YOLO  # type: ignore[attr-defined]", "from ultralytics import YOLO")
+            Set-Content -LiteralPath $file -Value $content -NoNewline
+            $destination = Join-Path "formatted-backend" $file
+            New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+            Copy-Item -LiteralPath $file -Destination $destination -Force
+          }
+      - name: Upload backend type-check fixes
+        if: steps.mypy.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: formatted-backend-files
+          path: formatted-backend
+      - name: Fail for backend type checking
+        if: steps.mypy.outcome == 'failure'
+        shell: pwsh
+        run: exit 1
       - run: python -m pytest apps/api/reefvision/tests
       - name: Verify migrations
         shell: pwsh
