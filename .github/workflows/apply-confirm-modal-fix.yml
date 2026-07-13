@@ -1,0 +1,75 @@
+name: Apply Confirm Install Modal Fix
+
+on:
+  push:
+    branches:
+      - fix/model-install-worker
+    paths:
+      - .github/workflows/apply-confirm-modal-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/model-install-worker
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+        working-directory: apps/web
+      - name: Close confirmation modal before request completes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("apps/web/src/features/models/ModelManager.tsx")
+          text = path.read_text(encoding="utf-8")
+          old = '''  const installMutation = useMutation({
+    mutationFn: async (model: ModelCatalogEntry) => ({
+      model,
+      job: await installCatalogModel(project.id, model.catalog_id),
+    }),
+    onSuccess: ({ model, job }) => {
+      setConfirmationModel(null);
+      setOperationMessage(`Installation started for ${model.display_name}.`);
+'''
+          new = '''  const installMutation = useMutation({
+    mutationFn: async (model: ModelCatalogEntry) => ({
+      model,
+      job: await installCatalogModel(project.id, model.catalog_id),
+    }),
+    onMutate: (model) => {
+      setConfirmationModel(null);
+      setOperationMessage(`Starting installation for ${model.display_name}...`);
+    },
+    onSuccess: ({ model, job }) => {
+      setOperationMessage(`Installation started for ${model.display_name}.`);
+'''
+          if text.count(old) != 1:
+              raise RuntimeError(f"Expected one install mutation block, found {text.count(old)}")
+          path.write_text(text.replace(old, new), encoding="utf-8")
+          PY
+          npm --prefix apps/web exec -- prettier --write src/features/models/ModelManager.tsx
+      - name: Validate frontend
+        run: |
+          npm run format:check
+          npm run typecheck
+          npm run test -- ModelManager.test.tsx
+        working-directory: apps/web
+      - name: Commit frontend fix and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/features/models/ModelManager.tsx
+          git rm .github/workflows/apply-confirm-modal-fix.yml
+          git commit -m "Close model install confirmation before starting request"
+          git push origin HEAD:fix/model-install-worker
