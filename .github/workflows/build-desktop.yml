@@ -20,7 +20,7 @@ concurrency:
 jobs:
   build-windows-installer:
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
@@ -38,15 +38,25 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
+      - name: Restore verified model bundle cache
+        uses: actions/cache@v4
+        with:
+          path: .desktop/bundled-models
+          key: ${{ runner.os }}-catalog-models-${{ hashFiles('config/model_catalog.json') }}
+
       - name: Bootstrap build environment
         shell: pwsh
         run: ./scripts/bootstrap.ps1 -NonInteractive -SkipPlaywrightBrowser
 
       - name: Run focused backend tests
         shell: pwsh
-        run: ./.venv/Scripts/python.exe -m pytest apps/api/reefvision/tests/test_desktop_runtime.py apps/api/reefvision/tests/test_model_install.py
+        run: >-
+          ./.venv/Scripts/python.exe -m pytest
+          apps/api/reefvision/tests/test_desktop_runtime.py
+          apps/api/reefvision/tests/test_model_install.py
+          apps/api/reefvision/tests/test_bundled_models.py
 
-      - name: Build NSIS desktop installer
+      - name: Build NSIS desktop installer with bundled checkpoints
         shell: pwsh
         run: npm run build:desktop
 
