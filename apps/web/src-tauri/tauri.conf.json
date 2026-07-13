@@ -27,9 +27,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": [
-      "nsis"
-    ],
+    "targets": ["nsis"],
     "shortDescription": "Local-first scientific image annotation and computer vision platform.",
     "resources": {
       "binaries/": "backend/"
