@@ -3,8 +3,8 @@
 from threading import Thread
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
@@ -47,6 +47,21 @@ def install_service(request: Request, session: Session) -> ModelInstallService:
 
 def _catalog_http_error(exc: CatalogResourceError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=exc.details)
+
+
+def _start_model_install_thread(
+    settings: Settings,
+    factory: sessionmaker[Session],
+    job_id: str,
+) -> None:
+    """Start the one-shot installer only after the HTTP response is finalized."""
+
+    Thread(
+        target=process_model_install_job,
+        args=(settings, factory, job_id),
+        name=f"reefvision-model-install-{job_id[:8]}",
+        daemon=True,
+    ).start()
 
 
 @router.get(
@@ -112,23 +127,29 @@ def install_catalog_model(
     catalog_id: str,
     payload: CatalogInstallRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     session: DbSession,
 ) -> JobResponse:
     job = install_service(request, session).create_install_job(
         project_id, catalog_id, confirmed=payload.confirmed
     )
+    # Freeze the response before any worker can mutate the ORM row. Previously,
+    # the installer thread raced FastAPI response serialization, so the model
+    # downloaded successfully while the confirmation mutation appeared to fail
+    # or remain unresolved in the desktop UI.
+    response = JobResponse.model_validate(job)
     settings: Settings = request.app.state.settings
     if settings.background_worker_enabled:
-        # The normal queue worker still handles recovery after restarts. This
-        # one-shot fallback removes that single long-lived task as a point of
-        # failure for newly requested model installs.
-        Thread(
-            target=process_model_install_job,
-            args=(settings, request.app.state.session_factory, job.id),
-            name=f"reefvision-model-install-{job.id[:8]}",
-            daemon=True,
-        ).start()
-    return job
+        # Launch only after FastAPI has finalized and sent the response. The
+        # normal queue worker still provides restart recovery; atomic claiming
+        # prevents duplicate execution if both paths see the same queued job.
+        background_tasks.add_task(
+            _start_model_install_thread,
+            settings,
+            request.app.state.session_factory,
+            job.id,
+        )
+    return response
 
 
 @router.get(
