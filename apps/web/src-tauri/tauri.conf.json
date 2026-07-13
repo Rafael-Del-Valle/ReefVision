@@ -27,7 +27,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": ["msi"],
     "shortDescription": "Local-first scientific image annotation and computer vision platform.",
     "resources": {
       "binaries/": "backend/",
@@ -40,9 +40,6 @@
       "icons/icon.ico"
     ],
     "windows": {
-      "nsis": {
-        "compression": "zlib"
-      },
       "webviewInstallMode": {
         "type": "offlineInstaller",
         "silent": true
