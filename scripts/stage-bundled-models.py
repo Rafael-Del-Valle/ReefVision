@@ -7,7 +7,6 @@ import argparse
 import hashlib
 import json
 import os
-import shutil
 import sys
 import urllib.request
 from pathlib import Path
@@ -43,7 +42,12 @@ def _safe_segments(value: str) -> list[str]:
     return segments
 
 
-def _download(url: str, destination: Path, expected_size: int, expected_sha256: str) -> None:
+def _download(
+    url: str,
+    destination: Path,
+    expected_size: int,
+    expected_sha256: str,
+) -> None:
     if not url.startswith("https://"):
         raise RuntimeError(f"Only HTTPS checkpoint sources are allowed: {url}")
 
@@ -57,7 +61,10 @@ def _download(url: str, destination: Path, expected_size: int, expected_sha256: 
     digest = hashlib.sha256()
     downloaded = 0
     try:
-        with urllib.request.urlopen(request, timeout=120) as response, temporary.open("wb") as output:
+        with (
+            urllib.request.urlopen(request, timeout=120) as response,
+            temporary.open("wb") as output,
+        ):
             while chunk := response.read(CHUNK_SIZE):
                 output.write(chunk)
                 digest.update(chunk)
@@ -73,7 +80,8 @@ def _download(url: str, destination: Path, expected_size: int, expected_sha256: 
         print()
         if downloaded != expected_size:
             raise RuntimeError(
-                f"Size mismatch for {destination.name}: expected {expected_size}, got {downloaded}"
+                f"Size mismatch for {destination.name}: expected {expected_size}, "
+                f"got {downloaded}"
             )
         actual_sha256 = digest.hexdigest()
         if actual_sha256 != expected_sha256:
@@ -82,7 +90,7 @@ def _download(url: str, destination: Path, expected_size: int, expected_sha256: 
                 f"got {actual_sha256}"
             )
         os.replace(temporary, destination)
-    except BaseException:
+    except Exception:
         temporary.unlink(missing_ok=True)
         raise
 
@@ -116,7 +124,9 @@ def stage_models(catalog_path: Path, output_root: Path) -> dict[str, Any]:
             raise RuntimeError(f"Invalid expected file declaration for {catalog_id}")
         filename = str(expected.get("filename") or "")
         if not filename or Path(filename).name != filename:
-            raise RuntimeError(f"Unsafe checkpoint filename for {catalog_id}: {filename!r}")
+            raise RuntimeError(
+                f"Unsafe checkpoint filename for {catalog_id}: {filename!r}"
+            )
         source_url = str(expected.get("source_url") or "")
         expected_sha256 = str(expected.get("sha256") or "").lower()
         expected_size = int(expected.get("size_bytes") or 0)
@@ -153,11 +163,15 @@ def stage_models(catalog_path: Path, output_root: Path) -> dict[str, Any]:
     }
     manifest_path = output_root / "manifest.json"
     temporary_manifest = manifest_path.with_suffix(".json.part")
-    temporary_manifest.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    temporary_manifest.write_text(
+        json.dumps(manifest, indent=2) + "\n",
+        encoding="utf-8",
+    )
     os.replace(temporary_manifest, manifest_path)
 
-    # Remove files left from models that are no longer part of the pinned bundle.
-    declared_paths = {output_root / record["relative_path"] for record in assets.values()}
+    declared_paths = {
+        output_root / record["relative_path"] for record in assets.values()
+    }
     declared_paths.add(manifest_path)
     for candidate in output_root.rglob("*"):
         if candidate.is_file() and candidate not in declared_paths:
