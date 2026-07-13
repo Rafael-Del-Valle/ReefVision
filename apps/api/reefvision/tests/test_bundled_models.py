@@ -141,7 +141,7 @@ def test_corrupt_bundled_checkpoint_is_rejected(
     )
 
     assert installed == []
-    assert any("wrong size" in warning for warning in warnings)
+    assert any("metadata does not match" in warning for warning in warnings)
     destination = catalog_asset_path(
         client.app.state.settings,
         entry.catalog_id,
