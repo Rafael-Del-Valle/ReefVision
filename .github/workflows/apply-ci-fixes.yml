@@ -1,0 +1,61 @@
+name: Apply CI fixes
+
+on:
+  push:
+    branches:
+      - fix/model-install-worker
+
+permissions:
+  contents: write
+
+jobs:
+  autofix:
+    if: github.event.head_commit.message != 'Apply frontend formatting and type-check fixes'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/model-install-worker
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+        working-directory: apps/web
+      - name: Format frontend
+        run: npx prettier --write .
+        working-directory: apps/web
+      - name: Remove stale mypy ignores
+        shell: pwsh
+        run: |
+          $files = @(
+            "apps/api/reefvision/ml/providers.py",
+            "apps/api/reefvision/jobs/training.py"
+          )
+          foreach ($file in $files) {
+            $content = [System.IO.File]::ReadAllText($file)
+            $content = $content.Replace(
+              "from ultralytics import YOLO  # type: ignore[attr-defined]",
+              "from ultralytics import YOLO"
+            )
+            [System.IO.File]::WriteAllText(
+              $file,
+              $content,
+              [System.Text.UTF8Encoding]::new($false)
+            )
+          }
+      - name: Commit fixes
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web apps/api/reefvision/ml/providers.py apps/api/reefvision/jobs/training.py
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "No CI fixes were needed."
+            exit 0
+          }
+          git commit -m "Apply frontend formatting and type-check fixes"
+          git push origin HEAD:fix/model-install-worker
