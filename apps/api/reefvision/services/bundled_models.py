@@ -19,6 +19,7 @@ from reefvision.db.models import Job
 from reefvision.services.model_catalog import _load_static_model_catalog
 from reefvision.storage.catalog_models import (
     catalog_asset_path,
+    catalog_manifest_record,
     relative_catalog_asset_path,
     write_catalog_manifest_record,
 )
@@ -52,6 +53,8 @@ def _bundle_roots() -> list[Path]:
             [
                 executable_root / "bundled-models",
                 executable_root / "_internal" / "bundled-models",
+                executable_root.parent / "bundled-models",
+                executable_root.parent.parent / "bundled-models",
             ]
         )
 
@@ -111,24 +114,27 @@ def install_bundled_catalog_models(settings: Settings) -> tuple[list[str], list[
         try:
             source.relative_to(bundle_root.resolve())
         except ValueError:
-            warnings.append(f"Bundled checkpoint path escapes its resource root: {entry.catalog_id}.")
+            warnings.append(
+                f"Bundled checkpoint path escapes its resource root: {entry.catalog_id}."
+            )
             continue
         if (
             record.get("filename") != expected.filename
             or record.get("sha256") != expected.sha256
             or record.get("size_bytes") != expected.size_bytes
         ):
-            warnings.append(f"Bundled checkpoint metadata does not match the catalog: {entry.catalog_id}.")
+            warnings.append(
+                f"Bundled checkpoint metadata does not match the catalog: {entry.catalog_id}."
+            )
             continue
         if not source.is_file() or source.stat().st_size != expected.size_bytes:
-            warnings.append(f"Bundled checkpoint is missing or has the wrong size: {entry.catalog_id}.")
+            warnings.append(
+                f"Bundled checkpoint is missing or has the wrong size: {entry.catalog_id}."
+            )
             continue
 
         destination = catalog_asset_path(settings, entry.catalog_id, expected.filename)
-        current_record = None
         try:
-            from reefvision.storage.catalog_models import catalog_manifest_record
-
             current_record = catalog_manifest_record(settings, entry.catalog_id)
         except OSError:
             current_record = None
@@ -152,7 +158,9 @@ def install_bundled_catalog_models(settings: Settings) -> tuple[list[str], list[
                 os.replace(temporary, destination)
             except OSError as exc:
                 temporary.unlink(missing_ok=True)
-                warnings.append(f"Could not install bundled checkpoint {entry.catalog_id}: {exc}")
+                warnings.append(
+                    f"Could not install bundled checkpoint {entry.catalog_id}: {exc}"
+                )
                 continue
 
         write_catalog_manifest_record(
