@@ -195,7 +195,13 @@ jobs:
         shell: bash
         run: |
           python -m json.tool config/model_catalog.json > /dev/null
-          python -m pytest tests/test_model_catalog_yolov8_pretrained.py
+          python - <<'PY'
+          import runpy
+
+          namespace = runpy.run_path("tests/test_model_catalog_yolov8_pretrained.py")
+          namespace["test_yolov8_detection_catalog_uses_managed_pretrained_weights"]()
+          print("YOLOv8 managed-checkpoint catalog validation passed.")
+          PY
 
       - name: Commit catalog fix
         shell: bash
