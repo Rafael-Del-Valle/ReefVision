@@ -187,6 +187,7 @@ def test_install_job_cancellation_is_persistent(
 
     assert response.status_code == 200
     assert response.json()["status"] == "cancelled"
+    assert response.json()["completed_at"] is not None
     assert (
         process_model_install_job(
             client.app.state.settings, client.app.state.session_factory, job["id"]
