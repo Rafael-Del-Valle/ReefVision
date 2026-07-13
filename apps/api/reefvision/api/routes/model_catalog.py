@@ -1,5 +1,6 @@
 """Model catalog and tracker catalog endpoints."""
 
+from threading import Thread
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Session
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
 from reefvision.domain.errors import CatalogResourceError
+from reefvision.jobs.model_install import process_model_install_job
 from reefvision.schemas.bootstrap import ModelHubBootstrapResponse
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.model_catalog import (
@@ -112,9 +114,21 @@ def install_catalog_model(
     request: Request,
     session: DbSession,
 ) -> JobResponse:
-    return install_service(request, session).create_install_job(
+    job = install_service(request, session).create_install_job(
         project_id, catalog_id, confirmed=payload.confirmed
     )
+    settings: Settings = request.app.state.settings
+    if settings.background_worker_enabled:
+        # The normal queue worker still handles recovery after restarts. This
+        # one-shot fallback removes that single long-lived task as a point of
+        # failure for newly requested model installs.
+        Thread(
+            target=process_model_install_job,
+            args=(settings, request.app.state.session_factory, job.id),
+            name=f"reefvision-model-install-{job.id[:8]}",
+            daemon=True,
+        ).start()
+    return job
 
 
 @router.get(
