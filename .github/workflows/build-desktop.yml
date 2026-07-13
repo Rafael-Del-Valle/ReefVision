@@ -1,0 +1,55 @@
+name: Build Windows Desktop
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "apps/api/**"
+      - "apps/web/**"
+      - "config/**"
+      - "requirements/**"
+      - "scripts/**"
+      - "pyproject.toml"
+      - "package.json"
+      - ".github/workflows/build-desktop.yml"
+
+jobs:
+  build-windows-installer:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Bootstrap build environment
+        shell: pwsh
+        run: ./scripts/bootstrap.ps1 -NonInteractive -SkipPlaywrightBrowser
+
+      - name: Run focused backend tests
+        shell: pwsh
+        run: ./.venv/Scripts/python.exe -m pytest apps/api/reefvision/tests/test_desktop_runtime.py apps/api/reefvision/tests/test_model_install.py
+
+      - name: Build NSIS desktop installer
+        shell: pwsh
+        run: npm run build:desktop
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReefVision-Windows-Installer
+          path: apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 14
