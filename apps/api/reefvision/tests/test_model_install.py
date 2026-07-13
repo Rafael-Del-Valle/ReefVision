@@ -247,6 +247,7 @@ def test_install_is_rejected_in_safe_mode(
     assert response.status_code == 409
     assert "Safe Mode" in response.json()["detail"]
 
+
 def test_job_status_response_disables_http_caching(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -263,4 +264,3 @@ def test_job_status_response_disables_http_caching(
     assert response.headers["cache-control"] == "no-store, no-cache, must-revalidate"
     assert response.headers["pragma"] == "no-cache"
     assert response.headers["expires"] == "0"
-
