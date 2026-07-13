@@ -56,7 +56,7 @@ jobs:
           apps/api/reefvision/tests/test_model_install.py
           apps/api/reefvision/tests/test_bundled_models.py
 
-      - name: Build NSIS desktop installer with bundled checkpoints
+      - name: Build MSI desktop installer with bundled checkpoints
         shell: pwsh
         run: |
           $LogPath = Join-Path $PWD ".desktop\windows-installer-build.log"
@@ -84,6 +84,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ReefVision-Windows-Installer
-          path: apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          path: apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
           if-no-files-found: error
           retention-days: 14
