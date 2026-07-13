@@ -1,0 +1,87 @@
+name: Apply ReefVision 1.7.0 Metadata
+
+on:
+  push:
+    branches:
+      - fix/model-install-worker
+    paths:
+      - .github/workflows/apply-version-1-7.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/model-install-worker
+          fetch-depth: 0
+
+      - name: Update lockfiles and Rust package metadata
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          lock_path = Path("apps/web/package-lock.json")
+          lock = json.loads(lock_path.read_text(encoding="utf-8"))
+          lock["version"] = "1.7.0"
+          lock["packages"][""]["version"] = "1.7.0"
+          lock_path.write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")
+
+          cargo_toml_path = Path("apps/web/src-tauri/Cargo.toml")
+          cargo_toml = cargo_toml_path.read_text(encoding="utf-8")
+          cargo_toml, count = re.subn(
+              r'(?m)^(version\s*=\s*")1\.6\.1("\s*)$',
+              r'\g<1>1.7.0\g<2>',
+              cargo_toml,
+              count=1,
+          )
+          if count != 1:
+              raise RuntimeError("Could not update ReefVision version in Cargo.toml")
+          cargo_toml_path.write_text(cargo_toml, encoding="utf-8")
+
+          cargo_lock_path = Path("apps/web/src-tauri/Cargo.lock")
+          cargo_lock = cargo_lock_path.read_text(encoding="utf-8")
+          pattern = re.compile(r'(name = "reefvision-desktop"\nversion = ")1\.6\.1("\n)')
+          cargo_lock, count = pattern.subn(r'\g<1>1.7.0\g<2>', cargo_lock, count=1)
+          if count != 1:
+              raise RuntimeError("Could not update reefvision-desktop in Cargo.lock")
+          cargo_lock_path.write_text(cargo_lock, encoding="utf-8")
+          PY
+
+      - name: Verify version consistency
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import re
+          import tomllib
+          from pathlib import Path
+
+          expected = "1.7.0"
+          assert tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"] == expected
+          assert json.loads(Path("package.json").read_text())["version"] == expected
+          assert json.loads(Path("apps/web/package.json").read_text())["version"] == expected
+          web_lock = json.loads(Path("apps/web/package-lock.json").read_text())
+          assert web_lock["version"] == expected
+          assert web_lock["packages"][""]["version"] == expected
+          assert json.loads(Path("apps/web/src-tauri/tauri.conf.json").read_text())["version"] == expected
+          assert tomllib.loads(Path("apps/web/src-tauri/Cargo.toml").read_text())["package"]["version"] == expected
+          cargo_lock = Path("apps/web/src-tauri/Cargo.lock").read_text()
+          assert re.search(r'name = "reefvision-desktop"\nversion = "1\.7\.0"', cargo_lock)
+          PY
+
+      - name: Commit version metadata
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/package-lock.json apps/web/src-tauri/Cargo.toml apps/web/src-tauri/Cargo.lock
+          git rm .github/workflows/apply-version-1-7.yml
+          git commit -m "Finalize ReefVision 1.7.0 bundled-model release"
+          git push origin HEAD:fix/model-install-worker
