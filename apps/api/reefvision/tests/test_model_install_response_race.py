@@ -67,10 +67,7 @@ def test_install_response_is_frozen_before_background_start(
     )
 
     project = create_project(client, "Install response race")
-    endpoint = (
-        f"/api/v1/projects/{project['id']}/model-installs/"
-        "ultralytics%2Fyolo11%2Fdetect%2Fn"
-    )
+    endpoint = f"/api/v1/projects/{project['id']}/model-installs/ultralytics%2Fyolo11%2Fdetect%2Fn"
 
     response = client.post(endpoint, json={"confirmed": True})
 

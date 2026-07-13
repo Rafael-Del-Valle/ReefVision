@@ -30,9 +30,7 @@ def _bundle_catalog(
     checksum = hashlib.sha256(payload).hexdigest()
     expected = CatalogExpectedFile(
         filename="yolo11n.pt",
-        source_url=(
-            "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n.pt"
-        ),
+        source_url=("https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n.pt"),
         revision="test-bundle",
         sha256=checksum,
         size_bytes=len(payload),
@@ -100,9 +98,7 @@ def test_bundled_checkpoint_is_seeded_and_ready(
     _write_bundle(bundle_root, entry, payload, checksum)
     monkeypatch.setenv("REEFVISION_BUNDLED_MODELS_DIR", str(bundle_root))
 
-    installed, warnings = bundled_models.install_bundled_catalog_models(
-        client.app.state.settings
-    )
+    installed, warnings = bundled_models.install_bundled_catalog_models(client.app.state.settings)
 
     assert warnings == []
     assert installed == [entry.catalog_id]
@@ -136,9 +132,7 @@ def test_corrupt_bundled_checkpoint_is_rejected(
     _write_bundle(bundle_root, entry, b"short", checksum)
     monkeypatch.setenv("REEFVISION_BUNDLED_MODELS_DIR", str(bundle_root))
 
-    installed, warnings = bundled_models.install_bundled_catalog_models(
-        client.app.state.settings
-    )
+    installed, warnings = bundled_models.install_bundled_catalog_models(client.app.state.settings)
 
     assert installed == []
     assert any("metadata does not match" in warning for warning in warnings)

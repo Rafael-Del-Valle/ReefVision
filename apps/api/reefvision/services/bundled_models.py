@@ -80,9 +80,8 @@ def _load_bundle_manifest() -> tuple[Path, dict[str, Any]] | None:
             payload = json.loads(manifest_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        if (
-            payload.get("manifest_version") == BUNDLE_MANIFEST_VERSION
-            and isinstance(payload.get("assets"), dict)
+        if payload.get("manifest_version") == BUNDLE_MANIFEST_VERSION and isinstance(
+            payload.get("assets"), dict
         ):
             return root, cast(dict[str, Any], payload)
     return None
@@ -158,9 +157,7 @@ def install_bundled_catalog_models(settings: Settings) -> tuple[list[str], list[
                 os.replace(temporary, destination)
             except OSError as exc:
                 temporary.unlink(missing_ok=True)
-                warnings.append(
-                    f"Could not install bundled checkpoint {entry.catalog_id}: {exc}"
-                )
+                warnings.append(f"Could not install bundled checkpoint {entry.catalog_id}: {exc}")
                 continue
 
         write_catalog_manifest_record(
