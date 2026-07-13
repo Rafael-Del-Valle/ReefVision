@@ -50,6 +50,8 @@ jobs:
       - run: npm ci
         working-directory: apps/web
       - name: Check frontend formatting
+        id: prettier
+        continue-on-error: true
         shell: pwsh
         working-directory: apps/web
         run: |
@@ -62,6 +64,27 @@ jobs:
         with:
           name: frontend-prettier-report
           path: apps/web/prettier-report.txt
+      - name: Generate formatted frontend files
+        if: steps.prettier.outcome == 'failure'
+        shell: pwsh
+        run: |
+          npm --prefix apps/web exec prettier -- --write .
+          $files = @(git diff --name-only -- apps/web)
+          foreach ($file in $files) {
+            $destination = Join-Path "formatted-frontend" $file
+            New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+            Copy-Item -LiteralPath $file -Destination $destination -Force
+          }
+      - name: Upload formatted frontend files
+        if: steps.prettier.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: formatted-frontend-files
+          path: formatted-frontend
+      - name: Fail for frontend formatting
+        if: steps.prettier.outcome == 'failure'
+        shell: pwsh
+        run: exit 1
       - run: npm run typecheck
         working-directory: apps/web
       - run: npm run test
