@@ -7,7 +7,10 @@ import os
 import urllib.request
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
+from typing import Any, cast
 
+from sqlalchemy import update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
@@ -109,11 +112,27 @@ def process_model_install_job(
             session.commit()
             return False
         expected = entry.expected_files[0]
-        job.status = "running"
-        job.started_at = datetime.now(UTC)
-        job.error_message = None
-        job.progress_total = expected.size_bytes
-        job.result_json = {"stage": "downloading", "filename": expected.filename}
+
+        # A model install can be offered to both the long-lived worker and the
+        # request-triggered fallback thread. Claim it atomically so only one
+        # executor can download and finalize the checkpoint.
+        claim = cast(
+            CursorResult[Any],
+            session.execute(
+                update(Job)
+                .where(Job.id == job_id, Job.status == "queued")
+                .values(
+                    status="running",
+                    started_at=datetime.now(UTC),
+                    error_message=None,
+                    progress_total=expected.size_bytes,
+                    result_json={"stage": "downloading", "filename": expected.filename},
+                )
+            ),
+        )
+        if int(claim.rowcount or 0) != 1:
+            session.rollback()
+            return False
         session.commit()
 
     directories = catalog_model_directories(settings)
@@ -168,9 +187,7 @@ def process_model_install_job(
         os.replace(temporary, destination)
         provider_version: str | None
         try:
-            provider_version = (
-                version("ultralytics") if entry.provider_id == "ultralytics" else None
-            )
+            provider_version = version("ultralytics") if entry.provider_id == "ultralytics" else None
         except PackageNotFoundError:
             provider_version = None
         write_catalog_manifest_record(
