@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from sqlalchemy import select
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import Job
