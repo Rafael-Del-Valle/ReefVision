@@ -17,10 +17,33 @@ $TauriConfig = Get-Content -LiteralPath $TauriConfigPath -Raw | ConvertFrom-Json
 if ($TauriConfig.bundle.resources.'binaries/' -ne 'backend/') {
     throw "Tauri must map the complete staged binaries directory to backend/."
 }
+if ($TauriConfig.bundle.resources.'../../../.desktop/bundled-models/' -ne 'bundled-models/') {
+    throw "Tauri must package the verified catalog checkpoints as bundled-models/."
+}
 
 if (-not (Test-Path ".venv" -PathType Container)) {
     throw "Run .\scripts\bootstrap.ps1 first."
 }
+
+$VenvPython = Join-Path $Root ".venv\Scripts\python.exe"
+$BundleScript = Join-Path $PSScriptRoot "stage-bundled-models.py"
+$ModelCatalog = Join-Path $Root "config\model_catalog.json"
+$BundledModels = Join-Path $Root ".desktop\bundled-models"
+
+Write-ReefVisionStep "Staging verified pretrained catalog checkpoints"
+& $VenvPython $BundleScript --catalog $ModelCatalog --output $BundledModels
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to stage the pretrained catalog checkpoints."
+}
+$BundledManifest = Join-Path $BundledModels "manifest.json"
+if (-not (Test-Path $BundledManifest -PathType Leaf)) {
+    throw "Model bundle staging did not produce its manifest: $BundledManifest"
+}
+$BundleMetadata = Get-Content -LiteralPath $BundledManifest -Raw | ConvertFrom-Json
+if ($BundleMetadata.asset_count -le 0) {
+    throw "The desktop installer model bundle contains no checkpoints."
+}
+Write-Host "Bundling $($BundleMetadata.asset_count) verified checkpoints ($([math]::Round($BundleMetadata.total_size_bytes / 1MB, 1)) MB)." -ForegroundColor Green
 
 & (Join-Path $PSScriptRoot "build-desktop-backend.ps1") -TargetTriple $TargetTriple
 
