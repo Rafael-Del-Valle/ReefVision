@@ -30,12 +30,18 @@ def test_unsupported_job_is_failed_and_does_not_poison_queue(client: TestClient)
     first_id = _queued_job(client, project["id"], "unsupported-first")
     second_id = _queued_job(client, project["id"], "unsupported-second")
 
-    assert worker.process_next_thumbnail_job(
-        client.app.state.settings, client.app.state.session_factory
-    ) is True
-    assert worker.process_next_thumbnail_job(
-        client.app.state.settings, client.app.state.session_factory
-    ) is True
+    assert (
+        worker.process_next_thumbnail_job(
+            client.app.state.settings, client.app.state.session_factory
+        )
+        is True
+    )
+    assert (
+        worker.process_next_thumbnail_job(
+            client.app.state.settings, client.app.state.session_factory
+        )
+        is True
+    )
 
     with client.app.state.session_factory() as session:
         first = session.get(Job, first_id)
@@ -62,12 +68,18 @@ def test_unexpected_handler_error_is_contained_and_queue_continues(
 
     monkeypatch.setattr(worker, "process_thumbnail_job", crash)
 
-    assert worker.process_next_thumbnail_job(
-        client.app.state.settings, client.app.state.session_factory
-    ) is True
-    assert worker.process_next_thumbnail_job(
-        client.app.state.settings, client.app.state.session_factory
-    ) is True
+    assert (
+        worker.process_next_thumbnail_job(
+            client.app.state.settings, client.app.state.session_factory
+        )
+        is True
+    )
+    assert (
+        worker.process_next_thumbnail_job(
+            client.app.state.settings, client.app.state.session_factory
+        )
+        is True
+    )
 
     with client.app.state.session_factory() as session:
         crashing = session.get(Job, crashing_id)

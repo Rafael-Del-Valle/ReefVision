@@ -187,7 +187,9 @@ def process_model_install_job(
         os.replace(temporary, destination)
         provider_version: str | None
         try:
-            provider_version = version("ultralytics") if entry.provider_id == "ultralytics" else None
+            provider_version = (
+                version("ultralytics") if entry.provider_id == "ultralytics" else None
+            )
         except PackageNotFoundError:
             provider_version = None
         write_catalog_manifest_record(
