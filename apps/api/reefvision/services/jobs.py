@@ -63,7 +63,7 @@ class JobService:
         backup = self.backups.get_by_job_id(job.id) if job.job_type == "backup" else None
         if job.status == "queued":
             job.status = "cancelled"
-            job.completed_at = None
+            job.completed_at = utc_now()
             if quality_control_run is not None:
                 quality_control_run.status = "cancelled"
                 quality_control_run.cancelled_at = utc_now()
