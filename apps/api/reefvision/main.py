@@ -20,6 +20,10 @@ from reefvision.jobs.worker import thumbnail_worker_loop
 from reefvision.logging_utils import configure_rotating_json_logging, default_api_log_path
 from reefvision.ml.assist_runtime import AssistRuntime
 from reefvision.ml.dependencies import configure_provider_runtime
+from reefvision.services.bundled_models import (
+    install_bundled_catalog_models,
+    reconcile_bundled_model_jobs,
+)
 from reefvision.services.model_catalog import validate_catalog_startup
 
 LOGGER = logging.getLogger("reefvision.api")
@@ -38,7 +42,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     configure_provider_runtime(active_settings)
     catalog_startup_warnings = validate_catalog_startup()
+    bundled_catalog_ids, bundled_warnings = install_bundled_catalog_models(active_settings)
+    catalog_startup_warnings.extend(bundled_warnings)
     engine = create_database_engine(active_settings)
+    session_factory = create_session_factory(engine)
+    reconcile_bundled_model_jobs(session_factory, bundled_catalog_ids)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
@@ -48,6 +56,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "event_id": "api_startup",
                 "component": "api",
                 "data_dir": str(active_settings.resolved_data_dir),
+                "bundled_catalog_model_count": len(bundled_catalog_ids),
             },
         )
         stop_event = asyncio.Event()
@@ -77,9 +86,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="ReefVision API", version=__version__, lifespan=lifespan)
     app.state.settings = active_settings
     app.state.engine = engine
-    app.state.session_factory = create_session_factory(engine)
+    app.state.session_factory = session_factory
     app.state.assist_runtime = AssistRuntime(active_settings)
     app.state.catalog_startup_warnings = catalog_startup_warnings
+    app.state.bundled_catalog_ids = bundled_catalog_ids
     app.add_middleware(
         CORSMiddleware,
         allow_origins=active_settings.allowed_web_origins,
