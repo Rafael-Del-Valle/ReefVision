@@ -15,6 +15,7 @@ from reefvision.ml.catalog_expansion import (
     apply_catalog_expansion_runtime_patches,
 )
 from reefvision.ml.fastsam_runtime_patch import apply_fastsam_runtime_patch
+from reefvision.schemas.model_catalog import ModelCatalogResponse
 
 
 def _load_installer_module() -> ModuleType:
@@ -62,6 +63,15 @@ def test_optional_pack_writes_catalog_override_and_manifest(
     assert installed == [model.catalog_id]
     assert failed == []
     catalog = json.loads((tmp_path / "config" / "model_catalog.json").read_text())
+    validated = ModelCatalogResponse.model_validate(
+        {
+            **catalog,
+            "application_version": "test",
+            "validation_warnings": [],
+            "rejected_entries": 0,
+        }
+    )
+    assert len(validated.models) == 40
     entry = next(item for item in catalog["models"] if item["catalog_id"] == model.catalog_id)
     assert entry["availability"] == "available"
     assert entry["selection_kind"] == "managed_catalog_model"
