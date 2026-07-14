@@ -322,6 +322,14 @@ def apply_catalog_expansion_runtime_patches() -> None:
         return
     from reefvision.ml import provider_hub
 
-    provider_hub.UltralyticsDetectionProvider = ExpandedUltralyticsDetectionProvider
-    provider_hub.SegmentAnythingAssistProvider = UnifiedSegmentAnythingAssistProvider
+    setattr(
+        provider_hub,
+        "UltralyticsDetectionProvider",
+        ExpandedUltralyticsDetectionProvider,
+    )
+    setattr(
+        provider_hub,
+        "SegmentAnythingAssistProvider",
+        UnifiedSegmentAnythingAssistProvider,
+    )
     _PATCHED = True
