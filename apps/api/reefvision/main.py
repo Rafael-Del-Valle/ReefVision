@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -19,6 +20,7 @@ from reefvision.domain.errors import ConflictError, NotFoundError, ValidationErr
 from reefvision.jobs.worker import thumbnail_worker_loop
 from reefvision.logging_utils import configure_rotating_json_logging, default_api_log_path
 from reefvision.ml.assist_runtime import AssistRuntime
+from reefvision.ml.catalog_expansion import apply_catalog_expansion_runtime_patches
 from reefvision.ml.dependencies import configure_provider_runtime
 from reefvision.services.bundled_models import (
     install_bundled_catalog_models,
@@ -34,6 +36,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if active_settings.safe_mode:
         active_settings.background_worker_enabled = False
     active_settings.ensure_directories()
+    os.environ.setdefault(
+        "REEFVISION_CONFIG_DIR", str(active_settings.resolved_data_dir / "config")
+    )
+    apply_catalog_expansion_runtime_patches()
     configure_rotating_json_logging(
         default_api_log_path(active_settings),
         default_component="api",
