@@ -36,9 +36,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if active_settings.safe_mode:
         active_settings.background_worker_enabled = False
     active_settings.ensure_directories()
-    os.environ.setdefault(
-        "REEFVISION_CONFIG_DIR", str(active_settings.resolved_data_dir / "config")
-    )
+    os.environ["REEFVISION_CONFIG_DIR"] = str(active_settings.resolved_data_dir / "config")
     apply_catalog_expansion_runtime_patches()
     configure_rotating_json_logging(
         default_api_log_path(active_settings),
