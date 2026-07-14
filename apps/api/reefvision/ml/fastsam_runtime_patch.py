@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from reefvision.domain.errors import ValidationError
 from reefvision.ml.catalog_expansion import UnifiedSegmentAnythingAssistProvider
@@ -39,7 +39,8 @@ def _fastsam_predict(
     labels: list[int] | None = None,
     box: PixelBox | None = None,
 ) -> AssistPrediction:
-    if self._backend != "fastsam":
+    backend = cast(str | None, getattr(self, "_backend", None))
+    if backend != "fastsam":
         return _ORIGINAL_PREDICT(
             self,
             prepared_image,
@@ -47,18 +48,20 @@ def _fastsam_predict(
             labels=labels,
             box=box,
         )
-    if self._model is None:
+    model = getattr(self, "_model", None)
+    if model is None:
         raise ValidationError("The FastSAM model is not loaded")
+    device = getattr(self, "_device", "cpu")
     try:
         from ultralytics.models.fastsam import FastSAMPrompt
 
-        results = self._model(
+        results = model(
             str(prepared_image),
-            device=self._device,
+            device=device,
             retina_masks=True,
             verbose=False,
         )
-        prompt = FastSAMPrompt(str(prepared_image), results, device=self._device)
+        prompt = FastSAMPrompt(str(prepared_image), results, device=device)
         if points:
             annotation = prompt.point_prompt(
                 points=points,
@@ -82,5 +85,5 @@ def apply_fastsam_runtime_patch() -> None:
     global _PATCHED
     if _PATCHED:
         return
-    UnifiedSegmentAnythingAssistProvider._predict = _fastsam_predict  # type: ignore[method-assign]
+    setattr(UnifiedSegmentAnythingAssistProvider, "_predict", _fastsam_predict)
     _PATCHED = True
