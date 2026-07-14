@@ -1,0 +1,9 @@
+﻿# Install only after the foundation branch passes its baseline tests.
+# Keep these outside the pinned desktop provider stack until packaging is tested.
+
+transformers>=4.45,<6
+safetensors>=0.4,<1
+scikit-image>=0.24,<1
+networkx>=3.3,<4
+boto3>=1.35,<2
+nnunetv2>=2.6,<3

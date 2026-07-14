@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+﻿import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -26,6 +26,7 @@ import {
   type TrainingPreflight,
   updateTrainingDraft,
 } from "../../api/client";
+import { TaskCapabilityMatrix } from "./TaskCapabilityMatrix";
 
 type TrainingSection =
   | "new_run"
@@ -963,6 +964,7 @@ export function TrainingWorkspace({
 
               {activeSection === "new_run" && (
                 <div className="training-card-grid">
+                  <TaskCapabilityMatrix />
                   <article className="system-card">
                     <h4>Run identity</h4>
                     <label>

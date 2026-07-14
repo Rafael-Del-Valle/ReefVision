@@ -10,8 +10,10 @@ from reefvision.db.models.dataset_version_item import DatasetVersionItem
 from reefvision.db.models.experiment_record import ExperimentRecord
 from reefvision.db.models.export_record import ExportRecord
 from reefvision.db.models.image import ImageAsset
+from reefvision.db.models.image_label import ImageLabel
 from reefvision.db.models.job import Job
 from reefvision.db.models.label_class import LabelClass
+from reefvision.db.models.mask_annotation import MaskAnnotation
 from reefvision.db.models.model_registration import ModelRegistration
 from reefvision.db.models.prediction_proposal import PredictionProposal
 from reefvision.db.models.project import Project
@@ -22,6 +24,8 @@ from reefvision.db.models.review_queue import ReviewQueue
 from reefvision.db.models.review_queue_item import ReviewQueueItem
 from reefvision.db.models.training_draft import TrainingDraft
 from reefvision.db.models.training_run import TrainingRun
+from reefvision.db.models.video_asset import VideoAsset
+from reefvision.db.models.video_track import VideoTrack
 
 __all__ = [
     "Annotation",
@@ -34,8 +38,10 @@ __all__ = [
     "ExperimentRecord",
     "ExportRecord",
     "ImageAsset",
+    "ImageLabel",
     "Job",
     "LabelClass",
+    "MaskAnnotation",
     "ModelRegistration",
     "PredictionProposal",
     "Project",
@@ -46,4 +52,6 @@ __all__ = [
     "ReviewQueueItem",
     "TrainingDraft",
     "TrainingRun",
+    "VideoAsset",
+    "VideoTrack",
 ]

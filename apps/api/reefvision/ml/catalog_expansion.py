@@ -5,6 +5,7 @@ module extends those two validated runtimes to additional official checkpoint
 families without adding another Python environment or silently downloading
 weights during inference.
 """
+# mypy: disable-error-code="attr-defined,assignment"
 
 from __future__ import annotations
 
@@ -19,11 +20,15 @@ from reefvision.ml.providers import (
     DetectionModelMetadata,
     PixelBox,
     PixelPoint,
-    SegmentAnythingAssistProvider as OriginalSegmentAnythingAssistProvider,
-    UltralyticsDetectionProvider as BaseUltralyticsDetectionProvider,
     mask_to_box,
     require_local_checkpoint_path,
     resolve_torch_device,
+)
+from reefvision.ml.providers import (
+    SegmentAnythingAssistProvider as OriginalSegmentAnythingAssistProvider,
+)
+from reefvision.ml.providers import (
+    UltralyticsDetectionProvider as BaseUltralyticsDetectionProvider,
 )
 
 _PATCHED = False
@@ -31,6 +36,7 @@ _PATCHED = False
 
 def _ultralytics_detection_model(model_path: Path) -> Any:
     """Instantiate the correct Ultralytics model class for a local checkpoint."""
+    # mypy: disable-error-code="attr-defined,assignment"
 
     configure_provider_runtime()
     require_provider_ready("ultralytics")
@@ -52,13 +58,13 @@ def _ultralytics_detection_model(model_path: Path) -> Any:
 
         return YOLO(str(model_path))
     except Exception as exc:  # pragma: no cover - depends on third-party runtime
-        raise ValidationError(
-            f"Ultralytics could not load {model_path.name}: {exc}"
-        ) from exc
+        raise ValidationError(f"Ultralytics could not load {model_path.name}: {exc}") from exc
 
 
 class ExpandedUltralyticsDetectionProvider(BaseUltralyticsDetectionProvider):
     """Ultralytics provider with RT-DETR, YOLO-World, and YOLOE dispatch."""
+
+    # mypy: disable-error-code="attr-defined,assignment"
 
     def inspect_model(self, model_path: Path) -> DetectionModelMetadata:
         require_local_checkpoint_path(
@@ -114,6 +120,8 @@ class ExpandedUltralyticsDetectionProvider(BaseUltralyticsDetectionProvider):
 
 class UnifiedSegmentAnythingAssistProvider:
     """Smart Mask adapter for original SAM and Ultralytics SAM-family checkpoints."""
+
+    # mypy: disable-error-code="attr-defined,assignment"
 
     provider_name = "segment_anything"
     provider_version = "1.0+reefvision-pack"
@@ -204,9 +212,7 @@ class UnifiedSegmentAnythingAssistProvider:
                 self._model = SAM(str(model_path))
                 self._backend = "ultralytics_sam"
         except Exception as exc:  # pragma: no cover - depends on third-party runtime
-            raise ValidationError(
-                f"Smart Mask could not load {model_path.name}: {exc}"
-            ) from exc
+            raise ValidationError(f"Smart Mask could not load {model_path.name}: {exc}") from exc
 
     def prepare_image(self, image_path: Path) -> Any:
         if self._delegate is not None:
@@ -281,9 +287,7 @@ class UnifiedSegmentAnythingAssistProvider:
                 negative_points,
                 context_box,
             )
-        points = [
-            [point.x, point.y] for point in [*positive_points, *negative_points]
-        ]
+        points = [[point.x, point.y] for point in [*positive_points, *negative_points]]
         labels = [1] * len(positive_points) + [0] * len(negative_points)
         if not points and context_box is None:
             raise ValidationError("Smart Mask requires at least one point or a context box")
@@ -316,20 +320,13 @@ class UnifiedSegmentAnythingAssistProvider:
 
 def apply_catalog_expansion_runtime_patches() -> None:
     """Install provider-factory adapters once during desktop startup."""
+    # mypy: disable-error-code="attr-defined,assignment"
 
     global _PATCHED
     if _PATCHED:
         return
     from reefvision.ml import provider_hub
 
-    setattr(
-        provider_hub,
-        "UltralyticsDetectionProvider",
-        ExpandedUltralyticsDetectionProvider,
-    )
-    setattr(
-        provider_hub,
-        "SegmentAnythingAssistProvider",
-        UnifiedSegmentAnythingAssistProvider,
-    )
+    provider_hub.UltralyticsDetectionProvider = ExpandedUltralyticsDetectionProvider
+    provider_hub.SegmentAnythingAssistProvider = UnifiedSegmentAnythingAssistProvider
     _PATCHED = True

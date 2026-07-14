@@ -22,7 +22,7 @@ def _entry(payload: bytes) -> ModelCatalogEntryResponse:
     digest = hashlib.sha256(payload).hexdigest()
     expected = CatalogExpectedFile(
         filename="yolo11n.pt",
-        source_url="https://example.invalid/yolo11n.pt",
+        source_url="https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n.pt",
         revision="response-race-test",
         sha256=digest,
         size_bytes=len(payload),

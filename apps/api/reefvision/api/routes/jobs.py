@@ -1,5 +1,6 @@
 """Background-job status and retry endpoints."""
 
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response
@@ -24,6 +25,9 @@ def _live_model_install_response(job: Job, settings: Settings) -> JobResponse:
     here keeps the desktop progress bar live even if a database progress write
     is delayed or not yet visible to the polling connection.
     """
+
+    if getattr(job, "created_at", None) is None:
+        job.created_at = datetime.now(UTC)
 
     response = JobResponse.model_validate(job)
     if job.job_type != "model_install" or job.status not in {

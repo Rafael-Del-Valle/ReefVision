@@ -1,4 +1,5 @@
 """FastSAM prompt adapter layered onto the optional Smart Mask runtime."""
+# mypy: disable-error-code="attr-defined,method-assign"
 
 from __future__ import annotations
 
@@ -68,9 +69,7 @@ def _fastsam_predict(
                 pointlabel=labels or [1] * len(points),
             )
         elif box is not None:
-            annotation = prompt.box_prompt(
-                bbox=[box.x_min, box.y_min, box.x_max, box.y_max]
-            )
+            annotation = prompt.box_prompt(bbox=[box.x_min, box.y_min, box.x_max, box.y_max])
         else:
             raise ValidationError("FastSAM requires point or box prompting")
         mask = _annotation_mask(annotation)
@@ -85,5 +84,5 @@ def apply_fastsam_runtime_patch() -> None:
     global _PATCHED
     if _PATCHED:
         return
-    setattr(UnifiedSegmentAnythingAssistProvider, "_predict", _fastsam_predict)
+    UnifiedSegmentAnythingAssistProvider._predict = _fastsam_predict
     _PATCHED = True

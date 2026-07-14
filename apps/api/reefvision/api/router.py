@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from reefvision.api.routes.annotations import router as annotations_router
 from reefvision.api.routes.assist import router as assist_router
 from reefvision.api.routes.backups import router as backups_router
+from reefvision.api.routes.capabilities import router as capabilities_router
 from reefvision.api.routes.class_operations import router as class_operations_router
 from reefvision.api.routes.class_visibility import router as class_visibility_router
 from reefvision.api.routes.dataset_versions import router as dataset_versions_router
@@ -19,11 +20,14 @@ from reefvision.api.routes.quality_control import router as quality_control_rout
 from reefvision.api.routes.review_queues import router as review_queues_router
 from reefvision.api.routes.system import router as system_router
 from reefvision.api.routes.training import router as training_router
+from reefvision.api.routes.videos import router as videos_router
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health_router)
+api_router.include_router(capabilities_router)
 api_router.include_router(system_router)
 api_router.include_router(training_router)
+api_router.include_router(videos_router)
 api_router.include_router(backups_router)
 api_router.include_router(projects_router)
 api_router.include_router(class_operations_router)

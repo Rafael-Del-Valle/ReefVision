@@ -48,14 +48,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     configure_provider_runtime(active_settings)
     catalog_startup_warnings = validate_catalog_startup()
-    bundled_catalog_ids, bundled_warnings = install_bundled_catalog_models(active_settings)
+
+    bundled_catalog_ids: list[str]
+    bundled_warnings: list[str]
+    if active_settings.env == "test":
+        bundled_catalog_ids = []
+        bundled_warnings = []
+    else:
+        bundled_catalog_ids, bundled_warnings = install_bundled_catalog_models(active_settings)
+
     catalog_startup_warnings.extend(bundled_warnings)
     engine = create_database_engine(active_settings)
     session_factory = create_session_factory(engine)
-    reconcile_bundled_model_jobs(session_factory, bundled_catalog_ids)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        reconcile_bundled_model_jobs(session_factory, bundled_catalog_ids)
         LOGGER.info(
             "ReefVision API starting",
             extra={

@@ -1,4 +1,5 @@
 """Detection and interactive assist provider integrations."""
+# mypy: disable-error-code="attr-defined"
 
 from __future__ import annotations
 
