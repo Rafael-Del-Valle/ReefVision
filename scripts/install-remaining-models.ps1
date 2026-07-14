@@ -22,8 +22,9 @@ Get-Process *reefvision* -ErrorAction SilentlyContinue | Stop-Process -Force
 New-Item -ItemType Directory -Path $DataDir -Force | Out-Null
 New-Item -ItemType Directory -Path $ConfigDir -Force | Out-Null
 
-# ReefVision 1.7.1 resolves this path automatically. Persisting it here also
-# lets an existing 1.7.0 installation discover the local catalog after restart.
+# The rebuilt desktop resolves this AppData catalog path automatically.
+# Persisting the variable also lets the currently installed 1.7.0 shell discover
+# the local catalog definition immediately after it is restarted.
 [Environment]::SetEnvironmentVariable("REEFVISION_CONFIG_DIR", $ConfigDir, "User")
 $env:REEFVISION_CONFIG_DIR = $ConfigDir
 
@@ -44,4 +45,4 @@ if ($ExitCode -ne 0) {
 }
 
 Write-Host "Optional model pack installation completed." -ForegroundColor Green
-Write-Host "Build and install ReefVision 1.7.1, then reopen Model Hub and choose Refresh catalog." -ForegroundColor Green
+Write-Host "Rebuild and reinstall the latest branch revision, then reopen Model Hub and choose Refresh catalog." -ForegroundColor Green
