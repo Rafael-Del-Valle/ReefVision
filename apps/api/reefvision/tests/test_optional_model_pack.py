@@ -18,10 +18,9 @@ from reefvision.ml.fastsam_runtime_patch import apply_fastsam_runtime_patch
 from reefvision.schemas.model_catalog import ModelCatalogResponse
 
 
-def _load_installer_module() -> ModuleType:
+def _load_script(filename: str, module_name: str) -> ModuleType:
     root = Path(__file__).resolve().parents[4]
-    path = root / "scripts" / "install-remaining-models.py"
-    module_name = "reefvision_optional_model_pack"
+    path = root / "scripts" / filename
     spec = importlib.util.spec_from_file_location(module_name, path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -38,10 +37,15 @@ def test_runtime_factories_use_expanded_adapters() -> None:
     assert provider_hub.SegmentAnythingAssistProvider is UnifiedSegmentAnythingAssistProvider
 
 
-def test_optional_pack_writes_catalog_override_and_manifest(
+def test_optional_pack_repair_marks_verified_model_available(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    installer = _load_installer_module()
+    installer = _load_script(
+        "install-remaining-models.py", "reefvision_optional_model_pack"
+    )
+    repair = _load_script(
+        "repair-optional-model-catalog.py", "reefvision_optional_model_repair"
+    )
     source_catalog = Path(__file__).resolve().parents[4] / "config" / "model_catalog.json"
     model = installer.OPTIONAL_MODELS[0]
     payload = b"reefvision-test-checkpoint"
@@ -62,7 +66,18 @@ def test_optional_pack_writes_catalog_override_and_manifest(
 
     assert installed == [model.catalog_id]
     assert failed == []
-    catalog = json.loads((tmp_path / "config" / "model_catalog.json").read_text())
+    catalog_path = tmp_path / "config" / "model_catalog.json"
+    before = json.loads(catalog_path.read_text())
+    before_entry = next(
+        item for item in before["models"] if item["catalog_id"] == model.catalog_id
+    )
+    assert before_entry["availability"] == "unavailable"
+
+    repaired, skipped = repair.repair_catalog(tmp_path)
+
+    assert model.catalog_id in repaired
+    assert all(not reason.startswith(f"{model.catalog_id}:") for reason in skipped)
+    catalog = json.loads(catalog_path.read_text())
     validated = ModelCatalogResponse.model_validate(
         {
             **catalog,
@@ -75,6 +90,7 @@ def test_optional_pack_writes_catalog_override_and_manifest(
     entry = next(item for item in catalog["models"] if item["catalog_id"] == model.catalog_id)
     assert entry["availability"] == "available"
     assert entry["selection_kind"] == "managed_catalog_model"
+    assert entry["installation_state"] == "Ready"
     assert entry["expected_files"][0]["filename"] == model.filename
     assert entry["expected_files"][0]["size_bytes"] == len(payload)
 
