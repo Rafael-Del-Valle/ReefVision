@@ -37,7 +37,7 @@ foreach ($Selection in $Only) {
     $Arguments += @("--only", $Selection)
 }
 
-Write-Host "Installing the optional ReefVision model pack..." -ForegroundColor Cyan
+Write-Host "Installing 18 optional ReefVision model checkpoints..." -ForegroundColor Cyan
 & $Python @Arguments
 $ExitCode = $LASTEXITCODE
 if ($ExitCode -ne 0) {
