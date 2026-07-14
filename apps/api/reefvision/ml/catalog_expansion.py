@@ -52,7 +52,9 @@ def _ultralytics_detection_model(model_path: Path) -> Any:
 
         return YOLO(str(model_path))
     except Exception as exc:  # pragma: no cover - depends on third-party runtime
-        raise ValidationError(f"Ultralytics could not load {model_path.name}: {exc}") from exc
+        raise ValidationError(
+            f"Ultralytics could not load {model_path.name}: {exc}"
+        ) from exc
 
 
 class ExpandedUltralyticsDetectionProvider(BaseUltralyticsDetectionProvider):
@@ -157,7 +159,7 @@ class UnifiedSegmentAnythingAssistProvider:
                 "MobileSAM, or FastSAM official weights."
             )
         return AssistModelMetadata(
-            framework="ultralytics" if backend != "original_sam" else "segment_anything",
+            framework="ultralytics",
             task="assist_segmentation",
             provider_name=self.provider_name,
             provider_version=self.provider_version,
@@ -202,7 +204,9 @@ class UnifiedSegmentAnythingAssistProvider:
                 self._model = SAM(str(model_path))
                 self._backend = "ultralytics_sam"
         except Exception as exc:  # pragma: no cover - depends on third-party runtime
-            raise ValidationError(f"Smart Mask could not load {model_path.name}: {exc}") from exc
+            raise ValidationError(
+                f"Smart Mask could not load {model_path.name}: {exc}"
+            ) from exc
 
     def prepare_image(self, image_path: Path) -> Any:
         if self._delegate is not None:
@@ -228,7 +232,10 @@ class UnifiedSegmentAnythingAssistProvider:
         confidences = getattr(boxes, "conf", None) if boxes is not None else None
         if confidences is not None:
             scores = [float(value) for value in confidences.detach().cpu().tolist()]
-        index = max(range(len(array)), key=lambda item: scores[item] if item < len(scores) else 0.0)
+        index = max(
+            range(len(array)),
+            key=lambda item: scores[item] if item < len(scores) else 0.0,
+        )
         mask = array[index] > 0.5
         score = scores[index] if index < len(scores) else 1.0
         return AssistPrediction(mask=mask, box=mask_to_box(mask), score=score)
@@ -274,7 +281,9 @@ class UnifiedSegmentAnythingAssistProvider:
                 negative_points,
                 context_box,
             )
-        points = [[point.x, point.y] for point in [*positive_points, *negative_points]]
+        points = [
+            [point.x, point.y] for point in [*positive_points, *negative_points]
+        ]
         labels = [1] * len(positive_points) + [0] * len(negative_points)
         if not points and context_box is None:
             raise ValidationError("Smart Mask requires at least one point or a context box")
