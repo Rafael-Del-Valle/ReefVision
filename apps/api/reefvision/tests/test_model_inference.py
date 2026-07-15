@@ -19,6 +19,11 @@ from reefvision.ml.providers import (
 from reefvision.services.models import ModelService
 from reefvision.tests.test_annotations import create_project, import_one
 
+VALID_ASSIST_MASK_PNG_BASE64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAFAAAAA8CAAAAADUTGJQAAAAL0lEQVR4nO3MMREAAAgE"
+    "ILV/CKPawfsRAtBbWRP+hEKhUCgUCoVCoVAoFAqFwqcDY9wBGD01rogAAAAASUVORK5CYII="
+)
+
 
 class FakeDetectorRegistrationProvider:
     provider_name = "fake_detector"
@@ -273,7 +278,7 @@ def test_assist_session_brush_and_accept_creates_assist_annotation(
     monkeypatch.setattr(
         assist_runtime_module,
         "mask_to_png_base64",
-        lambda mask: "ZmFrZS1tYXNr",
+        lambda mask: VALID_ASSIST_MASK_PNG_BASE64,
     )
 
     project = create_project(client)
@@ -317,7 +322,7 @@ def test_assist_session_brush_and_accept_creates_assist_annotation(
         "x_max": 26.0,
         "y_max": 24.0,
     }
-    assert brushed.json()["candidate_mask_png_base64"] == "ZmFrZS1tYXNr"
+    assert brushed.json()["candidate_mask_png_base64"] == VALID_ASSIST_MASK_PNG_BASE64
 
     accepted = client.post(
         f"/api/v1/assist-sessions/{session_id}/accept",
@@ -350,7 +355,7 @@ def test_assist_box_prompt_accepts_selected_prediction_as_provenance_source(
     monkeypatch.setattr(
         assist_runtime_module,
         "mask_to_png_base64",
-        lambda mask: "ZmFrZS1tYXNr",
+        lambda mask: VALID_ASSIST_MASK_PNG_BASE64,
     )
 
     project = create_project(client)
