@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, FiniteFloat, field_validator
 
-from reefvision.schemas.annotations import AnnotationResponse
+from reefvision.schemas.annotations import AnnotationResponse, MaskAnnotationResponse
 
 
 class AssistSessionCreateRequest(BaseModel):
@@ -88,6 +88,7 @@ class AssistSessionResponse(BaseModel):
 class AssistAcceptResponse(BaseModel):
     session_id: str
     annotation: AnnotationResponse
+    mask_annotation: MaskAnnotationResponse | None = None
 
 
 def _box_has_positive_area(x_min: float, y_min: float, x_max: float, y_max: float) -> bool:
