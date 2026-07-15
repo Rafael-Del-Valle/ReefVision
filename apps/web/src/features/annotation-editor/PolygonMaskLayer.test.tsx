@@ -23,6 +23,10 @@ beforeAll(() => {
   });
 });
 
+function maskLayer(): SVGSVGElement {
+  return screen.getByTestId("polygon-mask-layer") as unknown as SVGSVGElement;
+}
+
 function mockLayerBounds(layer: SVGSVGElement) {
   vi.spyOn(layer, "getBoundingClientRect").mockReturnValue({
     x: 0,
@@ -94,7 +98,7 @@ describe("PolygonMaskLayer", () => {
       />,
     );
 
-    const layer = screen.getByTestId("polygon-mask-layer");
+    const layer = maskLayer();
     mockLayerBounds(layer);
     fireEvent.pointerDown(layer, { clientX: 10, clientY: 10 });
     fireEvent.pointerDown(layer, { clientX: 30, clientY: 10 });
@@ -133,7 +137,7 @@ describe("PolygonMaskLayer", () => {
       />,
     );
 
-    const layer = screen.getByTestId("polygon-mask-layer");
+    const layer = maskLayer();
     const polygon = layer.querySelector("polygon");
     expect(polygon).not.toBeNull();
     fireEvent.pointerDown(polygon as SVGPolygonElement);
@@ -160,7 +164,7 @@ describe("PolygonMaskLayer", () => {
       />,
     );
 
-    const layer = screen.getByTestId("polygon-mask-layer");
+    const layer = maskLayer();
     mockLayerBounds(layer);
     const vertex = screen.getByTestId(`mask-vertex-${polygonMask.id}-0`);
     fireEvent.pointerDown(vertex, { pointerId: 4 });
