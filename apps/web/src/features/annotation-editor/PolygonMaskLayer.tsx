@@ -76,6 +76,7 @@ export function polygonMaskFromPoints(
   points: Point[],
   labelClassId: string,
   id = generatedMaskId(),
+  persisted = false,
 ): EditorMaskAnnotation {
   const metrics = polygonMetrics(points);
   return {
@@ -90,6 +91,7 @@ export function polygonMaskFromPoints(
     y_max: metrics.yMax,
     area_pixels: metrics.areaPixels,
     source_type: "human",
+    persisted,
   };
 }
 
@@ -140,7 +142,8 @@ export function PolygonMaskLayer({
 
   function imagePoint(event: PointerEvent<SVGSVGElement>): Point {
     const bounds = event.currentTarget.getBoundingClientRect();
-    const normalizedX = bounds.width > 0 ? (event.clientX - bounds.left) / bounds.width : 0;
+    const normalizedX =
+      bounds.width > 0 ? (event.clientX - bounds.left) / bounds.width : 0;
     const normalizedY =
       bounds.height > 0 ? (event.clientY - bounds.top) / bounds.height : 0;
     return {
@@ -204,6 +207,7 @@ export function PolygonMaskLayer({
           nextPoints,
           sourceMask.label_class_id ?? activeClassId ?? "",
           sourceMask.id,
+          sourceMask.persisted,
         ),
       );
       return;
