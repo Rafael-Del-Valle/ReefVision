@@ -8,6 +8,7 @@ import {
   type PointerEvent,
 } from "react";
 
+import { rasterMaskContentUrl } from "./rasterMaskApi";
 import type {
   EditorMaskAnnotation,
   EditorTool,
@@ -59,7 +60,11 @@ function generatedMaskId(): string {
   return `mask-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function projectToSegment(point: Point, start: Point, end: Point): SegmentProjection {
+function projectToSegment(
+  point: Point,
+  start: Point,
+  end: Point,
+): SegmentProjection {
   const deltaX = end.x - start.x;
   const deltaY = end.y - start.y;
   const lengthSquared = deltaX * deltaX + deltaY * deltaY;
@@ -84,7 +89,10 @@ function projectToSegment(point: Point, start: Point, end: Point): SegmentProjec
 }
 
 export function insertPolygonVertex(points: Point[], point: Point): Point[] {
-  if (points.length < 2) return points.map((existing) => ({ ...existing }));
+  if (points.length < 2) {
+    return points.map((existing) => ({ ...existing }));
+  }
+
   let nearestEdgeIndex = 0;
   let nearestProjection = projectToSegment(point, points[0], points[1]);
   for (let index = 1; index < points.length; index += 1) {
@@ -98,12 +106,16 @@ export function insertPolygonVertex(points: Point[], point: Point): Point[] {
       nearestProjection = projection;
     }
   }
+
   const next = points.map((existing) => ({ ...existing }));
   next.splice(nearestEdgeIndex + 1, 0, nearestProjection.point);
   return next;
 }
 
-export function removePolygonVertex(points: Point[], pointIndex: number): Point[] {
+export function removePolygonVertex(
+  points: Point[],
+  pointIndex: number,
+): Point[] {
   if (points.length <= 3 || pointIndex < 0 || pointIndex >= points.length) {
     return points.map((point) => ({ ...point }));
   }
@@ -154,13 +166,6 @@ export function polygonMaskFromPoints(
   };
 }
 
-function displayMask(
-  mask: EditorMaskAnnotation,
-  dragPreview: EditorMaskAnnotation | null,
-): EditorMaskAnnotation {
-  return dragPreview?.id === mask.id ? dragPreview : mask;
-}
-
 export function PolygonMaskLayer({
   width,
   height,
@@ -199,10 +204,16 @@ export function PolygonMaskLayer({
     }
   }, [tool]);
 
-  function sourcePoint(svg: SVGSVGElement, clientX: number, clientY: number): Point {
+  function sourcePoint(
+    svg: SVGSVGElement,
+    clientX: number,
+    clientY: number,
+  ): Point {
     const bounds = svg.getBoundingClientRect();
-    const normalizedX = bounds.width > 0 ? (clientX - bounds.left) / bounds.width : 0;
-    const normalizedY = bounds.height > 0 ? (clientY - bounds.top) / bounds.height : 0;
+    const normalizedX =
+      bounds.width > 0 ? (clientX - bounds.left) / bounds.width : 0;
+    const normalizedY =
+      bounds.height > 0 ? (clientY - bounds.top) / bounds.height : 0;
     return {
       x: clamp(normalizedX * width, 0, width),
       y: clamp(normalizedY * height, 0, height),
@@ -237,10 +248,11 @@ export function PolygonMaskLayer({
 
   function selectMask(maskId: string, additive: boolean) {
     if (additive) {
-      const nextSelection = selectedMasks.has(maskId)
-        ? selectedMaskIds.filter((id) => id !== maskId)
-        : [...selectedMaskIds, maskId];
-      onSelectionChange(nextSelection);
+      onSelectionChange(
+        selectedMasks.has(maskId)
+          ? selectedMaskIds.filter((id) => id !== maskId)
+          : [...selectedMaskIds, maskId],
+      );
       return;
     }
     onSelectionChange([maskId]);
@@ -270,7 +282,7 @@ export function PolygonMaskLayer({
         dragPreview?.id === vertexDrag.maskId
           ? dragPreview
           : masks.find((mask) => mask.id === vertexDrag.maskId) ?? null;
-      if (sourceMask?.points === null || sourceMask?.points === undefined) {
+      if (!sourceMask?.points) {
         return;
       }
       const nextPoints = sourceMask.points.map((existingPoint, index) =>
@@ -335,9 +347,13 @@ export function PolygonMaskLayer({
     event: MouseEvent<SVGPolygonElement>,
     mask: EditorMaskAnnotation,
   ) {
-    if (tool !== "select" || mask.points === null) return;
+    if (tool !== "select" || mask.points === null) {
+      return;
+    }
     const svg = event.currentTarget.ownerSVGElement;
-    if (!svg) return;
+    if (!svg) {
+      return;
+    }
     event.stopPropagation();
     const point = sourcePoint(svg, event.clientX, event.clientY);
     onUpdate(updatedMask(mask, insertPolygonVertex(mask.points, point)));
@@ -372,7 +388,7 @@ export function PolygonMaskLayer({
       }}
     >
       {masks.map((sourceMask) => {
-        const mask = displayMask(sourceMask, dragPreview);
+        const mask = dragPreview?.id === sourceMask.id ? dragPreview : sourceMask;
         if (
           mask.label_class_id !== null &&
           hiddenClasses.has(mask.label_class_id)
@@ -388,7 +404,7 @@ export function PolygonMaskLayer({
             <image
               key={mask.id}
               data-mask-id={mask.id}
-              href={`/api/v1/mask-annotations/${mask.id}/content?revision=${mask.revision ?? 0}`}
+              href={rasterMaskContentUrl(mask)}
               x={0}
               y={0}
               width={width}
@@ -478,9 +494,7 @@ export function PolygonMaskLayer({
             .map((point) => `${point.x},${point.y}`)
             .join(" ")}
           fill="none"
-          stroke={
-            (activeClassId && classColors[activeClassId]) || "#2a9d8f"
-          }
+          stroke={(activeClassId && classColors[activeClassId]) || "#2a9d8f"}
           strokeWidth={2}
           strokeDasharray="8 5"
           vectorEffect="non-scaling-stroke"
