@@ -3,8 +3,10 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   PolygonMaskLayer,
+  insertPolygonVertex,
   polygonMaskFromPoints,
   polygonMetrics,
+  removePolygonVertex,
 } from "./PolygonMaskLayer";
 import type { EditorMaskAnnotation } from "./types";
 
@@ -77,6 +79,43 @@ describe("polygon mask geometry", () => {
         { x: 10, y: 0 },
       ]),
     ).toThrow("at least three points");
+  });
+
+  it("inserts a projected point after the nearest polygon edge", () => {
+    expect(
+      insertPolygonVertex(
+        [
+          { x: 10, y: 10 },
+          { x: 30, y: 10 },
+          { x: 30, y: 25 },
+          { x: 10, y: 25 },
+        ],
+        { x: 20, y: 12 },
+      ),
+    ).toEqual([
+      { x: 10, y: 10 },
+      { x: 20, y: 10 },
+      { x: 30, y: 10 },
+      { x: 30, y: 25 },
+      { x: 10, y: 25 },
+    ]);
+  });
+
+  it("removes vertices while preserving the three-point minimum", () => {
+    const fourPoints = [
+      { x: 10, y: 10 },
+      { x: 30, y: 10 },
+      { x: 30, y: 25 },
+      { x: 10, y: 25 },
+    ];
+    expect(removePolygonVertex(fourPoints, 1)).toEqual([
+      { x: 10, y: 10 },
+      { x: 30, y: 25 },
+      { x: 10, y: 25 },
+    ]);
+    expect(removePolygonVertex(fourPoints.slice(0, 3), 1)).toEqual(
+      fourPoints.slice(0, 3),
+    );
   });
 });
 
@@ -185,5 +224,67 @@ describe("PolygonMaskLayer", () => {
         { x: 10, y: 25 },
       ],
     });
+  });
+
+  it("inserts a vertex on the nearest edge when the polygon is double-clicked", () => {
+    const onUpdate = vi.fn();
+    render(
+      <PolygonMaskLayer
+        width={400}
+        height={300}
+        masks={[polygonMask]}
+        classColors={{ "class-1": "#2a9d8f" }}
+        activeClassId="class-1"
+        tool="select"
+        selectedMaskIds={[polygonMask.id]}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onSelectionChange={vi.fn()}
+      />,
+    );
+
+    const layer = maskLayer();
+    mockLayerBounds(layer);
+    const polygon = layer.querySelector("polygon") as SVGPolygonElement;
+    fireEvent.doubleClick(polygon, { clientX: 20, clientY: 12 });
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate.mock.calls[0][0].points).toEqual([
+      { x: 10, y: 10 },
+      { x: 20, y: 10 },
+      { x: 30, y: 10 },
+      { x: 30, y: 25 },
+      { x: 10, y: 25 },
+    ]);
+  });
+
+  it("removes a selected vertex with Alt-click", () => {
+    const onUpdate = vi.fn();
+    render(
+      <PolygonMaskLayer
+        width={400}
+        height={300}
+        masks={[polygonMask]}
+        classColors={{ "class-1": "#2a9d8f" }}
+        activeClassId="class-1"
+        tool="select"
+        selectedMaskIds={[polygonMask.id]}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onSelectionChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.pointerDown(
+      screen.getByTestId(`mask-vertex-${polygonMask.id}-1`),
+      { altKey: true, pointerId: 9 },
+    );
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate.mock.calls[0][0].points).toEqual([
+      { x: 10, y: 10 },
+      { x: 30, y: 25 },
+      { x: 10, y: 25 },
+    ]);
   });
 });
