@@ -5,7 +5,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from reefvision.domain.enums import ANNOTATION_STATUSES, AnnotationStatus
 from reefvision.schemas.jobs import JobResponse
@@ -61,7 +67,10 @@ class DatasetVersionPreviewRequest(BaseModel):
 
     @field_validator("eligible_annotation_statuses")
     @classmethod
-    def normalize_statuses(cls, values: list[AnnotationStatus]) -> list[AnnotationStatus]:
+    def normalize_statuses(
+        cls,
+        values: list[AnnotationStatus],
+    ) -> list[AnnotationStatus]:
         if not values:
             raise ValueError("Choose at least one eligible annotation status")
         ordered = [status for status in ANNOTATION_STATUSES if status in values]
@@ -168,7 +177,9 @@ class DatasetVersionItemResponse(BaseModel):
     split: DatasetSplit
     group_key: str | None
     annotation_snapshot_json: list[dict[str, Any]]
-    mask_annotation_snapshot_json: list[dict[str, Any]] = Field(default_factory=list)
+    mask_annotation_snapshot_json: list[dict[str, Any]] = Field(
+        default_factory=list
+    )
     per_class_counts_json: dict[str, int]
     per_mask_class_counts_json: dict[str, int] = Field(default_factory=dict)
     annotation_count: int
