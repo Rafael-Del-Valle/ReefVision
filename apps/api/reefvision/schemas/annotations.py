@@ -86,7 +86,10 @@ class MaskAnnotationDraft(BaseModel):
 
     @field_validator("points")
     @classmethod
-    def require_three_unique_points(cls, value: list[PolygonPoint]) -> list[PolygonPoint]:
+    def require_three_unique_points(
+        cls,
+        value: list[PolygonPoint],
+    ) -> list[PolygonPoint]:
         unique = {(float(point.x), float(point.y)) for point in value}
         if len(unique) < 3:
             raise ValueError("Polygon masks require at least three unique points")
@@ -118,7 +121,10 @@ class AnnotationBatchSaveRequest(BaseModel):
 
     @field_validator("annotations")
     @classmethod
-    def unique_annotation_ids(cls, value: list[AnnotationDraft]) -> list[AnnotationDraft]:
+    def unique_annotation_ids(
+        cls,
+        value: list[AnnotationDraft],
+    ) -> list[AnnotationDraft]:
         ids = [item.id for item in value]
         if len(ids) != len(set(ids)):
             raise ValueError("Annotation ids must be unique within one save request")
@@ -147,7 +153,9 @@ class AnnotationBatchSaveRequest(BaseModel):
         active_ids = {item.id for item in self.mask_annotations}
         deleted_ids = set(self.deleted_mask_annotation_ids)
         if active_ids & deleted_ids:
-            raise ValueError("A mask annotation cannot be edited and deleted in the same save")
+            raise ValueError(
+                "A mask annotation cannot be edited and deleted in the same save"
+            )
         return self
 
 
