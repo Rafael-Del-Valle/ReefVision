@@ -13,7 +13,9 @@ from reefvision.schemas.annotations import AnnotationResponse, MaskAnnotationRes
 class AssistSessionCreateRequest(BaseModel):
     model_id: str = Field(min_length=1, max_length=36)
     device: str = Field(default="auto", min_length=1, max_length=20)
-    source_prediction_id: str | None = Field(default=None, min_length=1, max_length=36)
+    source_prediction_id: str | None = Field(
+        default=None, min_length=1, max_length=36
+    )
 
 
 class AssistPoint(BaseModel):
@@ -48,7 +50,12 @@ class AssistBoxRequest(BaseModel):
             x_min is not None
             and y_min is not None
             and y_max is not None
-            and not _box_has_positive_area(float(x_min), float(y_min), float(value), float(y_max))
+            and not _box_has_positive_area(
+                float(x_min),
+                float(y_min),
+                float(value),
+                float(y_max),
+            )
         ):
             raise ValueError("Bounding boxes must have positive width and height")
         return value
@@ -91,5 +98,10 @@ class AssistAcceptResponse(BaseModel):
     mask_annotation: MaskAnnotationResponse | None = None
 
 
-def _box_has_positive_area(x_min: float, y_min: float, x_max: float, y_max: float) -> bool:
+def _box_has_positive_area(
+    x_min: float,
+    y_min: float,
+    x_max: float,
+    y_max: float,
+) -> bool:
     return x_max > x_min and y_max > y_min
