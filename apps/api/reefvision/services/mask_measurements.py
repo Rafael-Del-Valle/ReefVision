@@ -123,7 +123,11 @@ class MaskMeasurementService:
         mask = self.masks.get(mask_annotation_id)
         if mask is None or mask.deleted_at is not None:
             raise NotFoundError("Mask annotation not found")
-        if None in (mask.x_min, mask.y_min, mask.x_max, mask.y_max):
+        x_min = mask.x_min
+        y_min = mask.y_min
+        x_max = mask.x_max
+        y_max = mask.y_max
+        if x_min is None or y_min is None or x_max is None or y_max is None:
             raise ValidationError("Mask annotation does not have valid bounds")
 
         polygon: list[Point] | None = None
@@ -165,10 +169,10 @@ class MaskMeasurementService:
             perimeter_pixels=perimeter,
             centroid_x=centroid_x,
             centroid_y=centroid_y,
-            x_min=float(mask.x_min),
-            y_min=float(mask.y_min),
-            x_max=float(mask.x_max),
-            y_max=float(mask.y_max),
+            x_min=float(x_min),
+            y_min=float(y_min),
+            x_max=float(x_max),
+            y_max=float(y_max),
             contained_box_count=contained_box_count,
             contained_box_density_per_1000_pixels=(contained_box_count / area * 1000.0),
         )

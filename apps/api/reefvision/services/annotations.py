@@ -409,21 +409,23 @@ class AnnotationService:
         )
         existing_masks_by_id = {annotation.id: annotation for annotation in existing_masks}
 
-        for draft in payload.mask_annotations:
-            if draft.label_class_id not in project_classes:
+        for mask_draft in payload.mask_annotations:
+            if mask_draft.label_class_id not in project_classes:
                 raise ValidationError("Mask class does not belong to this image's project")
-            polygon, x_min, y_min, x_max, y_max, area_pixels = self._validated_polygon(draft, image)
-            existing_mask = existing_masks_by_id.get(draft.id)
+            polygon, x_min, y_min, x_max, y_max, area_pixels = self._validated_polygon(
+                mask_draft, image
+            )
+            existing_mask = existing_masks_by_id.get(mask_draft.id)
             if existing_mask is None:
-                conflicting_mask = self.mask_annotations.get(draft.id)
+                conflicting_mask = self.mask_annotations.get(mask_draft.id)
                 if conflicting_mask is not None:
                     raise ValidationError(
                         "Mask annotations may only be saved to their source image"
                     )
                 mask_annotation = MaskAnnotation(
-                    id=draft.id,
+                    id=mask_draft.id,
                     image_id=image_id,
-                    label_class_id=draft.label_class_id,
+                    label_class_id=mask_draft.label_class_id,
                     geometry_kind="polygon",
                     polygon_json=polygon,
                     x_min=x_min,
@@ -450,7 +452,7 @@ class AnnotationService:
                 continue
 
             before = mask_annotation_snapshot(existing_mask)
-            class_changed = existing_mask.label_class_id != draft.label_class_id
+            class_changed = existing_mask.label_class_id != mask_draft.label_class_id
             geometry_changed = (
                 existing_mask.geometry_kind != "polygon"
                 or existing_mask.mask_path is not None
@@ -463,7 +465,7 @@ class AnnotationService:
             )
             restored = existing_mask.deleted_at is not None
             if class_changed or geometry_changed or restored:
-                existing_mask.label_class_id = draft.label_class_id
+                existing_mask.label_class_id = mask_draft.label_class_id
                 existing_mask.geometry_kind = "polygon"
                 existing_mask.mask_path = None
                 existing_mask.polygon_json = polygon
