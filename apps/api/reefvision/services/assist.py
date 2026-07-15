@@ -47,7 +47,12 @@ def _utc_now() -> datetime:
 
 
 class AssistService:
-    def __init__(self, session: Session, settings: Settings, runtime: AssistRuntime) -> None:
+    def __init__(
+        self,
+        session: Session,
+        settings: Settings,
+        runtime: AssistRuntime,
+    ) -> None:
         self.session = session
         self.settings = settings
         self.runtime = runtime
@@ -70,7 +75,11 @@ class AssistService:
             raise NotFoundError("Model not found")
         return model
 
-    def _source_prediction(self, image: ImageAsset, proposal_id: str) -> PredictionProposal:
+    def _source_prediction(
+        self,
+        image: ImageAsset,
+        proposal_id: str,
+    ) -> PredictionProposal:
         proposal = self.predictions.get(proposal_id)
         if proposal is None:
             raise NotFoundError("Prediction proposal not found")
@@ -115,15 +124,22 @@ class AssistService:
         )
 
     def create_session(
-        self, image_id: str, payload: AssistSessionCreateRequest
+        self,
+        image_id: str,
+        payload: AssistSessionCreateRequest,
     ) -> AssistSessionResponse:
         image = self._image(image_id)
         model = self._model(payload.model_id)
         if model.project_id != image.project_id or model.purpose != "assist":
-            raise ValidationError("Assist sessions require an assist model from the same project")
+            raise ValidationError(
+                "Assist sessions require an assist model from the same project"
+            )
         source_prediction_id = None
         if payload.source_prediction_id:
-            source_prediction_id = self._source_prediction(image, payload.source_prediction_id).id
+            source_prediction_id = self._source_prediction(
+                image,
+                payload.source_prediction_id,
+            ).id
         image_path = resolve_managed_project_path(self.settings, image.managed_path)
         model_path = resolve_managed_project_path(self.settings, model.managed_path)
         session_state = self.runtime.create_session(
@@ -142,12 +158,18 @@ class AssistService:
         )
         return self._response(session_state)
 
-    def brush(self, session_id: str, payload: AssistBrushRequest) -> AssistSessionResponse:
+    def brush(
+        self,
+        session_id: str,
+        payload: AssistBrushRequest,
+    ) -> AssistSessionResponse:
         image_id = self.runtime._session(session_id).image_id
         image = self._image(image_id)
         strokes = [
             BrushStroke(
-                points=[PixelPoint(x=point.x, y=point.y) for point in stroke.points],
+                points=[
+                    PixelPoint(x=point.x, y=point.y) for point in stroke.points
+                ],
                 brush_radius=float(payload.brush_radius),
             )
             for stroke in payload.strokes
@@ -161,7 +183,11 @@ class AssistService:
         )
         return self._response(state)
 
-    def box(self, session_id: str, payload: AssistBoxRequest) -> AssistSessionResponse:
+    def box(
+        self,
+        session_id: str,
+        payload: AssistBoxRequest,
+    ) -> AssistSessionResponse:
         if payload.x_max <= payload.x_min or payload.y_max <= payload.y_min:
             raise ValidationError("Bounding boxes must have positive width and height")
         state = self.runtime.apply_box_prompt(
@@ -178,14 +204,21 @@ class AssistService:
     def reset(self, session_id: str) -> AssistSessionResponse:
         return self._response(self.runtime.reset_session(session_id))
 
-    def accept(self, session_id: str, payload: AssistAcceptRequest) -> AssistAcceptResponse:
+    def accept(
+        self,
+        session_id: str,
+        payload: AssistAcceptRequest,
+    ) -> AssistAcceptResponse:
         session_state, box, provenance = self.runtime.accept_session(session_id)
         image = self._image(session_state.image_id)
         project = self.projects.get(image.project_id)
         if project is None:
             raise NotFoundError("Project not found")
-        if payload.label_class_id not in {label_class.id for label_class in project.label_classes}:
-            raise ValidationError("Annotation class does not belong to this image's project")
+        project_class_ids = {label_class.id for label_class in project.label_classes}
+        if payload.label_class_id not in project_class_ids:
+            raise ValidationError(
+                "Annotation class does not belong to this image's project"
+            )
         if session_state.candidate_mask_png_base64 is None:
             raise ValidationError("There is no current Smart Mask raster to accept")
 
@@ -195,7 +228,15 @@ class AssistService:
         annotation: Annotation | None = None
         mask_annotation: MaskAnnotation | None = None
         try:
-            relative_mask_path, destination_path, area_pixels = write_mask_png(
+            (
+                relative_mask_path,
+                destination_path,
+                area_pixels,
+                mask_x_min,
+                mask_y_min,
+                mask_x_max,
+                mask_y_max,
+            ) = write_mask_png(
                 self.settings,
                 project_storage_root=project.storage_root,
                 image_id=image.id,
@@ -209,6 +250,18 @@ class AssistService:
                 "assist_model_id": session_state.model_id,
                 "accepted_box_annotation_id": annotation_id,
                 "accepted_mask_annotation_id": mask_annotation_id,
+                "prompt_box": {
+                    "x_min": box.x_min,
+                    "y_min": box.y_min,
+                    "x_max": box.x_max,
+                    "y_max": box.y_max,
+                },
+                "mask_bounds": {
+                    "x_min": mask_x_min,
+                    "y_min": mask_y_min,
+                    "x_max": mask_x_max,
+                    "y_max": mask_y_max,
+                },
             }
             annotation = Annotation(
                 id=annotation_id,
@@ -230,14 +283,16 @@ class AssistService:
                 geometry_kind="raster_mask",
                 mask_path=relative_mask_path,
                 polygon_json=None,
-                x_min=box.x_min,
-                y_min=box.y_min,
-                x_max=box.x_max,
-                y_max=box.y_max,
+                x_min=mask_x_min,
+                y_min=mask_y_min,
+                x_max=mask_x_max,
+                y_max=mask_y_max,
                 area_pixels=area_pixels,
                 source_type="assist_mask",
                 provenance_json=shared_provenance,
                 status="verified",
+                created_by="local_user",
+                revision=1,
             )
             if session_state.source_prediction_id is not None:
                 self._attach_source_prediction(
