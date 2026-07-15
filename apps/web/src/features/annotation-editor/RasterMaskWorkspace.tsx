@@ -58,11 +58,16 @@ export function RasterMaskWorkspace({
 
   useEffect(() => {
     const firstClass = session?.label_classes.find((item) => item.is_active);
-    if (activeClassId === null && firstClass) setActiveClassId(firstClass.id);
+    if (activeClassId === null && firstClass) {
+      setActiveClassId(firstClass.id);
+    }
   }, [activeClassId, session?.label_classes]);
 
   useEffect(() => {
-    if (selectedMaskId && !rasterMasks.some((mask) => mask.id === selectedMaskId)) {
+    if (
+      selectedMaskId &&
+      !rasterMasks.some((mask) => mask.id === selectedMaskId)
+    ) {
       setSelectedMaskId(null);
     }
   }, [rasterMasks, selectedMaskId]);
@@ -113,7 +118,10 @@ export function RasterMaskWorkspace({
   const canErase = selectedMask !== null;
 
   return (
-    <div className="annotation-editor-shell" data-testid="raster-mask-workspace">
+    <div
+      className="annotation-editor-shell"
+      data-testid="raster-mask-workspace"
+    >
       <header className="annotation-editor-topbar">
         <div>
           <p className="eyebrow">Revision-safe raster mask editor</p>
@@ -123,13 +131,27 @@ export function RasterMaskWorkspace({
           </p>
         </div>
         <div className="annotation-editor-actions">
-          <button type="button" className="secondary" onClick={onReturnToMasks}>
+          <button
+            type="button"
+            className="secondary"
+            disabled={editMutation.isPending}
+            onClick={onReturnToMasks}
+          >
             Polygon workspace
           </button>
-          <button type="button" className="secondary" onClick={onReturnToBoxes}>
+          <button
+            type="button"
+            className="secondary"
+            disabled={editMutation.isPending}
+            onClick={onReturnToBoxes}
+          >
             Box editor
           </button>
-          <button type="button" onClick={onClose}>
+          <button
+            type="button"
+            disabled={editMutation.isPending}
+            onClick={onClose}
+          >
             Close editor
           </button>
         </div>
@@ -149,6 +171,7 @@ export function RasterMaskWorkspace({
               <button
                 type="button"
                 className={mode === "paint" ? "active" : "secondary"}
+                disabled={editMutation.isPending}
                 onClick={() => setMode("paint")}
               >
                 Paint
@@ -156,7 +179,7 @@ export function RasterMaskWorkspace({
               <button
                 type="button"
                 className={mode === "erase" ? "active" : "secondary"}
-                disabled={!canErase}
+                disabled={!canErase || editMutation.isPending}
                 onClick={() => setMode("erase")}
               >
                 Erase
@@ -169,7 +192,10 @@ export function RasterMaskWorkspace({
                 min="1"
                 max="128"
                 value={brushRadius}
-                onChange={(event) => setBrushRadius(Number(event.target.value))}
+                disabled={editMutation.isPending}
+                onChange={(event) =>
+                  setBrushRadius(Number(event.target.value))
+                }
               />
             </label>
             <p className="annotation-helper">
@@ -196,6 +222,7 @@ export function RasterMaskWorkspace({
                   <button
                     type="button"
                     className="annotation-class-button"
+                    disabled={editMutation.isPending}
                     onClick={() => setActiveClassId(labelClass.id)}
                   >
                     <span
@@ -220,6 +247,7 @@ export function RasterMaskWorkspace({
               <button
                 type="button"
                 className="secondary"
+                disabled={editMutation.isPending}
                 onClick={() => {
                   setSelectedMaskId(null);
                   setMode("paint");
@@ -238,13 +266,17 @@ export function RasterMaskWorkspace({
                   <button
                     type="button"
                     key={mask.id}
-                    className={selectedMaskId === mask.id ? "active" : "secondary"}
+                    className={
+                      selectedMaskId === mask.id ? "active" : "secondary"
+                    }
+                    disabled={editMutation.isPending}
                     onClick={() => {
                       setSelectedMaskId(mask.id);
                       setActiveClassId(mask.label_class_id);
                     }}
                   >
-                    {labelClass?.name ?? "Unassigned"} | r{mask.revision} | {mask.area_pixels ?? 0}px²
+                    {labelClass?.name ?? "Unassigned"} | r{mask.revision} |{" "}
+                    {mask.area_pixels ?? 0}px²
                   </button>
                 );
               })}
