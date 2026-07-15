@@ -57,9 +57,12 @@ def write_mask_png(
     destination_directory = project_root / "masks" / image_id
     destination_directory.mkdir(parents=True, exist_ok=True)
     destination = destination_directory / f"{mask_annotation_id}.png"
-    temporary = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
-    temporary.write_bytes(payload)
-    os.replace(temporary, destination)
+    temporary = destination_directory / f".{uuid4().hex}.tmp"
+    try:
+        temporary.write_bytes(payload)
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
 
     relative_path = destination.relative_to(settings.resolved_data_dir).as_posix()
     x_min, y_min, x_max, y_max = bounds
