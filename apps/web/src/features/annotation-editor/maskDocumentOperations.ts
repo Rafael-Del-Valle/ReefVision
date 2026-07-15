@@ -60,7 +60,7 @@ export function changeMaskAnnotationClass(
   return {
     ...document,
     maskAnnotations: document.maskAnnotations.map((mask) =>
-      selected.has(mask.id)
+      selected.has(mask.id) && mask.geometry_kind === "polygon"
         ? {
             ...mask,
             label_class_id: labelClassId,
