@@ -14,6 +14,7 @@ from reefvision.db.models.project import utc_now
 
 if TYPE_CHECKING:
     from reefvision.db.models.annotation import Annotation
+    from reefvision.db.models.mask_annotation import MaskAnnotation
     from reefvision.db.models.project import Project
 
 
@@ -48,3 +49,4 @@ class LabelClass(Base):
 
     project: Mapped[Project] = relationship(back_populates="label_classes")
     annotations: Mapped[list[Annotation]] = relationship(back_populates="label_class")
+    mask_annotations: Mapped[list[MaskAnnotation]] = relationship(back_populates="label_class")
