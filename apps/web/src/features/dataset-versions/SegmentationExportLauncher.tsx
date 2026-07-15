@@ -88,9 +88,8 @@ export function SegmentationExportLauncher() {
 
   const selectedVersion = useMemo(
     () =>
-      (versions.data?.find(
-        (version) => version.id === versionId,
-      ) as MaskAwareDatasetVersion | undefined) ?? null,
+      (versions.data?.find((version) => version.id === versionId) as
+        MaskAwareDatasetVersion | undefined) ?? null,
     [versionId, versions.data],
   );
   const selectedOption =
@@ -212,9 +211,7 @@ export function SegmentationExportLauncher() {
               <div className="version-preview-metrics">
                 <span>{selectedVersion.image_count} images</span>
                 <span>{selectedVersion.annotation_count} boxes</span>
-                <span>
-                  {selectedVersion.mask_annotation_count ?? 0} masks
-                </span>
+                <span>{selectedVersion.mask_annotation_count ?? 0} masks</span>
                 <span>Schema {selectedVersion.schema_version}</span>
               </div>
             )}
@@ -267,7 +264,9 @@ export function SegmentationExportLauncher() {
                 </p>
                 {job.data.status === "succeeded" && exportId && (
                   <div className="annotation-editor-inline-actions">
-                    <a href={datasetExportDownloadUrl(exportId)}>Download ZIP</a>
+                    <a href={datasetExportDownloadUrl(exportId)}>
+                      Download ZIP
+                    </a>
                     <a href={datasetExportManifestUrl(exportId)}>
                       Download manifest
                     </a>

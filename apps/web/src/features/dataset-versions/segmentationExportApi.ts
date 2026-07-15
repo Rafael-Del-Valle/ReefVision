@@ -2,9 +2,7 @@ import { getApiBaseUrl } from "../../runtime";
 import type { DatasetExportCreateResponse } from "../../api/client";
 
 export type DatasetExportFormat =
-  | "yolo_detection"
-  | "yolo_segmentation"
-  | "semantic_masks";
+  "yolo_detection" | "yolo_segmentation" | "semantic_masks";
 
 export async function createFormattedDatasetExport(
   versionId: string,

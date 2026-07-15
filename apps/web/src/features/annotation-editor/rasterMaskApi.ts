@@ -48,9 +48,7 @@ export async function editRasterMask(
   return (await response.json()) as RasterMaskEditResponse;
 }
 
-export function rasterMaskContentUrl(
-  mask: RasterMaskContentReference,
-): string {
+export function rasterMaskContentUrl(mask: RasterMaskContentReference): string {
   const revision = mask.revision ?? 0;
   return `${getApiBaseUrl()}/mask-annotations/${encodeURIComponent(mask.id)}/content?revision=${revision}`;
 }

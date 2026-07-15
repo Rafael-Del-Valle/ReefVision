@@ -9,11 +9,7 @@ import {
 } from "react";
 
 import { rasterMaskContentUrl } from "./rasterMaskApi";
-import type {
-  EditorMaskAnnotation,
-  EditorTool,
-  Point,
-} from "./types";
+import type { EditorMaskAnnotation, EditorTool, Point } from "./types";
 
 interface PolygonMaskLayerProps {
   width: number;
@@ -281,7 +277,7 @@ export function PolygonMaskLayer({
       const sourceMask =
         dragPreview?.id === vertexDrag.maskId
           ? dragPreview
-          : masks.find((mask) => mask.id === vertexDrag.maskId) ?? null;
+          : (masks.find((mask) => mask.id === vertexDrag.maskId) ?? null);
       if (!sourceMask?.points) {
         return;
       }
@@ -388,7 +384,8 @@ export function PolygonMaskLayer({
       }}
     >
       {masks.map((sourceMask) => {
-        const mask = dragPreview?.id === sourceMask.id ? dragPreview : sourceMask;
+        const mask =
+          dragPreview?.id === sourceMask.id ? dragPreview : sourceMask;
         if (
           mask.label_class_id !== null &&
           hiddenClasses.has(mask.label_class_id)
@@ -397,7 +394,8 @@ export function PolygonMaskLayer({
         }
         const selected = selectedMasks.has(mask.id);
         const color =
-          (mask.label_class_id && classColors[mask.label_class_id]) || "#2a9d8f";
+          (mask.label_class_id && classColors[mask.label_class_id]) ||
+          "#2a9d8f";
 
         if (mask.geometry_kind === "raster_mask" && mask.mask_path !== null) {
           return (

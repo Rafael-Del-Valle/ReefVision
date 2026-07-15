@@ -1,7 +1,4 @@
-import type {
-  AnnotationDocument,
-  EditorMaskAnnotation,
-} from "./types";
+import type { AnnotationDocument, EditorMaskAnnotation } from "./types";
 
 export function addMaskAnnotation(
   document: AnnotationDocument,

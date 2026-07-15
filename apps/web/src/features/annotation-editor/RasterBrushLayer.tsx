@@ -1,9 +1,4 @@
-import {
-  useMemo,
-  useRef,
-  useState,
-  type PointerEvent,
-} from "react";
+import { useMemo, useRef, useState, type PointerEvent } from "react";
 
 import type { RasterEditMode } from "./rasterMaskApi";
 import type { Point } from "./types";
@@ -91,9 +86,7 @@ export function RasterBrushLayer({
   }
 
   const previewFill =
-    mode === "paint"
-      ? "rgba(87, 204, 153, 0.35)"
-      : "rgba(244, 96, 108, 0.35)";
+    mode === "paint" ? "rgba(87, 204, 153, 0.35)" : "rgba(244, 96, 108, 0.35)";
   const previewStroke = mode === "paint" ? "#57cc99" : "#f4606c";
 
   return (

@@ -21,10 +21,7 @@ import {
   updateMaskAnnotation,
 } from "./maskDocumentOperations";
 import { PolygonMaskLayer } from "./PolygonMaskLayer";
-import type {
-  AnnotationDocument,
-  EditorMaskAnnotation,
-} from "./types";
+import type { AnnotationDocument, EditorMaskAnnotation } from "./types";
 
 interface MaskAnnotationWorkspaceProps {
   project: Project;
@@ -90,7 +87,8 @@ export function MaskAnnotationWorkspace({
         return true;
       })
       .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : "Mask save failed";
+        const message =
+          error instanceof Error ? error.message : "Mask save failed";
         dispatch({
           type: "saveFailed",
           message,
@@ -126,11 +124,15 @@ export function MaskAnnotationWorkspace({
   );
 
   function createMask(mask: EditorMaskAnnotation) {
-    commitDocument(addMaskAnnotation(stateRef.current.document, mask), [mask.id]);
+    commitDocument(addMaskAnnotation(stateRef.current.document, mask), [
+      mask.id,
+    ]);
   }
 
   function updateMask(mask: EditorMaskAnnotation) {
-    commitDocument(updateMaskAnnotation(stateRef.current.document, mask), [mask.id]);
+    commitDocument(updateMaskAnnotation(stateRef.current.document, mask), [
+      mask.id,
+    ]);
   }
 
   function deleteMasks(maskIds: string[]) {
@@ -182,7 +184,10 @@ export function MaskAnnotationWorkspace({
     const counts = new Map<string, number>();
     for (const mask of state.document.maskAnnotations) {
       if (mask.label_class_id) {
-        counts.set(mask.label_class_id, (counts.get(mask.label_class_id) ?? 0) + 1);
+        counts.set(
+          mask.label_class_id,
+          (counts.get(mask.label_class_id) ?? 0) + 1,
+        );
       }
     }
     return counts;
@@ -358,8 +363,8 @@ export function MaskAnnotationWorkspace({
               </div>
             </div>
             <p className="annotation-helper">
-              Add polygon vertices, then press Enter or click the first vertex to
-              close. Select a polygon to drag its vertices.
+              Add polygon vertices, then press Enter or click the first vertex
+              to close. Select a polygon to drag its vertices.
             </p>
             <button
               type="button"
@@ -389,7 +394,9 @@ export function MaskAnnotationWorkspace({
         <section className="annotation-canvas-panel">
           <div className="annotation-nav">
             <span>Masks use original source-image coordinates.</span>
-            <span>{isDirty(state) ? "Autosave pending" : "All changes synced"}</span>
+            <span>
+              {isDirty(state) ? "Autosave pending" : "All changes synced"}
+            </span>
           </div>
           <div
             className="annotation-canvas-frame"

@@ -119,8 +119,7 @@ function pointsEqual(
     return false;
   }
   return left.every(
-    (point, index) =>
-      point.x === right[index].x && point.y === right[index].y,
+    (point, index) => point.x === right[index].x && point.y === right[index].y,
   );
 }
 
@@ -164,10 +163,7 @@ function documentsEqual(
     left.annotation_status === right.annotation_status &&
     annotationsEqual(left.annotations, right.annotations) &&
     maskAnnotationsEqual(left.maskAnnotations, right.maskAnnotations) &&
-    arraysEqual(
-      left.deletedMaskAnnotationIds,
-      right.deletedMaskAnnotationIds,
-    )
+    arraysEqual(left.deletedMaskAnnotationIds, right.deletedMaskAnnotationIds)
   );
 }
 
@@ -304,10 +300,7 @@ export function annotationEditorReducer(
     case "setMaskSelection":
       return {
         ...state,
-        selectedMaskIds: validMaskSelection(
-          state.document,
-          action.selection,
-        ),
+        selectedMaskIds: validMaskSelection(state.document, action.selection),
       };
     case "setActiveClassId":
       return {
@@ -394,10 +387,7 @@ export function annotationEditorReducer(
         history: state.history.slice(0, -1),
         future: [state.document, ...state.future],
         selectedIds: validSelection(previous, state.selectedIds),
-        selectedMaskIds: validMaskSelection(
-          previous,
-          state.selectedMaskIds,
-        ),
+        selectedMaskIds: validMaskSelection(previous, state.selectedMaskIds),
         documentVersion: state.documentVersion + 1,
         saveState: state.saveState === "saving" ? "saving" : "dirty",
         saveMessage: null,
@@ -442,10 +432,7 @@ export function annotationEditorReducer(
         ),
         document,
         selectedIds: validSelection(document, state.selectedIds),
-        selectedMaskIds: validMaskSelection(
-          document,
-          state.selectedMaskIds,
-        ),
+        selectedMaskIds: validMaskSelection(document, state.selectedMaskIds),
         saveState: currentHasNewerChanges ? "dirty" : "saved",
         saveMessage: currentHasNewerChanges ? null : "Saved",
       };

@@ -193,9 +193,7 @@ export function RasterMaskWorkspace({
                 max="128"
                 value={brushRadius}
                 disabled={editMutation.isPending}
-                onChange={(event) =>
-                  setBrushRadius(Number(event.target.value))
-                }
+                onChange={(event) => setBrushRadius(Number(event.target.value))}
               />
             </label>
             <p className="annotation-helper">
