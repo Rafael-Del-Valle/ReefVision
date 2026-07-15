@@ -12,6 +12,11 @@ from reefvision.schemas.jobs import JobResponse
 
 DatasetSplit = Literal["train", "validation", "test", "unassigned"]
 DatasetSplitMethod = Literal["none", "manual", "random", "group_random"]
+DatasetExportFormat = Literal[
+    "yolo_detection",
+    "yolo_segmentation",
+    "semantic_masks",
+]
 DatasetVersionStatus = Literal[
     "validating",
     "creating",
@@ -84,6 +89,7 @@ class DatasetVersionPreviewClassCount(BaseModel):
     class_index: int
     class_name: str
     count: int
+    mask_count: int = 0
 
 
 class DatasetVersionPreviewImage(BaseModel):
@@ -92,6 +98,7 @@ class DatasetVersionPreviewImage(BaseModel):
     annotation_status: AnnotationStatus
     group_key: str | None
     annotation_count: int
+    mask_annotation_count: int = 0
     proposed_split: DatasetSplit
 
 
@@ -99,6 +106,7 @@ class DatasetVersionSplitSummary(BaseModel):
     split: DatasetSplit
     image_count: int
     annotation_count: int
+    mask_annotation_count: int = 0
 
 
 class DatasetVersionPreviewResponse(BaseModel):
@@ -106,6 +114,7 @@ class DatasetVersionPreviewResponse(BaseModel):
     resolved_split_method: DatasetSplitMethod
     eligible_image_count: int
     eligible_annotation_count: int
+    eligible_mask_annotation_count: int = 0
     missing_group_key_count: int
     warnings: list[str]
     split_summary: list[DatasetVersionSplitSummary]
@@ -136,6 +145,7 @@ class DatasetVersionResponse(BaseModel):
     manifest_sha256: str
     image_count: int
     annotation_count: int
+    mask_annotation_count: int = 0
     created_by: str
     reefvision_version: str
     schema_version: str
@@ -158,8 +168,11 @@ class DatasetVersionItemResponse(BaseModel):
     split: DatasetSplit
     group_key: str | None
     annotation_snapshot_json: list[dict[str, Any]]
+    mask_annotation_snapshot_json: list[dict[str, Any]] = Field(default_factory=list)
     per_class_counts_json: dict[str, int]
+    per_mask_class_counts_json: dict[str, int] = Field(default_factory=dict)
     annotation_count: int
+    mask_annotation_count: int = 0
     snapshot_sha256: str
     created_at: datetime
 
@@ -189,7 +202,7 @@ class DatasetVersionComparisonResponse(BaseModel):
 
 
 class DatasetExportCreateRequest(BaseModel):
-    format: Literal["yolo_detection"] = "yolo_detection"
+    format: DatasetExportFormat = "yolo_detection"
 
 
 class ExportResponse(BaseModel):
