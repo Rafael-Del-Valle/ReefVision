@@ -10,12 +10,13 @@ concurrency:
 
 jobs:
   backend:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[dev]"
       - run: python -m ruff check apps/api
@@ -23,14 +24,14 @@ jobs:
       - run: python -m mypy apps/api/reefvision
       - run: python -m pytest apps/api/reefvision/tests
       - name: Verify migrations
-        shell: pwsh
+        shell: bash
         run: |
-          $env:REEFVISION_DATA_DIR = "$env:RUNNER_TEMP/reefvision-migration-test"
+          export REEFVISION_DATA_DIR="$RUNNER_TEMP/reefvision-migration-test"
           alembic -c apps/api/alembic.ini upgrade head
           alembic -c apps/api/alembic.ini downgrade base
 
   frontend:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
