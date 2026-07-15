@@ -6,6 +6,7 @@ from collections import defaultdict
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -312,12 +313,14 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
                 "This dataset version does not contain mask annotations"
             )
 
+        export_id = str(uuid4())
         output_path, manifest_path, archive_path = dataset_export_relative_paths(
             project_storage_root=version.project.storage_root,
             version_number=version.version_number,
-            export_id=version.id + "-" + str(len(version.exports) + 1),
+            export_id=export_id,
         )
         export = ExportRecord(
+            id=export_id,
             project_id=version.project_id,
             dataset_version_id=version.id,
             format=request.format,
@@ -331,15 +334,6 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
             status="queued",
         )
         self.exports.add_export(export)
-        self.session.flush()
-        output_path, manifest_path, archive_path = dataset_export_relative_paths(
-            project_storage_root=version.project.storage_root,
-            version_number=version.version_number,
-            export_id=export.id,
-        )
-        export.output_path = output_path
-        export.manifest_path = manifest_path
-        export.archive_path = archive_path
         job = Job(
             project_id=version.project_id,
             job_type="export",
