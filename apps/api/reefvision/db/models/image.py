@@ -14,6 +14,7 @@ from reefvision.db.models.project import utc_now
 
 if TYPE_CHECKING:
     from reefvision.db.models.annotation import Annotation
+    from reefvision.db.models.mask_annotation import MaskAnnotation
     from reefvision.db.models.prediction_proposal import PredictionProposal
     from reefvision.db.models.project import Project
 
@@ -60,6 +61,9 @@ class ImageAsset(Base):
 
     project: Mapped[Project] = relationship(back_populates="images")
     annotations: Mapped[list[Annotation]] = relationship(
+        back_populates="image", cascade="all, delete-orphan"
+    )
+    mask_annotations: Mapped[list[MaskAnnotation]] = relationship(
         back_populates="image", cascade="all, delete-orphan"
     )
     prediction_proposals: Mapped[list[PredictionProposal]] = relationship(
