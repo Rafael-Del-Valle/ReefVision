@@ -164,3 +164,7 @@ Before merging the editable-mask branch:
 - Windows desktop package starts and serves persisted mask content
 - manual test confirms box, polygon, and raster workspace switching
 - manual test confirms detection, YOLO segmentation, and semantic-mask ZIP downloads
+
+## Current delivery state
+
+All July 20 implementation priorities listed above are present on the branch. The remaining work before merge is executable validation, correction of any failures uncovered by that validation, and manual desktop acceptance testing.
