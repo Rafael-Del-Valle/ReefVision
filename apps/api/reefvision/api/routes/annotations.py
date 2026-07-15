@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
 from reefvision.db.models import MaskAnnotation
+from reefvision.domain.errors import ValidationError
 from reefvision.schemas.annotations import (
     AnnotationBatchSaveRequest,
     AnnotationBatchSaveResponse,
@@ -24,6 +25,24 @@ DbSession = Annotated[Session, Depends(get_db_session)]
 def service(request: Request, session: Session) -> AnnotationService:
     settings: Settings = request.app.state.settings
     return AnnotationService(session, settings)
+
+
+def _stable_validation_error(exc: ValidationError) -> ValidationError:
+    """Preserve the established annotation API messages for existing clients."""
+
+    detail = str(exc)
+    aliases = {
+        "Annotation boxes must have positive area": (
+            "Annotation boxes must have positive width and height"
+        ),
+        "Annotation coordinates cannot be negative": (
+            "Annotation coordinates cannot fall outside the image"
+        ),
+        "Annotation coordinates cannot exceed image bounds": (
+            "Annotation coordinates cannot fall outside the image"
+        ),
+    }
+    return ValidationError(aliases.get(detail, detail))
 
 
 @router.get(
@@ -48,7 +67,10 @@ def save_annotations(
     request: Request,
     session: DbSession,
 ) -> AnnotationBatchSaveResponse:
-    return service(request, session).save_annotations(image_id, payload)
+    try:
+        return service(request, session).save_annotations(image_id, payload)
+    except ValidationError as exc:
+        raise _stable_validation_error(exc) from exc
 
 
 @router.get(
