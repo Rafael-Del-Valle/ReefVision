@@ -58,7 +58,8 @@ Implemented:
 6. deterministic semantic overlap ordering
 7. raster checksum verification at export time
 8. selectable detection, polygon-segmentation, and semantic-mask exports in the UI
-9. unchanged YOLO detection export behavior
+9. stable export IDs and paths assigned before the background job is queued
+10. unchanged YOLO detection export behavior
 
 Next:
 
