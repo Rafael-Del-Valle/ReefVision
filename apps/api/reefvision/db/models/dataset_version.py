@@ -64,6 +64,7 @@ class DatasetVersion(Base):
     manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     image_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     annotation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    mask_annotation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_by: Mapped[str] = mapped_column(String(100), nullable=False, default="local_user")
     reefvision_version: Mapped[str] = mapped_column(String(30), nullable=False)
     schema_version: Mapped[str] = mapped_column(String(20), nullable=False)
