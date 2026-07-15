@@ -12,6 +12,7 @@ import {
   initialAnnotationEditorState,
   isDirty,
   toAnnotationSavePayload,
+  type ExtendedAnnotationSavePayload,
 } from "./annotationEditorReducer";
 import {
   addMaskAnnotation,
@@ -45,6 +46,7 @@ export function MaskAnnotationWorkspace({
   );
   const stateRef = useRef(state);
   const savePromiseRef = useRef<Promise<boolean> | null>(null);
+  const loadedImageIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     stateRef.current = state;
@@ -57,60 +59,51 @@ export function MaskAnnotationWorkspace({
   });
 
   useEffect(() => {
-    if (sessionQuery.data) {
+    if (sessionQuery.data && loadedImageIdRef.current !== imageId) {
       dispatch({ type: "loadSession", session: sessionQuery.data });
+      loadedImageIdRef.current = imageId;
     }
-  }, [sessionQuery.data]);
+  }, [imageId, sessionQuery.data]);
 
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      const snapshot = stateRef.current;
-      const sentVersion = snapshot.documentVersion;
-      dispatch({ type: "saveStarted", sentVersion });
-      const response = await saveAnnotations(
-        imageId,
-        toAnnotationSavePayload(snapshot),
-      );
-      dispatch({ type: "saveSucceeded", sentVersion, response });
-      queryClient.setQueryData(["annotation-session", imageId], (current) => ({
-        ...(current as object),
-        ...response,
-        label_classes: sessionQuery.data?.label_classes ?? [],
-        previous_image_id: sessionQuery.data?.previous_image_id ?? null,
-        next_image_id: sessionQuery.data?.next_image_id ?? null,
-      }));
-      await queryClient.invalidateQueries({
-        queryKey: ["project-images", project.id],
-      });
-      return true;
-    },
-    onError: (error) => {
-      const message = error instanceof Error ? error.message : "Mask save failed";
-      dispatch({
-        type: "saveFailed",
-        message,
-        conflict: message.toLowerCase().includes("revision conflict"),
-      });
-    },
+  const { mutateAsync: persistDocument, isPending: savePending } = useMutation({
+    mutationFn: (payload: ExtendedAnnotationSavePayload) =>
+      saveAnnotations(imageId, payload),
   });
 
   const saveNow = useCallback(async (): Promise<boolean> => {
-    if (!isDirty(stateRef.current)) {
+    const snapshot = stateRef.current;
+    if (!isDirty(snapshot)) {
       return true;
     }
     if (savePromiseRef.current) {
       return savePromiseRef.current;
     }
-    const request = saveMutation
-      .mutateAsync()
-      .then(() => true)
-      .catch(() => false)
+
+    const sentVersion = snapshot.documentVersion;
+    dispatch({ type: "saveStarted", sentVersion });
+    const request = persistDocument(toAnnotationSavePayload(snapshot))
+      .then(async (response) => {
+        dispatch({ type: "saveSucceeded", sentVersion, response });
+        await queryClient.invalidateQueries({
+          queryKey: ["project-images", project.id],
+        });
+        return true;
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : "Mask save failed";
+        dispatch({
+          type: "saveFailed",
+          message,
+          conflict: message.toLowerCase().includes("revision conflict"),
+        });
+        return false;
+      })
       .finally(() => {
         savePromiseRef.current = null;
       });
     savePromiseRef.current = request;
     return request;
-  }, [saveMutation]);
+  }, [persistDocument, project.id, queryClient]);
 
   useEffect(() => {
     if (!isDirty(state) || state.saveState === "saving") {
@@ -127,11 +120,7 @@ export function MaskAnnotationWorkspace({
       document: AnnotationDocument,
       maskSelection = stateRef.current.selectedMaskIds,
     ) => {
-      dispatch({
-        type: "commitDocument",
-        document,
-        maskSelection,
-      });
+      dispatch({ type: "commitDocument", document, maskSelection });
     },
     [],
   );
@@ -152,17 +141,15 @@ export function MaskAnnotationWorkspace({
   }
 
   function applyClass(labelClassId: string) {
-    if (state.selectedMaskIds.length === 0) {
-      dispatch({ type: "setActiveClassId", classId: labelClassId });
-      return;
+    if (state.selectedMaskIds.length > 0) {
+      commitDocument(
+        changeMaskAnnotationClass(
+          state.document,
+          state.selectedMaskIds,
+          labelClassId,
+        ),
+      );
     }
-    commitDocument(
-      changeMaskAnnotationClass(
-        state.document,
-        state.selectedMaskIds,
-        labelClassId,
-      ),
-    );
     dispatch({ type: "setActiveClassId", classId: labelClassId });
   }
 
@@ -171,6 +158,9 @@ export function MaskAnnotationWorkspace({
     if (!saved && !window.confirm("Discard unsaved mask edits?")) {
       return;
     }
+    await queryClient.invalidateQueries({
+      queryKey: ["annotation-session", imageId],
+    });
     if (destination === "boxes") {
       onReturnToBoxes();
     } else {
@@ -190,11 +180,11 @@ export function MaskAnnotationWorkspace({
   );
   const maskCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    state.document.maskAnnotations.forEach((mask) => {
+    for (const mask of state.document.maskAnnotations) {
       if (mask.label_class_id) {
         counts.set(mask.label_class_id, (counts.get(mask.label_class_id) ?? 0) + 1);
       }
-    });
+    }
     return counts;
   }, [state.document.maskAnnotations]);
 
@@ -208,7 +198,7 @@ export function MaskAnnotationWorkspace({
               ? sessionQuery.error.message
               : "Preparing masks and image data..."}
           </p>
-          <button type="button" onClick={() => void leaveWorkspace("close")}>
+          <button type="button" onClick={() => onClose()}>
             Close
           </button>
         </div>
@@ -237,22 +227,22 @@ export function MaskAnnotationWorkspace({
             className={state.tool === "select" ? "active" : "secondary"}
             onClick={() => dispatch({ type: "setTool", tool: "select" })}
           >
-            Select vertices (V)
+            Select vertices
           </button>
           <button
             type="button"
             className={state.tool === "polygon" ? "active" : "secondary"}
             onClick={() => dispatch({ type: "setTool", tool: "polygon" })}
           >
-            Polygon (P)
+            Polygon
           </button>
           <button
             type="button"
             className="secondary"
-            disabled={!isDirty(state) || saveMutation.isPending}
+            disabled={!isDirty(state) || savePending}
             onClick={() => void saveNow()}
           >
-            {saveMutation.isPending ? "Saving..." : "Save now"}
+            {savePending ? "Saving..." : "Save now"}
           </button>
           <button
             type="button"
@@ -368,8 +358,8 @@ export function MaskAnnotationWorkspace({
               </div>
             </div>
             <p className="annotation-helper">
-              Click to add polygon vertices. Press Enter or click the first vertex
-              to close. Drag selected vertices to refine the outline.
+              Add polygon vertices, then press Enter or click the first vertex to
+              close. Select a polygon to drag its vertices.
             </p>
             <button
               type="button"
@@ -398,9 +388,7 @@ export function MaskAnnotationWorkspace({
 
         <section className="annotation-canvas-panel">
           <div className="annotation-nav">
-            <span>
-              Polygon masks are saved in original source-image coordinates.
-            </span>
+            <span>Masks use original source-image coordinates.</span>
             <span>{isDirty(state) ? "Autosave pending" : "All changes synced"}</span>
           </div>
           <div
