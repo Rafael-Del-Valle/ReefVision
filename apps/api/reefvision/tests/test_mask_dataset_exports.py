@@ -136,25 +136,30 @@ def test_yolo_segmentation_export_uses_frozen_polygon_snapshot(
         points=[(8, 6), (40, 6), (40, 30), (8, 30)],
         base_revision=0,
     )
-    version = create_version(client, project["id"], name="YOLO segment snapshot")
+    version = create_version(
+        client,
+        project["id"],
+        name="YOLO segment snapshot",
+    )
     export = _run_export(
         client,
         version_id=version["id"],
         export_format="yolo_segmentation",
     )
 
-    output_root = test_settings.resolved_data_dir / Path(str(export["output_path"]))
+    output_root = test_settings.resolved_data_dir / Path(
+        str(export["output_path"])
+    )
     label_files = sorted(output_root.glob("labels/*/*.txt"))
     assert len(label_files) == 1
     assert label_files[0].read_text(encoding="utf-8") == (
         "0 0.10000000 0.10000000 0.50000000 0.10000000 "
         "0.50000000 0.50000000 0.10000000 0.50000000"
     )
-    manifest = json.loads(
-        (test_settings.resolved_data_dir / Path(str(export["manifest_path"]))).read_text(
-            encoding="utf-8"
-        )
+    manifest_file = test_settings.resolved_data_dir / Path(
+        str(export["manifest_path"])
     )
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
     assert manifest["format"] == "yolo_segmentation"
     assert manifest["polygon_count"] == 1
 
@@ -188,7 +193,9 @@ def test_semantic_export_writes_indexed_class_pixels(
         export_format="semantic_masks",
     )
 
-    output_root = test_settings.resolved_data_dir / Path(str(export["output_path"]))
+    output_root = test_settings.resolved_data_dir / Path(
+        str(export["output_path"])
+    )
     mask_files = sorted(output_root.glob("masks/*/*.png"))
     assert len(mask_files) == 1
     with Image.open(mask_files[0]) as semantic:
