@@ -2,17 +2,20 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
+from reefvision.db.models import MaskAnnotation
 from reefvision.schemas.annotations import (
     AnnotationBatchSaveRequest,
     AnnotationBatchSaveResponse,
     AnnotationSessionResponse,
 )
 from reefvision.services.annotations import AnnotationService
+from reefvision.storage.projects import resolve_managed_project_path
 
 router = APIRouter(tags=["annotations"])
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -38,3 +41,33 @@ def save_annotations(
     session: DbSession,
 ) -> AnnotationBatchSaveResponse:
     return service(request, session).save_annotations(image_id, payload)
+
+
+@router.get("/mask-annotations/{mask_annotation_id}/content", response_class=FileResponse)
+def mask_annotation_content(
+    mask_annotation_id: str,
+    request: Request,
+    session: DbSession,
+) -> FileResponse:
+    annotation = session.get(MaskAnnotation, mask_annotation_id)
+    if annotation is None or annotation.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mask annotation not found")
+    if annotation.mask_path is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This polygon mask has no raster content file",
+        )
+    settings: Settings = request.app.state.settings
+    path = resolve_managed_project_path(settings, annotation.mask_path)
+    if not path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="The mask content file is missing from managed storage",
+        )
+    return FileResponse(
+        path,
+        media_type="image/png",
+        filename=f"{annotation.id}.png",
+        content_disposition_type="inline",
+        headers={"Cache-Control": "private, max-age=31536000, immutable"},
+    )
