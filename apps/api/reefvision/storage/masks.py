@@ -5,8 +5,11 @@ from __future__ import annotations
 import base64
 import binascii
 import os
+from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
+
+from PIL import Image, UnidentifiedImageError
 
 from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
@@ -22,8 +25,10 @@ def write_mask_png(
     image_id: str,
     mask_annotation_id: str,
     png_base64: str,
-) -> tuple[str, Path]:
-    """Atomically write a base64 PNG beneath the managed project directory."""
+    expected_width: int,
+    expected_height: int,
+) -> tuple[str, Path, int]:
+    """Validate and atomically write a base64 PNG beneath the managed project directory."""
 
     try:
         payload = base64.b64decode(png_base64, validate=True)
@@ -31,6 +36,19 @@ def write_mask_png(
         raise ValidationError("Assist mask output is not valid base64 data") from exc
     if not payload.startswith(PNG_SIGNATURE):
         raise ValidationError("Assist mask output is not a PNG image")
+
+    try:
+        with Image.open(BytesIO(payload)) as image:
+            image.load()
+            if image.size != (expected_width, expected_height):
+                raise ValidationError("Assist mask dimensions do not match the source image")
+            grayscale = image.convert("L")
+            histogram = grayscale.histogram()
+            area_pixels = int(sum(histogram[1:]))
+    except UnidentifiedImageError as exc:
+        raise ValidationError("Assist mask output is not a readable PNG image") from exc
+    if area_pixels <= 0:
+        raise ValidationError("Assist mask output is empty")
 
     project_root = resolve_managed_project_path(settings, project_storage_root)
     destination_directory = project_root / "masks" / image_id
@@ -41,4 +59,4 @@ def write_mask_png(
     os.replace(temporary, destination)
 
     relative_path = destination.relative_to(settings.resolved_data_dir).as_posix()
-    return relative_path, destination
+    return relative_path, destination, area_pixels
