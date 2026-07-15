@@ -28,7 +28,7 @@ def write_mask_png(
     expected_width: int,
     expected_height: int,
 ) -> tuple[str, Path, int]:
-    """Validate and atomically write a base64 PNG beneath the managed project directory."""
+    """Validate and atomically store a PNG beneath the managed project directory."""
 
     try:
         payload = base64.b64decode(png_base64, validate=True)
@@ -41,11 +41,13 @@ def write_mask_png(
         with Image.open(BytesIO(payload)) as image:
             image.load()
             if image.size != (expected_width, expected_height):
-                raise ValidationError("Assist mask dimensions do not match the source image")
+                raise ValidationError(
+                    "Assist mask dimensions do not match the source image"
+                )
             grayscale = image.convert("L")
             histogram = grayscale.histogram()
             area_pixels = int(sum(histogram[1:]))
-    except UnidentifiedImageError as exc:
+    except (OSError, UnidentifiedImageError) as exc:
         raise ValidationError("Assist mask output is not a readable PNG image") from exc
     if area_pixels <= 0:
         raise ValidationError("Assist mask output is empty")
