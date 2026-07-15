@@ -1,6 +1,8 @@
 """Annotation editor endpoints."""
 
-from typing import Annotated
+from collections import Counter
+from collections.abc import Iterable
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse
@@ -8,11 +10,12 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
-from reefvision.db.models import MaskAnnotation
+from reefvision.db.models import MaskAnnotation, Project
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.annotations import (
     AnnotationBatchSaveRequest,
     AnnotationBatchSaveResponse,
+    AnnotationCountResponse,
     AnnotationSessionResponse,
 )
 from reefvision.services.annotations import AnnotationService
@@ -45,6 +48,60 @@ def _stable_validation_error(exc: ValidationError) -> ValidationError:
     return ValidationError(aliases.get(detail, detail))
 
 
+def _ordered_counts(
+    label_classes: Iterable[Any],
+    annotations: Iterable[Any],
+) -> list[AnnotationCountResponse]:
+    counts = Counter(
+        annotation.label_class_id
+        for annotation in annotations
+        if annotation.label_class_id is not None
+    )
+    ordered_classes = sorted(
+        label_classes,
+        key=lambda item: (item.display_order, item.class_index, item.name.casefold()),
+    )
+    return [
+        AnnotationCountResponse(
+            label_class_id=label_class.id,
+            count=counts.get(label_class.id, 0),
+        )
+        for label_class in ordered_classes
+    ]
+
+
+def _normalize_session_counts(
+    response: AnnotationSessionResponse,
+) -> AnnotationSessionResponse:
+    response.counts_by_class = _ordered_counts(
+        response.label_classes,
+        response.annotations,
+    )
+    response.mask_counts_by_class = _ordered_counts(
+        response.label_classes,
+        response.mask_annotations,
+    )
+    return response
+
+
+def _normalize_save_counts(
+    response: AnnotationBatchSaveResponse,
+    session: Session,
+) -> AnnotationBatchSaveResponse:
+    project = session.get(Project, response.image.project_id)
+    if project is None:
+        return response
+    response.counts_by_class = _ordered_counts(
+        project.label_classes,
+        response.annotations,
+    )
+    response.mask_counts_by_class = _ordered_counts(
+        project.label_classes,
+        response.mask_annotations,
+    )
+    return response
+
+
 @router.get(
     "/images/{image_id}/annotations",
     response_model=AnnotationSessionResponse,
@@ -54,7 +111,7 @@ def get_annotation_session(
     request: Request,
     session: DbSession,
 ) -> AnnotationSessionResponse:
-    return service(request, session).get_session(image_id)
+    return _normalize_session_counts(service(request, session).get_session(image_id))
 
 
 @router.put(
@@ -68,9 +125,10 @@ def save_annotations(
     session: DbSession,
 ) -> AnnotationBatchSaveResponse:
     try:
-        return service(request, session).save_annotations(image_id, payload)
+        response = service(request, session).save_annotations(image_id, payload)
     except ValidationError as exc:
         raise _stable_validation_error(exc) from exc
+    return _normalize_save_counts(response, session)
 
 
 @router.get(
