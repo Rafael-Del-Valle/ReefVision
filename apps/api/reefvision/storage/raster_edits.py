@@ -116,7 +116,9 @@ def write_raster_mask_revision(
     destination_directory = project_root / "masks" / image_id
     destination_directory.mkdir(parents=True, exist_ok=True)
     destination = destination_directory / f"{mask_annotation_id}-r{revision}.png"
-    temporary = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
+    # Keep the temporary basename short enough to stay below the legacy Windows
+    # MAX_PATH limit even inside deeply nested pytest temporary directories.
+    temporary = destination_directory / f".rv-{uuid4().hex[:8]}.tmp"
     try:
         binary.save(temporary, format="PNG", optimize=True)
         _publish_revision_exclusively(temporary, destination)
