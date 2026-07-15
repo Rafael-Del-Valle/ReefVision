@@ -73,7 +73,7 @@ def test_raster_brush_revisions_preserve_frozen_semantic_exports(
     assert first_path.is_file()
     first_bytes = first_path.read_bytes()
 
-    update_image(
+    updated_image = update_image(
         client,
         image_id,
         group_key="fragment-1",
@@ -86,7 +86,7 @@ def test_raster_brush_revisions_preserve_frozen_semantic_exports(
         client,
         image_id=image_id,
         class_id=class_id,
-        base_revision=1,
+        base_revision=int(updated_image["annotation_revision"]),
         x=45,
         y=30,
         mask_id=mask_id,
