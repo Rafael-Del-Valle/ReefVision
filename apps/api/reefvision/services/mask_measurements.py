@@ -8,7 +8,6 @@ from PIL import Image, UnidentifiedImageError
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.db.models import MaskAnnotation
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.repositories.annotations import AnnotationRepository
 from reefvision.repositories.mask_annotations import MaskAnnotationRepository
@@ -74,7 +73,9 @@ def _polygon_measurements(points: list[Point]) -> tuple[int, float, float, float
     return max(1, round(area)), perimeter, centroid_x, centroid_y
 
 
-def _raster_measurements(path: str) -> tuple[int, float, float, float, set[tuple[int, int]]]:
+def _raster_measurements(
+    path: str,
+) -> tuple[int, float, float, float, set[tuple[int, int]]]:
     try:
         with Image.open(path) as image:
             grayscale = image.convert("L")
@@ -126,14 +127,16 @@ class MaskMeasurementService:
         if mask.geometry_kind == "polygon":
             if not mask.polygon_json or len(mask.polygon_json) < 3:
                 raise ValidationError("Polygon mask does not have valid geometry")
-            polygon = [(float(point[0]), float(point[1])) for point in mask.polygon_json]
+            polygon = [
+                (float(point[0]), float(point[1])) for point in mask.polygon_json
+            ]
             area, perimeter, centroid_x, centroid_y = _polygon_measurements(polygon)
         elif mask.geometry_kind == "raster_mask":
             if not mask.mask_path:
                 raise ValidationError("Raster mask content is missing")
             managed_path = resolve_managed_project_path(self.settings, mask.mask_path)
-            area, perimeter, centroid_x, centroid_y, raster_active = _raster_measurements(
-                str(managed_path)
+            area, perimeter, centroid_x, centroid_y, raster_active = (
+                _raster_measurements(str(managed_path))
             )
         else:
             raise ValidationError(
