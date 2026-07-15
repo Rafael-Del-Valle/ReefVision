@@ -50,6 +50,7 @@ export interface EditorMaskAnnotation {
   y_max: number | null;
   area_pixels: number | null;
   source_type: string;
+  persisted: boolean;
 }
 
 export interface AnnotationDocument {
@@ -116,5 +117,6 @@ export function toEditorMaskAnnotation(
     y_max: annotation.y_max,
     area_pixels: annotation.area_pixels,
     source_type: annotation.source_type,
+    persisted: true,
   };
 }
