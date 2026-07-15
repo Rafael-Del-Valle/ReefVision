@@ -3,15 +3,24 @@
 from __future__ import annotations
 
 from collections import Counter
+from math import isclose
 
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.db.models import Annotation, AnnotationEvent, ImageAsset, Project
+from reefvision.db.models import (
+    Annotation,
+    AnnotationEvent,
+    ImageAsset,
+    MaskAnnotation,
+    MaskAnnotationEvent,
+    Project,
+)
 from reefvision.db.models.project import utc_now
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.repositories.annotations import AnnotationRepository
 from reefvision.repositories.images import ImageRepository
+from reefvision.repositories.mask_annotations import MaskAnnotationRepository
 from reefvision.repositories.projects import ProjectRepository
 from reefvision.schemas.annotations import (
     AnnotationBatchSaveRequest,
@@ -20,9 +29,13 @@ from reefvision.schemas.annotations import (
     AnnotationDraft,
     AnnotationResponse,
     AnnotationSessionResponse,
+    MaskAnnotationDraft,
+    MaskAnnotationResponse,
 )
 from reefvision.schemas.images import ImageResponse
 from reefvision.schemas.projects import LabelClassResponse
+
+Point = tuple[float, float]
 
 
 def annotation_snapshot(annotation: Annotation) -> dict[str, object | None]:
@@ -44,11 +57,95 @@ def annotation_snapshot(annotation: Annotation) -> dict[str, object | None]:
     }
 
 
+def mask_annotation_snapshot(annotation: MaskAnnotation) -> dict[str, object | None]:
+    return {
+        "id": annotation.id,
+        "image_id": annotation.image_id,
+        "label_class_id": annotation.label_class_id,
+        "geometry_kind": annotation.geometry_kind,
+        "mask_path": annotation.mask_path,
+        "polygon_json": annotation.polygon_json,
+        "x_min": annotation.x_min,
+        "y_min": annotation.y_min,
+        "x_max": annotation.x_max,
+        "y_max": annotation.y_max,
+        "area_pixels": annotation.area_pixels,
+        "source_type": annotation.source_type,
+        "provenance_json": annotation.provenance_json,
+        "status": annotation.status,
+        "created_by": annotation.created_by,
+        "deleted_at": annotation.deleted_at.isoformat() if annotation.deleted_at else None,
+        "revision": annotation.revision,
+    }
+
+
+def _cross(first: Point, second: Point, third: Point) -> float:
+    return (second[0] - first[0]) * (third[1] - first[1]) - (
+        second[1] - first[1]
+    ) * (third[0] - first[0])
+
+
+def _point_on_segment(first: Point, second: Point, point: Point) -> bool:
+    return (
+        min(first[0], second[0]) <= point[0] <= max(first[0], second[0])
+        and min(first[1], second[1]) <= point[1] <= max(first[1], second[1])
+        and isclose(_cross(first, second, point), 0.0, abs_tol=1e-9)
+    )
+
+
+def _segments_intersect(first_a: Point, first_b: Point, second_a: Point, second_b: Point) -> bool:
+    cross_1 = _cross(first_a, first_b, second_a)
+    cross_2 = _cross(first_a, first_b, second_b)
+    cross_3 = _cross(second_a, second_b, first_a)
+    cross_4 = _cross(second_a, second_b, first_b)
+
+    if (cross_1 > 0 > cross_2 or cross_1 < 0 < cross_2) and (
+        cross_3 > 0 > cross_4 or cross_3 < 0 < cross_4
+    ):
+        return True
+    return (
+        (isclose(cross_1, 0.0, abs_tol=1e-9) and _point_on_segment(first_a, first_b, second_a))
+        or (isclose(cross_2, 0.0, abs_tol=1e-9) and _point_on_segment(first_a, first_b, second_b))
+        or (isclose(cross_3, 0.0, abs_tol=1e-9) and _point_on_segment(second_a, second_b, first_a))
+        or (isclose(cross_4, 0.0, abs_tol=1e-9) and _point_on_segment(second_a, second_b, first_b))
+    )
+
+
+def _polygon_self_intersects(points: list[Point]) -> bool:
+    edge_count = len(points)
+    for first_index in range(edge_count):
+        first_a = points[first_index]
+        first_b = points[(first_index + 1) % edge_count]
+        for second_index in range(first_index + 1, edge_count):
+            if second_index == first_index:
+                continue
+            if second_index == (first_index + 1) % edge_count:
+                continue
+            if first_index == (second_index + 1) % edge_count:
+                continue
+            second_a = points[second_index]
+            second_b = points[(second_index + 1) % edge_count]
+            if _segments_intersect(first_a, first_b, second_a, second_b):
+                return True
+    return False
+
+
+def _polygon_area(points: list[Point]) -> float:
+    return abs(
+        sum(
+            points[index][0] * points[(index + 1) % len(points)][1]
+            - points[(index + 1) % len(points)][0] * points[index][1]
+            for index in range(len(points))
+        )
+    ) / 2.0
+
+
 class AnnotationService:
     def __init__(self, session: Session, settings: Settings) -> None:
         self.session = session
         self.settings = settings
         self.annotations = AnnotationRepository(session)
+        self.mask_annotations = MaskAnnotationRepository(session)
         self.images = ImageRepository(session)
         self.projects = ProjectRepository(session)
 
@@ -68,11 +165,11 @@ class AnnotationService:
         return self.images.neighbor_ids_for_image(image)
 
     def _counts_by_class(
-        self, project: Project, annotations: list[Annotation]
+        self,
+        project: Project,
+        label_class_ids: list[str],
     ) -> list[AnnotationCountResponse]:
-        counts = Counter(
-            annotation.label_class_id for annotation in annotations if annotation.deleted_at is None
-        )
+        counts = Counter(label_class_ids)
         return [
             AnnotationCountResponse(
                 label_class_id=label_class.id,
@@ -85,6 +182,7 @@ class AnnotationService:
         image = self._image(image_id)
         project = self._project_with_classes(image)
         annotations = self.annotations.list_for_image(image_id)
+        mask_annotations = self.mask_annotations.list_for_image(image_id)
         previous_image_id, next_image_id = self._neighbor_ids(image)
         return AnnotationSessionResponse(
             image=ImageResponse.model_validate(image),
@@ -95,7 +193,22 @@ class AnnotationService:
             annotations=[
                 AnnotationResponse.model_validate(annotation) for annotation in annotations
             ],
-            counts_by_class=self._counts_by_class(project, annotations),
+            mask_annotations=[
+                MaskAnnotationResponse.model_validate(annotation)
+                for annotation in mask_annotations
+            ],
+            counts_by_class=self._counts_by_class(
+                project,
+                [annotation.label_class_id for annotation in annotations],
+            ),
+            mask_counts_by_class=self._counts_by_class(
+                project,
+                [
+                    annotation.label_class_id
+                    for annotation in mask_annotations
+                    if annotation.label_class_id is not None
+                ],
+            ),
             previous_image_id=previous_image_id,
             next_image_id=next_image_id,
         )
@@ -108,6 +221,39 @@ class AnnotationService:
         if annotation.x_max > image.width_px or annotation.y_max > image.height_px:
             raise ValidationError("Bounding boxes cannot extend outside the image bounds")
 
+    def _validated_polygon(
+        self,
+        annotation: MaskAnnotationDraft,
+        image: ImageAsset,
+    ) -> tuple[list[list[float]], float, float, float, float, int]:
+        points: list[Point] = [(float(point.x), float(point.y)) for point in annotation.points]
+        if len(points) > 3 and points[0] == points[-1]:
+            points = points[:-1]
+        if len(set(points)) < 3:
+            raise ValidationError("Polygon masks require at least three unique points")
+        if any(points[index] == points[(index + 1) % len(points)] for index in range(len(points))):
+            raise ValidationError("Polygon masks cannot contain consecutive duplicate points")
+        if any(
+            x < 0 or y < 0 or x > image.width_px or y > image.height_px
+            for x, y in points
+        ):
+            raise ValidationError("Polygon masks cannot extend outside the image bounds")
+        if _polygon_self_intersects(points):
+            raise ValidationError("Polygon masks cannot self-intersect")
+        area = _polygon_area(points)
+        if area < 1.0:
+            raise ValidationError("Polygon masks must cover at least one square pixel")
+        x_values = [point[0] for point in points]
+        y_values = [point[1] for point in points]
+        return (
+            [[x, y] for x, y in points],
+            min(x_values),
+            min(y_values),
+            max(x_values),
+            max(y_values),
+            max(1, round(area)),
+        )
+
     def _event(
         self,
         *,
@@ -119,6 +265,24 @@ class AnnotationService:
     ) -> AnnotationEvent:
         return AnnotationEvent(
             annotation_id=annotation.id,
+            image_id=image_id,
+            event_type=event_type,
+            before_json=before_json,
+            after_json=after_json,
+            actor="local_user",
+        )
+
+    def _mask_event(
+        self,
+        *,
+        annotation: MaskAnnotation,
+        image_id: str,
+        event_type: str,
+        before_json: dict[str, object | None] | None,
+        after_json: dict[str, object | None] | None,
+    ) -> MaskAnnotationEvent:
+        return MaskAnnotationEvent(
+            mask_annotation_id=annotation.id,
             image_id=image_id,
             event_type=event_type,
             before_json=before_json,
@@ -222,6 +386,113 @@ class AnnotationService:
                 )
                 changed = True
 
+        existing_masks = self.mask_annotations.list_for_image(image_id, include_deleted=True)
+        existing_masks_by_id = {annotation.id: annotation for annotation in existing_masks}
+
+        for draft in payload.mask_annotations:
+            if draft.label_class_id not in project_classes:
+                raise ValidationError("Mask class does not belong to this image's project")
+            polygon, x_min, y_min, x_max, y_max, area_pixels = self._validated_polygon(
+                draft,
+                image,
+            )
+            existing_mask = existing_masks_by_id.get(draft.id)
+            if existing_mask is None:
+                conflicting_mask = self.mask_annotations.get(draft.id)
+                if conflicting_mask is not None:
+                    raise ValidationError("Mask annotations may only be saved to their source image")
+                mask_annotation = MaskAnnotation(
+                    id=draft.id,
+                    image_id=image_id,
+                    label_class_id=draft.label_class_id,
+                    geometry_kind="polygon",
+                    polygon_json=polygon,
+                    x_min=x_min,
+                    y_min=y_min,
+                    x_max=x_max,
+                    y_max=y_max,
+                    area_pixels=area_pixels,
+                    source_type="human",
+                    status="verified",
+                )
+                self.mask_annotations.add(mask_annotation)
+                self.mask_annotations.add_event(
+                    self._mask_event(
+                        annotation=mask_annotation,
+                        image_id=image_id,
+                        event_type="created",
+                        before_json=None,
+                        after_json=mask_annotation_snapshot(mask_annotation),
+                    )
+                )
+                changed = True
+                continue
+
+            before = mask_annotation_snapshot(existing_mask)
+            class_changed = existing_mask.label_class_id != draft.label_class_id
+            geometry_changed = (
+                existing_mask.geometry_kind != "polygon"
+                or existing_mask.mask_path is not None
+                or existing_mask.polygon_json != polygon
+                or existing_mask.x_min != x_min
+                or existing_mask.y_min != y_min
+                or existing_mask.x_max != x_max
+                or existing_mask.y_max != y_max
+                or existing_mask.area_pixels != area_pixels
+            )
+            restored = existing_mask.deleted_at is not None
+            if class_changed or geometry_changed or restored:
+                existing_mask.label_class_id = draft.label_class_id
+                existing_mask.geometry_kind = "polygon"
+                existing_mask.mask_path = None
+                existing_mask.polygon_json = polygon
+                existing_mask.x_min = x_min
+                existing_mask.y_min = y_min
+                existing_mask.x_max = x_max
+                existing_mask.y_max = y_max
+                existing_mask.area_pixels = area_pixels
+                existing_mask.source_type = "human"
+                existing_mask.status = "verified"
+                if restored:
+                    existing_mask.deleted_at = None
+                existing_mask.revision += 1
+                event_type = (
+                    "restored" if restored else "class_changed" if class_changed else "updated"
+                )
+                self.mask_annotations.add_event(
+                    self._mask_event(
+                        annotation=existing_mask,
+                        image_id=image_id,
+                        event_type=event_type,
+                        before_json=before,
+                        after_json=mask_annotation_snapshot(existing_mask),
+                    )
+                )
+                changed = True
+
+        for mask_id in payload.deleted_mask_annotation_ids:
+            existing_mask = existing_masks_by_id.get(mask_id)
+            if existing_mask is None:
+                foreign_mask = self.mask_annotations.get(mask_id)
+                if foreign_mask is not None:
+                    raise ValidationError("Mask annotations may only be deleted from their source image")
+                raise NotFoundError("Mask annotation not found")
+            if existing_mask.deleted_at is not None:
+                continue
+            before = mask_annotation_snapshot(existing_mask)
+            existing_mask.deleted_at = utc_now()
+            existing_mask.revision += 1
+            self.mask_annotations.add_event(
+                self._mask_event(
+                    annotation=existing_mask,
+                    image_id=image_id,
+                    event_type="deleted",
+                    before_json=before,
+                    after_json=mask_annotation_snapshot(existing_mask),
+                )
+            )
+            changed = True
+
         if image.annotation_status != payload.annotation_status:
             image.annotation_status = payload.annotation_status
             changed = True
@@ -232,10 +503,25 @@ class AnnotationService:
 
         refreshed_image = self._image(image_id)
         active_annotations = self.annotations.list_for_image(image_id)
+        active_masks = self.mask_annotations.list_for_image(image_id)
         return AnnotationBatchSaveResponse(
             image=ImageResponse.model_validate(refreshed_image),
             annotations=[
                 AnnotationResponse.model_validate(annotation) for annotation in active_annotations
             ],
-            counts_by_class=self._counts_by_class(project, active_annotations),
+            mask_annotations=[
+                MaskAnnotationResponse.model_validate(annotation) for annotation in active_masks
+            ],
+            counts_by_class=self._counts_by_class(
+                project,
+                [annotation.label_class_id for annotation in active_annotations],
+            ),
+            mask_counts_by_class=self._counts_by_class(
+                project,
+                [
+                    annotation.label_class_id
+                    for annotation in active_masks
+                    if annotation.label_class_id is not None
+                ],
+            ),
         )
