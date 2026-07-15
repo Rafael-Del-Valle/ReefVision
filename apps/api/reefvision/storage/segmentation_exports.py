@@ -35,13 +35,23 @@ def _file_sha256(path: Path) -> str:
 
 
 def _archive_export(output_root: Path, archive_file: Path) -> None:
-    with zipfile.ZipFile(archive_file, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+    with zipfile.ZipFile(
+        archive_file,
+        mode="w",
+        compression=zipfile.ZIP_DEFLATED,
+    ) as archive:
         for path in sorted(output_root.rglob("*")):
             if path.is_file():
-                archive.write(path, arcname=path.relative_to(output_root).as_posix())
+                archive.write(
+                    path,
+                    arcname=path.relative_to(output_root).as_posix(),
+                )
 
 
-def _write_data_yaml(output_root: Path, class_map: list[dict[str, Any]]) -> None:
+def _write_data_yaml(
+    output_root: Path,
+    class_map: list[dict[str, Any]],
+) -> None:
     yaml_lines = [
         "path: .",
         "train: images/train",
@@ -49,9 +59,15 @@ def _write_data_yaml(output_root: Path, class_map: list[dict[str, Any]]) -> None
         "test: images/test",
         "names:",
     ]
-    for item in sorted(class_map, key=lambda value: int(value["class_index"])):
+    for item in sorted(
+        class_map,
+        key=lambda value: int(value["class_index"]),
+    ):
         yaml_lines.append(f"  {int(item['class_index'])}: {str(item['name'])}")
-    (output_root / "data.yaml").write_text("\n".join(yaml_lines) + "\n", encoding="utf-8")
+    (output_root / "data.yaml").write_text(
+        "\n".join(yaml_lines) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _normalized_polygon(
@@ -86,7 +102,7 @@ def write_yolo_segmentation_export(
     manifest_path: str,
     archive_path: str,
 ) -> dict[str, Any]:
-    """Write Ultralytics polygon-segmentation labels without changing detection export."""
+    """Write Ultralytics polygon labels without changing detection export."""
 
     output_root = resolve_managed_project_path(settings, output_path)
     output_root.mkdir(parents=True, exist_ok=False)
@@ -111,12 +127,15 @@ def write_yolo_segmentation_export(
     )
     for item in ordered_items:
         split_directory = EXPORT_SPLIT_DIRECTORIES[item.split]
-        target_filename = safe_export_filename(item.image_id, item.original_filename)
+        target_filename = safe_export_filename(
+            item.image_id,
+            item.original_filename,
+        )
         target_image = images_root / split_directory / target_filename
         shutil.copy2(image_paths[item.image_id], target_image)
-        label_path = (labels_root / split_directory / Path(target_filename).stem).with_suffix(
-            ".txt"
-        )
+        label_path = (
+            labels_root / split_directory / Path(target_filename).stem
+        ).with_suffix(".txt")
         lines: list[str] = []
         item_polygon_count = 0
         item_skipped_rasters = 0
@@ -192,7 +211,11 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
     normalized = value.lstrip("#")
     if len(normalized) != 6:
         return (255, 255, 255)
-    return tuple(int(normalized[index : index + 2], 16) for index in (0, 2, 4))
+    return (
+        int(normalized[0:2], 16),
+        int(normalized[2:4], 16),
+        int(normalized[4:6], 16),
+    )
 
 
 def _semantic_palette(class_map: list[dict[str, Any]]) -> list[int]:
@@ -200,8 +223,12 @@ def _semantic_palette(class_map: list[dict[str, Any]]) -> list[int]:
     for item in class_map:
         pixel_value = int(item["class_index"]) + 1
         if pixel_value > 255:
-            raise ValidationError("Semantic PNG export supports at most 255 classes")
-        red, green, blue = _hex_rgb(str(item.get("display_color", "#ffffff")))
+            raise ValidationError(
+                "Semantic PNG export supports at most 255 classes"
+            )
+        red, green, blue = _hex_rgb(
+            str(item.get("display_color", "#ffffff"))
+        )
         offset = pixel_value * 3
         palette[offset : offset + 3] = [red, green, blue]
     return palette
@@ -216,16 +243,24 @@ def _verified_raster_mask(
     mask_path = snapshot.get("mask_path")
     expected_sha256 = snapshot.get("mask_content_sha256")
     if not isinstance(mask_path, str) or not isinstance(expected_sha256, str):
-        raise ValidationError("Raster snapshot is missing its managed path or checksum")
+        raise ValidationError(
+            "Raster snapshot is missing its managed path or checksum"
+        )
     path = resolve_managed_project_path(settings, mask_path)
     if not path.is_file() or _file_sha256(path) != expected_sha256:
-        raise ValidationError("Raster mask content no longer matches the dataset snapshot")
+        raise ValidationError(
+            "Raster mask content no longer matches the dataset snapshot"
+        )
     try:
         with Image.open(path) as image:
             image.load()
             if image.size != expected_size:
-                raise ValidationError("Raster mask dimensions do not match the source image")
-            return image.convert("L").point(lambda value: 255 if value > 0 else 0)
+                raise ValidationError(
+                    "Raster mask dimensions do not match the source image"
+                )
+            return image.convert("L").point(
+                lambda value: 255 if value > 0 else 0
+            )
     except (OSError, UnidentifiedImageError) as exc:
         raise ValidationError("Raster mask content could not be read") from exc
 
@@ -241,7 +276,7 @@ def write_semantic_mask_export(
     manifest_path: str,
     archive_path: str,
 ) -> dict[str, Any]:
-    """Write indexed PNG semantic masks; background is 0 and classes are index + 1."""
+    """Write indexed PNG masks; background is 0 and classes are index + 1."""
 
     output_root = resolve_managed_project_path(settings, output_path)
     output_root.mkdir(parents=True, exist_ok=False)
@@ -265,7 +300,10 @@ def write_semantic_mask_export(
     )
     for item in ordered_items:
         split_directory = EXPORT_SPLIT_DIRECTORIES[item.split]
-        target_filename = safe_export_filename(item.image_id, item.original_filename)
+        target_filename = safe_export_filename(
+            item.image_id,
+            item.original_filename,
+        )
         target_image = images_root / split_directory / target_filename
         shutil.copy2(image_paths[item.image_id], target_image)
         semantic = Image.new("P", (item.width_px, item.height_px), 0)
@@ -273,16 +311,24 @@ def write_semantic_mask_export(
         draw = ImageDraw.Draw(semantic)
         ordered_masks = sorted(
             item.mask_annotation_snapshot_json,
-            key=lambda snapshot: (int(snapshot["class_index"]), str(snapshot["id"])),
+            key=lambda snapshot: (
+                int(snapshot["class_index"]),
+                str(snapshot["id"]),
+            ),
         )
         for snapshot in ordered_masks:
             pixel_value = int(snapshot["class_index"]) + 1
             if snapshot.get("geometry_kind") == "polygon":
                 raw_points = snapshot.get("polygon_json")
                 if not isinstance(raw_points, list) or len(raw_points) < 3:
-                    raise ValidationError("Semantic export encountered an invalid polygon")
+                    raise ValidationError(
+                        "Semantic export encountered an invalid polygon"
+                    )
                 draw.polygon(
-                    [(float(point[0]), float(point[1])) for point in raw_points],
+                    [
+                        (float(point[0]), float(point[1]))
+                        for point in raw_points
+                    ],
                     fill=pixel_value,
                 )
             elif snapshot.get("geometry_kind") == "raster_mask":
@@ -293,7 +339,9 @@ def write_semantic_mask_export(
                 )
                 semantic.paste(pixel_value, mask=raster)
             else:
-                raise ValidationError("Semantic export encountered unsupported mask geometry")
+                raise ValidationError(
+                    "Semantic export encountered unsupported mask geometry"
+                )
         target_mask = (
             masks_root / split_directory / Path(target_filename).stem
         ).with_suffix(".png")
@@ -323,7 +371,9 @@ def write_semantic_mask_export(
                 key=lambda value: int(value["class_index"]),
             )
         ],
-        "overlap_policy": "higher class index, then later mask id, overwrites earlier pixels",
+        "overlap_policy": (
+            "higher class index, then later mask id, overwrites earlier pixels"
+        ),
     }
     (output_root / "classes.json").write_text(
         json.dumps(classes, indent=2, sort_keys=True),
