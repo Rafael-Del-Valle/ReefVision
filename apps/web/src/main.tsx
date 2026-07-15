@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
 import { AppProviders } from "./app/providers";
+import { SegmentationExportLauncher } from "./features/dataset-versions/SegmentationExportLauncher";
 import { initializeRuntime } from "./runtime";
 import { renderStartupError } from "./startup";
 
@@ -20,6 +21,7 @@ async function bootstrap() {
     <StrictMode>
       <AppProviders>
         <App />
+        <SegmentationExportLauncher />
       </AppProviders>
     </StrictMode>,
   );
