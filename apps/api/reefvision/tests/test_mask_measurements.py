@@ -6,7 +6,10 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from reefvision.services.mask_measurements import _raster_measurements
+from reefvision.services.mask_measurements import (
+    _raster_measurements,
+    _raster_pixel_active,
+)
 from reefvision.tests.test_annotations import create_project, import_one
 
 
@@ -79,14 +82,15 @@ def test_raster_measurements_use_pixel_edges_and_centers(tmp_path: Path) -> None
             image.putpixel((x, y), 255)
     image.save(path)
 
-    area, perimeter, centroid_x, centroid_y, active = _raster_measurements(str(path))
+    area, perimeter, centroid_x, centroid_y, raster = _raster_measurements(path)
 
     assert area == 12
     assert perimeter == 14.0
     assert centroid_x == pytest.approx(4.0)
     assert centroid_y == pytest.approx(4.5)
-    assert (2, 3) in active
-    assert (5, 5) in active
+    assert _raster_pixel_active(raster, 2, 3)
+    assert _raster_pixel_active(raster, 5, 5)
+    assert not _raster_pixel_active(raster, 1, 3)
 
 
 def test_deleted_mask_measurements_return_not_found(client: TestClient) -> None:
