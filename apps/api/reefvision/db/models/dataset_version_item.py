@@ -48,10 +48,17 @@ class DatasetVersionItem(Base):
     annotation_snapshot_json: Mapped[list[dict[str, Any]]] = mapped_column(
         JSON, nullable=False, default=list
     )
+    mask_annotation_snapshot_json: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
     per_class_counts_json: Mapped[dict[str, int]] = mapped_column(
         JSON, nullable=False, default=dict
     )
+    per_mask_class_counts_json: Mapped[dict[str, int]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     annotation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    mask_annotation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     snapshot_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
