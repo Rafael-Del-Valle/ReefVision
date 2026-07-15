@@ -1,157 +1,63 @@
 [CmdletBinding()]
 param(
-    [switch]$InstallDependencies,
     [switch]$SkipE2E,
     [switch]$SkipDesktop,
-    [switch]$BuildDesktop
+    [switch]$BuildDesktopInstaller
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$webRoot = Join-Path $repoRoot "apps/web"
-$cargoManifest = Join-Path $webRoot "src-tauri/Cargo.toml"
-$validationRoot = Join-Path ([System.IO.Path]::GetTempPath()) "reefvision-validation-$PID"
-$buildRoot = Join-Path $validationRoot "python-dist"
-$previousDataDir = $env:REEFVISION_DATA_DIR
+$Root = Split-Path -Parent $PSScriptRoot
+Set-Location $Root
 
-function Assert-Command {
-    param([Parameter(Mandatory = $true)][string]$Name)
+. (Join-Path $PSScriptRoot "lib\node-tools.ps1")
 
-    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
-        throw "Required command '$Name' was not found on PATH."
-    }
+if (-not (Test-Path ".venv" -PathType Container)) {
+    throw "Run .\scripts\bootstrap.ps1 first."
 }
 
-function Invoke-ValidationStep {
-    param(
-        [Parameter(Mandatory = $true)][string]$Name,
-        [Parameter(Mandatory = $true)][scriptblock]$Action
-    )
+Write-ReefVisionStep "Running backend, frontend, migration, and browser tests"
+& (Join-Path $PSScriptRoot "test.ps1") -SkipE2E:$SkipE2E
+if ($LASTEXITCODE -ne 0) {
+    throw "ReefVision test validation failed."
+}
 
-    Write-Host ""
-    Write-Host "=== $Name ===" -ForegroundColor Cyan
-    & $Action
+Write-ReefVisionStep "Running production package builds"
+& (Join-Path $PSScriptRoot "build.ps1")
+if ($LASTEXITCODE -ne 0) {
+    throw "ReefVision package build validation failed."
+}
+
+if (-not $SkipDesktop) {
+    $RustTools = Ensure-ReefVisionRustTools -Purpose "validate the ReefVision desktop application"
+    $CargoManifest = Join-Path $Root "apps\web\src-tauri\Cargo.toml"
+
+    Write-ReefVisionStep "Checking Rust formatting"
+    & $RustTools.Cargo fmt --manifest-path $CargoManifest -- --check
     if ($LASTEXITCODE -ne 0) {
-        throw "$Name failed with exit code $LASTEXITCODE."
+        throw "Rust formatting validation failed."
+    }
+
+    Write-ReefVisionStep "Running Rust Clippy"
+    & $RustTools.Cargo clippy --manifest-path $CargoManifest --all-targets --all-features -- -D warnings
+    if ($LASTEXITCODE -ne 0) {
+        throw "Rust Clippy validation failed."
+    }
+
+    Write-ReefVisionStep "Running Rust tests"
+    & $RustTools.Cargo test --manifest-path $CargoManifest --all-features
+    if ($LASTEXITCODE -ne 0) {
+        throw "Rust tests failed."
+    }
+
+    if ($BuildDesktopInstaller) {
+        Write-ReefVisionStep "Building the complete Windows desktop installer"
+        & (Join-Path $PSScriptRoot "build-desktop.ps1")
+        if ($LASTEXITCODE -ne 0) {
+            throw "Windows desktop installer validation failed."
+        }
     }
 }
 
-try {
-    Assert-Command "python"
-    Assert-Command "npm"
-    if (-not $SkipDesktop) {
-        Assert-Command "cargo"
-    }
-
-    New-Item -ItemType Directory -Path $validationRoot -Force | Out-Null
-    New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
-    $env:REEFVISION_DATA_DIR = Join-Path $validationRoot "data"
-
-    Set-Location $repoRoot
-
-    if ($InstallDependencies) {
-        Invoke-ValidationStep "Upgrade pip" {
-            python -m pip install --upgrade pip
-        }
-        Invoke-ValidationStep "Install ReefVision backend development dependencies" {
-            python -m pip install -e ".[dev]"
-        }
-    }
-
-    Invoke-ValidationStep "Backend Ruff lint" {
-        python -m ruff check apps/api
-    }
-    Invoke-ValidationStep "Backend Ruff formatting" {
-        python -m ruff format --check apps/api
-    }
-    Invoke-ValidationStep "Backend mypy" {
-        python -m mypy apps/api/reefvision
-    }
-    Invoke-ValidationStep "Backend pytest" {
-        python -m pytest apps/api/reefvision/tests
-    }
-    Invoke-ValidationStep "Alembic upgrade to head" {
-        python -m alembic -c apps/api/alembic.ini upgrade head
-    }
-    Invoke-ValidationStep "Alembic downgrade to base" {
-        python -m alembic -c apps/api/alembic.ini downgrade base
-    }
-    Invoke-ValidationStep "Build Python package" {
-        python -m build --outdir $buildRoot
-    }
-
-    Push-Location $webRoot
-    try {
-        Invoke-ValidationStep "Frontend lockfile consistency" {
-            npm run lockfile:check
-        }
-        if ($InstallDependencies) {
-            Invoke-ValidationStep "Install frontend dependencies" {
-                npm ci
-            }
-        }
-        elseif (-not (Test-Path (Join-Path $webRoot "node_modules"))) {
-            throw "apps/web/node_modules is missing. Re-run with -InstallDependencies."
-        }
-
-        Invoke-ValidationStep "Frontend Prettier" {
-            npm run format:check
-        }
-        Invoke-ValidationStep "Frontend TypeScript" {
-            npm run typecheck
-        }
-        Invoke-ValidationStep "Frontend Vitest" {
-            npm run test
-        }
-
-        if (-not $SkipE2E) {
-            Invoke-ValidationStep "Install Playwright Chromium" {
-                npx playwright install chromium
-            }
-            Invoke-ValidationStep "Frontend Playwright" {
-                npm run test:e2e
-            }
-        }
-        else {
-            Invoke-ValidationStep "Frontend production build" {
-                npm run build
-            }
-        }
-
-        if (-not $SkipDesktop) {
-            Invoke-ValidationStep "Rust formatting" {
-                cargo fmt --manifest-path $cargoManifest -- --check
-            }
-            Invoke-ValidationStep "Rust Clippy" {
-                cargo clippy --manifest-path $cargoManifest --all-targets --all-features -- -D warnings
-            }
-            Invoke-ValidationStep "Rust tests" {
-                cargo test --manifest-path $cargoManifest --all-features
-            }
-
-            if ($BuildDesktop) {
-                Invoke-ValidationStep "Tauri desktop build" {
-                    npm run desktop:build
-                }
-            }
-        }
-    }
-    finally {
-        Pop-Location
-    }
-
-    Write-Host ""
-    Write-Host "All selected ReefVision validation gates passed." -ForegroundColor Green
-}
-finally {
-    Set-Location $repoRoot
-    if ($null -eq $previousDataDir) {
-        Remove-Item Env:REEFVISION_DATA_DIR -ErrorAction SilentlyContinue
-    }
-    else {
-        $env:REEFVISION_DATA_DIR = $previousDataDir
-    }
-    Remove-Item -Path $validationRoot -Recurse -Force -ErrorAction SilentlyContinue
-}
+Write-Host "`nAll selected ReefVision pull-request validation gates passed." -ForegroundColor Green
