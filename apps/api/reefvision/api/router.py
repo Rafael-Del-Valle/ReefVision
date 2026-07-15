@@ -12,6 +12,7 @@ from reefvision.api.routes.dataset_versions import router as dataset_versions_ro
 from reefvision.api.routes.health import router as health_router
 from reefvision.api.routes.images import router as images_router
 from reefvision.api.routes.jobs import router as jobs_router
+from reefvision.api.routes.measurements import router as measurements_router
 from reefvision.api.routes.model_catalog import router as model_catalog_router
 from reefvision.api.routes.models import router as models_router
 from reefvision.api.routes.predictions import router as predictions_router
@@ -34,6 +35,7 @@ api_router.include_router(class_operations_router)
 api_router.include_router(class_visibility_router)
 api_router.include_router(images_router)
 api_router.include_router(annotations_router)
+api_router.include_router(measurements_router)
 api_router.include_router(dataset_versions_router)
 api_router.include_router(jobs_router)
 api_router.include_router(model_catalog_router)
