@@ -16,7 +16,8 @@ if (-not (Test-Path ".venv" -PathType Container)) {
 
 $Python = Join-Path $Root ".venv\Scripts\python.exe"
 $PreviousDataDir = $env:REEFVISION_DATA_DIR
-$ValidationDataDir = Join-Path ([System.IO.Path]::GetTempPath()) ("reefvision-validation-" + [guid]::NewGuid().ToString())
+$ValidationRoot = Join-Path $Root ".runtime\validation"
+$ValidationDataDir = Join-Path $ValidationRoot ([guid]::NewGuid().ToString())
 
 function Remove-ReefVisionValidationData {
     param([Parameter(Mandatory = $true)][string]$Path)
