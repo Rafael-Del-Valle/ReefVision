@@ -18,6 +18,11 @@ export interface RasterMaskEditResponse {
   mask_annotation: MaskAnnotationRecord;
 }
 
+export interface RasterMaskContentReference {
+  id: string;
+  revision?: number;
+}
+
 export async function editRasterMask(
   imageId: string,
   payload: RasterMaskEditPayload,
@@ -43,6 +48,9 @@ export async function editRasterMask(
   return (await response.json()) as RasterMaskEditResponse;
 }
 
-export function rasterMaskContentUrl(mask: MaskAnnotationRecord): string {
-  return `${getApiBaseUrl()}/mask-annotations/${mask.id}/content?revision=${mask.revision}`;
+export function rasterMaskContentUrl(
+  mask: RasterMaskContentReference,
+): string {
+  const revision = mask.revision ?? 0;
+  return `${getApiBaseUrl()}/mask-annotations/${encodeURIComponent(mask.id)}/content?revision=${revision}`;
 }
