@@ -35,7 +35,7 @@ def get_annotation_session(
     request: Request,
     session: DbSession,
 ) -> AnnotationSessionResponse:
-    return service(request, session).get_annotation_session(image_id)
+    return service(request, session).get_session(image_id)
 
 
 @router.put(
