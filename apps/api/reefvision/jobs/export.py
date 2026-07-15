@@ -11,6 +11,10 @@ from reefvision.config import Settings
 from reefvision.db.models import DatasetVersion, DatasetVersionItem, ExportRecord, ImageAsset, Job
 from reefvision.storage.datasets import remove_export_artifacts, write_yolo_detection_export
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.segmentation_exports import (
+    write_semantic_mask_export,
+    write_yolo_segmentation_export,
+)
 
 
 def _fail_export(
@@ -88,16 +92,24 @@ def process_export_job(settings: Settings, factory: sessionmaker[Session], job_i
                     )
             output_path = export.output_path
             archive_path = export.archive_path
-            result = write_yolo_detection_export(
-                settings,
-                export_id=export.id,
-                version=version,
-                items=items,
-                image_paths=image_paths,
-                output_path=export.output_path,
-                manifest_path=export.manifest_path,
-                archive_path=export.archive_path,
-            )
+            common_arguments = {
+                "settings": settings,
+                "export_id": export.id,
+                "version": version,
+                "items": items,
+                "image_paths": image_paths,
+                "output_path": export.output_path,
+                "manifest_path": export.manifest_path,
+                "archive_path": export.archive_path,
+            }
+            if export.format == "yolo_detection":
+                result = write_yolo_detection_export(**common_arguments)
+            elif export.format == "yolo_segmentation":
+                result = write_yolo_segmentation_export(**common_arguments)
+            elif export.format == "semantic_masks":
+                result = write_semantic_mask_export(**common_arguments)
+            else:
+                raise RuntimeError(f"Unsupported export format: {export.format}")
 
         with factory() as session:
             job = session.get(Job, job_id)
