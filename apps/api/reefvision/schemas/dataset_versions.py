@@ -177,9 +177,7 @@ class DatasetVersionItemResponse(BaseModel):
     split: DatasetSplit
     group_key: str | None
     annotation_snapshot_json: list[dict[str, Any]]
-    mask_annotation_snapshot_json: list[dict[str, Any]] = Field(
-        default_factory=list
-    )
+    mask_annotation_snapshot_json: list[dict[str, Any]] = Field(default_factory=list)
     per_class_counts_json: dict[str, int]
     per_mask_class_counts_json: dict[str, int] = Field(default_factory=dict)
     annotation_count: int

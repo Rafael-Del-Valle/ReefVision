@@ -68,9 +68,7 @@ def test_raster_brush_revisions_preserve_frozen_semantic_exports(
     )
     first_mask = cast(dict[str, object], first["mask_annotation"])
     mask_id = str(first_mask["id"])
-    first_path = test_settings.resolved_data_dir / Path(
-        str(first_mask["mask_path"])
-    )
+    first_path = test_settings.resolved_data_dir / Path(str(first_mask["mask_path"]))
     assert first_mask["revision"] == 1
     assert first_path.is_file()
     first_bytes = first_path.read_bytes()
@@ -94,9 +92,7 @@ def test_raster_brush_revisions_preserve_frozen_semantic_exports(
         mask_id=mask_id,
     )
     second_mask = cast(dict[str, object], second["mask_annotation"])
-    second_path = test_settings.resolved_data_dir / Path(
-        str(second_mask["mask_path"])
-    )
+    second_path = test_settings.resolved_data_dir / Path(str(second_mask["mask_path"]))
     assert second_mask["revision"] == 2
     assert second_path != first_path
     assert first_path.read_bytes() == first_bytes
@@ -114,9 +110,7 @@ def test_raster_brush_revisions_preserve_frozen_semantic_exports(
         app.state.session_factory,
         payload["job"]["id"],
     )
-    export = client.get(
-        f"/api/v1/exports/{payload['export']['id']}"
-    ).json()
+    export = client.get(f"/api/v1/exports/{payload['export']['id']}").json()
     output_root = test_settings.resolved_data_dir / Path(export["output_path"])
     exported_masks = sorted(output_root.glob("masks/*/*.png"))
     assert len(exported_masks) == 1

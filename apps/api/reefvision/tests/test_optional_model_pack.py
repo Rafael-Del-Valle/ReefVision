@@ -40,12 +40,8 @@ def test_runtime_factories_use_expanded_adapters() -> None:
 def test_optional_pack_repair_marks_verified_model_available(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    installer = _load_script(
-        "install-remaining-models.py", "reefvision_optional_model_pack"
-    )
-    repair = _load_script(
-        "repair-optional-model-catalog.py", "reefvision_optional_model_repair"
-    )
+    installer = _load_script("install-remaining-models.py", "reefvision_optional_model_pack")
+    repair = _load_script("repair-optional-model-catalog.py", "reefvision_optional_model_repair")
     source_catalog = Path(__file__).resolve().parents[4] / "config" / "model_catalog.json"
     model = installer.OPTIONAL_MODELS[0]
     payload = b"reefvision-test-checkpoint"
@@ -68,9 +64,7 @@ def test_optional_pack_repair_marks_verified_model_available(
     assert failed == []
     catalog_path = tmp_path / "config" / "model_catalog.json"
     before = json.loads(catalog_path.read_text())
-    before_entry = next(
-        item for item in before["models"] if item["catalog_id"] == model.catalog_id
-    )
+    before_entry = next(item for item in before["models"] if item["catalog_id"] == model.catalog_id)
     assert before_entry["availability"] == "unavailable"
 
     repaired, skipped = repair.repair_catalog(tmp_path)
@@ -94,9 +88,7 @@ def test_optional_pack_repair_marks_verified_model_available(
     assert entry["expected_files"][0]["filename"] == model.filename
     assert entry["expected_files"][0]["size_bytes"] == len(payload)
 
-    manifest = json.loads(
-        (tmp_path / "models" / "catalog-models" / "manifest.json").read_text()
-    )
+    manifest = json.loads((tmp_path / "models" / "catalog-models" / "manifest.json").read_text())
     record = manifest["assets"][model.catalog_id]
     assert record["filename"] == model.filename
     assert record["size_bytes"] == len(payload)

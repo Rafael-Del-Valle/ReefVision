@@ -28,12 +28,9 @@ def _point_in_polygon(point: Point, polygon: list[Point]) -> bool:
         previous_x, previous_y = previous
         crosses = (current_y > y) != (previous_y > y)
         if crosses:
-            intersection_x = (
-                (previous_x - current_x)
-                * (y - current_y)
-                / (previous_y - current_y)
-                + current_x
-            )
+            intersection_x = (previous_x - current_x) * (y - current_y) / (
+                previous_y - current_y
+            ) + current_x
             if x < intersection_x:
                 inside = not inside
         previous = current
@@ -134,21 +131,15 @@ class MaskMeasurementService:
         if mask.geometry_kind == "polygon":
             if not mask.polygon_json or len(mask.polygon_json) < 3:
                 raise ValidationError("Polygon mask does not have valid geometry")
-            polygon = [
-                (float(point[0]), float(point[1])) for point in mask.polygon_json
-            ]
+            polygon = [(float(point[0]), float(point[1])) for point in mask.polygon_json]
             area, perimeter, centroid_x, centroid_y = _polygon_measurements(polygon)
         elif mask.geometry_kind == "raster_mask":
             if not mask.mask_path:
                 raise ValidationError("Raster mask content is missing")
             managed_path = resolve_managed_project_path(self.settings, mask.mask_path)
-            area, perimeter, centroid_x, centroid_y, raster = _raster_measurements(
-                managed_path
-            )
+            area, perimeter, centroid_x, centroid_y, raster = _raster_measurements(managed_path)
         else:
-            raise ValidationError(
-                f"Measurements are not supported for {mask.geometry_kind} masks"
-            )
+            raise ValidationError(f"Measurements are not supported for {mask.geometry_kind} masks")
 
         contained_box_count = 0
         for annotation in self.annotations.list_for_image(mask.image_id):
@@ -179,7 +170,5 @@ class MaskMeasurementService:
             x_max=float(mask.x_max),
             y_max=float(mask.y_max),
             contained_box_count=contained_box_count,
-            contained_box_density_per_1000_pixels=(
-                contained_box_count / area * 1000.0
-            ),
+            contained_box_density_per_1000_pixels=(contained_box_count / area * 1000.0),
         )

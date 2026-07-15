@@ -83,9 +83,7 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
     def _mask_snapshot(self, mask: MaskAnnotation) -> dict[str, Any]:
         label_class = mask.label_class
         if label_class is None:
-            raise ValidationError(
-                "Dataset snapshots require every mask to resolve its class"
-            )
+            raise ValidationError("Dataset snapshots require every mask to resolve its class")
         content_sha256: str | None = None
         if mask.geometry_kind == "raster_mask":
             if not mask.mask_path:
@@ -163,9 +161,7 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
             raise ValidationError("No images match the selected annotation statuses")
 
         split_plan = self._plan_splits(candidates, request)
-        masks_by_image = self._masks_for_images(
-            [candidate.image.id for candidate in candidates]
-        )
+        masks_by_image = self._masks_for_images([candidate.image.id for candidate in candidates])
         total_mask_count = sum(len(items) for items in masks_by_image.values())
         version = DatasetVersion(
             project_id=project.id,
@@ -176,9 +172,7 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
             status="creating",
             requested_split_method=request.split_method,
             resolved_split_method=split_plan.resolved_split_method,
-            eligible_annotation_statuses_json=list(
-                request.eligible_annotation_statuses
-            ),
+            eligible_annotation_statuses_json=list(request.eligible_annotation_statuses),
             requested_ratios_json=split_plan.requested_ratios,
             achieved_ratios_json=split_plan.achieved_ratios,
             split_seed=request.split_seed,
@@ -201,12 +195,10 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
         manifest_items: list[dict[str, Any]] = []
         for candidate in sorted(candidates, key=lambda item: item.image.id):
             annotations = [
-                self._annotation_snapshot(annotation)
-                for annotation in candidate.annotations
+                self._annotation_snapshot(annotation) for annotation in candidate.annotations
             ]
             mask_snapshots = [
-                self._mask_snapshot(mask)
-                for mask in masks_by_image.get(candidate.image.id, [])
+                self._mask_snapshot(mask) for mask in masks_by_image.get(candidate.image.id, [])
             ]
             mask_counts: dict[str, int] = defaultdict(int)
             for mask in mask_snapshots:
@@ -247,9 +239,7 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
                 snapshot_sha256=snapshot_sha256,
             )
             self.versions.add_item(dataset_item)
-            manifest_items.append(
-                {**item_payload, "snapshot_sha256": snapshot_sha256}
-            )
+            manifest_items.append({**item_payload, "snapshot_sha256": snapshot_sha256})
 
         manifest: dict[str, Any] = {
             "schema_version": MASK_AWARE_SCHEMA_VERSION,
@@ -276,9 +266,7 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
                 "achieved_ratios": version.achieved_ratios_json,
                 "split_seed": version.split_seed,
                 "reuse_parent_assignments": version.reuse_parent_assignments,
-                "eligible_annotation_statuses": (
-                    version.eligible_annotation_statuses_json
-                ),
+                "eligible_annotation_statuses": (version.eligible_annotation_statuses_json),
                 "warnings": version.warnings_json,
                 "missing_group_key_count": version.missing_group_key_count,
             },
@@ -309,9 +297,7 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
         if request.format not in SUPPORTED_EXPORT_FORMATS:
             raise ValidationError("Unsupported dataset export format")
         if request.format != "yolo_detection" and version.mask_annotation_count <= 0:
-            raise ValidationError(
-                "This dataset version does not contain mask annotations"
-            )
+            raise ValidationError("This dataset version does not contain mask annotations")
 
         export_id = str(uuid4())
         output_path, manifest_path, archive_path = dataset_export_relative_paths(

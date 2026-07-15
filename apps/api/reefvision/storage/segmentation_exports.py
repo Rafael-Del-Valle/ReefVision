@@ -133,9 +133,9 @@ def write_yolo_segmentation_export(
         )
         target_image = images_root / split_directory / target_filename
         shutil.copy2(image_paths[item.image_id], target_image)
-        label_path = (
-            labels_root / split_directory / Path(target_filename).stem
-        ).with_suffix(".txt")
+        label_path = (labels_root / split_directory / Path(target_filename).stem).with_suffix(
+            ".txt"
+        )
         lines: list[str] = []
         item_polygon_count = 0
         item_skipped_rasters = 0
@@ -153,9 +153,7 @@ def write_yolo_segmentation_export(
                     f"Dataset item {item.image_id} contains an invalid polygon snapshot"
                 )
             coordinates = " ".join(
-                coordinate
-                for x, y in points
-                for coordinate in (f"{x:.8f}", f"{y:.8f}")
+                coordinate for x, y in points for coordinate in (f"{x:.8f}", f"{y:.8f}")
             )
             lines.append(f"{int(snapshot['class_index'])} {coordinates}")
             item_polygon_count += 1
@@ -223,12 +221,8 @@ def _semantic_palette(class_map: list[dict[str, Any]]) -> list[int]:
     for item in class_map:
         pixel_value = int(item["class_index"]) + 1
         if pixel_value > 255:
-            raise ValidationError(
-                "Semantic PNG export supports at most 255 classes"
-            )
-        red, green, blue = _hex_rgb(
-            str(item.get("display_color", "#ffffff"))
-        )
+            raise ValidationError("Semantic PNG export supports at most 255 classes")
+        red, green, blue = _hex_rgb(str(item.get("display_color", "#ffffff")))
         offset = pixel_value * 3
         palette[offset : offset + 3] = [red, green, blue]
     return palette
@@ -243,24 +237,16 @@ def _verified_raster_mask(
     mask_path = snapshot.get("mask_path")
     expected_sha256 = snapshot.get("mask_content_sha256")
     if not isinstance(mask_path, str) or not isinstance(expected_sha256, str):
-        raise ValidationError(
-            "Raster snapshot is missing its managed path or checksum"
-        )
+        raise ValidationError("Raster snapshot is missing its managed path or checksum")
     path = resolve_managed_project_path(settings, mask_path)
     if not path.is_file() or _file_sha256(path) != expected_sha256:
-        raise ValidationError(
-            "Raster mask content no longer matches the dataset snapshot"
-        )
+        raise ValidationError("Raster mask content no longer matches the dataset snapshot")
     try:
         with Image.open(path) as image:
             image.load()
             if image.size != expected_size:
-                raise ValidationError(
-                    "Raster mask dimensions do not match the source image"
-                )
-            return image.convert("L").point(
-                lambda value: 255 if value > 0 else 0
-            )
+                raise ValidationError("Raster mask dimensions do not match the source image")
+            return image.convert("L").point(lambda value: 255 if value > 0 else 0)
     except (OSError, UnidentifiedImageError) as exc:
         raise ValidationError("Raster mask content could not be read") from exc
 
@@ -321,14 +307,9 @@ def write_semantic_mask_export(
             if snapshot.get("geometry_kind") == "polygon":
                 raw_points = snapshot.get("polygon_json")
                 if not isinstance(raw_points, list) or len(raw_points) < 3:
-                    raise ValidationError(
-                        "Semantic export encountered an invalid polygon"
-                    )
+                    raise ValidationError("Semantic export encountered an invalid polygon")
                 draw.polygon(
-                    [
-                        (float(point[0]), float(point[1]))
-                        for point in raw_points
-                    ],
+                    [(float(point[0]), float(point[1])) for point in raw_points],
                     fill=pixel_value,
                 )
             elif snapshot.get("geometry_kind") == "raster_mask":
@@ -339,12 +320,10 @@ def write_semantic_mask_export(
                 )
                 semantic.paste(pixel_value, mask=raster)
             else:
-                raise ValidationError(
-                    "Semantic export encountered unsupported mask geometry"
-                )
-        target_mask = (
-            masks_root / split_directory / Path(target_filename).stem
-        ).with_suffix(".png")
+                raise ValidationError("Semantic export encountered unsupported mask geometry")
+        target_mask = (masks_root / split_directory / Path(target_filename).stem).with_suffix(
+            ".png"
+        )
         semantic.save(target_mask, format="PNG", optimize=True)
         split_counts[item.split] += 1
         manifest_items.append(
@@ -371,9 +350,7 @@ def write_semantic_mask_export(
                 key=lambda value: int(value["class_index"]),
             )
         ],
-        "overlap_policy": (
-            "higher class index, then later mask id, overwrites earlier pixels"
-        ),
+        "overlap_policy": ("higher class index, then later mask id, overwrites earlier pixels"),
     }
     (output_root / "classes.json").write_text(
         json.dumps(classes, indent=2, sort_keys=True),

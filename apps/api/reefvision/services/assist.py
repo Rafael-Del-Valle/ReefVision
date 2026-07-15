@@ -131,9 +131,7 @@ class AssistService:
         image = self._image(image_id)
         model = self._model(payload.model_id)
         if model.project_id != image.project_id or model.purpose != "assist":
-            raise ValidationError(
-                "Assist sessions require an assist model from the same project"
-            )
+            raise ValidationError("Assist sessions require an assist model from the same project")
         source_prediction_id = None
         if payload.source_prediction_id:
             source_prediction_id = self._source_prediction(
@@ -167,9 +165,7 @@ class AssistService:
         image = self._image(image_id)
         strokes = [
             BrushStroke(
-                points=[
-                    PixelPoint(x=point.x, y=point.y) for point in stroke.points
-                ],
+                points=[PixelPoint(x=point.x, y=point.y) for point in stroke.points],
                 brush_radius=float(payload.brush_radius),
             )
             for stroke in payload.strokes
@@ -216,9 +212,7 @@ class AssistService:
             raise NotFoundError("Project not found")
         project_class_ids = {label_class.id for label_class in project.label_classes}
         if payload.label_class_id not in project_class_ids:
-            raise ValidationError(
-                "Annotation class does not belong to this image's project"
-            )
+            raise ValidationError("Annotation class does not belong to this image's project")
         if session_state.candidate_mask_png_base64 is None:
             raise ValidationError("There is no current Smart Mask raster to accept")
 

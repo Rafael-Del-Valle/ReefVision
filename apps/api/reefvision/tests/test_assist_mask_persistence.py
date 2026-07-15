@@ -96,9 +96,7 @@ def test_prompt_assist_acceptance_persists_box_and_raster_mask(
     assert len(session_payload["mask_annotations"]) == 1
     assert session_payload["image"]["annotation_revision"] == 1
 
-    content_response = client.get(
-        f"/api/v1/mask-annotations/{response.mask_annotation.id}/content"
-    )
+    content_response = client.get(f"/api/v1/mask-annotations/{response.mask_annotation.id}/content")
     assert content_response.status_code == 200
     assert content_response.headers["content-type"].startswith("image/png")
     assert content_response.content.startswith(b"\x89PNG\r\n\x1a\n")

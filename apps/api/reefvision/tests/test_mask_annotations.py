@@ -190,9 +190,7 @@ def test_box_only_save_preserves_existing_masks(client: TestClient) -> None:
         },
     )
     assert legacy_save.status_code == 200, legacy_save.text
-    assert [mask["id"] for mask in legacy_save.json()["mask_annotations"]] == [
-        mask_id
-    ]
+    assert [mask["id"] for mask in legacy_save.json()["mask_annotations"]] == [mask_id]
 
 
 def test_mask_save_uses_shared_revision_conflict_protection(client: TestClient) -> None:
@@ -224,9 +222,7 @@ def test_mask_save_uses_shared_revision_conflict_protection(client: TestClient) 
             "base_revision": 0,
             "annotation_status": "reviewed",
             "annotations": [],
-            "deleted_mask_annotation_ids": [
-                "2fb0beb0-a94d-4a30-b506-c932459b4094"
-            ],
+            "deleted_mask_annotation_ids": ["2fb0beb0-a94d-4a30-b506-c932459b4094"],
         },
     )
     assert stale.status_code == 409

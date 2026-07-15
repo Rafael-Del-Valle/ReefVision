@@ -74,9 +74,7 @@ def process_export_job(
             if export is None:
                 raise RuntimeError("Export record is missing")
             version = session.scalar(
-                select(DatasetVersion).where(
-                    DatasetVersion.id == export.dataset_version_id
-                )
+                select(DatasetVersion).where(DatasetVersion.id == export.dataset_version_id)
             )
             if version is None:
                 raise RuntimeError("Dataset version is missing")
@@ -93,9 +91,7 @@ def process_export_job(
             )
             images = list(
                 session.scalars(
-                    select(ImageAsset).where(
-                        ImageAsset.id.in_([item.image_id for item in items])
-                    )
+                    select(ImageAsset).where(ImageAsset.id.in_([item.image_id for item in items]))
                 )
             )
             image_paths = {

@@ -13,9 +13,7 @@ from reefvision.schemas.annotations import AnnotationResponse, MaskAnnotationRes
 class AssistSessionCreateRequest(BaseModel):
     model_id: str = Field(min_length=1, max_length=36)
     device: str = Field(default="auto", min_length=1, max_length=20)
-    source_prediction_id: str | None = Field(
-        default=None, min_length=1, max_length=36
-    )
+    source_prediction_id: str | None = Field(default=None, min_length=1, max_length=36)
 
 
 class AssistPoint(BaseModel):

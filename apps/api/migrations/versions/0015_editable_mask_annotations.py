@@ -26,12 +26,8 @@ def upgrade() -> None:
                 server_default="local_user",
             )
         )
-        batch_op.add_column(
-            sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True)
-        )
-        batch_op.add_column(
-            sa.Column("revision", sa.Integer(), nullable=False, server_default="1")
-        )
+        batch_op.add_column(sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True))
+        batch_op.add_column(sa.Column("revision", sa.Integer(), nullable=False, server_default="1"))
 
     op.create_index(
         "ix_mask_annotations_image_deleted",

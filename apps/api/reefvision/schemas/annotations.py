@@ -153,9 +153,7 @@ class AnnotationBatchSaveRequest(BaseModel):
         active_ids = {item.id for item in self.mask_annotations}
         deleted_ids = set(self.deleted_mask_annotation_ids)
         if active_ids & deleted_ids:
-            raise ValueError(
-                "A mask annotation cannot be edited and deleted in the same save"
-            )
+            raise ValueError("A mask annotation cannot be edited and deleted in the same save")
         return self
 
 

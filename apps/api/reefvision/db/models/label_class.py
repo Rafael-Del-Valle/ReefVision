@@ -31,15 +31,11 @@ class LabelClass(Base):
 
     __tablename__ = "label_classes"
     __table_args__ = (
-        UniqueConstraint(
-            "project_id", "class_index", name="uq_label_classes_project_index"
-        ),
+        UniqueConstraint("project_id", "class_index", name="uq_label_classes_project_index"),
         UniqueConstraint("project_id", "name", name="uq_label_classes_project_name"),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     project_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("projects.id", ondelete="CASCADE"),
@@ -54,9 +50,7 @@ class LabelClass(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     display_color: Mapped[str] = mapped_column(String(7), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    archived_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
@@ -66,6 +60,4 @@ class LabelClass(Base):
 
     project: Mapped[Project] = relationship(back_populates="label_classes")
     annotations: Mapped[list[Annotation]] = relationship(back_populates="label_class")
-    mask_annotations: Mapped[list[MaskAnnotation]] = relationship(
-        back_populates="label_class"
-    )
+    mask_annotations: Mapped[list[MaskAnnotation]] = relationship(back_populates="label_class")

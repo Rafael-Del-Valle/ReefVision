@@ -30,9 +30,7 @@ def _load_source_mask(
         with Image.open(source) as image:
             image.load()
             if image.size != expected_size:
-                raise ValidationError(
-                    "Raster mask dimensions do not match the source image"
-                )
+                raise ValidationError("Raster mask dimensions do not match the source image")
             return image.convert("L")
     except (OSError, UnidentifiedImageError) as exc:
         raise ValidationError("Raster mask content could not be read") from exc

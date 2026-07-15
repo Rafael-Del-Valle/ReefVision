@@ -44,12 +44,8 @@ class RasterMaskEditService:
         project = self.projects.get(image.project_id)
         if project is None:
             raise NotFoundError("Project not found")
-        if payload.label_class_id not in {
-            label_class.id for label_class in project.label_classes
-        }:
-            raise ValidationError(
-                "Mask class does not belong to this image's project"
-            )
+        if payload.label_class_id not in {label_class.id for label_class in project.label_classes}:
+            raise ValidationError("Mask class does not belong to this image's project")
 
         existing: MaskAnnotation | None = None
         mask_id = payload.mask_annotation_id or str(uuid4())
@@ -58,33 +54,27 @@ class RasterMaskEditService:
             if existing is None or existing.deleted_at is not None:
                 raise NotFoundError("Mask annotation not found")
             if existing.image_id != image.id:
-                raise ValidationError(
-                    "Raster masks may only be edited on their source image"
-                )
+                raise ValidationError("Raster masks may only be edited on their source image")
             if existing.geometry_kind != "raster_mask":
                 raise ValidationError("Brush editing requires a raster mask")
 
         next_revision = existing.revision + 1 if existing is not None else 1
         source_path = existing.mask_path if existing is not None else None
         destination_path: Path | None = None
-        before = (
-            mask_annotation_snapshot(existing) if existing is not None else None
-        )
+        before = mask_annotation_snapshot(existing) if existing is not None else None
         try:
-            relative_path, destination_path, area_pixels, bounds = (
-                write_raster_mask_revision(
-                    self.settings,
-                    project_storage_root=project.storage_root,
-                    image_id=image.id,
-                    mask_annotation_id=mask_id,
-                    revision=next_revision,
-                    source_relative_path=source_path,
-                    expected_width=image.width_px,
-                    expected_height=image.height_px,
-                    strokes=payload.strokes,
-                    brush_radius=float(payload.brush_radius),
-                    mode=payload.mode,
-                )
+            relative_path, destination_path, area_pixels, bounds = write_raster_mask_revision(
+                self.settings,
+                project_storage_root=project.storage_root,
+                image_id=image.id,
+                mask_annotation_id=mask_id,
+                revision=next_revision,
+                source_relative_path=source_path,
+                expected_width=image.width_px,
+                expected_height=image.height_px,
+                strokes=payload.strokes,
+                brush_radius=float(payload.brush_radius),
+                mode=payload.mode,
             )
             x_min, y_min, x_max, y_max = bounds
             if existing is None:

@@ -41,9 +41,7 @@ def write_mask_png(
         with Image.open(BytesIO(payload)) as image:
             image.load()
             if image.size != (expected_width, expected_height):
-                raise ValidationError(
-                    "Assist mask dimensions do not match the source image"
-                )
+                raise ValidationError("Assist mask dimensions do not match the source image")
             grayscale = image.convert("L")
             bounds = grayscale.getbbox()
             if bounds is None:
