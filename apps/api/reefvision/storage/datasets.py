@@ -62,7 +62,7 @@ def safe_export_filename(image_id: str, original_filename: str) -> str:
     sanitized = re.sub(r"[^A-Za-z0-9._-]+", "_", base).strip("._")
     if not sanitized:
         sanitized = "image"
-    return f"{image_id[:8]}_{sanitized}"
+    return f"{image_id}_{sanitized}"
 
 
 def remove_export_artifacts(
