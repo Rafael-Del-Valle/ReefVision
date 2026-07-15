@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from math import hypot
+from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 from sqlalchemy.orm import Session
@@ -15,6 +16,7 @@ from reefvision.schemas.measurements import MaskMeasurementResponse
 from reefvision.storage.projects import resolve_managed_project_path
 
 Point = tuple[float, float]
+RasterMask = tuple[bytes, int, int]
 
 
 def _point_in_polygon(point: Point, polygon: list[Point]) -> bool:
@@ -73,40 +75,45 @@ def _polygon_measurements(points: list[Point]) -> tuple[int, float, float, float
     return max(1, round(area)), perimeter, centroid_x, centroid_y
 
 
+def _raster_pixel_active(raster: RasterMask, x: int, y: int) -> bool:
+    data, width, height = raster
+    if x < 0 or y < 0 or x >= width or y >= height:
+        return False
+    return data[y * width + x] > 0
+
+
 def _raster_measurements(
-    path: str,
-) -> tuple[int, float, float, float, set[tuple[int, int]]]:
+    path: str | Path,
+) -> tuple[int, float, float, float, RasterMask]:
     try:
         with Image.open(path) as image:
             grayscale = image.convert("L")
             width, height = grayscale.size
-            pixels = grayscale.load()
-            active = {
-                (x, y)
-                for y in range(height)
-                for x in range(width)
-                if pixels[x, y] > 0
-            }
+            data = grayscale.tobytes()
     except (OSError, UnidentifiedImageError) as exc:
         raise ValidationError("Raster mask content could not be read") from exc
-    if not active:
+
+    area = 0
+    x_sum = 0.0
+    y_sum = 0.0
+    perimeter = 0
+    raster = (data, width, height)
+    for y in range(height):
+        row_offset = y * width
+        for x in range(width):
+            if data[row_offset + x] == 0:
+                continue
+            area += 1
+            x_sum += x + 0.5
+            y_sum += y + 0.5
+            perimeter += int(not _raster_pixel_active(raster, x - 1, y))
+            perimeter += int(not _raster_pixel_active(raster, x + 1, y))
+            perimeter += int(not _raster_pixel_active(raster, x, y - 1))
+            perimeter += int(not _raster_pixel_active(raster, x, y + 1))
+
+    if area == 0:
         raise ValidationError("Raster mask is empty")
-    area = len(active)
-    centroid_x = sum(x + 0.5 for x, _ in active) / area
-    centroid_y = sum(y + 0.5 for _, y in active) / area
-    perimeter = float(
-        sum(
-            neighbor not in active
-            for x, y in active
-            for neighbor in (
-                (x - 1, y),
-                (x + 1, y),
-                (x, y - 1),
-                (x, y + 1),
-            )
-        )
-    )
-    return area, perimeter, centroid_x, centroid_y, active
+    return area, float(perimeter), x_sum / area, y_sum / area, raster
 
 
 class MaskMeasurementService:
@@ -123,7 +130,7 @@ class MaskMeasurementService:
             raise ValidationError("Mask annotation does not have valid bounds")
 
         polygon: list[Point] | None = None
-        raster_active: set[tuple[int, int]] | None = None
+        raster: RasterMask | None = None
         if mask.geometry_kind == "polygon":
             if not mask.polygon_json or len(mask.polygon_json) < 3:
                 raise ValidationError("Polygon mask does not have valid geometry")
@@ -135,8 +142,8 @@ class MaskMeasurementService:
             if not mask.mask_path:
                 raise ValidationError("Raster mask content is missing")
             managed_path = resolve_managed_project_path(self.settings, mask.mask_path)
-            area, perimeter, centroid_x, centroid_y, raster_active = (
-                _raster_measurements(str(managed_path))
+            area, perimeter, centroid_x, centroid_y, raster = _raster_measurements(
+                managed_path
             )
         else:
             raise ValidationError(
@@ -151,10 +158,12 @@ class MaskMeasurementService:
             )
             if polygon is not None and _point_in_polygon(center, polygon):
                 contained_box_count += 1
-            elif raster_active is not None:
-                pixel = (int(center[0]), int(center[1]))
-                if pixel in raster_active:
-                    contained_box_count += 1
+            elif raster is not None and _raster_pixel_active(
+                raster,
+                int(center[0]),
+                int(center[1]),
+            ):
+                contained_box_count += 1
 
         return MaskMeasurementResponse(
             mask_annotation_id=mask.id,
