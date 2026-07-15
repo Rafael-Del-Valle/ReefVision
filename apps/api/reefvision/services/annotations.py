@@ -177,76 +177,77 @@ class AnnotationService:
         return self.images.neighbor_ids_for_image(image)
 
     def _counts_by_class(
-        self,
-        project: Project,
-        label_class_ids: list[str],
+        self, annotations: list[Annotation]
     ) -> list[AnnotationCountResponse]:
-        counts = Counter(label_class_ids)
+        counts = Counter(
+            annotation.label_class_id
+            for annotation in annotations
+            if annotation.deleted_at is None
+        )
         return [
-            AnnotationCountResponse(
-                label_class_id=label_class.id,
-                count=counts.get(label_class.id, 0),
-            )
-            for label_class in project.label_classes
+            AnnotationCountResponse(label_class_id=label_class_id, count=count)
+            for label_class_id, count in sorted(counts.items())
         ]
 
-    def get_annotation_session(self, image_id: str) -> AnnotationSessionResponse:
+    def _mask_counts_by_class(
+        self, annotations: list[MaskAnnotation]
+    ) -> list[AnnotationCountResponse]:
+        counts = Counter(
+            annotation.label_class_id
+            for annotation in annotations
+            if annotation.deleted_at is None and annotation.label_class_id is not None
+        )
+        return [
+            AnnotationCountResponse(label_class_id=label_class_id, count=count)
+            for label_class_id, count in sorted(counts.items())
+        ]
+
+    def get_session(self, image_id: str) -> AnnotationSessionResponse:
         image = self._image(image_id)
         project = self._project_with_classes(image)
         annotations = self.annotations.list_for_image(image_id)
-        mask_annotations = self.mask_annotations.list_for_image(image_id)
+        masks = self.mask_annotations.list_for_image(image_id)
         previous_image_id, next_image_id = self._neighbor_ids(image)
         return AnnotationSessionResponse(
             image=ImageResponse.model_validate(image),
             label_classes=[
                 LabelClassResponse.model_validate(label_class)
-                for label_class in project.label_classes
+                for label_class in sorted(
+                    project.label_classes,
+                    key=lambda item: (item.display_order, item.class_index),
+                )
             ],
             annotations=[
                 AnnotationResponse.model_validate(annotation) for annotation in annotations
             ],
             mask_annotations=[
-                MaskAnnotationResponse.model_validate(annotation)
-                for annotation in mask_annotations
+                MaskAnnotationResponse.model_validate(annotation) for annotation in masks
             ],
-            counts_by_class=self._counts_by_class(
-                project,
-                [annotation.label_class_id for annotation in annotations],
-            ),
-            mask_counts_by_class=self._counts_by_class(
-                project,
-                [
-                    annotation.label_class_id
-                    for annotation in mask_annotations
-                    if annotation.label_class_id is not None
-                ],
-            ),
+            counts_by_class=self._counts_by_class(annotations),
+            mask_counts_by_class=self._mask_counts_by_class(masks),
             previous_image_id=previous_image_id,
             next_image_id=next_image_id,
         )
 
-    def _validate_annotation_box(
-        self,
-        annotation: AnnotationDraft,
-        image: ImageAsset,
-    ) -> None:
-        if annotation.x_max <= annotation.x_min or annotation.y_max <= annotation.y_min:
-            raise ValidationError("Bounding boxes must have positive width and height")
-        if annotation.x_min < 0 or annotation.y_min < 0:
-            raise ValidationError("Bounding boxes cannot start outside the image")
-        if annotation.x_max > image.width_px or annotation.y_max > image.height_px:
-            raise ValidationError("Bounding boxes cannot extend outside the image bounds")
+    @staticmethod
+    def _validate_annotation_box(draft: AnnotationDraft, image: ImageAsset) -> None:
+        if draft.x_min < 0 or draft.y_min < 0:
+            raise ValidationError("Annotation coordinates cannot be negative")
+        if draft.x_max > image.width_px or draft.y_max > image.height_px:
+            raise ValidationError("Annotation coordinates cannot exceed image bounds")
+        if draft.x_max <= draft.x_min or draft.y_max <= draft.y_min:
+            raise ValidationError("Annotation boxes must have positive area")
 
+    @staticmethod
     def _validated_polygon(
-        self,
-        annotation: MaskAnnotationDraft,
+        draft: MaskAnnotationDraft,
         image: ImageAsset,
     ) -> tuple[list[list[float]], float, float, float, float, int]:
-        points: list[Point] = [
-            (float(point.x), float(point.y)) for point in annotation.points
-        ]
-        if len(points) > 3 and points[0] == points[-1]:
-            points = points[:-1]
+        if draft.geometry_kind != "polygon":
+            raise ValidationError("Editable batch saves currently support polygon masks")
+        points = [(float(point.x), float(point.y)) for point in draft.points]
+        if len(points) < 3:
+            raise ValidationError("Polygon masks require at least three points")
         if len(set(points)) < 3:
             raise ValidationError("Polygon masks require at least three unique points")
         if any(
@@ -460,6 +461,8 @@ class AnnotationService:
                     area_pixels=area_pixels,
                     source_type="human",
                     status="verified",
+                    created_by="local_user",
+                    revision=1,
                 )
                 self.mask_annotations.add(mask_annotation)
                 self.mask_annotations.add_event(
@@ -520,16 +523,10 @@ class AnnotationService:
                 )
                 changed = True
 
-        for mask_id in payload.deleted_mask_annotation_ids:
+        requested_deletions = set(payload.deleted_mask_annotation_ids)
+        for mask_id in requested_deletions:
             existing_mask = existing_masks_by_id.get(mask_id)
-            if existing_mask is None:
-                foreign_mask = self.mask_annotations.get(mask_id)
-                if foreign_mask is not None:
-                    raise ValidationError(
-                        "Mask annotations may only be deleted from their source image"
-                    )
-                raise NotFoundError("Mask annotation not found")
-            if existing_mask.deleted_at is not None:
+            if existing_mask is None or existing_mask.deleted_at is not None:
                 continue
             before = mask_annotation_snapshot(existing_mask)
             existing_mask.deleted_at = utc_now()
@@ -551,13 +548,18 @@ class AnnotationService:
 
         if changed:
             image.annotation_revision += 1
-            self.session.commit()
 
-        refreshed_image = self._image(image_id)
+        try:
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+
+        self.session.refresh(image)
         active_annotations = self.annotations.list_for_image(image_id)
         active_masks = self.mask_annotations.list_for_image(image_id)
         return AnnotationBatchSaveResponse(
-            image=ImageResponse.model_validate(refreshed_image),
+            image=ImageResponse.model_validate(image),
             annotations=[
                 AnnotationResponse.model_validate(annotation)
                 for annotation in active_annotations
@@ -566,16 +568,6 @@ class AnnotationService:
                 MaskAnnotationResponse.model_validate(annotation)
                 for annotation in active_masks
             ],
-            counts_by_class=self._counts_by_class(
-                project,
-                [annotation.label_class_id for annotation in active_annotations],
-            ),
-            mask_counts_by_class=self._counts_by_class(
-                project,
-                [
-                    annotation.label_class_id
-                    for annotation in active_masks
-                    if annotation.label_class_id is not None
-                ],
-            ),
+            counts_by_class=self._counts_by_class(active_annotations),
+            mask_counts_by_class=self._mask_counts_by_class(active_masks),
         )
