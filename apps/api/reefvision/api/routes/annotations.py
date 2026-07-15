@@ -26,14 +26,22 @@ def service(request: Request, session: Session) -> AnnotationService:
     return AnnotationService(session, settings)
 
 
-@router.get("/images/{image_id}/annotations", response_model=AnnotationSessionResponse)
+@router.get(
+    "/images/{image_id}/annotations",
+    response_model=AnnotationSessionResponse,
+)
 def get_annotation_session(
-    image_id: str, request: Request, session: DbSession
+    image_id: str,
+    request: Request,
+    session: DbSession,
 ) -> AnnotationSessionResponse:
     return service(request, session).get_annotation_session(image_id)
 
 
-@router.put("/images/{image_id}/annotations", response_model=AnnotationBatchSaveResponse)
+@router.put(
+    "/images/{image_id}/annotations",
+    response_model=AnnotationBatchSaveResponse,
+)
 def save_annotations(
     image_id: str,
     payload: AnnotationBatchSaveRequest,
@@ -43,7 +51,10 @@ def save_annotations(
     return service(request, session).save_annotations(image_id, payload)
 
 
-@router.get("/mask-annotations/{mask_annotation_id}/content", response_class=FileResponse)
+@router.get(
+    "/mask-annotations/{mask_annotation_id}/content",
+    response_class=FileResponse,
+)
 def mask_annotation_content(
     mask_annotation_id: str,
     request: Request,
