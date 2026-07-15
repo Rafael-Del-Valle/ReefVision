@@ -4,6 +4,7 @@ from typing import Any, cast
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from reefvision.db.models import MaskAnnotation, MaskAnnotationEvent
 from reefvision.tests.test_annotations import create_project, import_one
@@ -37,7 +38,11 @@ def test_polygon_mask_create_update_delete_and_audit(client: TestClient) -> None
             "annotation_status": "in_progress",
             "annotations": [],
             "mask_annotations": [
-                _mask_payload(mask_id, first_class_id, [(5, 5), (25, 5), (25, 20), (5, 20)])
+                _mask_payload(
+                    mask_id,
+                    first_class_id,
+                    [(5, 5), (25, 5), (25, 20), (5, 20)],
+                )
             ],
         },
     )
@@ -54,7 +59,11 @@ def test_polygon_mask_create_update_delete_and_audit(client: TestClient) -> None
             "annotation_status": "annotated",
             "annotations": [],
             "mask_annotations": [
-                _mask_payload(mask_id, second_class_id, [(6, 6), (30, 6), (30, 24), (6, 24)])
+                _mask_payload(
+                    mask_id,
+                    second_class_id,
+                    [(6, 6), (30, 6), (30, 24), (6, 24)],
+                )
             ],
         },
     )
@@ -80,13 +89,16 @@ def test_polygon_mask_create_update_delete_and_audit(client: TestClient) -> None
         assert mask is not None
         assert mask.deleted_at is not None
         assert mask.revision == 3
-        event_types = [
-            event.event_type
-            for event in session.query(MaskAnnotationEvent)
-            .filter_by(mask_annotation_id=mask_id)
+        events = session.scalars(
+            select(MaskAnnotationEvent)
+            .where(MaskAnnotationEvent.mask_annotation_id == mask_id)
             .order_by(MaskAnnotationEvent.created_at, MaskAnnotationEvent.id)
+        )
+        assert [event.event_type for event in events] == [
+            "created",
+            "class_changed",
+            "deleted",
         ]
-        assert event_types == ["created", "class_changed", "deleted"]
 
 
 def test_polygon_mask_validation_is_transactional(client: TestClient) -> None:
@@ -150,7 +162,11 @@ def test_box_only_save_preserves_existing_masks(client: TestClient) -> None:
             "annotation_status": "in_progress",
             "annotations": [],
             "mask_annotations": [
-                _mask_payload(mask_id, label_class_id, [(5, 5), (20, 5), (20, 20), (5, 20)])
+                _mask_payload(
+                    mask_id,
+                    label_class_id,
+                    [(5, 5), (20, 5), (20, 20), (5, 20)],
+                )
             ],
         },
     )
@@ -174,7 +190,9 @@ def test_box_only_save_preserves_existing_masks(client: TestClient) -> None:
         },
     )
     assert legacy_save.status_code == 200, legacy_save.text
-    assert [mask["id"] for mask in legacy_save.json()["mask_annotations"]] == [mask_id]
+    assert [mask["id"] for mask in legacy_save.json()["mask_annotations"]] == [
+        mask_id
+    ]
 
 
 def test_mask_save_uses_shared_revision_conflict_protection(client: TestClient) -> None:
@@ -206,7 +224,9 @@ def test_mask_save_uses_shared_revision_conflict_protection(client: TestClient) 
             "base_revision": 0,
             "annotation_status": "reviewed",
             "annotations": [],
-            "deleted_mask_annotation_ids": ["2fb0beb0-a94d-4a30-b506-c932459b4094"],
+            "deleted_mask_annotation_ids": [
+                "2fb0beb0-a94d-4a30-b506-c932459b4094"
+            ],
         },
     )
     assert stale.status_code == 409
