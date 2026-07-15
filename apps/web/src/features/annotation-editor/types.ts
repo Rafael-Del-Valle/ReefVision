@@ -51,6 +51,7 @@ export interface EditorMaskAnnotation {
   area_pixels: number | null;
   source_type: string;
   persisted: boolean;
+  revision?: number;
 }
 
 export interface AnnotationDocument {
@@ -118,5 +119,6 @@ export function toEditorMaskAnnotation(
     area_pixels: annotation.area_pixels,
     source_type: annotation.source_type,
     persisted: true,
+    revision: annotation.revision,
   };
 }
