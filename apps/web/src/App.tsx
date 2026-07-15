@@ -12,7 +12,7 @@ import {
   type QualityControlIssue,
   type ReviewQueueItem,
 } from "./api/client";
-import { AnnotationEditor } from "./features/annotation-editor/AnnotationEditor";
+import { EnhancedAnnotationEditor } from "./features/annotation-editor/EnhancedAnnotationEditor";
 import { ClassManagerPanel } from "./features/classes/ClassManagerPanel";
 import { DatasetVersionsPanel } from "./features/dataset-versions/DatasetVersionsPanel";
 import { Gallery } from "./features/gallery/Gallery";
@@ -479,7 +479,7 @@ export function App() {
         />
       )}
       {selectedProject && editorLaunch && (
-        <AnnotationEditor
+        <EnhancedAnnotationEditor
           project={selectedProject}
           initialImageId={editorLaunch.imageId}
           launchContext={editorLaunch}
