@@ -22,6 +22,22 @@ const persistedMask: EditorMaskAnnotation = {
   ),
 };
 
+const persistedRasterMask: EditorMaskAnnotation = {
+  id: "persisted-raster-mask",
+  label_class_id: "class-1",
+  geometry_kind: "raster_mask",
+  points: null,
+  mask_path: "projects/project-1/masks/image-1/raster-r1.png",
+  x_min: 5,
+  y_min: 5,
+  x_max: 25,
+  y_max: 25,
+  area_pixels: 200,
+  source_type: "human_brush",
+  persisted: true,
+  revision: 1,
+};
+
 const emptyDocument: AnnotationDocument = {
   annotation_status: "in_progress",
   annotations: [],
@@ -91,7 +107,7 @@ describe("mask document operations", () => {
     expect(deleted.deletedMaskAnnotationIds).toEqual([persistedMask.id]);
   });
 
-  it("changes the class for all selected masks", () => {
+  it("changes the class for selected polygon masks", () => {
     const changed = changeMaskAnnotationClass(
       {
         ...emptyDocument,
@@ -102,5 +118,18 @@ describe("mask document operations", () => {
     );
     expect(changed.maskAnnotations[0].label_class_id).toBe("class-2");
     expect(changed.maskAnnotations[0].persisted).toBe(true);
+  });
+
+  it("does not pretend a raster class-only change can be batch-saved", () => {
+    const changed = changeMaskAnnotationClass(
+      {
+        ...emptyDocument,
+        maskAnnotations: [persistedRasterMask],
+      },
+      [persistedRasterMask.id],
+      "class-2",
+    );
+
+    expect(changed.maskAnnotations[0].label_class_id).toBe("class-1");
   });
 });
