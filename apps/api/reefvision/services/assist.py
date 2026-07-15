@@ -192,6 +192,7 @@ class AssistService:
         annotation_id = str(uuid4())
         mask_annotation_id = str(uuid4())
         destination_path: Path | None = None
+        annotation: Annotation | None = None
         mask_annotation: MaskAnnotation | None = None
         try:
             relative_mask_path, destination_path, area_pixels = write_mask_png(
@@ -278,6 +279,8 @@ class AssistService:
                 destination_path.unlink(missing_ok=True)
             raise
 
+        assert annotation is not None
+        assert mask_annotation is not None
         self.session.refresh(annotation)
         self.session.refresh(mask_annotation)
         self.runtime.delete_session(session_id)
