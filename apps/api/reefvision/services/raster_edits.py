@@ -107,6 +107,7 @@ class RasterMaskEditService:
                         "stroke_count": len(payload.strokes),
                     },
                     status="verified",
+                    created_by="local_user",
                     revision=1,
                 )
                 self.masks.add(mask)
