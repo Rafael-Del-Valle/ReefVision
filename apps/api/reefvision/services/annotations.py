@@ -93,7 +93,12 @@ def _point_on_segment(first: Point, second: Point, point: Point) -> bool:
     )
 
 
-def _segments_intersect(first_a: Point, first_b: Point, second_a: Point, second_b: Point) -> bool:
+def _segments_intersect(
+    first_a: Point,
+    first_b: Point,
+    second_a: Point,
+    second_b: Point,
+) -> bool:
     cross_1 = _cross(first_a, first_b, second_a)
     cross_2 = _cross(first_a, first_b, second_b)
     cross_3 = _cross(second_a, second_b, first_a)
@@ -103,11 +108,18 @@ def _segments_intersect(first_a: Point, first_b: Point, second_a: Point, second_
         cross_3 > 0 > cross_4 or cross_3 < 0 < cross_4
     ):
         return True
-    return (
-        (isclose(cross_1, 0.0, abs_tol=1e-9) and _point_on_segment(first_a, first_b, second_a))
-        or (isclose(cross_2, 0.0, abs_tol=1e-9) and _point_on_segment(first_a, first_b, second_b))
-        or (isclose(cross_3, 0.0, abs_tol=1e-9) and _point_on_segment(second_a, second_b, first_a))
-        or (isclose(cross_4, 0.0, abs_tol=1e-9) and _point_on_segment(second_a, second_b, first_b))
+
+    return any(
+        (
+            isclose(cross_value, 0.0, abs_tol=1e-9)
+            and _point_on_segment(segment_a, segment_b, point)
+        )
+        for cross_value, segment_a, segment_b, point in (
+            (cross_1, first_a, first_b, second_a),
+            (cross_2, first_a, first_b, second_b),
+            (cross_3, second_a, second_b, first_a),
+            (cross_4, second_a, second_b, first_b),
+        )
     )
 
 
@@ -213,7 +225,11 @@ class AnnotationService:
             next_image_id=next_image_id,
         )
 
-    def _validate_annotation_box(self, annotation: AnnotationDraft, image: ImageAsset) -> None:
+    def _validate_annotation_box(
+        self,
+        annotation: AnnotationDraft,
+        image: ImageAsset,
+    ) -> None:
         if annotation.x_max <= annotation.x_min or annotation.y_max <= annotation.y_min:
             raise ValidationError("Bounding boxes must have positive width and height")
         if annotation.x_min < 0 or annotation.y_min < 0:
@@ -226,12 +242,17 @@ class AnnotationService:
         annotation: MaskAnnotationDraft,
         image: ImageAsset,
     ) -> tuple[list[list[float]], float, float, float, float, int]:
-        points: list[Point] = [(float(point.x), float(point.y)) for point in annotation.points]
+        points: list[Point] = [
+            (float(point.x), float(point.y)) for point in annotation.points
+        ]
         if len(points) > 3 and points[0] == points[-1]:
             points = points[:-1]
         if len(set(points)) < 3:
             raise ValidationError("Polygon masks require at least three unique points")
-        if any(points[index] == points[(index + 1) % len(points)] for index in range(len(points))):
+        if any(
+            points[index] == points[(index + 1) % len(points)]
+            for index in range(len(points))
+        ):
             raise ValidationError("Polygon masks cannot contain consecutive duplicate points")
         if any(
             x < 0 or y < 0 or x > image.width_px or y > image.height_px
@@ -291,16 +312,25 @@ class AnnotationService:
         )
 
     def save_annotations(
-        self, image_id: str, payload: AnnotationBatchSaveRequest
+        self,
+        image_id: str,
+        payload: AnnotationBatchSaveRequest,
     ) -> AnnotationBatchSaveResponse:
         image = self._image(image_id)
         if image.annotation_revision != payload.base_revision:
             raise ConflictError("Annotation revision conflict")
 
         project = self._project_with_classes(image)
-        project_classes = {label_class.id: label_class for label_class in project.label_classes}
-        existing_annotations = self.annotations.list_for_image(image_id, include_deleted=True)
-        existing_by_id = {annotation.id: annotation for annotation in existing_annotations}
+        project_classes = {
+            label_class.id: label_class for label_class in project.label_classes
+        }
+        existing_annotations = self.annotations.list_for_image(
+            image_id,
+            include_deleted=True,
+        )
+        existing_by_id = {
+            annotation.id: annotation for annotation in existing_annotations
+        }
         desired_ids = {annotation.id for annotation in payload.annotations}
         changed = False
 
@@ -308,7 +338,9 @@ class AnnotationService:
             self._validate_annotation_box(draft, image)
             label_class = project_classes.get(draft.label_class_id)
             if label_class is None:
-                raise ValidationError("Annotation class does not belong to this image's project")
+                raise ValidationError(
+                    "Annotation class does not belong to this image's project"
+                )
 
             existing = existing_by_id.get(draft.id)
             if existing is None:
@@ -335,7 +367,9 @@ class AnnotationService:
                 continue
 
             if existing.image_id != image_id:
-                raise ValidationError("Annotations may only be saved back to their source image")
+                raise ValidationError(
+                    "Annotations may only be saved back to their source image"
+                )
 
             before = annotation_snapshot(existing)
             class_changed = existing.label_class_id != draft.label_class_id
@@ -357,7 +391,11 @@ class AnnotationService:
                     existing.deleted_at = None
                 existing.revision += 1
                 event_type = (
-                    "restored" if restored else "class_changed" if class_changed else "updated"
+                    "restored"
+                    if restored
+                    else "class_changed"
+                    if class_changed
+                    else "updated"
                 )
                 self.annotations.add_event(
                     self._event(
@@ -386,21 +424,29 @@ class AnnotationService:
                 )
                 changed = True
 
-        existing_masks = self.mask_annotations.list_for_image(image_id, include_deleted=True)
-        existing_masks_by_id = {annotation.id: annotation for annotation in existing_masks}
+        existing_masks = self.mask_annotations.list_for_image(
+            image_id,
+            include_deleted=True,
+        )
+        existing_masks_by_id = {
+            annotation.id: annotation for annotation in existing_masks
+        }
 
         for draft in payload.mask_annotations:
             if draft.label_class_id not in project_classes:
-                raise ValidationError("Mask class does not belong to this image's project")
-            polygon, x_min, y_min, x_max, y_max, area_pixels = self._validated_polygon(
-                draft,
-                image,
+                raise ValidationError(
+                    "Mask class does not belong to this image's project"
+                )
+            polygon, x_min, y_min, x_max, y_max, area_pixels = (
+                self._validated_polygon(draft, image)
             )
             existing_mask = existing_masks_by_id.get(draft.id)
             if existing_mask is None:
                 conflicting_mask = self.mask_annotations.get(draft.id)
                 if conflicting_mask is not None:
-                    raise ValidationError("Mask annotations may only be saved to their source image")
+                    raise ValidationError(
+                        "Mask annotations may only be saved to their source image"
+                    )
                 mask_annotation = MaskAnnotation(
                     id=draft.id,
                     image_id=image_id,
@@ -457,7 +503,11 @@ class AnnotationService:
                     existing_mask.deleted_at = None
                 existing_mask.revision += 1
                 event_type = (
-                    "restored" if restored else "class_changed" if class_changed else "updated"
+                    "restored"
+                    if restored
+                    else "class_changed"
+                    if class_changed
+                    else "updated"
                 )
                 self.mask_annotations.add_event(
                     self._mask_event(
@@ -475,7 +525,9 @@ class AnnotationService:
             if existing_mask is None:
                 foreign_mask = self.mask_annotations.get(mask_id)
                 if foreign_mask is not None:
-                    raise ValidationError("Mask annotations may only be deleted from their source image")
+                    raise ValidationError(
+                        "Mask annotations may only be deleted from their source image"
+                    )
                 raise NotFoundError("Mask annotation not found")
             if existing_mask.deleted_at is not None:
                 continue
@@ -507,10 +559,12 @@ class AnnotationService:
         return AnnotationBatchSaveResponse(
             image=ImageResponse.model_validate(refreshed_image),
             annotations=[
-                AnnotationResponse.model_validate(annotation) for annotation in active_annotations
+                AnnotationResponse.model_validate(annotation)
+                for annotation in active_annotations
             ],
             mask_annotations=[
-                MaskAnnotationResponse.model_validate(annotation) for annotation in active_masks
+                MaskAnnotationResponse.model_validate(annotation)
+                for annotation in active_masks
             ],
             counts_by_class=self._counts_by_class(
                 project,
