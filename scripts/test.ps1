@@ -18,6 +18,30 @@ $Python = Join-Path $Root ".venv\Scripts\python.exe"
 $PreviousDataDir = $env:REEFVISION_DATA_DIR
 $ValidationDataDir = Join-Path ([System.IO.Path]::GetTempPath()) ("reefvision-validation-" + [guid]::NewGuid().ToString())
 
+function Remove-ReefVisionValidationData {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    for ($Attempt = 1; $Attempt -le 5; $Attempt += 1) {
+        if (-not (Test-Path -LiteralPath $Path)) {
+            return
+        }
+
+        try {
+            [System.GC]::Collect()
+            [System.GC]::WaitForPendingFinalizers()
+            Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+            return
+        }
+        catch {
+            if ($Attempt -eq 5) {
+                Write-Warning "Could not remove temporary validation data at '$Path': $($_.Exception.Message)"
+                return
+            }
+            Start-Sleep -Milliseconds (200 * $Attempt)
+        }
+    }
+}
+
 try {
     New-Item -ItemType Directory -Path $ValidationDataDir -Force | Out-Null
     $env:REEFVISION_DATA_DIR = $ValidationDataDir
@@ -67,5 +91,5 @@ finally {
     else {
         $env:REEFVISION_DATA_DIR = $PreviousDataDir
     }
-    Remove-Item -LiteralPath $ValidationDataDir -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-ReefVisionValidationData -Path $ValidationDataDir
 }
