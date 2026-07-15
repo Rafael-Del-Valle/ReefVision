@@ -15,7 +15,10 @@ from reefvision.repositories.mask_annotations import MaskAnnotationRepository
 from reefvision.repositories.projects import ProjectRepository
 from reefvision.schemas.annotations import MaskAnnotationResponse
 from reefvision.schemas.images import ImageResponse
-from reefvision.schemas.raster_edits import RasterMaskEditRequest, RasterMaskEditResponse
+from reefvision.schemas.raster_edits import (
+    RasterMaskEditRequest,
+    RasterMaskEditResponse,
+)
 from reefvision.services.annotations import mask_annotation_snapshot
 from reefvision.storage.raster_edits import write_raster_mask_revision
 
@@ -44,7 +47,9 @@ class RasterMaskEditService:
         if payload.label_class_id not in {
             label_class.id for label_class in project.label_classes
         }:
-            raise ValidationError("Mask class does not belong to this image's project")
+            raise ValidationError(
+                "Mask class does not belong to this image's project"
+            )
 
         existing: MaskAnnotation | None = None
         mask_id = payload.mask_annotation_id or str(uuid4())
@@ -62,7 +67,9 @@ class RasterMaskEditService:
         next_revision = existing.revision + 1 if existing is not None else 1
         source_path = existing.mask_path if existing is not None else None
         destination_path: Path | None = None
-        before = mask_annotation_snapshot(existing) if existing is not None else None
+        before = (
+            mask_annotation_snapshot(existing) if existing is not None else None
+        )
         try:
             relative_path, destination_path, area_pixels, bounds = (
                 write_raster_mask_revision(
