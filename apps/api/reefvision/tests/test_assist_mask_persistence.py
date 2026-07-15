@@ -39,14 +39,19 @@ class FakeAssistRuntime:
         return (
             self.state,
             PixelBox(x_min=10, y_min=8, x_max=20, y_max=18),
-            {"prompt_type": "smart_mask", "accepted_at": datetime.now(UTC).isoformat()},
+            {
+                "prompt_type": "smart_mask",
+                "accepted_at": datetime.now(UTC).isoformat(),
+            },
         )
 
     def delete_session(self, session_id: str) -> None:
         self.deleted_session_ids.append(session_id)
 
 
-def test_prompt_assist_acceptance_persists_box_and_raster_mask(client: TestClient) -> None:
+def test_prompt_assist_acceptance_persists_box_and_raster_mask(
+    client: TestClient,
+) -> None:
     project = create_project(client, "Persist assist mask")
     report = import_one(client, project["id"], size=(80, 60))
     image_id = report["successful"][0]["image_id"]
