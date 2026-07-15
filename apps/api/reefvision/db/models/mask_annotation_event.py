@@ -22,11 +22,17 @@ class MaskAnnotationEvent(Base):
 
     __tablename__ = "mask_annotation_events"
     __table_args__ = (
-        Index("ix_mask_annotation_events_annotation_created", "mask_annotation_id", "created_at"),
+        Index(
+            "ix_mask_annotation_events_annotation_created",
+            "mask_annotation_id",
+            "created_at",
+        ),
         Index("ix_mask_annotation_events_image_created", "image_id", "created_at"),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
     mask_annotation_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("mask_annotations.id", ondelete="CASCADE"), nullable=False
     )
