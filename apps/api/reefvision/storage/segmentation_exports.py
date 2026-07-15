@@ -63,7 +63,7 @@ def _write_data_yaml(
         class_map,
         key=lambda value: int(value["class_index"]),
     ):
-        yaml_lines.append(f"  {int(item['class_index'])}: {str(item['name'])}")
+        yaml_lines.append(f"  {int(item['class_index'])}: {item['name']!s}")
     (output_root / "data.yaml").write_text(
         "\n".join(yaml_lines) + "\n",
         encoding="utf-8",
