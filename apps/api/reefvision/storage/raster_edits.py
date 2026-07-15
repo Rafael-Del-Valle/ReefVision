@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 from uuid import uuid4
 
 from PIL import Image, ImageDraw, UnidentifiedImageError
 
 from reefvision.config import Settings
-from reefvision.domain.errors import ValidationError
+from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.schemas.raster_edits import RasterEditStroke
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -56,6 +57,30 @@ def _draw_stroke(
         )
 
 
+def _publish_revision_exclusively(temporary: Path, destination: Path) -> None:
+    """Publish a complete revision without replacing an existing immutable file."""
+
+    try:
+        os.link(temporary, destination)
+    except FileExistsError as exc:
+        raise ConflictError("Raster mask revision already exists") from exc
+    except OSError:
+        # Hard links can be unavailable on unusual filesystems. The exclusive
+        # fallback still guarantees that a committed revision is never replaced.
+        try:
+            with temporary.open("rb") as source, destination.open("xb") as target:
+                shutil.copyfileobj(source, target)
+                target.flush()
+                os.fsync(target.fileno())
+        except FileExistsError as exc:
+            raise ConflictError("Raster mask revision already exists") from exc
+        except Exception:
+            destination.unlink(missing_ok=True)
+            raise
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def write_raster_mask_revision(
     settings: Settings,
     *,
@@ -93,8 +118,11 @@ def write_raster_mask_revision(
     destination_directory.mkdir(parents=True, exist_ok=True)
     destination = destination_directory / f"{mask_annotation_id}-r{revision}.png"
     temporary = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
-    binary.save(temporary, format="PNG", optimize=True)
-    os.replace(temporary, destination)
+    try:
+        binary.save(temporary, format="PNG", optimize=True)
+        _publish_revision_exclusively(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
     relative_path = destination.relative_to(settings.resolved_data_dir).as_posix()
     left, top, right, bottom = bounds
     return (
