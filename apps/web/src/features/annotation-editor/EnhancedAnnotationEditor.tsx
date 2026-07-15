@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 
-import type { Project } from "../../api/client";
+import type { AnnotationSession, Project } from "../../api/client";
 import { AnnotationEditor } from "./AnnotationEditor";
 import { MaskAnnotationWorkspace } from "./MaskAnnotationWorkspace";
 import { RasterMaskWorkspace } from "./RasterMaskWorkspace";
@@ -36,13 +37,35 @@ export function EnhancedAnnotationEditor({
   launchContext,
   onClose,
 }: EnhancedAnnotationEditorProps) {
+  const queryClient = useQueryClient();
   const [workspace, setWorkspace] = useState<EditorWorkspace>("boxes");
+  const [activeImageId, setActiveImageId] = useState(initialImageId);
+
+  useEffect(() => {
+    setActiveImageId(initialImageId);
+  }, [initialImageId]);
+
+  useEffect(() => {
+    return queryClient.getQueryCache().subscribe((event) => {
+      const query = event.query;
+      if (query.queryKey[0] !== "annotation-session") {
+        return;
+      }
+      const data = query.state.data as AnnotationSession | undefined;
+      if (
+        query.state.status === "success" &&
+        data?.image.project_id === project.id
+      ) {
+        setActiveImageId(data.image.id);
+      }
+    });
+  }, [project.id, queryClient]);
 
   if (workspace === "raster") {
     return (
       <RasterMaskWorkspace
         project={project}
-        imageId={initialImageId}
+        imageId={activeImageId}
         onReturnToMasks={() => setWorkspace("masks")}
         onReturnToBoxes={() => setWorkspace("boxes")}
         onClose={onClose}
@@ -55,7 +78,7 @@ export function EnhancedAnnotationEditor({
       <>
         <MaskAnnotationWorkspace
           project={project}
-          imageId={initialImageId}
+          imageId={activeImageId}
           onReturnToBoxes={() => setWorkspace("boxes")}
           onClose={onClose}
         />
@@ -77,7 +100,7 @@ export function EnhancedAnnotationEditor({
     <>
       <AnnotationEditor
         project={project}
-        initialImageId={initialImageId}
+        initialImageId={activeImageId}
         launchContext={launchContext}
         onClose={onClose}
       />
