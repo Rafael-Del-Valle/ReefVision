@@ -1,12 +1,12 @@
 import {
-  PointerEvent,
   useMemo,
   useRef,
   useState,
+  type PointerEvent,
 } from "react";
 
-import type { Point } from "./types";
 import type { RasterEditMode } from "./rasterMaskApi";
+import type { Point } from "./types";
 
 interface RasterBrushLayerProps {
   width: number;
@@ -90,6 +90,12 @@ export function RasterBrushLayer({
     if (completed.length > 0) onStroke(completed);
   }
 
+  const previewFill =
+    mode === "paint"
+      ? "rgba(87, 204, 153, 0.35)"
+      : "rgba(244, 96, 108, 0.35)";
+  const previewStroke = mode === "paint" ? "#57cc99" : "#f4606c";
+
   return (
     <svg
       ref={svgRef}
@@ -118,7 +124,7 @@ export function RasterBrushLayer({
           cx={points[0].x}
           cy={points[0].y}
           r={brushRadius}
-          fill={mode === "paint" ? "rgba(87, 204, 153, 0.35)" : "rgba(244, 96, 108, 0.35)"}
+          fill={previewFill}
           pointerEvents="none"
         />
       )}
@@ -126,7 +132,7 @@ export function RasterBrushLayer({
         <polyline
           points={strokeText}
           fill="none"
-          stroke={mode === "paint" ? "#57cc99" : "#f4606c"}
+          stroke={previewStroke}
           strokeWidth={brushRadius * 2}
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -140,7 +146,7 @@ export function RasterBrushLayer({
           cy={hoverPoint.y}
           r={brushRadius}
           fill="none"
-          stroke={mode === "paint" ? "#57cc99" : "#f4606c"}
+          stroke={previewStroke}
           strokeWidth={1.5}
           vectorEffect="non-scaling-stroke"
           pointerEvents="none"
