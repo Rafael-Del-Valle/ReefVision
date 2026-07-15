@@ -18,7 +18,7 @@ Available foundations include task-aware model metadata, measurements, video ass
 
 ### Phase 2 — Editable mask annotations
 
-Status: implementation complete for the first production-oriented slice; validation is pending functioning CI runners.
+Status: implementation complete for polygon and raster editing; executable validation is pending functioning CI runners.
 
 Implemented:
 
@@ -31,28 +31,40 @@ Implemented:
 - Prompt Assist acceptance that preserves the actual raster mask instead of only its bounding box
 - linked box/mask/model/prediction provenance
 - editable polygon canvas with source-coordinate creation, selection, class changes, deletion, undo/redo, and vertex dragging
-- dedicated mask workspace accessible from the existing annotation editor
+- double-click polygon edge insertion and Alt-click vertex removal with a three-point minimum
+- dedicated polygon and raster workspaces accessible from the existing annotation editor
+- freehand raster paint and erase tools with source-coordinate brush sampling
+- immutable raster revision files so older dataset snapshots remain reproducible
 - autosave and revision-conflict behavior shared with the box workflow
 - protection against sending server deletes for masks created and removed before their first save
 
 Deferred from this slice:
 
-- freehand brush and eraser editing of already-persisted raster masks
-- polygon vertex insertion/removal and edge splitting
 - holes and multipart masks
 - raster-to-polygon conversion and polygon simplification controls
+- local multi-stroke undo before a server revision is committed
 
 ### Phase 3 — Segmentation datasets and training
 
-Status: foundations present; export/training integration remains next.
+Status: immutable segmentation datasets and exports implemented; model-training integration remains next.
 
-July 20 priorities:
+Implemented:
 
-1. include immutable mask snapshots in dataset-version manifests
-2. add YOLO segmentation export for polygon masks
-3. export raster masks for semantic-segmentation workflows
-4. expose task-aware dataset eligibility and validation warnings
-5. keep existing YOLO detection export unchanged
+1. mask-aware immutable dataset-version records and manifests
+2. frozen polygon geometry and raster file checksums
+3. per-image and per-class mask counts
+4. YOLO polygon-segmentation export
+5. indexed semantic-mask PNG export using polygon and raster masks
+6. deterministic semantic overlap ordering
+7. raster checksum verification at export time
+8. selectable detection, polygon-segmentation, and semantic-mask exports in the UI
+9. unchanged YOLO detection export behavior
+
+Next:
+
+- task-aware training-draft eligibility for detection, instance segmentation, and semantic segmentation
+- segmentation dataset preflight warnings in the training workspace
+- provider-specific export adaptation where a trainer requires a format other than YOLO polygons or indexed PNGs
 
 Out of scope for the July 20 slice unless the above is green:
 
@@ -86,7 +98,7 @@ Next:
 
 Status: task/model foundations exist; no new July branch implementation yet.
 
-Priorities after segmentation export:
+Priorities after segmentation validation:
 
 - image-level and crop-level dataset generation
 - species and condition/state classification tasks
@@ -121,13 +133,13 @@ This branch extends provider output preservation by storing accepted Prompt Assi
 
 ### Phase 9 — Project data and interoperability
 
-Status: project, dataset-version, JSON metadata, and export foundations exist.
+Status: mask-aware dataset manifests and segmentation exports are implemented.
 
 Next:
 
-- mask-aware manifests and portable mask paths
-- segmentation labels and measurement tables
+- measurement tables and calibrated-unit metadata
 - project JSON schema version update
+- import validation for external segmentation datasets
 
 ### Phase 10 — Fusion/node editor
 
@@ -137,16 +149,17 @@ The node editor should compose proven detection, segmentation, tracking, depth, 
 
 ## Validation blocker
 
-GitHub Actions currently creates CI and Windows Desktop jobs, but the jobs fail before checkout with no steps and no logs. This is a repository Actions/runner infrastructure blocker, not a reported test assertion or compiler failure. The branch must remain draft until backend, frontend, and desktop checks execute normally.
+GitHub Actions currently creates CI and Windows Desktop jobs, but the jobs fail before checkout with no steps and no logs. Moving the cross-platform CI jobs from Windows to Ubuntu produced the same result. This is a repository or account Actions infrastructure blocker, not a reported test assertion or compiler failure. The branch must remain draft until backend, frontend, and desktop checks execute normally.
 
 ## Merge gates
 
 Before merging the editable-mask branch:
 
-- Alembic upgrade and downgrade complete on a test database
+- Alembic upgrades through `0016` and downgrades to base complete on a test database
 - Ruff and mypy pass
-- backend tests pass, including mask lifecycle, Prompt Assist persistence, and measurements
-- frontend lint, TypeScript build, and Vitest pass
-- existing bounding-box editor regression tests pass
+- backend tests pass, including mask lifecycle, Prompt Assist persistence, measurements, frozen mask snapshots, segmentation exports, and raster revision preservation
+- frontend formatting, TypeScript build, and Vitest pass
+- existing bounding-box editor and detection-export regression tests pass
 - Windows desktop package starts and serves persisted mask content
-- manual test confirms box-to-mask workspace switching and autosave behavior
+- manual test confirms box, polygon, and raster workspace switching
+- manual test confirms detection, YOLO segmentation, and semantic-mask ZIP downloads
