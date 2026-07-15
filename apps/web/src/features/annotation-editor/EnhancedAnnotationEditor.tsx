@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { Project } from "../../api/client";
 import { AnnotationEditor } from "./AnnotationEditor";
 import { MaskAnnotationWorkspace } from "./MaskAnnotationWorkspace";
+import { RasterMaskWorkspace } from "./RasterMaskWorkspace";
 
 interface AnnotationLaunchContext {
   returnLabel: string;
@@ -19,22 +20,56 @@ interface EnhancedAnnotationEditorProps {
   onClose: () => void;
 }
 
+type EditorWorkspace = "boxes" | "masks" | "raster";
+
+const floatingButtonStyle = {
+  position: "fixed" as const,
+  right: "1rem",
+  bottom: "1rem",
+  zIndex: 10000,
+  boxShadow: "0 0.5rem 1.5rem rgba(0, 0, 0, 0.24)",
+};
+
 export function EnhancedAnnotationEditor({
   project,
   initialImageId,
   launchContext,
   onClose,
 }: EnhancedAnnotationEditorProps) {
-  const [workspace, setWorkspace] = useState<"boxes" | "masks">("boxes");
+  const [workspace, setWorkspace] = useState<EditorWorkspace>("boxes");
 
-  if (workspace === "masks") {
+  if (workspace === "raster") {
     return (
-      <MaskAnnotationWorkspace
+      <RasterMaskWorkspace
         project={project}
         imageId={initialImageId}
+        onReturnToMasks={() => setWorkspace("masks")}
         onReturnToBoxes={() => setWorkspace("boxes")}
         onClose={onClose}
       />
+    );
+  }
+
+  if (workspace === "masks") {
+    return (
+      <>
+        <MaskAnnotationWorkspace
+          project={project}
+          imageId={initialImageId}
+          onReturnToBoxes={() => setWorkspace("boxes")}
+          onClose={onClose}
+        />
+        <button
+          type="button"
+          className="secondary"
+          data-testid="open-raster-workspace"
+          title="Open the raster paint and eraser workspace"
+          onClick={() => setWorkspace("raster")}
+          style={floatingButtonStyle}
+        >
+          Raster brush
+        </button>
+      </>
     );
   }
 
@@ -46,22 +81,35 @@ export function EnhancedAnnotationEditor({
         launchContext={launchContext}
         onClose={onClose}
       />
-      <button
-        type="button"
-        className="secondary"
-        data-testid="open-mask-workspace"
-        title="Open the editable polygon and raster mask workspace"
-        onClick={() => setWorkspace("masks")}
+      <div
         style={{
           position: "fixed",
           right: "1rem",
           bottom: "1rem",
           zIndex: 10000,
-          boxShadow: "0 0.5rem 1.5rem rgba(0, 0, 0, 0.24)",
+          display: "flex",
+          gap: "0.5rem",
         }}
       >
-        Mask workspace
-      </button>
+        <button
+          type="button"
+          className="secondary"
+          data-testid="open-mask-workspace"
+          title="Open the editable polygon and raster mask workspace"
+          onClick={() => setWorkspace("masks")}
+        >
+          Polygon masks
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          data-testid="open-raster-workspace"
+          title="Open the raster paint and eraser workspace"
+          onClick={() => setWorkspace("raster")}
+        >
+          Raster brush
+        </button>
+      </div>
     </>
   );
 }
