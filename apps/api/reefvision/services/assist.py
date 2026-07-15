@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -12,6 +13,8 @@ from reefvision.db.models import (
     Annotation,
     AnnotationEvent,
     ImageAsset,
+    MaskAnnotation,
+    MaskAnnotationEvent,
     ModelRegistration,
     PredictionProposal,
 )
@@ -20,10 +23,11 @@ from reefvision.ml.assist_runtime import AssistRuntime, AssistSessionState
 from reefvision.ml.providers import BrushStroke, PixelBox, PixelPoint
 from reefvision.repositories.annotations import AnnotationRepository
 from reefvision.repositories.images import ImageRepository
+from reefvision.repositories.mask_annotations import MaskAnnotationRepository
 from reefvision.repositories.models import ModelRepository
 from reefvision.repositories.predictions import PredictionRepository
 from reefvision.repositories.projects import ProjectRepository
-from reefvision.schemas.annotations import AnnotationResponse
+from reefvision.schemas.annotations import AnnotationResponse, MaskAnnotationResponse
 from reefvision.schemas.assist import (
     AssistAcceptRequest,
     AssistAcceptResponse,
@@ -33,7 +37,8 @@ from reefvision.schemas.assist import (
     AssistSessionCreateRequest,
     AssistSessionResponse,
 )
-from reefvision.services.annotations import annotation_snapshot
+from reefvision.services.annotations import annotation_snapshot, mask_annotation_snapshot
+from reefvision.storage.masks import write_mask_png
 from reefvision.storage.projects import resolve_managed_project_path
 
 
@@ -50,6 +55,7 @@ class AssistService:
         self.images = ImageRepository(session)
         self.models = ModelRepository(session)
         self.annotations = AnnotationRepository(session)
+        self.mask_annotations = MaskAnnotationRepository(session)
         self.predictions = PredictionRepository(session)
 
     def _image(self, image_id: str) -> ImageAsset:
@@ -180,46 +186,105 @@ class AssistService:
             raise NotFoundError("Project not found")
         if payload.label_class_id not in {label_class.id for label_class in project.label_classes}:
             raise ValidationError("Annotation class does not belong to this image's project")
-        annotation = Annotation(
-            id=str(uuid4()),
-            image_id=image.id,
-            label_class_id=payload.label_class_id,
-            x_min=box.x_min,
-            y_min=box.y_min,
-            x_max=box.x_max,
-            y_max=box.y_max,
-            source_type="assist_mask",
-            source_model_id=session_state.model_id,
-            source_prediction_id=session_state.source_prediction_id,
-            provenance_json=provenance,
-        )
-        if session_state.source_prediction_id is not None:
-            self._attach_source_prediction(
-                image=image,
-                proposal_id=session_state.source_prediction_id,
-                annotation=annotation,
-                label_class_id=payload.label_class_id,
-            )
-        self.annotations.add(annotation)
-        self.annotations.add_event(
-            AnnotationEvent(
-                annotation_id=annotation.id,
+        if session_state.candidate_mask_png_base64 is None:
+            raise ValidationError("There is no current Smart Mask raster to accept")
+
+        annotation_id = str(uuid4())
+        mask_annotation_id = str(uuid4())
+        destination_path: Path | None = None
+        mask_annotation: MaskAnnotation | None = None
+        try:
+            relative_mask_path, destination_path, area_pixels = write_mask_png(
+                self.settings,
+                project_storage_root=project.storage_root,
                 image_id=image.id,
-                event_type="created",
-                before_json=None,
-                after_json=annotation_snapshot(annotation),
-                actor="local_user",
+                mask_annotation_id=mask_annotation_id,
+                png_base64=session_state.candidate_mask_png_base64,
+                expected_width=image.width_px,
+                expected_height=image.height_px,
             )
-        )
-        image.annotation_revision += 1
-        if image.annotation_status == "unannotated":
-            image.annotation_status = "in_progress"
-        self.session.commit()
+            shared_provenance = {
+                **provenance,
+                "assist_model_id": session_state.model_id,
+                "accepted_box_annotation_id": annotation_id,
+                "accepted_mask_annotation_id": mask_annotation_id,
+            }
+            annotation = Annotation(
+                id=annotation_id,
+                image_id=image.id,
+                label_class_id=payload.label_class_id,
+                x_min=box.x_min,
+                y_min=box.y_min,
+                x_max=box.x_max,
+                y_max=box.y_max,
+                source_type="assist_mask",
+                source_model_id=session_state.model_id,
+                source_prediction_id=session_state.source_prediction_id,
+                provenance_json=shared_provenance,
+            )
+            mask_annotation = MaskAnnotation(
+                id=mask_annotation_id,
+                image_id=image.id,
+                label_class_id=payload.label_class_id,
+                geometry_kind="raster_mask",
+                mask_path=relative_mask_path,
+                polygon_json=None,
+                x_min=box.x_min,
+                y_min=box.y_min,
+                x_max=box.x_max,
+                y_max=box.y_max,
+                area_pixels=area_pixels,
+                source_type="assist_mask",
+                provenance_json=shared_provenance,
+                status="verified",
+            )
+            if session_state.source_prediction_id is not None:
+                self._attach_source_prediction(
+                    image=image,
+                    proposal_id=session_state.source_prediction_id,
+                    annotation=annotation,
+                    label_class_id=payload.label_class_id,
+                    mask_annotation_id=mask_annotation.id,
+                )
+            self.annotations.add(annotation)
+            self.annotations.add_event(
+                AnnotationEvent(
+                    annotation_id=annotation.id,
+                    image_id=image.id,
+                    event_type="created",
+                    before_json=None,
+                    after_json=annotation_snapshot(annotation),
+                    actor="local_user",
+                )
+            )
+            self.mask_annotations.add(mask_annotation)
+            self.mask_annotations.add_event(
+                MaskAnnotationEvent(
+                    mask_annotation_id=mask_annotation.id,
+                    image_id=image.id,
+                    event_type="created",
+                    before_json=None,
+                    after_json=mask_annotation_snapshot(mask_annotation),
+                    actor="local_user",
+                )
+            )
+            image.annotation_revision += 1
+            if image.annotation_status == "unannotated":
+                image.annotation_status = "in_progress"
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            if destination_path is not None:
+                destination_path.unlink(missing_ok=True)
+            raise
+
         self.session.refresh(annotation)
+        self.session.refresh(mask_annotation)
         self.runtime.delete_session(session_id)
         return AssistAcceptResponse(
             session_id=session_id,
             annotation=AnnotationResponse.model_validate(annotation),
+            mask_annotation=MaskAnnotationResponse.model_validate(mask_annotation),
         )
 
     def cancel(self, session_id: str) -> None:
@@ -232,7 +297,8 @@ class AssistService:
         proposal_id: str,
         annotation: Annotation,
         label_class_id: str,
-    ) -> None:
+        mask_annotation_id: str,
+    ) -> PredictionProposal:
         proposal = self._source_prediction(image, proposal_id)
         edited = (
             label_class_id != proposal.label_class_id
@@ -250,6 +316,7 @@ class AssistService:
             "assist_acceptance": {
                 "assist_model_id": annotation.source_model_id,
                 "accepted_annotation_id": annotation.id,
+                "accepted_mask_annotation_id": mask_annotation_id,
                 "accepted_label_class_id": label_class_id,
                 "accepted_box": {
                     "x_min": annotation.x_min,
@@ -278,3 +345,4 @@ class AssistService:
                 "review_status_after_accept": proposal.review_status,
             },
         }
+        return proposal
