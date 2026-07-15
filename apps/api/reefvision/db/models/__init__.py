@@ -14,6 +14,7 @@ from reefvision.db.models.image_label import ImageLabel
 from reefvision.db.models.job import Job
 from reefvision.db.models.label_class import LabelClass
 from reefvision.db.models.mask_annotation import MaskAnnotation
+from reefvision.db.models.mask_annotation_event import MaskAnnotationEvent
 from reefvision.db.models.model_registration import ModelRegistration
 from reefvision.db.models.prediction_proposal import PredictionProposal
 from reefvision.db.models.project import Project
@@ -42,6 +43,7 @@ __all__ = [
     "Job",
     "LabelClass",
     "MaskAnnotation",
+    "MaskAnnotationEvent",
     "ModelRegistration",
     "PredictionProposal",
     "Project",
