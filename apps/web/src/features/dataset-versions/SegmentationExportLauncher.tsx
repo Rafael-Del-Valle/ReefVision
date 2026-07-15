@@ -227,7 +227,10 @@ export function SegmentationExportLauncher() {
             )}
             {(projects.error || versions.error || queueExport.error) && (
               <p className="form-error">
-                {(projects.error ?? versions.error ?? queueExport.error)?.message}
+                {
+                  (projects.error ?? versions.error ?? queueExport.error)
+                    ?.message
+                }
               </p>
             )}
 
@@ -249,7 +252,9 @@ export function SegmentationExportLauncher() {
                 }
                 onClick={() => queueExport.mutate()}
               >
-                {queueExport.isPending ? "Queueing..." : `Export ${selectedOption.label}`}
+                {queueExport.isPending
+                  ? "Queueing..."
+                  : `Export ${selectedOption.label}`}
               </button>
             </div>
 
