@@ -6,7 +6,15 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from reefvision.db.base import Base
@@ -30,9 +38,14 @@ class ImageAsset(Base):
         Index("ix_images_project_sequence", "project_id", "created_at", "id"),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
     project_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+        String(36),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     original_filename: Mapped[str] = mapped_column(String(500), nullable=False)
     managed_path: Mapped[str] = mapped_column(String(700), nullable=False, unique=True)
@@ -47,11 +60,15 @@ class ImageAsset(Base):
         DateTime(timezone=True), nullable=True
     )
     group_key: Mapped[str | None] = mapped_column(String(300), nullable=True)
-    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     annotation_status: Mapped[str] = mapped_column(
         String(30), nullable=False, default="unannotated"
     )
-    annotation_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    annotation_revision: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
