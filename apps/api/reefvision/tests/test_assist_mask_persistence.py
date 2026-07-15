@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from reefvision.ml.assist_runtime import AssistSessionState
+from reefvision.ml.assist_runtime import AssistRuntime, AssistSessionState
 from reefvision.ml.providers import PixelBox
 from reefvision.schemas.assist import AssistAcceptRequest
 from reefvision.services.assist import AssistService
@@ -73,7 +73,7 @@ def test_prompt_assist_acceptance_persists_box_and_raster_mask(client: TestClien
         response = AssistService(
             session,
             app.state.settings,
-            cast(object, runtime),
+            cast(AssistRuntime, runtime),
         ).accept(
             state.session_id,
             AssistAcceptRequest(label_class_id=project["label_classes"][0]["id"]),
