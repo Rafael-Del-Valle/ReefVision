@@ -51,7 +51,10 @@ def mask_annotation_content(
 ) -> FileResponse:
     annotation = session.get(MaskAnnotation, mask_annotation_id)
     if annotation is None or annotation.deleted_at is not None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mask annotation not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Mask annotation not found",
+        )
     if annotation.mask_path is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -67,7 +70,5 @@ def mask_annotation_content(
     return FileResponse(
         path,
         media_type="image/png",
-        filename=f"{annotation.id}.png",
-        content_disposition_type="inline",
         headers={"Cache-Control": "private, max-age=31536000, immutable"},
     )
