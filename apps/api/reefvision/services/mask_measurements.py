@@ -156,16 +156,13 @@ class MaskMeasurementService:
                 (annotation.x_min + annotation.x_max) / 2.0,
                 (annotation.y_min + annotation.y_max) / 2.0,
             )
-            if (
-                polygon is not None and _point_in_polygon(center, polygon)
-            ) or (
-                raster is not None
-                and _raster_pixel_active(
-                    raster,
-                    int(center[0]),
-                    int(center[1]),
-                )
-            ):
+            inside_polygon = polygon is not None and _point_in_polygon(center, polygon)
+            inside_raster = raster is not None and _raster_pixel_active(
+                raster,
+                int(center[0]),
+                int(center[1]),
+            )
+            if inside_polygon or inside_raster:
                 contained_box_count += 1
 
         return MaskMeasurementResponse(
