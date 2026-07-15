@@ -480,7 +480,7 @@ fn main() {
     let app = tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![desktop_context])
         .setup(|app| {
-            let data_dir = resolve_desktop_data_dir(&app.handle())?;
+            let data_dir = resolve_desktop_data_dir(app.handle())?;
             let handle = app.handle().clone();
             let port_file = backend_port_path(&data_dir);
             let mut backend = spawn_backend(&handle, &data_dir, &port_file)?;
