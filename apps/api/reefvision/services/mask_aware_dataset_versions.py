@@ -25,6 +25,7 @@ from reefvision.schemas.dataset_versions import (
     DatasetExportCreateRequest,
     DatasetExportCreateResponse,
     DatasetVersionCreateRequest,
+    DatasetVersionPreviewRequest,
     DatasetVersionPreviewResponse,
     DatasetVersionResponse,
     ExportResponse,
@@ -68,7 +69,11 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
                 MaskAnnotation.deleted_at.is_(None),
                 MaskAnnotation.status == "verified",
             )
-            .order_by(MaskAnnotation.image_id, MaskAnnotation.created_at, MaskAnnotation.id)
+            .order_by(
+                MaskAnnotation.image_id,
+                MaskAnnotation.created_at,
+                MaskAnnotation.id,
+            )
         )
         for mask in self.session.scalars(statement):
             masks_by_image[mask.image_id].append(mask)
@@ -77,7 +82,9 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
     def _mask_snapshot(self, mask: MaskAnnotation) -> dict[str, Any]:
         label_class = mask.label_class
         if label_class is None:
-            raise ValidationError("Dataset snapshots require every mask to resolve its class")
+            raise ValidationError(
+                "Dataset snapshots require every mask to resolve its class"
+            )
         content_sha256: str | None = None
         if mask.geometry_kind == "raster_mask":
             if not mask.mask_path:
@@ -112,11 +119,14 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
             "revision": mask.revision,
         }
 
-    def preview_version(self, project_id: str, request: Any) -> DatasetVersionPreviewResponse:
+    def preview_version(
+        self,
+        project_id: str,
+        request: DatasetVersionPreviewRequest,
+    ) -> DatasetVersionPreviewResponse:
         response = super().preview_version(project_id, request)
         image_ids = [item.image_id for item in response.images]
         masks_by_image = self._masks_for_images(image_ids)
-        split_by_image = {item.image_id: item.proposed_split for item in response.images}
         mask_counts_by_class: dict[str, int] = defaultdict(int)
         split_mask_counts: dict[str, int] = defaultdict(int)
         total_masks = 0
@@ -135,7 +145,6 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
         for class_count in response.per_class_counts:
             class_count.mask_count = mask_counts_by_class[class_count.label_class_id]
         response.eligible_mask_annotation_count = total_masks
-        del split_by_image
         return response
 
     def create_version(
@@ -145,7 +154,10 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
     ) -> DatasetVersionResponse:
         project = self._project(project_id)
         self._parent_version(project.id, request.parent_version_id)
-        candidates = self._eligible_images(project.id, list(request.eligible_annotation_statuses))
+        candidates = self._eligible_images(
+            project.id,
+            list(request.eligible_annotation_statuses),
+        )
         if not candidates:
             raise ValidationError("No images match the selected annotation statuses")
 
@@ -163,7 +175,9 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
             status="creating",
             requested_split_method=request.split_method,
             resolved_split_method=split_plan.resolved_split_method,
-            eligible_annotation_statuses_json=list(request.eligible_annotation_statuses),
+            eligible_annotation_statuses_json=list(
+                request.eligible_annotation_statuses
+            ),
             requested_ratios_json=split_plan.requested_ratios,
             achieved_ratios_json=split_plan.achieved_ratios,
             split_seed=request.split_seed,
@@ -186,7 +200,8 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
         manifest_items: list[dict[str, Any]] = []
         for candidate in sorted(candidates, key=lambda item: item.image.id):
             annotations = [
-                self._annotation_snapshot(annotation) for annotation in candidate.annotations
+                self._annotation_snapshot(annotation)
+                for annotation in candidate.annotations
             ]
             mask_snapshots = [
                 self._mask_snapshot(mask)
@@ -231,7 +246,9 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
                 snapshot_sha256=snapshot_sha256,
             )
             self.versions.add_item(dataset_item)
-            manifest_items.append({**item_payload, "snapshot_sha256": snapshot_sha256})
+            manifest_items.append(
+                {**item_payload, "snapshot_sha256": snapshot_sha256}
+            )
 
         manifest: dict[str, Any] = {
             "schema_version": MASK_AWARE_SCHEMA_VERSION,
@@ -258,7 +275,9 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
                 "achieved_ratios": version.achieved_ratios_json,
                 "split_seed": version.split_seed,
                 "reuse_parent_assignments": version.reuse_parent_assignments,
-                "eligible_annotation_statuses": version.eligible_annotation_statuses_json,
+                "eligible_annotation_statuses": (
+                    version.eligible_annotation_statuses_json
+                ),
                 "warnings": version.warnings_json,
                 "missing_group_key_count": version.missing_group_key_count,
             },
@@ -289,7 +308,9 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
         if request.format not in SUPPORTED_EXPORT_FORMATS:
             raise ValidationError("Unsupported dataset export format")
         if request.format != "yolo_detection" and version.mask_annotation_count <= 0:
-            raise ValidationError("This dataset version does not contain mask annotations")
+            raise ValidationError(
+                "This dataset version does not contain mask annotations"
+            )
 
         output_path, manifest_path, archive_path = dataset_export_relative_paths(
             project_storage_root=version.project.storage_root,
@@ -303,7 +324,10 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
             output_path=output_path,
             manifest_path=manifest_path,
             archive_path=archive_path,
-            request_json={"format": request.format, "dataset_version_id": version.id},
+            request_json={
+                "format": request.format,
+                "dataset_version_id": version.id,
+            },
             status="queued",
         )
         self.exports.add_export(export)
