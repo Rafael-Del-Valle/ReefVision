@@ -13,6 +13,7 @@ import {
   rasterMaskContentUrl,
   type RasterEditMode,
 } from "./rasterMaskApi";
+import { resolveRasterMaskSelection } from "./rasterMaskSelection";
 import type { MaskAnnotationRecord, Point } from "./types";
 
 interface RasterMaskWorkspaceProps {
@@ -36,6 +37,8 @@ export function RasterMaskWorkspace({
 }: RasterMaskWorkspaceProps) {
   const queryClient = useQueryClient();
   const [selectedMaskId, setSelectedMaskId] = useState<string | null>(null);
+  const [createAnotherMaskRequested, setCreateAnotherMaskRequested] =
+    useState(false);
   const [activeClassId, setActiveClassId] = useState<string | null>(null);
   const [mode, setMode] = useState<RasterEditMode>("paint");
   const [brushRadius, setBrushRadius] = useState(12);
@@ -57,6 +60,12 @@ export function RasterMaskWorkspace({
     rasterMasks.find((mask) => mask.id === selectedMaskId) ?? null;
 
   useEffect(() => {
+    setSelectedMaskId(null);
+    setCreateAnotherMaskRequested(false);
+    setMode("paint");
+  }, [imageId]);
+
+  useEffect(() => {
     const firstClass = session?.label_classes.find((item) => item.is_active);
     if (activeClassId === null && firstClass) {
       setActiveClassId(firstClass.id);
@@ -64,13 +73,25 @@ export function RasterMaskWorkspace({
   }, [activeClassId, session?.label_classes]);
 
   useEffect(() => {
-    if (
-      selectedMaskId &&
-      !rasterMasks.some((mask) => mask.id === selectedMaskId)
-    ) {
-      setSelectedMaskId(null);
+    const nextSelection = resolveRasterMaskSelection(
+      selectedMaskId,
+      rasterMasks,
+      createAnotherMaskRequested,
+    );
+    if (nextSelection !== selectedMaskId) {
+      setSelectedMaskId(nextSelection);
     }
-  }, [rasterMasks, selectedMaskId]);
+  }, [createAnotherMaskRequested, rasterMasks, selectedMaskId]);
+
+  useEffect(() => {
+    if (
+      !createAnotherMaskRequested &&
+      selectedMask?.label_class_id &&
+      selectedMask.label_class_id !== activeClassId
+    ) {
+      setActiveClassId(selectedMask.label_class_id);
+    }
+  }, [activeClassId, createAnotherMaskRequested, selectedMask]);
 
   const editMutation = useMutation({
     mutationFn: (points: Point[]) => {
@@ -87,9 +108,10 @@ export function RasterMaskWorkspace({
       });
     },
     onSuccess: async (response) => {
-      setSelectedMaskId(response.mask_annotation.id);
       setActiveClassId(response.mask_annotation.label_class_id);
       await sessionQuery.refetch();
+      setSelectedMaskId(response.mask_annotation.id);
+      setCreateAnotherMaskRequested(false);
       await queryClient.invalidateQueries({
         queryKey: ["project-images", project.id],
       });
@@ -137,7 +159,7 @@ export function RasterMaskWorkspace({
             disabled={editMutation.isPending}
             onClick={onReturnToMasks}
           >
-            Polygon workspace
+            Polygon tool
           </button>
           <button
             type="button"
@@ -197,7 +219,8 @@ export function RasterMaskWorkspace({
               />
             </label>
             <p className="annotation-helper">
-              Each completed stroke is saved as a new immutable raster revision.
+              Strokes update the selected raster layer. Use Create another mask
+              only when you intentionally want a separate layer.
             </p>
             {editMutation.error && (
               <p className="form-error">{editMutation.error.message}</p>
@@ -239,23 +262,26 @@ export function RasterMaskWorkspace({
           <section className="annotation-sidebar-section">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">Raster instances</p>
+                <p className="eyebrow">Raster layers</p>
                 <h3>{rasterMasks.length} masks</h3>
               </div>
               <button
                 type="button"
                 className="secondary"
-                disabled={editMutation.isPending}
+                disabled={rasterMasks.length === 0 || editMutation.isPending}
                 onClick={() => {
+                  setCreateAnotherMaskRequested(true);
                   setSelectedMaskId(null);
                   setMode("paint");
                 }}
               >
-                New mask
+                Create another mask
               </button>
             </div>
             <div className="annotation-selection-list">
-              {rasterMasks.length === 0 && <p>No raster masks yet.</p>}
+              {rasterMasks.length === 0 && (
+                <p>Your first stroke will create the initial raster mask.</p>
+              )}
               {rasterMasks.map((mask) => {
                 const labelClass = session.label_classes.find(
                   (item) => item.id === mask.label_class_id,
@@ -269,6 +295,7 @@ export function RasterMaskWorkspace({
                     }
                     disabled={editMutation.isPending}
                     onClick={() => {
+                      setCreateAnotherMaskRequested(false);
                       setSelectedMaskId(mask.id);
                       setActiveClassId(mask.label_class_id);
                     }}
@@ -287,7 +314,9 @@ export function RasterMaskWorkspace({
             <span>
               {selectedMask
                 ? `Editing raster revision ${selectedMask.revision}`
-                : "Painting a new raster mask"}
+                : createAnotherMaskRequested
+                  ? "Painting a separate raster mask"
+                  : "Painting the initial raster mask"}
             </span>
             <span>{mode === "paint" ? "Paint mode" : "Eraser mode"}</span>
           </div>
@@ -325,6 +354,7 @@ export function RasterMaskWorkspace({
                     height: "100%",
                     opacity: 0.42,
                     pointerEvents: "none",
+                    mixBlendMode: "screen",
                   }}
                 />
               )}
