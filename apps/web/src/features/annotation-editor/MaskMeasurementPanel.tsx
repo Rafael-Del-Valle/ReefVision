@@ -29,8 +29,7 @@ export function MaskMeasurementPanel({
       }
       return getMaskMeasurements(selectedMask.id, signal);
     },
-    enabled:
-      selectedMask !== null && selectedMask.persisted && !documentDirty,
+    enabled: selectedMask !== null && selectedMask.persisted && !documentDirty,
     refetchOnWindowFocus: false,
     retry: false,
   });
@@ -79,7 +78,9 @@ export function MaskMeasurementPanel({
         <>
           <div className="annotation-selection-row">
             <strong>Area</strong>
-            <span>{measurementsQuery.data.area_pixels.toLocaleString()} px²</span>
+            <span>
+              {measurementsQuery.data.area_pixels.toLocaleString()} px²
+            </span>
           </div>
           <div className="annotation-selection-row">
             <strong>Perimeter</strong>
@@ -88,7 +89,7 @@ export function MaskMeasurementPanel({
           <div className="annotation-selection-row">
             <strong>Centroid</strong>
             <span>
-              ({formatCoordinate(measurementsQuery.data.centroid_x)}, {" "}
+              ({formatCoordinate(measurementsQuery.data.centroid_x)},{" "}
               {formatCoordinate(measurementsQuery.data.centroid_y)}) px
             </span>
           </div>
@@ -96,7 +97,7 @@ export function MaskMeasurementPanel({
             <strong>Bounds</strong>
             <span>
               x {formatCoordinate(measurementsQuery.data.x_min)}–
-              {formatCoordinate(measurementsQuery.data.x_max)}, y {" "}
+              {formatCoordinate(measurementsQuery.data.x_max)}, y{" "}
               {formatCoordinate(measurementsQuery.data.y_min)}–
               {formatCoordinate(measurementsQuery.data.y_max)} px
             </span>
@@ -110,7 +111,7 @@ export function MaskMeasurementPanel({
             <span>
               {measurementsQuery.data.contained_box_density_per_1000_pixels.toFixed(
                 4,
-              )} {" "}
+              )}{" "}
               boxes per 1,000 mask pixels
             </span>
           </div>
