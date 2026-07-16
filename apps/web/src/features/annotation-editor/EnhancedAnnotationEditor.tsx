@@ -23,12 +23,20 @@ interface EnhancedAnnotationEditorProps {
 
 type EditorWorkspace = "boxes" | "masks" | "raster";
 
-const floatingButtonStyle = {
+const workspaceSwitcherStyle = {
   position: "fixed" as const,
-  right: "1rem",
+  left: "50%",
   bottom: "1rem",
-  zIndex: 10000,
-  boxShadow: "0 0.5rem 1.5rem rgba(0, 0, 0, 0.24)",
+  transform: "translateX(-50%)",
+  zIndex: 20000,
+  display: "flex",
+  alignItems: "center",
+  gap: "0.5rem",
+  padding: "0.55rem",
+  border: "1px solid rgba(182, 238, 228, 0.3)",
+  borderRadius: "0.9rem",
+  background: "rgba(3, 25, 30, 0.96)",
+  boxShadow: "0 0.75rem 2rem rgba(0, 0, 0, 0.38)",
 };
 
 export function EnhancedAnnotationEditor({
@@ -61,8 +69,9 @@ export function EnhancedAnnotationEditor({
     });
   }, [project.id, queryClient]);
 
+  let workspaceContent;
   if (workspace === "raster") {
-    return (
+    workspaceContent = (
       <RasterMaskWorkspace
         project={project}
         imageId={activeImageId}
@@ -71,61 +80,55 @@ export function EnhancedAnnotationEditor({
         onClose={onClose}
       />
     );
-  }
-
-  if (workspace === "masks") {
-    return (
-      <>
-        <MaskAnnotationWorkspace
-          project={project}
-          imageId={activeImageId}
-          onReturnToBoxes={() => setWorkspace("boxes")}
-          onClose={onClose}
-        />
-        <button
-          type="button"
-          className="secondary"
-          data-testid="open-raster-workspace"
-          title="Open the raster paint and eraser workspace"
-          onClick={() => setWorkspace("raster")}
-          style={floatingButtonStyle}
-        >
-          Raster brush
-        </button>
-      </>
+  } else if (workspace === "masks") {
+    workspaceContent = (
+      <MaskAnnotationWorkspace
+        project={project}
+        imageId={activeImageId}
+        onReturnToBoxes={() => setWorkspace("boxes")}
+        onClose={onClose}
+      />
     );
-  }
-
-  return (
-    <>
+  } else {
+    workspaceContent = (
       <AnnotationEditor
         project={project}
         initialImageId={activeImageId}
         launchContext={launchContext}
         onClose={onClose}
       />
+    );
+  }
+
+  return (
+    <>
+      {workspaceContent}
       <div
-        style={{
-          position: "fixed",
-          right: "1rem",
-          bottom: "1rem",
-          zIndex: 10000,
-          display: "flex",
-          gap: "0.5rem",
-        }}
+        role="toolbar"
+        aria-label="Annotation tools"
+        style={workspaceSwitcherStyle}
       >
         <button
           type="button"
-          className="secondary"
+          className={workspace === "boxes" ? "active" : "secondary"}
+          data-testid="open-box-workspace"
+          title="Open the bounding-box annotation workspace"
+          onClick={() => setWorkspace("boxes")}
+        >
+          Boxes
+        </button>
+        <button
+          type="button"
+          className={workspace === "masks" ? "active" : "secondary"}
           data-testid="open-mask-workspace"
-          title="Open the editable polygon and raster mask workspace"
+          title="Open the polygon-mask workspace"
           onClick={() => setWorkspace("masks")}
         >
           Polygon masks
         </button>
         <button
           type="button"
-          className="secondary"
+          className={workspace === "raster" ? "active" : "secondary"}
           data-testid="open-raster-workspace"
           title="Open the raster paint and eraser workspace"
           onClick={() => setWorkspace("raster")}
