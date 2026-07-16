@@ -31,10 +31,7 @@ const selectedMask: EditorMaskAnnotation = {
   revision: 2,
 };
 
-function renderPanel(
-  masks: EditorMaskAnnotation[],
-  documentDirty = false,
-) {
+function renderPanel(masks: EditorMaskAnnotation[], documentDirty = false) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -76,8 +73,13 @@ describe("MaskMeasurementPanel", () => {
     expect(await screen.findByText("300 px²")).toBeInTheDocument();
     expect(screen.getByText("70.00 px")).toBeInTheDocument();
     expect(screen.getByText("4")).toBeInTheDocument();
-    expect(screen.getByText(/13\.3333 boxes per 1,000 mask pixels/)).toBeInTheDocument();
-    expect(getMaskMeasurements).toHaveBeenCalledWith("mask-1", expect.any(AbortSignal));
+    expect(
+      screen.getByText(/13\.3333 boxes per 1,000 mask pixels/),
+    ).toBeInTheDocument();
+    expect(getMaskMeasurements).toHaveBeenCalledWith(
+      "mask-1",
+      expect.any(AbortSignal),
+    );
   });
 
   it("waits for unsaved edits before requesting measurements", () => {
