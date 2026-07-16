@@ -20,6 +20,7 @@ import {
   deleteMaskAnnotations,
   updateMaskAnnotation,
 } from "./maskDocumentOperations";
+import { MaskMeasurementPanel } from "./MaskMeasurementPanel";
 import { PolygonMaskLayer } from "./PolygonMaskLayer";
 import type { AnnotationDocument, EditorMaskAnnotation } from "./types";
 
@@ -83,6 +84,9 @@ export function MaskAnnotationWorkspace({
         dispatch({ type: "saveSucceeded", sentVersion, response });
         await queryClient.invalidateQueries({
           queryKey: ["project-images", project.id],
+        });
+        await queryClient.invalidateQueries({
+          queryKey: ["mask-measurements"],
         });
         return true;
       })
@@ -230,6 +234,8 @@ export function MaskAnnotationWorkspace({
           <button
             type="button"
             className={state.tool === "select" ? "active" : "secondary"}
+            data-testid="activate-mask-select-tool"
+            title="Select masks and edit polygon vertices"
             onClick={() => dispatch({ type: "setTool", tool: "select" })}
           >
             Select vertices
@@ -237,6 +243,8 @@ export function MaskAnnotationWorkspace({
           <button
             type="button"
             className={state.tool === "polygon" ? "active" : "secondary"}
+            data-testid="activate-polygon-tool"
+            title="Draw a polygon mask"
             onClick={() => dispatch({ type: "setTool", tool: "polygon" })}
           >
             Polygon
@@ -388,6 +396,10 @@ export function MaskAnnotationWorkspace({
                 </div>
               ))}
             </div>
+            <MaskMeasurementPanel
+              selectedMasks={selectedMasks}
+              documentDirty={isDirty(state)}
+            />
           </section>
         </aside>
 
