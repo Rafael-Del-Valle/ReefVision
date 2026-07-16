@@ -1,0 +1,25 @@
+[data-testid="mask-workspace"] [data-testid="polygon-mask-layer"] > image[data-mask-id] {
+  mix-blend-mode: screen;
+}
+
+[data-testid="mask-workspace"]:has(
+    .annotation-editor-topbar > .annotation-editor-actions > button:nth-child(2).active
+  )
+  [data-testid="polygon-mask-layer"]
+  > image[data-mask-id],
+[data-testid="mask-workspace"]:has(
+    .annotation-editor-topbar > .annotation-editor-actions > button:nth-child(2).active
+  )
+  [data-testid="polygon-mask-layer"]
+  > g[data-mask-id]
+  > polygon {
+  pointer-events: none;
+}
+
+[data-testid="mask-workspace"]:has(
+    .annotation-editor-topbar > .annotation-editor-actions > button:nth-child(2).active
+  )
+  [data-testid="polygon-mask-layer"]
+  > image[data-mask-id] {
+  opacity: 0 !important;
+}
