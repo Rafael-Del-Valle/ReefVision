@@ -48,6 +48,9 @@ describe("EnhancedAnnotationEditor", () => {
     );
 
     expect(screen.getByTestId("box-workspace")).toHaveTextContent("image-1");
+    expect(
+      screen.getByRole("button", { name: "Polygon tool" }),
+    ).toBeInTheDocument();
 
     act(() => {
       queryClient.setQueryData(["annotation-session", "image-2"], {
