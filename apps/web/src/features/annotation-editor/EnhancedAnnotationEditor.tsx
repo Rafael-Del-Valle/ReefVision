@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import type { AnnotationSession, Project } from "../../api/client";
 import { AnnotationEditor } from "./AnnotationEditor";
@@ -69,7 +69,7 @@ export function EnhancedAnnotationEditor({
     });
   }, [project.id, queryClient]);
 
-  let workspaceContent;
+  let workspaceContent: ReactNode;
   if (workspace === "raster") {
     workspaceContent = (
       <RasterMaskWorkspace
