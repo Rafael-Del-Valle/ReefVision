@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { AnnotationSession, Project } from "../../api/client";
 import { AnnotationEditor } from "./AnnotationEditor";
 import { MaskAnnotationWorkspace } from "./MaskAnnotationWorkspace";
+import "./polygonWorkspace.css";
 import { RasterMaskWorkspace } from "./RasterMaskWorkspace";
 
 interface AnnotationLaunchContext {
@@ -136,10 +137,10 @@ export function EnhancedAnnotationEditor({
         type="button"
         className={workspace === "masks" ? "active" : "secondary"}
         data-testid="open-mask-workspace"
-        title="Open the polygon-mask workspace"
+        title="Open the polygon drawing and editing workspace"
         onClick={() => setWorkspace("masks")}
       >
-        Polygon masks
+        Polygon tool
       </button>
       <button
         type="button"
