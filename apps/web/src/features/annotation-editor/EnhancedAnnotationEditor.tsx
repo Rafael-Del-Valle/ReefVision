@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 import type { AnnotationSession, Project } from "../../api/client";
 import { AnnotationEditor } from "./AnnotationEditor";
@@ -23,20 +24,19 @@ interface EnhancedAnnotationEditorProps {
 
 type EditorWorkspace = "boxes" | "masks" | "raster";
 
-const workspaceSwitcherStyle = {
+const fallbackToolbarStyle = {
   position: "fixed" as const,
-  left: "50%",
-  bottom: "1rem",
-  transform: "translateX(-50%)",
-  zIndex: 20000,
+  top: "1rem",
+  right: "1rem",
+  zIndex: 999999,
   display: "flex",
   alignItems: "center",
   gap: "0.5rem",
   padding: "0.55rem",
   border: "1px solid rgba(182, 238, 228, 0.3)",
   borderRadius: "0.9rem",
-  background: "rgba(3, 25, 30, 0.96)",
-  boxShadow: "0 0.75rem 2rem rgba(0, 0, 0, 0.38)",
+  background: "rgba(3, 25, 30, 0.98)",
+  boxShadow: "0 0.75rem 2rem rgba(0, 0, 0, 0.45)",
 };
 
 export function EnhancedAnnotationEditor({
@@ -48,6 +48,7 @@ export function EnhancedAnnotationEditor({
   const queryClient = useQueryClient();
   const [workspace, setWorkspace] = useState<EditorWorkspace>("boxes");
   const [activeImageId, setActiveImageId] = useState(initialImageId);
+  const [toolbarTarget, setToolbarTarget] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     setActiveImageId(initialImageId);
@@ -69,28 +70,43 @@ export function EnhancedAnnotationEditor({
     });
   }, [project.id, queryClient]);
 
-  let workspaceContent: ReactNode;
-  if (workspace === "raster") {
-    workspaceContent = (
-      <RasterMaskWorkspace
-        project={project}
-        imageId={activeImageId}
-        onReturnToMasks={() => setWorkspace("masks")}
-        onReturnToBoxes={() => setWorkspace("boxes")}
-        onClose={onClose}
-      />
-    );
-  } else if (workspace === "masks") {
-    workspaceContent = (
-      <MaskAnnotationWorkspace
-        project={project}
-        imageId={activeImageId}
-        onReturnToBoxes={() => setWorkspace("boxes")}
-        onClose={onClose}
-      />
-    );
-  } else {
-    workspaceContent = (
+  useEffect(() => {
+    const findToolbarTarget = () => {
+      const target = document.querySelector<HTMLElement>(
+        ".annotation-editor-topbar .annotation-editor-actions",
+      );
+      setToolbarTarget((current) => (current === target ? current : target));
+    };
+
+    findToolbarTarget();
+    const observer = new MutationObserver(findToolbarTarget);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [workspace, activeImageId]);
+
+  const workspaceContent = useMemo(() => {
+    if (workspace === "raster") {
+      return (
+        <RasterMaskWorkspace
+          project={project}
+          imageId={activeImageId}
+          onReturnToMasks={() => setWorkspace("masks")}
+          onReturnToBoxes={() => setWorkspace("boxes")}
+          onClose={onClose}
+        />
+      );
+    }
+    if (workspace === "masks") {
+      return (
+        <MaskAnnotationWorkspace
+          project={project}
+          imageId={activeImageId}
+          onReturnToBoxes={() => setWorkspace("boxes")}
+          onClose={onClose}
+        />
+      );
+    }
+    return (
       <AnnotationEditor
         project={project}
         initialImageId={activeImageId}
@@ -98,44 +114,49 @@ export function EnhancedAnnotationEditor({
         onClose={onClose}
       />
     );
-  }
+  }, [activeImageId, launchContext, onClose, project, workspace]);
+
+  const toolbar = (
+    <div
+      role="toolbar"
+      aria-label="Annotation workspaces"
+      data-testid="annotation-workspace-switcher"
+      style={toolbarTarget ? undefined : fallbackToolbarStyle}
+    >
+      <button
+        type="button"
+        className={workspace === "boxes" ? "active" : "secondary"}
+        data-testid="open-box-workspace"
+        title="Open the bounding-box annotation workspace"
+        onClick={() => setWorkspace("boxes")}
+      >
+        Boxes
+      </button>
+      <button
+        type="button"
+        className={workspace === "masks" ? "active" : "secondary"}
+        data-testid="open-mask-workspace"
+        title="Open the polygon-mask workspace"
+        onClick={() => setWorkspace("masks")}
+      >
+        Polygon masks
+      </button>
+      <button
+        type="button"
+        className={workspace === "raster" ? "active" : "secondary"}
+        data-testid="open-raster-workspace"
+        title="Open the raster paint and eraser workspace"
+        onClick={() => setWorkspace("raster")}
+      >
+        Raster brush
+      </button>
+    </div>
+  );
 
   return (
     <>
       {workspaceContent}
-      <div
-        role="toolbar"
-        aria-label="Annotation tools"
-        style={workspaceSwitcherStyle}
-      >
-        <button
-          type="button"
-          className={workspace === "boxes" ? "active" : "secondary"}
-          data-testid="open-box-workspace"
-          title="Open the bounding-box annotation workspace"
-          onClick={() => setWorkspace("boxes")}
-        >
-          Boxes
-        </button>
-        <button
-          type="button"
-          className={workspace === "masks" ? "active" : "secondary"}
-          data-testid="open-mask-workspace"
-          title="Open the polygon-mask workspace"
-          onClick={() => setWorkspace("masks")}
-        >
-          Polygon masks
-        </button>
-        <button
-          type="button"
-          className={workspace === "raster" ? "active" : "secondary"}
-          data-testid="open-raster-workspace"
-          title="Open the raster paint and eraser workspace"
-          onClick={() => setWorkspace("raster")}
-        >
-          Raster brush
-        </button>
-      </div>
+      {createPortal(toolbar, toolbarTarget ?? document.body)}
     </>
   );
 }
