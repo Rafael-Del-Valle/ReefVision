@@ -1,0 +1,20 @@
+[data-testid="enhanced-annotation-editor"][data-boxes-visible="false"]
+  [data-testid="annotation-canvas"]
+  g:has(> rect[data-testid^="annotation-"]) {
+  display: none;
+}
+
+[data-testid="enhanced-annotation-editor"][data-polygons-visible="false"]
+  [data-testid="polygon-mask-layer"]
+  > g[data-mask-id] {
+  display: none;
+}
+
+[data-testid="enhanced-annotation-editor"][data-raster-visible="false"]
+  [data-testid="polygon-mask-layer"]
+  > image[data-mask-id],
+[data-testid="enhanced-annotation-editor"][data-raster-visible="false"]
+  [data-testid="raster-mask-workspace"]
+  img[alt="Selected raster mask"] {
+  display: none;
+}
