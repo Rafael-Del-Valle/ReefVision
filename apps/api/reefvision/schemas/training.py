@@ -122,7 +122,12 @@ class TrainingDatasetSummaryResponse(BaseModel):
     split_manifest_sha256: str | None
     image_count: int
     annotation_count: int
+    mask_annotation_count: int = 0
+    polygon_count: int = 0
+    raster_mask_count: int = 0
     split_counts: dict[str, int]
+    polygon_counts_by_split: dict[str, int] = Field(default_factory=dict)
+    raster_counts_by_split: dict[str, int] = Field(default_factory=dict)
     group_count: int
     warnings: list[str]
 
