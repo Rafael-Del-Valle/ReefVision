@@ -69,8 +69,7 @@ export function EnhancedAnnotationEditor({
     masks: true,
     raster: true,
   });
-  const [vertexEditMode, setVertexEditMode] =
-    useState<VertexEditMode>("move");
+  const [vertexEditMode, setVertexEditMode] = useState<VertexEditMode>("move");
   const [activeImageId, setActiveImageId] = useState(initialImageId);
   const [toolbarTarget, setToolbarTarget] = useState<HTMLElement | null>(null);
 
@@ -160,7 +159,7 @@ export function EnhancedAnnotationEditor({
 
       if (
         vertexEditMode === "insert" &&
-        event.target instanceof SVGPolygonElement
+        event.target.tagName.toLowerCase() === "polygon"
       ) {
         const polygon = event.target;
         stopEditorEvent(event);
@@ -177,8 +176,8 @@ export function EnhancedAnnotationEditor({
 
       if (
         vertexEditMode === "delete" &&
-        event.target instanceof SVGCircleElement &&
-        event.target.dataset.testid?.startsWith("mask-vertex-") &&
+        event.target.tagName.toLowerCase() === "circle" &&
+        event.target.getAttribute("data-testid")?.startsWith("mask-vertex-") &&
         !event.altKey
       ) {
         const vertex = event.target;
