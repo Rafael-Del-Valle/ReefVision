@@ -90,7 +90,7 @@ if (-not $NoLaunch) {
 $results.Add((Read-AcceptanceResult -Name "Polygon node edit persistence" -Instructions @(
     "Open a persisted polygon in Polygon mode.",
     "Move one node, insert one node on an edge, and delete that inserted node.",
-    "Wait for Saved, switch annotation types, return to Polygon, and confirm the edited geometry remains."
+    "Wait for Saved, switch annotation types, return to Polygons, and confirm the edited geometry remains."
 )))
 
 $results.Add((Read-AcceptanceResult -Name "Three-node minimum" -Instructions @(
@@ -124,11 +124,11 @@ $results.Add((Read-AcceptanceResult -Name "Autosave and conflict messaging" -Ins
     "Confirm local geometry remains available after a failed save."
 )))
 
-$results.Add((Read-AcceptanceResult -Name "Independent annotation visibility" -Instructions @(
-    "Toggle Boxes off while keeping Polygons and Raster masks visible.",
-    "Toggle Polygons off while keeping the other types visible.",
-    "Toggle Raster masks off while keeping the other types visible.",
-    "Restore all three and confirm no annotation was deleted or modified."
+$results.Add((Read-AcceptanceResult -Name "Annotation type filtering" -Instructions @(
+    "Select Bounding boxes and confirm only box annotations are shown.",
+    "Select Polygons and confirm only polygon annotations are shown; raster masks must not appear.",
+    "Select Raster masks and confirm only raster-mask annotations are shown.",
+    "Switch among all three types and confirm filtering never deletes or modifies saved annotations."
 )))
 
 $results.Add((Read-AcceptanceResult -Name "Raster layer behavior" -Instructions @(
@@ -150,7 +150,7 @@ $results.Add((Read-AcceptanceResult -Name "Complete restart persistence" -Instru
     "Reopen the same project and image after the forced application restart.",
     "Confirm moved/inserted/deleted polygon nodes remain correct.",
     "Confirm raster paint, erase, instance count, and latest revisions remain correct.",
-    "Confirm visibility toggles did not alter stored annotations."
+    "Confirm annotation-type filtering did not alter stored annotations."
 )))
 
 $failed = @($results | Where-Object { $_.Result -eq "FAIL" })
