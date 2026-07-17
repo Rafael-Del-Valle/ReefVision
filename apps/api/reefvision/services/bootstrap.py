@@ -31,7 +31,7 @@ from reefvision.schemas.models import (
 )
 from reefvision.services.model_catalog import ModelCatalogService
 from reefvision.services.models import ModelService
-from reefvision.services.training import TrainingService
+from reefvision.services.segmentation_training import SegmentationTrainingService
 
 
 class BootstrapService:
@@ -40,7 +40,7 @@ class BootstrapService:
         self.settings = settings
         self.catalog = ModelCatalogService(session, settings)
         self.models = ModelService(session, settings)
-        self.training = TrainingService(session, settings)
+        self.training = SegmentationTrainingService(session, settings)
 
     def model_hub_bootstrap(self, project_id: str) -> ModelHubBootstrapResponse:
         catalog = self.catalog.list_project_catalog(project_id, workflow="model_hub")
@@ -120,7 +120,9 @@ class BootstrapService:
             warnings.append(f"Runtime status refresh failed: {exc}")
 
         try:
-            training_compatibility = cached_ultralytics_training_registry_summary(self.settings)
+            training_compatibility = cached_ultralytics_training_registry_summary(
+                self.settings
+            )
             training_compatibility_checked_at = training_compatibility.checked_at
             training_compatibility_response = (
                 UltralyticsTrainingRegistrySummarySnapshotResponse.model_validate(
@@ -152,7 +154,9 @@ class BootstrapService:
         project_id: str,
     ) -> TrainingWorkspaceBootstrapResponse:
         draft_summaries = self.training.list_draft_summaries(project_id)
-        selected_draft = self.training.get_draft(draft_summaries[0].id) if draft_summaries else None
+        selected_draft = (
+            self.training.get_draft(draft_summaries[0].id) if draft_summaries else None
+        )
         return TrainingWorkspaceBootstrapResponse(
             draft_summaries=draft_summaries,
             selected_draft=selected_draft,
