@@ -23,19 +23,12 @@ interface OverlayTarget {
 }
 
 function currentOverlayTarget(): OverlayTarget | null {
-  const canvas = document.querySelector<SVGSVGElement>(
-    "svg.annotation-canvas",
-  );
+  const canvas = document.querySelector<SVGSVGElement>("svg.annotation-canvas");
   const group = canvas?.querySelector<SVGGElement>(":scope > g") ?? null;
-  const image =
-    group?.querySelector<SVGImageElement>(":scope > image") ?? null;
+  const image = group?.querySelector<SVGImageElement>(":scope > image") ?? null;
   const href =
-    image?.getAttribute("href") ??
-    image?.getAttribute("xlink:href") ??
-    "";
-  const match = href.match(
-    /\/images\/([^/]+)\/(?:content|thumbnail)(?:\?|$)/,
-  );
+    image?.getAttribute("href") ?? image?.getAttribute("xlink:href") ?? "";
+  const match = href.match(/\/images\/([^/]+)\/(?:content|thumbnail)(?:\?|$)/);
   if (!group || !match?.[1]) {
     return null;
   }

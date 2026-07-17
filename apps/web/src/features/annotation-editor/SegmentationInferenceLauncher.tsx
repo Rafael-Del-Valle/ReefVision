@@ -22,7 +22,8 @@ interface EditorTarget {
 
 function currentEditorTarget(): EditorTarget | null {
   const canvas = document.querySelector<SVGSVGElement>("svg.annotation-canvas");
-  const sourceImage = canvas?.querySelector<SVGImageElement>(":scope > g > image");
+  const sourceImage =
+    canvas?.querySelector<SVGImageElement>(":scope > g > image");
   const href =
     sourceImage?.getAttribute("href") ??
     sourceImage?.getAttribute("xlink:href") ??
@@ -146,7 +147,9 @@ export function SegmentationInferenceLauncher() {
           }),
         },
       );
-      setStatus("Segmentation queued; mask proposals will appear on this image.");
+      setStatus(
+        "Segmentation queued; mask proposals will appear on this image.",
+      );
     } catch (error) {
       setStatus(
         error instanceof Error
