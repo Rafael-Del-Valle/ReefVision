@@ -171,7 +171,9 @@ class SegmentationModelCatalogService(ModelCatalogService):
                         segment_architecture,
                     )
                 )
-        filtered = [entry for entry in catalog.models if task is None or entry.task == task]
+        filtered = [
+            entry for entry in catalog.models if task is None or entry.task == task
+        ]
         ordered = sorted(
             [*filtered, *architecture_entries],
             key=_catalog_entry_sort_key,
