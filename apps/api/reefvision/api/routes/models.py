@@ -7,13 +7,16 @@ from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
-from reefvision.config import Settings
 from reefvision.ml.dependencies import ProviderPreflightReport, cached_lightweight_provider_preflight
 from reefvision.ml.provider_hub import (
     cached_model_provider_catalog,
     cached_runtime_provider_statuses,
     get_model_provider,
     get_model_provider_capabilities,
+)
+from reefvision.ml.segmentation_provider_catalog import (
+    segmentation_capability_matrix,
+    segmentation_provider_descriptor,
 )
 from reefvision.ml.ultralytics_registry import (
     cached_ultralytics_training_registry_summary,
@@ -47,24 +50,37 @@ def service(request: Request, session: Session) -> SegmentationModelService:
 
 
 @router.get("/models/provider-preflight", response_model=ProviderDependencyPreflightResponse)
-def get_provider_preflight(request: Request, refresh: bool = False) -> ProviderDependencyPreflightResponse:
+def get_provider_preflight(
+    request: Request, refresh: bool = False
+) -> ProviderDependencyPreflightResponse:
     return _serialize_provider_preflight(
-        cached_lightweight_provider_preflight(request.app.state.settings, refresh=refresh).value
+        cached_lightweight_provider_preflight(
+            request.app.state.settings, refresh=refresh
+        ).value
     )
 
 
 @router.get("/model-providers", response_model=list[ModelProviderResponse])
-def get_model_providers(request: Request, refresh: bool = False) -> list[ModelProviderResponse]:
+def get_model_providers(
+    request: Request, refresh: bool = False
+) -> list[ModelProviderResponse]:
     return [
-        ModelProviderResponse.model_validate(asdict(item))
-        for item in cached_model_provider_catalog(request.app.state.settings, refresh=refresh).value
+        ModelProviderResponse.model_validate(
+            asdict(segmentation_provider_descriptor(item))
+        )
+        for item in cached_model_provider_catalog(
+            request.app.state.settings, refresh=refresh
+        ).value
     ]
 
 
 @router.get("/model-providers/{provider_id}", response_model=ModelProviderResponse)
-def get_model_provider_detail(provider_id: str, request: Request) -> ModelProviderResponse:
+def get_model_provider_detail(
+    provider_id: str, request: Request
+) -> ModelProviderResponse:
+    provider = get_model_provider(provider_id, request.app.state.settings)
     return ModelProviderResponse.model_validate(
-        asdict(get_model_provider(provider_id, request.app.state.settings))
+        asdict(segmentation_provider_descriptor(provider))
     )
 
 
@@ -75,13 +91,18 @@ def get_model_provider_detail(provider_id: str, request: Request) -> ModelProvid
 def get_model_provider_capability_detail(
     provider_id: str, request: Request
 ) -> ModelProviderCapabilityMatrixResponse:
+    capabilities = get_model_provider_capabilities(
+        provider_id, request.app.state.settings
+    )
     return ModelProviderCapabilityMatrixResponse.model_validate(
-        asdict(get_model_provider_capabilities(provider_id, request.app.state.settings))
+        asdict(segmentation_capability_matrix(provider_id, capabilities))
     )
 
 
 @router.get("/runtime-providers/status", response_model=list[RuntimeProviderStatusResponse])
-def get_runtime_provider_statuses(refresh: bool = False) -> list[RuntimeProviderStatusResponse]:
+def get_runtime_provider_statuses(
+    refresh: bool = False,
+) -> list[RuntimeProviderStatusResponse]:
     return [
         RuntimeProviderStatusResponse.model_validate(asdict(item))
         for item in cached_runtime_provider_statuses(refresh=refresh).value
@@ -107,9 +128,12 @@ def get_ultralytics_training_registry_summary(
     "/models/ultralytics/training-registry",
     response_model=UltralyticsTrainingRegistryResponse,
 )
-def get_ultralytics_training_registry(request: Request) -> UltralyticsTrainingRegistryResponse:
+def get_ultralytics_training_registry(
+    request: Request,
+) -> UltralyticsTrainingRegistryResponse:
     return UltralyticsTrainingRegistryResponse.model_validate(
-        ultralytics_training_registry(request.app.state.settings), from_attributes=True
+        ultralytics_training_registry(request.app.state.settings),
+        from_attributes=True,
     )
 
 
@@ -118,7 +142,8 @@ def get_ultralytics_training_registry(request: Request) -> UltralyticsTrainingRe
     response_model=UltralyticsTrainingConfigurationValidationResponse,
 )
 def validate_ultralytics_training_registry(
-    payload: UltralyticsTrainingConfigurationValidationRequest, request: Request
+    payload: UltralyticsTrainingConfigurationValidationRequest,
+    request: Request,
 ) -> UltralyticsTrainingConfigurationValidationResponse:
     result = validate_ultralytics_training_configuration(
         task=payload.task,
@@ -133,7 +158,10 @@ def validate_ultralytics_training_registry(
     )
 
 
-@router.get("/projects/{project_id}/models", response_model=list[ModelRegistrationResponse])
+@router.get(
+    "/projects/{project_id}/models",
+    response_model=list[ModelRegistrationResponse],
+)
 def list_models(
     project_id: str,
     request: Request,
@@ -144,11 +172,16 @@ def list_models(
 
 
 @router.get("/models/{model_id}", response_model=ModelRegistrationResponse)
-def get_model(model_id: str, request: Request, session: DbSession) -> ModelRegistrationResponse:
+def get_model(
+    model_id: str, request: Request, session: DbSession
+) -> ModelRegistrationResponse:
     return service(request, session).get_model(model_id)
 
 
-@router.post("/projects/{project_id}/models/register", response_model=ModelRegistrationResponse)
+@router.post(
+    "/projects/{project_id}/models/register",
+    response_model=ModelRegistrationResponse,
+)
 async def register_model(
     project_id: str,
     request: Request,
