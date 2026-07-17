@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { getApiBaseUrl } from "../../runtime";
+import "./segmentationInference.css";
 
 interface ModelRegistration {
   id: string;
@@ -36,10 +37,7 @@ function currentEditorTarget(): EditorTarget | null {
   return { imageId: decodeURIComponent(match[1]), container };
 }
 
-async function jsonRequest<T>(
-  path: string,
-  init?: RequestInit,
-): Promise<T> {
+async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
     headers: {
@@ -80,7 +78,11 @@ export function SegmentationInferenceLauncher() {
     };
     refreshTarget();
     const observer = new MutationObserver(refreshTarget);
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+    });
     return () => observer.disconnect();
   }, []);
 
@@ -95,20 +97,19 @@ export function SegmentationInferenceLauncher() {
     const load = async () => {
       try {
         const session = await jsonRequest<AnnotationSessionResponse>(
-          `/images/${encodeURIComponent(target.imageId)}/annotation-session`,
+          `/images/${encodeURIComponent(target.imageId)}/annotations`,
           { signal: controller.signal },
         );
         const nextProjectId = session.image.project_id;
-        const nextModels = await jsonRequest<ModelRegistration[]>(
+        const responseModels = await jsonRequest<ModelRegistration[]>(
           `/projects/${encodeURIComponent(nextProjectId)}/models?purpose=segmenter`,
           { signal: controller.signal },
         );
-        setProjectId(nextProjectId);
-        setModels(
-          nextModels.filter(
-            (model) => model.purpose === "segmenter" && model.task === "segment",
-          ),
+        const nextModels = responseModels.filter(
+          (model) => model.purpose === "segmenter" && model.task === "segment",
         );
+        setProjectId(nextProjectId);
+        setModels(nextModels);
         setModelId((current) =>
           nextModels.some((model) => model.id === current)
             ? current
