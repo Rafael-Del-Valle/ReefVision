@@ -84,34 +84,24 @@ class PredictionProposal(Base):
         nullable=False,
         index=True,
     )
-    model_checksum: Mapped[str] = mapped_column(
-        String(64),
-        nullable=False,
-    )
+    model_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
     label_class_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey("label_classes.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
-    predicted_label: Mapped[str] = mapped_column(
-        String(200),
-        nullable=False,
-    )
-    predicted_index: Mapped[int | None] = mapped_column(
-        Integer,
-        nullable=True,
-    )
+    predicted_label: Mapped[str] = mapped_column(String(200), nullable=False)
+    predicted_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     geometry_kind: Mapped[str] = mapped_column(
         String(30),
         nullable=False,
         default="bounding_box",
     )
-    polygon_json: Mapped[list[list[float]] | None] = mapped_column(
-        JSON,
-        nullable=True,
-    )
+    polygon_json: Mapped[list[list[float]] | None] = mapped_column(JSON, nullable=True)
+    mask_path: Mapped[str | None] = mapped_column(String(700), nullable=True)
+    mask_content_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     x_min: Mapped[float] = mapped_column(Float, nullable=False)
     y_min: Mapped[float] = mapped_column(Float, nullable=False)
     x_max: Mapped[float] = mapped_column(Float, nullable=False)
@@ -121,29 +111,16 @@ class PredictionProposal(Base):
         nullable=False,
         default="pending",
     )
-    was_edited: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=False,
-    )
+    was_edited: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     reviewer_action_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    accepted_annotation_id: Mapped[str | None] = mapped_column(
-        String(36),
-        nullable=True,
-    )
-    accepted_mask_annotation_id: Mapped[str | None] = mapped_column(
-        String(36),
-        nullable=True,
-    )
+    accepted_annotation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    accepted_mask_annotation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     inference_settings_json: Mapped[dict[str, Any]] = mapped_column(
         JSON,
         nullable=False,
         default=dict,
     )
-    provenance_json: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON,
-        nullable=True,
-    )
+    provenance_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,
