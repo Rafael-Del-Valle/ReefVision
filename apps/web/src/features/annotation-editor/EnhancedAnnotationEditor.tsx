@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 
 import type { AnnotationSession, Project } from "../../api/client";
 import { AnnotationEditor } from "./AnnotationEditor";
+import "./annotationTypeVisibility.css";
 import { MaskAnnotationWorkspace } from "./MaskAnnotationWorkspace";
 import "./polygonWorkspace.css";
 import { RasterMaskWorkspace } from "./RasterMaskWorkspace";
@@ -97,6 +98,29 @@ export function EnhancedAnnotationEditor({
     observer.observe(document.body, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, [workspace, activeImageId]);
+
+  useEffect(() => {
+    if (workspace !== "masks") {
+      return;
+    }
+
+    const requireFirstNodeClick = (event: KeyboardEvent) => {
+      if (
+        event.key !== "Enter" ||
+        !(event.target instanceof Element) ||
+        !event.target.closest('[data-testid="polygon-mask-layer"]')
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    };
+
+    document.addEventListener("keydown", requireFirstNodeClick, true);
+    return () =>
+      document.removeEventListener("keydown", requireFirstNodeClick, true);
+  }, [workspace]);
 
   const workspaceContent = useMemo(() => {
     if (workspace === "raster") {
