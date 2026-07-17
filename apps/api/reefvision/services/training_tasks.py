@@ -8,9 +8,15 @@ from typing import Protocol
 
 DETECTION_TASK = "detect"
 INSTANCE_SEGMENTATION_TASK = "segment"
+SEMANTIC_SEGMENTATION_TASK = "semantic_segment"
 SUPPORTED_ULTRALYTICS_TRAINING_TASKS = (
     DETECTION_TASK,
     INSTANCE_SEGMENTATION_TASK,
+)
+SUPPORTED_TRAINING_TASKS = (
+    DETECTION_TASK,
+    INSTANCE_SEGMENTATION_TASK,
+    SEMANTIC_SEGMENTATION_TASK,
 )
 
 
@@ -39,6 +45,7 @@ class TaskDatasetPreflight:
     @property
     def ready(self) -> bool:
         return not self.blockers
+
 
 
 def task_dataset_preflight(
@@ -94,6 +101,31 @@ def task_dataset_preflight(
                 f"{raster_mask_count} raster mask(s) will be excluded from YOLO "
                 "polygon-segmentation training; use semantic-mask training or "
                 "convert them to polygons"
+            )
+    elif task == SEMANTIC_SEGMENTATION_TASK:
+        semantic_counts_by_split = {
+            split: polygon_counts_by_split.get(split, 0)
+            + raster_counts_by_split.get(split, 0)
+            for split in set(polygon_counts_by_split) | set(raster_counts_by_split)
+        }
+        if polygon_count + raster_mask_count <= 0:
+            blockers.append(
+                "Semantic-segmentation training requires at least one polygon or raster mask"
+            )
+        if semantic_counts_by_split.get("train", 0) <= 0:
+            blockers.append(
+                "The training split must contain at least one polygon or raster mask for "
+                "semantic segmentation"
+            )
+        if semantic_counts_by_split.get("validation", 0) <= 0:
+            warnings.append(
+                "The validation split contains no masks; ReefVision will create a "
+                "deterministic holdout when at least two training images are available"
+            )
+        if polygon_count > 0 and raster_mask_count > 0:
+            warnings.append(
+                "Polygon and raster masks will be flattened into one indexed semantic "
+                "label map using the dataset export overlap policy"
             )
     else:
         blockers.append(f"Unsupported training task: {task}")
