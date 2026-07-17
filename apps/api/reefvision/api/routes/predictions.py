@@ -3,6 +3,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
@@ -39,6 +40,19 @@ def list_predictions(
         label_class_id=label_class_id,
         min_confidence=min_confidence,
         review_status=review_status,
+    )
+
+
+@router.get("/prediction-proposals/{proposal_id}/mask")
+def get_prediction_mask(
+    proposal_id: str,
+    request: Request,
+    session: DbSession,
+) -> FileResponse:
+    return FileResponse(
+        service(request, session).raster_mask_file(proposal_id),
+        media_type="image/png",
+        filename=f"{proposal_id}.png",
     )
 
 
