@@ -1,4 +1,4 @@
-"""Task-aware provider metadata overlays for the Phase 3 segmentation slice."""
+"""Task-aware provider metadata overlays for instance segmentation."""
 
 from __future__ import annotations
 
@@ -47,13 +47,18 @@ def segmentation_provider_descriptor(
     return replace(
         descriptor,
         supported_tasks=tuple(
-            dict.fromkeys([*descriptor.supported_tasks, "detect", "segment"])
+            dict.fromkeys(
+                [*descriptor.supported_tasks, "detect", "segment"]
+            )
         ),
         supported_output_types=outputs,
         known_limitations=(
-            "Instance-segmentation training currently consumes polygon masks only; raster masks remain reserved for semantic providers.",
-            "Tuning execution and tiled segmentation training remain disabled in this vertical slice.",
-            "Automatic checkpoint downloads remain disabled; local or managed checkpoints must be selected explicitly.",
+            "Instance-segmentation training currently consumes polygon masks "
+            "only; raster masks remain reserved for semantic providers.",
+            "Tuning execution and tiled segmentation training remain disabled "
+            "in this vertical slice.",
+            "Automatic checkpoint downloads remain disabled; local or managed "
+            "checkpoints must be selected explicitly.",
         ),
         capabilities=segmentation_capability_matrix(
             descriptor.provider_id,
