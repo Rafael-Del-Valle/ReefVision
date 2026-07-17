@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib import import_module
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -60,12 +61,12 @@ class UltralyticsSegmentationProvider:
         configure_provider_runtime()
         require_provider_ready(self.provider_name)
         try:
-            import ultralytics
-            from ultralytics import YOLO
+            ultralytics = import_module("ultralytics")
+            yolo_class = getattr(ultralytics, "YOLO")
         except Exception as exc:  # pragma: no cover - dependency failure
             raise ValidationError(f"Ultralytics is unavailable: {exc}") from exc
         resolve_torch_device(device)
-        model = YOLO(str(model_path))
+        model = yolo_class(str(model_path))
         task = str(getattr(model, "task", "") or "")
         if task != "segment":
             raise ValidationError(
