@@ -25,7 +25,6 @@ interface EnhancedAnnotationEditorProps {
 }
 
 type EditorWorkspace = "boxes" | "masks" | "raster";
-type AnnotationVisibility = Record<EditorWorkspace, boolean>;
 type VertexEditMode = "move" | "insert" | "delete";
 
 const fallbackToolbarStyle = {
@@ -64,11 +63,6 @@ export function EnhancedAnnotationEditor({
 }: EnhancedAnnotationEditorProps) {
   const queryClient = useQueryClient();
   const [workspace, setWorkspace] = useState<EditorWorkspace>("boxes");
-  const [visibility, setVisibility] = useState<AnnotationVisibility>({
-    boxes: true,
-    masks: true,
-    raster: true,
-  });
   const [vertexEditMode, setVertexEditMode] = useState<VertexEditMode>("move");
   const [activeImageId, setActiveImageId] = useState(initialImageId);
   const [toolbarTarget, setToolbarTarget] = useState<HTMLElement | null>(null);
@@ -238,10 +232,6 @@ export function EnhancedAnnotationEditor({
     );
   }, [activeImageId, launchContext, onClose, project, workspace]);
 
-  function toggleVisibility(type: EditorWorkspace) {
-    setVisibility((current) => ({ ...current, [type]: !current[type] }));
-  }
-
   function activateVertexEditMode(mode: VertexEditMode) {
     setVertexEditMode(mode);
     document
@@ -264,40 +254,10 @@ export function EnhancedAnnotationEditor({
           }
         >
           <option value="boxes">Bounding boxes</option>
-          <option value="masks">Polygon</option>
-          <option value="raster">Raster brush</option>
+          <option value="masks">Polygons</option>
+          <option value="raster">Raster masks</option>
         </select>
       </label>
-      <div
-        role="group"
-        aria-label="Visible annotation types"
-        style={visibilityGroupStyle}
-      >
-        <label>
-          <input
-            type="checkbox"
-            checked={visibility.boxes}
-            onChange={() => toggleVisibility("boxes")}
-          />
-          Boxes
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={visibility.masks}
-            onChange={() => toggleVisibility("masks")}
-          />
-          Polygons
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={visibility.raster}
-            onChange={() => toggleVisibility("raster")}
-          />
-          Raster masks
-        </label>
-      </div>
       {workspace === "masks" && (
         <div
           role="group"
@@ -337,9 +297,10 @@ export function EnhancedAnnotationEditor({
     <>
       <div
         data-testid="enhanced-annotation-editor"
-        data-boxes-visible={visibility.boxes}
-        data-polygons-visible={visibility.masks}
-        data-raster-visible={visibility.raster}
+        data-active-annotation-type={workspace}
+        data-boxes-visible={workspace === "boxes"}
+        data-polygons-visible={workspace === "masks"}
+        data-raster-visible={workspace === "raster"}
         data-vertex-edit-mode={vertexEditMode}
         style={{ display: "contents" }}
       >
