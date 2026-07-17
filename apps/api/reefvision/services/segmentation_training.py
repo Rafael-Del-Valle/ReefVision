@@ -161,9 +161,9 @@ class SegmentationTrainingService(TrainingService):
         if task != INSTANCE_SEGMENTATION_TASK:
             response = super().preflight(project_id, payload)
             if task == DETECTION_TASK and payload.dataset_version_id:
-                version = self._version(payload.dataset_version_id)
-                if version.status == "complete":
-                    items = self.versions.items_for_version(version.id)
+                dataset_version = self._version(payload.dataset_version_id)
+                if dataset_version.status == "complete":
+                    items = self.versions.items_for_version(dataset_version.id)
                     response = self._apply_task_dataset_details(
                         response,
                         task_dataset_preflight(DETECTION_TASK, items),
