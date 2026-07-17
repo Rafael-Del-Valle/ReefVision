@@ -242,6 +242,15 @@ export function EnhancedAnnotationEditor({
     setVisibility((current) => ({ ...current, [type]: !current[type] }));
   }
 
+  function activateVertexEditMode(mode: VertexEditMode) {
+    setVertexEditMode(mode);
+    document
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="activate-mask-select-tool"]',
+      )
+      ?.click();
+  }
+
   const annotationControls = (
     <div style={visibilityGroupStyle}>
       <label data-testid="annotation-type-toggle" style={{ minWidth: "10rem" }}>
@@ -299,7 +308,7 @@ export function EnhancedAnnotationEditor({
             type="button"
             className={vertexEditMode === "move" ? "active" : "secondary"}
             data-testid="move-polygon-nodes"
-            onClick={() => setVertexEditMode("move")}
+            onClick={() => activateVertexEditMode("move")}
           >
             Move nodes
           </button>
@@ -307,7 +316,7 @@ export function EnhancedAnnotationEditor({
             type="button"
             className={vertexEditMode === "insert" ? "active" : "secondary"}
             data-testid="insert-polygon-node"
-            onClick={() => setVertexEditMode("insert")}
+            onClick={() => activateVertexEditMode("insert")}
           >
             Insert node
           </button>
@@ -315,7 +324,7 @@ export function EnhancedAnnotationEditor({
             type="button"
             className={vertexEditMode === "delete" ? "active" : "secondary"}
             data-testid="delete-polygon-node"
-            onClick={() => setVertexEditMode("delete")}
+            onClick={() => activateVertexEditMode("delete")}
           >
             Delete node
           </button>
