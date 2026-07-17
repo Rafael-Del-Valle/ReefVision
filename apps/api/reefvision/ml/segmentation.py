@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from reefvision.domain.errors import ValidationError
 from reefvision.ml.dependencies import (
@@ -61,8 +61,8 @@ class UltralyticsSegmentationProvider:
         configure_provider_runtime()
         require_provider_ready(self.provider_name)
         try:
-            ultralytics = import_module("ultralytics")
-            yolo_class = getattr(ultralytics, "YOLO")
+            ultralytics = cast(Any, import_module("ultralytics"))
+            yolo_class = ultralytics.YOLO
         except Exception as exc:  # pragma: no cover - dependency failure
             raise ValidationError(f"Ultralytics is unavailable: {exc}") from exc
         resolve_torch_device(device)
@@ -72,7 +72,7 @@ class UltralyticsSegmentationProvider:
             raise ValidationError(
                 "The selected checkpoint is not an Ultralytics segmentation model"
             )
-        self.provider_version = str(getattr(ultralytics, "__version__", "unknown"))
+        self.provider_version = str(vars(ultralytics).get("__version__", "unknown"))
         self._model = model
 
     def predict(
