@@ -3,8 +3,9 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
 import { AppProviders } from "./app/providers";
-import { SegmentationExportLauncher } from "./features/dataset-versions/SegmentationExportLauncher";
+import { SegmentationInferenceLauncher } from "./features/annotation-editor/SegmentationInferenceLauncher";
 import { SegmentationProposalOverlay } from "./features/annotation-editor/SegmentationProposalOverlay";
+import { SegmentationExportLauncher } from "./features/dataset-versions/SegmentationExportLauncher";
 import { initializeRuntime } from "./runtime";
 import { renderStartupError } from "./startup";
 
@@ -24,6 +25,7 @@ async function bootstrap() {
         <App />
         <SegmentationExportLauncher />
         <SegmentationProposalOverlay />
+        <SegmentationInferenceLauncher />
       </AppProviders>
     </StrictMode>,
   );
