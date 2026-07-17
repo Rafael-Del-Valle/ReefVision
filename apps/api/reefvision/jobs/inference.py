@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -28,12 +29,13 @@ def _model(session: Session, model_id: str) -> ModelRegistration:
     return model
 
 
-def _mapped_label_class_id(model: ModelRegistration, label: str) -> str | None:
-    mapping = (
-        model.class_map_json.get("mapping", {})
-        if isinstance(model.class_map_json, dict)
-        else {}
-    )
+def _mapped_label_class_id(
+    class_map_json: dict[str, Any],
+    label: str,
+) -> str | None:
+    mapping = class_map_json.get("mapping", {})
+    if not isinstance(mapping, dict):
+        return None
     value = mapping.get(label)
     return str(value) if value else None
 
@@ -63,6 +65,7 @@ def process_inference_job(
         model_provider_version = model.provider_version
         model_id = model.id
         model_checksum = model.sha256
+        model_class_map = dict(model.class_map_json or {})
 
     if model_task == "segment":
         provider = segmentation_provider_for_name(model_provider_name)
@@ -99,7 +102,9 @@ def process_inference_job(
                 proposals: list[PredictionProposal] = []
                 for prediction in predictions:
                     polygon = getattr(prediction, "polygon", None)
-                    geometry_kind = "polygon_mask" if polygon is not None else "bounding_box"
+                    geometry_kind = (
+                        "polygon_mask" if polygon is not None else "bounding_box"
+                    )
                     proposals.append(
                         PredictionProposal(
                             project_id=image.project_id,
@@ -107,7 +112,9 @@ def process_inference_job(
                             model_id=model_id,
                             inference_job_id=job_id,
                             model_checksum=model_checksum,
-                            label_class_id=_mapped_label_class_id(model, prediction.label),
+                            label_class_id=_mapped_label_class_id(
+                                model_class_map, prediction.label
+                            ),
                             predicted_label=prediction.label,
                             predicted_index=prediction.class_index,
                             confidence=prediction.confidence,
@@ -137,12 +144,18 @@ def process_inference_job(
                 job.result_json = {
                     "processed_images": index,
                     "model_task": model_task,
-                    "proposal_count": int((job.result_json or {}).get("proposal_count", 0))
+                    "proposal_count": int(
+                        (job.result_json or {}).get("proposal_count", 0)
+                    )
                     + len(proposals),
                     "mask_proposal_count": int(
                         (job.result_json or {}).get("mask_proposal_count", 0)
                     )
-                    + sum(1 for item in proposals if item.geometry_kind == "polygon_mask"),
+                    + sum(
+                        1
+                        for item in proposals
+                        if item.geometry_kind == "polygon_mask"
+                    ),
                 }
                 if index == len(image_ids):
                     job.status = "succeeded"
