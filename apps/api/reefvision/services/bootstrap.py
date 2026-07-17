@@ -29,8 +29,8 @@ from reefvision.schemas.models import (
     ProviderDependencyStatusResponse,
     RuntimeProviderStatusResponse,
 )
-from reefvision.services.model_catalog import ModelCatalogService
 from reefvision.services.models import ModelService
+from reefvision.services.segmentation_catalog import SegmentationModelCatalogService
 from reefvision.services.segmentation_training import SegmentationTrainingService
 
 
@@ -38,9 +38,10 @@ class BootstrapService:
     def __init__(self, session: Session, settings: Settings) -> None:
         self.session = session
         self.settings = settings
-        self.catalog = ModelCatalogService(session, settings)
+        self.catalog = SegmentationModelCatalogService(session, settings)
         self.models = ModelService(session, settings)
         self.training = SegmentationTrainingService(session, settings)
+        self.training.catalog = self.catalog
 
     def model_hub_bootstrap(self, project_id: str) -> ModelHubBootstrapResponse:
         catalog = self.catalog.list_project_catalog(project_id, workflow="model_hub")
