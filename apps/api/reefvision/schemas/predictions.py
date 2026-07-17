@@ -7,7 +7,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, FiniteFloat, field_validator
 
-from reefvision.schemas.annotations import AnnotationResponse, MaskAnnotationResponse
+from reefvision.schemas.annotations import (
+    AnnotationResponse,
+    MaskAnnotationResponse,
+)
 
 
 class PredictionProposalResponse(BaseModel):
@@ -44,12 +47,31 @@ class PredictionListResponse(BaseModel):
 
 
 class PredictionAcceptRequest(BaseModel):
-    label_class_id: str | None = Field(default=None, min_length=1, max_length=36)
+    label_class_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=36,
+    )
     x_min: FiniteFloat | None = None
     y_min: FiniteFloat | None = None
     x_max: FiniteFloat | None = None
     y_max: FiniteFloat | None = None
-    polygon_json: list[list[FiniteFloat]] | None = Field(default=None, min_length=3)
+    polygon_json: list[list[FiniteFloat]] | None = Field(
+        default=None,
+        min_length=3,
+    )
+
+    @field_validator("polygon_json")
+    @classmethod
+    def validate_polygon_points(
+        cls,
+        value: list[list[FiniteFloat]] | None,
+    ) -> list[list[FiniteFloat]] | None:
+        if value is not None and any(len(point) != 2 for point in value):
+            raise ValueError(
+                "Every segmentation polygon point must contain x and y"
+            )
+        return value
 
 
 class PredictionReviewResponse(BaseModel):
@@ -74,4 +96,6 @@ class PredictionBulkReviewRequest(BaseModel):
 class PredictionBulkReviewResponse(BaseModel):
     reviewed_count: int
     created_annotations: list[AnnotationResponse]
-    created_mask_annotations: list[MaskAnnotationResponse] = Field(default_factory=list)
+    created_mask_annotations: list[MaskAnnotationResponse] = Field(
+        default_factory=list
+    )
