@@ -34,7 +34,8 @@ vi.mock("./MaskAnnotationWorkspace", () => ({
         Select vertices
       </button>
       <p className="annotation-helper">
-        Add polygon vertices, then press Enter or click the first vertex to close.
+        Add polygon vertices, then press Enter or click the first vertex to
+        close.
       </p>
       <svg
         data-testid="polygon-mask-layer"
@@ -179,7 +180,7 @@ describe("EnhancedAnnotationEditor", () => {
     expect(vertexPointerHandler.mock.calls[0][0].altKey).toBe(true);
   });
 
-  it("keeps whole-polygon deletion explicit", () => {
+  it("keeps whole-polygon removal explicit", () => {
     renderEditor();
     fireEvent.change(screen.getByLabelText("Annotation type"), {
       target: { value: "masks" },
