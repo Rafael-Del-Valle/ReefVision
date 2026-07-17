@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { getApiBaseUrl } from "../../runtime";
@@ -22,8 +22,9 @@ interface EditorTarget {
 
 function currentEditorTarget(): EditorTarget | null {
   const canvas = document.querySelector<SVGSVGElement>("svg.annotation-canvas");
-  const sourceImage =
-    canvas?.querySelector<SVGImageElement>(":scope > g > image");
+  const sourceImage = canvas?.querySelector<SVGImageElement>(
+    ":scope > g > image",
+  );
   const href =
     sourceImage?.getAttribute("href") ??
     sourceImage?.getAttribute("xlink:href") ??
@@ -59,6 +60,10 @@ async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+function modelKind(model: ModelRegistration): string {
+  return model.task === "semantic_segment" ? "Semantic" : "Instance";
+}
+
 export function SegmentationInferenceLauncher() {
   const [target, setTarget] = useState<EditorTarget | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -66,6 +71,11 @@ export function SegmentationInferenceLauncher() {
   const [modelId, setModelId] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [launching, setLaunching] = useState(false);
+
+  const selectedModel = useMemo(
+    () => models.find((model) => model.id === modelId) ?? null,
+    [modelId, models],
+  );
 
   useEffect(() => {
     const refreshTarget = () => {
@@ -103,11 +113,14 @@ export function SegmentationInferenceLauncher() {
         );
         const nextProjectId = session.image.project_id;
         const responseModels = await jsonRequest<ModelRegistration[]>(
-          `/projects/${encodeURIComponent(nextProjectId)}/models?purpose=segmenter`,
+          `/projects/${encodeURIComponent(nextProjectId)}/models`,
           { signal: controller.signal },
         );
         const nextModels = responseModels.filter(
-          (model) => model.purpose === "segmenter" && model.task === "segment",
+          (model) =>
+            (model.purpose === "segmenter" && model.task === "segment") ||
+            (model.purpose === "semantic_segmenter" &&
+              model.task === "semantic_segment"),
         );
         setProjectId(nextProjectId);
         setModels(nextModels);
@@ -147,8 +160,9 @@ export function SegmentationInferenceLauncher() {
           }),
         },
       );
+      const kind = selectedModel ? modelKind(selectedModel).toLowerCase() : "";
       setStatus(
-        "Segmentation queued; mask proposals will appear on this image.",
+        `${kind ? `${kind} ` : ""}segmentation queued; mask proposals will appear on this image.`,
       );
     } catch (error) {
       setStatus(
@@ -170,12 +184,12 @@ export function SegmentationInferenceLauncher() {
         value={modelId}
         onChange={(event) => setModelId(event.target.value)}
         disabled={models.length === 0 || launching}
-        title="Select a trained segmentation model"
+        title="Select a trained instance or semantic segmentation model"
       >
         {models.length > 0 ? (
           models.map((model) => (
             <option key={model.id} value={model.id}>
-              {model.display_name}
+              {`${modelKind(model)} · ${model.display_name}`}
             </option>
           ))
         ) : (
@@ -187,7 +201,7 @@ export function SegmentationInferenceLauncher() {
         className="secondary"
         disabled={!modelId || launching}
         onClick={() => void launch()}
-        title={status ?? "Run instance segmentation on the open image"}
+        title={status ?? "Run segmentation on the open image"}
       >
         {launching ? "Queueing segment..." : "Run segmentation"}
       </button>
