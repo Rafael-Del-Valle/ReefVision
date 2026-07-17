@@ -54,6 +54,7 @@ vi.mock("./MaskAnnotationWorkspace", () => ({
           r="5"
           onPointerDown={vertexPointerHandler}
         />
+        <image data-testid="polygon-raster-overlay" data-mask-id="raster-1" />
         <text>{imageId}</text>
       </svg>
     </div>
@@ -94,16 +95,24 @@ describe("EnhancedAnnotationEditor", () => {
     vertexPointerHandler.mockClear();
   });
 
-  it("toggles annotation types on the most recently loaded image", async () => {
+  it("uses annotation type as the exclusive workspace and overlay filter", async () => {
     const { queryClient, project } = renderEditor();
+    const editor = screen.getByTestId("enhanced-annotation-editor");
 
     expect(screen.getByTestId("box-workspace")).toHaveTextContent("image-1");
     expect(
       screen.queryByRole("button", { name: "Polygon tool" }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("group", { name: "Visible annotation types" }),
+    ).not.toBeInTheDocument();
 
     const annotationType = screen.getByLabelText("Annotation type");
     expect(annotationType).toHaveValue("boxes");
+    expect(editor).toHaveAttribute("data-active-annotation-type", "boxes");
+    expect(editor).toHaveAttribute("data-boxes-visible", "true");
+    expect(editor).toHaveAttribute("data-polygons-visible", "false");
+    expect(editor).toHaveAttribute("data-raster-visible", "false");
 
     act(() => {
       queryClient.setQueryData(["annotation-session", "image-2"], {
@@ -119,28 +128,19 @@ describe("EnhancedAnnotationEditor", () => {
     expect(screen.getByTestId("polygon-mask-layer")).toHaveTextContent(
       "image-2",
     );
+    expect(editor).toHaveAttribute("data-active-annotation-type", "masks");
+    expect(editor).toHaveAttribute("data-boxes-visible", "false");
+    expect(editor).toHaveAttribute("data-polygons-visible", "true");
+    expect(editor).toHaveAttribute("data-raster-visible", "false");
 
     fireEvent.change(screen.getByLabelText("Annotation type"), {
       target: { value: "raster" },
     });
     expect(screen.getByTestId("raster-workspace")).toHaveTextContent("image-2");
-  });
-
-  it("hides each annotation geometry independently", () => {
-    renderEditor();
-    const editor = screen.getByTestId("enhanced-annotation-editor");
-
-    expect(editor).toHaveAttribute("data-boxes-visible", "true");
-    expect(editor).toHaveAttribute("data-polygons-visible", "true");
-    expect(editor).toHaveAttribute("data-raster-visible", "true");
-
-    fireEvent.click(screen.getByLabelText("Boxes"));
-    fireEvent.click(screen.getByLabelText("Polygons"));
-    fireEvent.click(screen.getByLabelText("Raster masks"));
-
+    expect(editor).toHaveAttribute("data-active-annotation-type", "raster");
     expect(editor).toHaveAttribute("data-boxes-visible", "false");
     expect(editor).toHaveAttribute("data-polygons-visible", "false");
-    expect(editor).toHaveAttribute("data-raster-visible", "false");
+    expect(editor).toHaveAttribute("data-raster-visible", "true");
   });
 
   it("requires clicking the first polygon node instead of pressing Enter", () => {
