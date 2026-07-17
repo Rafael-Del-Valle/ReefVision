@@ -26,8 +26,7 @@ def installed_ultralytics_segmentation_architectures() -> set[str]:
         path.name
         for path in models_root.rglob("*-seg.yaml")
         if not any(
-            token in path.name.casefold()
-            for token in ("-cls", "-pose", "-obb", "world", "yoloe")
+            token in path.name.casefold() for token in ("-cls", "-pose", "-obb", "world", "yoloe")
         )
     }
 
@@ -155,9 +154,7 @@ class SegmentationModelCatalogService(ModelCatalogService):
             for entry in catalog.models:
                 if entry.task != "detect" or entry.category != "pretrained_catalog":
                     continue
-                segment_architecture = _segmentation_architecture_name(
-                    entry.architecture_reference
-                )
+                segment_architecture = _segmentation_architecture_name(entry.architecture_reference)
                 if (
                     segment_architecture is None
                     or segment_architecture not in available
@@ -171,9 +168,7 @@ class SegmentationModelCatalogService(ModelCatalogService):
                         segment_architecture,
                     )
                 )
-        filtered = [
-            entry for entry in catalog.models if task is None or entry.task == task
-        ]
+        filtered = [entry for entry in catalog.models if task is None or entry.task == task]
         ordered = sorted(
             [*filtered, *architecture_entries],
             key=_catalog_entry_sort_key,
