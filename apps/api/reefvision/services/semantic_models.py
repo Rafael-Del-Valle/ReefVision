@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import zipfile
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -32,16 +33,19 @@ SEMANTIC_BUNDLE_METADATA = "reefvision-semantic-model.json"
 class SemanticModelService(SegmentationModelService):
     """Register nnU-Net bundles and queue semantic inference jobs."""
 
-    def _semantic_metadata(self, source_path: Path) -> dict[str, object]:
+    def _semantic_metadata(self, source_path: Path) -> dict[str, Any]:
         if not source_path.is_file() or source_path.suffix.casefold() != ".zip":
             raise ValidationError("Semantic model registration requires a ReefVision .zip bundle")
         try:
             with zipfile.ZipFile(source_path) as archive:
-                payload = json.loads(
+                raw_payload = json.loads(
                     archive.read(SEMANTIC_BUNDLE_METADATA).decode("utf-8")
                 )
         except (OSError, zipfile.BadZipFile, KeyError, json.JSONDecodeError) as exc:
             raise ValidationError("Semantic model bundle metadata is invalid") from exc
+        if not isinstance(raw_payload, dict):
+            raise ValidationError("Semantic model bundle metadata must be an object")
+        payload: dict[str, Any] = raw_payload
         if payload.get("format") != "reefvision_nnunet_v2":
             raise ValidationError("The selected ZIP is not a ReefVision nnU-Net model bundle")
         if payload.get("provider_id") != NNUNET_PROVIDER_ID:
@@ -49,6 +53,13 @@ class SemanticModelService(SegmentationModelService):
         classes = payload.get("classes")
         if not isinstance(classes, list) or not classes:
             raise ValidationError("Semantic model bundle classes are missing")
+        if any(
+            not isinstance(item, dict)
+            or "class_name" not in item
+            or "pixel_value" not in item
+            for item in classes
+        ):
+            raise ValidationError("Semantic model bundle class metadata is invalid")
         return payload
 
     def register_model_from_run(
@@ -90,7 +101,12 @@ class SemanticModelService(SegmentationModelService):
             for label_class in project.label_classes
             if label_class.is_active
         }
-        classes = [item for item in bundle["classes"] if isinstance(item, dict)]
+        raw_classes = bundle["classes"]
+        if not isinstance(raw_classes, list):
+            raise ValidationError("Semantic model bundle classes are invalid")
+        classes: list[dict[str, Any]] = [
+            item for item in raw_classes if isinstance(item, dict)
+        ]
         labels = [str(item["class_name"]) for item in classes]
         class_map = {
             "labels": labels,
