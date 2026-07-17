@@ -1,4 +1,4 @@
-"""Phase 3 model-catalog extensions for installed segmentation architectures."""
+"""Model-catalog extensions for installed segmentation architectures."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from reefvision.services.model_catalog import ModelCatalogService
 
 
 def installed_ultralytics_segmentation_architectures() -> set[str]:
-    """Return installed Ultralytics instance-segmentation architecture filenames."""
+    """Return installed Ultralytics segmentation architecture filenames."""
 
     try:
         models_root = Path(str(files("ultralytics.cfg").joinpath("models")))
@@ -32,8 +32,12 @@ def installed_ultralytics_segmentation_architectures() -> set[str]:
     }
 
 
-def _segmentation_architecture_name(detection_architecture: str | None) -> str | None:
-    if not detection_architecture or not detection_architecture.endswith(".yaml"):
+def _segmentation_architecture_name(
+    detection_architecture: str | None,
+) -> str | None:
+    if not detection_architecture or not detection_architecture.endswith(
+        ".yaml"
+    ):
         return None
     return detection_architecture.removesuffix(".yaml") + "-seg.yaml"
 
@@ -46,12 +50,16 @@ def _segmentation_architecture_entry(
     return source.model_copy(
         update={
             "catalog_id": source.catalog_id.replace(
-                "/detect/", "/segment-architecture/"
+                "/detect/",
+                "/segment-architecture/",
             ),
-            "display_name": f"{source.architecture_family} {str(size_label).upper()} Segmentation",
+            "display_name": (
+                f"{source.architecture_family} "
+                f"{str(size_label).upper()} Segmentation"
+            ),
             "display_summary": (
-                "Installed Ultralytics instance-segmentation architecture for local "
-                "scratch training from immutable polygon datasets."
+                "Installed Ultralytics instance-segmentation architecture "
+                "for local scratch training from immutable polygon datasets."
             ),
             "task": "segment",
             "model_variant": "segment",
@@ -60,33 +68,45 @@ def _segmentation_architecture_entry(
             "inference_supported": False,
             "checkpoint_identifier": architecture_reference,
             "checkpoint_source": "builtin_architecture",
+            "download_source_type": "builtin_architecture",
             "expected_checksum": None,
             "expected_file_size": None,
             "expected_files": [],
             "expected_size": None,
             "model_weight_license": (
-                "No pretrained weights are attached; training begins from the installed "
-                "architecture definition."
+                "No pretrained weights are attached; training begins from "
+                "the installed architecture definition."
             ),
             "license_summary": (
-                "Architecture definition supplied by the installed Ultralytics package; "
-                "resulting model use remains subject to applicable licensing."
+                "Architecture definition supplied by the installed "
+                "Ultralytics package; resulting model use remains subject "
+                "to applicable licensing."
             ),
-            "minimum_recommended_ram_gb": source.minimum_recommended_ram_gb,
-            "minimum_recommended_vram_gb": source.minimum_recommended_vram_gb,
+            "minimum_recommended_ram_gb": (
+                source.minimum_recommended_ram_gb
+            ),
+            "minimum_recommended_vram_gb": (
+                source.minimum_recommended_vram_gb
+            ),
             "desktop_package_status": "base_sidecar_provider",
-            "clean_machine_verification_status": "installed_architecture_discovery",
+            "clean_machine_verification_status": (
+                "installed_architecture_discovery"
+            ),
             "known_limitations": [
-                "This preset starts from an architecture definition rather than pretrained weights.",
-                "YOLO instance-segmentation training consumes polygon masks; raster masks are not converted silently.",
+                "This preset starts from an architecture definition rather "
+                "than pretrained weights.",
+                "YOLO instance-segmentation training consumes polygon masks; "
+                "raster masks are not converted silently.",
             ],
             "installation_state": "Ready",
             "installation_reason": (
-                "The segmentation architecture definition is installed with the pinned "
-                "Ultralytics provider."
+                "The segmentation architecture definition is installed with "
+                "the pinned Ultralytics provider."
             ),
             "installation_job_id": None,
-            "installed_asset_id": f"builtin_architecture:{architecture_reference}",
+            "installed_asset_id": (
+                f"builtin_architecture:{architecture_reference}"
+            ),
             "installed_path": None,
             "installed_checksum": None,
             "advanced_only": False,
@@ -117,10 +137,16 @@ class SegmentationModelCatalogService(ModelCatalogService):
         )
         available = installed_ultralytics_segmentation_architectures()
         architecture_entries: list[ModelCatalogEntryResponse] = []
-        if workflow in {None, "model_hub", "training"} and task in {None, "segment"}:
+        if workflow in {None, "model_hub", "training"} and task in {
+            None,
+            "segment",
+        }:
             seen_architectures: set[str] = set()
             for entry in catalog.models:
-                if entry.task != "detect" or entry.category != "pretrained_catalog":
+                if (
+                    entry.task != "detect"
+                    or entry.category != "pretrained_catalog"
+                ):
                     continue
                 segment_architecture = _segmentation_architecture_name(
                     entry.architecture_reference
@@ -133,7 +159,10 @@ class SegmentationModelCatalogService(ModelCatalogService):
                     continue
                 seen_architectures.add(segment_architecture)
                 architecture_entries.append(
-                    _segmentation_architecture_entry(entry, segment_architecture)
+                    _segmentation_architecture_entry(
+                        entry,
+                        segment_architecture,
+                    )
                 )
         filtered = [
             entry
@@ -174,7 +203,8 @@ class SegmentationModelCatalogService(ModelCatalogService):
                 "prompt_assist_compatibility": False,
                 "known_limitations": [
                     "This model produces reviewable polygon-mask proposals.",
-                    "Raster-mask semantic inference uses a separate future provider contract.",
+                    "Raster-mask semantic inference uses a separate future "
+                    "provider contract.",
                 ],
             }
         )
