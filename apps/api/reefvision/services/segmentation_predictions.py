@@ -8,6 +8,7 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import (
+    Annotation,
     MaskAnnotation,
     MaskAnnotationEvent,
     PredictionProposal,
@@ -237,7 +238,7 @@ class SegmentationPredictionService(PredictionService):
             raise ValidationError(
                 "One or more prediction proposals do not exist"
             )
-        box_annotations = []
+        box_annotations: list[Annotation] = []
         mask_annotations: list[MaskAnnotation] = []
         if payload.action == "reject":
             for proposal in proposals:
