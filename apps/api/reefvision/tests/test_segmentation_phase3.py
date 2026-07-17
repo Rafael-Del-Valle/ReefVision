@@ -262,7 +262,7 @@ class FakeSession(AbstractContextManager["FakeSession"]):
         )
         self.run = SimpleNamespace(task=task)
 
-    def __enter__(self) -> "FakeSession":
+    def __enter__(self) -> FakeSession:
         return self
 
     def __exit__(self, *args: Any) -> None:
