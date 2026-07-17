@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 from datetime import UTC, datetime
 from hashlib import sha256
+from pathlib import Path
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -35,7 +36,7 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-def _file_sha256(path: object) -> str:
+def _file_sha256(path: Path) -> str:
     digest = sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
@@ -56,6 +57,17 @@ class SemanticPredictionService(SegmentationPredictionService):
         response.mask_content_sha256 = proposal.mask_content_sha256
         return response
 
+    def raster_mask_file(self, proposal_id: str) -> Path:
+        proposal = self._proposal(proposal_id)
+        if proposal.geometry_kind != "raster_mask" or not proposal.mask_path:
+            raise NotFoundError("Semantic proposal mask not found")
+        path = resolve_managed_project_path(self.settings, proposal.mask_path)
+        if not path.is_file():
+            raise NotFoundError("Semantic proposal mask file not found")
+        if proposal.mask_content_sha256 and _file_sha256(path) != proposal.mask_content_sha256:
+            raise ValidationError("Semantic proposal mask checksum does not match")
+        return path
+
     def _create_raster_mask_from_proposal(
         self,
         proposal: PredictionProposal,
@@ -75,13 +87,9 @@ class SemanticPredictionService(SegmentationPredictionService):
         if label_class_id is None:
             raise ValidationError("Choose a project class before accepting this prediction")
         self._label_class(image, label_class_id)
-        if not proposal.mask_path or not proposal.mask_content_sha256:
+        if not proposal.mask_content_sha256:
             raise ValidationError("Semantic proposal mask metadata is missing")
-        source_path = resolve_managed_project_path(self.settings, proposal.mask_path)
-        if not source_path.is_file():
-            raise ValidationError("Semantic proposal mask file is missing")
-        if _file_sha256(source_path) != proposal.mask_content_sha256:
-            raise ValidationError("Semantic proposal mask checksum does not match")
+        source_path = self.raster_mask_file(proposal.id)
 
         annotation_id = str(uuid4())
         relative_path, _destination, area, x_min, y_min, x_max, y_max = write_mask_png(
