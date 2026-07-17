@@ -20,29 +20,46 @@
 - Backend geometry validation, audit events, and soft deletion.
 - Automated unit, API, migration, and frontend coverage for the implemented paths.
 
-## Remaining acceptance work
+## Automated coverage
 
-1. Run the full current-head validation and Windows MSI build.
-2. Confirm in the packaged desktop app that:
-   - clicking the first node closes a polygon and Enter does not;
-   - Move nodes drags and persists a vertex;
-   - Insert node adds one node on the clicked edge and persists it;
-   - Delete node removes only the clicked node and never reduces a polygon below three nodes;
-   - Delete and Backspace do not remove a whole polygon;
-   - the explicit **Delete selected masks** action still removes a selected polygon;
-   - boxes, polygons, and raster masks can each be hidden independently;
-   - visibility changes do not modify or delete saved annotations;
-   - raster paint continues the selected/default mask;
-   - **Create another mask** is the only normal path that starts another raster instance;
-   - raster erase, mask switching, and persistence still work.
-3. Exercise invalid polygon edits in the desktop app:
+The validation suite covers polygon creation and closure, vertex movement, insertion and protected deletion, explicit whole-mask deletion, blocked keyboard deletion, independent annotation-type visibility, self-intersection rejection, duplicate-vertex rejection, out-of-bounds rejection, shared revision conflicts, autosave failure messaging, raster paint/erase behavior, immutable raster revisions, migrations, production builds, Rust checks, and MSI creation.
+
+## Required acceptance command
+
+Run from a clean `feat/editable-mask-annotations` checkout:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\scripts\phase2-acceptance.ps1
+```
+
+The runner:
+
+1. verifies the branch and clean working tree;
+2. runs `validate-pr.ps1 -BuildDesktopInstaller`;
+3. launches the current packaged release executable;
+4. walks through every packaged-desktop check below;
+5. restarts ReefVision for persistence verification; and
+6. writes a Markdown report under `.desktop/acceptance/`.
+
+Use `-SkipBuild` only when the exact current commit has already passed the full build. Use `-NoLaunch` only for report-only troubleshooting; it is not sufficient for final acceptance.
+
+## Remaining packaged-desktop acceptance work
+
+1. Confirm move, insert, and delete-node edits persist after autosave and workspace switching.
+2. Confirm a three-node polygon cannot lose another node.
+3. Confirm Delete and Backspace do not remove a whole polygon.
+4. Confirm **Delete selected masks** still removes the explicitly selected polygon.
+5. Exercise invalid edits and verify visible rejection without annotation loss:
    - self-intersection;
    - duplicate vertices;
    - out-of-bounds coordinates;
    - attempted removal from a three-node polygon.
-4. Confirm autosave and revision-conflict messaging after polygon node edits and raster edits.
-5. Reopen the project after a complete application restart and verify all mask geometry and revisions remain intact.
+6. Confirm node and raster edits show Unsaved/Saving/Saved states and revision conflicts are visible.
+7. Confirm boxes, polygons, and raster masks hide independently without modifying stored data.
+8. Confirm raster paint continues the selected/default mask, erase persists, and **Create another mask** is the only normal path that creates another raster instance.
+9. Restart the complete application and verify all polygon geometry, raster instance counts, files, and revisions remain intact.
 
 ## Completion rule
 
-Phase 2 is complete when the current-head validation passes and every packaged-desktop check above passes without annotation loss, silent geometry corruption, or unintended creation/deletion of mask instances.
+Phase 2 is complete only when `scripts/phase2-acceptance.ps1` reports **PASS** at the current commit and the generated report contains no `FAIL` or `BLOCKED` result. Do not merge PR #3 before that evidence exists.
