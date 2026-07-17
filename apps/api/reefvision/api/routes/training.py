@@ -25,15 +25,15 @@ from reefvision.schemas.training import (
     TrainingTilingRequest,
 )
 from reefvision.services.bootstrap import BootstrapService
-from reefvision.services.training import TrainingService
+from reefvision.services.segmentation_training import SegmentationTrainingService
 
 router = APIRouter(tags=["training"])
 DbSession = Annotated[Session, Depends(get_db_session)]
 
 
-def service(request: Request, session: Session) -> TrainingService:
+def service(request: Request, session: Session) -> SegmentationTrainingService:
     settings: Settings = request.app.state.settings
-    return TrainingService(session, settings)
+    return SegmentationTrainingService(session, settings)
 
 
 def bootstrap_service(request: Request, session: Session) -> BootstrapService:
@@ -54,7 +54,9 @@ def get_training_workspace_bootstrap(
 
 
 @router.get("/training/providers", response_model=list[TrainingProviderResponse])
-def list_training_providers(request: Request, session: DbSession) -> list[TrainingProviderResponse]:
+def list_training_providers(
+    request: Request, session: DbSession
+) -> list[TrainingProviderResponse]:
     return service(request, session).list_providers()
 
 
@@ -174,12 +176,16 @@ def list_training_runs(
 
 
 @router.get("/training-runs/{run_id}", response_model=TrainingRunResponse)
-def get_training_run(run_id: str, request: Request, session: DbSession) -> TrainingRunResponse:
+def get_training_run(
+    run_id: str, request: Request, session: DbSession
+) -> TrainingRunResponse:
     return service(request, session).get_run(run_id)
 
 
 @router.post("/training-runs/{run_id}/cancel", response_model=TrainingRunResponse)
-def cancel_training_run(run_id: str, request: Request, session: DbSession) -> TrainingRunResponse:
+def cancel_training_run(
+    run_id: str, request: Request, session: DbSession
+) -> TrainingRunResponse:
     return service(request, session).cancel_run(run_id)
 
 
