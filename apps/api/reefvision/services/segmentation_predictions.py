@@ -105,7 +105,7 @@ class SegmentationPredictionService(PredictionService):
             min(ys),
             max(xs),
             max(ys),
-            max(int(round(area)), 1),
+            max(round(area), 1),
         )
 
     def _create_mask_from_proposal(
