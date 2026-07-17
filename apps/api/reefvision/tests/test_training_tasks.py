@@ -83,9 +83,14 @@ def test_instance_segmentation_blocks_raster_only_dataset() -> None:
         "The training split must contain at least one polygon mask for instance segmentation",
     ]
     assert result.warnings == [
-        "The validation split contains no polygon masks, so segmentation metrics may be unavailable",
-        "1 raster mask(s) will be excluded from YOLO polygon-segmentation training; use semantic-mask "
-        "training or convert them to polygons",
+        (
+            "The validation split contains no polygon masks, so segmentation "
+            "metrics may be unavailable"
+        ),
+        (
+            "1 raster mask(s) will be excluded from YOLO polygon-segmentation "
+            "training; use semantic-mask training or convert them to polygons"
+        ),
     ]
 
 
@@ -105,7 +110,12 @@ def test_instance_segmentation_warns_without_validation_polygons_and_for_rasters
     assert result.polygon_count == 1
     assert result.raster_mask_count == 1
     assert result.warnings == [
-        "The validation split contains no polygon masks, so segmentation metrics may be unavailable",
-        "1 raster mask(s) will be excluded from YOLO polygon-segmentation training; use semantic-mask "
-        "training or convert them to polygons",
+        (
+            "The validation split contains no polygon masks, so segmentation "
+            "metrics may be unavailable"
+        ),
+        (
+            "1 raster mask(s) will be excluded from YOLO polygon-segmentation "
+            "training; use semantic-mask training or convert them to polygons"
+        ),
     ]
