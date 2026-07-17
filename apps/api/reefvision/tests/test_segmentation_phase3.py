@@ -15,12 +15,13 @@ from reefvision.db.models import (
     Job,
     MaskAnnotationEvent,
     ModelRegistration,
+    Project,
     TrainingRun,
 )
 from reefvision.ml.provider_hub import ProviderCapabilityMatrix
+from reefvision.ml.providers import DetectionSettings, PixelBox
 from reefvision.ml.segmentation import SegmentationPrediction
 from reefvision.ml.segmentation_provider_catalog import segmentation_capability_matrix
-from reefvision.ml.providers import DetectionSettings, PixelBox
 from reefvision.schemas.training import TrainingProviderArchitectureResponse
 from reefvision.services.segmentation_catalog import SegmentationModelCatalogService
 from reefvision.services.segmentation_training import SegmentationTrainingService
@@ -69,10 +70,7 @@ def _seed_segmenter(
 ) -> ModelRegistration:
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
-        project = session.get(
-            __import__("reefvision.db.models", fromlist=["Project"]).Project,
-            project_id,
-        )
+        project = session.get(Project, project_id)
         assert project is not None
         managed_path = f"{project.storage_root}/models/test-segmenter.pt"
         checkpoint = resolve_managed_project_path(app.state.settings, managed_path)
@@ -158,9 +156,12 @@ def test_segmentation_inference_creates_reviewable_mask_and_accepts_it(
     assert payload["annotation"] is None
     assert payload["mask_annotation"]["geometry_kind"] == "polygon"
     assert payload["mask_annotation"]["source_type"] == "accepted_prediction"
-    assert payload["proposal"]["accepted_mask_annotation_id"] == payload["mask_annotation"]["id"]
+    assert (
+        payload["proposal"]["accepted_mask_annotation_id"]
+        == payload["mask_annotation"]["id"]
+    )
 
-    session_response = client.get(f"/api/v1/images/{image_id}/annotation-session")
+    session_response = client.get(f"/api/v1/images/{image_id}/annotations")
     assert session_response.status_code == 200, session_response.text
     session_payload = session_response.json()
     assert len(session_payload["mask_annotations"]) == 1
@@ -241,7 +242,9 @@ def test_segmentation_catalog_exposes_installed_scratch_architecture(
         catalog = SegmentationModelCatalogService(
             session,
             app.state.settings,
-        ).list_project_catalog(project["id"], workflow="training", task="segment")
+        ).list_project_catalog(
+            project["id"], workflow="training", task="segment"
+        )
     entries = [item for item in catalog.models if item.task == "segment"]
     assert entries
     assert entries[0].selection_kind == "builtin_architecture"
