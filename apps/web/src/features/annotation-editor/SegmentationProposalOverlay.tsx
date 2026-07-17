@@ -11,7 +11,6 @@ interface SegmentationProposal {
   confidence: number;
   x_min: number;
   y_min: number;
-  review_status: string;
 }
 
 interface PredictionListResponse {
@@ -24,11 +23,19 @@ interface OverlayTarget {
 }
 
 function currentOverlayTarget(): OverlayTarget | null {
-  const canvas = document.querySelector<SVGSVGElement>("svg.annotation-canvas");
+  const canvas = document.querySelector<SVGSVGElement>(
+    "svg.annotation-canvas",
+  );
   const group = canvas?.querySelector<SVGGElement>(":scope > g") ?? null;
-  const image = group?.querySelector<SVGImageElement>(":scope > image") ?? null;
-  const href = image?.getAttribute("href") ?? image?.getAttribute("xlink:href") ?? "";
-  const match = href.match(/\/images\/([^/]+)\/(?:content|thumbnail)(?:\?|$)/);
+  const image =
+    group?.querySelector<SVGImageElement>(":scope > image") ?? null;
+  const href =
+    image?.getAttribute("href") ??
+    image?.getAttribute("xlink:href") ??
+    "";
+  const match = href.match(
+    /\/images\/([^/]+)\/(?:content|thumbnail)(?:\?|$)/,
+  );
   if (!group || !match?.[1]) {
     return null;
   }
@@ -44,7 +51,9 @@ async function loadSegmentationProposals(
     { signal },
   );
   if (!response.ok) {
-    throw new Error(`Prediction overlay request failed with HTTP ${response.status}`);
+    throw new Error(
+      `Prediction overlay request failed with HTTP ${response.status}`,
+    );
   }
   const payload = (await response.json()) as PredictionListResponse;
   return payload.items.filter(
@@ -70,7 +79,11 @@ export function SegmentationProposalOverlay() {
     };
     updateTarget();
     const observer = new MutationObserver(updateTarget);
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+    });
     return () => observer.disconnect();
   }, []);
 
@@ -83,18 +96,22 @@ export function SegmentationProposalOverlay() {
     let stopped = false;
     const refresh = async () => {
       controller?.abort();
-      controller = new AbortController();
+      const nextController = new AbortController();
+      controller = nextController;
       try {
         const items = await loadSegmentationProposals(
           target.imageId,
-          controller.signal,
+          nextController.signal,
         );
         if (!stopped) {
           setProposals(items);
         }
       } catch (error) {
-        if (!controller.signal.aborted && !stopped) {
-          console.warn("Segmentation proposal overlay could not refresh", error);
+        if (!nextController.signal.aborted && !stopped) {
+          console.warn(
+            "Segmentation proposal overlay could not refresh",
+            error,
+          );
         }
       }
     };
@@ -132,7 +149,6 @@ export function SegmentationProposalOverlay() {
               y={proposal.y_min + 14}
               fill="#f5c542"
               fontSize={12}
-              vectorEffect="non-scaling-stroke"
             >
               {`${proposal.predicted_label} mask ${proposal.confidence.toFixed(2)}`}
             </text>
