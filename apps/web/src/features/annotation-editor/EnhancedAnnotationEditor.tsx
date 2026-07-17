@@ -24,6 +24,7 @@ interface EnhancedAnnotationEditorProps {
 }
 
 type EditorWorkspace = "boxes" | "masks" | "raster";
+type AnnotationVisibility = Record<EditorWorkspace, boolean>;
 
 const fallbackToolbarStyle = {
   position: "fixed" as const,
@@ -40,6 +41,13 @@ const fallbackToolbarStyle = {
   boxShadow: "0 0.75rem 2rem rgba(0, 0, 0, 0.45)",
 };
 
+const visibilityGroupStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.45rem",
+  flexWrap: "wrap" as const,
+};
+
 export function EnhancedAnnotationEditor({
   project,
   initialImageId,
@@ -48,6 +56,11 @@ export function EnhancedAnnotationEditor({
 }: EnhancedAnnotationEditorProps) {
   const queryClient = useQueryClient();
   const [workspace, setWorkspace] = useState<EditorWorkspace>("boxes");
+  const [visibility, setVisibility] = useState<AnnotationVisibility>({
+    boxes: true,
+    masks: true,
+    raster: true,
+  });
   const [activeImageId, setActiveImageId] = useState(initialImageId);
   const [toolbarTarget, setToolbarTarget] = useState<HTMLElement | null>(null);
 
@@ -117,37 +130,78 @@ export function EnhancedAnnotationEditor({
     );
   }, [activeImageId, launchContext, onClose, project, workspace]);
 
-  const annotationTypeSelector = (
-    <label
-      data-testid="annotation-type-toggle"
-      style={{ minWidth: "10rem" }}
-    >
-      Annotation type
-      <select
-        aria-label="Annotation type"
-        data-testid="annotation-type-select"
-        value={workspace}
-        onChange={(event) =>
-          setWorkspace(event.target.value as EditorWorkspace)
-        }
+  function toggleVisibility(type: EditorWorkspace) {
+    setVisibility((current) => ({ ...current, [type]: !current[type] }));
+  }
+
+  const annotationControls = (
+    <div style={visibilityGroupStyle}>
+      <label data-testid="annotation-type-toggle" style={{ minWidth: "10rem" }}>
+        Annotation type
+        <select
+          aria-label="Annotation type"
+          data-testid="annotation-type-select"
+          value={workspace}
+          onChange={(event) =>
+            setWorkspace(event.target.value as EditorWorkspace)
+          }
+        >
+          <option value="boxes">Bounding boxes</option>
+          <option value="masks">Polygon</option>
+          <option value="raster">Raster brush</option>
+        </select>
+      </label>
+      <div
+        role="group"
+        aria-label="Visible annotation types"
+        style={visibilityGroupStyle}
       >
-        <option value="boxes">Bounding boxes</option>
-        <option value="masks">Polygon</option>
-        <option value="raster">Raster brush</option>
-      </select>
-    </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={visibility.boxes}
+            onChange={() => toggleVisibility("boxes")}
+          />
+          Boxes
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={visibility.masks}
+            onChange={() => toggleVisibility("masks")}
+          />
+          Polygons
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={visibility.raster}
+            onChange={() => toggleVisibility("raster")}
+          />
+          Raster masks
+        </label>
+      </div>
+    </div>
   );
 
   return (
     <>
-      {workspaceContent}
+      <div
+        data-testid="enhanced-annotation-editor"
+        data-boxes-visible={visibility.boxes}
+        data-polygons-visible={visibility.masks}
+        data-raster-visible={visibility.raster}
+        style={{ display: "contents" }}
+      >
+        {workspaceContent}
+      </div>
       {createPortal(
         <div
           role="group"
-          aria-label="Annotation type selector"
+          aria-label="Annotation controls"
           style={toolbarTarget ? undefined : fallbackToolbarStyle}
         >
-          {annotationTypeSelector}
+          {annotationControls}
         </div>,
         toolbarTarget ?? document.body,
       )}
