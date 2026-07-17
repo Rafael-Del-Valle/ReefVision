@@ -26,7 +26,8 @@ def installed_ultralytics_segmentation_architectures() -> set[str]:
         path.name
         for path in models_root.rglob("*-seg.yaml")
         if not any(
-            token in path.name.casefold() for token in ("-cls", "-pose", "-obb", "world", "yoloe")
+            token in path.name.casefold()
+            for token in ("-cls", "-pose", "-obb", "world", "yoloe")
         )
     }
 
@@ -78,10 +79,10 @@ def _segmentation_architecture_entry(
                 "Ultralytics package; resulting model use remains subject "
                 "to applicable licensing."
             ),
-            "minimum_recommended_ram_gb": (source.minimum_recommended_ram_gb),
-            "minimum_recommended_vram_gb": (source.minimum_recommended_vram_gb),
+            "minimum_recommended_ram_gb": source.minimum_recommended_ram_gb,
+            "minimum_recommended_vram_gb": source.minimum_recommended_vram_gb,
             "desktop_package_status": "base_sidecar_provider",
-            "clean_machine_verification_status": ("installed_architecture_discovery"),
+            "clean_machine_verification_status": "installed_architecture_discovery",
             "known_limitations": [
                 "This preset starts from an architecture definition rather "
                 "than pretrained weights.",
@@ -94,7 +95,7 @@ def _segmentation_architecture_entry(
                 "the pinned Ultralytics provider."
             ),
             "installation_job_id": None,
-            "installed_asset_id": (f"builtin_architecture:{architecture_reference}"),
+            "installed_asset_id": f"builtin_architecture:{architecture_reference}",
             "installed_path": None,
             "installed_checksum": None,
             "advanced_only": False,
@@ -103,6 +104,27 @@ def _segmentation_architecture_entry(
             "architecture_reference": architecture_reference,
             "resolved_model_id": None,
         }
+    )
+
+
+def _catalog_entry_sort_key(
+    item: ModelCatalogEntryResponse,
+) -> tuple[int, int, str, str, str, str]:
+    category_rank = (
+        0
+        if item.category == "pretrained_catalog"
+        else 1
+        if item.category == "my_trained_models"
+        else 2
+    )
+    availability_rank = 0 if item.installation_state in {"Ready", "Available"} else 1
+    return (
+        category_rank,
+        availability_rank,
+        item.task,
+        item.architecture_family.casefold(),
+        item.display_name.casefold(),
+        item.catalog_id,
     )
 
 
@@ -133,7 +155,9 @@ class SegmentationModelCatalogService(ModelCatalogService):
             for entry in catalog.models:
                 if entry.task != "detect" or entry.category != "pretrained_catalog":
                     continue
-                segment_architecture = _segmentation_architecture_name(entry.architecture_reference)
+                segment_architecture = _segmentation_architecture_name(
+                    entry.architecture_reference
+                )
                 if (
                     segment_architecture is None
                     or segment_architecture not in available
@@ -150,17 +174,7 @@ class SegmentationModelCatalogService(ModelCatalogService):
         filtered = [entry for entry in catalog.models if task is None or entry.task == task]
         ordered = sorted(
             [*filtered, *architecture_entries],
-            key=lambda item: (
-                0
-                if item.category == "pretrained_catalog"
-                else 1
-                if item.category == "my_trained_models"
-                else 2,
-                item.task,
-                item.architecture_family.casefold(),
-                item.display_name.casefold(),
-                item.catalog_id,
-            ),
+            key=_catalog_entry_sort_key,
         )
         return catalog.model_copy(update={"models": ordered})
 
