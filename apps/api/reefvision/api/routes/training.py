@@ -26,17 +26,19 @@ from reefvision.schemas.training import (
 )
 from reefvision.services.bootstrap import BootstrapService
 from reefvision.services.segmentation_catalog import SegmentationModelCatalogService
-from reefvision.services.segmentation_training import SegmentationTrainingService
+from reefvision.services.semantic_training import SemanticTrainingService
 
 router = APIRouter(tags=["training"])
 DbSession = Annotated[Session, Depends(get_db_session)]
 
 
-def service(request: Request, session: Session) -> SegmentationTrainingService:
+
+def service(request: Request, session: Session) -> SemanticTrainingService:
     settings: Settings = request.app.state.settings
-    result = SegmentationTrainingService(session, settings)
+    result = SemanticTrainingService(session, settings)
     result.catalog = SegmentationModelCatalogService(session, settings)
     return result
+
 
 
 def bootstrap_service(request: Request, session: Session) -> BootstrapService:
@@ -57,7 +59,10 @@ def get_training_workspace_bootstrap(
 
 
 @router.get("/training/providers", response_model=list[TrainingProviderResponse])
-def list_training_providers(request: Request, session: DbSession) -> list[TrainingProviderResponse]:
+def list_training_providers(
+    request: Request,
+    session: DbSession,
+) -> list[TrainingProviderResponse]:
     return service(request, session).list_providers()
 
 
@@ -66,7 +71,9 @@ def list_training_providers(request: Request, session: DbSession) -> list[Traini
     response_model=UltralyticsTrainingRegistryResponse,
 )
 def get_training_provider_parameters(
-    provider_id: str, request: Request, session: DbSession
+    provider_id: str,
+    request: Request,
+    session: DbSession,
 ) -> UltralyticsTrainingRegistryResponse:
     snapshot = service(request, session).get_provider_parameters(provider_id)
     return UltralyticsTrainingRegistryResponse.model_validate(snapshot, from_attributes=True)
@@ -77,7 +84,9 @@ def get_training_provider_parameters(
     response_model=list[TrainingDraftResponse],
 )
 def list_training_drafts(
-    project_id: str, request: Request, session: DbSession
+    project_id: str,
+    request: Request,
+    session: DbSession,
 ) -> list[TrainingDraftResponse]:
     return service(request, session).list_drafts(project_id)
 
@@ -87,7 +96,9 @@ def list_training_drafts(
     response_model=list[TrainingDraftSummaryResponse],
 )
 def list_training_draft_summaries(
-    project_id: str, request: Request, session: DbSession
+    project_id: str,
+    request: Request,
+    session: DbSession,
 ) -> list[TrainingDraftSummaryResponse]:
     return service(request, session).list_draft_summaries(project_id)
 
@@ -107,7 +118,9 @@ def create_training_draft(
 
 @router.get("/training-drafts/{draft_id}", response_model=TrainingDraftResponse)
 def get_training_draft(
-    draft_id: str, request: Request, session: DbSession
+    draft_id: str,
+    request: Request,
+    session: DbSession,
 ) -> TrainingDraftResponse:
     return service(request, session).get_draft(draft_id)
 
@@ -123,7 +136,11 @@ def patch_training_draft(
 
 
 @router.delete("/training-drafts/{draft_id}", status_code=204)
-def delete_training_draft(draft_id: str, request: Request, session: DbSession) -> None:
+def delete_training_draft(
+    draft_id: str,
+    request: Request,
+    session: DbSession,
+) -> None:
     service(request, session).delete_draft(draft_id)
 
 
@@ -171,18 +188,28 @@ def create_training_run(
     response_model=list[TrainingRunResponse],
 )
 def list_training_runs(
-    project_id: str, request: Request, session: DbSession
+    project_id: str,
+    request: Request,
+    session: DbSession,
 ) -> list[TrainingRunResponse]:
     return service(request, session).list_runs(project_id)
 
 
 @router.get("/training-runs/{run_id}", response_model=TrainingRunResponse)
-def get_training_run(run_id: str, request: Request, session: DbSession) -> TrainingRunResponse:
+def get_training_run(
+    run_id: str,
+    request: Request,
+    session: DbSession,
+) -> TrainingRunResponse:
     return service(request, session).get_run(run_id)
 
 
 @router.post("/training-runs/{run_id}/cancel", response_model=TrainingRunResponse)
-def cancel_training_run(run_id: str, request: Request, session: DbSession) -> TrainingRunResponse:
+def cancel_training_run(
+    run_id: str,
+    request: Request,
+    session: DbSession,
+) -> TrainingRunResponse:
     return service(request, session).cancel_run(run_id)
 
 
@@ -191,7 +218,9 @@ def cancel_training_run(run_id: str, request: Request, session: DbSession) -> Tr
     response_model=list[ExperimentRecordResponse],
 )
 def list_project_experiments(
-    project_id: str, request: Request, session: DbSession
+    project_id: str,
+    request: Request,
+    session: DbSession,
 ) -> list[ExperimentRecordResponse]:
     return service(request, session).list_experiments(project_id)
 
