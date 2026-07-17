@@ -19,9 +19,7 @@ router = APIRouter(tags=["predictions"])
 DbSession = Annotated[Session, Depends(get_db_session)]
 
 
-@router.get(
-    "/images/{image_id}/prediction-proposals", response_model=PredictionListResponse
-)
+@router.get("/images/{image_id}/prediction-proposals", response_model=PredictionListResponse)
 def list_predictions(
     image_id: str,
     session: DbSession,
@@ -53,15 +51,11 @@ def accept_prediction(
     "/prediction-proposals/{proposal_id}/reject",
     response_model=PredictionReviewResponse,
 )
-def reject_prediction(
-    proposal_id: str, session: DbSession
-) -> PredictionReviewResponse:
+def reject_prediction(proposal_id: str, session: DbSession) -> PredictionReviewResponse:
     return SegmentationPredictionService(session).reject(proposal_id)
 
 
-@router.post(
-    "/prediction-proposals/bulk-review", response_model=PredictionBulkReviewResponse
-)
+@router.post("/prediction-proposals/bulk-review", response_model=PredictionBulkReviewResponse)
 def bulk_review_predictions(
     payload: PredictionBulkReviewRequest, session: DbSession
 ) -> PredictionBulkReviewResponse:

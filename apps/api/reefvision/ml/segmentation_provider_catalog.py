@@ -46,11 +46,7 @@ def segmentation_provider_descriptor(
     )
     return replace(
         descriptor,
-        supported_tasks=tuple(
-            dict.fromkeys(
-                [*descriptor.supported_tasks, "detect", "segment"]
-            )
-        ),
+        supported_tasks=tuple(dict.fromkeys([*descriptor.supported_tasks, "detect", "segment"])),
         supported_output_types=outputs,
         known_limitations=(
             "Instance-segmentation training currently consumes polygon masks "

@@ -49,9 +49,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     with op.batch_alter_table("prediction_proposals") as batch_op:
-        batch_op.drop_index(
-            "ix_prediction_proposals_image_geometry_status"
-        )
+        batch_op.drop_index("ix_prediction_proposals_image_geometry_status")
         batch_op.drop_column("accepted_mask_annotation_id")
         batch_op.drop_column("polygon_json")
         batch_op.drop_column("geometry_kind")

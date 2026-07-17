@@ -68,9 +68,7 @@ class PredictionAcceptRequest(BaseModel):
         value: list[list[FiniteFloat]] | None,
     ) -> list[list[FiniteFloat]] | None:
         if value is not None and any(len(point) != 2 for point in value):
-            raise ValueError(
-                "Every segmentation polygon point must contain x and y"
-            )
+            raise ValueError("Every segmentation polygon point must contain x and y")
         return value
 
 
@@ -96,6 +94,4 @@ class PredictionBulkReviewRequest(BaseModel):
 class PredictionBulkReviewResponse(BaseModel):
     reviewed_count: int
     created_annotations: list[AnnotationResponse]
-    created_mask_annotations: list[MaskAnnotationResponse] = Field(
-        default_factory=list
-    )
+    created_mask_annotations: list[MaskAnnotationResponse] = Field(default_factory=list)

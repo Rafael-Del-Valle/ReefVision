@@ -56,11 +56,7 @@ def process_segmentation_training_job(
     run_id: str | None = None
     with factory() as session:
         job = session.get(Job, job_id)
-        if (
-            job is None
-            or job.job_type != "training"
-            or job.status != "queued"
-        ):
+        if job is None or job.job_type != "training" or job.status != "queued":
             return False
         run_id = str(job.request_json["training_run_id"])
         run = session.get(TrainingRun, run_id)
@@ -92,33 +88,21 @@ def process_segmentation_training_job(
             if run is None or job is None:
                 raise RuntimeError("Training run or job is missing")
             if run.dataset_version_id is None:
-                raise RuntimeError(
-                    "Training run is missing its dataset version"
-                )
+                raise RuntimeError("Training run is missing its dataset version")
             project = session.get(Project, run.project_id)
             version_row = session.get(
                 DatasetVersion,
                 run.dataset_version_id,
             )
             if project is None or version_row is None:
-                raise RuntimeError(
-                    "Training run references missing project or dataset version"
-                )
+                raise RuntimeError("Training run references missing project or dataset version")
             if run.task != SEGMENTATION_TASK:
-                raise RuntimeError(
-                    "Segmentation worker received a non-segmentation training run"
-                )
-            if (
-                dict(run.tuning_config_json).get("mode", "disabled")
-                != "disabled"
-            ):
-                raise RuntimeError(
-                    "Segmentation tuning execution is not implemented"
-                )
+                raise RuntimeError("Segmentation worker received a non-segmentation training run")
+            if dict(run.tuning_config_json).get("mode", "disabled") != "disabled":
+                raise RuntimeError("Segmentation tuning execution is not implemented")
             if dict(run.tiling_config_json).get("mode", "none") != "none":
                 raise RuntimeError(
-                    "The segmentation training executor launches only the "
-                    "no-tiling baseline"
+                    "The segmentation training executor launches only the no-tiling baseline"
                 )
             require_provider_ready(run.provider_id, settings)
 
@@ -133,10 +117,7 @@ def process_segmentation_training_job(
             items = list(
                 session.scalars(
                     select(DatasetVersionItem)
-                    .where(
-                        DatasetVersionItem.dataset_version_id
-                        == version_row.id
-                    )
+                    .where(DatasetVersionItem.dataset_version_id == version_row.id)
                     .order_by(
                         DatasetVersionItem.split,
                         DatasetVersionItem.original_filename,
@@ -146,11 +127,7 @@ def process_segmentation_training_job(
             )
             images = list(
                 session.scalars(
-                    select(ImageAsset).where(
-                        ImageAsset.id.in_(
-                            [item.image_id for item in items]
-                        )
-                    )
+                    select(ImageAsset).where(ImageAsset.id.in_([item.image_id for item in items]))
                 )
             )
             image_paths = {
@@ -163,15 +140,12 @@ def process_segmentation_training_job(
             for image_id, path in image_paths.items():
                 if not path.is_file():
                     raise FileNotFoundError(
-                        "Managed source image is missing for training: "
-                        f"{image_id}"
+                        f"Managed source image is missing for training: {image_id}"
                     )
 
             base_relative = f"{project.storage_root}/training/{run.id}"
             dataset_output_path = f"{base_relative}/dataset"
-            dataset_manifest_path = (
-                f"{base_relative}/dataset-manifest.json"
-            )
+            dataset_manifest_path = f"{base_relative}/dataset-manifest.json"
             dataset_archive_path = f"{base_relative}/dataset.zip"
             dataset_root = resolve_managed_project_path(
                 settings,
@@ -195,8 +169,7 @@ def process_segmentation_training_job(
             )
             if int(export_result.get("polygon_count", 0)) <= 0:
                 raise RuntimeError(
-                    "The immutable dataset export contains no polygon masks "
-                    "for segmentation"
+                    "The immutable dataset export contains no polygon masks for segmentation"
                 )
 
             save_root_relative = f"{base_relative}/ultralytics"
@@ -209,10 +182,7 @@ def process_segmentation_training_job(
             logs_path = save_root / "training.log"
             _append_log(
                 logs_path,
-                (
-                    f"[{datetime.now(UTC).isoformat()}] polygon "
-                    "segmentation dataset prepared"
-                ),
+                (f"[{datetime.now(UTC).isoformat()}] polygon segmentation dataset prepared"),
             )
 
             checkpoint_source = _resolve_model_source(
@@ -279,9 +249,7 @@ def process_segmentation_training_job(
         with factory() as session:
             run = session.get(TrainingRun, run_id)
             if run is None:
-                raise RuntimeError(
-                    "Training run disappeared before launch"
-                )
+                raise RuntimeError("Training run disappeared before launch")
             train_args = dict(run.training_config_json)
             device = resolve_torch_device(run.device)
             train_args["amp"] = run.precision == "amp"
@@ -314,10 +282,7 @@ def process_segmentation_training_job(
                     settings,
                     run.logs_path or "",
                 ),
-                (
-                    f"[{datetime.now(UTC).isoformat()}] launching "
-                    "Ultralytics segment training"
-                ),
+                (f"[{datetime.now(UTC).isoformat()}] launching Ultralytics segment training"),
             )
 
         model.train(**train_args)
@@ -326,14 +291,10 @@ def process_segmentation_training_job(
             run = session.get(TrainingRun, run_id)
             job = session.get(Job, job_id)
             if run is None or job is None:
-                raise RuntimeError(
-                    "Training run disappeared after execution"
-                )
+                raise RuntimeError("Training run disappeared after execution")
             trainer = model.trainer
             if trainer is None:
-                raise RuntimeError(
-                    "Ultralytics trainer unavailable after execution"
-                )
+                raise RuntimeError("Ultralytics trainer unavailable after execution")
             save_dir = Path(str(trainer.save_dir)).resolve()
             results_csv = save_dir / "results.csv"
             weights_dir = save_dir / "weights"
@@ -344,9 +305,7 @@ def process_segmentation_training_job(
             mask_metrics = {
                 key: value
                 for key, value in last_metrics.items()
-                if "(M)" in key
-                or "mask" in key.casefold()
-                or "seg" in key.casefold()
+                if "(M)" in key or "mask" in key.casefold() or "seg" in key.casefold()
             }
             run.metrics_history_json = history
             run.metrics_json = last_metrics
@@ -357,19 +316,13 @@ def process_segmentation_training_job(
                     save_dir,
                 ),
                 "results_csv": (
-                    _relative_to_data_dir(settings, results_csv)
-                    if results_csv.is_file()
-                    else None
+                    _relative_to_data_dir(settings, results_csv) if results_csv.is_file() else None
                 ),
                 "best_checkpoint_path": (
-                    _relative_to_data_dir(settings, best_ckpt)
-                    if best_ckpt.is_file()
-                    else None
+                    _relative_to_data_dir(settings, best_ckpt) if best_ckpt.is_file() else None
                 ),
                 "last_checkpoint_path": (
-                    _relative_to_data_dir(settings, last_ckpt)
-                    if last_ckpt.is_file()
-                    else None
+                    _relative_to_data_dir(settings, last_ckpt) if last_ckpt.is_file() else None
                 ),
                 "mask_metrics": mask_metrics,
             }
@@ -380,10 +333,7 @@ def process_segmentation_training_job(
                 if last_ckpt.is_file()
                 else None
             )
-            if (
-                cancellation_requested["value"]
-                or job.status == "cancel_requested"
-            ):
+            if cancellation_requested["value"] or job.status == "cancel_requested":
                 job.status = "cancelled"
                 run.status = "cancelled"
                 run.stage = "cancelled"
@@ -392,10 +342,7 @@ def process_segmentation_training_job(
                         settings,
                         run.logs_path or "",
                     ),
-                    (
-                        f"[{datetime.now(UTC).isoformat()}] segmentation "
-                        "training cancelled"
-                    ),
+                    (f"[{datetime.now(UTC).isoformat()}] segmentation training cancelled"),
                 )
             else:
                 job.status = "succeeded"
@@ -413,18 +360,14 @@ def process_segmentation_training_job(
                     project_id=run.project_id,
                     training_run_id=run.id,
                     dataset_version_id=run.dataset_version_id,
-                    dataset_manifest_sha256=(
-                        run.dataset_manifest_sha256
-                    ),
+                    dataset_manifest_sha256=(run.dataset_manifest_sha256),
                     split_manifest_sha256=run.split_manifest_sha256,
                     task=run.task,
                     provider_id=run.provider_id,
                     architecture=run.architecture,
                     summary_metrics_json=last_metrics,
                     comparison_warnings_json=list(run.warnings_json),
-                    artifact_manifest_json=dict(
-                        run.artifact_manifest_json
-                    ),
+                    artifact_manifest_json=dict(run.artifact_manifest_json),
                     package_versions_json=_package_versions_snapshot(),
                 )
                 session.add(experiment)
@@ -433,10 +376,7 @@ def process_segmentation_training_job(
                         settings,
                         run.logs_path or "",
                     ),
-                    (
-                        f"[{datetime.now(UTC).isoformat()}] segmentation "
-                        "training completed"
-                    ),
+                    (f"[{datetime.now(UTC).isoformat()}] segmentation training completed"),
                 )
             run.completed_at = datetime.now(UTC)
             job.completed_at = datetime.now(UTC)
@@ -445,11 +385,7 @@ def process_segmentation_training_job(
     except Exception as exc:
         with factory() as session:
             job = session.get(Job, job_id)
-            run = (
-                session.get(TrainingRun, run_id)
-                if run_id is not None
-                else None
-            )
+            run = session.get(TrainingRun, run_id) if run_id is not None else None
             if job is not None:
                 job.status = "failed"
                 job.error_message = str(exc)
@@ -466,10 +402,7 @@ def process_segmentation_training_job(
                                 settings,
                                 run.logs_path,
                             ),
-                            (
-                                f"[{datetime.now(UTC).isoformat()}] "
-                                f"failure: {exc}"
-                            ),
+                            (f"[{datetime.now(UTC).isoformat()}] failure: {exc}"),
                         )
             session.commit()
         return False

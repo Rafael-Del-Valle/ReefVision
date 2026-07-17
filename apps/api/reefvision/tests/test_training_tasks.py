@@ -27,9 +27,7 @@ def test_detection_preflight_requires_boxes() -> None:
         [FakeDatasetItem(split="train")],
     )
     assert blocked.ready is False
-    assert blocked.blockers == [
-        "Object-detection training requires at least one bounding box"
-    ]
+    assert blocked.blockers == ["Object-detection training requires at least one bounding box"]
 
     ready = task_dataset_preflight(
         DETECTION_TASK,

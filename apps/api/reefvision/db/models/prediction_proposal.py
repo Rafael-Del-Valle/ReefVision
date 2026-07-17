@@ -126,9 +126,7 @@ class PredictionProposal(Base):
         nullable=False,
         default=False,
     )
-    reviewer_action_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True)
-    )
+    reviewer_action_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     accepted_annotation_id: Mapped[str | None] = mapped_column(
         String(36),
         nullable=True,
@@ -152,12 +150,6 @@ class PredictionProposal(Base):
         nullable=False,
     )
 
-    project: Mapped[Project] = relationship(
-        back_populates="prediction_proposals"
-    )
-    image: Mapped[ImageAsset] = relationship(
-        back_populates="prediction_proposals"
-    )
-    model: Mapped[ModelRegistration] = relationship(
-        back_populates="prediction_proposals"
-    )
+    project: Mapped[Project] = relationship(back_populates="prediction_proposals")
+    image: Mapped[ImageAsset] = relationship(back_populates="prediction_proposals")
+    model: Mapped[ModelRegistration] = relationship(back_populates="prediction_proposals")

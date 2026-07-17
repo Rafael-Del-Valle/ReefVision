@@ -36,9 +36,7 @@ class SemanticDatasetContract:
 
     def validate(self) -> None:
         if not self.dataset_version_id.strip():
-            raise ValidationError(
-                "Semantic datasets require a dataset version id"
-            )
+            raise ValidationError("Semantic datasets require a dataset version id")
         for value, label in (
             (self.dataset_manifest_sha256, "dataset manifest"),
             (self.split_manifest_sha256, "split manifest"),
@@ -47,40 +45,25 @@ class SemanticDatasetContract:
                 character in "0123456789abcdef" for character in value
             )
             if not is_sha256:
-                raise ValidationError(
-                    "Semantic datasets require a lowercase SHA-256 "
-                    f"{label}"
-                )
+                raise ValidationError(f"Semantic datasets require a lowercase SHA-256 {label}")
         if self.background_pixel_value != 0:
-            raise ValidationError(
-                "ReefVision semantic-mask background must use pixel value 0"
-            )
+            raise ValidationError("ReefVision semantic-mask background must use pixel value 0")
         if not self.export_root.is_dir():
             raise ValidationError("Semantic dataset export root is missing")
         if not self.images_root.is_dir() or not self.masks_root.is_dir():
-            raise ValidationError(
-                "Semantic datasets require images and masks directories"
-            )
+            raise ValidationError("Semantic datasets require images and masks directories")
         if not self.classes_file.is_file():
-            raise ValidationError(
-                "Semantic dataset classes metadata is missing"
-            )
+            raise ValidationError("Semantic dataset classes metadata is missing")
         if not self.classes:
-            raise ValidationError(
-                "Semantic datasets require at least one foreground class"
-            )
+            raise ValidationError("Semantic datasets require at least one foreground class")
         class_indices = [item.class_index for item in self.classes]
         if len(class_indices) != len(set(class_indices)):
             raise ValidationError("Semantic class indices must be unique")
         pixel_values = [item.pixel_value for item in self.classes]
         if len(pixel_values) != len(set(pixel_values)):
-            raise ValidationError(
-                "Semantic class pixel values must be unique"
-            )
+            raise ValidationError("Semantic class pixel values must be unique")
         if any(value <= 0 or value > 255 for value in pixel_values):
-            raise ValidationError(
-                "Semantic class pixel values must be between 1 and 255"
-            )
+            raise ValidationError("Semantic class pixel values must be between 1 and 255")
 
 
 @dataclass(frozen=True)
@@ -155,8 +138,7 @@ class PlannedNnUNetProvider:
     ) -> SemanticTrainingResult:
         request.dataset.validate()
         raise ValidationError(
-            "nnU-Net semantic training is capability-gated and not "
-            "implemented yet"
+            "nnU-Net semantic training is capability-gated and not implemented yet"
         )
 
     def predict(
@@ -168,8 +150,7 @@ class PlannedNnUNetProvider:
     ) -> Path:
         del checkpoint_path, image_path, device
         raise ValidationError(
-            "nnU-Net semantic inference is capability-gated and not "
-            "implemented yet"
+            "nnU-Net semantic inference is capability-gated and not implemented yet"
         )
 
 
@@ -179,6 +160,4 @@ def semantic_provider_for_name(
     normalized = provider_id.strip().casefold()
     if normalized == NNUNET_PROVIDER_ID:
         return PlannedNnUNetProvider()
-    raise ValidationError(
-        f"Unsupported semantic segmentation provider: {provider_id}"
-    )
+    raise ValidationError(f"Unsupported semantic segmentation provider: {provider_id}")

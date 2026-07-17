@@ -156,10 +156,7 @@ def test_segmentation_inference_creates_reviewable_mask_and_accepts_it(
     assert payload["annotation"] is None
     assert payload["mask_annotation"]["geometry_kind"] == "polygon"
     assert payload["mask_annotation"]["source_type"] == "accepted_prediction"
-    assert (
-        payload["proposal"]["accepted_mask_annotation_id"]
-        == payload["mask_annotation"]["id"]
-    )
+    assert payload["proposal"]["accepted_mask_annotation_id"] == payload["mask_annotation"]["id"]
 
     session_response = client.get(f"/api/v1/images/{image_id}/annotations")
     assert session_response.status_code == 200, session_response.text
@@ -169,11 +166,7 @@ def test_segmentation_inference_creates_reviewable_mask_and_accepts_it(
     assert session_payload["image"]["annotation_revision"] == 1
 
     with app.state.session_factory() as session:
-        events = (
-            session.query(MaskAnnotationEvent)
-            .filter_by(image_id=image_id)
-            .all()
-        )
+        events = session.query(MaskAnnotationEvent).filter_by(image_id=image_id).all()
         assert len(events) == 1
         assert events[0].event_type == "created"
         assert events[0].after_json["source_type"] == "accepted_prediction"
@@ -242,9 +235,7 @@ def test_segmentation_catalog_exposes_installed_scratch_architecture(
         catalog = SegmentationModelCatalogService(
             session,
             app.state.settings,
-        ).list_project_catalog(
-            project["id"], workflow="training", task="segment"
-        )
+        ).list_project_catalog(project["id"], workflow="training", task="segment")
     entries = [item for item in catalog.models if item.task == "segment"]
     assert entries
     assert entries[0].selection_kind == "builtin_architecture"

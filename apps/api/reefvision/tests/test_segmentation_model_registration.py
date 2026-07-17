@@ -41,9 +41,7 @@ def test_completed_segmentation_run_registers_as_segmenter(
     project = create_project(client, "Segment registration")
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
-        checkpoint_relative = (
-            f"{project['storage_root']}/training/test-segment/weights/best.pt"
-        )
+        checkpoint_relative = f"{project['storage_root']}/training/test-segment/weights/best.pt"
         checkpoint = resolve_managed_project_path(
             app.state.settings,
             checkpoint_relative,
@@ -55,15 +53,11 @@ def test_completed_segmentation_run_registers_as_segmenter(
             dataset_manifest_sha256="a" * 64,
             split_manifest_sha256="b" * 64,
             task="segment",
-            catalog_model_id=(
-                "ultralytics/yolo11/segment-architecture/n"
-            ),
+            catalog_model_id=("ultralytics/yolo11/segment-architecture/n"),
             provider_id="ultralytics",
             architecture="yolo11n-seg.yaml",
             initial_checkpoint_source="scratch",
-            resolved_model_asset_id=(
-                "builtin_architecture:yolo11n-seg.yaml"
-            ),
+            resolved_model_asset_id=("builtin_architecture:yolo11n-seg.yaml"),
             parameter_registry_version="8.3.228",
             selected_preset="YOLO11 N Segmentation",
             installation_state="Ready",
@@ -90,9 +84,7 @@ def test_completed_segmentation_run_registers_as_segmenter(
     monkeypatch.setattr(
         SegmentationModelService,
         "_provider_for_registration",
-        lambda self, purpose, provider_name: (
-            FakeSegmentationRegistrationProvider()
-        ),
+        lambda self, purpose, provider_name: FakeSegmentationRegistrationProvider(),
     )
     response = client.post(
         f"/api/v1/projects/{project['id']}/models/register-from-run",
@@ -109,6 +101,4 @@ def test_completed_segmentation_run_registers_as_segmenter(
     assert model["metadata_json"]["registered_from"] == "training_run"
     assert model["metadata_json"]["source_training_run_id"] == run_id
     assert model["metadata_json"]["proposal_geometry"] == "polygon_mask"
-    assert model["metadata_json"]["source_metrics"] == {
-        "metrics/mAP50(M)": 0.7
-    }
+    assert model["metadata_json"]["source_metrics"] == {"metrics/mAP50(M)": 0.7}

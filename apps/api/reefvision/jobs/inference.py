@@ -35,9 +35,7 @@ def _utc_now() -> datetime:
 def _model(session: Session, model_id: str) -> ModelRegistration:
     model = ModelRepository(session).get(model_id)
     if model is None:
-        raise ValidationError(
-            "The inference job references a missing model"
-        )
+        raise ValidationError("The inference job references a missing model")
     return model
 
 
@@ -59,11 +57,7 @@ def process_inference_job(
 ) -> bool:
     with factory() as session:
         job = session.get(Job, job_id)
-        if (
-            job is None
-            or job.job_type != "inference"
-            or job.status != "queued"
-        ):
+        if job is None or job.job_type != "inference" or job.status != "queued":
             return False
         job.status = "running"
         job.started_at = _utc_now()
@@ -75,17 +69,13 @@ def process_inference_job(
             settings,
             model.managed_path,
         )
-        image_ids = [
-            str(image_id) for image_id in request["image_ids"]
-        ]
+        image_ids = [str(image_id) for image_id in request["image_ids"]]
         inference_settings = DetectionSettings(
             confidence_threshold=float(request["confidence_threshold"]),
             iou_threshold=float(request["iou_threshold"]),
             device=str(request.get("device", "auto")),
         )
-        model_task = str(
-            request.get("model_task") or model.task or "detect"
-        )
+        model_task = str(request.get("model_task") or model.task or "detect")
         model_provider_name = model.provider_name
         model_provider_version = model.provider_version
         model_id = model.id
@@ -94,9 +84,7 @@ def process_inference_job(
 
     provider: DetectionProvider | SegmentationProvider
     if model_task == "segment":
-        provider = segmentation_provider_for_name(
-            model_provider_name
-        )
+        provider = segmentation_provider_for_name(model_provider_name)
     elif model_task == "detect":
         provider = detection_provider_for_name(model_provider_name)
     else:
@@ -104,9 +92,7 @@ def process_inference_job(
             job = session.get(Job, job_id)
             if job is not None:
                 job.status = "failed"
-                job.error_message = (
-                    f"Unsupported inference model task: {model_task}"
-                )
+                job.error_message = f"Unsupported inference model task: {model_task}"
                 job.completed_at = _utc_now()
                 session.commit()
         return False
@@ -128,9 +114,7 @@ def process_inference_job(
                     return True
                 image = ImageRepository(session).get(image_id)
                 if image is None:
-                    raise ValidationError(
-                        "The inference job references a missing image"
-                    )
+                    raise ValidationError("The inference job references a missing image")
                 image_path = resolve_managed_project_path(
                     settings,
                     image.managed_path,
@@ -142,11 +126,7 @@ def process_inference_job(
                 proposals: list[PredictionProposal] = []
                 for prediction in predictions:
                     polygon = getattr(prediction, "polygon", None)
-                    geometry_kind = (
-                        "polygon_mask"
-                        if polygon is not None
-                        else "bounding_box"
-                    )
+                    geometry_kind = "polygon_mask" if polygon is not None else "bounding_box"
                     proposals.append(
                         PredictionProposal(
                             project_id=image.project_id,
@@ -171,20 +151,14 @@ def process_inference_job(
                             y_max=prediction.box.y_max,
                             review_status="pending",
                             inference_settings_json={
-                                "confidence_threshold": (
-                                    inference_settings.confidence_threshold
-                                ),
-                                "iou_threshold": (
-                                    inference_settings.iou_threshold
-                                ),
+                                "confidence_threshold": (inference_settings.confidence_threshold),
+                                "iou_threshold": (inference_settings.iou_threshold),
                                 "device": inference_settings.device,
                                 "task": model_task,
                             },
                             provenance_json={
                                 "provider_name": model_provider_name,
-                                "provider_version": (
-                                    model_provider_version
-                                ),
+                                "provider_version": (model_provider_version),
                                 "model_task": model_task,
                                 "proposal_geometry": geometry_kind,
                             },
@@ -196,9 +170,7 @@ def process_inference_job(
                 job.result_json = {
                     "processed_images": index,
                     "model_task": model_task,
-                    "proposal_count": int(
-                        previous_result.get("proposal_count", 0)
-                    )
+                    "proposal_count": int(previous_result.get("proposal_count", 0))
                     + len(proposals),
                     "mask_proposal_count": int(
                         previous_result.get(
@@ -206,11 +178,7 @@ def process_inference_job(
                             0,
                         )
                     )
-                    + sum(
-                        1
-                        for item in proposals
-                        if item.geometry_kind == "polygon_mask"
-                    ),
+                    + sum(1 for item in proposals if item.geometry_kind == "polygon_mask"),
                 }
                 if index == len(image_ids):
                     job.status = "succeeded"

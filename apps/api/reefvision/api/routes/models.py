@@ -82,9 +82,7 @@ def get_model_providers(
     refresh: bool = False,
 ) -> list[ModelProviderResponse]:
     return [
-        ModelProviderResponse.model_validate(
-            asdict(segmentation_provider_descriptor(item))
-        )
+        ModelProviderResponse.model_validate(asdict(segmentation_provider_descriptor(item)))
         for item in cached_model_provider_catalog(
             request.app.state.settings,
             refresh=refresh,
@@ -104,9 +102,7 @@ def get_model_provider_detail(
         provider_id,
         request.app.state.settings,
     )
-    return ModelProviderResponse.model_validate(
-        asdict(segmentation_provider_descriptor(provider))
-    )
+    return ModelProviderResponse.model_validate(asdict(segmentation_provider_descriptor(provider)))
 
 
 @router.get(
@@ -186,12 +182,8 @@ def validate_ultralytics_training_registry(
         task=payload.task,
         mode=payload.mode,
         parameters=payload.parameters,
-        search_space=[
-            item.model_dump() for item in payload.search_space
-        ],
-        expected_ultralytics_version=(
-            payload.expected_ultralytics_version
-        ),
+        search_space=[item.model_dump() for item in payload.search_space],
+        expected_ultralytics_version=(payload.expected_ultralytics_version),
         settings=request.app.state.settings,
     )
     return UltralyticsTrainingConfigurationValidationResponse.model_validate(
@@ -312,12 +304,8 @@ def _serialize_provider_preflight(
                 current_platform=report.current_platform,
                 tested_cuda=report.tested_cuda,
                 current_cuda=report.current_cuda,
-                automatic_downloads_disabled=(
-                    report.automatic_downloads_disabled
-                ),
-                explicit_checkpoint_required=(
-                    report.explicit_checkpoint_required
-                ),
+                automatic_downloads_disabled=(report.automatic_downloads_disabled),
+                explicit_checkpoint_required=(report.explicit_checkpoint_required),
                 requirements_file=report.requirements_file,
                 issues=list(report.issues),
                 packages=[

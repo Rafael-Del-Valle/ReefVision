@@ -26,8 +26,7 @@ def installed_ultralytics_segmentation_architectures() -> set[str]:
         path.name
         for path in models_root.rglob("*-seg.yaml")
         if not any(
-            token in path.name.casefold()
-            for token in ("-cls", "-pose", "-obb", "world", "yoloe")
+            token in path.name.casefold() for token in ("-cls", "-pose", "-obb", "world", "yoloe")
         )
     }
 
@@ -35,9 +34,7 @@ def installed_ultralytics_segmentation_architectures() -> set[str]:
 def _segmentation_architecture_name(
     detection_architecture: str | None,
 ) -> str | None:
-    if not detection_architecture or not detection_architecture.endswith(
-        ".yaml"
-    ):
+    if not detection_architecture or not detection_architecture.endswith(".yaml"):
         return None
     return detection_architecture.removesuffix(".yaml") + "-seg.yaml"
 
@@ -54,8 +51,7 @@ def _segmentation_architecture_entry(
                 "/segment-architecture/",
             ),
             "display_name": (
-                f"{source.architecture_family} "
-                f"{str(size_label).upper()} Segmentation"
+                f"{source.architecture_family} {str(size_label).upper()} Segmentation"
             ),
             "display_summary": (
                 "Installed Ultralytics instance-segmentation architecture "
@@ -82,16 +78,10 @@ def _segmentation_architecture_entry(
                 "Ultralytics package; resulting model use remains subject "
                 "to applicable licensing."
             ),
-            "minimum_recommended_ram_gb": (
-                source.minimum_recommended_ram_gb
-            ),
-            "minimum_recommended_vram_gb": (
-                source.minimum_recommended_vram_gb
-            ),
+            "minimum_recommended_ram_gb": (source.minimum_recommended_ram_gb),
+            "minimum_recommended_vram_gb": (source.minimum_recommended_vram_gb),
             "desktop_package_status": "base_sidecar_provider",
-            "clean_machine_verification_status": (
-                "installed_architecture_discovery"
-            ),
+            "clean_machine_verification_status": ("installed_architecture_discovery"),
             "known_limitations": [
                 "This preset starts from an architecture definition rather "
                 "than pretrained weights.",
@@ -104,9 +94,7 @@ def _segmentation_architecture_entry(
                 "the pinned Ultralytics provider."
             ),
             "installation_job_id": None,
-            "installed_asset_id": (
-                f"builtin_architecture:{architecture_reference}"
-            ),
+            "installed_asset_id": (f"builtin_architecture:{architecture_reference}"),
             "installed_path": None,
             "installed_checksum": None,
             "advanced_only": False,
@@ -143,14 +131,9 @@ class SegmentationModelCatalogService(ModelCatalogService):
         }:
             seen_architectures: set[str] = set()
             for entry in catalog.models:
-                if (
-                    entry.task != "detect"
-                    or entry.category != "pretrained_catalog"
-                ):
+                if entry.task != "detect" or entry.category != "pretrained_catalog":
                     continue
-                segment_architecture = _segmentation_architecture_name(
-                    entry.architecture_reference
-                )
+                segment_architecture = _segmentation_architecture_name(entry.architecture_reference)
                 if (
                     segment_architecture is None
                     or segment_architecture not in available
@@ -164,11 +147,7 @@ class SegmentationModelCatalogService(ModelCatalogService):
                         segment_architecture,
                     )
                 )
-        filtered = [
-            entry
-            for entry in catalog.models
-            if task is None or entry.task == task
-        ]
+        filtered = [entry for entry in catalog.models if task is None or entry.task == task]
         ordered = sorted(
             [*filtered, *architecture_entries],
             key=lambda item: (
@@ -203,8 +182,7 @@ class SegmentationModelCatalogService(ModelCatalogService):
                 "prompt_assist_compatibility": False,
                 "known_limitations": [
                     "This model produces reviewable polygon-mask proposals.",
-                    "Raster-mask semantic inference uses a separate future "
-                    "provider contract.",
+                    "Raster-mask semantic inference uses a separate future provider contract.",
                 ],
             }
         )

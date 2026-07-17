@@ -25,17 +25,14 @@ from reefvision.services.models import ModelService, _humanize_catalog_family
 from reefvision.storage.projects import resolve_managed_project_path
 
 
-class UltralyticsSegmentationRegistrationProvider(
-    UltralyticsDetectionProvider
-):
+class UltralyticsSegmentationRegistrationProvider(UltralyticsDetectionProvider):
     """Inspect Ultralytics checkpoints while enforcing the segment task."""
 
     def inspect_model(self, model_path: Path) -> DetectionModelMetadata:
         metadata = super().inspect_model(model_path)
         if metadata.task != "segment":
             raise ValidationError(
-                "Segmenter registration requires an Ultralytics segmentation "
-                "checkpoint"
+                "Segmenter registration requires an Ultralytics segmentation checkpoint"
             )
         return replace(
             metadata,
@@ -65,9 +62,7 @@ class SegmentationModelService(ModelService):
     ) -> DetectionProvider | AnnotationAssistProvider:
         if purpose == "segmenter":
             if provider_name.strip().casefold() != "ultralytics":
-                raise ValidationError(
-                    f"Unsupported segmentation provider: {provider_name}"
-                )
+                raise ValidationError(f"Unsupported segmentation provider: {provider_name}")
             return UltralyticsSegmentationRegistrationProvider()
         return super()._provider_for_registration(purpose, provider_name)
 
@@ -82,22 +77,17 @@ class SegmentationModelService(ModelService):
         if run.task != "segment":
             return super().register_model_from_run(project_id, payload)
         if run.project_id != project_id:
-            raise ValidationError(
-                "Training runs must belong to the selected project"
-            )
+            raise ValidationError("Training runs must belong to the selected project")
         if run.status != "completed" or not run.result_checkpoint_path:
             raise ValidationError(
-                "Only completed training runs with a finalized checkpoint can "
-                "be registered"
+                "Only completed training runs with a finalized checkpoint can be registered"
             )
         source_path = resolve_managed_project_path(
             self.settings,
             run.result_checkpoint_path,
         )
         experiment = self.session.scalar(
-            select(ExperimentRecord).where(
-                ExperimentRecord.training_run_id == run.id
-            )
+            select(ExperimentRecord).where(ExperimentRecord.training_run_id == run.id)
         )
         metadata_overrides: dict[str, object] = {
             "registered_from": "training_run",
@@ -108,15 +98,11 @@ class SegmentationModelService(ModelService):
             "source_catalog_model_id": run.catalog_model_id,
             "source_resolved_model_asset_id": run.resolved_model_asset_id,
             "source_resolved_model_checksum": run.resolved_model_checksum,
-            "source_parameter_registry_version": (
-                run.parameter_registry_version
-            ),
+            "source_parameter_registry_version": (run.parameter_registry_version),
             "source_selected_preset": run.selected_preset,
             "source_installation_state": run.installation_state,
             "source_architecture": run.architecture,
-            "source_architecture_family": _humanize_catalog_family(
-                run.catalog_model_id
-            ),
+            "source_architecture_family": _humanize_catalog_family(run.catalog_model_id),
             "source_result_checkpoint_path": run.result_checkpoint_path,
             "source_metrics": dict(run.metrics_json),
             "proposal_geometry": "polygon_mask",
@@ -155,13 +141,9 @@ class SegmentationModelService(ModelService):
             )
         images = self.images.list_by_ids(payload.image_ids)
         if len(images) != len(payload.image_ids):
-            raise ValidationError(
-                "One or more requested images do not exist"
-            )
+            raise ValidationError("One or more requested images do not exist")
         if any(image.project_id != project_id for image in images):
-            raise ValidationError(
-                "Inference images must belong to the same project as the model"
-            )
+            raise ValidationError("Inference images must belong to the same project as the model")
         job = Job(
             project_id=project_id,
             job_type="inference",

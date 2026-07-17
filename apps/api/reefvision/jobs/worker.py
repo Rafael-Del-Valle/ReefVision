@@ -60,9 +60,7 @@ def _fail_job(factory: sessionmaker[Session], job_id: str, message: str) -> None
         session.commit()
 
 
-def process_thumbnail_job(
-    settings: Settings, factory: sessionmaker[Session], job_id: str
-) -> bool:
+def process_thumbnail_job(settings: Settings, factory: sessionmaker[Session], job_id: str) -> bool:
     with factory() as session:
         job = session.get(Job, job_id)
         if job is None or job.job_type != "thumbnail" or job.status != "queued":
@@ -105,9 +103,7 @@ def process_thumbnail_job(
         return False
 
 
-def process_next_thumbnail_job(
-    settings: Settings, factory: sessionmaker[Session]
-) -> bool:
+def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session]) -> bool:
     with factory() as session:
         job = JobRepository(session).next_queued()
         job_id = job.id if job is not None else None
@@ -171,9 +167,7 @@ async def thumbnail_worker_loop(
     recover_interrupted_jobs(factory)
     while not stop_event.is_set():
         try:
-            processed = await asyncio.to_thread(
-                process_next_thumbnail_job, settings, factory
-            )
+            processed = await asyncio.to_thread(process_next_thumbnail_job, settings, factory)
         except Exception:
             LOGGER.exception(
                 "Background worker iteration failed",
@@ -185,6 +179,4 @@ async def thumbnail_worker_loop(
             processed = False
         if not processed:
             with suppress(TimeoutError):
-                await asyncio.wait_for(
-                    stop_event.wait(), timeout=settings.worker_poll_seconds
-                )
+                await asyncio.wait_for(stop_event.wait(), timeout=settings.worker_poll_seconds)

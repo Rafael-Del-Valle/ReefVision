@@ -62,13 +62,9 @@ def task_dataset_preflight(
         for snapshot in item.mask_annotation_snapshot_json:
             geometry_kind = snapshot.get("geometry_kind")
             if geometry_kind == "polygon":
-                polygon_counts_by_split[split] = (
-                    polygon_counts_by_split.get(split, 0) + 1
-                )
+                polygon_counts_by_split[split] = polygon_counts_by_split.get(split, 0) + 1
             elif geometry_kind == "raster_mask":
-                raster_counts_by_split[split] = (
-                    raster_counts_by_split.get(split, 0) + 1
-                )
+                raster_counts_by_split[split] = raster_counts_by_split.get(split, 0) + 1
 
     polygon_count = sum(polygon_counts_by_split.values())
     raster_mask_count = sum(raster_counts_by_split.values())
@@ -77,14 +73,11 @@ def task_dataset_preflight(
 
     if task == DETECTION_TASK:
         if box_count <= 0:
-            blockers.append(
-                "Object-detection training requires at least one bounding box"
-            )
+            blockers.append("Object-detection training requires at least one bounding box")
     elif task == INSTANCE_SEGMENTATION_TASK:
         if polygon_count <= 0:
             blockers.append(
-                "Ultralytics instance-segmentation training requires at least "
-                "one polygon mask"
+                "Ultralytics instance-segmentation training requires at least one polygon mask"
             )
         if polygon_counts_by_split.get("train", 0) <= 0:
             blockers.append(
