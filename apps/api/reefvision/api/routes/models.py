@@ -8,10 +8,7 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
-from reefvision.ml.dependencies import (
-    ProviderPreflightReport,
-    cached_lightweight_provider_preflight,
-)
+from reefvision.ml.dependencies import ProviderPreflightReport, cached_lightweight_provider_preflight
 from reefvision.ml.provider_hub import (
     cached_model_provider_catalog,
     cached_runtime_provider_statuses,
@@ -39,46 +36,36 @@ from reefvision.schemas.models import (
     UltralyticsTrainingConfigurationValidationResponse,
     UltralyticsTrainingRegistryResponse,
 )
-from reefvision.services.models import ModelService
+from reefvision.services.segmentation_models import SegmentationModelService
 
 router = APIRouter(tags=["models"])
 DbSession = Annotated[Session, Depends(get_db_session)]
 
 
-def service(request: Request, session: Session) -> ModelService:
-    settings: Settings = request.app.state.settings
-    return ModelService(session, settings)
+def service(request: Request, session: Session) -> SegmentationModelService:
+    return SegmentationModelService(session, request.app.state.settings)
 
 
 @router.get("/models/provider-preflight", response_model=ProviderDependencyPreflightResponse)
-def get_provider_preflight(
-    request: Request,
-    refresh: bool = False,
-) -> ProviderDependencyPreflightResponse:
-    settings: Settings = request.app.state.settings
-    reports = cached_lightweight_provider_preflight(settings, refresh=refresh).value
-    return _serialize_provider_preflight(reports)
+def get_provider_preflight(request: Request, refresh: bool = False) -> ProviderDependencyPreflightResponse:
+    return _serialize_provider_preflight(
+        cached_lightweight_provider_preflight(request.app.state.settings, refresh=refresh).value
+    )
 
 
 @router.get("/model-providers", response_model=list[ModelProviderResponse])
-def get_model_providers(
-    request: Request,
-    refresh: bool = False,
-) -> list[ModelProviderResponse]:
-    settings: Settings = request.app.state.settings
+def get_model_providers(request: Request, refresh: bool = False) -> list[ModelProviderResponse]:
     return [
-        ModelProviderResponse.model_validate(asdict(provider))
-        for provider in cached_model_provider_catalog(settings, refresh=refresh).value
+        ModelProviderResponse.model_validate(asdict(item))
+        for item in cached_model_provider_catalog(request.app.state.settings, refresh=refresh).value
     ]
 
 
 @router.get("/model-providers/{provider_id}", response_model=ModelProviderResponse)
-def get_model_provider_detail(
-    provider_id: str,
-    request: Request,
-) -> ModelProviderResponse:
-    settings: Settings = request.app.state.settings
-    return ModelProviderResponse.model_validate(asdict(get_model_provider(provider_id, settings)))
+def get_model_provider_detail(provider_id: str, request: Request) -> ModelProviderResponse:
+    return ModelProviderResponse.model_validate(
+        asdict(get_model_provider(provider_id, request.app.state.settings))
+    )
 
 
 @router.get(
@@ -86,20 +73,18 @@ def get_model_provider_detail(
     response_model=ModelProviderCapabilityMatrixResponse,
 )
 def get_model_provider_capability_detail(
-    provider_id: str,
-    request: Request,
+    provider_id: str, request: Request
 ) -> ModelProviderCapabilityMatrixResponse:
-    settings: Settings = request.app.state.settings
     return ModelProviderCapabilityMatrixResponse.model_validate(
-        asdict(get_model_provider_capabilities(provider_id, settings))
+        asdict(get_model_provider_capabilities(provider_id, request.app.state.settings))
     )
 
 
 @router.get("/runtime-providers/status", response_model=list[RuntimeProviderStatusResponse])
 def get_runtime_provider_statuses(refresh: bool = False) -> list[RuntimeProviderStatusResponse]:
     return [
-        RuntimeProviderStatusResponse.model_validate(asdict(runtime))
-        for runtime in cached_runtime_provider_statuses(refresh=refresh).value
+        RuntimeProviderStatusResponse.model_validate(asdict(item))
+        for item in cached_runtime_provider_statuses(refresh=refresh).value
     ]
 
 
@@ -108,12 +93,12 @@ def get_runtime_provider_statuses(refresh: bool = False) -> list[RuntimeProvider
     response_model=UltralyticsTrainingRegistrySummarySnapshotResponse,
 )
 def get_ultralytics_training_registry_summary(
-    request: Request,
-    refresh: bool = False,
+    request: Request, refresh: bool = False
 ) -> UltralyticsTrainingRegistrySummarySnapshotResponse:
-    settings: Settings = request.app.state.settings
     return UltralyticsTrainingRegistrySummarySnapshotResponse.model_validate(
-        cached_ultralytics_training_registry_summary(settings, refresh=refresh).value,
+        cached_ultralytics_training_registry_summary(
+            request.app.state.settings, refresh=refresh
+        ).value,
         from_attributes=True,
     )
 
@@ -123,9 +108,9 @@ def get_ultralytics_training_registry_summary(
     response_model=UltralyticsTrainingRegistryResponse,
 )
 def get_ultralytics_training_registry(request: Request) -> UltralyticsTrainingRegistryResponse:
-    settings: Settings = request.app.state.settings
-    snapshot = ultralytics_training_registry(settings)
-    return UltralyticsTrainingRegistryResponse.model_validate(snapshot, from_attributes=True)
+    return UltralyticsTrainingRegistryResponse.model_validate(
+        ultralytics_training_registry(request.app.state.settings), from_attributes=True
+    )
 
 
 @router.post(
@@ -133,21 +118,18 @@ def get_ultralytics_training_registry(request: Request) -> UltralyticsTrainingRe
     response_model=UltralyticsTrainingConfigurationValidationResponse,
 )
 def validate_ultralytics_training_registry(
-    payload: UltralyticsTrainingConfigurationValidationRequest,
-    request: Request,
+    payload: UltralyticsTrainingConfigurationValidationRequest, request: Request
 ) -> UltralyticsTrainingConfigurationValidationResponse:
-    settings: Settings = request.app.state.settings
-    validation = validate_ultralytics_training_configuration(
+    result = validate_ultralytics_training_configuration(
         task=payload.task,
         mode=payload.mode,
         parameters=payload.parameters,
-        search_space=[field.model_dump() for field in payload.search_space],
+        search_space=[item.model_dump() for item in payload.search_space],
         expected_ultralytics_version=payload.expected_ultralytics_version,
-        settings=settings,
+        settings=request.app.state.settings,
     )
     return UltralyticsTrainingConfigurationValidationResponse.model_validate(
-        validation,
-        from_attributes=True,
+        result, from_attributes=True
     )
 
 
