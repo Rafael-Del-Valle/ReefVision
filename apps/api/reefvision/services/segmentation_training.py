@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from importlib.resources import files
 from pathlib import Path
-from typing import Any
 
 from reefvision.db.models import DatasetVersion, DatasetVersionItem, TrainingDraft
 from reefvision.domain.errors import ValidationError
@@ -13,9 +12,10 @@ from reefvision.ml.dependencies import (
     provider_preflight,
     provider_spec,
 )
-from reefvision.ml.ultralytics_registry import validate_ultralytics_training_configuration
+from reefvision.ml.ultralytics_registry import (
+    validate_ultralytics_training_configuration,
+)
 from reefvision.schemas.training import (
-    TrainingDatasetSummaryResponse,
     TrainingDraftWriteRequest,
     TrainingPreflightResponse,
     TrainingProviderArchitectureResponse,
@@ -23,7 +23,6 @@ from reefvision.schemas.training import (
     TrainingTilingEstimateResponse,
 )
 from reefvision.services.training import (
-    DEFAULT_TRAINING_CONFIG,
     TRAINABLE_PROVIDER_ID,
     TRAINING_PRECISIONS,
     TRAINING_PROVIDER_ARCHITECTURE_TTL_SECONDS,
@@ -51,15 +50,18 @@ class SegmentationTrainingService(TrainingService):
             TrainingProviderResponse(
                 provider_id=TRAINABLE_PROVIDER_ID,
                 display_name="Ultralytics YOLO",
-                provider_version=provider_spec(TRAINABLE_PROVIDER_ID).provider_version,
+                provider_version=provider_spec(
+                    TRAINABLE_PROVIDER_ID
+                ).provider_version,
                 supported_tasks=list(SUPPORTED_ULTRALYTICS_TRAINING_TASKS),
                 supported_precision_modes=list(TRAINING_PRECISIONS),
                 supports_tiling=False,
                 supports_tuning=False,
                 supports_packaged_desktop=True,
                 warning=(
-                    "Detection and polygon instance-segmentation training are available. "
-                    "Raster masks remain reserved for the semantic-segmentation provider slice."
+                    "Detection and polygon instance-segmentation training are "
+                    "available. Raster masks remain reserved for the "
+                    "semantic-segmentation provider slice."
                 ),
                 architectures=sorted(
                     architectures,
@@ -79,7 +81,10 @@ class SegmentationTrainingService(TrainingService):
         architectures: list[TrainingProviderArchitectureResponse] = []
         for path in models_root.rglob("*-seg.yaml"):
             normalized = path.name.casefold()
-            if any(token in normalized for token in ("-cls", "-pose", "-obb", "world", "yoloe")):
+            if any(
+                token in normalized
+                for token in ("-cls", "-pose", "-obb", "world", "yoloe")
+            ):
                 continue
             architectures.append(
                 TrainingProviderArchitectureResponse(
@@ -90,18 +95,27 @@ class SegmentationTrainingService(TrainingService):
                 )
             )
         deduped = {item.architecture_id: item for item in architectures}
-        return sorted(deduped.values(), key=lambda item: item.display_name.casefold())
+        return sorted(
+            deduped.values(),
+            key=lambda item: item.display_name.casefold(),
+        )
 
     def _cached_ultralytics_segment_architectures(
         self,
     ) -> list[TrainingProviderArchitectureResponse]:
         return get_cached_snapshot(
-            f"training_provider_segment_architectures:{self.settings.resolved_data_dir}",
+            (
+                "training_provider_segment_architectures:"
+                f"{self.settings.resolved_data_dir}"
+            ),
             self._ultralytics_segment_architectures,
             ttl_seconds=TRAINING_PROVIDER_ARCHITECTURE_TTL_SECONDS,
         ).value
 
-    def _architectures_for_task(self, task: str) -> list[TrainingProviderArchitectureResponse]:
+    def _architectures_for_task(
+        self,
+        task: str,
+    ) -> list[TrainingProviderArchitectureResponse]:
         if task == DETECTION_TASK:
             return self._cached_ultralytics_detect_architectures()
         if task == INSTANCE_SEGMENTATION_TASK:
@@ -113,13 +127,23 @@ class SegmentationTrainingService(TrainingService):
         response: TrainingPreflightResponse,
         task_check: TaskDatasetPreflight,
     ) -> TrainingPreflightResponse:
-        response.blockers = self._dedupe_messages([*response.blockers, *task_check.blockers])
-        response.warnings = self._dedupe_messages([*response.warnings, *task_check.warnings])
-        response.dataset.mask_annotation_count = task_check.polygon_count + task_check.raster_mask_count
+        response.blockers = self._dedupe_messages(
+            [*response.blockers, *task_check.blockers]
+        )
+        response.warnings = self._dedupe_messages(
+            [*response.warnings, *task_check.warnings]
+        )
+        response.dataset.mask_annotation_count = (
+            task_check.polygon_count + task_check.raster_mask_count
+        )
         response.dataset.polygon_count = task_check.polygon_count
         response.dataset.raster_mask_count = task_check.raster_mask_count
-        response.dataset.polygon_counts_by_split = dict(task_check.polygon_counts_by_split)
-        response.dataset.raster_counts_by_split = dict(task_check.raster_counts_by_split)
+        response.dataset.polygon_counts_by_split = dict(
+            task_check.polygon_counts_by_split
+        )
+        response.dataset.raster_counts_by_split = dict(
+            task_check.raster_counts_by_split
+        )
         response.status = (
             "blocked"
             if response.blockers
@@ -143,7 +167,6 @@ class SegmentationTrainingService(TrainingService):
                     payload.catalog_model_id,
                 )
             except ValidationError:
-                # The base service returns the canonical catalog-selection blocker.
                 return super().preflight(project_id, payload)
 
         task = (
@@ -153,7 +176,7 @@ class SegmentationTrainingService(TrainingService):
         )
         if task != INSTANCE_SEGMENTATION_TASK:
             response = super().preflight(project_id, payload)
-            if payload.dataset_version_id:
+            if task == DETECTION_TASK and payload.dataset_version_id:
                 version = self._version(payload.dataset_version_id)
                 if version.status == "complete":
                     items = self.versions.items_for_version(version.id)
@@ -171,14 +194,20 @@ class SegmentationTrainingService(TrainingService):
             version = self._version(payload.dataset_version_id)
             if version.project_id != project.id:
                 raise ValidationError(
-                    "Training drafts must reference a dataset version from the same project"
+                    "Training drafts must reference a dataset version from the "
+                    "same project"
                 )
             if version.status != "complete":
-                blockers.append("Only complete immutable dataset versions may be selected for training")
+                blockers.append(
+                    "Only complete immutable dataset versions may be selected "
+                    "for training"
+                )
             else:
                 version_items = self.versions.items_for_version(version.id)
         else:
-            blockers.append("Select an immutable dataset version before launching training")
+            blockers.append(
+                "Select an immutable dataset version before launching training"
+            )
 
         provider_id = (
             resolved_catalog_selection.provider_id
@@ -186,7 +215,10 @@ class SegmentationTrainingService(TrainingService):
             else payload.provider_id or TRAINABLE_PROVIDER_ID
         )
         if provider_id != TRAINABLE_PROVIDER_ID:
-            blockers.append("Only the pinned Ultralytics provider supports this segmentation slice")
+            blockers.append(
+                "Only the pinned Ultralytics provider supports this segmentation "
+                "slice"
+            )
 
         architecture = (
             resolved_catalog_selection.architecture
@@ -194,14 +226,18 @@ class SegmentationTrainingService(TrainingService):
             else payload.architecture or ""
         )
         available_architectures = {
-            item.architecture_id for item in self._cached_ultralytics_segment_architectures()
+            item.architecture_id
+            for item in self._cached_ultralytics_segment_architectures()
         }
         if not architecture:
-            blockers.append("Choose a local Ultralytics segmentation architecture before launching training")
+            blockers.append(
+                "Choose a local Ultralytics segmentation architecture before "
+                "launching training"
+            )
         elif architecture not in available_architectures:
             blockers.append(
-                "The selected segmentation architecture is not available in the installed pinned "
-                "Ultralytics package"
+                "The selected segmentation architecture is not available in the "
+                "installed pinned Ultralytics package"
             )
 
         if payload.precision not in TRAINING_PRECISIONS:
@@ -220,7 +256,8 @@ class SegmentationTrainingService(TrainingService):
         if initial_checkpoint_source == "registered_model":
             if not initial_checkpoint_model_id:
                 blockers.append(
-                    "Choose a registered segmentation checkpoint or switch to scratch training"
+                    "Choose a registered segmentation checkpoint or switch to "
+                    "scratch training"
                 )
             else:
                 model = self._model(initial_checkpoint_model_id)
@@ -230,12 +267,13 @@ class SegmentationTrainingService(TrainingService):
                     or model.task != INSTANCE_SEGMENTATION_TASK
                 ):
                     blockers.append(
-                        "The selected checkpoint must be an Ultralytics segmentation model from "
-                        "the same project"
+                        "The selected checkpoint must be an Ultralytics segmentation "
+                        "model from the same project"
                     )
                 if model.provider_name != TRAINABLE_PROVIDER_ID:
                     blockers.append(
-                        "Only Ultralytics segmentation checkpoints can seed this training flow"
+                        "Only Ultralytics segmentation checkpoints can seed this "
+                        "training flow"
                     )
         elif initial_checkpoint_source not in {"scratch", "managed_catalog"}:
             blockers.append("Unsupported checkpoint source")
@@ -260,7 +298,8 @@ class SegmentationTrainingService(TrainingService):
         tuning_config = self._merged_tuning_config(payload.tuning_config)
         if tuning_config.get("mode", "disabled") != "disabled":
             blockers.append(
-                "Tuning configuration can be saved, but segmentation tuning execution is not implemented"
+                "Tuning configuration can be saved, but segmentation tuning "
+                "execution is not implemented"
             )
 
         tiling_config = self._merged_tiling_config(payload.tiling_config)
@@ -280,7 +319,8 @@ class SegmentationTrainingService(TrainingService):
         warnings.extend(tiling_estimate.warnings)
         if tiling_config.get("mode") != "none":
             blockers.append(
-                "The segmentation runner currently launches only the no-tiling baseline"
+                "The segmentation runner currently launches only the no-tiling "
+                "baseline"
             )
 
         dataset_summary = self._dataset_summary(version, items=version_items)
@@ -292,14 +332,22 @@ class SegmentationTrainingService(TrainingService):
         )
         dataset_summary.polygon_count = task_check.polygon_count
         dataset_summary.raster_mask_count = task_check.raster_mask_count
-        dataset_summary.polygon_counts_by_split = dict(task_check.polygon_counts_by_split)
-        dataset_summary.raster_counts_by_split = dict(task_check.raster_counts_by_split)
+        dataset_summary.polygon_counts_by_split = dict(
+            task_check.polygon_counts_by_split
+        )
+        dataset_summary.raster_counts_by_split = dict(
+            task_check.raster_counts_by_split
+        )
 
         leakage_audit = self._leakage_audit(version, items=version_items)
         warnings.extend(leakage_audit.warnings)
         blockers.extend(leakage_audit.blockers)
 
-        dependency = provider_preflight(provider_id, self.settings, check_level="full")
+        dependency = provider_preflight(
+            provider_id,
+            self.settings,
+            check_level="full",
+        )
         if not dependency.ready:
             blockers.extend(
                 [
@@ -315,17 +363,28 @@ class SegmentationTrainingService(TrainingService):
         resource_snapshot = self._resource_snapshot(payload.device)
         disk_free_gb = resource_snapshot.get("disk_free_gb")
         max_disk_usage_gb = float(
-            self._merged_resource_limits(payload.resource_limits)["max_disk_usage_gb"]
+            self._merged_resource_limits(payload.resource_limits)[
+                "max_disk_usage_gb"
+            ]
         )
-        if isinstance(disk_free_gb, (int, float)) and disk_free_gb < max_disk_usage_gb:
+        if (
+            isinstance(disk_free_gb, (int, float))
+            and disk_free_gb < max_disk_usage_gb
+        ):
             warnings.append(
-                "Requested disk budget exceeds currently available free space in the "
-                "ReefVision data directory"
+                "Requested disk budget exceeds currently available free space in "
+                "the ReefVision data directory"
             )
 
         blockers = self._dedupe_messages(blockers)
         warnings = self._dedupe_messages(warnings)
-        status = "blocked" if blockers else "ready_with_warnings" if warnings else "ready"
+        status = (
+            "blocked"
+            if blockers
+            else "ready_with_warnings"
+            if warnings
+            else "ready"
+        )
         return TrainingPreflightResponse(
             status=status,
             warnings=warnings,
