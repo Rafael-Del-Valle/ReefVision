@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from sqlalchemy import select
 
 from reefvision.db.models import ExperimentRecord, Job, TrainingRun
 from reefvision.domain.errors import NotFoundError, ValidationError
-from reefvision.ml.providers import UltralyticsDetectionProvider
+from reefvision.ml.providers import DetectionModelMetadata, UltralyticsDetectionProvider
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.models import (
     InferenceJobCreateRequest,
@@ -19,12 +20,31 @@ from reefvision.services.models import ModelService, _humanize_catalog_family
 from reefvision.storage.projects import resolve_managed_project_path
 
 
+class UltralyticsSegmentationRegistrationProvider(UltralyticsDetectionProvider):
+    """Inspect Ultralytics checkpoints while enforcing the segment task."""
+
+    def inspect_model(self, model_path: Path) -> DetectionModelMetadata:
+        metadata = super().inspect_model(model_path)
+        if metadata.task != "segment":
+            raise ValidationError(
+                "Segmenter registration requires an Ultralytics segmentation checkpoint"
+            )
+        return replace(
+            metadata,
+            metadata={
+                **metadata.metadata,
+                "proposal_geometry": "polygon_mask",
+                "segmentation_masks_exposed_in_editor": True,
+            },
+        )
+
+
 class SegmentationModelService(ModelService):
     """Register and execute distinct Ultralytics segmentation models."""
 
     def _provider_for_purpose(self, purpose: str):
         if purpose == "segmenter":
-            return UltralyticsDetectionProvider()
+            return UltralyticsSegmentationRegistrationProvider()
         return super()._provider_for_purpose(purpose)
 
     def _provider_for_registration(self, purpose: str, provider_name: str):
@@ -33,7 +53,7 @@ class SegmentationModelService(ModelService):
                 raise ValidationError(
                     f"Unsupported segmentation provider: {provider_name}"
                 )
-            return UltralyticsDetectionProvider()
+            return UltralyticsSegmentationRegistrationProvider()
         return super()._provider_for_registration(purpose, provider_name)
 
     def register_model_from_run(
@@ -77,6 +97,7 @@ class SegmentationModelService(ModelService):
             "source_result_checkpoint_path": run.result_checkpoint_path,
             "source_metrics": dict(run.metrics_json),
             "proposal_geometry": "polygon_mask",
+            "segmentation_masks_exposed_in_editor": True,
         }
         if experiment is not None:
             metadata_overrides["source_experiment_id"] = experiment.id
