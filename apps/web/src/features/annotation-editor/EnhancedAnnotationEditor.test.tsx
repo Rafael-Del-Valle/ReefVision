@@ -31,7 +31,7 @@ vi.mock("./RasterMaskWorkspace", () => ({
 import { EnhancedAnnotationEditor } from "./EnhancedAnnotationEditor";
 
 describe("EnhancedAnnotationEditor", () => {
-  it("opens mask workspaces on the most recently loaded image", async () => {
+  it("toggles annotation types on the most recently loaded image", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -49,8 +49,11 @@ describe("EnhancedAnnotationEditor", () => {
 
     expect(screen.getByTestId("box-workspace")).toHaveTextContent("image-1");
     expect(
-      screen.getByRole("button", { name: "Polygon tool" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Polygon tool" }),
+    ).not.toBeInTheDocument();
+
+    const annotationType = screen.getByLabelText("Annotation type");
+    expect(annotationType).toHaveValue("boxes");
 
     act(() => {
       queryClient.setQueryData(["annotation-session", "image-2"], {
@@ -62,7 +65,12 @@ describe("EnhancedAnnotationEditor", () => {
       expect(screen.getByTestId("box-workspace")).toHaveTextContent("image-2");
     });
 
-    fireEvent.click(screen.getByTestId("open-mask-workspace"));
+    fireEvent.change(annotationType, { target: { value: "masks" } });
     expect(screen.getByTestId("mask-workspace")).toHaveTextContent("image-2");
+
+    fireEvent.change(screen.getByLabelText("Annotation type"), {
+      target: { value: "raster" },
+    });
+    expect(screen.getByTestId("raster-workspace")).toHaveTextContent("image-2");
   });
 });
