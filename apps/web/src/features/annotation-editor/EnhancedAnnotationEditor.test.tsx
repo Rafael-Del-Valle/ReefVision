@@ -10,9 +10,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Project } from "../../api/client";
 
-const { polygonEnterHandler } = vi.hoisted(() => ({
-  polygonEnterHandler: vi.fn(),
-}));
+const { polygonKeyHandler, polygonInsertHandler, vertexPointerHandler } =
+  vi.hoisted(() => ({
+    polygonKeyHandler: vi.fn(),
+    polygonInsertHandler: vi.fn(),
+    vertexPointerHandler: vi.fn(),
+  }));
 
 vi.mock("./AnnotationEditor", () => ({
   AnnotationEditor: ({ initialImageId }: { initialImageId: string }) => (
@@ -22,13 +25,37 @@ vi.mock("./AnnotationEditor", () => ({
 
 vi.mock("./MaskAnnotationWorkspace", () => ({
   MaskAnnotationWorkspace: ({ imageId }: { imageId: string }) => (
-    <svg
-      data-testid="polygon-mask-layer"
-      tabIndex={0}
-      onKeyDown={polygonEnterHandler}
-    >
-      <text>{imageId}</text>
-    </svg>
+    <div data-testid="mask-workspace">
+      <button
+        type="button"
+        className="active"
+        data-testid="activate-mask-select-tool"
+      >
+        Select vertices
+      </button>
+      <p className="annotation-helper">
+        Add polygon vertices, then press Enter or click the first vertex to close.
+      </p>
+      <svg
+        data-testid="polygon-mask-layer"
+        tabIndex={0}
+        onKeyDown={polygonKeyHandler}
+      >
+        <polygon
+          data-testid="editable-polygon"
+          points="10,10 50,10 50,50"
+          onDoubleClick={polygonInsertHandler}
+        />
+        <circle
+          data-testid="mask-vertex-mask-1-0"
+          cx="10"
+          cy="10"
+          r="5"
+          onPointerDown={vertexPointerHandler}
+        />
+        <text>{imageId}</text>
+      </svg>
+    </div>
   ),
 }));
 
@@ -61,7 +88,9 @@ function renderEditor() {
 
 describe("EnhancedAnnotationEditor", () => {
   beforeEach(() => {
-    polygonEnterHandler.mockClear();
+    polygonKeyHandler.mockClear();
+    polygonInsertHandler.mockClear();
+    vertexPointerHandler.mockClear();
   });
 
   it("toggles annotation types on the most recently loaded image", async () => {
@@ -123,6 +152,46 @@ describe("EnhancedAnnotationEditor", () => {
       key: "Enter",
     });
 
-    expect(polygonEnterHandler).not.toHaveBeenCalled();
+    expect(polygonKeyHandler).not.toHaveBeenCalled();
+  });
+
+  it("inserts and deletes individual polygon nodes through visible modes", () => {
+    renderEditor();
+    fireEvent.change(screen.getByLabelText("Annotation type"), {
+      target: { value: "masks" },
+    });
+
+    const editor = screen.getByTestId("enhanced-annotation-editor");
+    expect(editor).toHaveAttribute("data-vertex-edit-mode", "move");
+
+    fireEvent.click(screen.getByRole("button", { name: "Insert node" }));
+    expect(editor).toHaveAttribute("data-vertex-edit-mode", "insert");
+    fireEvent.pointerDown(screen.getByTestId("editable-polygon"), {
+      clientX: 30,
+      clientY: 10,
+    });
+    expect(polygonInsertHandler).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete node" }));
+    expect(editor).toHaveAttribute("data-vertex-edit-mode", "delete");
+    fireEvent.pointerDown(screen.getByTestId("mask-vertex-mask-1-0"));
+    expect(vertexPointerHandler).toHaveBeenCalledTimes(1);
+    expect(vertexPointerHandler.mock.calls[0][0].altKey).toBe(true);
+  });
+
+  it("keeps whole-polygon deletion explicit", () => {
+    renderEditor();
+    fireEvent.change(screen.getByLabelText("Annotation type"), {
+      target: { value: "masks" },
+    });
+
+    fireEvent.keyDown(screen.getByTestId("polygon-mask-layer"), {
+      key: "Delete",
+    });
+    fireEvent.keyDown(screen.getByTestId("polygon-mask-layer"), {
+      key: "Backspace",
+    });
+
+    expect(polygonKeyHandler).not.toHaveBeenCalled();
   });
 });
