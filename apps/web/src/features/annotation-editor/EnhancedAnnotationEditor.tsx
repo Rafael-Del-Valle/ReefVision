@@ -117,47 +117,40 @@ export function EnhancedAnnotationEditor({
     );
   }, [activeImageId, launchContext, onClose, project, workspace]);
 
-  const toolbar = (
-    <div
-      role="toolbar"
-      aria-label="Annotation workspaces"
-      data-testid="annotation-workspace-switcher"
-      style={toolbarTarget ? undefined : fallbackToolbarStyle}
+  const annotationTypeSelector = (
+    <label
+      data-testid="annotation-type-toggle"
+      style={{ minWidth: "10rem" }}
     >
-      <button
-        type="button"
-        className={workspace === "boxes" ? "active" : "secondary"}
-        data-testid="open-box-workspace"
-        title="Open the bounding-box annotation workspace"
-        onClick={() => setWorkspace("boxes")}
+      Annotation type
+      <select
+        aria-label="Annotation type"
+        data-testid="annotation-type-select"
+        value={workspace}
+        onChange={(event) =>
+          setWorkspace(event.target.value as EditorWorkspace)
+        }
       >
-        Boxes
-      </button>
-      <button
-        type="button"
-        className={workspace === "masks" ? "active" : "secondary"}
-        data-testid="open-mask-workspace"
-        title="Open the polygon drawing and editing workspace"
-        onClick={() => setWorkspace("masks")}
-      >
-        Polygon tool
-      </button>
-      <button
-        type="button"
-        className={workspace === "raster" ? "active" : "secondary"}
-        data-testid="open-raster-workspace"
-        title="Open the raster paint and eraser workspace"
-        onClick={() => setWorkspace("raster")}
-      >
-        Raster brush
-      </button>
-    </div>
+        <option value="boxes">Bounding boxes</option>
+        <option value="masks">Polygon</option>
+        <option value="raster">Raster brush</option>
+      </select>
+    </label>
   );
 
   return (
     <>
       {workspaceContent}
-      {createPortal(toolbar, toolbarTarget ?? document.body)}
+      {createPortal(
+        <div
+          role="group"
+          aria-label="Annotation type selector"
+          style={toolbarTarget ? undefined : fallbackToolbarStyle}
+        >
+          {annotationTypeSelector}
+        </div>,
+        toolbarTarget ?? document.body,
+      )}
     </>
   );
 }
