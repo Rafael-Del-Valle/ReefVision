@@ -6,6 +6,7 @@ import json
 import shutil
 from contextlib import suppress
 from datetime import UTC, datetime
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -36,9 +37,8 @@ from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.storage.segmentation_exports import write_semantic_mask_export
 
 
-def _classes(path: object) -> tuple[SemanticClassDefinition, ...]:
-    classes_path = path
-    payload = json.loads(classes_path.read_text(encoding="utf-8"))
+def _classes(path: Path) -> tuple[SemanticClassDefinition, ...]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
     raw_classes = payload.get("classes")
     if not isinstance(raw_classes, list):
         raise RuntimeError("Semantic dataset classes metadata is invalid")
