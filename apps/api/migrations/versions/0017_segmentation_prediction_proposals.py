@@ -26,9 +26,19 @@ def upgrade() -> None:
                 server_default="bounding_box",
             )
         )
-        batch_op.add_column(sa.Column("polygon_json", sa.JSON(), nullable=True))
         batch_op.add_column(
-            sa.Column("accepted_mask_annotation_id", sa.String(length=36), nullable=True)
+            sa.Column(
+                "polygon_json",
+                sa.JSON(),
+                nullable=True,
+            )
+        )
+        batch_op.add_column(
+            sa.Column(
+                "accepted_mask_annotation_id",
+                sa.String(length=36),
+                nullable=True,
+            )
         )
         batch_op.create_index(
             "ix_prediction_proposals_image_geometry_status",
@@ -39,7 +49,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     with op.batch_alter_table("prediction_proposals") as batch_op:
-        batch_op.drop_index("ix_prediction_proposals_image_geometry_status")
+        batch_op.drop_index(
+            "ix_prediction_proposals_image_geometry_status"
+        )
         batch_op.drop_column("accepted_mask_annotation_id")
         batch_op.drop_column("polygon_json")
         batch_op.drop_column("geometry_kind")
