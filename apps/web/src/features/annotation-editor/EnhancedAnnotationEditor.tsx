@@ -26,6 +26,7 @@ interface EnhancedAnnotationEditorProps {
 
 type EditorWorkspace = "boxes" | "masks" | "raster";
 type AnnotationVisibility = Record<EditorWorkspace, boolean>;
+type VertexEditMode = "move" | "insert" | "delete";
 
 const fallbackToolbarStyle = {
   position: "fixed" as const,
@@ -49,6 +50,12 @@ const visibilityGroupStyle = {
   flexWrap: "wrap" as const,
 };
 
+function stopEditorEvent(event: Event) {
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+}
+
 export function EnhancedAnnotationEditor({
   project,
   initialImageId,
@@ -62,6 +69,8 @@ export function EnhancedAnnotationEditor({
     masks: true,
     raster: true,
   });
+  const [vertexEditMode, setVertexEditMode] =
+    useState<VertexEditMode>("move");
   const [activeImageId, setActiveImageId] = useState(initialImageId);
   const [toolbarTarget, setToolbarTarget] = useState<HTMLElement | null>(null);
 
@@ -104,23 +113,99 @@ export function EnhancedAnnotationEditor({
       return;
     }
 
-    const requireFirstNodeClick = (event: KeyboardEvent) => {
+    const updateInstructions = () => {
+      const helpers = document.querySelectorAll<HTMLElement>(
+        '[data-testid="mask-workspace"] .annotation-helper',
+      );
+      for (const helper of helpers) {
+        if (helper.textContent?.includes("press Enter")) {
+          helper.textContent =
+            "Add at least three vertices, then click the first node to close. Select a polygon and use Move nodes, Insert node, or Delete node to refine it.";
+        }
+      }
+    };
+
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (
-        event.key !== "Enter" ||
         !(event.target instanceof Element) ||
         !event.target.closest('[data-testid="polygon-mask-layer"]')
       ) {
         return;
       }
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
+
+      if (event.key === "Enter") {
+        stopEditorEvent(event);
+        return;
+      }
+
+      const selectToolActive = document
+        .querySelector('[data-testid="activate-mask-select-tool"]')
+        ?.classList.contains("active");
+      if (
+        selectToolActive &&
+        (event.key === "Delete" || event.key === "Backspace")
+      ) {
+        stopEditorEvent(event);
+      }
     };
 
-    document.addEventListener("keydown", requireFirstNodeClick, true);
-    return () =>
-      document.removeEventListener("keydown", requireFirstNodeClick, true);
-  }, [workspace]);
+    const handlePointerDown = (event: globalThis.PointerEvent) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+      const layer = event.target.closest('[data-testid="polygon-mask-layer"]');
+      if (!layer) {
+        return;
+      }
+
+      if (
+        vertexEditMode === "insert" &&
+        event.target instanceof SVGPolygonElement
+      ) {
+        const polygon = event.target;
+        stopEditorEvent(event);
+        polygon.dispatchEvent(
+          new MouseEvent("dblclick", {
+            bubbles: true,
+            cancelable: true,
+            clientX: event.clientX,
+            clientY: event.clientY,
+          }),
+        );
+        return;
+      }
+
+      if (
+        vertexEditMode === "delete" &&
+        event.target instanceof SVGCircleElement &&
+        event.target.dataset.testid?.startsWith("mask-vertex-") &&
+        !event.altKey
+      ) {
+        const vertex = event.target;
+        stopEditorEvent(event);
+        vertex.dispatchEvent(
+          new MouseEvent("pointerdown", {
+            bubbles: true,
+            cancelable: true,
+            clientX: event.clientX,
+            clientY: event.clientY,
+            altKey: true,
+          }),
+        );
+      }
+    };
+
+    updateInstructions();
+    const observer = new MutationObserver(updateInstructions);
+    observer.observe(document.body, { childList: true, subtree: true });
+    document.addEventListener("keydown", handleKeyDown, true);
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("keydown", handleKeyDown, true);
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+    };
+  }, [vertexEditMode, workspace]);
 
   const workspaceContent = useMemo(() => {
     if (workspace === "raster") {
@@ -205,6 +290,38 @@ export function EnhancedAnnotationEditor({
           Raster masks
         </label>
       </div>
+      {workspace === "masks" && (
+        <div
+          role="group"
+          aria-label="Polygon node editing"
+          style={visibilityGroupStyle}
+        >
+          <button
+            type="button"
+            className={vertexEditMode === "move" ? "active" : "secondary"}
+            data-testid="move-polygon-nodes"
+            onClick={() => setVertexEditMode("move")}
+          >
+            Move nodes
+          </button>
+          <button
+            type="button"
+            className={vertexEditMode === "insert" ? "active" : "secondary"}
+            data-testid="insert-polygon-node"
+            onClick={() => setVertexEditMode("insert")}
+          >
+            Insert node
+          </button>
+          <button
+            type="button"
+            className={vertexEditMode === "delete" ? "active" : "secondary"}
+            data-testid="delete-polygon-node"
+            onClick={() => setVertexEditMode("delete")}
+          >
+            Delete node
+          </button>
+        </div>
+      )}
     </div>
   );
 
@@ -215,6 +332,7 @@ export function EnhancedAnnotationEditor({
         data-boxes-visible={visibility.boxes}
         data-polygons-visible={visibility.masks}
         data-raster-visible={visibility.raster}
+        data-vertex-edit-mode={vertexEditMode}
         style={{ display: "contents" }}
       >
         {workspaceContent}
