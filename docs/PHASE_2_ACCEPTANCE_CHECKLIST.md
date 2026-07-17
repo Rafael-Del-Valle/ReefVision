@@ -9,7 +9,8 @@
 - Visible **Move nodes**, **Insert node**, and **Delete node** controls.
 - Edge-based node insertion.
 - Node-only deletion with a protected three-node minimum.
-- Independent visibility toggles for boxes, polygons, and raster masks.
+- The **Annotation type** selector acts as an exclusive filter for bounding boxes, polygons, and raster masks.
+- Polygon mode suppresses raster-mask overlays.
 - Raster paint and erase tools.
 - One raster layer selected and reused by default.
 - Explicit **Create another mask** action for additional raster instances.
@@ -22,7 +23,7 @@
 
 ## Automated coverage
 
-The validation suite covers polygon creation and closure, vertex movement, insertion and protected deletion, explicit whole-mask deletion, blocked keyboard deletion, independent annotation-type visibility, self-intersection rejection, duplicate-vertex rejection, out-of-bounds rejection, shared revision conflicts, autosave failure messaging, raster paint/erase behavior, immutable raster revisions, migrations, production builds, Rust checks, and MSI creation.
+The validation suite covers polygon creation and closure, vertex movement, insertion and protected deletion, explicit whole-mask deletion, blocked keyboard deletion, exclusive annotation-type filtering, self-intersection rejection, duplicate-vertex rejection, out-of-bounds rejection, shared revision conflicts, autosave failure messaging, raster paint/erase behavior, immutable raster revisions, migrations, production builds, Rust checks, and MSI creation.
 
 ## Required acceptance command
 
@@ -56,7 +57,11 @@ Use `-SkipBuild` only when the exact current commit has already passed the full 
    - out-of-bounds coordinates;
    - attempted removal from a three-node polygon.
 6. Confirm node and raster edits show Unsaved/Saving/Saved states and revision conflicts are visible.
-7. Confirm boxes, polygons, and raster masks hide independently without modifying stored data.
+7. Confirm **Annotation type** filters exclusively:
+   - **Bounding boxes** shows only boxes;
+   - **Polygons** shows only polygons and no raster overlays;
+   - **Raster masks** shows only raster masks;
+   - switching types does not modify stored annotations.
 8. Confirm raster paint continues the selected/default mask, erase persists, and **Create another mask** is the only normal path that creates another raster instance.
 9. Restart the complete application and verify all polygon geometry, raster instance counts, files, and revisions remain intact.
 
