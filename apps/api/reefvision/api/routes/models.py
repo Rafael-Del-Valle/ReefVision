@@ -7,7 +7,10 @@ from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
-from reefvision.ml.dependencies import ProviderPreflightReport, cached_lightweight_provider_preflight
+from reefvision.ml.dependencies import (
+    ProviderPreflightReport,
+    cached_lightweight_provider_preflight,
+)
 from reefvision.ml.provider_hub import (
     cached_model_provider_catalog,
     cached_runtime_provider_statuses,
@@ -23,7 +26,9 @@ from reefvision.ml.ultralytics_registry import (
     ultralytics_training_registry,
     validate_ultralytics_training_configuration,
 )
-from reefvision.schemas.bootstrap import UltralyticsTrainingRegistrySummarySnapshotResponse
+from reefvision.schemas.bootstrap import (
+    UltralyticsTrainingRegistrySummarySnapshotResponse,
+)
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.models import (
     InferenceJobCreateRequest,
@@ -45,40 +50,60 @@ router = APIRouter(tags=["models"])
 DbSession = Annotated[Session, Depends(get_db_session)]
 
 
-def service(request: Request, session: Session) -> SegmentationModelService:
+def service(
+    request: Request,
+    session: Session,
+) -> SegmentationModelService:
     return SegmentationModelService(session, request.app.state.settings)
 
 
-@router.get("/models/provider-preflight", response_model=ProviderDependencyPreflightResponse)
+@router.get(
+    "/models/provider-preflight",
+    response_model=ProviderDependencyPreflightResponse,
+)
 def get_provider_preflight(
-    request: Request, refresh: bool = False
+    request: Request,
+    refresh: bool = False,
 ) -> ProviderDependencyPreflightResponse:
     return _serialize_provider_preflight(
         cached_lightweight_provider_preflight(
-            request.app.state.settings, refresh=refresh
+            request.app.state.settings,
+            refresh=refresh,
         ).value
     )
 
 
-@router.get("/model-providers", response_model=list[ModelProviderResponse])
+@router.get(
+    "/model-providers",
+    response_model=list[ModelProviderResponse],
+)
 def get_model_providers(
-    request: Request, refresh: bool = False
+    request: Request,
+    refresh: bool = False,
 ) -> list[ModelProviderResponse]:
     return [
         ModelProviderResponse.model_validate(
             asdict(segmentation_provider_descriptor(item))
         )
         for item in cached_model_provider_catalog(
-            request.app.state.settings, refresh=refresh
+            request.app.state.settings,
+            refresh=refresh,
         ).value
     ]
 
 
-@router.get("/model-providers/{provider_id}", response_model=ModelProviderResponse)
+@router.get(
+    "/model-providers/{provider_id}",
+    response_model=ModelProviderResponse,
+)
 def get_model_provider_detail(
-    provider_id: str, request: Request
+    provider_id: str,
+    request: Request,
 ) -> ModelProviderResponse:
-    provider = get_model_provider(provider_id, request.app.state.settings)
+    provider = get_model_provider(
+        provider_id,
+        request.app.state.settings,
+    )
     return ModelProviderResponse.model_validate(
         asdict(segmentation_provider_descriptor(provider))
     )
@@ -89,17 +114,27 @@ def get_model_provider_detail(
     response_model=ModelProviderCapabilityMatrixResponse,
 )
 def get_model_provider_capability_detail(
-    provider_id: str, request: Request
+    provider_id: str,
+    request: Request,
 ) -> ModelProviderCapabilityMatrixResponse:
     capabilities = get_model_provider_capabilities(
-        provider_id, request.app.state.settings
+        provider_id,
+        request.app.state.settings,
     )
     return ModelProviderCapabilityMatrixResponse.model_validate(
-        asdict(segmentation_capability_matrix(provider_id, capabilities))
+        asdict(
+            segmentation_capability_matrix(
+                provider_id,
+                capabilities,
+            )
+        )
     )
 
 
-@router.get("/runtime-providers/status", response_model=list[RuntimeProviderStatusResponse])
+@router.get(
+    "/runtime-providers/status",
+    response_model=list[RuntimeProviderStatusResponse],
+)
 def get_runtime_provider_statuses(
     refresh: bool = False,
 ) -> list[RuntimeProviderStatusResponse]:
@@ -114,11 +149,13 @@ def get_runtime_provider_statuses(
     response_model=UltralyticsTrainingRegistrySummarySnapshotResponse,
 )
 def get_ultralytics_training_registry_summary(
-    request: Request, refresh: bool = False
+    request: Request,
+    refresh: bool = False,
 ) -> UltralyticsTrainingRegistrySummarySnapshotResponse:
     return UltralyticsTrainingRegistrySummarySnapshotResponse.model_validate(
         cached_ultralytics_training_registry_summary(
-            request.app.state.settings, refresh=refresh
+            request.app.state.settings,
+            refresh=refresh,
         ).value,
         from_attributes=True,
     )
@@ -149,12 +186,17 @@ def validate_ultralytics_training_registry(
         task=payload.task,
         mode=payload.mode,
         parameters=payload.parameters,
-        search_space=[item.model_dump() for item in payload.search_space],
-        expected_ultralytics_version=payload.expected_ultralytics_version,
+        search_space=[
+            item.model_dump() for item in payload.search_space
+        ],
+        expected_ultralytics_version=(
+            payload.expected_ultralytics_version
+        ),
         settings=request.app.state.settings,
     )
     return UltralyticsTrainingConfigurationValidationResponse.model_validate(
-        result, from_attributes=True
+        result,
+        from_attributes=True,
     )
 
 
@@ -168,12 +210,20 @@ def list_models(
     session: DbSession,
     purpose: str | None = None,
 ) -> list[ModelRegistrationResponse]:
-    return service(request, session).list_models(project_id, purpose=purpose)
+    return service(request, session).list_models(
+        project_id,
+        purpose=purpose,
+    )
 
 
-@router.get("/models/{model_id}", response_model=ModelRegistrationResponse)
+@router.get(
+    "/models/{model_id}",
+    response_model=ModelRegistrationResponse,
+)
 def get_model(
-    model_id: str, request: Request, session: DbSession
+    model_id: str,
+    request: Request,
+    session: DbSession,
 ) -> ModelRegistrationResponse:
     return service(request, session).get_model(model_id)
 
@@ -213,22 +263,35 @@ def register_model_from_run(
     request: Request,
     session: DbSession,
 ) -> ModelRegistrationResponse:
-    return service(request, session).register_model_from_run(project_id, payload)
+    return service(request, session).register_model_from_run(
+        project_id,
+        payload,
+    )
 
 
 @router.delete("/models/{model_id}", status_code=204)
-def delete_model(model_id: str, request: Request, session: DbSession) -> None:
+def delete_model(
+    model_id: str,
+    request: Request,
+    session: DbSession,
+) -> None:
     service(request, session).delete_model(model_id)
 
 
-@router.post("/projects/{project_id}/inference-jobs", response_model=JobResponse)
+@router.post(
+    "/projects/{project_id}/inference-jobs",
+    response_model=JobResponse,
+)
 def create_inference_job(
     project_id: str,
     payload: InferenceJobCreateRequest,
     request: Request,
     session: DbSession,
 ) -> JobResponse:
-    return service(request, session).create_inference_job(project_id, payload)
+    return service(request, session).create_inference_job(
+        project_id,
+        payload,
+    )
 
 
 def _serialize_provider_preflight(
@@ -249,8 +312,12 @@ def _serialize_provider_preflight(
                 current_platform=report.current_platform,
                 tested_cuda=report.tested_cuda,
                 current_cuda=report.current_cuda,
-                automatic_downloads_disabled=report.automatic_downloads_disabled,
-                explicit_checkpoint_required=report.explicit_checkpoint_required,
+                automatic_downloads_disabled=(
+                    report.automatic_downloads_disabled
+                ),
+                explicit_checkpoint_required=(
+                    report.explicit_checkpoint_required
+                ),
                 requirements_file=report.requirements_file,
                 issues=list(report.issues),
                 packages=[
