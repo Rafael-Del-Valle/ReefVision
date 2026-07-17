@@ -14,6 +14,7 @@ from reefvision.ml.provider_hub import (
     cached_model_provider_catalog,
     cached_runtime_provider_statuses,
 )
+from reefvision.ml.segmentation_provider_catalog import segmentation_provider_descriptor
 from reefvision.ml.ultralytics_registry import (
     cached_ultralytics_training_registry_summary,
 )
@@ -63,7 +64,9 @@ class BootstrapService:
             provider_catalog = cached_model_provider_catalog(self.settings)
             provider_catalog_checked_at = provider_catalog.checked_at
             providers = [
-                ModelProviderResponse.model_validate(asdict(provider))
+                ModelProviderResponse.model_validate(
+                    asdict(segmentation_provider_descriptor(provider))
+                )
                 for provider in provider_catalog.value
             ]
         except Exception as exc:
