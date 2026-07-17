@@ -6,7 +6,6 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Protocol
 
-
 DETECTION_TASK = "detect"
 INSTANCE_SEGMENTATION_TASK = "segment"
 SUPPORTED_ULTRALYTICS_TRAINING_TASKS = (
