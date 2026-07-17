@@ -1,4 +1,4 @@
-"""Instance-segmentation provider contracts and Ultralytics implementation."""
+"""Instance-segmentation provider contracts and implementation."""
 
 from __future__ import annotations
 
@@ -7,7 +7,10 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from reefvision.domain.errors import ValidationError
-from reefvision.ml.dependencies import configure_provider_runtime, require_provider_ready
+from reefvision.ml.dependencies import (
+    configure_provider_runtime,
+    require_provider_ready,
+)
 from reefvision.ml.providers import (
     DetectionSettings,
     PixelBox,
@@ -60,15 +63,20 @@ class UltralyticsSegmentationProvider:
             import ultralytics
             from ultralytics import YOLO
         except Exception as exc:  # pragma: no cover - dependency failure
-            raise ValidationError(f"Ultralytics is unavailable: {exc}") from exc
+            raise ValidationError(
+                f"Ultralytics is unavailable: {exc}"
+            ) from exc
         resolve_torch_device(device)
         model = YOLO(str(model_path))
         task = str(getattr(model, "task", "") or "")
         if task != "segment":
             raise ValidationError(
-                "The selected checkpoint is not an Ultralytics segmentation model"
+                "The selected checkpoint is not an Ultralytics segmentation "
+                "model"
             )
-        self.provider_version = str(getattr(ultralytics, "__version__", "unknown"))
+        self.provider_version = str(
+            getattr(ultralytics, "__version__", "unknown")
+        )
         self._model = model
 
     def predict(
@@ -89,15 +97,21 @@ class UltralyticsSegmentationProvider:
         for result in results:
             boxes = getattr(result, "boxes", None)
             masks = getattr(result, "masks", None)
-            polygons = getattr(masks, "xy", None) if masks is not None else None
+            polygons = (
+                getattr(masks, "xy", None) if masks is not None else None
+            )
             if boxes is None or polygons is None:
                 continue
             xyxy = boxes.xyxy.tolist()
             confidences = boxes.conf.tolist()
             classes = boxes.cls.tolist()
-            names = getattr(result, "names", None) or getattr(self._model, "names", None) or {}
+            names = (
+                getattr(result, "names", None)
+                or getattr(self._model, "names", None)
+                or {}
+            )
             for index, raw_polygon in enumerate(polygons):
-                if index >= len(xyxy):
+                if index >= len(xyxy) or index >= len(confidences):
                     break
                 points = [
                     [float(point[0]), float(point[1])]
@@ -113,7 +127,9 @@ class UltralyticsSegmentationProvider:
                     y_max=float(coords[3]),
                 )
                 ensure_finite_box(box)
-                class_index = int(classes[index]) if index < len(classes) else None
+                class_index = (
+                    int(classes[index]) if index < len(classes) else None
+                )
                 label = (
                     str(names.get(class_index, class_index))
                     if isinstance(names, dict)
@@ -143,7 +159,11 @@ class UltralyticsSegmentationProvider:
             return
 
 
-def segmentation_provider_for_name(provider_name: str) -> SegmentationProvider:
+def segmentation_provider_for_name(
+    provider_name: str,
+) -> SegmentationProvider:
     if provider_name.strip().casefold() == "ultralytics":
         return UltralyticsSegmentationProvider()
-    raise ValidationError(f"Unsupported segmentation provider: {provider_name}")
+    raise ValidationError(
+        f"Unsupported segmentation provider: {provider_name}"
+    )
