@@ -27,6 +27,7 @@ from reefvision.api.routes.review_queues import router as review_queues_router
 from reefvision.api.routes.system import router as system_router
 from reefvision.api.routes.training import router as training_router
 from reefvision.api.routes.videos import router as videos_router
+from reefvision.api.routes.workflow_graphs import router as workflow_graphs_router
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health_router)
@@ -54,3 +55,4 @@ api_router.include_router(review_queues_router)
 api_router.include_router(active_learning_router)
 api_router.include_router(advanced_providers_router)
 api_router.include_router(project_exchange_router)
+api_router.include_router(workflow_graphs_router)
