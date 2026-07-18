@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 import reefvision.jobs.inference as inference_module
-from reefvision.db.models import MaskAnnotationEvent, ModelRegistration, Project
+from reefvision.db.models import Job, MaskAnnotationEvent, ModelRegistration, Project
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project, import_one
 
@@ -126,14 +126,19 @@ def test_semantic_inference_creates_previewable_raster_proposals_and_reviews_the
     assert job["request_json"]["model_task"] == "semantic_segment"
 
     app = cast(FastAPI, client.app)
-    assert (
-        inference_module.process_inference_job(
-            app.state.settings,
-            app.state.session_factory,
-            job["id"],
-        )
-        is True
+    completed = inference_module.process_inference_job(
+        app.state.settings,
+        app.state.session_factory,
+        job["id"],
     )
+    if not completed:
+        with app.state.session_factory() as session:
+            failed_job = session.get(Job, job["id"])
+            assert failed_job is not None
+            pytest.fail(
+                "Semantic inference worker failed: "
+                f"{failed_job.error_message or failed_job.result_json}"
+            )
 
     listed = client.get(f"/api/v1/images/{image_id}/prediction-proposals?review_status=pending")
     assert listed.status_code == 200, listed.text
