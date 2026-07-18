@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { Project } from "../../api/client";
 import { AdvancedProviderWorkspace } from "../advanced-providers/AdvancedProviderWorkspace";
 import { InteroperabilityWorkspace } from "../interoperability/InteroperabilityWorkspace";
+import { WorkflowGraphWorkspace } from "../workflow-graphs/WorkflowGraphWorkspace";
 import {
   completeActiveLearningRound,
   createActiveLearningRound,
@@ -196,6 +197,10 @@ export function ActiveLearningWorkspace({
       <details className="panel-card">
         <summary><strong>Phase 9 · Project Interoperability</strong></summary>
         <InteroperabilityWorkspace project={project} />
+      </details>
+      <details className="panel-card">
+        <summary><strong>Phase 10 · Workflow Graph Foundation</strong></summary>
+        <WorkflowGraphWorkspace project={project} />
       </details>
     </section>
   );
