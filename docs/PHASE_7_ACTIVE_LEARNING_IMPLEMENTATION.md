@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented as a backend-complete first release on top of ReefVision's existing explainable review queues.
+Implemented as a backend-and-desktop first release on top of ReefVision's existing explainable review queues.
 
 This implementation does not automatically accept model predictions or modify verified annotations. It creates a compact, reproducible list of images for human review.
 
@@ -15,8 +15,27 @@ This implementation does not automatically accept model predictions or modify ve
 - Configurable batch size, minimum priority score, diversity weight, per-group cap, and reviewed-image inclusion.
 - Deterministic ranking and checksums for reproducibility.
 - Human-readable score explanations stored on each selected item.
+- Score components scaled so their displayed contributions reconstruct the blended active-learning score within rounding tolerance.
 - Queue regeneration that preserves the original active-learning configuration.
 - Compatibility with the existing Review Queue list, item viewer, state transitions, filters, and Regenerate button.
+- Desktop controls for switching between ordinary priority rankings and active-learning batches.
+- Desktop summary metrics for candidate count, reviewed-image exclusions, diversity, and final score.
+
+## Desktop workflow
+
+1. Open **Review Queue**.
+2. Choose **Priority ranking** or **Active-learning batch**.
+3. Select the entire project or an immutable dataset version.
+4. Optionally choose a completed quality-control run.
+5. For active learning, configure:
+   - maximum images;
+   - minimum priority score;
+   - diversity weight from `0` to `1`;
+   - optional maximum images per group;
+   - whether already-reviewed images may be included.
+6. Adjust the explainable review-signal weights when needed.
+7. Generate the queue and review the ranked images through the existing item workflow.
+8. Regenerate later to produce a new immutable queue using the same configuration and current project state.
 
 ## Selection behavior
 
@@ -31,13 +50,21 @@ A higher diversity weight favors coverage of new classes, models, groups, splits
 
 ## API
 
-### Create a project queue
+### Shared Review Queue creation route
 
-`POST /api/v1/projects/{project_id}/active-learning-queues`
+The desktop interface uses the existing routes with `queue_kind` set to `priority` or `active_learning`:
 
-### Create a dataset-version queue
+- `POST /api/v1/projects/{project_id}/review-queues`
+- `POST /api/v1/dataset-versions/{version_id}/review-queues`
 
-`POST /api/v1/dataset-versions/{version_id}/active-learning-queues`
+Ordinary clients that omit `queue_kind` remain backward compatible and create `review_priority_v1` queues.
+
+### Dedicated active-learning routes
+
+The original dedicated routes remain available:
+
+- `POST /api/v1/projects/{project_id}/active-learning-queues`
+- `POST /api/v1/dataset-versions/{version_id}/active-learning-queues`
 
 ### Regenerate while preserving settings
 
@@ -48,10 +75,11 @@ Either endpoint is supported:
 
 The second route keeps the existing Review Queue desktop workflow compatible.
 
-## Request example
+## Shared-route request example
 
 ```json
 {
+  "queue_kind": "active_learning",
   "source_quality_control_run_id": null,
   "max_items": 100,
   "min_priority_score": 15.0,
@@ -100,15 +128,19 @@ Each item records:
 
 - Priority/diversity selection behavior.
 - Per-group batch limits.
+- Review-score explanation arithmetic.
 - Reviewed-image exclusion.
 - Maximum batch size.
 - Active-learning metadata persistence.
+- Shared-route active-learning dispatch.
+- Backward-compatible default priority-queue creation.
 - Regeneration through the existing Review Queue route.
 
 ## Remaining Phase 7 work
 
-- Add creation controls to the Review Queue React panel.
 - Add optional embedding-based visual novelty once a stable feature provider is available.
 - Add model-ensemble disagreement when multiple compatible inference runs exist.
-- Add retraining-cycle comparison that measures whether the reviewed batch improved model performance.
+- Add a retraining-cycle workflow that converts reviewed items into a new immutable dataset version and launches an explicitly approved training run.
+- Add before-and-after model evaluation that measures whether the reviewed batch improved performance.
 - Validate batch quality on a real coral dataset and tune the default diversity weight.
+- Complete full frontend and packaged-desktop acceptance once GitHub Actions can start jobs again.
