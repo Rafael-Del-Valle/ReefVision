@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
+from reefvision.schemas.active_learning import ActiveLearningQueueCreateRequest
 from reefvision.schemas.review_queues import (
     ReviewQueueCreateRequest,
     ReviewQueueItemPageResponse,
@@ -37,6 +38,21 @@ def active_learning_service(
     return ActiveLearningQueueService(session, settings)
 
 
+def active_learning_payload(
+    payload: ReviewQueueCreateRequest,
+) -> ActiveLearningQueueCreateRequest:
+    return ActiveLearningQueueCreateRequest(
+        source_quality_control_run_id=payload.source_quality_control_run_id,
+        signal_weights=payload.signal_weights,
+        max_items=payload.max_items,
+        min_priority_score=payload.min_priority_score,
+        diversity_weight=payload.diversity_weight,
+        max_items_per_group=payload.max_items_per_group,
+        include_reviewed=payload.include_reviewed,
+        created_by=payload.created_by,
+    )
+
+
 @router.get(
     "/projects/{project_id}/review-queues", response_model=list[ReviewQueueResponse]
 )
@@ -59,6 +75,11 @@ def create_project_review_queue(
     request: Request,
     session: DbSession,
 ) -> ReviewQueueResponse:
+    if payload.queue_kind == "active_learning":
+        return active_learning_service(request, session).create_for_project(
+            project_id,
+            active_learning_payload(payload),
+        )
     return service(request, session).create_queue_for_project(project_id, payload)
 
 
@@ -88,6 +109,11 @@ def create_dataset_version_review_queue(
     request: Request,
     session: DbSession,
 ) -> ReviewQueueResponse:
+    if payload.queue_kind == "active_learning":
+        return active_learning_service(request, session).create_for_dataset_version(
+            version_id,
+            active_learning_payload(payload),
+        )
     return service(request, session).create_queue_for_dataset_version(
         version_id, payload
     )
