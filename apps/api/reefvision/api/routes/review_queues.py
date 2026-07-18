@@ -37,7 +37,9 @@ def active_learning_service(
     return ActiveLearningQueueService(session, settings)
 
 
-@router.get("/projects/{project_id}/review-queues", response_model=list[ReviewQueueResponse])
+@router.get(
+    "/projects/{project_id}/review-queues", response_model=list[ReviewQueueResponse]
+)
 def list_project_review_queues(
     project_id: str,
     request: Request,
@@ -70,7 +72,9 @@ def list_dataset_version_review_queues(
     session: DbSession,
 ) -> list[ReviewQueueResponse]:
     version = service(request, session).quality_control._version(version_id)
-    return service(request, session).list_queues(version.project_id, dataset_version_id=version.id)
+    return service(request, session).list_queues(
+        version.project_id, dataset_version_id=version.id
+    )
 
 
 @router.post(
@@ -84,7 +88,9 @@ def create_dataset_version_review_queue(
     request: Request,
     session: DbSession,
 ) -> ReviewQueueResponse:
-    return service(request, session).create_queue_for_dataset_version(version_id, payload)
+    return service(request, session).create_queue_for_dataset_version(
+        version_id, payload
+    )
 
 
 @router.get("/review-queues/{queue_id}", response_model=ReviewQueueResponse)
@@ -96,7 +102,9 @@ def get_review_queue(
     return service(request, session).get_queue(queue_id)
 
 
-@router.get("/review-queues/{queue_id}/items", response_model=ReviewQueueItemPageResponse)
+@router.get(
+    "/review-queues/{queue_id}/items", response_model=ReviewQueueItemPageResponse
+)
 def list_review_queue_items(
     queue_id: str,
     request: Request,
@@ -121,7 +129,9 @@ def list_review_queue_items(
     )
 
 
-@router.post("/review-queue-items/{item_id}/start", response_model=ReviewQueueItemResponse)
+@router.post(
+    "/review-queue-items/{item_id}/start", response_model=ReviewQueueItemResponse
+)
 def start_review_queue_item(
     item_id: str,
     request: Request,
@@ -130,7 +140,9 @@ def start_review_queue_item(
     return service(request, session).start_item(item_id)
 
 
-@router.post("/review-queue-items/{item_id}/complete", response_model=ReviewQueueItemResponse)
+@router.post(
+    "/review-queue-items/{item_id}/complete", response_model=ReviewQueueItemResponse
+)
 def complete_review_queue_item(
     item_id: str,
     request: Request,
@@ -139,7 +151,9 @@ def complete_review_queue_item(
     return service(request, session).complete_item(item_id)
 
 
-@router.post("/review-queue-items/{item_id}/skip", response_model=ReviewQueueItemResponse)
+@router.post(
+    "/review-queue-items/{item_id}/skip", response_model=ReviewQueueItemResponse
+)
 def skip_review_queue_item(
     item_id: str,
     payload: ReviewQueueItemSkipRequest,
@@ -149,7 +163,9 @@ def skip_review_queue_item(
     return service(request, session).skip_item(item_id, payload)
 
 
-@router.post("/review-queue-items/{item_id}/return", response_model=ReviewQueueItemResponse)
+@router.post(
+    "/review-queue-items/{item_id}/return", response_model=ReviewQueueItemResponse
+)
 def return_review_queue_item(
     item_id: str,
     request: Request,
