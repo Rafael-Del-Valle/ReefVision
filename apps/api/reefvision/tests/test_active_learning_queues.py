@@ -187,7 +187,7 @@ def test_project_active_learning_queue_is_compact_and_excludes_reviewed_images(
     assert "Active-learning score" in items[0]["reason_summary"]
 
     regenerated_response = client.post(
-        f"/api/v1/active-learning-queues/{queue['id']}/regenerate"
+        f"/api/v1/review-queues/{queue['id']}/regenerate"
     )
     assert regenerated_response.status_code == 200, regenerated_response.text
     regenerated = regenerated_response.json()
