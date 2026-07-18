@@ -1,5 +1,6 @@
 """Database model exports."""
 
+from reefvision.db.models.active_learning_round import ActiveLearningRound
 from reefvision.db.models.annotation import Annotation
 from reefvision.db.models.annotation_event import AnnotationEvent
 from reefvision.db.models.backup_record import BackupRecord
@@ -31,6 +32,7 @@ from reefvision.db.models.video_asset import VideoAsset
 from reefvision.db.models.video_track import VideoTrack
 
 __all__ = [
+    "ActiveLearningRound",
     "Annotation",
     "AnnotationEvent",
     "BackupRecord",
