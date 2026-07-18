@@ -198,7 +198,7 @@ def test_project_summary_groups_measurements(client: TestClient) -> None:
     assert summary["contained_box_count"] == 2
     assert summary["calibrated_area_by_unit"]["mm"] == pytest.approx(2.0)
     assert summary["calibrated_tle_by_unit"]["mm"] == pytest.approx(2.0)
-    assert summary["surface_area_by_unit"]["mm"] == pytest.approx(2.0 * pytest.approx(3.141592653589793))
+    assert summary["surface_area_by_unit"]["mm"] == pytest.approx(2.0 * 3.141592653589793)
     assert len(summary["by_class"]) == 1
 
 
