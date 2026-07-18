@@ -23,9 +23,17 @@ class MeasurementCalibrationUpdate(BaseModel):
     default_depth: float | None = Field(default=None, gt=0)
     notes: str | None = Field(default=None, max_length=1000)
 
-    @field_validator("unit", "source", "notes")
+    @field_validator("unit", "source")
     @classmethod
-    def normalize_text(cls, value: str | None) -> str | None:
+    def normalize_required_text(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Calibration text fields cannot be blank")
+        return stripped
+
+    @field_validator("notes")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
         if value is None:
             return None
         stripped = value.strip()
