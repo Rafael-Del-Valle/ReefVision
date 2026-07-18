@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass, field
 
 from sqlalchemy import select
@@ -18,6 +17,10 @@ from reefvision.schemas.measurements import (
 from reefvision.services.mask_measurements import MaskMeasurementService
 
 
+def _empty_unit_totals() -> dict[str, float]:
+    return {}
+
+
 @dataclass(slots=True)
 class _MeasurementAccumulator:
     mask_count: int = 0
@@ -26,15 +29,13 @@ class _MeasurementAccumulator:
     perimeter_pixels: float = 0.0
     contained_box_count: int = 0
     total_linear_extension_pixels: float = 0.0
-    calibrated_area_by_unit: dict[str, float] = field(
-        default_factory=lambda: defaultdict(float)
-    )
-    calibrated_tle_by_unit: dict[str, float] = field(
-        default_factory=lambda: defaultdict(float)
-    )
-    surface_area_by_unit: dict[str, float] = field(
-        default_factory=lambda: defaultdict(float)
-    )
+    calibrated_area_by_unit: dict[str, float] = field(default_factory=_empty_unit_totals)
+    calibrated_tle_by_unit: dict[str, float] = field(default_factory=_empty_unit_totals)
+    surface_area_by_unit: dict[str, float] = field(default_factory=_empty_unit_totals)
+
+    @staticmethod
+    def _add_unit(target: dict[str, float], unit: str, value: float) -> None:
+        target[unit] = target.get(unit, 0.0) + value
 
     def add(self, item: MaskMeasurementResponse) -> None:
         self.mask_count += 1
@@ -46,11 +47,15 @@ class _MeasurementAccumulator:
             self.calibrated_mask_count += 1
         unit = item.physical_unit
         if unit and item.area_physical is not None:
-            self.calibrated_area_by_unit[unit] += item.area_physical
+            self._add_unit(self.calibrated_area_by_unit, unit, item.area_physical)
         if unit and item.total_linear_extension_physical is not None:
-            self.calibrated_tle_by_unit[unit] += item.total_linear_extension_physical
+            self._add_unit(
+                self.calibrated_tle_by_unit,
+                unit,
+                item.total_linear_extension_physical,
+            )
         if unit and item.surface_area_physical is not None:
-            self.surface_area_by_unit[unit] += item.surface_area_physical
+            self._add_unit(self.surface_area_by_unit, unit, item.surface_area_physical)
 
     @property
     def density_per_1000_pixels(self) -> float:
@@ -100,6 +105,18 @@ class MeasurementAnalyticsService:
             return fallback, fallback.replace("_", " ").title()
         return normalized.casefold(), normalized
 
+    @staticmethod
+    def _add_group(
+        groups: dict[tuple[str, str], _MeasurementAccumulator],
+        key: tuple[str, str],
+        row: MaskMeasurementResponse,
+    ) -> None:
+        accumulator = groups.get(key)
+        if accumulator is None:
+            accumulator = _MeasurementAccumulator()
+            groups[key] = accumulator
+        accumulator.add(row)
+
     def summarize(
         self,
         project_id: str,
@@ -116,15 +133,9 @@ class MeasurementAnalyticsService:
         )
         masks = self._mask_metadata(project_id)
         total = _MeasurementAccumulator()
-        class_groups: dict[tuple[str, str], _MeasurementAccumulator] = defaultdict(
-            _MeasurementAccumulator
-        )
-        species_groups: dict[tuple[str, str], _MeasurementAccumulator] = defaultdict(
-            _MeasurementAccumulator
-        )
-        state_groups: dict[tuple[str, str], _MeasurementAccumulator] = defaultdict(
-            _MeasurementAccumulator
-        )
+        class_groups: dict[tuple[str, str], _MeasurementAccumulator] = {}
+        species_groups: dict[tuple[str, str], _MeasurementAccumulator] = {}
+        state_groups: dict[tuple[str, str], _MeasurementAccumulator] = {}
 
         for row in rows:
             total.add(row)
@@ -142,9 +153,9 @@ class MeasurementAnalyticsService:
                 label_class.state_name if label_class is not None else None,
                 "unspecified_state",
             )
-            class_groups[class_key].add(row)
-            species_groups[species_key].add(row)
-            state_groups[state_key].add(row)
+            self._add_group(class_groups, class_key, row)
+            self._add_group(species_groups, species_key, row)
+            self._add_group(state_groups, state_key, row)
 
         def responses(
             groups: dict[tuple[str, str], _MeasurementAccumulator],
