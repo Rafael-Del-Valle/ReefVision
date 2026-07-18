@@ -17,7 +17,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    with op.batch_alter_table("video_assets") as batch_op:
+    with op.batch_alter_table("videos") as batch_op:
         batch_op.add_column(sa.Column("frame_directory_path", sa.String(700), nullable=True))
         batch_op.add_column(sa.Column("extraction_job_id", sa.String(36), nullable=True))
         batch_op.add_column(
@@ -35,7 +35,7 @@ def upgrade() -> None:
             )
         )
         batch_op.create_foreign_key(
-            "fk_video_assets_extraction_job",
+            "fk_videos_extraction_job",
             "jobs",
             ["extraction_job_id"],
             ["id"],
@@ -91,8 +91,8 @@ def downgrade() -> None:
         batch_op.drop_column("source_job_id")
         batch_op.drop_column("source_model_id")
 
-    with op.batch_alter_table("video_assets") as batch_op:
-        batch_op.drop_constraint("fk_video_assets_extraction_job", type_="foreignkey")
+    with op.batch_alter_table("videos") as batch_op:
+        batch_op.drop_constraint("fk_videos_extraction_job", type_="foreignkey")
         batch_op.drop_column("updated_at")
         batch_op.drop_column("revision")
         batch_op.drop_column("status")
