@@ -14,6 +14,10 @@ from reefvision.schemas.review_queues import (
     ReviewQueueItemSkipRequest,
     ReviewQueueResponse,
 )
+from reefvision.services.active_learning_queues import (
+    ACTIVE_LEARNING_FORMULA_ID,
+    ActiveLearningQueueService,
+)
 from reefvision.services.review_queues import ReviewQueueService
 
 router = APIRouter(tags=["review_queues"])
@@ -23,6 +27,14 @@ DbSession = Annotated[Session, Depends(get_db_session)]
 def service(request: Request, session: Session) -> ReviewQueueService:
     settings: Settings = request.app.state.settings
     return ReviewQueueService(session, settings)
+
+
+def active_learning_service(
+    request: Request,
+    session: Session,
+) -> ActiveLearningQueueService:
+    settings: Settings = request.app.state.settings
+    return ActiveLearningQueueService(session, settings)
 
 
 @router.get("/projects/{project_id}/review-queues", response_model=list[ReviewQueueResponse])
@@ -152,4 +164,8 @@ def regenerate_review_queue(
     request: Request,
     session: DbSession,
 ) -> ReviewQueueResponse:
-    return service(request, session).regenerate(queue_id)
+    review_service = service(request, session)
+    queue = review_service.get_queue(queue_id)
+    if queue.formula_id == ACTIVE_LEARNING_FORMULA_ID:
+        return active_learning_service(request, session).regenerate(queue_id)
+    return review_service.regenerate(queue_id)
