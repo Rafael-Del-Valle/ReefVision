@@ -36,12 +36,18 @@ export function AdvancedProviderWorkspace({
   }, [manifestsQuery.data, providerId]);
   useEffect(() => {
     const firstTask = selectedManifest?.supported_tasks[0] ?? "";
-    if (!selectedManifest?.supported_tasks.includes(task)) setTask(firstTask);
-    const fields = firstTask
-      ? selectedManifest?.prompt_fields_by_task[firstTask] ?? []
+    const resolvedTask = selectedManifest?.supported_tasks.includes(task)
+      ? task
+      : firstTask;
+    if (resolvedTask !== task) setTask(resolvedTask);
+    const fields = resolvedTask
+      ? selectedManifest?.prompt_fields_by_task[resolvedTask] ?? []
       : [];
     const example = Object.fromEntries(
-      fields.map((field) => [field, field.endsWith("_id") ? "select-in-workflow" : "required"]),
+      fields.map((field) => [
+        field,
+        field.endsWith("_id") ? "select-in-workflow" : "required",
+      ]),
     );
     setPromptJson(JSON.stringify(example, null, 2));
   }, [selectedManifest, task]);
@@ -76,7 +82,10 @@ export function AdvancedProviderWorkspace({
           <h4>Provider manifest</h4>
           <label>
             Provider
-            <select value={providerId} onChange={(event) => setProviderId(event.target.value)}>
+            <select
+              value={providerId}
+              onChange={(event) => setProviderId(event.target.value)}
+            >
               {manifestsQuery.data?.map((manifest) => (
                 <option key={manifest.provider_id} value={manifest.provider_id}>
                   {manifest.display_name} · {manifest.maturity}
@@ -87,14 +96,27 @@ export function AdvancedProviderWorkspace({
           {selectedManifest && (
             <>
               <p>
-                Execution: <strong>{selectedManifest.execution_supported ? "implemented" : "blocked"}</strong>
+                Execution:{" "}
+                <strong>
+                  {selectedManifest.execution_supported ? "implemented" : "blocked"}
+                </strong>
               </p>
               <p>Tasks: {selectedManifest.supported_tasks.join(", ")}</p>
-              <p>Model files: {selectedManifest.required_model_extensions.join(", ")}</p>
+              <p>
+                Model files: {selectedManifest.required_model_extensions.join(", ")}
+              </p>
               <h5>Packages</h5>
-              <ul>{selectedManifest.required_packages.map((item) => <li key={item}>{item}</li>)}</ul>
+              <ul>
+                {selectedManifest.required_packages.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
               <h5>Known limitations</h5>
-              <ul>{selectedManifest.known_limitations.map((item) => <li key={item}>{item}</li>)}</ul>
+              <ul>
+                {selectedManifest.known_limitations.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
             </>
           )}
         </div>
@@ -111,7 +133,9 @@ export function AdvancedProviderWorkspace({
             Task
             <select value={task} onChange={(event) => setTask(event.target.value)}>
               {selectedManifest?.supported_tasks.map((item) => (
-                <option key={item} value={item}>{item}</option>
+                <option key={item} value={item}>
+                  {item}
+                </option>
               ))}
             </select>
           </label>
@@ -125,7 +149,10 @@ export function AdvancedProviderWorkspace({
           </label>
           <label>
             Device
-            <select value={device} onChange={(event) => setDevice(event.target.value)}>
+            <select
+              value={device}
+              onChange={(event) => setDevice(event.target.value)}
+            >
               <option value="auto">Auto</option>
               <option value="cuda">CUDA</option>
               <option value="cpu">CPU</option>
@@ -139,7 +166,10 @@ export function AdvancedProviderWorkspace({
               onChange={(event) => setPromptJson(event.target.value)}
             />
           </label>
-          <button type="submit" disabled={!providerId || !task || preflightMutation.isPending}>
+          <button
+            type="submit"
+            disabled={!providerId || !task || preflightMutation.isPending}
+          >
             {preflightMutation.isPending ? "Checking..." : "Run preflight"}
           </button>
           {preflightMutation.error && (
@@ -152,21 +182,37 @@ export function AdvancedProviderWorkspace({
           {preflightMutation.data ? (
             <>
               <p>
-                Ready: <strong>{preflightMutation.data.ready ? "Yes" : "No"}</strong>
+                Ready:{" "}
+                <strong>{preflightMutation.data.ready ? "Yes" : "No"}</strong>
               </p>
               <p>Availability: {preflightMutation.data.availability_status}</p>
               <p>Outputs: {preflightMutation.data.output_contract.join(", ")}</p>
               <h5>Blockers</h5>
               {preflightMutation.data.blockers.length ? (
-                <ul>{preflightMutation.data.blockers.map((item) => <li key={item}>{item}</li>)}</ul>
-              ) : <p>None.</p>}
+                <ul>
+                  {preflightMutation.data.blockers.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p>None.</p>
+              )}
               <h5>Warnings</h5>
               {preflightMutation.data.warnings.length ? (
-                <ul>{preflightMutation.data.warnings.map((item) => <li key={item}>{item}</li>)}</ul>
-              ) : <p>None.</p>}
+                <ul>
+                  {preflightMutation.data.warnings.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p>None.</p>
+              )}
             </>
           ) : (
-            <p>Run preflight to inspect prompts, assets, packages, and execution blockers.</p>
+            <p>
+              Run preflight to inspect prompts, assets, packages, and execution
+              blockers.
+            </p>
           )}
         </div>
       </div>
