@@ -46,3 +46,15 @@ def create_dataset_active_learning_queue(
     session: DbSession,
 ) -> ReviewQueueResponse:
     return service(request, session).create_for_dataset_version(version_id, payload)
+
+
+@router.post(
+    "/active-learning-queues/{queue_id}/regenerate",
+    response_model=ReviewQueueResponse,
+)
+def regenerate_active_learning_queue(
+    queue_id: str,
+    request: Request,
+    session: DbSession,
+) -> ReviewQueueResponse:
+    return service(request, session).regenerate(queue_id)
