@@ -6,11 +6,18 @@ from pathlib import Path
 from typing import BinaryIO
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.db.models import ExperimentRecord, Job, ModelRegistration, Project, TrainingRun
+from reefvision.db.models import (
+    ClassificationPrediction,
+    ExperimentRecord,
+    Job,
+    ModelRegistration,
+    Project,
+    TrainingRun,
+)
 from reefvision.domain.enums import MODEL_PURPOSES
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.ml.provider_hub import provider_for_registration
@@ -291,8 +298,18 @@ class ModelService:
 
     def delete_model(self, model_id: str) -> None:
         model = self._model(model_id)
-        if self.predictions.has_any_for_model(model.id) or self.annotations.count_for_model(
-            model.id
+        classification_count = int(
+            self.session.scalar(
+                select(func.count(ClassificationPrediction.id)).where(
+                    ClassificationPrediction.model_id == model.id
+                )
+            )
+            or 0
+        )
+        if (
+            self.predictions.has_any_for_model(model.id)
+            or self.annotations.count_for_model(model.id)
+            or classification_count > 0
         ):
             raise ConflictError("Models with predictions or accepted annotations cannot be removed")
         path = resolve_managed_project_path(self.settings, model.managed_path)
@@ -301,33 +318,43 @@ class ModelService:
         path.unlink(missing_ok=True)
 
     def create_inference_job(
-        self, project_id: str, payload: InferenceJobCreateRequest
+        self,
+        project_id: str,
+        payload: InferenceJobCreateRequest,
     ) -> JobResponse:
         project = self._project(project_id)
         model = self._model(payload.model_id)
-        if model.project_id != project.id or model.purpose != "detector":
-            raise ValidationError("Inference jobs require a detector model from the same project")
-        images = self.images.list_by_ids(payload.image_ids)
-        if len(images) != len(payload.image_ids):
-            raise ValidationError("One or more requested images do not exist")
-        if any(image.project_id != project_id for image in images):
-            raise ValidationError("Inference images must belong to the same project as the model")
+        if model.project_id != project.id:
+            raise ValidationError("Model does not belong to this project")
+        if model.purpose not in {"detector", "segmenter", "semantic_segmenter"}:
+            raise ValidationError("Selected model is not available for image inference")
+        image_ids = list(dict.fromkeys(payload.image_ids))
+        if len(image_ids) != len(payload.image_ids):
+            raise ValidationError("Image ids must be unique")
+        images = self.images.get_many(image_ids)
+        if len(images) != len(image_ids):
+            raise NotFoundError("One or more images were not found")
+        if any(image.project_id != project.id for image in images):
+            raise ValidationError("All images must belong to the selected project")
+        task = model.task
+        if model.purpose == "segmenter":
+            task = "segment"
+        elif model.purpose == "semantic_segmenter":
+            task = "semantic_segment"
+        request = payload.model_dump(mode="json")
+        request.update(
+            {
+                "model_task": task,
+                "model_purpose": model.purpose,
+                "model_provider": model.provider_name,
+            }
+        )
         job = Job(
             project_id=project_id,
             job_type="inference",
             status="queued",
-            progress_total=len(images),
-            request_json={
-                "model_id": model.id,
-                "image_ids": [image.id for image in images],
-                "device": payload.device,
-                "confidence_threshold": payload.confidence_threshold
-                if payload.confidence_threshold is not None
-                else self.settings.inference_default_confidence,
-                "iou_threshold": payload.iou_threshold
-                if payload.iou_threshold is not None
-                else self.settings.inference_default_iou,
-            },
+            progress_total=len(image_ids),
+            request_json=request,
         )
         self.session.add(job)
         self.session.commit()
