@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import type { Project } from "../../api/client";
+import { AdvancedProviderWorkspace } from "../advanced-providers/AdvancedProviderWorkspace";
+import { InteroperabilityWorkspace } from "../interoperability/InteroperabilityWorkspace";
 import {
   completeActiveLearningRound,
   createActiveLearningRound,
@@ -146,18 +148,9 @@ export function ActiveLearningWorkspace({
           </select>
           {selectedRound && (
             <dl className="metric-list">
-              <div>
-                <dt>Selected</dt>
-                <dd>{selectedRound.selected_count}</dd>
-              </div>
-              <div>
-                <dt>Review queue</dt>
-                <dd><code>{selectedRound.review_queue_id}</code></dd>
-              </div>
-              <div>
-                <dt>Manifest</dt>
-                <dd><code>{selectedRound.selection_sha256.slice(0, 12)}</code></dd>
-              </div>
+              <div><dt>Selected</dt><dd>{selectedRound.selected_count}</dd></div>
+              <div><dt>Review queue</dt><dd><code>{selectedRound.review_queue_id}</code></dd></div>
+              <div><dt>Manifest</dt><dd><code>{selectedRound.selection_sha256.slice(0, 12)}</code></dd></div>
             </dl>
           )}
           <div className="button-row">
@@ -181,13 +174,8 @@ export function ActiveLearningWorkspace({
           <h4>Feedback progress</h4>
           {feedbackQuery.data ? (
             <>
-              <progress
-                max={1}
-                value={feedbackQuery.data.completion_fraction}
-              />
-              <p>
-                {(feedbackQuery.data.completion_fraction * 100).toFixed(1)}% terminal
-              </p>
+              <progress max={1} value={feedbackQuery.data.completion_fraction} />
+              <p>{(feedbackQuery.data.completion_fraction * 100).toFixed(1)}% terminal</p>
               <dl className="metric-list">
                 <div><dt>Pending</dt><dd>{feedbackQuery.data.pending_count}</dd></div>
                 <div><dt>In progress</dt><dd>{feedbackQuery.data.in_progress_count}</dd></div>
@@ -200,6 +188,15 @@ export function ActiveLearningWorkspace({
           )}
         </div>
       </div>
+
+      <details className="panel-card">
+        <summary><strong>Phase 8 · Advanced Provider Lab</strong></summary>
+        <AdvancedProviderWorkspace project={project} />
+      </details>
+      <details className="panel-card">
+        <summary><strong>Phase 9 · Project Interoperability</strong></summary>
+        <InteroperabilityWorkspace project={project} />
+      </details>
     </section>
   );
 }
