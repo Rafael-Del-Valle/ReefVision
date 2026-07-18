@@ -173,12 +173,17 @@ class VideoAssetService:
         payload: VideoExtractRequest,
     ) -> JobResponse:
         video = self.get_record(video_id)
-        frames_relative = f"projects/{video.project_id}/videos/frames/{video.id}"
+        project = self._project(video.project_id)
+        frames_relative = f"{project.storage_root}/videos/frames/{video.id}"
         job = Job(
             project_id=video.project_id,
             job_type="video_extract",
             status="queued",
-            progress_total=max(1, (video.frame_count + payload.every_n_frames - 1) // payload.every_n_frames),
+            progress_total=max(
+                1,
+                (video.frame_count + payload.every_n_frames - 1)
+                // payload.every_n_frames,
+            ),
             request_json={
                 "video_asset_id": video.id,
                 "video_path": video.managed_path,
@@ -191,6 +196,10 @@ class VideoAssetService:
         video.frame_directory_path = frames_relative
         video.extraction_job_id = job.id
         video.status = "extracting"
+        video.metadata_json = {
+            **dict(video.metadata_json or {}),
+            "extraction_every_n_frames": payload.every_n_frames,
+        }
         video.revision += 1
         self.session.commit()
         self.session.refresh(job)
@@ -202,6 +211,9 @@ class VideoAssetService:
             raise NotFoundError("Video frame is outside the source frame range")
         if not video.frame_directory_path:
             raise NotFoundError("Video frames have not been extracted")
+        stride = max(1, int(dict(video.metadata_json or {}).get("extraction_every_n_frames", 1)))
+        if frame_index % stride != 0:
+            raise NotFoundError("Requested frame was not part of the extraction stride")
         path = resolve_managed_project_path(
             self.settings,
             f"{video.frame_directory_path}/frame_{frame_index:08d}.jpg",
