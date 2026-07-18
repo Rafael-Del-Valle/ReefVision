@@ -14,7 +14,10 @@ from reefvision.config import Settings
 from reefvision.db.models import ImageAsset, ReviewQueue, ReviewQueueItem
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.active_learning import ActiveLearningQueueCreateRequest
-from reefvision.schemas.review_queues import ReviewQueueCreateRequest, ReviewQueueResponse
+from reefvision.schemas.review_queues import (
+    ReviewQueueCreateRequest,
+    ReviewQueueResponse,
+)
 from reefvision.services.review_queues import ReviewQueueService
 from reefvision.storage.datasets import canonical_json_sha256
 
@@ -206,7 +209,9 @@ class ActiveLearningQueueService:
         if queue is None:
             raise NotFoundError("Active-learning queue not found")
         if queue.formula_id != ACTIVE_LEARNING_FORMULA_ID:
-            raise ValidationError("Only active-learning queues use this regeneration endpoint")
+            raise ValidationError(
+                "Only active-learning queues use this regeneration endpoint"
+            )
         active_config = queue.configuration_json.get("active_learning", {})
         request = ActiveLearningQueueCreateRequest(
             source_quality_control_run_id=queue.source_quality_control_run_id,
@@ -322,9 +327,7 @@ class ActiveLearningQueueService:
                     "normalized_value": selection.diversity_score,
                     "weight": request.diversity_weight,
                     "contribution": round(
-                        selection.diversity_score
-                        * request.diversity_weight
-                        * 100.0,
+                        selection.diversity_score * request.diversity_weight * 100.0,
                         2,
                     ),
                     "description": (
