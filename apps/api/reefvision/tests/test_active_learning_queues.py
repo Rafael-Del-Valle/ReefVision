@@ -3,11 +3,13 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import cast
 
+import pytest
 from fastapi.testclient import TestClient
 
 from reefvision.db.models import ImageAsset, ReviewQueueItem
 from reefvision.services.active_learning_queues import (
     ActiveLearningCandidate,
+    build_active_learning_score_breakdown,
     select_diverse_candidates,
 )
 from reefvision.tests.test_annotations import create_project, import_one
@@ -114,6 +116,30 @@ def test_diversity_selection_enforces_per_group_limit() -> None:
     assert [item.candidate.item.image_id for item in selected] == ["first-a", "first-b"]
 
 
+def test_score_breakdown_matches_blended_selection_score() -> None:
+    breakdown = build_active_learning_score_breakdown(
+        [
+            {
+                "signal_id": "low_mean_confidence",
+                "label": "Low confidence",
+                "raw_value": 0.8,
+                "normalized_value": 0.8,
+                "weight": 1.0,
+                "contribution": 80.0,
+                "description": "Review priority contribution.",
+            }
+        ],
+        diversity_score=0.5,
+        diversity_weight=0.25,
+    )
+
+    assert breakdown[0]["contribution"] == pytest.approx(60.0)
+    assert breakdown[1]["contribution"] == pytest.approx(12.5)
+    assert sum(component["contribution"] for component in breakdown) == pytest.approx(
+        72.5
+    )
+
+
 def test_project_active_learning_queue_is_compact_and_excludes_reviewed_images(
     client: TestClient,
 ) -> None:
@@ -185,6 +211,10 @@ def test_project_active_learning_queue_is_compact_and_excludes_reviewed_images(
     assert items[0]["rank_position"] == 1
     assert "active_learning_diversity" in items[0]["normalized_signals_json"]
     assert "Active-learning score" in items[0]["reason_summary"]
+    explained_score = sum(
+        component["contribution"] for component in items[0]["score_breakdown_json"]
+    )
+    assert explained_score == pytest.approx(items[0]["score"], abs=0.2)
 
     regenerated_response = client.post(
         f"/api/v1/review-queues/{queue['id']}/regenerate"
