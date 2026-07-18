@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
 from reefvision.db.models import ImageAsset, ReviewQueue, ReviewQueueItem
-from reefvision.domain.errors import NotFoundError
+from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.active_learning import ActiveLearningQueueCreateRequest
 from reefvision.schemas.review_queues import ReviewQueueCreateRequest, ReviewQueueResponse
 from reefvision.services.review_queues import ReviewQueueService
@@ -201,6 +201,38 @@ class ActiveLearningQueueService:
         )
         return self._finalize(base.id, request)
 
+    def regenerate(self, queue_id: str) -> ReviewQueueResponse:
+        queue = self.session.get(ReviewQueue, queue_id)
+        if queue is None:
+            raise NotFoundError("Active-learning queue not found")
+        if queue.formula_id != ACTIVE_LEARNING_FORMULA_ID:
+            raise ValidationError("Only active-learning queues use this regeneration endpoint")
+        active_config = queue.configuration_json.get("active_learning", {})
+        request = ActiveLearningQueueCreateRequest(
+            source_quality_control_run_id=queue.source_quality_control_run_id,
+            signal_weights=queue.configuration_json.get("weights", {}),
+            max_items=active_config.get("max_items", 100),
+            min_priority_score=active_config.get("min_priority_score", 0.0),
+            diversity_weight=active_config.get("diversity_weight", 0.35),
+            max_items_per_group=active_config.get("max_items_per_group"),
+            include_reviewed=active_config.get("include_reviewed", False),
+            created_by=queue.created_by,
+        )
+        if queue.dataset_version_id is None:
+            regenerated = self.create_for_project(queue.project_id, request)
+        else:
+            regenerated = self.create_for_dataset_version(
+                queue.dataset_version_id,
+                request,
+            )
+        regenerated_queue = self.session.get(ReviewQueue, regenerated.id)
+        if regenerated_queue is None:
+            raise NotFoundError("Regenerated active-learning queue was not created")
+        regenerated_queue.regenerated_from_queue_id = queue.id
+        self.session.commit()
+        self.session.refresh(regenerated_queue)
+        return ReviewQueueResponse.model_validate(regenerated_queue)
+
     def _finalize(
         self,
         queue_id: str,
@@ -216,10 +248,11 @@ class ActiveLearningQueueService:
                 .order_by(ReviewQueueItem.rank_position, ReviewQueueItem.image_id)
             )
         )
+        image_ids = [item.image_id for item in items]
         images = {
             image.id: image
             for image in self.session.scalars(
-                select(ImageAsset).where(ImageAsset.id.in_([item.image_id for item in items]))
+                select(ImageAsset).where(ImageAsset.id.in_(image_ids))
             )
         }
 
@@ -230,7 +263,15 @@ class ActiveLearningQueueService:
             image = images.get(item.image_id)
             if image is None:
                 continue
-            is_reviewed = float(item.normalized_signals_json.get("unreviewed_state", 1.0)) <= 0.0
+            is_reviewed = (
+                float(
+                    item.normalized_signals_json.get(
+                        "unreviewed_state",
+                        1.0,
+                    )
+                )
+                <= 0.0
+            )
             if is_reviewed and not request.include_reviewed:
                 reviewed_excluded += 1
                 continue
@@ -262,7 +303,10 @@ class ActiveLearningQueueService:
             }
             item.normalized_signals_json = {
                 **dict(item.normalized_signals_json),
-                "active_learning_priority": round(selection.base_priority_score / 100.0, 6),
+                "active_learning_priority": round(
+                    selection.base_priority_score / 100.0,
+                    6,
+                ),
                 "active_learning_diversity": selection.diversity_score,
             }
             item.weights_json = {
@@ -278,7 +322,9 @@ class ActiveLearningQueueService:
                     "normalized_value": selection.diversity_score,
                     "weight": request.diversity_weight,
                     "contribution": round(
-                        selection.diversity_score * request.diversity_weight * 100.0,
+                        selection.diversity_score
+                        * request.diversity_weight
+                        * 100.0,
                         2,
                     ),
                     "description": (
@@ -343,19 +389,28 @@ class ActiveLearningQueueService:
             "reviewed_excluded": reviewed_excluded,
             "below_threshold_excluded": below_threshold_excluded,
             "average_selection_score": (
-                round(mean(selection.selection_score for selection in selections), 2)
+                round(
+                    mean(selection.selection_score for selection in selections),
+                    2,
+                )
                 if selections
                 else 0.0
             ),
             "average_diversity_score": (
-                round(mean(selection.diversity_score for selection in selections), 4)
+                round(
+                    mean(selection.diversity_score for selection in selections),
+                    4,
+                )
                 if selections
                 else 0.0
             ),
-            "top_image_ids": [selection.candidate.item.image_id for selection in selections[:10]],
+            "top_image_ids": [
+                selection.candidate.item.image_id for selection in selections[:10]
+            ],
             "counts_by_group": dict(
                 Counter(
-                    selection.candidate.group_key or "ungrouped" for selection in selections
+                    selection.candidate.group_key or "ungrouped"
+                    for selection in selections
                 )
             ),
         }
