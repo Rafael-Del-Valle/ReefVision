@@ -17,8 +17,10 @@ from reefvision.schemas.measurements import (
     MaskMeasurementResponse,
     MeasurementCalibrationResponse,
     MeasurementCalibrationUpdate,
+    ProjectMeasurementSummaryResponse,
 )
 from reefvision.services.mask_measurements import MaskMeasurementService
+from reefvision.services.measurement_analytics import MeasurementAnalyticsService
 
 router = APIRouter(tags=["measurements"])
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -27,6 +29,11 @@ DbSession = Annotated[Session, Depends(get_db_session)]
 def service(request: Request, session: Session) -> MaskMeasurementService:
     settings: Settings = request.app.state.settings
     return MaskMeasurementService(session, settings)
+
+
+def analytics_service(request: Request, session: Session) -> MeasurementAnalyticsService:
+    settings: Settings = request.app.state.settings
+    return MeasurementAnalyticsService(session, settings)
 
 
 @router.get(
@@ -106,6 +113,26 @@ def get_mask_measurements(
 ) -> MaskMeasurementResponse:
     return service(request, session).measure(
         mask_annotation_id,
+        label_class_ids=label_class_id,
+        scientific_names=scientific_name,
+        state_names=state_name,
+    )
+
+
+@router.get(
+    "/projects/{project_id}/measurement-summary",
+    response_model=ProjectMeasurementSummaryResponse,
+)
+def summarize_project_measurements(
+    project_id: str,
+    request: Request,
+    session: DbSession,
+    label_class_id: Annotated[list[str] | None, Query()] = None,
+    scientific_name: Annotated[list[str] | None, Query()] = None,
+    state_name: Annotated[list[str] | None, Query()] = None,
+) -> ProjectMeasurementSummaryResponse:
+    return analytics_service(request, session).summarize(
+        project_id,
         label_class_ids=label_class_id,
         scientific_names=scientific_name,
         state_names=state_name,
