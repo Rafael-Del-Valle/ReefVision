@@ -1,0 +1,172 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+
+import type { Project } from "../../api/client";
+import {
+  createProjectExchange,
+  getProjectExchangePackages,
+  inspectProjectExchange,
+  projectExchangeDownloadUrl,
+} from "./projectExchangeApi";
+
+interface InteroperabilityWorkspaceProps {
+  project: Project;
+}
+
+export function InteroperabilityWorkspace({
+  project,
+}: InteroperabilityWorkspaceProps) {
+  const queryClient = useQueryClient();
+  const [includeMedia, setIncludeMedia] = useState(false);
+  const [includeModelWeights, setIncludeModelWeights] = useState(false);
+  const [inspectionFile, setInspectionFile] = useState<File | null>(null);
+
+  const packagesQuery = useQuery({
+    queryKey: ["project-exchange-packages", project.id],
+    queryFn: ({ signal }) => getProjectExchangePackages(project.id, signal),
+    refetchInterval: 3000,
+  });
+  const exportMutation = useMutation({
+    mutationFn: () =>
+      createProjectExchange(project.id, {
+        include_media: includeMedia,
+        include_model_weights: includeModelWeights,
+        include_generated_artifacts: false,
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["project-exchange-packages", project.id],
+      });
+    },
+  });
+  const inspectMutation = useMutation({
+    mutationFn: () => {
+      if (!inspectionFile) throw new Error("Choose an exchange ZIP first");
+      return inspectProjectExchange(inspectionFile);
+    },
+  });
+
+  return (
+    <section className="feature-workspace">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Phase 9</p>
+          <h3>Project interoperability</h3>
+          <p>
+            Export a versioned, checksummed ReefVision package or inspect one
+            safely. Import remains disabled until record-ID remapping and conflict
+            rules are fully specified.
+          </p>
+        </div>
+      </div>
+
+      <div className="feature-grid">
+        <div className="panel-card">
+          <h4>Create exchange package</h4>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={includeMedia}
+              onChange={(event) => setIncludeMedia(event.target.checked)}
+            />
+            Include original images and videos
+          </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={includeModelWeights}
+              onChange={(event) => setIncludeModelWeights(event.target.checked)}
+            />
+            Include registered model weights
+          </label>
+          <p>
+            Model weights are excluded by default because they can be large and
+            may have separate redistribution licenses.
+          </p>
+          <button
+            type="button"
+            onClick={() => exportMutation.mutate()}
+            disabled={exportMutation.isPending}
+          >
+            {exportMutation.isPending ? "Queueing..." : "Create exchange ZIP"}
+          </button>
+          {exportMutation.error && (
+            <p className="form-error">{exportMutation.error.message}</p>
+          )}
+        </div>
+
+        <div className="panel-card">
+          <h4>Inspect exchange package</h4>
+          <input
+            type="file"
+            accept=".zip,.reefvision.zip,application/zip"
+            onChange={(event) => setInspectionFile(event.target.files?.[0] ?? null)}
+          />
+          <button
+            type="button"
+            onClick={() => inspectMutation.mutate()}
+            disabled={!inspectionFile || inspectMutation.isPending}
+          >
+            {inspectMutation.isPending ? "Inspecting..." : "Inspect safely"}
+          </button>
+          {inspectMutation.data && (
+            <>
+              <p>
+                Compatible: <strong>{inspectMutation.data.compatible ? "Yes" : "No"}</strong>
+              </p>
+              <p>Project: {inspectMutation.data.project_name ?? "Unknown"}</p>
+              <p>Format: {inspectMutation.data.format_version ?? "Unknown"}</p>
+              <p>Media files: {inspectMutation.data.included_media_count}</p>
+              {inspectMutation.data.warnings.length > 0 && (
+                <ul>
+                  {inspectMutation.data.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              )}
+              {inspectMutation.data.errors.length > 0 && (
+                <ul className="form-error">
+                  {inspectMutation.data.errors.map((error) => (
+                    <li key={error}>{error}</li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+          {inspectMutation.error && (
+            <p className="form-error">{inspectMutation.error.message}</p>
+          )}
+          <button type="button" disabled title="Import is intentionally not implemented">
+            Import disabled pending ID-remapping design
+          </button>
+        </div>
+
+        <div className="panel-card">
+          <h4>Exchange history</h4>
+          {packagesQuery.data?.length ? (
+            <ul className="record-list">
+              {packagesQuery.data.map((item) => (
+                <li key={item.id}>
+                  <strong>{item.status}</strong> · format {item.format_version}
+                  <br />
+                  <code>{item.manifest_sha256.slice(0, 12) || "pending"}</code>
+                  {item.status === "complete" && (
+                    <>
+                      {" · "}
+                      <a href={projectExchangeDownloadUrl(item.id)}>Download ZIP</a>
+                    </>
+                  )}
+                  {item.error_message && (
+                    <p className="form-error">{item.error_message}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No exchange packages have been created.</p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
