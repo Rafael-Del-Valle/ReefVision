@@ -84,7 +84,7 @@ class MaskMeasurementProfileResponse(BaseModel):
     revision: int
     centerline_points: list[MeasurementPoint]
     centerline_length_pixels: float
-    surface_model: str
+    surface_model: SurfaceModelKind
     depth_value: float | None
     diameter_value: float | None
     notes: str | None
@@ -123,6 +123,37 @@ class MaskMeasurementResponse(BaseModel):
     centerline_points: list[MeasurementPoint] = Field(default_factory=list)
     total_linear_extension_pixels: float = Field(default=0, ge=0)
     total_linear_extension_physical: float | None = Field(default=None, ge=0)
-    surface_area_model: str = "none"
+    surface_area_model: SurfaceModelKind = "none"
     surface_area_physical: float | None = Field(default=None, ge=0)
     surface_area_assumptions: list[str] = Field(default_factory=list)
+
+
+class MeasurementAggregateGroupResponse(BaseModel):
+    key: str
+    label: str
+    mask_count: int = Field(ge=0)
+    area_pixels: int = Field(ge=0)
+    perimeter_pixels: float = Field(ge=0)
+    contained_box_count: int = Field(ge=0)
+    density_per_1000_pixels: float = Field(ge=0)
+    total_linear_extension_pixels: float = Field(ge=0)
+    calibrated_area_by_unit: dict[str, float] = Field(default_factory=dict)
+    calibrated_tle_by_unit: dict[str, float] = Field(default_factory=dict)
+    surface_area_by_unit: dict[str, float] = Field(default_factory=dict)
+
+
+class ProjectMeasurementSummaryResponse(BaseModel):
+    project_id: str
+    mask_count: int = Field(ge=0)
+    calibrated_mask_count: int = Field(ge=0)
+    area_pixels: int = Field(ge=0)
+    perimeter_pixels: float = Field(ge=0)
+    contained_box_count: int = Field(ge=0)
+    density_per_1000_pixels: float = Field(ge=0)
+    total_linear_extension_pixels: float = Field(ge=0)
+    calibrated_area_by_unit: dict[str, float] = Field(default_factory=dict)
+    calibrated_tle_by_unit: dict[str, float] = Field(default_factory=dict)
+    surface_area_by_unit: dict[str, float] = Field(default_factory=dict)
+    by_class: list[MeasurementAggregateGroupResponse] = Field(default_factory=list)
+    by_species: list[MeasurementAggregateGroupResponse] = Field(default_factory=list)
+    by_state: list[MeasurementAggregateGroupResponse] = Field(default_factory=list)
