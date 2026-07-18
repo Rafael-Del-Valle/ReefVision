@@ -13,6 +13,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from reefvision.config import Settings
 from reefvision.db.models import BackupRecord, ImageAsset, Job, QualityControlRun
 from reefvision.jobs.backups import process_backup_job
+from reefvision.jobs.classification_inference import process_classification_inference_job
+from reefvision.jobs.classification_training import process_classification_training_job
 from reefvision.jobs.diagnostics import process_diagnostics_job
 from reefvision.jobs.export import process_export_job
 from reefvision.jobs.inference import process_inference_job
@@ -116,6 +118,10 @@ def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session
             return process_thumbnail_job(settings, factory, job_id)
         if job_type == "inference":
             return process_inference_job(settings, factory, job_id)
+        if job_type == "classification_inference":
+            return process_classification_inference_job(settings, factory, job_id)
+        if job_type == "classification_training":
+            return process_classification_training_job(settings, factory, job_id)
         if job_type == "export":
             return process_export_job(settings, factory, job_id)
         if job_type == "qc":
