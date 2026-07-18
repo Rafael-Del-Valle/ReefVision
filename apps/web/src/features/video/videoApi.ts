@@ -1,5 +1,26 @@
 import { getApiBaseUrl } from "../../runtime";
-import type { JobRecord, ModelRegistration } from "../../api/client";
+import type { JobRecord } from "../../api/client";
+
+export interface TrackingModelRecord {
+  id: string;
+  project_id: string;
+  purpose: "detector" | "segmenter" | string;
+  display_name: string;
+  source_filename: string;
+  managed_path: string;
+  sha256: string;
+  file_size_bytes: number;
+  framework: string;
+  task: "detect" | "segment" | string;
+  provider_name: string;
+  provider_version: string;
+  class_map_json: Record<string, unknown>;
+  input_size_json: Record<string, unknown> | null;
+  metadata_json: Record<string, unknown>;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface VideoAssetRecord {
   id: string;
@@ -210,13 +231,13 @@ export function getVideoTrackAnalytics(
 export async function getTrackingModels(
   projectId: string,
   signal?: AbortSignal,
-): Promise<ModelRegistration[]> {
+): Promise<TrackingModelRecord[]> {
   const [detectors, segmenters] = await Promise.all([
-    request<ModelRegistration[]>(
+    request<TrackingModelRecord[]>(
       `/projects/${encodeURIComponent(projectId)}/models?purpose=detector`,
       { signal },
     ),
-    request<ModelRegistration[]>(
+    request<TrackingModelRecord[]>(
       `/projects/${encodeURIComponent(projectId)}/models?purpose=segmenter`,
       { signal },
     ),
