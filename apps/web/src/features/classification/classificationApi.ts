@@ -2,9 +2,29 @@ import { getApiBaseUrl } from "../../runtime";
 import type {
   DatasetVersionRecord,
   JobRecord,
-  ModelRegistration,
   ProjectImageListItem,
 } from "../../api/client";
+
+export interface ClassificationModelRecord {
+  id: string;
+  project_id: string;
+  purpose: "classifier" | string;
+  display_name: string;
+  source_filename: string;
+  managed_path: string;
+  sha256: string;
+  file_size_bytes: number;
+  framework: string;
+  task: "classify" | string;
+  provider_name: string;
+  provider_version: string;
+  class_map_json: Record<string, unknown>;
+  input_size_json: Record<string, unknown> | null;
+  metadata_json: Record<string, unknown>;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface ImageLabelRecord {
   id: string;
@@ -150,8 +170,8 @@ export function replaceImageClassificationLabels(
 export function getClassifierModels(
   projectId: string,
   signal?: AbortSignal,
-): Promise<ModelRegistration[]> {
-  return request<ModelRegistration[]>(
+): Promise<ClassificationModelRecord[]> {
+  return request<ClassificationModelRecord[]>(
     `/projects/${encodeURIComponent(projectId)}/models?purpose=classifier`,
     { signal },
   );
