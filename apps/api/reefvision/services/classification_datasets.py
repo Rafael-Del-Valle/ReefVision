@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import zipfile
@@ -31,7 +32,6 @@ from reefvision.schemas.classification import (
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
-
 _SPLIT_DIR = {"train": "train", "validation": "val", "test": "test"}
 
 
@@ -40,8 +40,17 @@ def _slug(value: str) -> str:
     return normalized or "class"
 
 
+def _class_info(snapshot: dict[str, Any]) -> tuple[str, int, str]:
+    label_class_id = str(snapshot.get("label_class_id", snapshot.get("id", "")))
+    class_name = str(snapshot.get("class_name", snapshot.get("name", "")))
+    if not label_class_id or not class_name or "class_index" not in snapshot:
+        raise ValidationError("Classification class metadata is incomplete")
+    return label_class_id, int(snapshot["class_index"]), class_name
+
+
 def _class_folder(snapshot: dict[str, Any]) -> str:
-    return f"{int(snapshot['class_index']):04d}_{_slug(str(snapshot['class_name']))}"
+    _label_class_id, class_index, class_name = _class_info(snapshot)
+    return f"{class_index:04d}_{_slug(class_name)}"
 
 
 def _bounds(snapshot: dict[str, Any], width: int, height: int) -> tuple[int, int, int, int]:
@@ -143,7 +152,9 @@ class ClassificationDatasetService:
         }
         image_labels = self._labels_for_images(image_ids, payload.label_set)
         class_map = {
-            str(entry["id"]): entry for entry in version.class_map_json if isinstance(entry, dict)
+            str(entry["id"]): entry
+            for entry in version.class_map_json
+            if isinstance(entry, dict) and entry.get("id")
         }
 
         dataset_id = str(uuid4())
@@ -157,6 +168,7 @@ class ClassificationDatasetService:
 
         samples: list[dict[str, Any]] = []
         class_counts: dict[str, int] = defaultdict(int)
+        class_folders: dict[str, dict[str, object]] = {}
         try:
             for item in items:
                 split = _SPLIT_DIR.get(item.split)
@@ -178,10 +190,11 @@ class ClassificationDatasetService:
                                     "Whole-image classification requires exactly one verified label "
                                     f"in label set '{payload.label_set}' for {item.original_filename}"
                                 )
-                            label_id = labels[0].label_class_id
-                            class_snapshot = class_map.get(label_id)
+                            class_snapshot = class_map.get(labels[0].label_class_id)
                             if class_snapshot is None:
-                                raise ValidationError("Image label class is absent from the dataset class map")
+                                raise ValidationError(
+                                    "Image label class is absent from the dataset class map"
+                                )
                             sample_specs = [(class_snapshot, None, f"{item.image_id}.jpg")]
                         else:
                             source_snapshots = (
@@ -195,8 +208,13 @@ class ClassificationDatasetService:
                             ]
 
                         for class_snapshot, geometry, filename in sample_specs:
-                            class_id = str(class_snapshot["label_class_id"])
+                            class_id, class_index, class_name = _class_info(class_snapshot)
                             class_folder = _class_folder(class_snapshot)
+                            class_folders[class_folder] = {
+                                "label_class_id": class_id,
+                                "class_index": class_index,
+                                "class_name": class_name,
+                            }
                             destination = output_root / split / class_folder / filename
                             destination.parent.mkdir(parents=True, exist_ok=True)
                             if geometry is None:
@@ -222,8 +240,8 @@ class ClassificationDatasetService:
                                     "image_id": item.image_id,
                                     "image_sha256": item.image_sha256,
                                     "label_class_id": class_id,
-                                    "class_index": int(class_snapshot["class_index"]),
-                                    "class_name": str(class_snapshot["class_name"]),
+                                    "class_index": class_index,
+                                    "class_name": class_name,
                                     "crop_bounds": crop_bounds,
                                     "source_snapshot_sha256": item.snapshot_sha256,
                                 }
@@ -244,11 +262,12 @@ class ClassificationDatasetService:
                 "label_set": payload.label_set,
                 "minimum_crop_pixels": payload.minimum_crop_pixels,
                 "class_counts": dict(sorted(class_counts.items())),
+                "class_folders": dict(sorted(class_folders.items())),
                 "samples": samples,
             }
             manifest_sha256 = canonical_json_sha256(manifest)
             (output_root / "reefvision-classification-manifest.json").write_text(
-                __import__("json").dumps(manifest, indent=2, sort_keys=True),
+                json.dumps(manifest, indent=2, sort_keys=True),
                 encoding="utf-8",
             )
             archive_path.parent.mkdir(parents=True, exist_ok=True)
