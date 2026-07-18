@@ -121,7 +121,8 @@ export async function getMaskMeasurements(
   for (const value of filters.state_names ?? []) {
     query.append("state_name", value);
   }
-  const suffix = query.size > 0 ? `?${query.toString()}` : "";
+  const encodedQuery = query.toString();
+  const suffix = encodedQuery ? `?${encodedQuery}` : "";
   const response = await fetch(
     `${getApiBaseUrl()}/mask-annotations/${encodeURIComponent(maskAnnotationId)}/measurements${suffix}`,
     { signal },
