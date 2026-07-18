@@ -85,38 +85,15 @@ describe("ClassificationWorkspace", () => {
       page_size: 100,
       pages: 1,
     });
-    vi.mocked(api.getClassificationVersions).mockResolvedValue([
-      {
-        id: "version-1",
-        project_id: "project-1",
-        version_number: 1,
-        name: "Reviewed images",
-        notes: null,
-        parent_version_id: null,
-        status: "complete",
-        requested_split_method: "random",
-        resolved_split_method: "random",
-        eligible_annotation_statuses_json: ["reviewed"],
-        requested_ratios_json: { train: 0.7, validation: 0.2, test: 0.1 },
-        achieved_ratios_json: { train: 1, validation: 0, test: 0 },
-        split_seed: 42,
-        reuse_parent_assignments: false,
-        missing_group_key_count: 0,
-        image_count: 1,
-        annotation_count: 0,
-        mask_annotation_count: 0,
-        per_class_counts_json: [],
-        manifest_path: "manifest.json",
-        manifest_sha256: "a".repeat(64),
-        split_manifest_sha256: "b".repeat(64),
-        class_map_json: [],
-        schema_version: "0007",
-        app_version: "1.7.0",
-        created_by: "local_user",
-        created_at: "2026-07-18T00:00:00Z",
-        completed_at: "2026-07-18T00:00:00Z",
-      },
-    ]);
+    vi.mocked(api.getClassificationVersions).mockResolvedValue(
+      [
+        {
+          id: "version-1",
+          version_number: 1,
+          name: "Reviewed images",
+        },
+      ] as unknown as Awaited<ReturnType<typeof api.getClassificationVersions>>,
+    );
     vi.mocked(api.getClassificationDatasets).mockResolvedValue([]);
     vi.mocked(api.getClassifierModels).mockResolvedValue([]);
     vi.mocked(api.getImageClassificationLabels).mockResolvedValue([]);
