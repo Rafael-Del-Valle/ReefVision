@@ -11,6 +11,10 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
+from reefvision.schemas.measurement_validation import (
+    ProjectMeasurementValidationRequest,
+    ProjectMeasurementValidationResponse,
+)
 from reefvision.schemas.measurements import (
     MaskMeasurementProfileResponse,
     MaskMeasurementProfileUpdate,
@@ -21,6 +25,7 @@ from reefvision.schemas.measurements import (
 )
 from reefvision.services.mask_measurements import MaskMeasurementService
 from reefvision.services.measurement_analytics import MeasurementAnalyticsService
+from reefvision.services.measurement_validation import MeasurementValidationService
 
 router = APIRouter(tags=["measurements"])
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -34,6 +39,11 @@ def service(request: Request, session: Session) -> MaskMeasurementService:
 def analytics_service(request: Request, session: Session) -> MeasurementAnalyticsService:
     settings: Settings = request.app.state.settings
     return MeasurementAnalyticsService(session, settings)
+
+
+def validation_service(request: Request, session: Session) -> MeasurementValidationService:
+    settings: Settings = request.app.state.settings
+    return MeasurementValidationService(session, settings)
 
 
 @router.get(
@@ -137,6 +147,19 @@ def summarize_project_measurements(
         scientific_names=scientific_name,
         state_names=state_name,
     )
+
+
+@router.post(
+    "/projects/{project_id}/measurement-validation",
+    response_model=ProjectMeasurementValidationResponse,
+)
+def validate_project_measurements(
+    project_id: str,
+    payload: ProjectMeasurementValidationRequest,
+    request: Request,
+    session: DbSession,
+) -> ProjectMeasurementValidationResponse:
+    return validation_service(request, session).validate(project_id, payload)
 
 
 @router.get("/projects/{project_id}/measurement-export")
