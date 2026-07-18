@@ -15,6 +15,7 @@ from reefvision.db.models import (
     ModelRegistration,
     PredictionProposal,
     Project,
+    ReviewQueue,
     ReviewQueueItem,
 )
 from reefvision.db.models.project import utc_now
@@ -153,8 +154,17 @@ class ActiveLearningRoundService:
         if not selected:
             raise ValidationError("The acquisition strategy did not select any review candidates")
 
-        manifest = {
-            "schema_version": "active-learning-0001",
+        stable_items = [
+            {
+                "image_id": item.image_id,
+                "rank_position": item.rank_position,
+                "score": item.score,
+                "input_checksum": item.input_checksum,
+            }
+            for item in selected
+        ]
+        identity_payload = {
+            "schema_version": "active-learning-identity-0001",
             "project_id": project_id,
             "dataset_version_id": version.id if version else None,
             "strategy": request.strategy,
@@ -163,19 +173,9 @@ class ActiveLearningRoundService:
             "queue_formula_id": queue.formula_id,
             "queue_formula_version": queue.formula_version,
             "weights": weights.model_dump(mode="json"),
-            "items": [
-                {
-                    "queue_item_id": item.id,
-                    "image_id": item.image_id,
-                    "rank_position": item.rank_position,
-                    "score": item.score,
-                    "input_checksum": item.input_checksum,
-                    "reason_summary": item.reason_summary,
-                }
-                for item in selected
-            ],
+            "items": stable_items,
         }
-        selection_sha256 = canonical_json_sha256(manifest)
+        selection_sha256 = canonical_json_sha256(identity_payload)
         existing = self.session.scalar(
             select(ActiveLearningRound).where(
                 ActiveLearningRound.project_id == project_id,
@@ -183,8 +183,25 @@ class ActiveLearningRoundService:
             )
         )
         if existing is not None:
+            generated_queue = self.session.get(ReviewQueue, queue.id)
+            if generated_queue is not None:
+                self.session.delete(generated_queue)
+                self.session.commit()
             return ActiveLearningRoundResponse.model_validate(existing)
 
+        manifest = {
+            **identity_payload,
+            "schema_version": "active-learning-0001",
+            "review_queue_id": queue.id,
+            "items": [
+                {
+                    **stable,
+                    "queue_item_id": item.id,
+                    "reason_summary": item.reason_summary,
+                }
+                for stable, item in zip(stable_items, selected, strict=True)
+            ],
+        }
         round_record = ActiveLearningRound(
             project_id=project_id,
             dataset_version_id=version.id if version else None,
