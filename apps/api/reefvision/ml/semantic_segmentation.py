@@ -110,7 +110,9 @@ class SemanticSegmentationProvider(Protocol):
     """Modular trainer/inference boundary for indexed semantic masks."""
 
     provider_id: str
-    provider_version: str
+
+    @property
+    def provider_version(self) -> str: ...
 
     def preflight(
         self,
