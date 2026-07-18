@@ -258,9 +258,7 @@ def process_inference_job(
                     proposals = []
                     for prediction in predictions:
                         polygon = getattr(prediction, "polygon", None)
-                        geometry_kind = (
-                            "polygon_mask" if polygon is not None else "bounding_box"
-                        )
+                        geometry_kind = "polygon_mask" if polygon is not None else "bounding_box"
                         proposals.append(
                             PredictionProposal(
                                 project_id=image.project_id,
@@ -304,11 +302,8 @@ def process_inference_job(
                 job.result_json = {
                     "processed_images": index,
                     "model_task": model_task,
-                    "proposal_count": int(previous.get("proposal_count", 0))
-                    + len(proposals),
-                    "mask_proposal_count": int(
-                        previous.get("mask_proposal_count", 0)
-                    )
+                    "proposal_count": int(previous.get("proposal_count", 0)) + len(proposals),
+                    "mask_proposal_count": int(previous.get("mask_proposal_count", 0))
                     + sum(
                         1
                         for item in proposals

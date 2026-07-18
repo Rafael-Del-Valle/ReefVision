@@ -135,24 +135,18 @@ def test_semantic_inference_creates_previewable_raster_proposals_and_reviews_the
         is True
     )
 
-    listed = client.get(
-        f"/api/v1/images/{image_id}/prediction-proposals?review_status=pending"
-    )
+    listed = client.get(f"/api/v1/images/{image_id}/prediction-proposals?review_status=pending")
     assert listed.status_code == 200, listed.text
     proposals = listed.json()["items"]
     assert len(proposals) == 2
     assert {item["geometry_kind"] for item in proposals} == {"raster_mask"}
     assert all(item["mask_content_sha256"] for item in proposals)
 
-    preview = client.get(
-        f"/api/v1/prediction-proposals/{proposals[0]['id']}/mask"
-    )
+    preview = client.get(f"/api/v1/prediction-proposals/{proposals[0]['id']}/mask")
     assert preview.status_code == 200
     assert preview.headers["content-type"].startswith("image/png")
 
-    rejected = client.post(
-        f"/api/v1/prediction-proposals/{proposals[0]['id']}/reject"
-    )
+    rejected = client.post(f"/api/v1/prediction-proposals/{proposals[0]['id']}/reject")
     assert rejected.status_code == 200, rejected.text
     assert rejected.json()["proposal"]["review_status"] == "rejected"
 

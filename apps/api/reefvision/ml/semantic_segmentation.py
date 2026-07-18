@@ -80,9 +80,7 @@ class SemanticDatasetContract:
             raise ValidationError("Semantic class pixel values must be between 1 and 255")
         expected_pixels = list(range(1, len(pixel_values) + 1))
         if sorted(pixel_values) != expected_pixels:
-            raise ValidationError(
-                "nnU-Net semantic class pixel values must be consecutive from 1"
-            )
+            raise ValidationError("nnU-Net semantic class pixel values must be consecutive from 1")
 
 
 @dataclass(frozen=True)
@@ -173,9 +171,7 @@ def nnunet_dependency_status() -> dict[str, Any]:
     missing_commands = [name for name, path in commands.items() if path is None]
     issues: list[str] = []
     if installed_version is None:
-        issues.append(
-            "nnunetv2 is not installed; install PyTorch first, then install nnunetv2"
-        )
+        issues.append("nnunetv2 is not installed; install PyTorch first, then install nnunetv2")
     if missing_commands:
         issues.append("Missing nnU-Net commands: " + ", ".join(missing_commands))
     return {
@@ -185,8 +181,7 @@ def nnunet_dependency_status() -> dict[str, Any]:
         "status": "ready" if not issues else "missing",
         "issues": issues,
         "commands": {
-            name: str(path) if path is not None else None
-            for name, path in commands.items()
+            name: str(path) if path is not None else None for name, path in commands.items()
         },
     }
 
@@ -265,7 +260,9 @@ def _convert_rgb_png(source: Path, target: Path) -> None:
             image.load()
             image.convert("RGB").save(target, format="PNG", optimize=True)
     except (OSError, UnidentifiedImageError) as exc:
-        raise ValidationError(f"Semantic source image could not be converted: {source.name}") from exc
+        raise ValidationError(
+            f"Semantic source image could not be converted: {source.name}"
+        ) from exc
 
 
 def _copy_indexed_mask(source: Path, target: Path) -> None:
@@ -430,9 +427,7 @@ class NnUNetV2Provider:
                 "nnUNet_raw": str(raw_root),
                 "nnUNet_preprocessed": str(preprocessed_root),
                 "nnUNet_results": str(results_root),
-                "nnUNet_n_proc_DA": str(
-                    max(1, int(request.resource_limits.get("max_workers", 2)))
-                ),
+                "nnUNet_n_proc_DA": str(max(1, int(request.resource_limits.get("max_workers", 2)))),
             }
         )
         if request.random_seed is not None:
@@ -492,9 +487,7 @@ class NnUNetV2Provider:
         )
 
         configuration_root = (
-            results_root
-            / dataset_name
-            / f"{trainer}__{NNUNET_PLANS}__{NNUNET_CONFIGURATION}"
+            results_root / dataset_name / f"{trainer}__{NNUNET_PLANS}__{NNUNET_CONFIGURATION}"
         )
         fold_root = configuration_root / f"fold_{fold}"
         checkpoint = fold_root / "checkpoint_final.pth"
@@ -600,9 +593,7 @@ class NnUNetV2Provider:
                 configuration = str(metadata.get("configuration", NNUNET_CONFIGURATION))
                 fold = str(metadata["fold"])
                 configuration_root = (
-                    results_root
-                    / dataset_name
-                    / f"{trainer}__{plans}__{configuration}"
+                    results_root / dataset_name / f"{trainer}__{plans}__{configuration}"
                 )
                 configuration_root.mkdir(parents=True)
                 archive.extractall(configuration_root)

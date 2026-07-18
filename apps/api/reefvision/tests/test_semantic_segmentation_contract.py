@@ -100,9 +100,7 @@ def test_nnunet_dataset_materialization_writes_native_2d_layout(
     for split in ("train", "validation", "test"):
         (dataset.images_root / split).mkdir()
         (dataset.masks_root / split).mkdir()
-    Image.new("RGB", (12, 8), (10, 20, 30)).save(
-        dataset.images_root / "train" / "coral.jpg"
-    )
+    Image.new("RGB", (12, 8), (10, 20, 30)).save(dataset.images_root / "train" / "coral.jpg")
     train_mask = Image.new("L", (12, 8), 0)
     train_mask.putpixel((4, 3), 1)
     train_mask.save(dataset.masks_root / "train" / "coral.png")

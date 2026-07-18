@@ -128,9 +128,7 @@ class BootstrapService:
             warnings.append(f"Runtime status refresh failed: {exc}")
 
         try:
-            training_compatibility = cached_ultralytics_training_registry_summary(
-                self.settings
-            )
+            training_compatibility = cached_ultralytics_training_registry_summary(self.settings)
             training_compatibility_checked_at = training_compatibility.checked_at
             training_compatibility_response = (
                 UltralyticsTrainingRegistrySummarySnapshotResponse.model_validate(
@@ -162,9 +160,7 @@ class BootstrapService:
         project_id: str,
     ) -> TrainingWorkspaceBootstrapResponse:
         draft_summaries = self.training.list_draft_summaries(project_id)
-        selected_draft = (
-            self.training.get_draft(draft_summaries[0].id) if draft_summaries else None
-        )
+        selected_draft = self.training.get_draft(draft_summaries[0].id) if draft_summaries else None
         return TrainingWorkspaceBootstrapResponse(
             draft_summaries=draft_summaries,
             selected_draft=selected_draft,

@@ -32,13 +32,11 @@ router = APIRouter(tags=["training"])
 DbSession = Annotated[Session, Depends(get_db_session)]
 
 
-
 def service(request: Request, session: Session) -> SemanticTrainingService:
     settings: Settings = request.app.state.settings
     result = SemanticTrainingService(session, settings)
     result.catalog = SegmentationModelCatalogService(session, settings)
     return result
-
 
 
 def bootstrap_service(request: Request, session: Session) -> BootstrapService:

@@ -12,7 +12,6 @@ from reefvision.jobs.training import process_training_job
 from reefvision.ml.semantic_segmentation import SEMANTIC_SEGMENTATION_TASK
 
 
-
 def process_task_aware_training_job(
     settings: Settings,
     factory: sessionmaker[Session],

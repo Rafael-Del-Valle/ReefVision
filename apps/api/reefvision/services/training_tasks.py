@@ -47,7 +47,6 @@ class TaskDatasetPreflight:
         return not self.blockers
 
 
-
 def task_dataset_preflight(
     task: str,
     items: Iterable[TrainingDatasetItem],
@@ -104,8 +103,7 @@ def task_dataset_preflight(
             )
     elif task == SEMANTIC_SEGMENTATION_TASK:
         semantic_counts_by_split = {
-            split: polygon_counts_by_split.get(split, 0)
-            + raster_counts_by_split.get(split, 0)
+            split: polygon_counts_by_split.get(split, 0) + raster_counts_by_split.get(split, 0)
             for split in set(polygon_counts_by_split) | set(raster_counts_by_split)
         }
         if polygon_count + raster_mask_count <= 0:

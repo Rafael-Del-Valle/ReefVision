@@ -112,9 +112,7 @@ def process_semantic_training_job(
             )
             images = list(
                 session.scalars(
-                    select(ImageAsset).where(
-                        ImageAsset.id.in_([item.image_id for item in items])
-                    )
+                    select(ImageAsset).where(ImageAsset.id.in_([item.image_id for item in items]))
                 )
             )
             image_paths = {
@@ -152,9 +150,7 @@ def process_semantic_training_job(
                 masks_root=dataset_root / "masks",
                 classes_file=classes_path,
                 classes=_classes(classes_path),
-                background_pixel_value=int(
-                    classes_payload.get("background_pixel_value", 0)
-                ),
+                background_pixel_value=int(classes_payload.get("background_pixel_value", 0)),
                 overlap_policy=str(classes_payload.get("overlap_policy", "")),
             )
             workspace_relative = f"{base}/nnunet"

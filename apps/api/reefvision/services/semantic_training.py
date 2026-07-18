@@ -30,9 +30,8 @@ class SemanticTrainingService(SegmentationTrainingService):
         dependency = nnunet_dependency_status()
         warning = None
         if not dependency["ready"]:
-            warning = (
-                "nnU-Net is optional and currently unavailable: "
-                + "; ".join(str(item) for item in dependency["issues"])
+            warning = "nnU-Net is optional and currently unavailable: " + "; ".join(
+                str(item) for item in dependency["issues"]
             )
         return [
             *super().list_providers(),

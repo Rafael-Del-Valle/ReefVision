@@ -22,9 +22,8 @@ interface EditorTarget {
 
 function currentEditorTarget(): EditorTarget | null {
   const canvas = document.querySelector<SVGSVGElement>("svg.annotation-canvas");
-  const sourceImage = canvas?.querySelector<SVGImageElement>(
-    ":scope > g > image",
-  );
+  const sourceImage =
+    canvas?.querySelector<SVGImageElement>(":scope > g > image");
   const href =
     sourceImage?.getAttribute("href") ??
     sourceImage?.getAttribute("xlink:href") ??

@@ -15,7 +15,6 @@ from reefvision.storage.projects import resolve_managed_project_path
 SUPPORTED_MODEL_EXTENSIONS = {".pt", ".pth", ".zip"}
 
 
-
 def project_model_directories(
     settings: Settings,
     project_storage_root: str,
@@ -30,12 +29,10 @@ def project_model_directories(
     return directories
 
 
-
 def safe_model_name(filename: str | None) -> str:
     if not filename:
         return "unnamed-model"
     return Path(filename.replace("\\", "/")).name or "unnamed-model"
-
 
 
 def ensure_supported_model_extension(filename: str) -> None:
@@ -44,7 +41,6 @@ def ensure_supported_model_extension(filename: str) -> None:
             "Supported model types are trusted local .pt/.pth checkpoints or "
             "ReefVision semantic .zip bundles"
         )
-
 
 
 def stage_model_upload(
@@ -59,13 +55,11 @@ def stage_model_upload(
     return sha256, size
 
 
-
 def commit_staged_model(staged_path: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists():
         raise ValidationError("Managed model destination already exists")
     os.replace(staged_path, destination)
-
 
 
 def hash_model_file(path: Path) -> tuple[str, int]:
@@ -76,7 +70,6 @@ def hash_model_file(path: Path) -> tuple[str, int]:
             digest.update(chunk)
             total += len(chunk)
     return digest.hexdigest(), total
-
 
 
 def copy_model_file(source_path: Path, destination: Path) -> tuple[str, int]:

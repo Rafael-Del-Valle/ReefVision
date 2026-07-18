@@ -93,9 +93,7 @@ def get_model_provider_detail(
     request: Request,
 ) -> ModelProviderResponse:
     provider = get_model_provider(provider_id, request.app.state.settings)
-    return ModelProviderResponse.model_validate(
-        asdict(segmentation_provider_descriptor(provider))
-    )
+    return ModelProviderResponse.model_validate(asdict(segmentation_provider_descriptor(provider)))
 
 
 @router.get(

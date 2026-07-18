@@ -38,9 +38,7 @@ class SemanticModelService(SegmentationModelService):
             raise ValidationError("Semantic model registration requires a ReefVision .zip bundle")
         try:
             with zipfile.ZipFile(source_path) as archive:
-                raw_payload = json.loads(
-                    archive.read(SEMANTIC_BUNDLE_METADATA).decode("utf-8")
-                )
+                raw_payload = json.loads(archive.read(SEMANTIC_BUNDLE_METADATA).decode("utf-8"))
         except (OSError, zipfile.BadZipFile, KeyError, json.JSONDecodeError) as exc:
             raise ValidationError("Semantic model bundle metadata is invalid") from exc
         if not isinstance(raw_payload, dict):
@@ -54,9 +52,7 @@ class SemanticModelService(SegmentationModelService):
         if not isinstance(classes, list) or not classes:
             raise ValidationError("Semantic model bundle classes are missing")
         if any(
-            not isinstance(item, dict)
-            or "class_name" not in item
-            or "pixel_value" not in item
+            not isinstance(item, dict) or "class_name" not in item or "pixel_value" not in item
             for item in classes
         ):
             raise ValidationError("Semantic model bundle class metadata is invalid")
@@ -104,18 +100,12 @@ class SemanticModelService(SegmentationModelService):
         raw_classes = bundle["classes"]
         if not isinstance(raw_classes, list):
             raise ValidationError("Semantic model bundle classes are invalid")
-        classes: list[dict[str, Any]] = [
-            item for item in raw_classes if isinstance(item, dict)
-        ]
+        classes: list[dict[str, Any]] = [item for item in raw_classes if isinstance(item, dict)]
         labels = [str(item["class_name"]) for item in classes]
         class_map = {
             "labels": labels,
-            "mapping": {
-                label: labels_by_name.get(label.strip().casefold()) for label in labels
-            },
-            "pixel_values": {
-                str(item["class_name"]): int(item["pixel_value"]) for item in classes
-            },
+            "mapping": {label: labels_by_name.get(label.strip().casefold()) for label in labels},
+            "pixel_values": {str(item["class_name"]): int(item["pixel_value"]) for item in classes},
         }
 
         model_id = str(uuid4())
@@ -179,8 +169,7 @@ class SemanticModelService(SegmentationModelService):
             (model.purpose == "detector" and model.task == "detect")
             or (model.purpose == "segmenter" and model.task == "segment")
             or (
-                model.purpose == SEMANTIC_MODEL_PURPOSE
-                and model.task == SEMANTIC_SEGMENTATION_TASK
+                model.purpose == SEMANTIC_MODEL_PURPOSE and model.task == SEMANTIC_SEGMENTATION_TASK
             )
         )
         if not compatible:
