@@ -28,24 +28,15 @@ def _fail(factory: sessionmaker[Session], job_id: str, message: str) -> None:
 
 def _class_map(dataset: ClassificationDataset) -> dict[str, object]:
     classes: dict[str, dict[str, object]] = {}
-    samples = dataset.manifest_json.get("samples", [])
-    if isinstance(samples, list):
-        for sample in samples:
-            if not isinstance(sample, dict):
-                continue
-            path = str(sample.get("sample_path", ""))
-            parts = Path(path).parts
-            if len(parts) < 3:
-                continue
-            folder = parts[1]
-            classes.setdefault(
-                folder,
-                {
-                    "label_class_id": str(sample.get("label_class_id", "")),
-                    "class_index": int(sample.get("class_index", 0)),
-                    "class_name": str(sample.get("class_name", folder)),
-                },
-            )
+    folders = dataset.manifest_json.get("class_folders", {})
+    if isinstance(folders, dict):
+        for folder, metadata in folders.items():
+            if isinstance(metadata, dict):
+                classes[str(folder)] = {
+                    "label_class_id": str(metadata.get("label_class_id", "")),
+                    "class_index": int(metadata.get("class_index", 0)),
+                    "class_name": str(metadata.get("class_name", folder)),
+                }
     return {"label_set": dataset.label_set, "provider_classes": classes}
 
 
@@ -81,6 +72,7 @@ def process_classification_training_job(
         job.error_message = None
         session.commit()
         dataset_path = dataset.output_path
+        dataset_manifest_sha256 = dataset.manifest_sha256
         project_storage_root = project.storage_root
         project_id = project.id
         class_map = _class_map(dataset)
@@ -125,10 +117,13 @@ def process_classification_training_job(
                 provider_name=provider.provider_id,
                 provider_version=result.provider_version,
                 class_map_json=class_map,
-                input_size_json={"width": int(request.get("image_size", 224)), "height": int(request.get("image_size", 224))},
+                input_size_json={
+                    "width": int(request.get("image_size", 224)),
+                    "height": int(request.get("image_size", 224)),
+                },
                 metadata_json={
                     "classification_dataset_id": str(request["classification_dataset_id"]),
-                    "dataset_manifest_sha256": dataset.manifest_sha256,
+                    "dataset_manifest_sha256": dataset_manifest_sha256,
                     "training_metrics": result.metrics,
                     "architecture": str(request.get("architecture", "yolo11n-cls.pt")),
                 },
