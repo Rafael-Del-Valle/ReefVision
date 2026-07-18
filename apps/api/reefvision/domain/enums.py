@@ -20,6 +20,7 @@ JobType = Literal[
     "training",
     "model_install",
     "video_extract",
+    "video_tracking",
 ]
 ModelPurpose = Literal["detector", "segmenter", "semantic_segmenter", "classifier", "assist"]
 PredictionReviewStatus = Literal[
