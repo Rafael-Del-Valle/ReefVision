@@ -14,6 +14,7 @@ from reefvision.schemas.project_exchange import (
     ProjectExchangePackageResponse,
 )
 from reefvision.services.project_exchange import ProjectExchangeService
+from reefvision.services.project_exchange_inspection import inspect_project_exchange
 
 router = APIRouter(tags=["project-exchange"])
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -68,23 +69,14 @@ def download_project_exchange(
     session: DbSession,
 ) -> FileResponse:
     path = service(request, session).archive_path(package_id)
-    return FileResponse(
-        path,
-        media_type="application/zip",
-        filename=path.name,
-    )
+    return FileResponse(path, media_type="application/zip", filename=path.name)
 
 
 @router.post(
     "/exchange-packages/inspect",
     response_model=ProjectExchangeInspectionResponse,
 )
-def inspect_project_exchange(
+def inspect_project_exchange_upload(
     file: Annotated[UploadFile, File(...)],
-    request: Request,
-    session: DbSession,
 ) -> ProjectExchangeInspectionResponse:
-    try:
-        return service(request, session).inspect_upload(file.file)
-    finally:
-        file.file.seek(0)
+    return inspect_project_exchange(file.file)
