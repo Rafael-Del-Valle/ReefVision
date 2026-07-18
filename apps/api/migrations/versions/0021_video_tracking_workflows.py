@@ -74,7 +74,7 @@ def upgrade() -> None:
         )
         batch_op.create_index(
             "ix_video_tracks_video_deleted",
-            ["video_asset_id", "deleted_at"],
+            ["video_id", "deleted_at"],
             unique=False,
         )
 
