@@ -150,9 +150,11 @@ class VideoTrackService:
             span = second.frame - first.frame
             for frame in range(first.frame, second.frame):
                 ratio = 0.0 if track.interpolation == "hold" else (frame - first.frame) / span
-                bbox = tuple(
-                    first.bbox[index] + (second.bbox[index] - first.bbox[index]) * ratio
-                    for index in range(4)
+                bbox = (
+                    first.bbox[0] + (second.bbox[0] - first.bbox[0]) * ratio,
+                    first.bbox[1] + (second.bbox[1] - first.bbox[1]) * ratio,
+                    first.bbox[2] + (second.bbox[2] - first.bbox[2]) * ratio,
+                    first.bbox[3] + (second.bbox[3] - first.bbox[3]) * ratio,
                 )
                 x, y, width, height = bbox
                 frames.append(
