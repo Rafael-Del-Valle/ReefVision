@@ -19,6 +19,7 @@ from reefvision.jobs.diagnostics import process_diagnostics_job
 from reefvision.jobs.export import process_export_job
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.model_install import process_model_install_job
+from reefvision.jobs.project_exchange import process_project_exchange_export_job
 from reefvision.jobs.quality_control import process_quality_control_job
 from reefvision.jobs.restores import process_restore_job
 from reefvision.jobs.training_dispatch import process_task_aware_training_job
@@ -63,7 +64,11 @@ def _fail_job(factory: sessionmaker[Session], job_id: str, message: str) -> None
         session.commit()
 
 
-def process_thumbnail_job(settings: Settings, factory: sessionmaker[Session], job_id: str) -> bool:
+def process_thumbnail_job(
+    settings: Settings,
+    factory: sessionmaker[Session],
+    job_id: str,
+) -> bool:
     with factory() as session:
         job = session.get(Job, job_id)
         if job is None or job.job_type != "thumbnail" or job.status != "queued":
@@ -106,7 +111,10 @@ def process_thumbnail_job(settings: Settings, factory: sessionmaker[Session], jo
         return False
 
 
-def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session]) -> bool:
+def process_next_thumbnail_job(
+    settings: Settings,
+    factory: sessionmaker[Session],
+) -> bool:
     with factory() as session:
         job = JobRepository(session).next_queued()
         job_id = job.id if job is not None else None
@@ -141,6 +149,8 @@ def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session
             return process_video_extract_job(settings, factory, job_id)
         if job_type == "video_tracking":
             return process_video_tracking_job(settings, factory, job_id)
+        if job_type == "project_exchange_export":
+            return process_project_exchange_export_job(settings, factory, job_id)
 
         message = f"Unsupported queued job type: {job_type}"
         _fail_job(factory, job_id, message)
@@ -176,7 +186,11 @@ async def thumbnail_worker_loop(
     recover_interrupted_jobs(factory)
     while not stop_event.is_set():
         try:
-            processed = await asyncio.to_thread(process_next_thumbnail_job, settings, factory)
+            processed = await asyncio.to_thread(
+                process_next_thumbnail_job,
+                settings,
+                factory,
+            )
         except Exception:
             LOGGER.exception(
                 "Background worker iteration failed",
@@ -188,4 +202,4 @@ async def thumbnail_worker_loop(
             processed = False
         if not processed:
             with suppress(TimeoutError):
-                await asyncio.wait_for(stop_event.wait(), timeout=settings.worker_poll_seconds)
+                await asyncio.wait_for(stop_event.wait(), timeout=settings.worker_poll_interval_seconds)
