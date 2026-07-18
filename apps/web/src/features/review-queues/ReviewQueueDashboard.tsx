@@ -21,6 +21,10 @@ import {
   type ReviewScoreWeights,
 } from "../../api/client";
 
+const ACTIVE_LEARNING_FORMULA_ID = "active_learning_diversity_v1";
+
+type QueueKind = "priority" | "active_learning";
+
 const defaultWeights: ReviewScoreWeights = {
   low_mean_confidence: 24,
   low_min_confidence: 12,
@@ -37,8 +41,32 @@ const defaultWeights: ReviewScoreWeights = {
   stale_review_state: 6,
 };
 
+function queueTitle(queue: ReviewQueueRecord): string {
+  return queue.formula_id === ACTIVE_LEARNING_FORMULA_ID
+    ? "Active-learning batch"
+    : "Priority ranking";
+}
+
 function queueLabel(queue: ReviewQueueRecord): string {
-  return `${queue.status} | ${queue.item_count} ranked images`;
+  return `${queueTitle(queue)} | ${queue.status} | ${queue.item_count} images`;
+}
+
+function nestedRecord(
+  record: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> | null {
+  const value = record[key];
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function metricValue(record: Record<string, unknown>, key: string): string {
+  const value = record[key];
+  if (typeof value === "number") return value.toLocaleString();
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "string" && value.length > 0) return value;
+  return "—";
 }
 
 export function ReviewQueueDashboard({
@@ -52,6 +80,7 @@ export function ReviewQueueDashboard({
   const [scopeType, setScopeType] = useState<"project" | "dataset_version">(
     "project",
   );
+  const [queueKind, setQueueKind] = useState<QueueKind>("priority");
   const [datasetVersionId, setDatasetVersionId] = useState("");
   const [selectedQueueId, setSelectedQueueId] = useState("");
   const [selectedRunId, setSelectedRunId] = useState("");
@@ -62,6 +91,11 @@ export function ReviewQueueDashboard({
   const [reviewState, setReviewState] = useState("");
   const [modelId, setModelId] = useState("");
   const [weights, setWeights] = useState<ReviewScoreWeights>(defaultWeights);
+  const [maxItems, setMaxItems] = useState(100);
+  const [minPriorityScore, setMinPriorityScore] = useState(0);
+  const [diversityWeight, setDiversityWeight] = useState(0.35);
+  const [maxItemsPerGroup, setMaxItemsPerGroup] = useState("");
+  const [includeReviewed, setIncludeReviewed] = useState(false);
 
   const versions = useQuery({
     queryKey: ["dataset_versions", project.id],
@@ -128,6 +162,14 @@ export function ReviewQueueDashboard({
       const payload = {
         source_quality_control_run_id: selectedRunId || undefined,
         signal_weights: weights,
+        queue_kind: queueKind,
+        max_items: maxItems,
+        min_priority_score: minPriorityScore,
+        diversity_weight: diversityWeight,
+        max_items_per_group: maxItemsPerGroup
+          ? Number(maxItemsPerGroup)
+          : undefined,
+        include_reviewed: includeReviewed,
       };
       return scopeType === "dataset_version" && datasetVersionId
         ? createDatasetVersionReviewQueue(datasetVersionId, payload)
@@ -192,6 +234,23 @@ export function ReviewQueueDashboard({
     () => queues.data?.find((queue) => queue.id === selectedQueueId) ?? null,
     [queues.data, selectedQueueId],
   );
+  const selectedActiveConfig = useMemo(
+    () =>
+      selectedQueue?.formula_id === ACTIVE_LEARNING_FORMULA_ID
+        ? nestedRecord(selectedQueue.configuration_json, "active_learning")
+        : null,
+    [selectedQueue],
+  );
+  const activeSettingsInvalid =
+    queueKind === "active_learning" &&
+    (maxItems < 1 ||
+      maxItems > 500 ||
+      minPriorityScore < 0 ||
+      minPriorityScore > 100 ||
+      diversityWeight < 0 ||
+      diversityWeight > 1 ||
+      (maxItemsPerGroup.length > 0 &&
+        (Number(maxItemsPerGroup) < 1 || Number(maxItemsPerGroup) > 500)));
 
   return (
     <section className="dashboard-panel">
@@ -212,6 +271,23 @@ export function ReviewQueueDashboard({
                 <h4>Generate ranking</h4>
               </div>
             </div>
+            <label>
+              Queue type
+              <select
+                value={queueKind}
+                onChange={(event) =>
+                  setQueueKind(event.target.value as QueueKind)
+                }
+              >
+                <option value="priority">Priority ranking</option>
+                <option value="active_learning">Active-learning batch</option>
+              </select>
+            </label>
+            <small>
+              {queueKind === "active_learning"
+                ? "Select a compact batch that balances review priority with class, model, group, split, and QC diversity."
+                : "Rank every eligible image using the configured review signals."}
+            </small>
             <label>
               Scope
               <select
@@ -256,6 +332,73 @@ export function ReviewQueueDashboard({
                 ))}
               </select>
             </label>
+            {queueKind === "active_learning" && (
+              <>
+                <div className="dashboard-grid compact-grid">
+                  <label>
+                    Maximum images
+                    <input
+                      type="number"
+                      min="1"
+                      max="500"
+                      step="1"
+                      value={maxItems}
+                      onChange={(event) => setMaxItems(Number(event.target.value))}
+                    />
+                  </label>
+                  <label>
+                    Minimum priority score
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={minPriorityScore}
+                      onChange={(event) =>
+                        setMinPriorityScore(Number(event.target.value))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Diversity weight
+                    <input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={diversityWeight}
+                      onChange={(event) =>
+                        setDiversityWeight(Number(event.target.value))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Maximum per group
+                    <input
+                      type="number"
+                      min="1"
+                      max="500"
+                      step="1"
+                      value={maxItemsPerGroup}
+                      onChange={(event) =>
+                        setMaxItemsPerGroup(event.target.value)
+                      }
+                      placeholder="No limit"
+                    />
+                  </label>
+                </div>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={includeReviewed}
+                    onChange={(event) =>
+                      setIncludeReviewed(event.target.checked)
+                    }
+                  />{" "}
+                  Include images already marked reviewed
+                </label>
+              </>
+            )}
             <div className="dashboard-grid compact-grid">
               {Object.entries(weights).map(([key, value]) => (
                 <label key={key}>
@@ -280,22 +423,33 @@ export function ReviewQueueDashboard({
                 type="button"
                 disabled={
                   createQueue.isPending ||
+                  activeSettingsInvalid ||
                   (scopeType === "dataset_version" && !datasetVersionId)
                 }
                 onClick={() => createQueue.mutate()}
               >
-                {createQueue.isPending ? "Generating..." : "Generate queue"}
+                {createQueue.isPending
+                  ? "Generating..."
+                  : queueKind === "active_learning"
+                    ? "Generate active-learning batch"
+                    : "Generate priority queue"}
               </button>
               {selectedQueue && (
                 <button
                   type="button"
                   className="secondary"
+                  disabled={regenerateQueue.isPending}
                   onClick={() => regenerateQueue.mutate(selectedQueue.id)}
                 >
-                  Regenerate
+                  {regenerateQueue.isPending ? "Regenerating..." : "Regenerate"}
                 </button>
               )}
             </div>
+            {activeSettingsInvalid && (
+              <p className="form-error">
+                Active-learning limits must stay within their displayed ranges.
+              </p>
+            )}
             {(createQueue.error || regenerateQueue.error) && (
               <p className="form-error">
                 {(createQueue.error ?? regenerateQueue.error)?.message}
@@ -338,7 +492,7 @@ export function ReviewQueueDashboard({
               <div className="section-heading">
                 <div>
                   <p className="eyebrow">Selected queue</p>
-                  <h4>{selectedQueue.formula_id}</h4>
+                  <h4>{queueTitle(selectedQueue)}</h4>
                 </div>
                 <span>{selectedQueue.item_count} images</span>
               </div>
@@ -349,6 +503,51 @@ export function ReviewQueueDashboard({
                 </span>
                 <span>Formula version: {selectedQueue.formula_version}</span>
               </div>
+              {selectedActiveConfig && (
+                <>
+                  <div className="version-preview-metrics">
+                    <span>
+                      Batch limit: {metricValue(selectedActiveConfig, "max_items")}
+                    </span>
+                    <span>
+                      Minimum score:{" "}
+                      {metricValue(selectedActiveConfig, "min_priority_score")}
+                    </span>
+                    <span>
+                      Diversity weight:{" "}
+                      {metricValue(selectedActiveConfig, "diversity_weight")}
+                    </span>
+                    <span>
+                      Per-group limit:{" "}
+                      {metricValue(selectedActiveConfig, "max_items_per_group")}
+                    </span>
+                  </div>
+                  <div className="version-preview-metrics">
+                    <span>
+                      Candidates:{" "}
+                      {metricValue(selectedQueue.summary_json, "candidate_count")}
+                    </span>
+                    <span>
+                      Reviewed excluded:{" "}
+                      {metricValue(selectedQueue.summary_json, "reviewed_excluded")}
+                    </span>
+                    <span>
+                      Average diversity:{" "}
+                      {metricValue(
+                        selectedQueue.summary_json,
+                        "average_diversity_score",
+                      )}
+                    </span>
+                    <span>
+                      Average final score:{" "}
+                      {metricValue(
+                        selectedQueue.summary_json,
+                        "average_selection_score",
+                      )}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
