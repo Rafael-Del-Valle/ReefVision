@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 from statistics import mean
-from typing import Iterable
+from typing import Any, Iterable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -84,6 +84,48 @@ def _candidate_diversity(
             0.0 if candidate.item.highest_qc_severity in seen_severities else 1.0
         )
     return mean(components) if components else 0.0
+
+
+def build_active_learning_score_breakdown(
+    review_breakdown: Iterable[dict[str, Any]],
+    *,
+    diversity_score: float,
+    diversity_weight: float,
+) -> list[dict[str, Any]]:
+    """Scale review contributions and append the diversity contribution."""
+
+    priority_weight = 1.0 - diversity_weight
+    scaled: list[dict[str, Any]] = []
+    for component in review_breakdown:
+        scaled.append(
+            {
+                **dict(component),
+                "contribution": round(
+                    float(component.get("contribution", 0.0)) * priority_weight,
+                    2,
+                ),
+                "description": (
+                    f"{component.get('description', '')} "
+                    f"Scaled by the active-learning priority weight "
+                    f"({priority_weight:.2f})."
+                ).strip(),
+            }
+        )
+    scaled.append(
+        {
+            "signal_id": "active_learning_diversity",
+            "label": "Batch diversity",
+            "raw_value": diversity_score,
+            "normalized_value": diversity_score,
+            "weight": diversity_weight,
+            "contribution": round(diversity_score * diversity_weight * 100.0, 2),
+            "description": (
+                "Rewards candidates that add unseen classes, models, groups, "
+                "splits, or QC severities to the selected batch."
+            ),
+        }
+    )
+    return scaled
 
 
 def select_diverse_candidates(
@@ -318,24 +360,11 @@ class ActiveLearningQueueService:
                 **dict(item.weights_json),
                 "active_learning_diversity": request.diversity_weight,
             }
-            item.score_breakdown_json = [
-                *list(item.score_breakdown_json),
-                {
-                    "signal_id": "active_learning_diversity",
-                    "label": "Batch diversity",
-                    "raw_value": selection.diversity_score,
-                    "normalized_value": selection.diversity_score,
-                    "weight": request.diversity_weight,
-                    "contribution": round(
-                        selection.diversity_score * request.diversity_weight * 100.0,
-                        2,
-                    ),
-                    "description": (
-                        "Rewards candidates that add unseen classes, models, groups, "
-                        "splits, or QC severities to the selected batch."
-                    ),
-                },
-            ]
+            item.score_breakdown_json = build_active_learning_score_breakdown(
+                item.score_breakdown_json,
+                diversity_score=selection.diversity_score,
+                diversity_weight=request.diversity_weight,
+            )
             selection_reason = (
                 f"Active-learning score {selection.selection_score:.2f}: priority "
                 f"{selection.base_priority_score:.2f}, diversity "
