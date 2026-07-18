@@ -140,6 +140,24 @@ def test_score_breakdown_matches_blended_selection_score() -> None:
     )
 
 
+def test_review_queue_creation_defaults_to_priority(client: TestClient) -> None:
+    project = create_project(client, "Priority queue compatibility")
+    import_one(
+        client,
+        project["id"],
+        filename="priority.png",
+        size=(64, 64),
+    )
+
+    response = client.post(f"/api/v1/projects/{project['id']}/review-queues", json={})
+
+    assert response.status_code == 201, response.text
+    queue = response.json()
+    assert queue["formula_id"] == "review_priority_v1"
+    assert queue["item_count"] == 1
+    assert "active_learning" not in queue["configuration_json"]
+
+
 def test_project_active_learning_queue_is_compact_and_excludes_reviewed_images(
     client: TestClient,
 ) -> None:
@@ -187,8 +205,9 @@ def test_project_active_learning_queue_is_compact_and_excludes_reviewed_images(
     assert reviewed.status_code == 200, reviewed.text
 
     response = client.post(
-        f"/api/v1/projects/{project['id']}/active-learning-queues",
+        f"/api/v1/projects/{project['id']}/review-queues",
         json={
+            "queue_kind": "active_learning",
             "max_items": 1,
             "diversity_weight": 0.5,
             "max_items_per_group": 1,
