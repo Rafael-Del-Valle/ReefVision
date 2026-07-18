@@ -36,8 +36,8 @@ def test_measurement_reference_comparison_reports_bias_and_tolerance(
                         {"metric": "area_pixels", "reference_value": 200},
                         {
                             "metric": "perimeter_pixels",
-                            "reference_value": 63,
-                            "tolerance_percent": 10,
+                            "reference_value": 70,
+                            "tolerance_percent": 2,
                         },
                         {
                             "metric": "total_linear_extension_physical",
@@ -60,20 +60,20 @@ def test_measurement_reference_comparison_reports_bias_and_tolerance(
     observations = {item["metric"]: item for item in payload["observations"]}
     assert observations["area_pixels"]["percent_error"] == pytest.approx(0)
     assert observations["area_pixels"]["passed"] is True
-    assert observations["perimeter_pixels"]["signed_error"] == pytest.approx(-3)
-    assert observations["perimeter_pixels"]["absolute_error"] == pytest.approx(3)
+    assert observations["perimeter_pixels"]["signed_error"] == pytest.approx(-10)
+    assert observations["perimeter_pixels"]["absolute_error"] == pytest.approx(10)
     assert observations["perimeter_pixels"]["percent_error"] == pytest.approx(
-        100 * 3 / 63
+        100 * 10 / 70
     )
-    assert observations["perimeter_pixels"]["passed"] is True
+    assert observations["perimeter_pixels"]["passed"] is False
     assert observations["total_linear_extension_physical"]["passed"] is True
 
     perimeter_summary = next(
         item for item in payload["summaries"] if item["metric"] == "perimeter_pixels"
     )
-    assert perimeter_summary["mean_bias"] == pytest.approx(-3)
-    assert perimeter_summary["mean_absolute_error"] == pytest.approx(3)
-    assert perimeter_summary["root_mean_square_error"] == pytest.approx(3)
+    assert perimeter_summary["mean_bias"] == pytest.approx(-10)
+    assert perimeter_summary["mean_absolute_error"] == pytest.approx(10)
+    assert perimeter_summary["root_mean_square_error"] == pytest.approx(10)
 
 
 def test_measurement_validation_skips_unavailable_or_mismatched_units(
