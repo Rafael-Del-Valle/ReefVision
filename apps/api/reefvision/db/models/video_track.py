@@ -1,4 +1,4 @@
-"""Track annotations represented by sparse keyframes."""
+"""Track annotations represented by sparse source-coordinate keyframes."""
 
 from __future__ import annotations
 
@@ -25,13 +25,21 @@ class VideoTrack(Base):
     )
     track_number: Mapped[int] = mapped_column(Integer, nullable=False)
     geometry_kind: Mapped[str] = mapped_column(String(30), nullable=False, default="bbox")
-    # [{"frame": 0, "bbox": [x, y, w, h]}, {"frame": 12, "bbox": [...]}]
     keyframes_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
     interpolation: Mapped[str] = mapped_column(String(30), nullable=False, default="linear")
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft")
+    source_model_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("model_registrations.id", ondelete="SET NULL"), nullable=True
+    )
+    source_job_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True
+    )
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
