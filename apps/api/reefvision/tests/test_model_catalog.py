@@ -207,14 +207,9 @@ def test_bootstrap_auxiliary_failure_keeps_catalog_visible(
     baseline_response = client.get(endpoint)
     assert baseline_response.status_code == 200, baseline_response.text
     baseline_payload = baseline_response.json()
-    baseline_catalog_ids = {
-        item["catalog_id"] for item in baseline_payload["catalog"]["models"]
-    }
+    baseline_catalog_ids = {item["catalog_id"] for item in baseline_payload["catalog"]["models"]}
     assert baseline_catalog_ids
-    assert any(
-        item["task"] == "semantic_segment"
-        for item in baseline_payload["catalog"]["models"]
-    )
+    assert any(item["task"] == "semantic_segment" for item in baseline_payload["catalog"]["models"])
 
     def fail(*args: object, **kwargs: object) -> object:
         raise RuntimeError("auxiliary readiness unavailable")
@@ -230,10 +225,6 @@ def test_bootstrap_auxiliary_failure_keeps_catalog_visible(
 
     assert response.status_code == 200, response.text
     payload = response.json()
-    degraded_catalog_ids = {
-        item["catalog_id"] for item in payload["catalog"]["models"]
-    }
+    degraded_catalog_ids = {item["catalog_id"] for item in payload["catalog"]["models"]}
     assert degraded_catalog_ids == baseline_catalog_ids
-    assert len(payload["validation_warnings"]) == (
-        len(baseline_payload["validation_warnings"]) + 4
-    )
+    assert len(payload["validation_warnings"]) == (len(baseline_payload["validation_warnings"]) + 4)
