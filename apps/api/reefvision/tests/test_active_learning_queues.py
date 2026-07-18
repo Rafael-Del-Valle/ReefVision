@@ -76,7 +76,7 @@ def test_diversity_selection_can_prefer_a_novel_group_and_class() -> None:
 
     assert [item.candidate.item.image_id for item in selected] == ["highest", "novel"]
     assert selected[1].diversity_score > 0.0
-    assert selected[1].selection_score > selected[1].base_priority_score
+    assert selected[1].selection_score > 60.0
 
 
 def test_diversity_selection_enforces_per_group_limit() -> None:
