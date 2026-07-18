@@ -19,6 +19,7 @@ from reefvision.api.routes.measurements import router as measurements_router
 from reefvision.api.routes.model_catalog import router as model_catalog_router
 from reefvision.api.routes.models import router as models_router
 from reefvision.api.routes.predictions import router as predictions_router
+from reefvision.api.routes.project_exchange import router as project_exchange_router
 from reefvision.api.routes.projects import router as projects_router
 from reefvision.api.routes.quality_control import router as quality_control_router
 from reefvision.api.routes.raster_edits import router as raster_edits_router
@@ -52,3 +53,4 @@ api_router.include_router(quality_control_router)
 api_router.include_router(review_queues_router)
 api_router.include_router(active_learning_router)
 api_router.include_router(advanced_providers_router)
+api_router.include_router(project_exchange_router)
