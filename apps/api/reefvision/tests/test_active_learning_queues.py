@@ -74,9 +74,7 @@ def test_diversity_selection_can_prefer_a_novel_group_and_class() -> None:
         max_items_per_group=None,
     )
 
-    assert [
-        item.candidate.item.image_id for item in selected
-    ] == ["highest", "novel"]
+    assert [item.candidate.item.image_id for item in selected] == ["highest", "novel"]
     assert selected[1].diversity_score > 0.0
     assert selected[1].selection_score > 60.0
 
@@ -113,9 +111,7 @@ def test_diversity_selection_enforces_per_group_limit() -> None:
         max_items_per_group=1,
     )
 
-    assert [
-        item.candidate.item.image_id for item in selected
-    ] == ["first-a", "first-b"]
+    assert [item.candidate.item.image_id for item in selected] == ["first-a", "first-b"]
 
 
 def test_project_active_learning_queue_is_compact_and_excludes_reviewed_images(
@@ -182,9 +178,7 @@ def test_project_active_learning_queue_is_compact_and_excludes_reviewed_images(
     assert queue["summary_json"]["reviewed_excluded"] == 1
     assert queue["configuration_json"]["active_learning"]["max_items"] == 1
 
-    items_response = client.get(
-        f"/api/v1/review-queues/{queue['id']}/items"
-    )
+    items_response = client.get(f"/api/v1/review-queues/{queue['id']}/items")
     assert items_response.status_code == 200, items_response.text
     items = items_response.json()["items"]
     assert len(items) == 1
