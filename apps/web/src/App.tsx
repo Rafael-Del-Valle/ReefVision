@@ -12,6 +12,7 @@ import {
   type QualityControlIssue,
   type ReviewQueueItem,
 } from "./api/client";
+import { ActiveLearningWorkspace } from "./features/active-learning/ActiveLearningWorkspace";
 import { EnhancedAnnotationEditor } from "./features/annotation-editor/EnhancedAnnotationEditor";
 import { ClassManagerPanel } from "./features/classes/ClassManagerPanel";
 import { ClassificationWorkspace } from "./features/classification/ClassificationWorkspace";
@@ -42,6 +43,7 @@ type ProjectView =
   | "training"
   | "classification"
   | "video"
+  | "active_learning"
   | "classes"
   | "quality_control"
   | "review_queue"
@@ -131,6 +133,7 @@ export function App() {
     { id: "training", label: "Training" },
     { id: "classification", label: "Classification" },
     { id: "video", label: "Video Tracking" },
+    { id: "active_learning", label: "Active Learning" },
     { id: "models", label: "Models" },
     { id: "quality_control", label: "Quality Control" },
     { id: "review_queue", label: "Review Queue" },
@@ -309,6 +312,12 @@ export function App() {
               )}
               {activeView === "video" && (
                 <VideoTrackingWorkspace project={selectedProject} />
+              )}
+              {activeView === "active_learning" && (
+                <ActiveLearningWorkspace
+                  project={selectedProject}
+                  onOpenReviewQueue={() => setActiveView("review_queue")}
+                />
               )}
               {activeView === "models" && (
                 <ModelManager
