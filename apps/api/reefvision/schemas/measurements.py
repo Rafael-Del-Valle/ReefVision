@@ -84,7 +84,7 @@ class MaskMeasurementProfileResponse(BaseModel):
     revision: int
     centerline_points: list[MeasurementPoint]
     centerline_length_pixels: float
-    surface_model: SurfaceModelKind
+    surface_model: str
     depth_value: float | None
     diameter_value: float | None
     notes: str | None
@@ -123,6 +123,6 @@ class MaskMeasurementResponse(BaseModel):
     centerline_points: list[MeasurementPoint] = Field(default_factory=list)
     total_linear_extension_pixels: float = Field(default=0, ge=0)
     total_linear_extension_physical: float | None = Field(default=None, ge=0)
-    surface_area_model: SurfaceModelKind = "none"
+    surface_area_model: str = "none"
     surface_area_physical: float | None = Field(default=None, ge=0)
     surface_area_assumptions: list[str] = Field(default_factory=list)
