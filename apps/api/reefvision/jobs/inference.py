@@ -89,11 +89,6 @@ def _semantic_proposals(
     if indexed.size != (image_width, image_height):
         raise ValidationError("Semantic inference output dimensions do not match the image")
 
-    output_root = resolve_managed_project_path(
-        settings,
-        f"{project.storage_root}/prediction-masks/{job_id}/{image_id}",
-    )
-    output_root.mkdir(parents=True, exist_ok=True)
     proposals: list[PredictionProposal] = []
     for raw in classes:
         if not isinstance(raw, dict):
@@ -110,6 +105,15 @@ def _semantic_proposals(
         if area_pixels <= 0:
             continue
         proposal_id = str(uuid4())
+        # Keep proposal paths short enough for Windows environments whose Python or
+        # imaging stack still observes the traditional MAX_PATH boundary. The UUID
+        # remains the authoritative identity; the two-character shard only limits
+        # directory fan-out and does not encode job or image provenance.
+        output_root = resolve_managed_project_path(
+            settings,
+            f"{project.storage_root}/prediction-masks/{proposal_id[:2]}",
+        )
+        output_root.mkdir(parents=True, exist_ok=True)
         destination = output_root / f"{proposal_id}.png"
         temporary = output_root / f".{proposal_id}.tmp"
         try:
