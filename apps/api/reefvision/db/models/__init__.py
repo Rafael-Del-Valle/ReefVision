@@ -22,6 +22,7 @@ from reefvision.db.models.model_registration import ModelRegistration
 from reefvision.db.models.prediction_proposal import PredictionProposal
 from reefvision.db.models.project import Project
 from reefvision.db.models.project_class_visibility_default import ProjectClassVisibilityDefault
+from reefvision.db.models.project_exchange_package import ProjectExchangePackage
 from reefvision.db.models.quality_control_issue import QualityControlIssue
 from reefvision.db.models.quality_control_run import QualityControlRun
 from reefvision.db.models.review_queue import ReviewQueue
@@ -54,6 +55,7 @@ __all__ = [
     "PredictionProposal",
     "Project",
     "ProjectClassVisibilityDefault",
+    "ProjectExchangePackage",
     "QualityControlIssue",
     "QualityControlRun",
     "ReviewQueue",
