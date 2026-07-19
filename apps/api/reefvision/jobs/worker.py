@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import suppress
 from datetime import UTC, datetime
 
@@ -123,9 +124,10 @@ def process_thumbnail_job(
 def process_next_thumbnail_job(
     settings: Settings,
     factory: sessionmaker[Session],
+    worker_id: str | None = None,
 ) -> bool:
     with factory() as session:
-        job = JobRepository(session).next_queued()
+        job = JobRepository(session).next_queued(worker_id)
         job_id = job.id if job is not None else None
         job_type = job.job_type if job is not None else None
     if job_id is None:
@@ -185,18 +187,20 @@ def process_next_thumbnail_job(
         return True
 
 
-async def thumbnail_worker_loop(
+async def _worker_slot(
     settings: Settings,
     factory: sessionmaker[Session],
     stop_event: asyncio.Event,
+    slot_index: int,
 ) -> None:
-    recover_interrupted_jobs(factory)
+    worker_id = f"desktop-{os.getpid()}-slot-{slot_index}"
     while not stop_event.is_set():
         try:
             processed = await asyncio.to_thread(
                 process_next_thumbnail_job,
                 settings,
                 factory,
+                worker_id,
             )
         except Exception:
             LOGGER.exception(
@@ -204,6 +208,7 @@ async def thumbnail_worker_loop(
                 extra={
                     "event_id": "background_worker_iteration_failure",
                     "component": "worker",
+                    "worker_id": worker_id,
                 },
             )
             processed = False
@@ -213,3 +218,21 @@ async def thumbnail_worker_loop(
                     stop_event.wait(),
                     timeout=settings.worker_poll_seconds,
                 )
+
+
+async def thumbnail_worker_loop(
+    settings: Settings,
+    factory: sessionmaker[Session],
+    stop_event: asyncio.Event,
+) -> None:
+    recover_interrupted_jobs(factory)
+    slots = [
+        asyncio.create_task(_worker_slot(settings, factory, stop_event, index))
+        for index in range(settings.worker_concurrency)
+    ]
+    try:
+        await asyncio.gather(*slots)
+    finally:
+        for slot in slots:
+            slot.cancel()
+        await asyncio.gather(*slots, return_exceptions=True)
