@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import hashlib
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -37,7 +35,7 @@ def _sharpness(gray: np.ndarray) -> float:
     except Exception:
         horizontal = np.diff(gray.astype(np.float32), axis=1)
         vertical = np.diff(gray.astype(np.float32), axis=0)
-        values = []
+        values: list[float] = []
         if horizontal.size:
             values.append(float(np.var(horizontal)))
         if vertical.size:
@@ -62,14 +60,14 @@ class ClassificationQAService:
         request: ClassificationCropQARequest,
     ) -> ClassificationCropQAResponse:
         self._project(project_id)
-        query = select(ClassificationCrop).where(
+        statement = select(ClassificationCrop).where(
             ClassificationCrop.project_id == project_id
         )
         if request.crop_ids:
-            query = query.where(ClassificationCrop.id.in_(request.crop_ids))
+            statement = statement.where(ClassificationCrop.id.in_(request.crop_ids))
         crops = list(
             self.session.scalars(
-                query.order_by(
+                statement.order_by(
                     ClassificationCrop.label_class_id,
                     ClassificationCrop.created_at,
                     ClassificationCrop.id,
@@ -80,6 +78,7 @@ class ClassificationQAService:
             raise ValidationError("One or more requested crop IDs are missing")
         if not crops:
             raise ValidationError("No classification crops match the request")
+
         image_ids = {crop.image_id for crop in crops}
         source_images = {
             image.id: image
@@ -124,9 +123,10 @@ class ClassificationQAService:
                     )
                 )
                 continue
+
             with Image.open(path) as source:
-                gray = np.asarray(source.convert("L"), dtype=np.uint8)
                 width, height = source.size
+                gray = np.asarray(source.convert("L"), dtype=np.uint8)
             area = width * height
             aspect_ratio = max(width / max(height, 1), height / max(width, 1))
             mean_brightness = float(gray.mean())
@@ -152,7 +152,8 @@ class ClassificationQAService:
                     sha256=crop.sha256,
                 )
             )
-            checks = [
+
+            checks = (
                 (
                     width < request.minimum_width_px,
                     "crop_too_narrow",
@@ -212,18 +213,18 @@ class ClassificationQAService:
                 (
                     dark_fraction > request.maximum_dark_fraction,
                     "excessive_dark_pixels",
-                    "The fraction of near-black pixels exceeds the configured threshold.",
+                    "The near-black pixel fraction exceeds the configured threshold.",
                     round(dark_fraction, 6),
                     request.maximum_dark_fraction,
                 ),
                 (
                     bright_fraction > request.maximum_bright_fraction,
                     "excessive_bright_pixels",
-                    "The fraction of near-white pixels exceeds the configured threshold.",
+                    "The near-white pixel fraction exceeds the configured threshold.",
                     round(bright_fraction, 6),
                     request.maximum_bright_fraction,
                 ),
-            ]
+            )
             for failed, code, message, measured, threshold in checks:
                 if failed:
                     issues.append(
@@ -236,8 +237,9 @@ class ClassificationQAService:
                             threshold=threshold,
                         )
                     )
+
             source_image = source_images.get(crop.image_id)
-            box = crop.source_box_json or {}
+            box = crop.source_box_json
             if source_image and box:
                 touches_boundary = any(
                     (
@@ -255,7 +257,10 @@ class ClassificationQAService:
                             crop_id=crop.id,
                             severity="info",
                             code="source_geometry_touches_boundary",
-                            message="The source geometry touches an image boundary; context padding may be clipped.",
+                            message=(
+                                "The source geometry touches an image boundary; "
+                                "context padding may be clipped."
+                            ),
                         )
                     )
 
@@ -269,7 +274,10 @@ class ClassificationQAService:
                             crop_id=crop.id,
                             severity=severity,
                             code="duplicate_crop_checksum",
-                            message=f"This crop shares its SHA-256 with {len(group) - 1} other crop(s).",
+                            message=(
+                                "This crop shares its SHA-256 with "
+                                f"{len(group) - 1} other crop(s)."
+                            ),
                             measured_value=crop.sha256,
                         )
                     )
@@ -286,6 +294,7 @@ class ClassificationQAService:
                     "label_class_id": crop.label_class_id,
                     "image_id": crop.image_id,
                     "annotation_id": crop.annotation_id,
+                    "export_id": crop.export_id,
                 }
                 for crop in crops
             ],
@@ -327,13 +336,16 @@ class ClassificationQAService:
 
         warning_messages: list[str] = []
         class_counts = sorted(per_class_counts.values())
-        if class_counts and class_counts[0] > 0 and class_counts[-1] / class_counts[0] >= 5:
-            warning_messages.append(
-                "The crop dataset has at least a 5:1 class imbalance; consider weighted sampling or targeted collection."
-            )
+        if class_counts and class_counts[0] > 0:
+            if class_counts[-1] / class_counts[0] >= 5:
+                warning_messages.append(
+                    "The crop dataset has at least a 5:1 class imbalance; consider "
+                    "weighted sampling or targeted collection."
+                )
         if duplicate_groups:
             warning_messages.append(
-                f"Found {len(duplicate_groups)} duplicate checksum groups; keep duplicates in one data split to avoid leakage."
+                f"Found {len(duplicate_groups)} duplicate checksum groups; keep "
+                "duplicates in one data split to avoid leakage."
             )
         return ClassificationCropQAResponse(
             project_id=project_id,
@@ -363,27 +375,33 @@ class ClassificationQAService:
         blockers: list[str] = []
         if config.vertical_flip_probability > 0:
             warnings.append(
-                "Vertical flips can create biologically implausible orientations; confirm that orientation is not meaningful for this classifier."
+                "Vertical flips can create biologically implausible orientations; "
+                "confirm that orientation is not meaningful for this classifier."
             )
         if config.rotation_degrees > 45:
             warnings.append(
-                "Large rotations may expose padding artifacts and unrealistic specimen orientation."
+                "Large rotations may expose padding artifacts and unrealistic "
+                "specimen orientation."
             )
         if config.hue_jitter > 0.08:
             warnings.append(
-                "Strong hue jitter may obscure pigmentation or polyp-state cues used by marine classifiers."
+                "Strong hue jitter may obscure pigmentation or polyp-state cues used "
+                "by marine classifiers."
             )
         if config.random_erasing_probability > 0.25:
             warnings.append(
-                "Frequent random erasing may remove small coral branches or diagnostic polyps."
+                "Frequent random erasing may remove small coral branches or "
+                "diagnostic polyps."
             )
         if config.mixup_probability + config.cutmix_probability > 0.75:
             blockers.append(
-                "Combined MixUp and CutMix probability cannot exceed 0.75 for the ReefVision classifier workflow."
+                "Combined MixUp and CutMix probability cannot exceed 0.75 for the "
+                "ReefVision classifier workflow."
             )
         if config.scale_min < 0.5 or config.scale_max > 2.0:
             warnings.append(
-                "The scale range is unusually broad and may create unrealistic specimen sizes."
+                "The scale range is unusually broad and may create unrealistic "
+                "specimen sizes."
             )
         payload = {
             "format": "reefvision-classification-augmentation",
