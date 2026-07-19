@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass, field
 from statistics import mean
 from typing import TypeAlias
 
@@ -31,15 +32,25 @@ BinaryMask: TypeAlias = Image.Image
 GroupKey: TypeAlias = tuple[str, str | None]
 
 
+@dataclass
+class _ClassAccumulator:
+    ground_truth_count: int = 0
+    prediction_count: int = 0
+    matches: list[SegmentationInstanceMatch] = field(default_factory=list)
+
+
 def _polygon_mask(
     points: list[list[float]],
     *,
     width: int,
     height: int,
 ) -> BinaryMask:
-    image = Image.new("1", (width, height), 0)
+    image = Image.new("L", (width, height), 0)
     draw = ImageDraw.Draw(image)
-    draw.polygon([(float(point[0]), float(point[1])) for point in points], fill=1)
+    draw.polygon(
+        [(float(point[0]), float(point[1])) for point in points],
+        fill=255,
+    )
     return image
 
 
@@ -60,7 +71,7 @@ def _raster_mask(
                 raise ValidationError(
                     "Segmentation mask dimensions do not match the source image"
                 )
-            return source.convert("L").point(lambda value: 1 if value > 0 else 0).convert("1")
+            return source.convert("L").point(lambda value: 255 if value > 0 else 0)
     except (OSError, UnidentifiedImageError) as exc:
         raise ValidationError("Segmentation mask content could not be read") from exc
 
@@ -125,17 +136,16 @@ class SegmentationEvaluationService:
         query = select(ImageAsset).where(ImageAsset.project_id == project_id)
         if requested_ids:
             query = query.where(ImageAsset.id.in_(requested_ids))
-        images = list(self.session.scalars(query.order_by(ImageAsset.created_at, ImageAsset.id)))
+        images = list(
+            self.session.scalars(query.order_by(ImageAsset.created_at, ImageAsset.id))
+        )
         if requested_ids and len(images) != len(set(requested_ids)):
             raise ValidationError(
                 "All requested evaluation images must exist in the selected project"
             )
         return images
 
-    def _verified_masks(
-        self,
-        image_ids: list[str],
-    ) -> list[MaskAnnotation]:
+    def _verified_masks(self, image_ids: list[str]) -> list[MaskAnnotation]:
         if not image_ids:
             return []
         return list(
@@ -146,7 +156,11 @@ class SegmentationEvaluationService:
                     MaskAnnotation.deleted_at.is_(None),
                     MaskAnnotation.status == "verified",
                 )
-                .order_by(MaskAnnotation.image_id, MaskAnnotation.created_at, MaskAnnotation.id)
+                .order_by(
+                    MaskAnnotation.image_id,
+                    MaskAnnotation.created_at,
+                    MaskAnnotation.id,
+                )
             )
         )
 
@@ -193,19 +207,59 @@ class SegmentationEvaluationService:
                 width=image.width_px,
                 height=image.height_px,
             )
-        relative_path = (
-            item.mask_path
-            if isinstance(item, MaskAnnotation)
-            else item.mask_path
-        )
-        if relative_path:
+        if item.mask_path:
             return _raster_mask(
                 self.settings,
-                relative_path,
+                item.mask_path,
                 width=image.width_px,
                 height=image.height_px,
             )
         raise ValidationError("Segmentation record has no polygon or raster geometry")
+
+    @staticmethod
+    def _class_summary(
+        label_class_id: str | None,
+        accumulator: _ClassAccumulator,
+    ) -> SegmentationClassEvaluation:
+        matched_count = len(accumulator.matches)
+        return SegmentationClassEvaluation(
+            label_class_id=label_class_id,
+            ground_truth_count=accumulator.ground_truth_count,
+            prediction_count=accumulator.prediction_count,
+            matched_count=matched_count,
+            false_positive_count=accumulator.prediction_count - matched_count,
+            false_negative_count=accumulator.ground_truth_count - matched_count,
+            instance_precision=(
+                matched_count / accumulator.prediction_count
+                if accumulator.prediction_count
+                else 0.0
+            ),
+            instance_recall=(
+                matched_count / accumulator.ground_truth_count
+                if accumulator.ground_truth_count
+                else 0.0
+            ),
+            mean_iou=(
+                mean(item.iou for item in accumulator.matches)
+                if accumulator.matches
+                else None
+            ),
+            mean_dice=(
+                mean(item.dice for item in accumulator.matches)
+                if accumulator.matches
+                else None
+            ),
+            mean_pixel_precision=(
+                mean(item.pixel_precision for item in accumulator.matches)
+                if accumulator.matches
+                else None
+            ),
+            mean_pixel_recall=(
+                mean(item.pixel_recall for item in accumulator.matches)
+                if accumulator.matches
+                else None
+            ),
+        )
 
     def evaluate(
         self,
@@ -257,14 +311,19 @@ class SegmentationEvaluationService:
             )
 
         matches: list[SegmentationInstanceMatch] = []
-        summaries: list[SegmentationClassEvaluation] = []
+        class_accumulators: dict[str | None, _ClassAccumulator] = defaultdict(
+            _ClassAccumulator
+        )
         all_groups = sorted(
             set(ground_truth_by_group) | set(prediction_by_group),
-            key=lambda item: (item[1] or "", item[0]),
+            key=lambda item: (item[0], item[1] or ""),
         )
         for image_id, label_class_id in all_groups:
             ground_truth_items = ground_truth_by_group[(image_id, label_class_id)]
             prediction_items = prediction_by_group[(image_id, label_class_id)]
+            accumulator = class_accumulators[label_class_id]
+            accumulator.ground_truth_count += len(ground_truth_items)
+            accumulator.prediction_count += len(prediction_items)
             candidates: list[
                 tuple[
                     float,
@@ -290,7 +349,6 @@ class SegmentationEvaluationService:
                     )
             used_ground_truth: set[int] = set()
             used_predictions: set[int] = set()
-            group_matches: list[SegmentationInstanceMatch] = []
             for iou, ground_truth_index, prediction_index, statistics in sorted(
                 candidates,
                 key=lambda item: item[0],
@@ -320,45 +378,16 @@ class SegmentationEvaluationService:
                     pixel_precision=pixel_precision,
                     pixel_recall=pixel_recall,
                 )
-                group_matches.append(match)
                 matches.append(match)
+                accumulator.matches.append(match)
 
-            ground_truth_count = len(ground_truth_items)
-            prediction_count = len(prediction_items)
-            matched_count = len(group_matches)
-            summaries.append(
-                SegmentationClassEvaluation(
-                    label_class_id=label_class_id,
-                    ground_truth_count=ground_truth_count,
-                    prediction_count=prediction_count,
-                    matched_count=matched_count,
-                    false_positive_count=prediction_count - matched_count,
-                    false_negative_count=ground_truth_count - matched_count,
-                    instance_precision=(
-                        matched_count / prediction_count if prediction_count else 0.0
-                    ),
-                    instance_recall=(
-                        matched_count / ground_truth_count if ground_truth_count else 0.0
-                    ),
-                    mean_iou=(mean(item.iou for item in group_matches) if group_matches else None),
-                    mean_dice=(
-                        mean(item.dice for item in group_matches)
-                        if group_matches
-                        else None
-                    ),
-                    mean_pixel_precision=(
-                        mean(item.pixel_precision for item in group_matches)
-                        if group_matches
-                        else None
-                    ),
-                    mean_pixel_recall=(
-                        mean(item.pixel_recall for item in group_matches)
-                        if group_matches
-                        else None
-                    ),
-                )
+        summaries = [
+            self._class_summary(label_class_id, accumulator)
+            for label_class_id, accumulator in sorted(
+                class_accumulators.items(),
+                key=lambda item: item[0] or "",
             )
-
+        ]
         ground_truth_count = sum(item.ground_truth_count for item in summaries)
         prediction_count = sum(item.prediction_count for item in summaries)
         matched_count = len(matches)
@@ -381,10 +410,7 @@ class SegmentationEvaluationService:
             mean_dice=mean(item.dice for item in matches) if matches else None,
             confidence_threshold=request.confidence_threshold,
             match_iou_threshold=request.match_iou_threshold,
-            per_class=sorted(
-                summaries,
-                key=lambda item: item.label_class_id or "",
-            ),
+            per_class=summaries,
             matches=sorted(
                 matches,
                 key=lambda item: (
