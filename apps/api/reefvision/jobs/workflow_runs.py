@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -248,9 +247,7 @@ def _depth_estimation(
 ) -> dict[str, tuple[str, dict[str, Any]]]:
     image_ids = _list_values([_artifact_payload(item) for item in inputs], "image_ids")
     provider_id = str(configuration.get("provider_id", "depth_anything_v2_relative"))
-    model_id = str(
-        configuration.get("model_id", "depth-anything/Depth-Anything-V2-Small-hf")
-    )
+    model_id = str(configuration.get("model_id", "depth-anything/Depth-Anything-V2-Small-hf"))
     depth_kind = str(configuration.get("depth_kind", "relative"))
     depth_map_ids: list[str] = []
     child_job_ids: list[str] = []
@@ -398,9 +395,7 @@ def _model_inference(
     with factory() as session:
         predictions = list(
             session.scalars(
-                select(PredictionProposal).where(
-                    PredictionProposal.inference_job_id == child.id
-                )
+                select(PredictionProposal).where(PredictionProposal.inference_job_id == child.id)
             )
         )
     output_port = "detections" if node_type == "detector" else "masks"
@@ -452,9 +447,7 @@ def _classification(
                 "image_ids": image_ids,
                 "annotation_ids": annotation_ids,
                 "device": str(configuration.get("device", "auto")),
-                "confidence_threshold": float(
-                    configuration.get("confidence_threshold", 0.0)
-                ),
+                "confidence_threshold": float(configuration.get("confidence_threshold", 0.0)),
                 "batch_size": int(configuration.get("batch_size", 32)),
                 "label_set": configuration.get("label_set"),
                 "parent_workflow_run_id": run.id,
@@ -512,9 +505,7 @@ def _tracker(
                     "replace_generated_tracks": bool(
                         configuration.get("replace_generated_tracks", True)
                     ),
-                    "confidence_threshold": float(
-                        configuration.get("confidence_threshold", 0.25)
-                    ),
+                    "confidence_threshold": float(configuration.get("confidence_threshold", 0.25)),
                     "iou_threshold": float(configuration.get("iou_threshold", 0.45)),
                     "device": str(configuration.get("device", "auto")),
                     "parent_workflow_run_id": run.id,
@@ -557,12 +548,16 @@ def _measurement_snapshot(
     configured = configuration.get("mask_annotation_ids")
     mask_ids = [str(value) for value in configured] if isinstance(configured, list) else []
     with factory() as session:
-        query = select(MaskAnnotation).join(
-            ImageAsset,
-            ImageAsset.id == MaskAnnotation.image_id,
-        ).where(
-            ImageAsset.project_id == run.project_id,
-            MaskAnnotation.deleted_at.is_(None),
+        query = (
+            select(MaskAnnotation)
+            .join(
+                ImageAsset,
+                ImageAsset.id == MaskAnnotation.image_id,
+            )
+            .where(
+                ImageAsset.project_id == run.project_id,
+                MaskAnnotation.deleted_at.is_(None),
+            )
         )
         if mask_ids:
             query = query.where(MaskAnnotation.id.in_(mask_ids))
@@ -700,11 +695,7 @@ def _filter_artifact(
     filtered: dict[str, Any] = {}
     for key, value in payload.items():
         if isinstance(value, list):
-            items = [
-                item
-                for item in value
-                if not include_ids or str(item) in include_ids
-            ]
+            items = [item for item in value if not include_ids or str(item) in include_ids]
             filtered[key] = items[:limit] if limit > 0 else items
         else:
             filtered[key] = value
@@ -789,9 +780,7 @@ def process_workflow_run_job(
         run_id = str(job.request_json.get("workflow_run_id", ""))
         run = session.get(WorkflowRun, run_id)
         revision = (
-            session.get(WorkflowRevision, run.workflow_revision_id)
-            if run is not None
-            else None
+            session.get(WorkflowRevision, run.workflow_revision_id) if run is not None else None
         )
         if run is None or revision is None:
             job.status = "failed"
@@ -1001,9 +990,7 @@ def process_workflow_run_job(
                 return False
             artifacts = list(
                 session.scalars(
-                    select(WorkflowArtifact).where(
-                        WorkflowArtifact.workflow_run_id == run.id
-                    )
+                    select(WorkflowArtifact).where(WorkflowArtifact.workflow_run_id == run.id)
                 )
             )
             run.status = "succeeded"

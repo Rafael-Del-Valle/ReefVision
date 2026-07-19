@@ -126,14 +126,19 @@ export function WorkflowGraphEditor({
   const [pendingConnection, setPendingConnection] =
     useState<PendingConnection | null>(null);
   const [configurationText, setConfigurationText] = useState("{}");
-  const [configurationError, setConfigurationError] = useState<string | null>(null);
+  const [configurationError, setConfigurationError] = useState<string | null>(
+    null,
+  );
   const [edgeSourceNode, setEdgeSourceNode] = useState("");
   const [edgeSourcePort, setEdgeSourcePort] = useState("");
   const [edgeTargetNode, setEdgeTargetNode] = useState("");
   const [edgeTargetPort, setEdgeTargetPort] = useState("");
 
   const definitionByType = useMemo(
-    () => new Map(definitions.map((definition) => [definition.node_type, definition])),
+    () =>
+      new Map(
+        definitions.map((definition) => [definition.node_type, definition]),
+      ),
     [definitions],
   );
   const nodeById = useMemo(
@@ -159,7 +164,10 @@ export function WorkflowGraphEditor({
   }, [selectedNode]);
 
   const updateNode = useCallback(
-    (nodeId: string, updater: (node: EditableWorkflowNode) => EditableWorkflowNode) => {
+    (
+      nodeId: string,
+      updater: (node: EditableWorkflowNode) => EditableWorkflowNode,
+    ) => {
       onChange({
         ...workflow,
         nodes: workflow.nodes.map((node) =>
@@ -201,8 +209,14 @@ export function WorkflowGraphEditor({
       const maximumY = Math.max(0, bounds.height - nodeHeight(definition));
       updateNode(drag.nodeId, (current) =>
         withPosition(current, {
-          x: Math.max(0, Math.min(maximumX, event.clientX - bounds.left - drag.offsetX)),
-          y: Math.max(0, Math.min(maximumY, event.clientY - bounds.top - drag.offsetY)),
+          x: Math.max(
+            0,
+            Math.min(maximumX, event.clientX - bounds.left - drag.offsetX),
+          ),
+          y: Math.max(
+            0,
+            Math.min(maximumY, event.clientY - bounds.top - drag.offsetY),
+          ),
         }),
       );
     };
@@ -272,7 +286,9 @@ export function WorkflowGraphEditor({
 
   function handleDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
-    const nodeType = event.dataTransfer.getData("application/x-reefvision-node");
+    const nodeType = event.dataTransfer.getData(
+      "application/x-reefvision-node",
+    );
     if (!nodeType) return;
     const bounds = event.currentTarget.getBoundingClientRect();
     addNode(nodeType, {
@@ -314,11 +330,7 @@ export function WorkflowGraphEditor({
       target_port: port,
     };
     const nextEdges = workflow.edges.filter(
-      (item) =>
-        !(
-          item.target_node_id === nodeId &&
-          item.target_port === port
-        ),
+      (item) => !(item.target_node_id === nodeId && item.target_port === port),
     );
     if (!nextEdges.some((item) => edgeKey(item) === edgeKey(edge))) {
       nextEdges.push(edge);
@@ -328,7 +340,12 @@ export function WorkflowGraphEditor({
   }
 
   function addAccessibleEdge() {
-    if (!edgeSourceNode || !edgeSourcePort || !edgeTargetNode || !edgeTargetPort) {
+    if (
+      !edgeSourceNode ||
+      !edgeSourcePort ||
+      !edgeTargetNode ||
+      !edgeTargetPort
+    ) {
       return;
     }
     const sourceDefinition = definitionByType.get(
@@ -357,7 +374,8 @@ export function WorkflowGraphEditor({
           item.target_port === edgeTargetPort
         ),
     );
-    if (!edges.some((item) => edgeKey(item) === edgeKey(edge))) edges.push(edge);
+    if (!edges.some((item) => edgeKey(item) === edgeKey(edge)))
+      edges.push(edge);
     onChange({ ...workflow, edges });
   }
 
@@ -375,23 +393,31 @@ export function WorkflowGraphEditor({
       }));
     } catch (error) {
       setConfigurationError(
-        error instanceof Error ? error.message : "Configuration JSON is invalid",
+        error instanceof Error
+          ? error.message
+          : "Configuration JSON is invalid",
       );
     }
   }
 
-  const sourcePorts = definitionByType.get(
-    nodeById.get(edgeSourceNode)?.node_type ?? "",
-  )?.outputs ?? [];
-  const targetPorts = definitionByType.get(
-    nodeById.get(edgeTargetNode)?.node_type ?? "",
-  )?.inputs ?? [];
+  const sourcePorts =
+    definitionByType.get(nodeById.get(edgeSourceNode)?.node_type ?? "")
+      ?.outputs ?? [];
+  const targetPorts =
+    definitionByType.get(nodeById.get(edgeTargetNode)?.node_type ?? "")
+      ?.inputs ?? [];
 
   return (
     <div className="workflow-graph-layout" data-testid="workflow-graph-editor">
-      <aside className="workflow-graph-palette" aria-label="Workflow node palette">
+      <aside
+        className="workflow-graph-palette"
+        aria-label="Workflow node palette"
+      >
         <h5>Node palette</h5>
-        <p>Drag a node onto the canvas or add it with the keyboard-accessible button.</p>
+        <p>
+          Drag a node onto the canvas or add it with the keyboard-accessible
+          button.
+        </p>
         {definitions.map((definition) => (
           <div
             key={definition.node_type}
@@ -427,7 +453,9 @@ export function WorkflowGraphEditor({
               }
             />
           </label>
-          <span>{workflow.nodes.length} nodes · {workflow.edges.length} edges</span>
+          <span>
+            {workflow.nodes.length} nodes · {workflow.edges.length} edges
+          </span>
           {pendingConnection && (
             <button
               type="button"
@@ -476,14 +504,26 @@ export function WorkflowGraphEditor({
                   (port) => port.name === edge.target_port,
                 ) ?? 0,
               );
-              const sourcePosition = positionById.get(source.id) ?? { x: 0, y: 0 };
-              const targetPosition = positionById.get(target.id) ?? { x: 0, y: 0 };
+              const sourcePosition = positionById.get(source.id) ?? {
+                x: 0,
+                y: 0,
+              };
+              const targetPosition = positionById.get(target.id) ?? {
+                x: 0,
+                y: 0,
+              };
               const x1 = sourcePosition.x + NODE_WIDTH;
               const y1 =
-                sourcePosition.y + NODE_HEADER_HEIGHT + sourceIndex * PORT_ROW_HEIGHT + 14;
+                sourcePosition.y +
+                NODE_HEADER_HEIGHT +
+                sourceIndex * PORT_ROW_HEIGHT +
+                14;
               const x2 = targetPosition.x;
               const y2 =
-                targetPosition.y + NODE_HEADER_HEIGHT + targetIndex * PORT_ROW_HEIGHT + 14;
+                targetPosition.y +
+                NODE_HEADER_HEIGHT +
+                targetIndex * PORT_ROW_HEIGHT +
+                14;
               const middle = Math.max(50, Math.abs(x2 - x1) / 2);
               return (
                 <path
@@ -496,7 +536,8 @@ export function WorkflowGraphEditor({
 
           {workflow.nodes.map((node, nodeIndex) => {
             const definition = definitionByType.get(node.node_type);
-            const position = positionById.get(node.id) ?? positionOf(node, nodeIndex);
+            const position =
+              positionById.get(node.id) ?? positionOf(node, nodeIndex);
             return (
               <article
                 key={node.id}
@@ -514,7 +555,9 @@ export function WorkflowGraphEditor({
                     className="workflow-node-select"
                     onClick={() => setSelectedNodeId(node.id)}
                   >
-                    <strong>{node.label || definition?.display_name || node.node_type}</strong>
+                    <strong>
+                      {node.label || definition?.display_name || node.node_type}
+                    </strong>
                     <small>{node.id}</small>
                   </button>
                   <button
@@ -538,7 +581,9 @@ export function WorkflowGraphEditor({
                           Boolean(pendingConnection) &&
                           pendingConnection?.dataType !== port.data_type
                         }
-                        onClick={() => connectTo(node.id, port.name, port.data_type)}
+                        onClick={() =>
+                          connectTo(node.id, port.name, port.data_type)
+                        }
                       >
                         <span aria-hidden="true" />
                         {port.name}
@@ -572,7 +617,10 @@ export function WorkflowGraphEditor({
         </div>
       </div>
 
-      <aside className="workflow-graph-inspector" aria-label="Workflow inspector">
+      <aside
+        className="workflow-graph-inspector"
+        aria-label="Workflow inspector"
+      >
         <h5>Node inspector</h5>
         {selectedNode ? (
           <>
@@ -687,8 +735,8 @@ export function WorkflowGraphEditor({
           {workflow.edges.map((edge) => (
             <div key={edgeKey(edge)}>
               <small>
-                {edge.source_node_id}.{edge.source_port} → {edge.target_node_id}.
-                {edge.target_port}
+                {edge.source_node_id}.{edge.source_port} → {edge.target_node_id}
+                .{edge.target_port}
               </small>
               <button
                 type="button"

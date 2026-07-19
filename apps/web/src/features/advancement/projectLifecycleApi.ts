@@ -25,7 +25,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (init?.body && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
-  const response = await fetch(`${getApiBaseUrl()}${path}`, { ...init, headers });
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    ...init,
+    headers,
+  });
   if (!response.ok) {
     let message = `Request failed with HTTP ${response.status}`;
     try {
@@ -52,7 +55,10 @@ export function updateProjectLifecycle(
 export function queueProjectArchive(projectId: string, notes?: string) {
   return request<{ job: JobRecord }>(`/projects/${projectId}/archive-export`, {
     method: "POST",
-    body: JSON.stringify({ include_archived_records: true, notes: notes || null }),
+    body: JSON.stringify({
+      include_archived_records: true,
+      notes: notes || null,
+    }),
   });
 }
 
@@ -78,7 +84,9 @@ export function queueProjectStorageMigration(
 
 export function verifyProjectArchive(archivePath: string) {
   const search = new URLSearchParams({ archive_path: archivePath });
-  return request<ProjectArchiveVerification>(`/project-archives/verify?${search}`);
+  return request<ProjectArchiveVerification>(
+    `/project-archives/verify?${search}`,
+  );
 }
 
 export function queueProjectArchiveImport(payload: {

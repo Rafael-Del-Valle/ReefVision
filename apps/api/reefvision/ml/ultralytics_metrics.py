@@ -8,6 +8,7 @@ Ultralytics HTML or plotting implementation.
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import json
 import math
@@ -34,10 +35,8 @@ def _python_value(value: Any) -> Any:
         candidate = tolist()
     item = getattr(candidate, "item", None)
     if callable(item) and not isinstance(candidate, (list, tuple, dict, str, bytes)):
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             candidate = item()
-        except (TypeError, ValueError):
-            pass
     return candidate
 
 
@@ -232,9 +231,7 @@ def extract_ultralytics_validation(metrics: Any, *, task: str) -> dict[str, Any]
     raw_results = _python_value(getattr(metrics, "results_dict", {}))
     aggregate = {
         str(key): value
-        for key, raw_value in (
-            raw_results.items() if isinstance(raw_results, Mapping) else []
-        )
+        for key, raw_value in (raw_results.items() if isinstance(raw_results, Mapping) else [])
         if (value := _as_float(raw_value)) is not None
     }
     speed = _python_value(getattr(metrics, "speed", {}))
@@ -325,9 +322,5 @@ def run_ultralytics_validation(
     metrics = model.val(**val_args)
     payload = extract_ultralytics_validation(metrics, task=task)
     artifact_paths = write_ultralytics_validation_artifacts(output_directory, payload)
-    plot_paths = sorted(
-        str(path)
-        for path in output_directory.glob("*.png")
-        if path.is_file()
-    )
+    plot_paths = sorted(str(path) for path in output_directory.glob("*.png") if path.is_file())
     return payload, artifact_paths, plot_paths

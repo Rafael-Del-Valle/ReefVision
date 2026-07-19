@@ -101,9 +101,7 @@ def boundary_metrics(
     recall = float(np.mean(ground_truth_distances <= tolerance_pixels))
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
     hausdorff = float(max(np.max(prediction_distances), np.max(ground_truth_distances)))
-    average_distance = float(
-        (np.mean(prediction_distances) + np.mean(ground_truth_distances)) / 2
-    )
+    average_distance = float((np.mean(prediction_distances) + np.mean(ground_truth_distances)) / 2)
     return BoundaryMetrics(precision, recall, f1, hausdorff, average_distance)
 
 
@@ -155,10 +153,15 @@ def confidence_calibration(
         lower = index / bin_count
         upper = (index + 1) / bin_count
 
-        def in_current_bin(confidence: float) -> bool:
-            if index == bin_count - 1:
-                return lower <= confidence <= upper
-            return lower <= confidence < upper
+        def in_current_bin(
+            confidence: float,
+            lower_bound: float = lower,
+            upper_bound: float = upper,
+            final_bin: bool = index == bin_count - 1,
+        ) -> bool:
+            if final_bin:
+                return lower_bound <= confidence <= upper_bound
+            return lower_bound <= confidence < upper_bound
 
         selected = [
             (float(confidence), bool(matched))

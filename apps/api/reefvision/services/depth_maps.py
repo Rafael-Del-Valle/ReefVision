@@ -290,9 +290,7 @@ class DepthMapService:
         )
         median = float(np.median(selected))
         relative_index = (
-            float(np.sum((selected / median) ** 2))
-            if median != 0 and np.isfinite(median)
-            else None
+            float(np.sum((selected / median) ** 2)) if median != 0 and np.isfinite(median) else None
         )
         warnings: list[str] = []
         intrinsics = _intrinsics(dict(depth_map.metadata_json or {}))

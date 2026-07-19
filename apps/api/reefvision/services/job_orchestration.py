@@ -20,9 +20,7 @@ ACTIVE_JOB_STATUSES = frozenset(
 ALLOWED_JOB_TRANSITIONS: dict[str, frozenset[str]] = {
     "queued": frozenset({"blocked", "running", "cancelled"}),
     "blocked": frozenset({"queued", "cancelled"}),
-    "running": frozenset(
-        {"pause_requested", "cancel_requested", "succeeded", "failed"}
-    ),
+    "running": frozenset({"pause_requested", "cancel_requested", "succeeded", "failed"}),
     "pause_requested": frozenset({"paused", "cancel_requested", "failed"}),
     "paused": frozenset({"queued", "cancelled"}),
     "cancel_requested": frozenset({"cancelled", "failed", "succeeded"}),
@@ -194,9 +192,7 @@ class JobOrchestrationService:
             }
             for dependency, upstream in rows
         ]
-        return all(
-            item["required_status"] == item["actual_status"] for item in details
-        ), details
+        return all(item["required_status"] == item["actual_status"] for item in details), details
 
     def refresh_blocked_state(self, job_id: str) -> Job:
         job = self.get(job_id)

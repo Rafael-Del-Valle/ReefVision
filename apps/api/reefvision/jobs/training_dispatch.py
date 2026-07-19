@@ -54,9 +54,7 @@ def _process_ultralytics_training(
         run = session.get(TrainingRun, run_id)
         if run is None:
             return False
-        requested_tuning = normalize_tuning_config(
-            getattr(run, "tuning_config_json", None)
-        )
+        requested_tuning = normalize_tuning_config(getattr(run, "tuning_config_json", None))
 
     tuning_artifact = None
     if requested_tuning["mode"] != "disabled":

@@ -27,10 +27,7 @@ export interface MeasurementCalibrationUpdate {
   notes?: string | null;
 }
 
-export type SurfaceModelKind =
-  | "none"
-  | "extruded"
-  | "cylindrical_centerline";
+export type SurfaceModelKind = "none" | "extruded" | "cylindrical_centerline";
 
 export interface MaskMeasurementProfile {
   mask_annotation_id: string;
@@ -165,7 +162,9 @@ export async function updateMeasurementCalibration(
   return (await response.json()) as MeasurementCalibration;
 }
 
-export async function clearMeasurementCalibration(imageId: string): Promise<void> {
+export async function clearMeasurementCalibration(
+  imageId: string,
+): Promise<void> {
   const response = await fetch(
     `${getApiBaseUrl()}/images/${encodeURIComponent(imageId)}/measurement-calibration`,
     { method: "DELETE" },

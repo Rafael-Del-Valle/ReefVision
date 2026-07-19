@@ -22,9 +22,7 @@ class ProjectIntegrityRuntimeService(ProjectIntegrityService):
     def _inspect_jobs(self, project_id: str, stale_job_minutes: int) -> None:
         jobs = list(
             self.session.scalars(
-                select(Job)
-                .where(Job.project_id == project_id)
-                .order_by(Job.created_at, Job.id)
+                select(Job).where(Job.project_id == project_id).order_by(Job.created_at, Job.id)
             )
         )
         self.categories["job"].record_count = len(jobs)

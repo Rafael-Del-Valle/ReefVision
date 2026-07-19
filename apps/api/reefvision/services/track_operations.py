@@ -90,9 +90,7 @@ class TrackOperationService:
         track.frame_start = min(event.frame_index for event in events)
         track.frame_end = max(event.frame_index for event in events)
         confidences = [event.confidence for event in events if event.confidence is not None]
-        track.confidence_mean = (
-            sum(confidences) / len(confidences) if confidences else None
-        )
+        track.confidence_mean = sum(confidences) / len(confidences) if confidences else None
         track.updated_at = datetime.now(UTC)
 
     def split(self, track_id: str, request: TrackSplitRequest) -> TrackOperationResponse:

@@ -7,7 +7,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (init?.body && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
-  const response = await fetch(`${getApiBaseUrl()}${path}`, { ...init, headers });
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    ...init,
+    headers,
+  });
   if (!response.ok) {
     let message = `Request failed with HTTP ${response.status}`;
     try {
@@ -253,10 +256,7 @@ export function getWorkflowTemplates() {
   return request<WorkflowTemplate[]>("/workflow-templates");
 }
 
-export function validateWorkflow(
-  projectId: string,
-  payload: object,
-) {
+export function validateWorkflow(projectId: string, payload: object) {
   return request<WorkflowValidation>(
     `/projects/${projectId}/workflows/validate`,
     { method: "POST", body: JSON.stringify(payload) },

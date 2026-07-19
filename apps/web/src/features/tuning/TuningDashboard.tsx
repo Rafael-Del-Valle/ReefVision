@@ -110,7 +110,9 @@ export function TuningDashboard({ project }: { project: Project }) {
           setParseError(null);
         } catch (error) {
           const message =
-            error instanceof Error ? error.message : "Invalid search-space JSON";
+            error instanceof Error
+              ? error.message
+              : "Invalid search-space JSON";
           setParseError(message);
           throw new Error(message);
         }
@@ -138,7 +140,10 @@ export function TuningDashboard({ project }: { project: Project }) {
     () =>
       (runs.data ?? []).filter((run) => {
         const config = asRecord(run.tuning_config_json);
-        return config.mode === "ultralytics" || asRecord(run.artifact_manifest_json).tuning;
+        return (
+          config.mode === "ultralytics" ||
+          asRecord(run.artifact_manifest_json).tuning
+        );
       }),
     [runs.data],
   );
@@ -150,8 +155,8 @@ export function TuningDashboard({ project }: { project: Project }) {
           <p className="eyebrow">Ultralytics model development</p>
           <h3>Hyperparameter tuning</h3>
           <span>
-            Configure reproducible trials, preserve fitness history and plots, then
-            train the final model with the best accepted parameters.
+            Configure reproducible trials, preserve fitness history and plots,
+            then train the final model with the best accepted parameters.
           </span>
         </div>
         <span>{tuningRuns.length} tuning runs</span>
@@ -163,7 +168,10 @@ export function TuningDashboard({ project }: { project: Project }) {
             <h4>Training draft</h4>
             <label>
               Draft
-              <select value={draftId} onChange={(event) => setDraftId(event.target.value)}>
+              <select
+                value={draftId}
+                onChange={(event) => setDraftId(event.target.value)}
+              >
                 <option value="">Choose a draft</option>
                 {bootstrap.data?.draft_summaries.map((summary) => (
                   <option key={summary.id} value={summary.id}>
@@ -219,7 +227,9 @@ export function TuningDashboard({ project }: { project: Project }) {
                 max="500"
                 value={epochsPerTrial}
                 disabled={!enabled}
-                onChange={(event) => setEpochsPerTrial(Number(event.target.value))}
+                onChange={(event) =>
+                  setEpochsPerTrial(Number(event.target.value))
+                }
               />
             </label>
             <label>
@@ -261,7 +271,8 @@ export function TuningDashboard({ project }: { project: Project }) {
             </div>
             <p>
               Two-number arrays define continuous ranges. Longer arrays define
-              discrete choices. Remove parameters that should retain their draft values.
+              discrete choices. Remove parameters that should retain their draft
+              values.
             </p>
             <textarea
               rows={24}
@@ -278,9 +289,13 @@ export function TuningDashboard({ project }: { project: Project }) {
               {update.isPending ? "Saving..." : "Save tuning configuration"}
             </button>
             {(parseError || update.error) && (
-              <p className="form-error">{parseError ?? update.error?.message}</p>
+              <p className="form-error">
+                {parseError ?? update.error?.message}
+              </p>
             )}
-            {update.isSuccess && <p>Tuning configuration saved to the draft.</p>}
+            {update.isSuccess && (
+              <p>Tuning configuration saved to the draft.</p>
+            )}
           </article>
 
           <article className="dashboard-card">
@@ -295,7 +310,9 @@ export function TuningDashboard({ project }: { project: Project }) {
             ) : (
               <div className="dashboard-list">
                 {tuningRuns.map((run) => {
-                  const tuning = asRecord(asRecord(run.artifact_manifest_json).tuning);
+                  const tuning = asRecord(
+                    asRecord(run.artifact_manifest_json).tuning,
+                  );
                   return (
                     <div key={run.id} className="dashboard-row">
                       <div>
@@ -304,7 +321,8 @@ export function TuningDashboard({ project }: { project: Project }) {
                           {run.status} · {run.stage} · {run.architecture}
                         </p>
                         <small>
-                          Best fitness: {typeof tuning.best_fitness === "number"
+                          Best fitness:{" "}
+                          {typeof tuning.best_fitness === "number"
                             ? tuning.best_fitness.toFixed(5)
                             : "pending"}
                         </small>

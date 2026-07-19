@@ -135,9 +135,7 @@ def test_score_breakdown_matches_blended_selection_score() -> None:
 
     assert breakdown[0]["contribution"] == pytest.approx(60.0)
     assert breakdown[1]["contribution"] == pytest.approx(12.5)
-    assert sum(component["contribution"] for component in breakdown) == pytest.approx(
-        72.5
-    )
+    assert sum(component["contribution"] for component in breakdown) == pytest.approx(72.5)
 
 
 def test_review_queue_creation_defaults_to_priority(client: TestClient) -> None:
@@ -235,9 +233,7 @@ def test_project_active_learning_queue_is_compact_and_excludes_reviewed_images(
     )
     assert explained_score == pytest.approx(items[0]["score"], abs=0.2)
 
-    regenerated_response = client.post(
-        f"/api/v1/review-queues/{queue['id']}/regenerate"
-    )
+    regenerated_response = client.post(f"/api/v1/review-queues/{queue['id']}/regenerate")
     assert regenerated_response.status_code == 200, regenerated_response.text
     regenerated = regenerated_response.json()
     assert regenerated["formula_id"] == "active_learning_diversity_v1"

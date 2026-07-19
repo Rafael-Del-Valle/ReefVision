@@ -197,7 +197,9 @@ def _sqlite_lock_probe(settings: Settings) -> dict[str, Any]:
 
 
 def _database_inventory(factory: sessionmaker[Session], settings: Settings) -> dict[str, Any]:
-    output: dict[str, Any] = {"url_backend": make_url(settings.resolved_database_url).get_backend_name()}
+    output: dict[str, Any] = {
+        "url_backend": make_url(settings.resolved_database_url).get_backend_name()
+    }
     try:
         with factory() as session:
             output["quick_check"] = session.scalar(text("PRAGMA quick_check"))
@@ -225,8 +227,7 @@ def _database_inventory(factory: sessionmaker[Session], settings: Settings) -> d
                 or 0
             )
             output["failed_job_count"] = int(
-                session.scalar(select(func.count(Job.id)).where(Job.status == "failed"))
-                or 0
+                session.scalar(select(func.count(Job.id)).where(Job.status == "failed")) or 0
             )
     except Exception as exc:
         output["error"] = str(exc)
@@ -238,9 +239,7 @@ def _environment_inventory() -> dict[str, Any]:
     values: dict[str, Any] = {}
     for key, value in sorted(os.environ.items()):
         normalized = key.upper()
-        if normalized.startswith("REEFVISION_"):
-            values[key] = value
-        elif normalized in {
+        if normalized.startswith("REEFVISION_") or normalized in {
             "CUDA_VISIBLE_DEVICES",
             "CUDA_HOME",
             "CONDA_DEFAULT_ENV",

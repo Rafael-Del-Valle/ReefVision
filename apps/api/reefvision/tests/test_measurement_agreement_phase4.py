@@ -83,15 +83,11 @@ def test_measurement_validation_reports_bland_altman_limits(
             "references": [
                 {
                     "mask_annotation_id": first_mask_id,
-                    "values": [
-                        {"metric": "area_pixels", "reference_value": 190}
-                    ],
+                    "values": [{"metric": "area_pixels", "reference_value": 190}],
                 },
                 {
                     "mask_annotation_id": second_mask_id,
-                    "values": [
-                        {"metric": "area_pixels", "reference_value": 280}
-                    ],
+                    "values": [{"metric": "area_pixels", "reference_value": 280}],
                 },
             ]
         },
@@ -101,9 +97,7 @@ def test_measurement_validation_reports_bland_altman_limits(
     summary = response.json()["summaries"][0]
     expected_standard_deviation = math.sqrt(50)
     assert summary["mean_bias"] == pytest.approx(15)
-    assert summary["standard_deviation_bias"] == pytest.approx(
-        expected_standard_deviation
-    )
+    assert summary["standard_deviation_bias"] == pytest.approx(expected_standard_deviation)
     assert summary["lower_limit_of_agreement"] == pytest.approx(
         15 - 1.96 * expected_standard_deviation
     )

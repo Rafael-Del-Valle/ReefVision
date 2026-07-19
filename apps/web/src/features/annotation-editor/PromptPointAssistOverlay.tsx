@@ -130,7 +130,9 @@ export function PromptPointAssistOverlay({
     const savedModelId = window.localStorage.getItem(storageKey);
     const nextModelId =
       readyModels.find((model) => model.resolved_model_id === savedModelId)
-        ?.resolved_model_id ?? readyModels[0]?.resolved_model_id ?? "";
+        ?.resolved_model_id ??
+      readyModels[0]?.resolved_model_id ??
+      "";
     setModelId((current) =>
       readyModels.some((model) => model.resolved_model_id === current)
         ? current
@@ -158,7 +160,9 @@ export function PromptPointAssistOverlay({
 
   useEffect(() => {
     const findTargets = () => {
-      const svg = document.querySelector<SVGSVGElement>("svg.annotation-canvas");
+      const svg = document.querySelector<SVGSVGElement>(
+        "svg.annotation-canvas",
+      );
       const group = svg?.querySelector<SVGGElement>(":scope > g") ?? null;
       const sidebar = document.querySelector<HTMLElement>(
         ".annotation-editor-sidebar",
@@ -212,14 +216,17 @@ export function PromptPointAssistOverlay({
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
-        setInteractionError("Place at least one Include point before Exclude points.");
+        setInteractionError(
+          "Place at least one Include point before Exclude points.",
+        );
         return;
       }
       const matrix = overlayTarget.getScreenCTM();
       if (!matrix) return;
-      const transformed = new DOMPoint(event.clientX, event.clientY).matrixTransform(
-        matrix.inverse(),
-      );
+      const transformed = new DOMPoint(
+        event.clientX,
+        event.clientY,
+      ).matrixTransform(matrix.inverse());
       const image = annotationSession.data.image;
       if (
         transformed.x < 0 ||
@@ -327,7 +334,9 @@ export function PromptPointAssistOverlay({
     ? `data:image/png;base64,${session.candidate_mask_png_base64}`
     : null;
   const operationError =
-    interactionError ?? previewMutation.error?.message ?? acceptMutation.error?.message;
+    interactionError ??
+    previewMutation.error?.message ??
+    acceptMutation.error?.message;
 
   const panel = (
     <section
@@ -345,9 +354,9 @@ export function PromptPointAssistOverlay({
         </button>
       </div>
       <p className="annotation-helper">
-        Click directly on the image to place the active point type. Alt-click always
-        places an Exclude point. Update preview reruns the selected model from the full
-        point history.
+        Click directly on the image to place the active point type. Alt-click
+        always places an Exclude point. Update preview reruns the selected model
+        from the full point history.
       </p>
       <label>
         Assist model
@@ -363,7 +372,10 @@ export function PromptPointAssistOverlay({
             <option value="">No ready Smart Mask models</option>
           ) : (
             readyModels.map((model) => (
-              <option key={model.catalog_id} value={model.resolved_model_id ?? ""}>
+              <option
+                key={model.catalog_id}
+                value={model.resolved_model_id ?? ""}
+              >
                 {model.display_name}
               </option>
             ))
@@ -471,15 +483,19 @@ export function PromptPointAssistOverlay({
       )}
       {session?.candidate_box && !candidateStale && (
         <p className="form-success">
-          Candidate ready via {session.provider_name}; {session.positive_point_count}{" "}
-          positive and {session.negative_point_count} negative prompts were applied.
+          Candidate ready via {session.provider_name};{" "}
+          {session.positive_point_count} positive and{" "}
+          {session.negative_point_count} negative prompts were applied.
         </p>
       )}
       {operationError && <p className="form-error">{operationError}</p>}
       {modelCatalog.error && (
         <p className="form-error">{modelCatalog.error.message}</p>
       )}
-      <div className="annotation-selection-list" aria-label="Point prompt history">
+      <div
+        className="annotation-selection-list"
+        aria-label="Point prompt history"
+      >
         {[...points].reverse().map((point, index) => (
           <div key={point.id} className="annotation-selection-row">
             <div>

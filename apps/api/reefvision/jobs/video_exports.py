@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import shutil
-from collections import defaultdict, deque
+from collections import deque
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -112,10 +111,10 @@ class TrackInterpolator:
 
 def _clip_box(state: BoxState, width: int, height: int) -> tuple[int, int, int, int]:
     return (
-        max(0, min(width - 1, int(round(state.x_min)))),
-        max(0, min(height - 1, int(round(state.y_min)))),
-        max(0, min(width - 1, int(round(state.x_max)))),
-        max(0, min(height - 1, int(round(state.y_max)))),
+        max(0, min(width - 1, round(state.x_min))),
+        max(0, min(height - 1, round(state.y_min))),
+        max(0, min(width - 1, round(state.x_max))),
+        max(0, min(height - 1, round(state.y_max))),
     )
 
 
@@ -138,8 +137,8 @@ def _build_heatmap(
             if state is None:
                 continue
             center_x, center_y = state.center
-            x = max(0, min(width - 1, int(round(center_x))))
-            y = max(0, min(height - 1, int(round(center_y))))
+            x = max(0, min(width - 1, round(center_x)))
+            y = max(0, min(height - 1, round(center_y)))
             density[y, x] += 1.0
     if not np.any(density):
         return np.zeros((height, width, 3), dtype=np.uint8)
@@ -298,7 +297,7 @@ def process_video_render_export_job(
                 track = interpolator.track
                 color = _color(track.id)
                 x_min, y_min, x_max, y_max = _clip_box(state, width, height)
-                center = (int(round((x_min + x_max) / 2)), int(round((y_min + y_max) / 2)))
+                center = (round((x_min + x_max) / 2), round((y_min + y_max) / 2))
                 histories[track.id].append(center)
                 if export_kind == "annotated":
                     cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, thickness)

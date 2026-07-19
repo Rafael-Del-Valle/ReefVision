@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 from collections import defaultdict
 from math import dist
 
@@ -33,12 +34,8 @@ def analyze_depth_tracks(
         points = [
             DepthTrackPoint3D(
                 frame_index=sample.frame_index,
-                x=(sample.center_x_px - intrinsics.cx_px)
-                * sample.depth
-                / intrinsics.fx_px,
-                y=(sample.center_y_px - intrinsics.cy_px)
-                * sample.depth
-                / intrinsics.fy_px,
+                x=(sample.center_x_px - intrinsics.cx_px) * sample.depth / intrinsics.fx_px,
+                y=(sample.center_y_px - intrinsics.cy_px) * sample.depth / intrinsics.fy_px,
                 z=sample.depth,
             )
             for sample in samples
@@ -47,7 +44,7 @@ def analyze_depth_tracks(
         maximum_speed = 0.0
         valid_duration = 0.0
         skipped_gap_count = 0
-        for first, second in zip(points, points[1:], strict=False):
+        for first, second in itertools.pairwise(points):
             frame_gap = second.frame_index - first.frame_index
             if frame_gap <= 0:
                 continue

@@ -242,11 +242,7 @@ export interface LabelClassCreate {
 }
 
 export type AnnotationStatus =
-  | "unannotated"
-  | "in_progress"
-  | "annotated"
-  | "reviewed"
-  | "excluded";
+  "unannotated" | "in_progress" | "annotated" | "reviewed" | "excluded";
 
 export interface ProjectImage {
   id: string;
@@ -366,11 +362,7 @@ export interface AnnotationSaveResponse {
 }
 
 export type ModelPurpose =
-  | "detector"
-  | "segmenter"
-  | "semantic_segmenter"
-  | "classifier"
-  | "assist";
+  "detector" | "segmenter" | "semantic_segmenter" | "classifier" | "assist";
 
 export interface ModelRegistration {
   id: string;
@@ -394,9 +386,7 @@ export interface ModelRegistration {
 }
 
 export type ModelCatalogCategory =
-  | "pretrained_catalog"
-  | "my_trained_models"
-  | "imported_custom_models";
+  "pretrained_catalog" | "my_trained_models" | "imported_custom_models";
 
 export type ModelCatalogTask =
   | "detect"
@@ -432,11 +422,7 @@ export type ModelCatalogSelectionKind =
   | "planned_unavailable";
 
 export type ModelCatalogWorkflow =
-  | "training"
-  | "prompt_assist"
-  | "smart_mask"
-  | "video"
-  | "model_hub";
+  "training" | "prompt_assist" | "smart_mask" | "video" | "model_hub";
 
 export interface ModelCatalogEntry {
   catalog_id: string;
@@ -860,10 +846,7 @@ export interface ReviewScoreComponent {
 }
 
 export type ReviewQueueItemState =
-  | "pending"
-  | "in_progress"
-  | "completed"
-  | "skipped";
+  "pending" | "in_progress" | "completed" | "skipped";
 
 export interface ReviewQueueRecord {
   id: string;
@@ -1849,10 +1832,13 @@ export async function previewClassReassignment(
     notes?: string | null;
   },
 ): Promise<ClassOperationRecord> {
-  return request<ClassOperationRecord>(`/classes/${sourceClassId}/reassign/preview`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  return request<ClassOperationRecord>(
+    `/classes/${sourceClassId}/reassign/preview`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export async function executeClassReassignment(
@@ -1874,9 +1860,12 @@ export async function executeClassReassignment(
 export async function rollbackClassOperation(
   operationId: string,
 ): Promise<ClassOperationRecord> {
-  return request<ClassOperationRecord>(`/class-operations/${operationId}/rollback`, {
-    method: "POST",
-  });
+  return request<ClassOperationRecord>(
+    `/class-operations/${operationId}/rollback`,
+    {
+      method: "POST",
+    },
+  );
 }
 
 export async function deleteLabelClass(classId: string): Promise<void> {
@@ -1887,9 +1876,12 @@ export async function getClassVisibility(
   projectId: string,
   signal?: AbortSignal,
 ): Promise<ClassVisibilityBundle> {
-  return request<ClassVisibilityBundle>(`/projects/${projectId}/class-visibility`, {
-    signal,
-  });
+  return request<ClassVisibilityBundle>(
+    `/projects/${projectId}/class-visibility`,
+    {
+      signal,
+    },
+  );
 }
 
 export async function updateUserClassVisibility(
@@ -1996,10 +1988,13 @@ export async function importImagesFromPaths(
   projectId: string,
   sources: ImageImportSource[],
 ): Promise<ImageImportReport> {
-  return request<ImageImportReport>(`/projects/${projectId}/imports/image-paths`, {
-    method: "POST",
-    body: JSON.stringify({ sources }),
-  });
+  return request<ImageImportReport>(
+    `/projects/${projectId}/imports/image-paths`,
+    {
+      method: "POST",
+      body: JSON.stringify({ sources }),
+    },
+  );
 }
 
 export async function getProjectJobs(
@@ -2050,10 +2045,13 @@ export async function registerModelFromRun(
     notes?: string | null;
   },
 ): Promise<ModelRegistration> {
-  return request<ModelRegistration>(`/projects/${projectId}/models/register-from-run`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  return request<ModelRegistration>(
+    `/projects/${projectId}/models/register-from-run`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export async function deleteModel(modelId: string): Promise<void> {
@@ -2102,8 +2100,10 @@ export async function getModelCatalog(
   if (query.task) search.set("task", query.task);
   if (query.provider) search.set("provider", query.provider);
   if (query.architecture) search.set("architecture", query.architecture);
-  if (query.trainable !== undefined) search.set("trainable", String(query.trainable));
-  if (query.inference !== undefined) search.set("inference", String(query.inference));
+  if (query.trainable !== undefined)
+    search.set("trainable", String(query.trainable));
+  if (query.inference !== undefined)
+    search.set("inference", String(query.inference));
   if (query.videoCompatibility !== undefined)
     search.set("video_compatibility", String(query.videoCompatibility));
   if (query.promptAssistCompatibility !== undefined)
@@ -2125,12 +2125,17 @@ export async function getModelCatalog(
 export async function installModelCatalogEntry(
   catalogId: string,
 ): Promise<ModelCatalogInstallResponse> {
-  return request<ModelCatalogInstallResponse>(`/model-catalog/${catalogId}/install`, {
-    method: "POST",
-  });
+  return request<ModelCatalogInstallResponse>(
+    `/model-catalog/${catalogId}/install`,
+    {
+      method: "POST",
+    },
+  );
 }
 
-export async function removeModelCatalogEntry(catalogId: string): Promise<void> {
+export async function removeModelCatalogEntry(
+  catalogId: string,
+): Promise<void> {
   await request<void>(`/model-catalog/${catalogId}`, { method: "DELETE" });
 }
 
@@ -2157,17 +2162,23 @@ export async function getModelCatalogWorkflowEligibility(
 export async function getModelCatalogProviderSummary(
   signal?: AbortSignal,
 ): Promise<ModelCatalogProviderSummary[]> {
-  return request<ModelCatalogProviderSummary[]>("/model-catalog/provider-summary", {
-    signal,
-  });
+  return request<ModelCatalogProviderSummary[]>(
+    "/model-catalog/provider-summary",
+    {
+      signal,
+    },
+  );
 }
 
 export async function getProviderRuntimeStatus(
   signal?: AbortSignal,
 ): Promise<RuntimeProviderStatus[]> {
-  return request<RuntimeProviderStatus[]>("/model-catalog/provider-runtime-status", {
-    signal,
-  });
+  return request<RuntimeProviderStatus[]>(
+    "/model-catalog/provider-runtime-status",
+    {
+      signal,
+    },
+  );
 }
 
 export async function getTrainingProviders(
@@ -2179,9 +2190,12 @@ export async function getTrainingProviders(
 export async function getTrainingWorkspaceStatus(
   signal?: AbortSignal,
 ): Promise<TrainingWorkspaceStatusResponse> {
-  return request<TrainingWorkspaceStatusResponse>("/training/workspace-status", {
-    signal,
-  });
+  return request<TrainingWorkspaceStatusResponse>(
+    "/training/workspace-status",
+    {
+      signal,
+    },
+  );
 }
 
 export async function getTrainingWorkspaceBootstrap(
@@ -2226,10 +2240,13 @@ export async function validateTrainingSearchSpace(payload: {
   provider_id: string;
   search_space: Record<string, unknown>;
 }): Promise<TrainingSearchSpaceValidation> {
-  return request<TrainingSearchSpaceValidation>("/training/search-space/validate", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  return request<TrainingSearchSpaceValidation>(
+    "/training/search-space/validate",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export async function validateUltralyticsTraining(payload: {
@@ -2269,19 +2286,25 @@ export async function preflightTrainingEnvironment(payload: {
   precision: string;
   parameters: Record<string, unknown>;
 }): Promise<TrainingEnvironmentPreflight> {
-  return request<TrainingEnvironmentPreflight>("/training/environment-preflight", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  return request<TrainingEnvironmentPreflight>(
+    "/training/environment-preflight",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export async function getTrainingDrafts(
   projectId: string,
   signal?: AbortSignal,
 ): Promise<TrainingDraftSummary[]> {
-  return request<TrainingDraftSummary[]>(`/projects/${projectId}/training-drafts`, {
-    signal,
-  });
+  return request<TrainingDraftSummary[]>(
+    `/projects/${projectId}/training-drafts`,
+    {
+      signal,
+    },
+  );
 }
 
 export async function getTrainingDraft(
@@ -2351,7 +2374,9 @@ export async function getTrainingRun(
   return request<TrainingRunDetail>(`/training-runs/${runId}`, { signal });
 }
 
-export async function cancelTrainingRun(runId: string): Promise<TrainingRunDetail> {
+export async function cancelTrainingRun(
+  runId: string,
+): Promise<TrainingRunDetail> {
   return request<TrainingRunDetail>(`/training-runs/${runId}/cancel`, {
     method: "POST",
   });
@@ -2361,9 +2386,12 @@ export async function getTrainingRunLogs(
   runId: string,
   signal?: AbortSignal,
 ): Promise<string> {
-  const response = await fetch(`${getApiBaseUrl()}/training-runs/${runId}/logs`, {
-    signal,
-  });
+  const response = await fetch(
+    `${getApiBaseUrl()}/training-runs/${runId}/logs`,
+    {
+      signal,
+    },
+  );
   if (!response.ok) {
     throw new ApiRequestError(`Unable to load logs (HTTP ${response.status})`);
   }
@@ -2395,29 +2423,38 @@ export async function getDatasetVersions(
   projectId: string,
   signal?: AbortSignal,
 ): Promise<DatasetVersionRecord[]> {
-  return request<DatasetVersionRecord[]>(`/projects/${projectId}/dataset-versions`, {
-    signal,
-  });
+  return request<DatasetVersionRecord[]>(
+    `/projects/${projectId}/dataset-versions`,
+    {
+      signal,
+    },
+  );
 }
 
 export async function previewDatasetVersion(
   projectId: string,
   payload: Record<string, unknown>,
 ): Promise<DatasetVersionPreview> {
-  return request<DatasetVersionPreview>(`/projects/${projectId}/dataset-versions/preview`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  return request<DatasetVersionPreview>(
+    `/projects/${projectId}/dataset-versions/preview`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export async function createDatasetVersion(
   projectId: string,
   payload: Record<string, unknown>,
 ): Promise<DatasetVersionRecord> {
-  return request<DatasetVersionRecord>(`/projects/${projectId}/dataset-versions`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  return request<DatasetVersionRecord>(
+    `/projects/${projectId}/dataset-versions`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export async function getDatasetVersionItems(
@@ -2433,9 +2470,12 @@ export async function getDatasetVersionManifest(
   versionId: string,
   signal?: AbortSignal,
 ): Promise<DatasetVersionManifest> {
-  return request<DatasetVersionManifest>(`/dataset-versions/${versionId}/manifest`, {
-    signal,
-  });
+  return request<DatasetVersionManifest>(
+    `/dataset-versions/${versionId}/manifest`,
+    {
+      signal,
+    },
+  );
 }
 
 export async function compareDatasetVersions(
@@ -2454,10 +2494,13 @@ export async function createDatasetExport(
   versionId: string,
   format: DatasetExportFormat,
 ): Promise<DatasetExportCreateResponse> {
-  return request<DatasetExportCreateResponse>(`/dataset-versions/${versionId}/exports`, {
-    method: "POST",
-    body: JSON.stringify({ format }),
-  });
+  return request<DatasetExportCreateResponse>(
+    `/dataset-versions/${versionId}/exports`,
+    {
+      method: "POST",
+      body: JSON.stringify({ format }),
+    },
+  );
 }
 
 export async function getExports(
@@ -2511,9 +2554,12 @@ export async function getQualityControlRuns(
   projectId: string,
   signal?: AbortSignal,
 ): Promise<QualityControlRunRecord[]> {
-  return request<QualityControlRunRecord[]>(`/projects/${projectId}/quality-control-runs`, {
-    signal,
-  });
+  return request<QualityControlRunRecord[]>(
+    `/projects/${projectId}/quality-control-runs`,
+    {
+      signal,
+    },
+  );
 }
 
 export async function getDatasetVersionQualityControlRuns(

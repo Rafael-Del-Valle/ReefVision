@@ -88,7 +88,9 @@ export function TrainingReportsDashboard({ project }: { project: Project }) {
   const [includePlots, setIncludePlots] = useState(true);
   const [includeTuning, setIncludeTuning] = useState(true);
   const [includeProvenance, setIncludeProvenance] = useState(true);
-  const [lastReport, setLastReport] = useState<TrainingReportResult | null>(null);
+  const [lastReport, setLastReport] = useState<TrainingReportResult | null>(
+    null,
+  );
 
   const runs = useQuery({
     queryKey: ["training_report_runs", project.id],
@@ -146,8 +148,8 @@ export function TrainingReportsDashboard({ project }: { project: Project }) {
           <p className="eyebrow">Model development</p>
           <h3>Training reports</h3>
           <span>
-            CoralNet-style class metrics, Ultralytics plots, tuning analysis, and
-            configurable report typography.
+            CoralNet-style class metrics, Ultralytics plots, tuning analysis,
+            and configurable report typography.
           </span>
         </div>
         <span>{completedRuns.length} completed runs</span>
@@ -226,7 +228,9 @@ export function TrainingReportsDashboard({ project }: { project: Project }) {
                 max="24"
                 step="0.5"
                 value={baseFontSize}
-                onChange={(event) => setBaseFontSize(Number(event.target.value))}
+                onChange={(event) =>
+                  setBaseFontSize(Number(event.target.value))
+                }
               />
             </label>
             <label>
@@ -250,7 +254,9 @@ export function TrainingReportsDashboard({ project }: { project: Project }) {
                 max="20"
                 step="0.5"
                 value={tableFontSize}
-                onChange={(event) => setTableFontSize(Number(event.target.value))}
+                onChange={(event) =>
+                  setTableFontSize(Number(event.target.value))
+                }
               />
             </label>
             <label>
@@ -261,7 +267,9 @@ export function TrainingReportsDashboard({ project }: { project: Project }) {
                 max="20"
                 step="0.5"
                 value={figureFontSize}
-                onChange={(event) => setFigureFontSize(Number(event.target.value))}
+                onChange={(event) =>
+                  setFigureFontSize(Number(event.target.value))
+                }
               />
             </label>
           </article>
@@ -274,7 +282,9 @@ export function TrainingReportsDashboard({ project }: { project: Project }) {
               Title
               <input
                 value={title}
-                placeholder={selectedRun ? `${selectedRun.run_name} training report` : ""}
+                placeholder={
+                  selectedRun ? `${selectedRun.run_name} training report` : ""
+                }
                 onChange={(event) => setTitle(event.target.value)}
               />
             </label>
@@ -312,7 +322,9 @@ export function TrainingReportsDashboard({ project }: { project: Project }) {
               disabled={!selectedRun || reportMutation.isPending}
               onClick={() => reportMutation.mutate()}
             >
-              {reportMutation.isPending ? "Generating..." : "Generate HTML report"}
+              {reportMutation.isPending
+                ? "Generating..."
+                : "Generate HTML report"}
             </button>
             {reportMutation.error && (
               <p className="form-error">{reportMutation.error.message}</p>
@@ -384,7 +396,8 @@ export function TrainingReportsDashboard({ project }: { project: Project }) {
             <article className="dashboard-card">
               <h4>Hyperparameter tuning</h4>
               <p>
-                Best fitness: {typeof tuning.best_fitness === "number"
+                Best fitness:{" "}
+                {typeof tuning.best_fitness === "number"
                   ? tuning.best_fitness.toFixed(5)
                   : "Unavailable"}
               </p>

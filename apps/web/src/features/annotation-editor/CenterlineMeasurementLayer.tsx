@@ -25,9 +25,7 @@ interface CenterlineMeasurementLayerProps {
 }
 
 function sourcePoint(
-  event:
-    | ReactPointerEvent<SVGSVGElement>
-    | ReactMouseEvent<SVGSVGElement>,
+  event: ReactPointerEvent<SVGSVGElement> | ReactMouseEvent<SVGSVGElement>,
   width: number,
   height: number,
 ): MeasurementPoint {
@@ -64,9 +62,7 @@ export function CenterlineMeasurementLayer({
       return getMaskMeasurementProfile(maskId, signal);
     },
     enabled:
-      maskId !== null &&
-      Boolean(selectedMask?.persisted) &&
-      !documentDirty,
+      maskId !== null && Boolean(selectedMask?.persisted) && !documentDirty,
     refetchOnWindowFocus: false,
     retry: false,
   });

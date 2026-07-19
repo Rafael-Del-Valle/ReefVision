@@ -39,8 +39,7 @@ class SAM2VideoPropagationService:
             if point.x > video.width_px or point.y > video.height_px:
                 raise ValidationError("Prompt points must remain inside video-frame bounds")
         if payload.prompt_box is not None and (
-            payload.prompt_box.x_max > video.width_px
-            or payload.prompt_box.y_max > video.height_px
+            payload.prompt_box.x_max > video.width_px or payload.prompt_box.y_max > video.height_px
         ):
             raise ValidationError("The prompt box must remain inside video-frame bounds")
 

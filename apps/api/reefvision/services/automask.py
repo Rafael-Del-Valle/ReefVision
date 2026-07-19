@@ -34,9 +34,7 @@ class AutoMaskEditService(RasterMaskEditService):
         project = self.projects.get(image.project_id)
         if project is None:
             raise NotFoundError("Project not found")
-        if payload.label_class_id not in {
-            label_class.id for label_class in project.label_classes
-        }:
+        if payload.label_class_id not in {label_class.id for label_class in project.label_classes}:
             raise ValidationError("Mask class does not belong to this image's project")
 
         existing: MaskAnnotation | None = None
@@ -62,26 +60,24 @@ class AutoMaskEditService(RasterMaskEditService):
             "sample_radius": payload.auto_mask_sample_radius,
         }
         try:
-            relative_path, destination_path, area_pixels, bounds = (
-                write_raster_automask_revision(
-                    self.settings,
-                    project_storage_root=project.storage_root,
-                    source_image_relative_path=image.managed_path,
-                    image_id=image.id,
-                    mask_annotation_id=mask_id,
-                    revision=next_revision,
-                    source_mask_relative_path=source_path,
-                    expected_width=image.width_px,
-                    expected_height=image.height_px,
-                    strokes=payload.strokes,
-                    brush_radius=float(payload.brush_radius),
-                    mode=payload.mode,
-                    color_tolerance=float(payload.auto_mask_color_tolerance),
-                    luminance_tolerance=float(payload.auto_mask_luminance_tolerance),
-                    edge_sensitivity=float(payload.auto_mask_edge_sensitivity),
-                    contiguous=payload.auto_mask_contiguous,
-                    sample_radius=payload.auto_mask_sample_radius,
-                )
+            relative_path, destination_path, area_pixels, bounds = write_raster_automask_revision(
+                self.settings,
+                project_storage_root=project.storage_root,
+                source_image_relative_path=image.managed_path,
+                image_id=image.id,
+                mask_annotation_id=mask_id,
+                revision=next_revision,
+                source_mask_relative_path=source_path,
+                expected_width=image.width_px,
+                expected_height=image.height_px,
+                strokes=payload.strokes,
+                brush_radius=float(payload.brush_radius),
+                mode=payload.mode,
+                color_tolerance=float(payload.auto_mask_color_tolerance),
+                luminance_tolerance=float(payload.auto_mask_luminance_tolerance),
+                edge_sensitivity=float(payload.auto_mask_edge_sensitivity),
+                contiguous=payload.auto_mask_contiguous,
+                sample_radius=payload.auto_mask_sample_radius,
             )
             x_min, y_min, x_max, y_max = bounds
             if existing is None:

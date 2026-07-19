@@ -7,7 +7,6 @@ import hashlib
 import json
 import shutil
 import zipfile
-from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -269,9 +268,7 @@ def write_project_archive(
             "slug": project_row["slug"],
             "storage_root": storage_root,
             "archived_at": (
-                project_row["archived_at"].isoformat()
-                if project_row.get("archived_at")
-                else None
+                project_row["archived_at"].isoformat() if project_row.get("archived_at") else None
             ),
         },
         "notes": notes,
@@ -354,7 +351,10 @@ def inspect_project_archive(
             records = json.loads(records_bytes)
             if manifest.get("format") != "reefvision-project-archive":
                 blockers.append("The archive format identifier is not recognized")
-            if archive.read("COMPLETED").decode("utf-8", errors="replace").strip() != _COMPLETION_MARKER:
+            if (
+                archive.read("COMPLETED").decode("utf-8", errors="replace").strip()
+                != _COMPLETION_MARKER
+            ):
                 blockers.append("The archive completion marker is invalid")
             expected_records_sha = str(manifest.get("records", {}).get("sha256", ""))
             if hashlib.sha256(records_bytes).hexdigest() != expected_records_sha:
@@ -420,7 +420,8 @@ def inspect_project_archive(
     current_revision = _expected_revision()
     if source_revision and current_revision and source_revision != current_revision:
         warnings.append(
-            f"Archive schema revision {source_revision} differs from current head {current_revision}; compatibility was checked column by column."
+            f"Archive schema revision {source_revision} differs from current "
+            f"head {current_revision}; compatibility was checked column by column."
         )
     source_project = manifest.get("source_project") or {}
     return ProjectArchiveVerificationResponse(
@@ -429,9 +430,7 @@ def inspect_project_archive(
         format_version=(str(manifest.get("format_version")) if manifest else None),
         application_version=(str(manifest.get("application_version")) if manifest else None),
         source_schema_revision=(str(source_revision) if source_revision else None),
-        source_project_id=(
-            str(source_project.get("id")) if source_project.get("id") else None
-        ),
+        source_project_id=(str(source_project.get("id")) if source_project.get("id") else None),
         source_project_name=(
             str(source_project.get("name")) if source_project.get("name") else None
         ),
@@ -465,7 +464,7 @@ def _recursive_remap(value: Any, value_map: dict[str, str], old_root: str, new_r
         if value in value_map:
             return value_map[value]
         if value == old_root or value.startswith(f"{old_root}/"):
-            return f"{new_root}{value[len(old_root):]}"
+            return f"{new_root}{value[len(old_root) :]}"
         return value
     if isinstance(value, list):
         return [_recursive_remap(item, value_map, old_root, new_root) for item in value]
@@ -687,7 +686,9 @@ def import_project_archive(
 ) -> dict[str, Any]:
     verification = inspect_project_archive(settings, archive_path)
     if not verification.valid:
-        raise ValidationError("Project archive verification failed: " + "; ".join(verification.blockers))
+        raise ValidationError(
+            "Project archive verification failed: " + "; ".join(verification.blockers)
+        )
     path = resolve_archive_path(settings, archive_path)
     with zipfile.ZipFile(path) as archive:
         manifest = json.loads(archive.read("manifest.json"))
@@ -729,7 +730,9 @@ def import_project_archive(
                     with archive.open(f"files/{relative}") as source, target.open("wb") as output:
                         shutil.copyfileobj(source, output)
                     if _sha256_file(target) != str(file_item["sha256"]):
-                        raise ValidationError(f"Checksum verification failed while extracting {relative}")
+                        raise ValidationError(
+                            f"Checksum verification failed while extracting {relative}"
+                        )
                 temporary.replace(destination)
                 for table in Base.metadata.sorted_tables:
                     table_rows = transformed.get(table.name, [])

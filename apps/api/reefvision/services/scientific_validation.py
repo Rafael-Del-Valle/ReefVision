@@ -57,9 +57,7 @@ def _finite(value: Any) -> float | None:
     return None
 
 
-def _measurement_value(
-    measurement: MaskMeasurementResponse, metric: str
-) -> float | None:
+def _measurement_value(measurement: MaskMeasurementResponse, metric: str) -> float | None:
     aliases = {
         "area": "area_pixels",
         "area_px": "area_pixels",
@@ -101,9 +99,7 @@ def _icc_absolute_agreement(ratings: np.ndarray) -> float | None:
     ms_targets = ss_targets / (targets - 1)
     ms_raters = ss_raters / (raters - 1)
     ms_error = ss_error / ((targets - 1) * (raters - 1))
-    denominator = (
-        ms_targets + (raters - 1) * ms_error + raters * (ms_raters - ms_error) / targets
-    )
+    denominator = ms_targets + (raters - 1) * ms_error + raters * (ms_raters - ms_error) / targets
     if math.isclose(denominator, 0.0, abs_tol=1e-15):
         return 1.0 if np.allclose(ratings, ratings[:, :1]) else None
     return float(np.clip((ms_targets - ms_error) / denominator, -1.0, 1.0))
@@ -124,9 +120,7 @@ def _complete_icc(rows: dict[str, dict[str, list[float]]]) -> float | None:
 def _observer_reliability(
     observations: list[ScientificReferenceObservation],
 ) -> tuple[float | None, float | None]:
-    interobserver_rows: dict[str, dict[str, list[float]]] = defaultdict(
-        lambda: defaultdict(list)
-    )
+    interobserver_rows: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     by_observer: dict[str, list[ScientificReferenceObservation]] = defaultdict(list)
     for observation in observations:
         interobserver_rows[observation.specimen_id][observation.observer_id].append(
@@ -136,9 +130,7 @@ def _observer_reliability(
     interobserver = _complete_icc(interobserver_rows)
     intraobserver_values: list[float] = []
     for observer_rows in by_observer.values():
-        matrix: dict[str, dict[str, list[float]]] = defaultdict(
-            lambda: defaultdict(list)
-        )
+        matrix: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
         for row in observer_rows:
             matrix[row.specimen_id][row.session_id].append(row.reference_value)
         value = _complete_icc(matrix)
@@ -201,12 +193,8 @@ class ScientificValidationService:
         resolved: list[ScientificObservationResult] = []
         blockers: list[str] = []
         warnings: list[str] = []
-        observations_by_metric: dict[str, list[ScientificReferenceObservation]] = (
-            defaultdict(list)
-        )
-        measurement_cache: dict[
-            str, tuple[MaskAnnotation, MaskMeasurementResponse] | None
-        ] = {}
+        observations_by_metric: dict[str, list[ScientificReferenceObservation]] = defaultdict(list)
+        measurement_cache: dict[str, tuple[MaskAnnotation, MaskMeasurementResponse] | None] = {}
 
         for observation in request.observations:
             observations_by_metric[observation.metric].append(observation)
@@ -223,9 +211,7 @@ class ScientificValidationService:
                         try:
                             cached = (
                                 mask,
-                                self.measurements.measure(
-                                    observation.mask_annotation_id
-                                ),
+                                self.measurements.measure(observation.mask_annotation_id),
                             )
                         except (NotFoundError, ValidationError) as exc:
                             warnings.append(
@@ -263,9 +249,7 @@ class ScientificValidationService:
                     if measurement is not None and mask is not None
                     else None,
                     measurement_revision=(
-                        mask.revision
-                        if measurement is not None and mask is not None
-                        else None
+                        mask.revision if measurement is not None and mask is not None else None
                     ),
                     reference_value=observation.reference_value,
                     predicted_value=float(predicted),
@@ -289,16 +273,10 @@ class ScientificValidationService:
             rows = [item for item in resolved if item.metric == metric]
             threshold = request.thresholds[metric]
             if rows:
-                reference = np.asarray(
-                    [item.reference_value for item in rows], dtype=np.float64
-                )
-                predicted = np.asarray(
-                    [item.predicted_value for item in rows], dtype=np.float64
-                )
+                reference = np.asarray([item.reference_value for item in rows], dtype=np.float64)
+                predicted = np.asarray([item.predicted_value for item in rows], dtype=np.float64)
             else:
-                failures.append(
-                    "No observations have both reference and predicted values."
-                )
+                failures.append("No observations have both reference and predicted values.")
                 reference = np.asarray([0.0], dtype=np.float64)
                 predicted = np.asarray([0.0], dtype=np.float64)
             errors = predicted - reference
@@ -327,16 +305,13 @@ class ScientificValidationService:
             if threshold.maximum_mae is not None and mae > threshold.maximum_mae:
                 failures.append(f"MAE {mae:.6g} exceeds {threshold.maximum_mae:.6g}.")
             if threshold.maximum_rmse is not None and rmse > threshold.maximum_rmse:
-                failures.append(
-                    f"RMSE {rmse:.6g} exceeds {threshold.maximum_rmse:.6g}."
-                )
+                failures.append(f"RMSE {rmse:.6g} exceeds {threshold.maximum_rmse:.6g}.")
             if (
                 threshold.maximum_absolute_bias is not None
                 and abs(bias) > threshold.maximum_absolute_bias
             ):
                 failures.append(
-                    f"Absolute bias {abs(bias):.6g} exceeds "
-                    f"{threshold.maximum_absolute_bias:.6g}."
+                    f"Absolute bias {abs(bias):.6g} exceeds {threshold.maximum_absolute_bias:.6g}."
                 )
             if threshold.maximum_relative_mae_percent is not None:
                 if relative_mae is None:
@@ -379,9 +354,7 @@ class ScientificValidationService:
                         "Depth-assisted metrics require calibration_metadata.depth_source."
                     )
                 if not request.calibration_metadata.get("camera_intrinsics"):
-                    failures.append(
-                        "Metric depth-assisted dimensions require camera_intrinsics."
-                    )
+                    failures.append("Metric depth-assisted dimensions require camera_intrinsics.")
             metric_results.append(
                 ScientificMetricResult(
                     metric=metric,
@@ -441,9 +414,7 @@ class ScientificValidationService:
             "passed": passed,
             "calibration_metadata": request.calibration_metadata,
             "notes": request.notes,
-            "metric_results": [
-                result.model_dump(mode="json") for result in metric_results
-            ],
+            "metric_results": [result.model_dump(mode="json") for result in metric_results],
             "observations": [item.model_dump(mode="json") for item in resolved],
             "warnings": warnings,
             "blockers": blockers,
@@ -456,18 +427,14 @@ class ScientificValidationService:
         if request.persist_report:
             relative_root = f"{project.storage_root}/scientific-reports/{report_id}"
             output_root = resolve_managed_project_path(self.settings, relative_root)
-            temporary = output_root.with_name(
-                f".{output_root.name}.{uuid4().hex[:8]}.tmp"
-            )
+            temporary = output_root.with_name(f".{output_root.name}.{uuid4().hex[:8]}.tmp")
             temporary.mkdir(parents=True, exist_ok=False)
             try:
                 json_path = temporary / "scientific-validation.json"
                 csv_path = temporary / "scientific-observations.csv"
                 html_path = temporary / "scientific-validation.html"
                 json_path.write_bytes(
-                    canonical_json_bytes(
-                        {**report_payload, "report_checksum": report_checksum}
-                    )
+                    canonical_json_bytes({**report_payload, "report_checksum": report_checksum})
                 )
                 with csv_path.open("w", encoding="utf-8", newline="") as handle:
                     fieldnames = list(ScientificObservationResult.model_fields)

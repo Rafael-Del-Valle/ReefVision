@@ -102,16 +102,21 @@ def _patch_provider_catalog() -> None:
                         descriptor,
                         package_version=provider_hub._package_version("sam2"),
                         availability_status=(
-                            "ready" if provider_hub._package_version("sam2") else "dependency_missing"
+                            "ready"
+                            if provider_hub._package_version("sam2")
+                            else "dependency_missing"
                         ),
                         availability_reason=(
                             None
                             if provider_hub._package_version("sam2")
-                            else "Install the optional sam2 package and register a local checkpoint."
+                            else (
+                                "Install the optional sam2 package and register a local checkpoint."
+                            )
                         ),
                         registerable=True,
                         known_limitations=(
-                            "SAM 2 image prompting and managed video propagation require a local checkpoint and inferred Hiera configuration.",
+                            "SAM 2 image prompting and managed video propagation "
+                            "require a local checkpoint and inferred Hiera configuration.",
                             "Packaged Windows operation still requires clean-machine acceptance.",
                         ),
                         desktop_packaging_state="optional_pack_runtime",
@@ -119,7 +124,9 @@ def _patch_provider_catalog() -> None:
                     )
                 )
             elif descriptor.provider_id == "mobilesam":
-                installed = provider_hub._package_version("mobile-sam") or provider_hub._package_version("mobile_sam")
+                installed = provider_hub._package_version(
+                    "mobile-sam"
+                ) or provider_hub._package_version("mobile_sam")
                 output.append(
                     replace(
                         descriptor,
@@ -128,7 +135,10 @@ def _patch_provider_catalog() -> None:
                         availability_reason=(
                             None
                             if installed
-                            else "Install the optional MobileSAM package and register a local checkpoint."
+                            else (
+                                "Install the optional MobileSAM package and register "
+                                "a local checkpoint."
+                            )
                         ),
                         registerable=True,
                         known_limitations=(
@@ -156,7 +166,10 @@ def _patch_provider_catalog() -> None:
                     availability_reason=(
                         None
                         if installed
-                        else "Install the optional EfficientViT-SAM package and register a local checkpoint."
+                        else (
+                            "Install the optional EfficientViT-SAM package and register "
+                            "a local checkpoint."
+                        )
                     ),
                     memory_recommendations=(
                         "L0 and L1 variants are preferred for interactive desktop prompting.",

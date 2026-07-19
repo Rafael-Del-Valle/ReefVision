@@ -69,7 +69,8 @@ export function MeasurementsDashboard({ project }: { project: Project }) {
           <p className="eyebrow">Phase 4</p>
           <h3>Coral measurements</h3>
           <span>
-            Revisioned measurements, scientific summaries, and reference validation
+            Revisioned measurements, scientific summaries, and reference
+            validation
           </span>
         </div>
         <div className="version-actions">
@@ -99,7 +100,10 @@ export function MeasurementsDashboard({ project }: { project: Project }) {
           <article className="dashboard-card">
             <p className="eyebrow">Coverage</p>
             <h4>{summary.data.mask_count} verified masks</h4>
-            <p>{summary.data.calibrated_mask_count} masks have physical calibration.</p>
+            <p>
+              {summary.data.calibrated_mask_count} masks have physical
+              calibration.
+            </p>
           </article>
           <article className="dashboard-card">
             <p className="eyebrow">Pixel geometry</p>
@@ -109,7 +113,8 @@ export function MeasurementsDashboard({ project }: { project: Project }) {
           <article className="dashboard-card">
             <p className="eyebrow">Coral structure</p>
             <h4>
-              {summary.data.total_linear_extension_pixels.toLocaleString()} px TLE
+              {summary.data.total_linear_extension_pixels.toLocaleString()} px
+              TLE
             </h4>
             <p>{summary.data.contained_box_count} contained polyp boxes</p>
           </article>
@@ -140,9 +145,9 @@ export function MeasurementsDashboard({ project }: { project: Project }) {
               </div>
             </div>
             <p>
-              Paste mask IDs and manually measured values. ReefVision reports bias,
-              MAE, RMSE, percentage error, and tolerance pass/fail without altering
-              any annotation.
+              Paste mask IDs and manually measured values. ReefVision reports
+              bias, MAE, RMSE, percentage error, and tolerance pass/fail without
+              altering any annotation.
             </p>
             <label>
               Reference JSON
@@ -157,7 +162,9 @@ export function MeasurementsDashboard({ project }: { project: Project }) {
               disabled={validation.isPending}
               onClick={() => validation.mutate()}
             >
-              {validation.isPending ? "Validating..." : "Run reference comparison"}
+              {validation.isPending
+                ? "Validating..."
+                : "Run reference comparison"}
             </button>
             {(parseError || validation.error) && (
               <p className="form-error">

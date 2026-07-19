@@ -208,7 +208,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (init?.body && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
-  const response = await fetch(`${getApiBaseUrl()}${path}`, { ...init, headers });
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    ...init,
+    headers,
+  });
   if (!response.ok) {
     let message = `Request failed with HTTP ${response.status}`;
     try {
@@ -245,9 +248,12 @@ export function validateMeasurements(
 }
 
 export function getDatasetVersions(projectId: string, signal?: AbortSignal) {
-  return request<DatasetVersionOption[]>(`/projects/${projectId}/dataset-versions`, {
-    signal,
-  });
+  return request<DatasetVersionOption[]>(
+    `/projects/${projectId}/dataset-versions`,
+    {
+      signal,
+    },
+  );
 }
 
 export function previewClassification(
@@ -281,10 +287,13 @@ export function createClassificationTraining(
 }
 
 export function registerClassifier(projectId: string, trainingRunId: string) {
-  return request<ModelRecord>(`/projects/${projectId}/classifiers/register-from-run`, {
-    method: "POST",
-    body: JSON.stringify({ training_run_id: trainingRunId }),
-  });
+  return request<ModelRecord>(
+    `/projects/${projectId}/classifiers/register-from-run`,
+    {
+      method: "POST",
+      body: JSON.stringify({ training_run_id: trainingRunId }),
+    },
+  );
 }
 
 export function getTrainingRuns(projectId: string, signal?: AbortSignal) {
@@ -302,9 +311,12 @@ export function getJob(jobId: string, signal?: AbortSignal) {
 }
 
 export function getImages(projectId: string, signal?: AbortSignal) {
-  return request<ImagePage>(`/projects/${projectId}/images?page=1&page_size=100`, {
-    signal,
-  });
+  return request<ImagePage>(
+    `/projects/${projectId}/images?page=1&page_size=100`,
+    {
+      signal,
+    },
+  );
 }
 
 export function createClassificationInference(
@@ -358,14 +370,20 @@ export function getVideoTracks(videoId: string, signal?: AbortSignal) {
   return request<VideoTrack[]>(`/videos/${videoId}/tracks`, { signal });
 }
 
-export function createVideoTrack(videoId: string, payload: Record<string, unknown>) {
+export function createVideoTrack(
+  videoId: string,
+  payload: Record<string, unknown>,
+) {
   return request<VideoTrack>(`/videos/${videoId}/tracks`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export function updateVideoTrack(trackId: string, payload: Record<string, unknown>) {
+export function updateVideoTrack(
+  trackId: string,
+  payload: Record<string, unknown>,
+) {
   return request<VideoTrack>(`/video-tracks/${trackId}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
@@ -376,21 +394,30 @@ export function deleteVideoTrack(trackId: string) {
   return request<void>(`/video-tracks/${trackId}`, { method: "DELETE" });
 }
 
-export function calibrateVideo(videoId: string, payload: Record<string, unknown>) {
+export function calibrateVideo(
+  videoId: string,
+  payload: Record<string, unknown>,
+) {
   return request<VideoAsset>(`/videos/${videoId}/calibration`, {
     method: "PUT",
     body: JSON.stringify(payload),
   });
 }
 
-export function createVideoTracking(videoId: string, payload: Record<string, unknown>) {
+export function createVideoTracking(
+  videoId: string,
+  payload: Record<string, unknown>,
+) {
   return request<JobRecord>(`/videos/${videoId}/tracking-jobs`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export function analyzeVideo(videoId: string, payload: Record<string, unknown>) {
+export function analyzeVideo(
+  videoId: string,
+  payload: Record<string, unknown>,
+) {
   return request<VideoAnalytics>(`/videos/${videoId}/analytics`, {
     method: "POST",
     body: JSON.stringify(payload),

@@ -96,7 +96,9 @@ def artifact_content(
         "ETag": artifact.checksum,
     }
     if media_type in {"text/html", "application/xhtml+xml"}:
-        headers["Content-Security-Policy"] = "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'"
+        headers["Content-Security-Policy"] = (
+            "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'"
+        )
     return FileResponse(path, media_type=media_type, headers=headers)
 
 

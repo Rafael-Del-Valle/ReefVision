@@ -97,9 +97,7 @@ def import_classifier(
     model.class_map_json = {
         **dict(model.class_map_json or {}),
         "classification_mode": classification_mode,
-        "state_labels": ["open", "closed"]
-        if classification_mode == "binary_state"
-        else [],
+        "state_labels": ["open", "closed"] if classification_mode == "binary_state" else [],
     }
     model.metadata_json = {
         **dict(model.metadata_json or {}),

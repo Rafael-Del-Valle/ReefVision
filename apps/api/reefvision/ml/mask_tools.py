@@ -96,9 +96,12 @@ def normalize_ring(
     area = signed_area(cleaned)
     if not allow_zero_area and math.isclose(area, 0.0, abs_tol=1e-12):
         raise ValidationError("Polygon ring has zero area")
-    if clockwise is not None and not math.isclose(area, 0.0, abs_tol=1e-12):
-        if (area < 0) != clockwise:
-            cleaned.reverse()
+    if (
+        clockwise is not None
+        and not math.isclose(area, 0.0, abs_tol=1e-12)
+        and (area < 0) != clockwise
+    ):
+        cleaned.reverse()
     if close:
         cleaned.append(cleaned[0])
     return cleaned
@@ -129,9 +132,7 @@ def _point_line_distance(point: Point, start: Point, end: Point) -> float:
         return math.dist(point, start)
     dx = end[0] - start[0]
     dy = end[1] - start[1]
-    numerator = abs(
-        dy * point[0] - dx * point[1] + end[0] * start[1] - end[1] * start[0]
-    )
+    numerator = abs(dy * point[0] - dx * point[1] + end[0] * start[1] - end[1] * start[0])
     return numerator / math.hypot(dx, dy)
 
 
@@ -178,9 +179,7 @@ def _on_segment(a: Point, b: Point, p: Point, epsilon: float = 1e-9) -> bool:
 def segments_intersect(a: Point, b: Point, c: Point, d: Point) -> bool:
     ab_c, ab_d = _orientation(a, b, c), _orientation(a, b, d)
     cd_a, cd_b = _orientation(c, d, a), _orientation(c, d, b)
-    if (ab_c > 0 > ab_d or ab_d > 0 > ab_c) and (
-        cd_a > 0 > cd_b or cd_b > 0 > cd_a
-    ):
+    if (ab_c > 0 > ab_d or ab_d > 0 > ab_c) and (cd_a > 0 > cd_b or cd_b > 0 > cd_a):
         return True
     return any(
         (
@@ -219,9 +218,7 @@ def convex_hull(points: Iterable[Point]) -> Ring:
         raise ValidationError("Convex-hull repair requires at least three distinct points")
 
     def cross(origin: Point, a: Point, b: Point) -> float:
-        return (a[0] - origin[0]) * (b[1] - origin[1]) - (
-            a[1] - origin[1]
-        ) * (b[0] - origin[0])
+        return (a[0] - origin[0]) * (b[1] - origin[1]) - (a[1] - origin[1]) * (b[0] - origin[0])
 
     lower: Ring = []
     for point in unique:
@@ -456,9 +453,7 @@ def flood_select(
 ) -> np.ndarray:
     array = np.asarray(image, dtype=np.float32)
     if array.ndim not in {2, 3}:
-        raise ValidationError(
-            "Flood selection requires grayscale or multichannel image data"
-        )
+        raise ValidationError("Flood selection requires grayscale or multichannel image data")
     height, width = array.shape[:2]
     if not (0 <= seed_x < width and 0 <= seed_y < height):
         raise ValidationError("Flood-selection seed lies outside the image")

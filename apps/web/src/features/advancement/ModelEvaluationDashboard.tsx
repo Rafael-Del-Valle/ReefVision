@@ -53,13 +53,20 @@ export function ModelEvaluationDashboard({ project }: { project: Project }) {
   );
   const knownEmbeddingModels = useMemo(
     () =>
-      [...new Set(embeddings.data?.map((item) => item.embedding_model_id) ?? [])].sort(),
+      [
+        ...new Set(
+          embeddings.data?.map((item) => item.embedding_model_id) ?? [],
+        ),
+      ].sort(),
     [embeddings.data],
   );
   const classNameById = useMemo(
     () =>
       Object.fromEntries(
-        project.label_classes.map((labelClass) => [labelClass.id, labelClass.name]),
+        project.label_classes.map((labelClass) => [
+          labelClass.id,
+          labelClass.name,
+        ]),
       ),
     [project.label_classes],
   );
@@ -92,7 +99,8 @@ export function ModelEvaluationDashboard({ project }: { project: Project }) {
         setParseError(null);
         return selectEmbeddingDiversity(project.id, {
           embedding_model_id: embeddingModelId,
-          candidate_image_ids: images.data?.items.map((image) => image.id) ?? [],
+          candidate_image_ids:
+            images.data?.items.map((image) => image.id) ?? [],
           maximum_items: maximumItems,
           diversity_weight: diversityWeight,
           base_scores: parsed,
@@ -119,8 +127,8 @@ export function ModelEvaluationDashboard({ project }: { project: Project }) {
           <p className="eyebrow">Phases 3, 5, and 7</p>
           <h3>Model evaluation and active-learning diversity</h3>
           <span>
-            Quantify segmentation, classification, calibration, and visual novelty
-            before accepting or retraining models.
+            Quantify segmentation, classification, calibration, and visual
+            novelty before accepting or retraining models.
           </span>
         </div>
         <span>{images.data?.total ?? 0} loaded images</span>
@@ -186,7 +194,9 @@ export function ModelEvaluationDashboard({ project }: { project: Project }) {
               disabled={!segmentationModelId || segmentation.isPending}
               onClick={() => segmentation.mutate()}
             >
-              {segmentation.isPending ? "Evaluating..." : "Evaluate segmentation"}
+              {segmentation.isPending
+                ? "Evaluating..."
+                : "Evaluate segmentation"}
             </button>
           </article>
 
@@ -197,7 +207,9 @@ export function ModelEvaluationDashboard({ project }: { project: Project }) {
               Classifier
               <select
                 value={classificationModelId}
-                onChange={(event) => setClassificationModelId(event.target.value)}
+                onChange={(event) =>
+                  setClassificationModelId(event.target.value)
+                }
               >
                 <option value="">Choose classifier</option>
                 {classifiers.map((model) => (
@@ -243,7 +255,9 @@ export function ModelEvaluationDashboard({ project }: { project: Project }) {
                   min="1"
                   max="5000"
                   value={maximumItems}
-                  onChange={(event) => setMaximumItems(Number(event.target.value))}
+                  onChange={(event) =>
+                    setMaximumItems(Number(event.target.value))
+                  }
                 />
               </label>
               <label>
@@ -254,7 +268,9 @@ export function ModelEvaluationDashboard({ project }: { project: Project }) {
                   max="1"
                   step="0.05"
                   value={diversityWeight}
-                  onChange={(event) => setDiversityWeight(Number(event.target.value))}
+                  onChange={(event) =>
+                    setDiversityWeight(Number(event.target.value))
+                  }
                 />
               </label>
               <label>
@@ -283,7 +299,9 @@ export function ModelEvaluationDashboard({ project }: { project: Project }) {
             >
               {diversity.isPending ? "Selecting..." : "Select diverse batch"}
             </button>
-            <p>{embeddings.data?.length ?? 0} stored embeddings match the filter.</p>
+            <p>
+              {embeddings.data?.length ?? 0} stored embeddings match the filter.
+            </p>
           </article>
         </div>
 
@@ -298,11 +316,19 @@ export function ModelEvaluationDashboard({ project }: { project: Project }) {
                 <span>Dice {percentage(segmentation.data.mean_dice)}</span>
               </div>
               <div className="version-preview-metrics">
-                <span>Precision {percentage(segmentation.data.instance_precision)}</span>
-                <span>Recall {percentage(segmentation.data.instance_recall)}</span>
+                <span>
+                  Precision {percentage(segmentation.data.instance_precision)}
+                </span>
+                <span>
+                  Recall {percentage(segmentation.data.instance_recall)}
+                </span>
                 <span>{segmentation.data.matched_count} matches</span>
-                <span>{segmentation.data.false_positive_count} false positives</span>
-                <span>{segmentation.data.false_negative_count} false negatives</span>
+                <span>
+                  {segmentation.data.false_positive_count} false positives
+                </span>
+                <span>
+                  {segmentation.data.false_negative_count} false negatives
+                </span>
               </div>
               {segmentation.data.warnings.map((warning) => (
                 <p key={warning} className="form-warning">
@@ -318,7 +344,8 @@ export function ModelEvaluationDashboard({ project }: { project: Project }) {
                     <div>
                       <strong>
                         {item.label_class_id
-                          ? classNameById[item.label_class_id] ?? item.label_class_id
+                          ? (classNameById[item.label_class_id] ??
+                            item.label_class_id)
                           : "Unmapped"}
                       </strong>
                       <p>
@@ -347,7 +374,9 @@ export function ModelEvaluationDashboard({ project }: { project: Project }) {
               </div>
               <div className="version-preview-metrics">
                 <span>Macro F1 {percentage(classification.data.macro_f1)}</span>
-                <span>Weighted F1 {percentage(classification.data.weighted_f1)}</span>
+                <span>
+                  Weighted F1 {percentage(classification.data.weighted_f1)}
+                </span>
                 <span>
                   Calibration error{" "}
                   {percentage(classification.data.expected_calibration_error)}
@@ -368,7 +397,8 @@ export function ModelEvaluationDashboard({ project }: { project: Project }) {
                   <div key={item.label_class_id} className="dashboard-row">
                     <div>
                       <strong>
-                        {classNameById[item.label_class_id] ?? item.label_class_id}
+                        {classNameById[item.label_class_id] ??
+                          item.label_class_id}
                       </strong>
                       <p>
                         Precision {percentage(item.precision)} · Recall{" "}
@@ -390,7 +420,8 @@ export function ModelEvaluationDashboard({ project }: { project: Project }) {
                   <h4>{diversity.data.selected_count} images selected</h4>
                 </div>
                 <span>
-                  {diversity.data.skipped_missing_embedding_count} missing embeddings
+                  {diversity.data.skipped_missing_embedding_count} missing
+                  embeddings
                 </span>
               </div>
               {diversity.data.warnings.map((warning) => (
@@ -425,8 +456,8 @@ export function ModelEvaluationDashboard({ project }: { project: Project }) {
             <div className="empty-state">
               <h4>No evaluation result yet</h4>
               <p>
-                Choose a model or embedding source to quantify its behavior on the
-                current project.
+                Choose a model or embedding source to quantify its behavior on
+                the current project.
               </p>
             </div>
           )}

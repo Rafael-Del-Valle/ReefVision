@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import shutil
 from datetime import UTC, datetime
-from pathlib import Path
 
 from PIL import Image
 from sqlalchemy import select
@@ -57,10 +56,10 @@ def _resolve_class_id(
         if not label_class.is_active:
             continue
         if (
-            (label_class.scientific_name or "").strip().casefold()
-            == source_class.scientific_name.strip().casefold()
-            and (label_class.state_name or "").strip().casefold() == predicted_state
-        ):
+            label_class.scientific_name or ""
+        ).strip().casefold() == source_class.scientific_name.strip().casefold() and (
+            label_class.state_name or ""
+        ).strip().casefold() == predicted_state:
             return label_class.id
     return None
 
@@ -72,11 +71,7 @@ def process_classification_inference_job(
 ) -> bool:
     with factory() as session:
         job = session.get(Job, job_id)
-        if (
-            job is None
-            or job.job_type != "classification_inference"
-            or job.status != "queued"
-        ):
+        if job is None or job.job_type != "classification_inference" or job.status != "queued":
             return False
         request = dict(job.request_json)
         model = session.get(ModelRegistration, str(request.get("model_id", "")))
@@ -100,9 +95,7 @@ def process_classification_inference_job(
         model_checksum = model.sha256
         model_provider = model.provider_name
         model_provider_version = model.provider_version
-        classification_mode = str(
-            model.class_map_json.get("classification_mode", "multiclass")
-        )
+        classification_mode = str(model.class_map_json.get("classification_mode", "multiclass"))
         image_ids = [str(item) for item in request.get("image_ids", [])]
         device = str(request.get("device", "auto"))
         minimum_crop_size_px = int(request.get("minimum_crop_size_px", 10))
@@ -220,7 +213,7 @@ def process_classification_inference_job(
                                     "source_annotation_revision": annotation.revision,
                                     "crop_bbox": [left, top, right, bottom],
                                     "preprocessing_note": (
-                                        f"Crops smaller than {minimum_crop_size_px}×"
+                                        f"Crops smaller than {minimum_crop_size_px}x"
                                         f"{minimum_crop_size_px} pixels were removed during "
                                         "preprocessing."
                                     ),

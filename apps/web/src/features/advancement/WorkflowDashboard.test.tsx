@@ -112,7 +112,9 @@ describe("WorkflowDashboard", () => {
     );
     expect(await screen.findByText(/job job-1/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /validate workflow/i }));
+    await user.click(
+      screen.getByRole("button", { name: /validate workflow/i }),
+    );
     await waitFor(() => expect(validateWorkflow).toHaveBeenCalledTimes(1));
     expect(
       await screen.findByText(/workflow is structurally valid/i),

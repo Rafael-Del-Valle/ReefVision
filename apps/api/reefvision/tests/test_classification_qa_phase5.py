@@ -53,8 +53,7 @@ def test_classification_export_registers_crops_for_qa(client: TestClient) -> Non
         crop_ids = [crop.id for crop in crops]
         assert len(crops) == 2
         assert all(
-            (app.state.settings.resolved_data_dir / crop.managed_path).is_file()
-            for crop in crops
+            (app.state.settings.resolved_data_dir / crop.managed_path).is_file() for crop in crops
         )
         assert all(len(crop.managed_path.rsplit("/", 1)[-1]) <= 32 for crop in crops)
 

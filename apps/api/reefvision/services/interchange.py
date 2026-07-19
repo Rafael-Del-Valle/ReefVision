@@ -33,7 +33,6 @@ from reefvision.schemas.interchange import (
 )
 from reefvision.services.interchange_parsers import (
     ParsedInterchange,
-    SourceAnnotation,
     SourceCategory,
     parse_interchange,
 )
@@ -245,13 +244,18 @@ class InterchangeService:
             if len(source_keys) > 1
         }
         if collisions and request.class_conflict_policy != "merge":
-            for target_id, source_keys in collisions.items():
+            for _target_id, source_keys in collisions.items():
                 for mapping in mappings:
                     if mapping.source_key not in source_keys:
                         continue
-                    if request.class_conflict_policy == "skip" and mapping.source_key != source_keys[0]:
+                    if (
+                        request.class_conflict_policy == "skip"
+                        and mapping.source_key != source_keys[0]
+                    ):
                         mapping.resolution = "skip"
-                        mapping.message = "Skipped because another source category already maps here."
+                        mapping.message = (
+                            "Skipped because another source category already maps here."
+                        )
                         resolved[mapping.source_key] = _SKIP
                     elif request.class_conflict_policy == "error":
                         mapping.resolution = "conflict"
@@ -291,8 +295,8 @@ class InterchangeService:
                 ):
                     status = "dimension_mismatch"
                     message = (
-                        f"Source is {source.width}×{source.height}; managed image is "
-                        f"{target.width_px}×{target.height_px}."
+                        f"Source is {source.width}x{source.height}; managed image is "
+                        f"{target.width_px}x{target.height_px}."
                     )
                 else:
                     status = "matched"
@@ -343,7 +347,8 @@ class InterchangeService:
         missing_matches = [match for match in image_matches if match.status == "missing"]
         if missing_matches:
             warnings.append(
-                f"{len(missing_matches)} source images are not present in the managed project and will be skipped."
+                f"{len(missing_matches)} source images are not present in the "
+                "managed project and will be skipped."
             )
 
         existing_counts: dict[str, int] = {}
@@ -374,7 +379,8 @@ class InterchangeService:
             )
         elif images_with_existing and request.existing_annotation_policy == "skip_image":
             warnings.append(
-                f"{len(images_with_existing)} matched images will be skipped because they already contain annotations."
+                f"{len(images_with_existing)} matched images will be skipped "
+                "because they already contain annotations."
             )
         elif images_with_existing and request.existing_annotation_policy == "append":
             warnings.append(
@@ -448,8 +454,8 @@ class InterchangeService:
     ) -> tuple[str, Path]:
         if mask.shape != (image.height_px, image.width_px):
             raise ValidationError(
-                f"Raster mask dimensions {mask.shape[1]}×{mask.shape[0]} do not match "
-                f"{image.original_filename} ({image.width_px}×{image.height_px})"
+                f"Raster mask dimensions {mask.shape[1]}x{mask.shape[0]} do not match "
+                f"{image.original_filename} ({image.width_px}x{image.height_px})"
             )
         relative = f"{project.storage_root}/masks/imported/{mask_id}.png"
         path = resolve_managed_project_path(self.settings, relative)
@@ -624,7 +630,7 @@ class InterchangeService:
                             y_min=y_min,
                             x_max=x_max,
                             y_max=y_max,
-                            area_pixels=max(1, int(round(_polygon_area(points)))),
+                            area_pixels=max(1, round(_polygon_area(points))),
                             measurement_json={},
                             source_type="external_import",
                             provenance_json=provenance,
@@ -729,7 +735,8 @@ class InterchangeService:
             pass
         x_min, y_min, x_max, y_max = _raster_bounds(array)
         warnings.append(
-            f"Raster mask {mask.id} was exported as its bounding polygon because contour extraction was unavailable."
+            f"Raster mask {mask.id} was exported as its bounding polygon because "
+            "contour extraction was unavailable."
         )
         return [
             [x_min, y_min],
@@ -747,7 +754,9 @@ class InterchangeService:
         image_query = select(ImageAsset).where(ImageAsset.project_id == project_id)
         if request.image_ids:
             image_query = image_query.where(ImageAsset.id.in_(request.image_ids))
-        images = list(self.session.scalars(image_query.order_by(ImageAsset.created_at, ImageAsset.id)))
+        images = list(
+            self.session.scalars(image_query.order_by(ImageAsset.created_at, ImageAsset.id))
+        )
         if request.image_ids and len(images) != len(set(request.image_ids)):
             raise ValidationError("One or more export image IDs are missing")
         class_query = select(LabelClass).where(LabelClass.project_id == project_id)
@@ -936,7 +945,9 @@ class InterchangeService:
                 ids = np.zeros((image.height_px, image.width_px), dtype=np.int64)
                 segments: list[dict[str, Any]] = []
                 geometries: list[tuple[str, Any, str]] = []
-                geometries.extend(("box", item, item.label_class_id) for item in boxes_by_image[image.id])
+                geometries.extend(
+                    ("box", item, item.label_class_id) for item in boxes_by_image[image.id]
+                )
                 geometries.extend(
                     ("mask", item, str(item.label_class_id))
                     for item in masks_by_image[image.id]
@@ -956,7 +967,10 @@ class InterchangeService:
                         mask_image = Image.new("1", (image.width_px, image.height_px), 0)
                         draw = ImageDraw.Draw(mask_image)
                         draw.polygon(
-                            [(float(point[0]), float(point[1])) for point in geometry.polygon_json or []],
+                            [
+                                (float(point[0]), float(point[1]))
+                                for point in geometry.polygon_json or []
+                            ],
                             fill=1,
                         )
                         mask_array = np.asarray(mask_image, dtype=bool)
@@ -1194,7 +1208,8 @@ class InterchangeService:
                 width = (box.x_max - box.x_min) / image.width_px
                 height = (box.y_max - box.y_min) / image.height_px
                 lines.append(
-                    f"{class_index[box.label_class_id]} {center_x:.8f} {center_y:.8f} {width:.8f} {height:.8f}"
+                    f"{class_index[box.label_class_id]} {center_x:.8f} "
+                    f"{center_y:.8f} {width:.8f} {height:.8f}"
                 )
             for mask in masks_by_image[image.id]:
                 if not mask.label_class_id:
@@ -1211,6 +1226,8 @@ class InterchangeService:
             )
         (root / "data.yaml").write_text(
             "path: .\ntrain: images\nval: images\nnames:\n"
-            + "".join(f"  {index}: {json.dumps(item.name)}\n" for index, item in enumerate(classes)),
+            + "".join(
+                f"  {index}: {json.dumps(item.name)}\n" for index, item in enumerate(classes)
+            ),
             encoding="utf-8",
         )

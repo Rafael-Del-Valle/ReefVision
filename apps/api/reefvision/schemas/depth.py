@@ -44,10 +44,14 @@ class DepthMapGenerateRequest(BaseModel):
     def validate_provider_kind(self) -> DepthMapGenerateRequest:
         if self.provider_id == "depth_anything_v2_metric" and self.depth_kind != "metric":
             raise ValueError("The metric provider requires depth_kind='metric'")
-        if self.provider_id in {
-            "luminance_relative",
-            "depth_anything_v2_relative",
-        } and self.depth_kind != "relative":
+        if (
+            self.provider_id
+            in {
+                "luminance_relative",
+                "depth_anything_v2_relative",
+            }
+            and self.depth_kind != "relative"
+        ):
             raise ValueError("The selected provider produces relative depth only")
         if self.depth_kind == "metric" and not self.unit:
             self.unit = "m"

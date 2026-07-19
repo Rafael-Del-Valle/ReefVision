@@ -10,7 +10,8 @@ import {
 
 function bytesLabel(value: number | null | undefined): string {
   if (value == null) return "Unknown";
-  if (value >= 1_073_741_824) return `${(value / 1_073_741_824).toFixed(2)} GiB`;
+  if (value >= 1_073_741_824)
+    return `${(value / 1_073_741_824).toFixed(2)} GiB`;
   if (value >= 1_048_576) return `${(value / 1_048_576).toFixed(1)} MiB`;
   if (value >= 1024) return `${(value / 1024).toFixed(1)} KiB`;
   return `${value} B`;
@@ -70,8 +71,9 @@ export function ProviderDashboard() {
 
   const selectedProvider = useMemo(
     () =>
-      providers.find((provider) => provider.provider_id === selectedProviderId) ??
-      null,
+      providers.find(
+        (provider) => provider.provider_id === selectedProviderId,
+      ) ?? null,
     [providers, selectedProviderId],
   );
 
@@ -114,7 +116,9 @@ export function ProviderDashboard() {
       <section className="dashboard-panel">
         <div className="empty-state">
           <h3>Inspecting provider health</h3>
-          <p>Checking dependencies, devices, model files, and stored benchmarks.</p>
+          <p>
+            Checking dependencies, devices, model files, and stored benchmarks.
+          </p>
         </div>
       </section>
     );
@@ -138,8 +142,8 @@ export function ProviderDashboard() {
           <p className="eyebrow">Phase 8 runtime acceptance</p>
           <h3>Provider health and benchmarks</h3>
           <span>
-            Inspect optional packages, execution devices, model integrity, prompt
-            support, and real-hardware benchmark records.
+            Inspect optional packages, execution devices, model integrity,
+            prompt support, and real-hardware benchmark records.
           </span>
         </div>
         <button
@@ -192,15 +196,23 @@ export function ProviderDashboard() {
                 </div>
                 <div className="version-preview-metrics">
                   <span>
-                    Tasks: {selectedProvider.supported_tasks.join(", ") || "None"}
+                    Tasks:{" "}
+                    {selectedProvider.supported_tasks.join(", ") || "None"}
                   </span>
                   <span>
                     Prompts:{" "}
-                    {selectedProvider.supported_prompt_types.join(", ") || "None"}
+                    {selectedProvider.supported_prompt_types.join(", ") ||
+                      "None"}
                   </span>
-                  <span>Training {selectedProvider.supports_training ? "yes" : "no"}</span>
-                  <span>Video {selectedProvider.supports_video ? "yes" : "no"}</span>
-                  <span>CUDA {selectedProvider.supports_cuda ? "yes" : "no"}</span>
+                  <span>
+                    Training {selectedProvider.supports_training ? "yes" : "no"}
+                  </span>
+                  <span>
+                    Video {selectedProvider.supports_video ? "yes" : "no"}
+                  </span>
+                  <span>
+                    CUDA {selectedProvider.supports_cuda ? "yes" : "no"}
+                  </span>
                 </div>
                 {selectedProvider.warnings.map((warning) => (
                   <p key={warning} className="form-warning">
@@ -226,11 +238,13 @@ export function ProviderDashboard() {
                     <div key={dependency.package} className="dashboard-row">
                       <div>
                         <strong>{dependency.package}</strong>
-                        <p>{dependency.message ?? "Dependency is installed."}</p>
+                        <p>
+                          {dependency.message ?? "Dependency is installed."}
+                        </p>
                       </div>
                       <span>
                         {dependency.installed
-                          ? dependency.version ?? "Installed"
+                          ? (dependency.version ?? "Installed")
                           : dependency.required
                             ? "Missing"
                             : "Optional"}
@@ -341,7 +355,9 @@ export function ProviderDashboard() {
                           {record.input_width}×{record.input_height} · batch{" "}
                           {record.batch_size} · {record.sample_count} samples
                         </p>
-                        <small>{new Date(record.recorded_at).toLocaleString()}</small>
+                        <small>
+                          {new Date(record.recorded_at).toLocaleString()}
+                        </small>
                       </div>
                       <span>
                         {record.throughput_per_second.toFixed(2)}/s · p95{" "}

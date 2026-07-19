@@ -42,7 +42,9 @@ def upgrade() -> None:
         sa.Column("provenance_json", sa.JSON(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["accepted_label_class_id"], ["label_classes.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(
+            ["accepted_label_class_id"], ["label_classes.id"], ondelete="SET NULL"
+        ),
         sa.ForeignKeyConstraint(["annotation_id"], ["annotations.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["image_id"], ["images.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["inference_job_id"], ["jobs.id"], ondelete="SET NULL"),

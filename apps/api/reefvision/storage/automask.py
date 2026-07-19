@@ -35,9 +35,7 @@ def _load_rgb_source(
                 raise ValidationError("Auto Mask source dimensions do not match the image")
             return cast(Image.Image, image.convert("RGB"))
     except (OSError, UnidentifiedImageError) as exc:
-        raise ValidationError(
-            "The source image required for Auto Mask could not be read"
-        ) from exc
+        raise ValidationError("The source image required for Auto Mask could not be read") from exc
 
 
 def _luminance(rgb: tuple[int, int, int]) -> float:
@@ -89,8 +87,7 @@ def _pixel_allowed(
         if abs(pixel_luminance - _luminance(seed)) > luminance_tolerance:
             continue
         distance_squared = sum(
-            (float(left) - float(right)) ** 2
-            for left, right in zip(color, seed, strict=True)
+            (float(left) - float(right)) ** 2 for left, right in zip(color, seed, strict=True)
         )
         if distance_squared <= color_tolerance_squared:
             return True

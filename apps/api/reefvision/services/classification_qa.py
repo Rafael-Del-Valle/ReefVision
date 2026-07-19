@@ -60,9 +60,7 @@ class ClassificationQAService:
         request: ClassificationCropQARequest,
     ) -> ClassificationCropQAResponse:
         self._project(project_id)
-        statement = select(ClassificationCrop).where(
-            ClassificationCrop.project_id == project_id
-        )
+        statement = select(ClassificationCrop).where(ClassificationCrop.project_id == project_id)
         if request.crop_ids:
             statement = statement.where(ClassificationCrop.id.in_(request.crop_ids))
         crops = list(
@@ -245,8 +243,7 @@ class ClassificationQAService:
                     (
                         float(box.get("x_min", 1)) <= 0,
                         float(box.get("y_min", 1)) <= 0,
-                        float(box.get("x_max", source_image.width_px - 1))
-                        >= source_image.width_px,
+                        float(box.get("x_max", source_image.width_px - 1)) >= source_image.width_px,
                         float(box.get("y_max", source_image.height_px - 1))
                         >= source_image.height_px,
                     )
@@ -275,16 +272,13 @@ class ClassificationQAService:
                             severity=severity,
                             code="duplicate_crop_checksum",
                             message=(
-                                "This crop shares its SHA-256 with "
-                                f"{len(group) - 1} other crop(s)."
+                                f"This crop shares its SHA-256 with {len(group) - 1} other crop(s)."
                             ),
                             measured_value=crop.sha256,
                         )
                     )
 
-        error_crop_ids = {
-            issue.crop_id for issue in issues if issue.severity == "error"
-        }
+        error_crop_ids = {issue.crop_id for issue in issues if issue.severity == "error"}
         checked_at = datetime.now(UTC).isoformat()
         input_payload = {
             "project_id": project_id,
@@ -338,12 +332,11 @@ class ClassificationQAService:
 
         warning_messages: list[str] = []
         class_counts = sorted(per_class_counts.values())
-        if class_counts and class_counts[0] > 0:
-            if class_counts[-1] / class_counts[0] >= 5:
-                warning_messages.append(
-                    "The crop dataset has at least a 5:1 class imbalance; consider "
-                    "weighted sampling or targeted collection."
-                )
+        if class_counts and class_counts[0] > 0 and class_counts[-1] / class_counts[0] >= 5:
+            warning_messages.append(
+                "The crop dataset has at least a 5:1 class imbalance; consider "
+                "weighted sampling or targeted collection."
+            )
         if duplicate_groups:
             warning_messages.append(
                 f"Found {len(duplicate_groups)} duplicate checksum groups; keep "
@@ -382,8 +375,7 @@ class ClassificationQAService:
             )
         if config.rotation_degrees > 45:
             warnings.append(
-                "Large rotations may expose padding artifacts and unrealistic "
-                "specimen orientation."
+                "Large rotations may expose padding artifacts and unrealistic specimen orientation."
             )
         if config.hue_jitter > 0.08:
             warnings.append(
@@ -392,8 +384,7 @@ class ClassificationQAService:
             )
         if config.random_erasing_probability > 0.25:
             warnings.append(
-                "Frequent random erasing may remove small coral branches or "
-                "diagnostic polyps."
+                "Frequent random erasing may remove small coral branches or diagnostic polyps."
             )
         if config.mixup_probability + config.cutmix_probability > 0.75:
             blockers.append(
@@ -402,8 +393,7 @@ class ClassificationQAService:
             )
         if config.scale_min < 0.5 or config.scale_max > 2.0:
             warnings.append(
-                "The scale range is unusually broad and may create unrealistic "
-                "specimen sizes."
+                "The scale range is unusually broad and may create unrealistic specimen sizes."
             )
         payload = {
             "format": "reefvision-classification-augmentation",

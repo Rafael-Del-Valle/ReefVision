@@ -77,9 +77,7 @@ class ProjectIntegrityService:
     def __init__(self, session: Session, settings: Settings) -> None:
         self.session = session
         self.settings = settings
-        self.categories = {
-            kind: _CategoryAccumulator(kind) for kind in CATEGORY_ORDER
-        }
+        self.categories = {kind: _CategoryAccumulator(kind) for kind in CATEGORY_ORDER}
         self.issues: list[ProjectIntegrityIssue] = []
         self.verify_checksums = False
 
@@ -101,11 +99,7 @@ class ProjectIntegrityService:
     def _path_size(path: Path) -> int:
         if path.is_file():
             return path.stat().st_size
-        return sum(
-            child.stat().st_size
-            for child in path.rglob("*")
-            if child.is_file()
-        )
+        return sum(child.stat().st_size for child in path.rglob("*") if child.is_file())
 
     def _issue(
         self,
@@ -181,10 +175,7 @@ class ProjectIntegrityService:
                 resource_kind=resource_kind,
                 record_id=record_id,
                 managed_path=managed_path,
-                message=(
-                    f"The managed path exists but is not the expected "
-                    f"{expected_kind} type."
-                ),
+                message=(f"The managed path exists but is not the expected {expected_kind} type."),
             )
             return
         category.existing_file_count += 1
@@ -375,9 +366,7 @@ class ProjectIntegrityService:
                 .order_by(ExportRecord.created_at, ExportRecord.id)
             )
         )
-        completed = [
-            item for item in exports if item.status in {"completed", "succeeded"}
-        ]
+        completed = [item for item in exports if item.status in {"completed", "succeeded"}]
         for kind in ("export_output", "export_manifest", "export_archive"):
             self.categories[kind].record_count = len(completed)
         for export in completed:
@@ -406,9 +395,7 @@ class ProjectIntegrityService:
             )
         )
         self.categories["training_log"].record_count = len(runs)
-        completed = [
-            run for run in runs if run.status in {"completed", "succeeded"}
-        ]
+        completed = [run for run in runs if run.status in {"completed", "succeeded"}]
         self.categories["training_checkpoint"].record_count = len(completed)
         for run in runs:
             if run.logs_path:
@@ -463,15 +450,15 @@ class ProjectIntegrityService:
     def _inspect_jobs(self, project_id: str, stale_job_minutes: int) -> None:
         jobs = list(
             self.session.scalars(
-                select(Job)
-                .where(Job.project_id == project_id)
-                .order_by(Job.created_at, Job.id)
+                select(Job).where(Job.project_id == project_id).order_by(Job.created_at, Job.id)
             )
         )
         self.categories["job"].record_count = len(jobs)
         cutoff = datetime.now(UTC) - timedelta(minutes=stale_job_minutes)
         for job in jobs:
             timestamp = job.started_at or job.created_at
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=UTC)
             if job.status in {"running", "cancel_requested"} and timestamp < cutoff:
                 self._issue(
                     severity="warning",
@@ -512,12 +499,8 @@ class ProjectIntegrityService:
         self._inspect_jobs(project.id, stale_job_minutes)
 
         categories = [self.categories[kind].response() for kind in CATEGORY_ORDER]
-        error_count = sum(
-            1 for issue in self.issues if issue.severity == "error"
-        )
-        warning_count = sum(
-            1 for issue in self.issues if issue.severity == "warning"
-        )
+        error_count = sum(1 for issue in self.issues if issue.severity == "error")
+        warning_count = sum(1 for issue in self.issues if issue.severity == "warning")
         referenced = sum(item.referenced_file_count for item in categories)
         existing = sum(item.existing_file_count for item in categories)
         missing = sum(item.missing_file_count for item in categories)

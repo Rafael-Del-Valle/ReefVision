@@ -99,9 +99,7 @@ def _verified_raster_mask(
     mask_path = snapshot.get("mask_path")
     expected_sha256 = snapshot.get("mask_content_sha256")
     if not isinstance(mask_path, str) or not isinstance(expected_sha256, str):
-        raise ValidationError(
-            "Raster snapshot is missing its managed path or checksum"
-        )
+        raise ValidationError("Raster snapshot is missing its managed path or checksum")
     path = resolve_managed_project_path(settings, mask_path)
     if not path.is_file() or _file_sha256(path) != expected_sha256:
         raise ValidationError(
@@ -111,9 +109,7 @@ def _verified_raster_mask(
         with Image.open(path) as image:
             image.load()
             if image.size != expected_size:
-                raise ValidationError(
-                    "Raster mask dimensions do not match the source image"
-                )
+                raise ValidationError("Raster mask dimensions do not match the source image")
             return cast(
                 Image.Image,
                 image.convert("L").point(lambda value: 255 if value > 0 else 0),
@@ -184,9 +180,7 @@ def _mask_annotation(
     geometry_kind = str(snapshot.get("geometry_kind"))
     if geometry_kind == "polygon":
         points = _polygon_points(snapshot)
-        segmentation: Any = [
-            [coordinate for point in points for coordinate in point]
-        ]
+        segmentation: Any = [[coordinate for point in points for coordinate in point]]
         bbox = _polygon_bbox(points)
         area = _polygon_area(points)
     elif geometry_kind == "raster_mask":
@@ -209,9 +203,7 @@ def _mask_annotation(
         ]
         area = float(rle["area"])
     else:
-        raise ValidationError(
-            f"COCO export does not support mask geometry {geometry_kind!r}"
-        )
+        raise ValidationError(f"COCO export does not support mask geometry {geometry_kind!r}")
     return {
         "id": annotation_id,
         "image_id": image_id,

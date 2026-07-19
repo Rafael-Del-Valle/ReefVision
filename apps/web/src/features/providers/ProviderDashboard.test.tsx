@@ -142,7 +142,9 @@ describe("ProviderDashboard", () => {
     await user.click(screen.getByRole("button", { name: /SAM 2/i }));
 
     expect(
-      await screen.findByText(/Required optional packages are not installed: sam2/i),
+      await screen.findByText(
+        /Required optional packages are not installed: sam2/i,
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/Install the provider from the Model Catalog/i),

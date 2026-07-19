@@ -39,10 +39,13 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 
     for item in items:
         filename = Path(str(item.fspath)).name.casefold()
-        if item.get_closest_marker("unit") is None and item.get_closest_marker(
-            "integration"
-        ) is None:
-            marker = "integration" if any(token in filename for token in _INTEGRATION_HINTS) else "unit"
+        if (
+            item.get_closest_marker("unit") is None
+            and item.get_closest_marker("integration") is None
+        ):
+            marker = (
+                "integration" if any(token in filename for token in _INTEGRATION_HINTS) else "unit"
+            )
             item.add_marker(getattr(pytest.mark, marker))
         match = _PHASE_PATTERN.search(filename)
         if match is not None:

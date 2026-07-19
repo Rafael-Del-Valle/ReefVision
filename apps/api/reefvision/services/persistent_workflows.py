@@ -27,7 +27,6 @@ from reefvision.schemas.workflows import (
     WorkflowRunCreateRequest,
     WorkflowRunCreateResponse,
     WorkflowRunResponse,
-    WorkflowValidationRequest,
     WorkflowValidationResponse,
 )
 from reefvision.services.workflows import (
@@ -36,7 +35,6 @@ from reefvision.services.workflows import (
     WorkflowService,
     _NodeDefinition,
 )
-
 
 NODE_DEFINITIONS.update(
     {
@@ -168,14 +166,17 @@ class PersistentWorkflowService:
         validation = self.validator.validate(workflow.project_id, request.workflow)
         if not validation.valid:
             raise ValidationError("Only structurally valid workflow revisions may be saved")
-        next_number = int(
-            self.session.scalar(
-                select(func.coalesce(func.max(WorkflowRevision.revision_number), 0)).where(
-                    WorkflowRevision.workflow_id == workflow.id
+        next_number = (
+            int(
+                self.session.scalar(
+                    select(func.coalesce(func.max(WorkflowRevision.revision_number), 0)).where(
+                        WorkflowRevision.workflow_id == workflow.id
+                    )
                 )
+                or 0
             )
-            or 0
-        ) + 1
+            + 1
+        )
         revision = WorkflowRevision(
             workflow_id=workflow.id,
             revision_number=next_number,
@@ -232,8 +233,7 @@ class PersistentWorkflowService:
             input_json=request.inputs,
             result_json={"use_cache": request.use_cache},
             node_state_json={
-                node_id: {"status": "queued"}
-                for node_id in validation.topological_order
+                node_id: {"status": "queued"} for node_id in validation.topological_order
             },
         )
         self.session.add(run)

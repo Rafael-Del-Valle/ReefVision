@@ -43,9 +43,7 @@ class ImageEmbeddingResponse(BaseModel):
 
 
 class ImageEmbeddingGenerateRequest(BaseModel):
-    provider_id: Literal["color_texture_v1", "transformers_vision"] = (
-        "color_texture_v1"
-    )
+    provider_id: Literal["color_texture_v1", "transformers_vision"] = "color_texture_v1"
     model_id: str = Field(default="reefvision-color-texture-v1", min_length=1, max_length=300)
     model_checksum: str | None = Field(default=None, min_length=64, max_length=64)
     device: str = Field(default="auto", min_length=1, max_length=60)

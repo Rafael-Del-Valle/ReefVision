@@ -118,9 +118,7 @@ def test_point_prompts_accumulate_mix_with_brush_and_enter_provenance(
     assert PixelPoint(x=12, y=12) in provider.positive_points
     assert provider.negative_points == [PixelPoint(x=20, y=20)]
 
-    accepted_state, accepted_box, provenance = runtime.accept_session(
-        session.session_id
-    )
+    accepted_state, accepted_box, provenance = runtime.accept_session(session.session_id)
     assert accepted_state.session_id == session.session_id
     assert accepted_box == PixelBox(x_min=5, y_min=5, x_max=30, y_max=30)
     assert provenance["prompt_type"] == "mixed_point_brush"

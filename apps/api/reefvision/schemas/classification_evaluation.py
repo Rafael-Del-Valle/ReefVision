@@ -12,9 +12,7 @@ ClassificationReviewFilter = Literal["pending", "accepted", "rejected"]
 class ClassificationEvaluationRequest(BaseModel):
     model_id: str = Field(min_length=1, max_length=36)
     image_ids: list[str] = Field(default_factory=list)
-    review_statuses: list[ClassificationReviewFilter] = Field(
-        default_factory=lambda: ["pending"]
-    )
+    review_statuses: list[ClassificationReviewFilter] = Field(default_factory=lambda: ["pending"])
     label_set: str | None = Field(default=None, max_length=100)
     confidence_threshold: float = Field(default=0, ge=0, le=1)
     calibration_bin_count: int = Field(default=10, ge=2, le=100)

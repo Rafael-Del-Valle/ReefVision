@@ -22,7 +22,6 @@ from reefvision.schemas.training_reports import (
 )
 from reefvision.storage.projects import resolve_managed_project_path
 
-
 FONT_STACKS = {
     "system": "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     "sans-serif": "Arial, Helvetica, sans-serif",
@@ -44,7 +43,7 @@ def _number(value: Any, digits: int = 4) -> str:
         number = float(value)
         if math.isfinite(number):
             return f"{number:.{digits}f}"
-    return "—"
+    return "-"
 
 
 def _managed_json(settings: Settings, managed_path: object) -> dict[str, Any] | None:
@@ -94,7 +93,9 @@ def _svg_line_chart(
     paths: list[str] = []
     legend: list[str] = []
     for series_index, (name, values) in enumerate(series):
-        coordinates = [point(index, value) for index, value in enumerate(values) if math.isfinite(value)]
+        coordinates = [
+            point(index, value) for index, value in enumerate(values) if math.isfinite(value)
+        ]
         if not coordinates:
             continue
         path_data = " ".join(
@@ -102,9 +103,7 @@ def _svg_line_chart(
             for index, (x, y) in enumerate(coordinates)
         )
         color = colors[series_index % len(colors)]
-        paths.append(
-            f'<path d="{path_data}" fill="none" stroke="{color}" stroke-width="2.2" />'
-        )
+        paths.append(f'<path d="{path_data}" fill="none" stroke="{color}" stroke-width="2.2" />')
         legend.append(
             f'<g transform="translate({left + series_index * 145},{height - 14})">'
             f'<line x1="0" y1="0" x2="18" y2="0" stroke="{color}" stroke-width="3" />'
@@ -115,18 +114,18 @@ def _svg_line_chart(
         y = top + step / 4 * chart_height
         value = high - step / 4 * (high - low)
         grid.append(
-            f'<line x1="{left}" y1="{y:.2f}" x2="{width-right}" y2="{y:.2f}" '
+            f'<line x1="{left}" y1="{y:.2f}" x2="{width - right}" y2="{y:.2f}" '
             'stroke="#d1d5db" stroke-width="1" />'
-            f'<text x="{left-8}" y="{y+4:.2f}" text-anchor="end" font-size="{font_size}">'
-            f'{value:.3f}</text>'
+            f'<text x="{left - 8}" y="{y + 4:.2f}" text-anchor="end" font-size="{font_size}">'
+            f"{value:.3f}</text>"
         )
     return (
         f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="{html.escape(title)}">'
         f'<text x="{left}" y="22" font-size="{font_size + 2}" font-weight="700">'
-        f'{html.escape(title)}</text>'
+        f"{html.escape(title)}</text>"
         + "".join(grid)
-        + f'<line x1="{left}" y1="{top}" x2="{left}" y2="{top+chart_height}" stroke="#111827" />'
-        + f'<line x1="{left}" y1="{top+chart_height}" x2="{width-right}" y2="{top+chart_height}" stroke="#111827" />'
+        + f'<line x1="{left}" y1="{top}" x2="{left}" y2="{top + chart_height}" stroke="#111827" />'
+        + f'<line x1="{left}" y1="{top + chart_height}" x2="{width - right}" y2="{top + chart_height}" stroke="#111827" />'
         + "".join(paths)
         + "".join(legend)
         + "</svg>"
@@ -156,8 +155,8 @@ def _svg_grouped_bars(
         y = top + index * row_height
         label = str(row.get("class_name", row.get("class_id", "Class")))
         content.append(
-            f'<text x="{left-10}" y="{y+18}" text-anchor="end" font-size="{font_size}">'
-            f'{html.escape(label)}</text>'
+            f'<text x="{left - 10}" y="{y + 18}" text-anchor="end" font-size="{font_size}">'
+            f"{html.escape(label)}</text>"
         )
         for metric_index, metric in enumerate(metrics):
             value = row.get(metric)
@@ -172,8 +171,8 @@ def _svg_grouped_bars(
     for index, metric in enumerate(metrics):
         x = left + index * 130
         content.append(
-            f'<rect x="{x}" y="{legend_y-8}" width="14" height="8" fill="{colors[metric]}" />'
-            f'<text x="{x+20}" y="{legend_y}" font-size="{font_size}">{metric.title()}</text>'
+            f'<rect x="{x}" y="{legend_y - 8}" width="14" height="8" fill="{colors[metric]}" />'
+            f'<text x="{x + 20}" y="{legend_y}" font-size="{font_size}">{metric.title()}</text>'
         )
     content.append("</svg>")
     return "".join(content)
@@ -209,15 +208,17 @@ def _svg_tuning_scatter(
     for x, y in points:
         px = left + (x - x_min) / (x_max - x_min) * chart_width
         py = top + (1 - (y - y_min) / (y_max - y_min)) * chart_height
-        circles.append(f'<circle cx="{px:.2f}" cy="{py:.2f}" r="4" fill="#0f766e" opacity="0.75" />')
+        circles.append(
+            f'<circle cx="{px:.2f}" cy="{py:.2f}" r="4" fill="#0f766e" opacity="0.75" />'
+        )
     return (
         f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="{html.escape(title)}">'
-        f'<text x="{left}" y="24" font-size="{font_size+1}" font-weight="700">{html.escape(title)}</text>'
-        f'<line x1="{left}" y1="{top}" x2="{left}" y2="{height-bottom}" stroke="#111827" />'
-        f'<line x1="{left}" y1="{height-bottom}" x2="{width-right}" y2="{height-bottom}" stroke="#111827" />'
+        f'<text x="{left}" y="24" font-size="{font_size + 1}" font-weight="700">{html.escape(title)}</text>'
+        f'<line x1="{left}" y1="{top}" x2="{left}" y2="{height - bottom}" stroke="#111827" />'
+        f'<line x1="{left}" y1="{height - bottom}" x2="{width - right}" y2="{height - bottom}" stroke="#111827" />'
         + "".join(circles)
-        + f'<text x="{width/2}" y="{height-10}" text-anchor="middle" font-size="{font_size}">{html.escape(parameter)}</text>'
-        + f'<text x="15" y="{height/2}" transform="rotate(-90 15 {height/2})" text-anchor="middle" font-size="{font_size}">Fitness</text>'
+        + f'<text x="{width / 2}" y="{height - 10}" text-anchor="middle" font-size="{font_size}">{html.escape(parameter)}</text>'
+        + f'<text x="15" y="{height / 2}" transform="rotate(-90 15 {height / 2})" text-anchor="middle" font-size="{font_size}">Fitness</text>'
         + "</svg>"
     )
 
@@ -303,7 +304,9 @@ class TrainingReportService:
                 if not isinstance(values, list):
                     continue
                 numeric = [float(value) for value in values if isinstance(value, (int, float))]
-                if numeric and any(token.casefold() in key.casefold() for token in preferred_tokens):
+                if numeric and any(
+                    token.casefold() in key.casefold() for token in preferred_tokens
+                ):
                     selected.append((key, numeric))
                 if len(selected) >= 6:
                     break
@@ -338,13 +341,13 @@ class TrainingReportService:
                 )
                 chart = _svg_grouped_bars(
                     [row for row in rows if isinstance(row, dict)],
-                    title=f"Per-class precision, recall, and F1 — {scope_name}",
+                    title=f"Per-class precision, recall, and F1 - {scope_name}",
                     font_size=request.figure_label_font_size_pt,
                 )
                 sections.append(
-                    f"<section><h2>Per-class metrics — {html.escape(scope_name)}</h2>{chart}"
+                    f"<section><h2>Per-class metrics - {html.escape(scope_name)}</h2>{chart}"
                     "<table><thead><tr><th>Class</th><th>Precision</th><th>Recall</th>"
-                    "<th>F1</th><th>mAP50</th><th>mAP50–95</th></tr></thead>"
+                    "<th>F1</th><th>mAP50</th><th>mAP50-95</th></tr></thead>"
                     f"<tbody>{table_rows}</tbody></table></section>"
                 )
             included_sections.append("per_class_metrics")
@@ -418,12 +421,12 @@ class TrainingReportService:
                     if source:
                         embedded.append(
                             f'<figure><img src="{source}" alt="Ultralytics validation plot" />'
-                            f'<figcaption>{html.escape(Path(str(path)).name)}</figcaption></figure>'
+                            f"<figcaption>{html.escape(Path(str(path)).name)}</figcaption></figure>"
                         )
             if embedded:
                 sections.append(
                     "<section><h2>Ultralytics validation plots</h2>"
-                    f"<div class=\"figure-grid\">{''.join(embedded)}</div></section>"
+                    f'<div class="figure-grid">{"".join(embedded)}</div></section>'
                 )
                 included_sections.append("ultralytics_plots")
 
@@ -461,8 +464,8 @@ class TrainingReportService:
 :root {{ font-family: {font_stack}; font-size: {request.base_font_size_pt}pt; color: #111827; }}
 body {{ max-width: 1100px; margin: 0 auto; padding: 2rem; line-height: 1.45; background: white; }}
 h1 {{ font-size: {request.heading_font_size_pt}pt; margin-bottom: .25rem; }}
-h2 {{ font-size: {request.heading_font_size_pt * .72:.2f}pt; border-bottom: 1px solid #d1d5db; padding-bottom: .25rem; }}
-h3 {{ font-size: {request.heading_font_size_pt * .58:.2f}pt; }}
+h2 {{ font-size: {request.heading_font_size_pt * 0.72:.2f}pt; border-bottom: 1px solid #d1d5db; padding-bottom: .25rem; }}
+h3 {{ font-size: {request.heading_font_size_pt * 0.58:.2f}pt; }}
 .subtitle {{ color: #4b5563; }}
 section {{ margin: 2rem 0; break-inside: avoid; }}
 table {{ width: 100%; border-collapse: collapse; font-size: {request.table_font_size_pt}pt; }}
@@ -483,8 +486,8 @@ figcaption {{ font-size: {request.figure_label_font_size_pt}pt; color: #4b5563; 
 <header><p>ReefVision model-development report</p><h1>{html.escape(title)}</h1>
 <p class="subtitle">{html.escape(request.subtitle or project.name)}</p>
 <p>Generated {created_at.isoformat()}</p></header>
-{''.join(f'<div class="warning">{html.escape(warning)}</div>' for warning in warnings)}
-{''.join(sections)}
+{"".join(f'<div class="warning">{html.escape(warning)}</div>' for warning in warnings)}
+{"".join(sections)}
 </body></html>"""
         html_path.write_text(document, encoding="utf-8")
         manifest = {

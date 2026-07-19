@@ -16,10 +16,14 @@ from reefvision.ml.agreement_statistics import (
     bootstrap_paired,
     concordance_correlation,
     icc_two_way_absolute_single,
-    mean_absolute_error as bootstrap_mae_statistic,
-    mean_bias as bootstrap_bias_statistic,
     pearson,
     spearman,
+)
+from reefvision.ml.agreement_statistics import (
+    mean_absolute_error as bootstrap_mae_statistic,
+)
+from reefvision.ml.agreement_statistics import (
+    mean_bias as bootstrap_bias_statistic,
 )
 from reefvision.schemas.measurement_validation import (
     MeasurementMetric,
@@ -51,9 +55,7 @@ class MeasurementValidationService:
             raise NotFoundError(f"Mask annotation not found: {mask_id}")
         image = self.session.get(ImageAsset, mask.image_id)
         if image is None or image.project_id != project_id:
-            raise ValidationError(
-                "All validation masks must belong to the selected project"
-            )
+            raise ValidationError("All validation masks must belong to the selected project")
         return mask
 
     @staticmethod
@@ -108,9 +110,7 @@ class MeasurementValidationService:
                     observation_count=len(rows),
                     mean_bias=mean(row.signed_error for row in rows),
                     mean_absolute_error=mean(row.absolute_error for row in rows),
-                    root_mean_square_error=sqrt(
-                        mean(row.signed_error**2 for row in rows)
-                    ),
+                    root_mean_square_error=sqrt(mean(row.signed_error**2 for row in rows)),
                     passed_count=sum(row.passed for row in rows),
                     failed_count=sum(not row.passed for row in rows),
                 )
@@ -139,9 +139,7 @@ class MeasurementValidationService:
                     continue
                 expected_unit = self._expected_unit(measured, value.metric)
                 supplied_unit = (
-                    value.unit.strip()
-                    if value.unit is not None and value.unit.strip()
-                    else None
+                    value.unit.strip() if value.unit is not None and value.unit.strip() else None
                 )
                 if (
                     supplied_unit
@@ -200,9 +198,7 @@ class MeasurementValidationService:
         for summary_index, ((metric, unit), rows) in enumerate(
             sorted(grouped.items(), key=lambda item: item[0][0])
         ):
-            percent_errors = [
-                row.percent_error for row in rows if row.percent_error is not None
-            ]
+            percent_errors = [row.percent_error for row in rows if row.percent_error is not None]
             bias = mean(row.signed_error for row in rows)
             bias_standard_deviation = (
                 stdev(row.signed_error for row in rows) if len(rows) >= 2 else None
@@ -213,9 +209,7 @@ class MeasurementValidationService:
                 else None
             )
             agreement_half_width = (
-                1.96 * bias_standard_deviation
-                if bias_standard_deviation is not None
-                else None
+                1.96 * bias_standard_deviation if bias_standard_deviation is not None else None
             )
             measured_values = [row.measured_value for row in rows]
             reference_values = [row.reference_value for row in rows]
@@ -266,24 +260,16 @@ class MeasurementValidationService:
                     mean_bias=bias,
                     standard_deviation_bias=bias_standard_deviation,
                     bias_confidence_interval_lower=(
-                        bias - confidence_half_width
-                        if confidence_half_width is not None
-                        else None
+                        bias - confidence_half_width if confidence_half_width is not None else None
                     ),
                     bias_confidence_interval_upper=(
-                        bias + confidence_half_width
-                        if confidence_half_width is not None
-                        else None
+                        bias + confidence_half_width if confidence_half_width is not None else None
                     ),
                     lower_limit_of_agreement=(
-                        bias - agreement_half_width
-                        if agreement_half_width is not None
-                        else None
+                        bias - agreement_half_width if agreement_half_width is not None else None
                     ),
                     upper_limit_of_agreement=(
-                        bias + agreement_half_width
-                        if agreement_half_width is not None
-                        else None
+                        bias + agreement_half_width if agreement_half_width is not None else None
                     ),
                     pearson_correlation=pearson(measured_values, reference_values),
                     spearman_correlation=spearman(measured_values, reference_values),
@@ -296,9 +282,7 @@ class MeasurementValidationService:
                         reference_values,
                     ),
                     mean_absolute_error=mean(row.absolute_error for row in rows),
-                    root_mean_square_error=sqrt(
-                        mean(row.signed_error**2 for row in rows)
-                    ),
+                    root_mean_square_error=sqrt(mean(row.signed_error**2 for row in rows)),
                     mean_absolute_percentage_error=(
                         mean(percent_errors) if percent_errors else None
                     ),
@@ -309,21 +293,13 @@ class MeasurementValidationService:
                     bootstrap_bias_upper=(
                         bias_interval.upper if bias_interval is not None else None
                     ),
-                    bootstrap_mae_lower=(
-                        mae_interval.lower if mae_interval is not None else None
-                    ),
-                    bootstrap_mae_upper=(
-                        mae_interval.upper if mae_interval is not None else None
-                    ),
+                    bootstrap_mae_lower=(mae_interval.lower if mae_interval is not None else None),
+                    bootstrap_mae_upper=(mae_interval.upper if mae_interval is not None else None),
                     bootstrap_concordance_lower=(
-                        concordance_interval.lower
-                        if concordance_interval is not None
-                        else None
+                        concordance_interval.lower if concordance_interval is not None else None
                     ),
                     bootstrap_concordance_upper=(
-                        concordance_interval.upper
-                        if concordance_interval is not None
-                        else None
+                        concordance_interval.upper if concordance_interval is not None else None
                     ),
                     passed_count=sum(row.passed for row in rows),
                     failed_count=sum(not row.passed for row in rows),

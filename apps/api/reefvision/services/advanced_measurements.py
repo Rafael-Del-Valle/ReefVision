@@ -85,9 +85,7 @@ class AdvancedMeasurementService:
                 with Image.open(path) as source:
                     source.load()
                     if source.size != (image.width_px, image.height_px):
-                        raise ValidationError(
-                            "Raster mask dimensions do not match the image"
-                        )
+                        raise ValidationError("Raster mask dimensions do not match the image")
                     return np.asarray(source.convert("L"), dtype=np.uint8) > 0
             except (OSError, UnidentifiedImageError) as exc:
                 raise ValidationError("Raster mask content could not be read") from exc
@@ -125,7 +123,9 @@ class AdvancedMeasurementService:
             "default_depth": None,
             "notes": request.notes,
             "multi_reference": {
-                "references": [reference.model_dump(mode="json") for reference in request.references],
+                "references": [
+                    reference.model_dump(mode="json") for reference in request.references
+                ],
                 "reference_count": estimate.reference_count,
                 "residual_standard_error": estimate.residual_standard_error,
                 "lower_95": estimate.lower_95,
@@ -213,9 +213,10 @@ class AdvancedMeasurementService:
                 "surface inputs are interpreted in pixel units."
             )
         multi_reference = calibration.get("multi_reference")
-        if isinstance(multi_reference, dict) and multi_reference.get(
-            "residual_standard_error"
-        ) is not None:
+        if (
+            isinstance(multi_reference, dict)
+            and multi_reference.get("residual_standard_error") is not None
+        ):
             warnings.append(
                 "Calibration uncertainty is stored with the image and should be included "
                 "when reporting physical measurements."
@@ -249,11 +250,7 @@ class AdvancedMeasurementService:
             longest_path_physical=(
                 skeleton.longest_path_pixels * scale if scale is not None else None
             ),
-            feret_max_physical=(
-                shape.feret_max_pixels * scale if scale is not None else None
-            ),
-            feret_min_physical=(
-                shape.feret_min_pixels * scale if scale is not None else None
-            ),
+            feret_max_physical=(shape.feret_max_pixels * scale if scale is not None else None),
+            feret_min_physical=(shape.feret_min_pixels * scale if scale is not None else None),
             warnings=warnings,
         )

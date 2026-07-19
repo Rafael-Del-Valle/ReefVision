@@ -79,8 +79,7 @@ export function ClassificationDashboard({ project }: { project: Project }) {
           run.status === "completed" &&
           run.result_checkpoint_path &&
           !classifiers.some(
-            (model) =>
-              model.metadata_json.source_training_run_id === run.id,
+            (model) => model.metadata_json.source_training_run_id === run.id,
           ),
       ),
     [classificationRuns, classifiers],
@@ -88,7 +87,9 @@ export function ClassificationDashboard({ project }: { project: Project }) {
 
   useEffect(() => {
     if (!datasetVersionId) {
-      const first = versions.data?.find((version) => version.status === "complete");
+      const first = versions.data?.find(
+        (version) => version.status === "complete",
+      );
       if (first) setDatasetVersionId(first.id);
     }
   }, [datasetVersionId, versions.data]);
@@ -139,14 +140,18 @@ export function ClassificationDashboard({ project }: { project: Project }) {
       }),
     onSuccess: async (run) => {
       setLastMessage(`Classification training queued as ${run.run_name}.`);
-      await queryClient.invalidateQueries({ queryKey: ["phase5_runs", project.id] });
+      await queryClient.invalidateQueries({
+        queryKey: ["phase5_runs", project.id],
+      });
     },
   });
   const register = useMutation({
     mutationFn: (runId: string) => registerClassifier(project.id, runId),
     onSuccess: async (model) => {
       setLastMessage(`Registered classifier ${model.display_name}.`);
-      await queryClient.invalidateQueries({ queryKey: ["phase5_models", project.id] });
+      await queryClient.invalidateQueries({
+        queryKey: ["phase5_models", project.id],
+      });
     },
   });
   const infer = useMutation({
@@ -183,7 +188,9 @@ export function ClassificationDashboard({ project }: { project: Project }) {
       await queryClient.invalidateQueries({
         queryKey: ["phase5_predictions", project.id],
       });
-      await queryClient.invalidateQueries({ queryKey: ["project", project.id] });
+      await queryClient.invalidateQueries({
+        queryKey: ["project", project.id],
+      });
     },
   });
 
@@ -216,9 +223,7 @@ export function ClassificationDashboard({ project }: { project: Project }) {
         <div>
           <p className="eyebrow">Phase 5</p>
           <h3>Classification</h3>
-          <span>
-            Immutable crops → train → register → infer → human review
-          </span>
+          <span>Immutable crops → train → register → infer → human review</span>
         </div>
         <span>{classifiers.length} registered classifiers</span>
       </div>
@@ -315,7 +320,10 @@ export function ClassificationDashboard({ project }: { project: Project }) {
             <h4>Train classifier</h4>
             <label>
               Run name
-              <input value={runName} onChange={(event) => setRunName(event.target.value)} />
+              <input
+                value={runName}
+                onChange={(event) => setRunName(event.target.value)}
+              />
             </label>
             <label>
               Scratch architecture
@@ -329,7 +337,9 @@ export function ClassificationDashboard({ project }: { project: Project }) {
               Optional local pretrained classifier
               <select
                 value={initialCheckpointModelId}
-                onChange={(event) => setInitialCheckpointModelId(event.target.value)}
+                onChange={(event) =>
+                  setInitialCheckpointModelId(event.target.value)
+                }
               >
                 <option value="">Scratch training</option>
                 {classifiers.map((model) => (
@@ -391,8 +401,8 @@ export function ClassificationDashboard({ project }: { project: Project }) {
               </div>
               {preview.data && (
                 <span>
-                  {preview.data.removed_during_preprocessing_count} removed during
-                  preprocessing
+                  {preview.data.removed_during_preprocessing_count} removed
+                  during preprocessing
                 </span>
               )}
             </div>
@@ -423,10 +433,14 @@ export function ClassificationDashboard({ project }: { project: Project }) {
                 <article key={run.id} className="dashboard-row">
                   <div>
                     <strong>{run.run_name}</strong>
-                    <p>{run.status} · {run.stage}</p>
+                    <p>
+                      {run.status} · {run.stage}
+                    </p>
                     <small>{new Date(run.created_at).toLocaleString()}</small>
                   </div>
-                  {completedUnregisteredRuns.some((item) => item.id === run.id) && (
+                  {completedUnregisteredRuns.some(
+                    (item) => item.id === run.id,
+                  ) && (
                     <button
                       type="button"
                       disabled={register.isPending}
@@ -462,7 +476,9 @@ export function ClassificationDashboard({ project }: { project: Project }) {
                 type="button"
                 className="secondary"
                 onClick={() =>
-                  setSelectedImageIds(images.data?.items.map((image) => image.id) ?? [])
+                  setSelectedImageIds(
+                    images.data?.items.map((image) => image.id) ?? [],
+                  )
                 }
               >
                 Select loaded images
@@ -476,7 +492,9 @@ export function ClassificationDashboard({ project }: { project: Project }) {
               </button>
               <button
                 type="button"
-                disabled={!classifierId || !selectedImageIds.length || infer.isPending}
+                disabled={
+                  !classifierId || !selectedImageIds.length || infer.isPending
+                }
                 onClick={() => infer.mutate()}
               >
                 {infer.isPending

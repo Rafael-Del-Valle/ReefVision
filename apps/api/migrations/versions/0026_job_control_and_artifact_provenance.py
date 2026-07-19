@@ -18,15 +18,9 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     with op.batch_alter_table("jobs") as batch:
-        batch.add_column(
-            sa.Column("priority", sa.Integer(), nullable=False, server_default="100")
-        )
-        batch.add_column(
-            sa.Column("retry_count", sa.Integer(), nullable=False, server_default="0")
-        )
-        batch.add_column(
-            sa.Column("max_retries", sa.Integer(), nullable=False, server_default="0")
-        )
+        batch.add_column(sa.Column("priority", sa.Integer(), nullable=False, server_default="100"))
+        batch.add_column(sa.Column("retry_count", sa.Integer(), nullable=False, server_default="0"))
+        batch.add_column(sa.Column("max_retries", sa.Integer(), nullable=False, server_default="0"))
         batch.add_column(
             sa.Column("state_version", sa.Integer(), nullable=False, server_default="0")
         )
@@ -59,9 +53,7 @@ def upgrade() -> None:
         batch.add_column(sa.Column("heartbeat_at", sa.DateTime(timezone=True), nullable=True))
         batch.add_column(sa.Column("cancel_after", sa.DateTime(timezone=True), nullable=True))
         batch.add_column(sa.Column("paused_at", sa.DateTime(timezone=True), nullable=True))
-        batch.add_column(
-            sa.Column("last_transition_at", sa.DateTime(timezone=True), nullable=True)
-        )
+        batch.add_column(sa.Column("last_transition_at", sa.DateTime(timezone=True), nullable=True))
         batch.create_foreign_key(
             "fk_jobs_parent_job_id",
             "jobs",

@@ -22,7 +22,8 @@ class TrackingEvaluationService:
         warnings: list[str] = []
         if not references:
             warnings.append(
-                "No reference boxes were supplied; detection and identity scores cannot be interpreted."
+                "No reference boxes were supplied; detection and identity "
+                "scores cannot be interpreted."
             )
         summaries: list[TrackingMetricSummary] = []
         for candidate in request.candidates:
@@ -89,9 +90,7 @@ class TrackingEvaluationService:
         return TrackingEvaluationResponse(
             minimum_iou=float(request.minimum_iou),
             maximum_depth_gap=(
-                float(request.maximum_depth_gap)
-                if request.maximum_depth_gap is not None
-                else None
+                float(request.maximum_depth_gap) if request.maximum_depth_gap is not None else None
             ),
             ranked_by_hota=ranked,
             best_candidate_name=ranked[0].candidate_name,

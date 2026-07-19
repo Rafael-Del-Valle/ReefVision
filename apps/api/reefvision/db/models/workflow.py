@@ -24,9 +24,7 @@ from reefvision.db.models.project import utc_now
 
 class Workflow(Base):
     __tablename__ = "workflows"
-    __table_args__ = (
-        Index("ix_workflows_project_status", "project_id", "status"),
-    )
+    __table_args__ = (Index("ix_workflows_project_status", "project_id", "status"),)
 
     id: Mapped[str] = mapped_column(
         String(36),
@@ -91,9 +89,7 @@ class WorkflowRevision(Base):
 
 class WorkflowRun(Base):
     __tablename__ = "workflow_runs"
-    __table_args__ = (
-        Index("ix_workflow_runs_project_status", "project_id", "status"),
-    )
+    __table_args__ = (Index("ix_workflow_runs_project_status", "project_id", "status"),)
 
     id: Mapped[str] = mapped_column(
         String(36),

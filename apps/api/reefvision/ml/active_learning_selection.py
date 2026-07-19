@@ -212,9 +212,7 @@ def select_candidates(
             uncertainty_raw.append(least_confidence(candidate.probabilities))
         else:
             uncertainty_raw.append(entropy(candidate.probabilities))
-        disagreement_raw.append(
-            ensemble_disagreement(candidate.ensemble_probabilities)
-        )
+        disagreement_raw.append(ensemble_disagreement(candidate.ensemble_probabilities))
     uncertainty = _normalize(uncertainty_raw)
     disagreement = _normalize(disagreement_raw)
     base_scores = _normalize([float(item.base_score) for item in candidates])
@@ -233,9 +231,7 @@ def select_candidates(
     cluster_ids: list[int | None] = [None] * len(candidates)
     for embedding_index, candidate_index in enumerate(embedding_indices):
         cluster_ids[candidate_index] = int(assignments[embedding_index])
-    pareto = _pareto_front(
-        list(zip(uncertainty, density, strict=True))
-    )
+    pareto = _pareto_front(list(zip(uncertainty, density, strict=True)))
 
     selected: list[int] = []
     selected_details: dict[int, tuple[float, float]] = {}
@@ -251,9 +247,7 @@ def select_candidates(
         if embedding_index is None:
             return 0.0
         selected_embeddings = [
-            candidate_to_embedding[item]
-            for item in selected
-            if item in candidate_to_embedding
+            candidate_to_embedding[item] for item in selected if item in candidate_to_embedding
         ]
         if not selected_embeddings:
             return float(np.mean(pairwise[embedding_index])) if len(matrix) > 1 else 1.0
@@ -277,18 +271,12 @@ def select_candidates(
                 )
             elif strategy == "cluster_balanced":
                 cluster_id = cluster_ids[index]
-                cluster_selected = sum(
-                    cluster_ids[item] == cluster_id for item in selected
-                )
+                cluster_selected = sum(cluster_ids[item] == cluster_id for item in selected)
                 strategy_score = uncertainty[index] + diversity - cluster_selected
             elif strategy == "density_aware":
                 strategy_score = uncertainty[index] * 0.7 + density[index] * 0.3
             elif strategy == "pareto_uncertainty_diversity":
-                strategy_score = (
-                    (1.0 if index in pareto else 0.0)
-                    + uncertainty[index]
-                    + diversity
-                )
+                strategy_score = (1.0 if index in pareto else 0.0) + uncertainty[index] + diversity
             elif strategy == "ensemble_disagreement":
                 strategy_score = disagreement[index]
             else:
@@ -300,9 +288,7 @@ def select_candidates(
                 + disagreement_weight * disagreement[index]
                 + base_score_weight * base_scores[index]
             )
-            scored.append(
-                (combined, candidates[index].candidate_id, index, diversity)
-            )
+            scored.append((combined, candidates[index].candidate_id, index, diversity))
         if not scored:
             break
         score, _candidate_id, index, diversity = max(

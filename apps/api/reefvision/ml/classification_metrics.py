@@ -64,13 +64,25 @@ def binary_curve(
     points: list[BinaryCurvePoint] = []
     for threshold in thresholds:
         predicted = [float(score) >= threshold for score in scores]
-        true_positives = sum(prediction and target for prediction, target in zip(predicted, targets, strict=True))
-        false_positives = sum(prediction and not target for prediction, target in zip(predicted, targets, strict=True))
+        true_positives = sum(
+            prediction and target for prediction, target in zip(predicted, targets, strict=True)
+        )
+        false_positives = sum(
+            prediction and not target for prediction, target in zip(predicted, targets, strict=True)
+        )
         false_negatives = positive_count - true_positives
         tpr = true_positives / positive_count if positive_count else 0.0
         fpr = false_positives / negative_count if negative_count else 0.0
-        precision = true_positives / (true_positives + false_positives) if true_positives + false_positives else 0.0
-        recall = true_positives / (true_positives + false_negatives) if true_positives + false_negatives else 0.0
+        precision = (
+            true_positives / (true_positives + false_positives)
+            if true_positives + false_positives
+            else 0.0
+        )
+        recall = (
+            true_positives / (true_positives + false_negatives)
+            if true_positives + false_negatives
+            else 0.0
+        )
         points.append(BinaryCurvePoint(threshold, tpr, fpr, precision, recall))
     return points
 

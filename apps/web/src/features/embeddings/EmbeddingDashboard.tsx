@@ -64,7 +64,9 @@ export function EmbeddingDashboard({ project }: { project: Project }) {
   const [maximumItems, setMaximumItems] = useState(25);
   const [diversityWeight, setDiversityWeight] = useState(0.7);
   const [maximumPerGroup, setMaximumPerGroup] = useState(3);
-  const [selection, setSelection] = useState<DiversitySelectionResult | null>(null);
+  const [selection, setSelection] = useState<DiversitySelectionResult | null>(
+    null,
+  );
 
   const embeddings = useQuery({
     queryKey: ["project_embeddings", project.id, modelId],
@@ -189,11 +191,17 @@ export function EmbeddingDashboard({ project }: { project: Project }) {
             </label>
             <label>
               Model ID or local path
-              <input value={modelId} onChange={(event) => setModelId(event.target.value)} />
+              <input
+                value={modelId}
+                onChange={(event) => setModelId(event.target.value)}
+              />
             </label>
             <label>
               Device
-              <select value={device} onChange={(event) => setDevice(event.target.value)}>
+              <select
+                value={device}
+                onChange={(event) => setDevice(event.target.value)}
+              >
                 <option value="auto">Auto</option>
                 <option value="cpu">CPU</option>
                 <option value="cuda">CUDA</option>
@@ -221,7 +229,9 @@ export function EmbeddingDashboard({ project }: { project: Project }) {
               disabled={generation.isPending || !modelId.trim()}
               onClick={() => generation.mutate()}
             >
-              {generation.isPending ? "Queueing..." : "Generate project embeddings"}
+              {generation.isPending
+                ? "Queueing..."
+                : "Generate project embeddings"}
             </button>
             {generation.error && (
               <p className="form-error">{generation.error.message}</p>
@@ -243,7 +253,9 @@ export function EmbeddingDashboard({ project }: { project: Project }) {
                 min="1"
                 max="5000"
                 value={maximumItems}
-                onChange={(event) => setMaximumItems(Number(event.target.value))}
+                onChange={(event) =>
+                  setMaximumItems(Number(event.target.value))
+                }
               />
             </label>
             <label>
@@ -254,7 +266,9 @@ export function EmbeddingDashboard({ project }: { project: Project }) {
                 max="1"
                 step="0.05"
                 value={diversityWeight}
-                onChange={(event) => setDiversityWeight(Number(event.target.value))}
+                onChange={(event) =>
+                  setDiversityWeight(Number(event.target.value))
+                }
               />
             </label>
             <label>
@@ -264,7 +278,9 @@ export function EmbeddingDashboard({ project }: { project: Project }) {
                 min="0"
                 max="5000"
                 value={maximumPerGroup}
-                onChange={(event) => setMaximumPerGroup(Number(event.target.value))}
+                onChange={(event) =>
+                  setMaximumPerGroup(Number(event.target.value))
+                }
               />
             </label>
             <button
@@ -297,7 +313,9 @@ export function EmbeddingDashboard({ project }: { project: Project }) {
                   Dimension: {embeddings.data?.[0]?.dimension ?? "Unavailable"}
                 </span>
                 {[...providerCounts.entries()].map(([name, count]) => (
-                  <span key={name}>{name}: {count}</span>
+                  <span key={name}>
+                    {name}: {count}
+                  </span>
                 ))}
               </div>
             )}
@@ -317,24 +335,34 @@ export function EmbeddingDashboard({ project }: { project: Project }) {
               <>
                 <div className="version-preview-metrics">
                   <span>Candidates: {selection.candidate_count}</span>
-                  <span>Missing: {selection.skipped_missing_embedding_count}</span>
-                  <span>Dimension: {selection.vector_dimension ?? "Unavailable"}</span>
+                  <span>
+                    Missing: {selection.skipped_missing_embedding_count}
+                  </span>
+                  <span>
+                    Dimension: {selection.vector_dimension ?? "Unavailable"}
+                  </span>
                 </div>
                 {selection.warnings.map((warning) => (
-                  <p key={warning} className="annotation-helper">{warning}</p>
+                  <p key={warning} className="annotation-helper">
+                    {warning}
+                  </p>
                 ))}
                 <div className="dashboard-list">
                   {selection.selections.map((item) => (
                     <div key={item.image_id} className="dashboard-row">
                       <div>
-                        <strong>#{item.rank} · {item.image_id}</strong>
+                        <strong>
+                          #{item.rank} · {item.image_id}
+                        </strong>
                         <p>{item.group_key ?? "Ungrouped"}</p>
                         <small>
-                          Nearest selected: {item.nearest_selected_image_id ?? "seed"}
+                          Nearest selected:{" "}
+                          {item.nearest_selected_image_id ?? "seed"}
                         </small>
                       </div>
                       <span>
-                        novelty {item.novelty_score.toFixed(3)} · score {item.selection_score.toFixed(3)}
+                        novelty {item.novelty_score.toFixed(3)} · score{" "}
+                        {item.selection_score.toFixed(3)}
                       </span>
                     </div>
                   ))}

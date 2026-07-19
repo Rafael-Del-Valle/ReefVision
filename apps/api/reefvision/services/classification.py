@@ -64,9 +64,7 @@ class ClassificationService:
         if version.project_id != project_id:
             raise ValidationError("The dataset version must belong to the selected project")
         if version.status != "complete":
-            raise ValidationError(
-                "Classification requires a complete immutable dataset version"
-            )
+            raise ValidationError("Classification requires a complete immutable dataset version")
         return version
 
     def preview(
@@ -88,13 +86,9 @@ class ClassificationService:
             mode=request.mode,
             minimum_crop_size_px=request.minimum_crop_size_px,
             eligible_crop_count=int(preview["eligible_crop_count"]),
-            removed_during_preprocessing_count=int(
-                preview["removed_during_preprocessing_count"]
-            ),
+            removed_during_preprocessing_count=int(preview["removed_during_preprocessing_count"]),
             missing_state_count=int(preview["missing_state_count"]),
-            split_counts={
-                str(key): int(value) for key, value in preview["split_counts"].items()
-            },
+            split_counts={str(key): int(value) for key, value in preview["split_counts"].items()},
             classes=[
                 ClassificationDatasetClassSummary.model_validate(item)
                 for item in preview["classes"]
@@ -111,17 +105,11 @@ class ClassificationService:
         version = self._version(project_id, request.dataset_version_id)
         preview = self.preview(project_id, request)
         if preview.eligible_crop_count <= 0:
-            raise ValidationError(
-                "No eligible classification crops remain after preprocessing"
-            )
+            raise ValidationError("No eligible classification crops remain after preprocessing")
         if len([item for item in preview.classes if item.crop_count > 0]) < 2:
-            raise ValidationError(
-                "Classification training requires at least two eligible classes"
-            )
+            raise ValidationError("Classification training requires at least two eligible classes")
         if preview.split_counts.get("train", 0) <= 0:
-            raise ValidationError(
-                "The training split contains no eligible classification crops"
-            )
+            raise ValidationError("The training split contains no eligible classification crops")
 
         initial_model: ModelRegistration | None = None
         initial_source = "scratch"
@@ -249,16 +237,12 @@ class ClassificationService:
         if not checkpoint.is_file():
             raise ValidationError("The registered classifier checkpoint is missing")
         images = list(
-            self.session.scalars(
-                select(ImageAsset).where(ImageAsset.id.in_(request.image_ids))
-            )
+            self.session.scalars(select(ImageAsset).where(ImageAsset.id.in_(request.image_ids)))
         )
         if len(images) != len(set(request.image_ids)):
             raise ValidationError("One or more requested images do not exist")
         if any(image.project_id != project.id for image in images):
-            raise ValidationError(
-                "All inference images must belong to the selected project"
-            )
+            raise ValidationError("All inference images must belong to the selected project")
         job = Job(
             project_id=project.id,
             job_type="classification_inference",
@@ -294,9 +278,7 @@ class ClassificationService:
         if review_status:
             filters.append(ClassificationPrediction.review_status == review_status)
         total = int(
-            self.session.scalar(
-                select(func.count(ClassificationPrediction.id)).where(*filters)
-            )
+            self.session.scalar(select(func.count(ClassificationPrediction.id)).where(*filters))
             or 0
         )
         rows = list(
@@ -312,9 +294,7 @@ class ClassificationService:
             )
         )
         return ClassificationPredictionPage(
-            items=[
-                ClassificationPredictionResponse.model_validate(item) for item in rows
-            ],
+            items=[ClassificationPredictionResponse.model_validate(item) for item in rows],
             total=total,
             page=page,
             page_size=page_size,
@@ -330,9 +310,7 @@ class ClassificationService:
         if prediction is None:
             raise NotFoundError("Classification prediction not found")
         if prediction.review_status != "pending":
-            raise ConflictError(
-                "Only pending classification predictions may be reviewed"
-            )
+            raise ConflictError("Only pending classification predictions may be reviewed")
         if request.action == "reject":
             prediction.review_status = "rejected"
             prediction.reviewed_at = datetime.now(UTC)
@@ -346,19 +324,13 @@ class ClassificationService:
             else None
         )
         if annotation is None or annotation.deleted_at is not None:
-            raise ValidationError(
-                "Accepting this crop prediction requires its source annotation"
-            )
+            raise ValidationError("Accepting this crop prediction requires its source annotation")
         target_class_id = request.label_class_id or prediction.label_class_id
         target_class = (
-            self.session.get(LabelClass, target_class_id)
-            if target_class_id is not None
-            else None
+            self.session.get(LabelClass, target_class_id) if target_class_id is not None else None
         )
         if target_class is None or target_class.project_id != prediction.project_id:
-            raise ValidationError(
-                "Choose a valid project class before accepting this prediction"
-            )
+            raise ValidationError("Choose a valid project class before accepting this prediction")
         image = self.session.get(ImageAsset, prediction.image_id)
         if image is None:
             raise NotFoundError("Source image not found")
@@ -427,9 +399,7 @@ class ClassificationService:
         if image is None:
             raise NotFoundError("Image not found")
         if label_class is None or label_class.project_id != image.project_id:
-            raise ValidationError(
-                "Image labels must use a class from the same project"
-            )
+            raise ValidationError("Image labels must use a class from the same project")
         existing = self.session.scalar(
             select(ImageLabel).where(
                 ImageLabel.image_id == image.id,

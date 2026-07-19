@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 from PIL import Image
@@ -63,9 +63,7 @@ def _points_payload(
 def _box_array(box: PixelBox | None) -> np.ndarray | None:
     if box is None:
         return None
-    return np.asarray(
-        [box.x_min, box.y_min, box.x_max, box.y_max], dtype=np.float32
-    )
+    return np.asarray([box.x_min, box.y_min, box.x_max, box.y_max], dtype=np.float32)
 
 
 def _prediction(masks: Any, scores: Any) -> AssistPrediction:
@@ -82,7 +80,7 @@ class _PredictorAdapter:
     provider_name = "sam_family"
     provider_version = "unknown"
     framework = "sam_family"
-    allowed_suffixes = {".pt", ".pth"}
+    allowed_suffixes: ClassVar[set[str]] = {".pt", ".pth"}
 
     def __init__(self) -> None:
         self._model: Any | None = None
@@ -219,7 +217,8 @@ class EfficientViTSAMAssistProvider(_PredictorAdapter):
                 model = create_sam_model(variant, False, str(model_path))
             except Exception as exc:
                 raise ValidationError(
-                    "The installed EfficientViT-SAM package does not expose a compatible model factory"
+                    "The installed EfficientViT-SAM package does not expose a "
+                    "compatible model factory"
                 ) from exc
         model.to(device=self._device)
         model.eval()
@@ -243,16 +242,29 @@ def infer_sam2_config(model_path: Path) -> str:
     name = model_path.name.casefold().replace("-", "_")
     version_prefix = "configs/sam2.1" if "2.1" in name or "sam2_1" in name else "configs/sam2"
     variants = (
-        (("hiera_tiny", "hiera_t", "tiny"), "sam2.1_hiera_t.yaml" if "sam2.1" in version_prefix else "sam2_hiera_t.yaml"),
-        (("hiera_small", "hiera_s", "small"), "sam2.1_hiera_s.yaml" if "sam2.1" in version_prefix else "sam2_hiera_s.yaml"),
-        (("hiera_base_plus", "base_plus", "hiera_b+", "base"), "sam2.1_hiera_b+.yaml" if "sam2.1" in version_prefix else "sam2_hiera_b+.yaml"),
-        (("hiera_large", "hiera_l", "large"), "sam2.1_hiera_l.yaml" if "sam2.1" in version_prefix else "sam2_hiera_l.yaml"),
+        (
+            ("hiera_tiny", "hiera_t", "tiny"),
+            "sam2.1_hiera_t.yaml" if "sam2.1" in version_prefix else "sam2_hiera_t.yaml",
+        ),
+        (
+            ("hiera_small", "hiera_s", "small"),
+            "sam2.1_hiera_s.yaml" if "sam2.1" in version_prefix else "sam2_hiera_s.yaml",
+        ),
+        (
+            ("hiera_base_plus", "base_plus", "hiera_b+", "base"),
+            "sam2.1_hiera_b+.yaml" if "sam2.1" in version_prefix else "sam2_hiera_b+.yaml",
+        ),
+        (
+            ("hiera_large", "hiera_l", "large"),
+            "sam2.1_hiera_l.yaml" if "sam2.1" in version_prefix else "sam2_hiera_l.yaml",
+        ),
     )
     for tokens, config in variants:
         if any(token in name for token in tokens):
             return f"{version_prefix}/{config}"
     raise ValidationError(
-        "Could not infer the SAM 2 configuration from the checkpoint filename; include tiny, small, base_plus, or large"
+        "Could not infer the SAM 2 configuration from the checkpoint filename; "
+        "include tiny, small, base_plus, or large"
     )
 
 

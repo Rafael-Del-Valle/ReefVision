@@ -36,9 +36,7 @@ def _cosine_novelty(
     nearest_image_id: str | None = None
     nearest_distance = 1.0
     for image_id, vector in selected:
-        similarity = sum(
-            first * second for first, second in zip(candidate, vector, strict=True)
-        )
+        similarity = sum(first * second for first, second in zip(candidate, vector, strict=True))
         distance = max(0.0, min(1.0, (1.0 - similarity) / 2.0))
         if distance < nearest_distance or (
             distance == nearest_distance
@@ -111,9 +109,7 @@ class ImageEmbeddingService:
         self._project(project_id)
         query = select(ImageEmbedding).where(ImageEmbedding.project_id == project_id)
         if embedding_model_id:
-            query = query.where(
-                ImageEmbedding.embedding_model_id == embedding_model_id
-            )
+            query = query.where(ImageEmbedding.embedding_model_id == embedding_model_id)
         rows = list(
             self.session.scalars(
                 query.order_by(
@@ -139,20 +135,12 @@ class ImageEmbeddingService:
         self._project(project_id)
         image_query = select(ImageAsset).where(ImageAsset.project_id == project_id)
         if request.candidate_image_ids:
-            image_query = image_query.where(
-                ImageAsset.id.in_(request.candidate_image_ids)
-            )
+            image_query = image_query.where(ImageAsset.id.in_(request.candidate_image_ids))
         images = list(
-            self.session.scalars(
-                image_query.order_by(ImageAsset.created_at, ImageAsset.id)
-            )
+            self.session.scalars(image_query.order_by(ImageAsset.created_at, ImageAsset.id))
         )
-        if request.candidate_image_ids and len(images) != len(
-            request.candidate_image_ids
-        ):
-            raise ValidationError(
-                "All candidate images must exist in the selected project"
-            )
+        if request.candidate_image_ids and len(images) != len(request.candidate_image_ids):
+            raise ValidationError("All candidate images must exist in the selected project")
         image_by_id = {image.id: image for image in images}
         embedding_query = select(ImageEmbedding).where(
             ImageEmbedding.project_id == project_id,
@@ -161,8 +149,7 @@ class ImageEmbeddingService:
         )
         if request.embedding_model_checksum:
             embedding_query = embedding_query.where(
-                ImageEmbedding.embedding_model_checksum
-                == request.embedding_model_checksum
+                ImageEmbedding.embedding_model_checksum == request.embedding_model_checksum
             )
         embeddings = list(self.session.scalars(embedding_query))
         embedding_by_image = {item.image_id: item for item in embeddings}
@@ -183,14 +170,10 @@ class ImageEmbeddingService:
             )
         dimensions = {item.dimension for item in embeddings}
         if len(dimensions) != 1:
-            raise ValidationError(
-                "Matching embeddings use inconsistent vector dimensions"
-            )
+            raise ValidationError("Matching embeddings use inconsistent vector dimensions")
         dimension = next(iter(dimensions))
         normalized_vectors = {
-            item.image_id: _normalized_vector(
-                [float(value) for value in item.vector_json]
-            )
+            item.image_id: _normalized_vector([float(value) for value in item.vector_json])
             for item in embeddings
         }
         raw_scores = {
@@ -232,8 +215,7 @@ class ImageEmbeddingService:
                 group_identifier = group_key or "__ungrouped__"
                 if (
                     request.maximum_items_per_group is not None
-                    and group_counts[group_identifier]
-                    >= request.maximum_items_per_group
+                    and group_counts[group_identifier] >= request.maximum_items_per_group
                 ):
                     continue
                 novelty, nearest_image_id = _cosine_novelty(
@@ -297,9 +279,7 @@ class ImageEmbeddingService:
                 "embedding was not available."
             )
         if len(selections) < maximum_items and request.maximum_items_per_group:
-            warnings.append(
-                "The per-group selection limit prevented the requested batch size."
-            )
+            warnings.append("The per-group selection limit prevented the requested batch size.")
         return EmbeddingDiversitySelectionResponse(
             project_id=project_id,
             embedding_model_id=request.embedding_model_id,

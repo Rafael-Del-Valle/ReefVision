@@ -53,9 +53,7 @@ def test_k_center_is_deterministic_diverse_and_respects_groups() -> None:
         seed=7,
         group_limit=1,
     )
-    assert [item.candidate_id for item in first] == [
-        item.candidate_id for item in second
-    ]
+    assert [item.candidate_id for item in first] == [item.candidate_id for item in second]
     assert len(first) == 3
     assert len({item.group_id for item in first}) == 3
     assert all(item.score >= 0 for item in first)

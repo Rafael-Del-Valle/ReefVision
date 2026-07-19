@@ -24,11 +24,8 @@ def test_embedding_diversity_combines_priority_novelty_and_group_caps(
         )
         for index in range(4)
     ]
-    image_ids = [
-        str(item["successful"][0]["image_id"])
-        for item in imported
-    ]
-    first_id, similar_id, orthogonal_id, opposite_id = image_ids
+    image_ids = [str(item["successful"][0]["image_id"]) for item in imported]
+    first_id, similar_id, _orthogonal_id, opposite_id = image_ids
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
         for image_id, group_key in zip(

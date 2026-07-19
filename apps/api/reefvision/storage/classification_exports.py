@@ -93,7 +93,7 @@ def preview_classification_dataset(
     warnings: list[str] = []
     if removed:
         warnings.append(
-            f"{removed} crop(s) smaller than {minimum_crop_size_px}×"
+            f"{removed} crop(s) smaller than {minimum_crop_size_px}x"
             f"{minimum_crop_size_px} pixels were removed during preprocessing."
         )
     if missing_state:
@@ -190,7 +190,7 @@ def write_classification_export(
                 destination_root = output_root / split_directory / class_key
                 destination_root.mkdir(parents=True, exist_ok=True)
                 annotation_id = str(annotation.get("id") or f"crop-{crop_index}")
-                crop_identity = f"{item.image_id}:{annotation_id}".encode("utf-8")
+                crop_identity = f"{item.image_id}:{annotation_id}".encode()
                 filename = f"{sha256(crop_identity).hexdigest()[:24]}.jpg"
                 destination = destination_root / filename
                 image.crop((left, top, right, bottom)).save(
@@ -201,9 +201,7 @@ def write_classification_export(
                 )
                 class_map[class_key] = {
                     "label": class_label,
-                    "label_class_id": (
-                        str(class_record["id"]) if mode == "multiclass" else None
-                    ),
+                    "label_class_id": (str(class_record["id"]) if mode == "multiclass" else None),
                     "class_index": (
                         int(class_record["class_index"]) if mode == "multiclass" else None
                     ),
@@ -243,7 +241,7 @@ def write_classification_export(
         "minimum_crop_size_px": minimum_crop_size_px,
         "padding_fraction": padding_fraction,
         "preprocessing_note": (
-            f"Crops smaller than {minimum_crop_size_px}×{minimum_crop_size_px} pixels "
+            f"Crops smaller than {minimum_crop_size_px}x{minimum_crop_size_px} pixels "
             "were removed during preprocessing."
         ),
         "split_directory_map": CLASSIFICATION_SPLIT_DIRECTORIES,
@@ -268,8 +266,6 @@ def write_classification_export(
         "split_counts": dict(split_counts),
         "class_counts": dict(class_counts),
         "item_count": len(manifest_items),
-        "removed_during_preprocessing_count": preview[
-            "removed_during_preprocessing_count"
-        ],
+        "removed_during_preprocessing_count": preview["removed_during_preprocessing_count"],
         "archive_size_bytes": archive_file.stat().st_size,
     }

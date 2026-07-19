@@ -45,11 +45,7 @@ class RasterMaskCleanupRequest(BaseModel):
 
     @model_validator(mode="after")
     def require_cleanup_operation(self) -> RasterMaskCleanupRequest:
-        if not (
-            self.remove_small_components
-            or self.keep_largest_component
-            or self.fill_holes
-        ):
+        if not (self.remove_small_components or self.keep_largest_component or self.fill_holes):
             raise ValueError("Choose at least one raster cleanup operation")
         return self
 

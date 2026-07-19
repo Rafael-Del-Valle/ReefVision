@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import itertools
 import json
 import struct
 import zipfile
@@ -155,7 +156,7 @@ def _raster_measurements(
 def _centerline_length(points: list[MeasurementPoint]) -> float:
     return sum(
         hypot(second.x - first.x, second.y - first.y)
-        for first, second in zip(points, points[1:], strict=False)
+        for first, second in itertools.pairwise(points)
     )
 
 
@@ -301,7 +302,7 @@ class MaskMeasurementService:
             raise ValidationError("Centerline points cannot extend outside the image bounds")
         if any(
             first.x == second.x and first.y == second.y
-            for first, second in zip(points, points[1:], strict=False)
+            for first, second in itertools.pairwise(points)
         ):
             raise ValidationError("Centerlines cannot contain consecutive duplicate points")
 

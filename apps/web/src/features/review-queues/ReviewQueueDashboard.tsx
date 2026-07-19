@@ -343,7 +343,9 @@ export function ReviewQueueDashboard({
                       max="500"
                       step="1"
                       value={maxItems}
-                      onChange={(event) => setMaxItems(Number(event.target.value))}
+                      onChange={(event) =>
+                        setMaxItems(Number(event.target.value))
+                      }
                     />
                   </label>
                   <label>
@@ -507,7 +509,8 @@ export function ReviewQueueDashboard({
                 <>
                   <div className="version-preview-metrics">
                     <span>
-                      Batch limit: {metricValue(selectedActiveConfig, "max_items")}
+                      Batch limit:{" "}
+                      {metricValue(selectedActiveConfig, "max_items")}
                     </span>
                     <span>
                       Minimum score:{" "}
@@ -525,11 +528,17 @@ export function ReviewQueueDashboard({
                   <div className="version-preview-metrics">
                     <span>
                       Candidates:{" "}
-                      {metricValue(selectedQueue.summary_json, "candidate_count")}
+                      {metricValue(
+                        selectedQueue.summary_json,
+                        "candidate_count",
+                      )}
                     </span>
                     <span>
                       Reviewed excluded:{" "}
-                      {metricValue(selectedQueue.summary_json, "reviewed_excluded")}
+                      {metricValue(
+                        selectedQueue.summary_json,
+                        "reviewed_excluded",
+                      )}
                     </span>
                     <span>
                       Average diversity:{" "}

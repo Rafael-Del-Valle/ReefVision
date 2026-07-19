@@ -115,9 +115,7 @@ def process_export_job(
             if export is None:
                 raise RuntimeError("Export record is missing")
             version = session.scalar(
-                select(DatasetVersion).where(
-                    DatasetVersion.id == export.dataset_version_id
-                )
+                select(DatasetVersion).where(DatasetVersion.id == export.dataset_version_id)
             )
             if version is None:
                 raise RuntimeError("Dataset version is missing")
@@ -134,9 +132,7 @@ def process_export_job(
             )
             images = list(
                 session.scalars(
-                    select(ImageAsset).where(
-                        ImageAsset.id.in_([item.image_id for item in items])
-                    )
+                    select(ImageAsset).where(ImageAsset.id.in_([item.image_id for item in items]))
                 )
             )
             image_paths = {
@@ -216,12 +212,8 @@ def process_export_job(
                     manifest_path=export.manifest_path,
                     archive_path=export.archive_path,
                     mode=mode,
-                    minimum_crop_size_px=int(
-                        export.request_json.get("minimum_crop_size_px", 10)
-                    ),
-                    padding_fraction=float(
-                        export.request_json.get("padding_fraction", 0.0)
-                    ),
+                    minimum_crop_size_px=int(export.request_json.get("minimum_crop_size_px", 10)),
+                    padding_fraction=float(export.request_json.get("padding_fraction", 0.0)),
                 )
                 classification_rows = _classification_crop_rows(
                     settings,
@@ -229,28 +221,20 @@ def process_export_job(
                     expected_count=int(result["item_count"]),
                 )
             else:
-                raise RuntimeError(
-                    f"Unsupported export format: {export.format}"
-                )
+                raise RuntimeError(f"Unsupported export format: {export.format}")
 
         with factory() as session:
             job = session.get(Job, job_id)
             export = session.get(ExportRecord, export_id)
             if job is None or export is None:
-                raise RuntimeError(
-                    "Export job references missing database rows"
-                )
+                raise RuntimeError("Export job references missing database rows")
             if classification_rows is not None:
                 session.execute(
-                    delete(ClassificationCrop).where(
-                        ClassificationCrop.export_id == export.id
-                    )
+                    delete(ClassificationCrop).where(ClassificationCrop.export_id == export.id)
                 )
                 for item in classification_rows:
                     crop_path = str(item["crop_path"])
-                    managed_path = (
-                        f"{export.output_path.rstrip('/')}/{crop_path.lstrip('/')}"
-                    )
+                    managed_path = f"{export.output_path.rstrip('/')}/{crop_path.lstrip('/')}"
                     session.add(
                         ClassificationCrop(
                             project_id=export.project_id,

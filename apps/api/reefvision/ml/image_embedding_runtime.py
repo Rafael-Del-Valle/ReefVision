@@ -49,7 +49,7 @@ def color_texture_embedding(image: Image.Image) -> tuple[list[float], dict[str, 
     )
     features.extend(np.nan_to_num(magnitude_histogram).astype(np.float32).tolist())
     features.extend(np.nan_to_num(orientation_histogram).astype(np.float32).tolist())
-    # Preserve coarse spatial structure through an 8×8 grayscale grid.
+    # Preserve coarse spatial structure through an 8x8 grayscale grid.
     coarse = np.asarray(rgb.convert("L").resize((8, 8)), dtype=np.float32) / 255.0
     features.extend(coarse.reshape(-1).tolist())
     vector = np.asarray(features, dtype=np.float32)

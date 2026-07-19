@@ -37,8 +37,7 @@ class PublicActiveLearningCycleService(ActiveLearningCycleService):
             baseline_metrics=dict(cycle.baseline_metrics_json or {}),
             candidate_metrics=dict(cycle.candidate_metrics_json or {}),
             promotion_gates=[
-                PromotionGate.model_validate(item)
-                for item in gate_container.get("gates", [])
+                PromotionGate.model_validate(item) for item in gate_container.get("gates", [])
             ],
             promotion_results=[
                 PromotionGateResult.model_validate(item)

@@ -77,9 +77,7 @@ class GeometryToolsService:
         warnings: list[str] = []
         if request.operation == "simplify":
             outer = simplify_ring(outer, tolerance=float(request.tolerance))
-            holes = [
-                simplify_ring(hole, tolerance=float(request.tolerance)) for hole in holes
-            ]
+            holes = [simplify_ring(hole, tolerance=float(request.tolerance)) for hole in holes]
         elif request.operation == "densify":
             outer = densify_ring(
                 outer,

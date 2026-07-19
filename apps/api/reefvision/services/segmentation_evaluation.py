@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from statistics import mean
-from typing import Any, TypeAlias
+from typing import TypeAlias
 
 import numpy as np
 from PIL import Image, ImageDraw, UnidentifiedImageError
@@ -22,8 +22,8 @@ from reefvision.db.models import (
 )
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.ml.segmentation_metrics import (
-    average_precision,
     area_stratum,
+    average_precision,
     boundary_metrics,
     confidence_calibration,
     panoptic_metrics,
@@ -123,9 +123,7 @@ def _raster_mask(
         with Image.open(path) as source:
             source.load()
             if source.size != (width, height):
-                raise ValidationError(
-                    "Segmentation mask dimensions do not match the source image"
-                )
+                raise ValidationError("Segmentation mask dimensions do not match the source image")
             return source.convert("L").point(lambda value: 255 if value > 0 else 0)
     except (OSError, UnidentifiedImageError) as exc:
         raise ValidationError("Segmentation mask content could not be read") from exc
@@ -166,12 +164,7 @@ def _touches_boundary(mask: BinaryMask) -> bool:
     values = _array(mask)
     return bool(
         values.size
-        and (
-            values[0, :].any()
-            or values[-1, :].any()
-            or values[:, 0].any()
-            or values[:, -1].any()
-        )
+        and (values[0, :].any() or values[-1, :].any() or values[:, 0].any() or values[:, -1].any())
     )
 
 
@@ -278,9 +271,7 @@ class SegmentationEvaluationService:
         query = select(ImageAsset).where(ImageAsset.project_id == project_id)
         if requested_ids:
             query = query.where(ImageAsset.id.in_(requested_ids))
-        images = list(
-            self.session.scalars(query.order_by(ImageAsset.created_at, ImageAsset.id))
-        )
+        images = list(self.session.scalars(query.order_by(ImageAsset.created_at, ImageAsset.id)))
         if requested_ids and len(images) != len(set(requested_ids)):
             raise ValidationError(
                 "All requested evaluation images must exist in the selected project"
@@ -395,20 +386,13 @@ class SegmentationEvaluationService:
             mean_pixel_precision=_mean_optional(
                 [item.pixel_precision for item in accumulator.matches]
             ),
-            mean_pixel_recall=_mean_optional(
-                [item.pixel_recall for item in accumulator.matches]
-            ),
-            mean_boundary_f1=_mean_optional(
-                [item.boundary_f1 for item in accumulator.matches]
-            ),
+            mean_pixel_recall=_mean_optional([item.pixel_recall for item in accumulator.matches]),
+            mean_boundary_f1=_mean_optional([item.boundary_f1 for item in accumulator.matches]),
             mean_hausdorff_distance_pixels=_mean_optional(
                 [item.hausdorff_distance_pixels for item in accumulator.matches]
             ),
             mean_average_symmetric_surface_distance_pixels=_mean_optional(
-                [
-                    item.average_symmetric_surface_distance_pixels
-                    for item in accumulator.matches
-                ]
+                [item.average_symmetric_surface_distance_pixels for item in accumulator.matches]
             ),
             panoptic_quality=panoptic.panoptic_quality,
             segmentation_quality=panoptic.segmentation_quality,
@@ -464,9 +448,7 @@ class SegmentationEvaluationService:
             )
 
         matches: list[SegmentationInstanceMatch] = []
-        class_accumulators: dict[str | None, _ClassAccumulator] = defaultdict(
-            _ClassAccumulator
-        )
+        class_accumulators: dict[str | None, _ClassAccumulator] = defaultdict(_ClassAccumulator)
         image_accumulators: dict[str, _ImageAccumulator] = defaultdict(_ImageAccumulator)
         size_accumulators: dict[str, _SizeAccumulator] = defaultdict(_SizeAccumulator)
         calibration_rows: list[tuple[float, bool]] = []
@@ -506,9 +488,7 @@ class SegmentationEvaluationService:
                 iou_threshold=request.match_iou_threshold,
             )
             for candidate in accepted:
-                ground_truth, ground_truth_mask = ground_truth_items[
-                    candidate.ground_truth_index
-                ]
+                ground_truth, ground_truth_mask = ground_truth_items[candidate.ground_truth_index]
                 prediction, prediction_mask = prediction_items[candidate.prediction_index]
                 (
                     intersection,
@@ -601,9 +581,7 @@ class SegmentationEvaluationService:
                 ground_truth_count=accumulator.ground_truth_count,
                 matched_count=len(accumulator.matches),
                 mean_iou=_mean_optional([item.iou for item in accumulator.matches]),
-                mean_boundary_f1=_mean_optional(
-                    [item.boundary_f1 for item in accumulator.matches]
-                ),
+                mean_boundary_f1=_mean_optional([item.boundary_f1 for item in accumulator.matches]),
             )
             for stratum, accumulator in sorted(size_accumulators.items())
         ]
@@ -695,12 +673,8 @@ class SegmentationEvaluationService:
             matched_count=matched_count,
             false_positive_count=false_positive_count,
             false_negative_count=false_negative_count,
-            instance_precision=(
-                matched_count / prediction_count if prediction_count else 0.0
-            ),
-            instance_recall=(
-                matched_count / ground_truth_count if ground_truth_count else 0.0
-            ),
+            instance_precision=(matched_count / prediction_count if prediction_count else 0.0),
+            instance_recall=(matched_count / ground_truth_count if ground_truth_count else 0.0),
             mean_iou=_mean_optional([item.iou for item in matches]),
             mean_dice=_mean_optional([item.dice for item in matches]),
             mean_boundary_f1=_mean_optional([item.boundary_f1 for item in matches]),

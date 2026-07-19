@@ -41,7 +41,7 @@ def _utc(value: datetime | None) -> datetime | None:
 
 
 def _issue_id(category: str, record_id: str | None, path: str | None) -> str:
-    value = f"{category}|{record_id or ''}|{path or ''}".encode("utf-8")
+    value = f"{category}|{record_id or ''}|{path or ''}".encode()
     return hashlib.sha256(value).hexdigest()[:24]
 
 
@@ -306,10 +306,7 @@ class RecoveryService:
         for path in project_root.rglob("*"):
             if not path.is_file() or ".quarantine" in path.parts:
                 continue
-            if not (
-                path.name.startswith(".rv-")
-                or path.suffix.casefold() in {".tmp", ".part"}
-            ):
+            if not (path.name.startswith(".rv-") or path.suffix.casefold() in {".tmp", ".part"}):
                 continue
             modified = datetime.fromtimestamp(path.stat().st_mtime, UTC)
             if modified >= cutoff:

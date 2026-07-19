@@ -118,11 +118,7 @@ def process_video_tracking_job(
                 track_ids = boxes.id.int().tolist()
                 confidences = boxes.conf.tolist()
                 classes = boxes.cls.int().tolist()
-                names = (
-                    getattr(result, "names", None)
-                    or getattr(detector, "names", None)
-                    or {}
-                )
+                names = getattr(result, "names", None) or getattr(detector, "names", None) or {}
                 for index, raw_track_id in enumerate(track_ids):
                     track_number = int(raw_track_id)
                     if track_number < 1:

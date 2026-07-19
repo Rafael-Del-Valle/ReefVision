@@ -116,7 +116,10 @@ describe("ReviewQueueDashboard active learning", () => {
     const user = userEvent.setup();
     renderDashboard();
 
-    await user.selectOptions(await screen.findByLabelText("Queue type"), "active_learning");
+    await user.selectOptions(
+      await screen.findByLabelText("Queue type"),
+      "active_learning",
+    );
     await user.clear(screen.getByLabelText("Maximum images"));
     await user.type(screen.getByLabelText("Maximum images"), "25");
     await user.clear(screen.getByLabelText("Minimum priority score"));
@@ -124,7 +127,9 @@ describe("ReviewQueueDashboard active learning", () => {
     await user.clear(screen.getByLabelText("Diversity weight"));
     await user.type(screen.getByLabelText("Diversity weight"), "0.6");
     await user.type(screen.getByLabelText("Maximum per group"), "3");
-    await user.click(screen.getByLabelText("Include images already marked reviewed"));
+    await user.click(
+      screen.getByLabelText("Include images already marked reviewed"),
+    );
     await user.click(
       screen.getByRole("button", { name: "Generate active-learning batch" }),
     );

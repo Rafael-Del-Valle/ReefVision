@@ -124,9 +124,7 @@ def test_classification_evaluation_reports_confusion_f1_and_calibration(
     assert payload["top_label_brier_score"] == pytest.approx(0.27)
 
     confusion = {
-        (item["actual_label_class_id"], item["predicted_label_class_id"]): item[
-            "count"
-        ]
+        (item["actual_label_class_id"], item["predicted_label_class_id"]): item["count"]
         for item in payload["confusion_matrix"]
     }
     assert confusion[(class_ids["closed"], class_ids["closed"])] == 1

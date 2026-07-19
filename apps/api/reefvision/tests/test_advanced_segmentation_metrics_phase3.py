@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 
 from reefvision.ml.segmentation_metrics import (
-    average_precision,
     area_stratum,
+    average_precision,
     boundary_metrics,
     confidence_calibration,
     panoptic_metrics,

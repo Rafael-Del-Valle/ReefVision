@@ -19,9 +19,10 @@ import {
 import { PromptPointAssistOverlay } from "./PromptPointAssistOverlay";
 
 vi.mock("../../api/client", async () => {
-  const actual = await vi.importActual<typeof import("../../api/client")>(
-    "../../api/client",
-  );
+  const actual =
+    await vi.importActual<typeof import("../../api/client")>(
+      "../../api/client",
+    );
   return {
     ...actual,
     getAnnotationSession: vi.fn(),
@@ -245,7 +246,9 @@ describe("PromptPointAssistOverlay", () => {
   it("requires an include point before exclusion points", async () => {
     const user = userEvent.setup();
     const { svg } = renderOverlay();
-    await screen.findByRole("heading", { name: /positive and negative points/i });
+    await screen.findByRole("heading", {
+      name: /positive and negative points/i,
+    });
     await waitFor(() =>
       expect(screen.getByLabelText("Accept mask as")).toHaveValue("class-1"),
     );
@@ -258,7 +261,9 @@ describe("PromptPointAssistOverlay", () => {
     });
 
     expect(
-      await screen.findByText(/place at least one include point before exclude/i),
+      await screen.findByText(
+        /place at least one include point before exclude/i,
+      ),
     ).toBeInTheDocument();
     expect(screen.getByText("0 exclude")).toBeInTheDocument();
     expect(

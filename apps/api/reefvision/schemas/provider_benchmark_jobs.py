@@ -29,13 +29,17 @@ class ProviderBenchmarkRunRequest(BaseModel):
     def validate_inputs(self) -> ProviderBenchmarkRunRequest:
         if self.provider_id != "mock" and not self.image_ids:
             raise ValueError("Non-mock provider benchmarks require at least one image_id")
-        if self.provider_id in {
-            "ultralytics",
-            "segment_anything",
-            "efficientvit_sam",
-            "mobile_sam",
-            "sam2",
-        } and not self.model_id:
+        if (
+            self.provider_id
+            in {
+                "ultralytics",
+                "segment_anything",
+                "efficientvit_sam",
+                "mobile_sam",
+                "sam2",
+            }
+            and not self.model_id
+        ):
             raise ValueError("The selected provider benchmark requires model_id")
         return self
 

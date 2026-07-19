@@ -56,8 +56,7 @@ export function MaskMeasurementPanel({
   const [distancePerPixel, setDistancePerPixel] = useState("");
   const [unit, setUnit] = useState("mm");
   const [defaultDepth, setDefaultDepth] = useState("");
-  const [surfaceModel, setSurfaceModel] =
-    useState<SurfaceModelKind>("none");
+  const [surfaceModel, setSurfaceModel] = useState<SurfaceModelKind>("none");
   const [depthValue, setDepthValue] = useState("");
   const [diameterValue, setDiameterValue] = useState("");
   const [profileNotes, setProfileNotes] = useState("");
@@ -287,18 +286,20 @@ export function MaskMeasurementPanel({
             className="danger-ghost"
             onClick={() => clearCalibrationMutation.mutate()}
             disabled={
-              calibrationQuery.data == null || clearCalibrationMutation.isPending
+              calibrationQuery.data == null ||
+              clearCalibrationMutation.isPending
             }
           >
             Clear
           </button>
         </div>
-        {(calibrationMutation.error ?? clearCalibrationMutation.error) instanceof
-          Error && (
+        {(calibrationMutation.error ??
+          clearCalibrationMutation.error) instanceof Error && (
           <p className="form-error">
-            {(
-              calibrationMutation.error ?? clearCalibrationMutation.error
-            )?.message}
+            {
+              (calibrationMutation.error ?? clearCalibrationMutation.error)
+                ?.message
+            }
           </p>
         )}
       </details>
@@ -353,8 +354,8 @@ export function MaskMeasurementPanel({
         <details>
           <summary>Centerline and surface model</summary>
           <p className="annotation-helper">
-            Use the Centerline tool above the image to add or drag source-coordinate
-            points. Double-click a point to remove it.
+            Use the Centerline tool above the image to add or drag
+            source-coordinate points. Double-click a point to remove it.
           </p>
           <div className="annotation-selection-row">
             <strong>Centerline</strong>

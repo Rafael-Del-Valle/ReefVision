@@ -100,7 +100,9 @@ export function InterchangeDashboard({ project }: { project: Project }) {
         return previewInterchange(project.id, request);
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : "Interchange document is invalid";
+          error instanceof Error
+            ? error.message
+            : "Interchange document is invalid";
         setParseError(message);
         throw error;
       }
@@ -125,7 +127,8 @@ export function InterchangeDashboard({ project }: { project: Project }) {
 
   const apply = useMutation({
     mutationFn: () => {
-      if (!preview.data) throw new Error("Generate a current preview before importing");
+      if (!preview.data)
+        throw new Error("Generate a current preview before importing");
       return applyInterchange(project.id, {
         ...buildRequest(),
         preview_checksum: preview.data.preview_checksum,
@@ -134,7 +137,9 @@ export function InterchangeDashboard({ project }: { project: Project }) {
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["project", project.id] }),
-        queryClient.invalidateQueries({ queryKey: ["project-images", project.id] }),
+        queryClient.invalidateQueries({
+          queryKey: ["project-images", project.id],
+        }),
         queryClient.invalidateQueries({ queryKey: ["images", project.id] }),
         queryClient.invalidateQueries({ queryKey: ["project_summaries"] }),
       ]);
@@ -179,7 +184,9 @@ export function InterchangeDashboard({ project }: { project: Project }) {
       apply.reset();
     } catch (error) {
       setParseError(
-        error instanceof Error ? error.message : "The selected file could not be read",
+        error instanceof Error
+          ? error.message
+          : "The selected file could not be read",
       );
     } finally {
       event.target.value = "";
@@ -193,8 +200,9 @@ export function InterchangeDashboard({ project }: { project: Project }) {
           <p className="eyebrow">Phase 9 interoperability</p>
           <h3>External format round trips and class mapping</h3>
           <span>
-            Preview image and class collisions, resolve mappings, apply an immutable
-            dry-run checksum, or export the current project to a portable ecosystem format.
+            Preview image and class collisions, resolve mappings, apply an
+            immutable dry-run checksum, or export the current project to a
+            portable ecosystem format.
           </span>
         </div>
         <span>{activeClasses.length} active project classes</span>
@@ -223,7 +231,9 @@ export function InterchangeDashboard({ project }: { project: Project }) {
               Load local annotation file
               <input
                 type="file"
-                accept={format === "cvat" ? ".xml,text/xml" : ".json,application/json"}
+                accept={
+                  format === "cvat" ? ".xml,text/xml" : ".json,application/json"
+                }
                 onChange={(event) => void loadFile(event)}
               />
             </label>
@@ -292,7 +302,9 @@ export function InterchangeDashboard({ project }: { project: Project }) {
               >
                 <option value="append">Append imported annotations</option>
                 <option value="skip_image">Skip annotated images</option>
-                <option value="replace_imported">Replace earlier external imports</option>
+                <option value="replace_imported">
+                  Replace earlier external imports
+                </option>
                 <option value="error">Block import</option>
               </select>
             </label>
@@ -368,7 +380,9 @@ export function InterchangeDashboard({ project }: { project: Project }) {
               }
               onClick={() => exportMutation.mutate()}
             >
-              {exportMutation.isPending ? "Exporting..." : "Create portable export"}
+              {exportMutation.isPending
+                ? "Exporting..."
+                : "Create portable export"}
             </button>
             {exportMutation.error && (
               <p className="form-error">{exportMutation.error.message}</p>
@@ -419,9 +433,9 @@ export function InterchangeDashboard({ project }: { project: Project }) {
                 )}
                 {apply.data && (
                   <p className="form-success">
-                    Imported {apply.data.created_annotation_ids.length} boxes and{" "}
-                    {apply.data.created_mask_annotation_ids.length} masks across{" "}
-                    {apply.data.affected_image_ids.length} images.
+                    Imported {apply.data.created_annotation_ids.length} boxes
+                    and {apply.data.created_mask_annotation_ids.length} masks
+                    across {apply.data.affected_image_ids.length} images.
                   </p>
                 )}
               </article>
@@ -432,7 +446,9 @@ export function InterchangeDashboard({ project }: { project: Project }) {
                     <p className="eyebrow">Class mapping</p>
                     <h4>Preview and resolve collisions</h4>
                   </div>
-                  <span>{preview.data.source_category_count} source categories</span>
+                  <span>
+                    {preview.data.source_category_count} source categories
+                  </span>
                 </div>
                 <div className="dashboard-list">
                   {preview.data.mappings.map((mapping) => (
@@ -480,8 +496,8 @@ export function InterchangeDashboard({ project }: { project: Project }) {
                   ))}
                 </div>
                 <p className="annotation-helper">
-                  Mapping changes invalidate the old checksum. Preview the import again
-                  before Apply becomes available.
+                  Mapping changes invalidate the old checksum. Preview the
+                  import again before Apply becomes available.
                 </p>
               </article>
 
@@ -513,8 +529,9 @@ export function InterchangeDashboard({ project }: { project: Project }) {
             <div className="empty-state">
               <h4>No import preview yet</h4>
               <p>
-                Load an external annotation document and run Preview to inspect class
-                mappings, image matches, conflicts, and the exact import count.
+                Load an external annotation document and run Preview to inspect
+                class mappings, image matches, conflicts, and the exact import
+                count.
               </p>
             </div>
           )}
@@ -526,7 +543,9 @@ export function InterchangeDashboard({ project }: { project: Project }) {
                   <p className="eyebrow">Export ready</p>
                   <h4>{formatLabels[exportMutation.data.format]}</h4>
                 </div>
-                <span>{formatBytes(exportMutation.data.archive_size_bytes)}</span>
+                <span>
+                  {formatBytes(exportMutation.data.archive_size_bytes)}
+                </span>
               </div>
               <div className="version-preview-metrics">
                 <span>{exportMutation.data.image_count} images</span>

@@ -15,7 +15,9 @@ from reefvision.storage.project_archives import (
 )
 
 
-def _start(factory: sessionmaker[Session], job_id: str, expected_type: str) -> tuple[dict, str | None]:
+def _start(
+    factory: sessionmaker[Session], job_id: str, expected_type: str
+) -> tuple[dict, str | None]:
     with factory() as session:
         job = session.get(Job, job_id)
         if job is None or job.job_type != expected_type or job.status != "queued":

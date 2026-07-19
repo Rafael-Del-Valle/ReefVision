@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import itertools
 import os
 import re
 from collections import Counter, defaultdict
@@ -37,8 +38,8 @@ from reefvision.schemas.videos import (
     VideoImportResponse,
     VideoTrackAnalytics,
     VideoTrackCreateRequest,
-    VideoTrackKeyframe,
     VideoTrackingJobRequest,
+    VideoTrackKeyframe,
     VideoTrackResponse,
     VideoTrackUpdateRequest,
 )
@@ -55,9 +56,7 @@ def _safe_filename(filename: str | None) -> str:
         sanitized = "video.mp4"
     suffix = Path(sanitized).suffix.casefold()
     if suffix not in SUPPORTED_VIDEO_SUFFIXES:
-        raise ValidationError(
-            "Supported video containers are MP4, MOV, AVI, MKV, and M4V"
-        )
+        raise ValidationError("Supported video containers are MP4, MOV, AVI, MKV, and M4V")
     return sanitized
 
 
@@ -90,7 +89,7 @@ def interpolate_track(track: VideoTrack) -> list[VideoTrackKeyframe]:
     if len(keyframes) <= 1:
         return keyframes
     interpolated: list[VideoTrackKeyframe] = []
-    for left, right in zip(keyframes, keyframes[1:], strict=False):
+    for left, right in itertools.pairwise(keyframes):
         frame_delta = right.frame_index - left.frame_index
         if frame_delta <= 0:
             continue
@@ -178,9 +177,7 @@ class VideoService:
             try:
                 import cv2
             except Exception as exc:
-                raise ValidationError(
-                    "OpenCV is required to inspect imported videos"
-                ) from exc
+                raise ValidationError("OpenCV is required to inspect imported videos") from exc
             capture = cv2.VideoCapture(str(temporary))
             if not capture.isOpened():
                 capture.release()
@@ -502,9 +499,7 @@ class VideoService:
                         else None
                     ),
                     mean_speed_physical_per_second=(
-                        mean_speed * distance_per_pixel
-                        if distance_per_pixel is not None
-                        else None
+                        mean_speed * distance_per_pixel if distance_per_pixel is not None else None
                     ),
                     maximum_speed_physical_per_second=(
                         maximum_speed * distance_per_pixel
@@ -534,8 +529,7 @@ class VideoService:
                 center_y = sum(point[1] for point in centers) / len(centers)
                 spread = sqrt(
                     sum(
-                        (point[0] - center_x) ** 2 + (point[1] - center_y) ** 2
-                        for point in centers
+                        (point[0] - center_x) ** 2 + (point[1] - center_y) ** 2 for point in centers
                     )
                     / len(centers)
                 )

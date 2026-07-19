@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass
 from statistics import mean
-from typing import Any, Iterable
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -80,9 +81,7 @@ def _candidate_diversity(
     if candidate.item.split:
         components.append(0.0 if candidate.item.split in seen_splits else 1.0)
     if candidate.item.highest_qc_severity:
-        components.append(
-            0.0 if candidate.item.highest_qc_severity in seen_severities else 1.0
-        )
+        components.append(0.0 if candidate.item.highest_qc_severity in seen_severities else 1.0)
     return mean(components) if components else 0.0
 
 
@@ -189,9 +188,7 @@ def select_diverse_candidates(
         )
         selected.append(choice)
         remaining = [
-            candidate
-            for candidate in remaining
-            if candidate.item.id != choice.candidate.item.id
+            candidate for candidate in remaining if candidate.item.id != choice.candidate.item.id
         ]
         candidate = choice.candidate
         seen_classes.update(candidate.item.label_class_ids_json)
@@ -251,9 +248,7 @@ class ActiveLearningQueueService:
         if queue is None:
             raise NotFoundError("Active-learning queue not found")
         if queue.formula_id != ACTIVE_LEARNING_FORMULA_ID:
-            raise ValidationError(
-                "Only active-learning queues use this regeneration endpoint"
-            )
+            raise ValidationError("Only active-learning queues use this regeneration endpoint")
         active_config = queue.configuration_json.get("active_learning", {})
         request = ActiveLearningQueueCreateRequest(
             source_quality_control_run_id=queue.source_quality_control_run_id,
@@ -436,14 +431,9 @@ class ActiveLearningQueueService:
                 if selections
                 else 0.0
             ),
-            "top_image_ids": [
-                selection.candidate.item.image_id for selection in selections[:10]
-            ],
+            "top_image_ids": [selection.candidate.item.image_id for selection in selections[:10]],
             "counts_by_group": dict(
-                Counter(
-                    selection.candidate.group_key or "ungrouped"
-                    for selection in selections
-                )
+                Counter(selection.candidate.group_key or "ungrouped" for selection in selections)
             ),
         }
         self.session.commit()

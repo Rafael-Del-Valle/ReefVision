@@ -106,9 +106,7 @@ def process_image_embedding_job(
                         project_id=image.project_id,
                         image_id=image.id,
                         embedding_model_id=model_id,
-                        embedding_model_checksum=(
-                            str(model_checksum) if model_checksum else None
-                        ),
+                        embedding_model_checksum=(str(model_checksum) if model_checksum else None),
                         dimension=len(vector),
                         vector_json=vector,
                         vector_sha256=checksum,
@@ -152,9 +150,7 @@ def process_image_embedding_job(
             return False
         job.status = "succeeded" if completed or skipped else "failed"
         job.error_message = (
-            None
-            if job.status == "succeeded"
-            else "No image embeddings were generated"
+            None if job.status == "succeeded" else "No image embeddings were generated"
         )
         job.completed_at = datetime.now(UTC)
         job.result_json = {

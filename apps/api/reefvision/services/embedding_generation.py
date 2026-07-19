@@ -29,9 +29,7 @@ class ImageEmbeddingGenerationService:
         query = select(ImageAsset).where(ImageAsset.project_id == project.id)
         if request.image_ids:
             query = query.where(ImageAsset.id.in_(request.image_ids))
-        images = list(
-            self.session.scalars(query.order_by(ImageAsset.created_at, ImageAsset.id))
-        )
+        images = list(self.session.scalars(query.order_by(ImageAsset.created_at, ImageAsset.id)))
         if request.image_ids and len(images) != len(request.image_ids):
             raise ValidationError(
                 "All requested embedding images must belong to the selected project"

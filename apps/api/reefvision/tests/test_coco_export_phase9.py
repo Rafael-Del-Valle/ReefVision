@@ -81,10 +81,7 @@ def test_coco_export_contains_immutable_boxes_polygons_and_categories(
     assert coco["images"][0]["reefvision_image_id"] == image_id
     assert len(coco["categories"]) == len(project["label_classes"])
     assert len(coco["annotations"]) == 2
-    by_geometry = {
-        item["reefvision_geometry_kind"]: item
-        for item in coco["annotations"]
-    }
+    by_geometry = {item["reefvision_geometry_kind"]: item for item in coco["annotations"]}
     box = by_geometry["bounding_box"]
     assert box["bbox"] == [5.0, 6.0, 20.0, 20.0]
     assert box["area"] == 400
@@ -92,9 +89,7 @@ def test_coco_export_contains_immutable_boxes_polygons_and_categories(
     polygon = by_geometry["polygon"]
     assert polygon["bbox"] == [30.0, 10.0, 20.0, 20.0]
     assert polygon["area"] == 400
-    assert polygon["segmentation"] == [
-        [30.0, 10.0, 50.0, 10.0, 50.0, 30.0, 30.0, 30.0]
-    ]
+    assert polygon["segmentation"] == [[30.0, 10.0, 50.0, 10.0, 50.0, 30.0, 30.0, 30.0]]
     assert manifest["format"] == "coco_instances"
     assert manifest["box_annotation_count"] == 1
     assert manifest["mask_annotation_count"] == 1

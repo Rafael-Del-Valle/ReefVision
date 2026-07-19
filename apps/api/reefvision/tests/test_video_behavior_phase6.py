@@ -84,21 +84,15 @@ def test_video_behavior_reports_tortuosity_turning_and_school_polarization(
     assert first_track["path_tortuosity"] == pytest.approx(math.sqrt(2))
     assert first_track["mean_speed_pixels_per_second"] == pytest.approx(100)
     assert first_track["maximum_speed_pixels_per_second"] == pytest.approx(100)
-    assert first_track[
-        "mean_acceleration_pixels_per_second_squared"
-    ] == pytest.approx(0)
-    assert first_track[
-        "maximum_acceleration_pixels_per_second_squared"
-    ] == pytest.approx(0)
+    assert first_track["mean_acceleration_pixels_per_second_squared"] == pytest.approx(0)
+    assert first_track["maximum_acceleration_pixels_per_second_squared"] == pytest.approx(0)
     assert first_track["mean_turning_angle_degrees"] == pytest.approx(90)
     assert first_track["cumulative_turning_angle_degrees"] == pytest.approx(90)
     assert first_track["mean_distance_to_wall_pixels"] == pytest.approx(25 / 3)
     assert first_track["active_time_seconds"] == pytest.approx(0.2)
     assert first_track["inactive_time_seconds"] == pytest.approx(0)
     assert first_track["distance_physical"] == pytest.approx(2)
-    assert first_track["net_displacement_physical"] == pytest.approx(
-        math.sqrt(2)
-    )
+    assert first_track["net_displacement_physical"] == pytest.approx(math.sqrt(2))
     assert first_track["mean_speed_physical_per_second"] == pytest.approx(10)
     assert first_track["mean_distance_to_wall_physical"] == pytest.approx(5 / 6)
 

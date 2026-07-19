@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import itertools
 import math
-from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
@@ -100,9 +100,7 @@ def _convex_hull(points: np.ndarray) -> np.ndarray:
         return np.asarray(unique, dtype=np.float64)
 
     def cross(origin: Point, a: Point, b: Point) -> float:
-        return (a[0] - origin[0]) * (b[1] - origin[1]) - (
-            a[1] - origin[1]
-        ) * (b[0] - origin[0])
+        return (a[0] - origin[0]) * (b[1] - origin[1]) - (a[1] - origin[1]) * (b[0] - origin[0])
 
     lower: list[Point] = []
     for point in unique:
@@ -214,8 +212,7 @@ def skeletonize(values: np.ndarray | Image.Image) -> np.ndarray:
                 neighbors = _neighbor_values(mask, y, x)
                 count = sum(neighbors)
                 transitions = sum(
-                    not neighbors[index] and neighbors[(index + 1) % 8]
-                    for index in range(8)
+                    not neighbors[index] and neighbors[(index + 1) % 8] for index in range(8)
                 )
                 if not 2 <= count <= 6 or transitions != 1:
                     continue
@@ -316,9 +313,7 @@ def prune_skeleton_spurs(
             length = 0.0
             while True:
                 neighbors = [
-                    node
-                    for node in _skeleton_neighbors(output, current)
-                    if node != previous
+                    node for node in _skeleton_neighbors(output, current) if node != previous
                 ]
                 if len(neighbors) != 1:
                     break
@@ -359,8 +354,7 @@ def _branch_segments(skeleton: np.ndarray) -> list[list[tuple[int, int]]]:
                 options = [
                     node
                     for node in _skeleton_neighbors(skeleton, current)
-                    if node != previous
-                    and frozenset((current, node)) not in visited_edges
+                    if node != previous and frozenset((current, node)) not in visited_edges
                 ]
                 if not options:
                     break
@@ -373,10 +367,7 @@ def _branch_segments(skeleton: np.ndarray) -> list[list[tuple[int, int]]]:
 
 
 def _path_length(path: Sequence[tuple[int, int]]) -> float:
-    return sum(
-        _edge_length(first, second)
-        for first, second in zip(path, path[1:], strict=False)
-    )
+    return sum(_edge_length(first, second) for first, second in itertools.pairwise(path))
 
 
 def _longest_shortest_path(skeleton: np.ndarray) -> float:
@@ -439,7 +430,7 @@ def calibrate_references(
     *,
     unit: str,
 ) -> CalibrationEstimate:
-    """Fit physical distance = scale × pixel distance through the origin."""
+    """Fit physical distance = scale x pixel distance through the origin."""
 
     if not references:
         raise ValidationError("At least one calibration reference is required")
@@ -453,9 +444,7 @@ def calibrate_references(
     standard_error = None
     lower = upper = None
     if len(references) > 1:
-        residual_variance = float(
-            np.dot(residuals, residuals) / (len(references) - 1)
-        )
+        residual_variance = float(np.dot(residuals, residuals) / (len(references) - 1))
         standard_error = math.sqrt(residual_variance / denominator)
         lower = max(0.0, scale - 1.96 * standard_error)
         upper = scale + 1.96 * standard_error
@@ -506,16 +495,12 @@ def surface_area_estimate(
             raise ValidationError("Elliptical surface area requires two positive diameters")
         a = diameter_major / 2
         b = diameter_minor / 2
-        circumference = math.pi * (
-            3 * (a + b) - math.sqrt((3 * a + b) * (a + 3 * b))
-        )
+        circumference = math.pi * (3 * (a + b) - math.sqrt((3 * a + b) * (a + 3 * b)))
         area = circumference * centerline_length
         assumptions.append("Elliptical branch cross section with constant diameters")
     elif method == "pixel_frustum":
         if pixel_area_scale is None or pixel_area_scale <= 0:
-            raise ValidationError(
-                "Pixel-frustum surface area requires a positive pixel scale"
-            )
+            raise ValidationError("Pixel-frustum surface area requires a positive pixel scale")
         area = projected_area * pixel_area_scale
         assumptions.append("Locally fronto-parallel depth projection")
     else:

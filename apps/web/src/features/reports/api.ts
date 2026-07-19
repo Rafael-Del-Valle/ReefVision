@@ -63,10 +63,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function listReportTrainingRuns(projectId: string, signal?: AbortSignal) {
-  return request<TrainingRunForReport[]>(`/projects/${projectId}/training-runs`, {
-    signal,
-  });
+export function listReportTrainingRuns(
+  projectId: string,
+  signal?: AbortSignal,
+) {
+  return request<TrainingRunForReport[]>(
+    `/projects/${projectId}/training-runs`,
+    {
+      signal,
+    },
+  );
 }
 
 export function createTrainingReport(

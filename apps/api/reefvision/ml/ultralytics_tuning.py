@@ -11,7 +11,6 @@ from typing import Any
 
 from reefvision.domain.errors import ValidationError
 
-
 DEFAULT_TUNING_CONFIG: dict[str, Any] = {
     "mode": "disabled",
     "iterations": 10,
@@ -163,9 +162,7 @@ def summarize_tuning_rows(
                 "trial": index,
                 "fitness": _numeric(row.get(fitness_key)) if fitness_key else None,
                 "parameters": {
-                    key: row.get(key)
-                    for key in sorted(search_space_keys)
-                    if key in row
+                    key: row.get(key) for key in sorted(search_space_keys) if key in row
                 },
                 "metrics": {
                     key: value

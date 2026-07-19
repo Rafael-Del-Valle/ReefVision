@@ -86,6 +86,10 @@ src = ["apps/api"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
 
+[tool.ruff.lint.per-file-ignores]
+"apps/api/reefvision/services/scientific_validation.py" = ["E501"]
+"apps/api/reefvision/services/training_reports.py" = ["E501"]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"

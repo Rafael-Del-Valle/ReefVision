@@ -55,11 +55,11 @@ def stack_rgbd(
     dataset_mean: float | None = None,
     dataset_std: float | None = None,
 ) -> np.ndarray:
-    """Create an H×W×4 RGB-D array with an explicitly normalized depth channel."""
+    """Create an HxWx4 RGB-D array with an explicitly normalized depth channel."""
 
     image = np.asarray(rgb)
     if image.ndim != 3 or image.shape[2] != 3:
-        raise ValidationError("RGB-D fusion requires an H×W×3 RGB image")
+        raise ValidationError("RGB-D fusion requires an HxWx3 RGB image")
     if image.shape[:2] != np.asarray(depth).shape:
         raise ValidationError("RGB and depth dimensions must match exactly")
     rgb_float = image.astype(np.float32)
@@ -96,7 +96,9 @@ def adapt_first_convolution_to_rgbd(
     if convolution.in_channels != 3:
         raise ValidationError("Only three-channel input convolutions can be adapted to RGB-D")
     if convolution.groups != 1:
-        raise ValidationError("Grouped first convolutions require a provider-specific RGB-D adapter")
+        raise ValidationError(
+            "Grouped first convolutions require a provider-specific RGB-D adapter"
+        )
     replacement = nn.Conv2d(
         in_channels=4,
         out_channels=convolution.out_channels,
@@ -162,8 +164,12 @@ def depth_aware_association_cost(
         and maximum_normalized_depth_gap is not None
         and normalized_gap > maximum_normalized_depth_gap
     )
-    return cost, gated, {
-        "track_depth": track_depth,
-        "detection_depth": detection_depth,
-        "normalized_depth_gap": normalized_gap,
-    }
+    return (
+        cost,
+        gated,
+        {
+            "track_depth": track_depth,
+            "detection_depth": detection_depth,
+            "normalized_depth_gap": normalized_gap,
+        },
+    )

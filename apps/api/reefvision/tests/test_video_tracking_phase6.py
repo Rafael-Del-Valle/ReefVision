@@ -128,9 +128,7 @@ def test_manual_tracks_interpolate_and_produce_research_analytics(
     payload = analytics.json()
     assert payload["distance_per_pixel"] == pytest.approx(0.1)
     assert len(payload["tracks"]) == 2
-    first_track = next(
-        item for item in payload["tracks"] if item["tracker_id"] == 1
-    )
+    first_track = next(item for item in payload["tracks"] if item["tracker_id"] == 1)
     assert first_track["observed_frame_count"] == 11
     assert first_track["distance_pixels"] == pytest.approx(10)
     assert first_track["duration_seconds"] == pytest.approx(1)
@@ -140,28 +138,20 @@ def test_manual_tracks_interpolate_and_produce_research_analytics(
     assert first_track["inactive_time_seconds"] == pytest.approx(0)
     assert first_track["zone_time_seconds"]["left wall"] > 0
     assert payload["school_by_frame"][0]["active_track_count"] == 2
-    assert payload["school_by_frame"][0][
-        "mean_nearest_neighbor_pixels"
-    ] == pytest.approx(20)
+    assert payload["school_by_frame"][0]["mean_nearest_neighbor_pixels"] == pytest.approx(20)
     assert payload["heatmap"]
     assert sum(item["observation_count"] for item in payload["heatmap"]) == 22
 
-    csv_export = client.get(
-        f"/api/v1/videos/{video_id}/tracking-export?format=csv"
-    )
+    csv_export = client.get(f"/api/v1/videos/{video_id}/tracking-export?format=csv")
     assert csv_export.status_code == 200, csv_export.text
     assert "frame,time_seconds,tracker_id" in csv_export.text
     assert len(csv_export.text.strip().splitlines()) == 23
 
-    mot_export = client.get(
-        f"/api/v1/videos/{video_id}/tracking-export?format=mot"
-    )
+    mot_export = client.get(f"/api/v1/videos/{video_id}/tracking-export?format=mot")
     assert mot_export.status_code == 200, mot_export.text
     assert len(mot_export.text.strip().splitlines()) == 22
 
-    json_export = client.get(
-        f"/api/v1/videos/{video_id}/tracking-export?format=json"
-    )
+    json_export = client.get(f"/api/v1/videos/{video_id}/tracking-export?format=json")
     assert json_export.status_code == 200, json_export.text
     exported = json.loads(json_export.content)
     assert exported["format"] == "reefvision_video_tracks_v1"

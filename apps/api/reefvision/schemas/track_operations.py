@@ -29,7 +29,9 @@ class TrackMergeRequest(BaseModel):
     secondary_track_id: str
     expected_primary_revision: int = Field(ge=1)
     expected_secondary_revision: int = Field(ge=1)
-    conflict_policy: str = Field(default="highest_confidence", pattern="^(highest_confidence|primary)$")
+    conflict_policy: str = Field(
+        default="highest_confidence", pattern="^(highest_confidence|primary)$"
+    )
 
     @model_validator(mode="after")
     def distinct_tracks(self) -> TrackMergeRequest:

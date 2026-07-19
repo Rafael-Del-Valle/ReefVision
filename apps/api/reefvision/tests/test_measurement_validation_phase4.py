@@ -62,9 +62,7 @@ def test_measurement_reference_comparison_reports_bias_and_tolerance(
     assert observations["area_pixels"]["passed"] is True
     assert observations["perimeter_pixels"]["signed_error"] == pytest.approx(-10)
     assert observations["perimeter_pixels"]["absolute_error"] == pytest.approx(10)
-    assert observations["perimeter_pixels"]["percent_error"] == pytest.approx(
-        100 * 10 / 70
-    )
+    assert observations["perimeter_pixels"]["percent_error"] == pytest.approx(100 * 10 / 70)
     assert observations["perimeter_pixels"]["passed"] is False
     assert observations["total_linear_extension_physical"]["passed"] is True
 

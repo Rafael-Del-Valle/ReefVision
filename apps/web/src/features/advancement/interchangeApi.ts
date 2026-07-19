@@ -11,10 +11,7 @@ export type InterchangeFormat =
 
 export type ClassConflictPolicy = "error" | "skip" | "merge";
 export type ExistingAnnotationPolicy =
-  | "append"
-  | "skip_image"
-  | "replace_imported"
-  | "error";
+  "append" | "skip_image" | "replace_imported" | "error";
 
 export interface InterchangeRequest {
   format: InterchangeFormat;
@@ -32,12 +29,7 @@ export interface InterchangeMapping {
   target_class_id: string | null;
   target_class_name: string | null;
   resolution:
-    | "matched"
-    | "explicit"
-    | "create"
-    | "skip"
-    | "conflict"
-    | "unmapped";
+    "matched" | "explicit" | "create" | "skip" | "conflict" | "unmapped";
   message: string | null;
 }
 
@@ -103,7 +95,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (init?.body && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
-  const response = await fetch(`${getApiBaseUrl()}${path}`, { ...init, headers });
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    ...init,
+    headers,
+  });
   if (!response.ok) {
     let message = `Request failed with HTTP ${response.status}`;
     try {

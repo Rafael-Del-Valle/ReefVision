@@ -32,7 +32,8 @@ class ProviderBenchmarkJobService:
         capability = ProviderCapabilityService(self.session, self.settings).get(capability_id)
         if capability.health == "unavailable":
             raise ValidationError(
-                "The selected provider is unavailable. Resolve its dependency or device blockers first."
+                "The selected provider is unavailable. Resolve its dependency "
+                "or device blockers first."
             )
         if payload.task not in capability.supported_tasks:
             aliases = {
@@ -64,9 +65,7 @@ class ProviderBenchmarkJobService:
                 raise ValidationError("The registered model belongs to a different project")
 
         images = list(
-            self.session.scalars(
-                select(ImageAsset).where(ImageAsset.id.in_(payload.image_ids))
-            )
+            self.session.scalars(select(ImageAsset).where(ImageAsset.id.in_(payload.image_ids)))
         )
         if len(images) != len(set(payload.image_ids)):
             raise ValidationError("One or more benchmark images do not exist")
@@ -90,8 +89,13 @@ class ProviderBenchmarkJobService:
             )
         }
         requested_device = payload.device_id
-        if requested_device not in {"auto", "cuda", "gpu"} and requested_device not in compatible_devices:
-            raise ValidationError("The requested benchmark device is not available for this provider")
+        if (
+            requested_device not in {"auto", "cuda", "gpu"}
+            and requested_device not in compatible_devices
+        ):
+            raise ValidationError(
+                "The requested benchmark device is not available for this provider"
+            )
 
         minimum_vram = 0
         if requested_device.startswith("cuda") or requested_device in {"cuda", "gpu"}:

@@ -341,9 +341,8 @@ class ActiveLearningCycleService:
                     if gate.relative_to_baseline and baseline_value is not None
                     else candidate_value
                 )
-            passed = (
-                comparison_value is not None
-                and _compare(comparison_value, gate.operator, float(gate.threshold))
+            passed = comparison_value is not None and _compare(
+                comparison_value, gate.operator, float(gate.threshold)
             )
             results.append(
                 PromotionGateResult(
@@ -418,7 +417,11 @@ class ActiveLearningCycleService:
         metric = conditions.get("plateau_metric")
         minimum = conditions.get("plateau_minimum_improvement")
         patience = conditions.get("plateau_patience_cycles")
-        if isinstance(metric, str) and isinstance(minimum, (int, float)) and isinstance(patience, int):
+        if (
+            isinstance(metric, str)
+            and isinstance(minimum, (int, float))
+            and isinstance(patience, int)
+        ):
             cycles = list(
                 self.session.scalars(
                     select(ActiveLearningCycle)
@@ -452,12 +455,14 @@ class ActiveLearningCycleService:
             raise ConflictError("Complete candidate evaluation before creating the next cycle")
         stop_reasons = self._stop_reasons(cycle)
         if stop_reasons:
-            raise ConflictError("Configured stop condition prevents another cycle: " + "; ".join(stop_reasons))
+            raise ConflictError(
+                "Configured stop condition prevents another cycle: " + "; ".join(stop_reasons)
+            )
         conditions = dict(cycle.stop_conditions_json or {})
         return self.create(
             cycle.project_id,
             ActiveLearningCycleCreateRequest(
-                name=request.name or f"{cycle.name} — cycle {cycle.cycle_index + 1}",
+                name=request.name or f"{cycle.name} - cycle {cycle.cycle_index + 1}",
                 selection_strategy=request.selection_strategy or cycle.selection_strategy,
                 annotation_budget=request.annotation_budget or cycle.annotation_budget,
                 source_model_id=cycle.promoted_model_id or cycle.source_model_id,

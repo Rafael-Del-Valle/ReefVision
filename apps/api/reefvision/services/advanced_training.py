@@ -42,8 +42,7 @@ class AdvancedTrainingService(SemanticTrainingService):
         response.blockers = [
             blocker
             for blocker in response.blockers
-            if "tuning" not in blocker.casefold()
-            or "not implemented" not in blocker.casefold()
+            if "tuning" not in blocker.casefold() or "not implemented" not in blocker.casefold()
         ]
         try:
             tuning = normalize_tuning_config(payload.tuning_config)
@@ -51,9 +50,7 @@ class AdvancedTrainingService(SemanticTrainingService):
             response.blockers.append(str(exc))
         else:
             if tuning["mode"] == "ultralytics":
-                total_epochs = int(tuning["iterations"]) * int(
-                    tuning["epochs_per_trial"]
-                )
+                total_epochs = int(tuning["iterations"]) * int(tuning["epochs_per_trial"])
                 response.warnings.append(
                     f"Tuning will run {tuning['iterations']} trials of "
                     f"{tuning['epochs_per_trial']} epochs before final training "

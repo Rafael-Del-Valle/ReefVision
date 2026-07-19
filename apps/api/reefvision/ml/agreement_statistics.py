@@ -22,9 +22,7 @@ def pearson(first: Sequence[float], second: Sequence[float]) -> float | None:
     y = np.asarray(second, dtype=np.float64)
     x_centered = x - x.mean()
     y_centered = y - y.mean()
-    denominator = float(
-        math.sqrt(np.dot(x_centered, x_centered) * np.dot(y_centered, y_centered))
-    )
+    denominator = float(math.sqrt(np.dot(x_centered, x_centered) * np.dot(y_centered, y_centered)))
     if denominator <= 0:
         return None
     return float(np.clip(np.dot(x_centered, y_centered) / denominator, -1, 1))
@@ -90,11 +88,7 @@ def icc_two_way_absolute_single(
     ms_targets = ss_targets / (targets - 1)
     ms_raters = ss_raters / (raters - 1)
     ms_error = ss_error / ((targets - 1) * (raters - 1))
-    denominator = (
-        ms_targets
-        + (raters - 1) * ms_error
-        + raters * (ms_raters - ms_error) / targets
-    )
+    denominator = ms_targets + (raters - 1) * ms_error + raters * (ms_raters - ms_error) / targets
     if math.isclose(denominator, 0.0, abs_tol=1e-15):
         return 1.0 if np.array_equal(ratings[:, 0], ratings[:, 1]) else None
     return float(np.clip((ms_targets - ms_error) / denominator, -1, 1))

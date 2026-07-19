@@ -122,9 +122,7 @@ class VideoBehaviorAnalysisService:
                 frame_speeds.append(speed)
                 interval_seconds.append(elapsed)
                 if distance > 0:
-                    directions_by_frame[point.frame_index].append(
-                        (dx / distance, dy / distance)
-                    )
+                    directions_by_frame[point.frame_index].append((dx / distance, dy / distance))
 
             duration = (points[-1].frame_index - points[0].frame_index) / video.fps
             distance_pixels = sum(frame_distances)
@@ -132,14 +130,11 @@ class VideoBehaviorAnalysisService:
                 centers[-1][0] - centers[0][0],
                 centers[-1][1] - centers[0][1],
             )
-            path_tortuosity = (
-                distance_pixels / net_displacement if net_displacement > 0 else None
-            )
+            path_tortuosity = distance_pixels / net_displacement if net_displacement > 0 else None
             mean_speed = distance_pixels / duration if duration > 0 else 0.0
             maximum_speed = max(frame_speeds, default=0.0)
             accelerations = [
-                abs(frame_speeds[index] - frame_speeds[index - 1])
-                / interval_seconds[index]
+                abs(frame_speeds[index] - frame_speeds[index - 1]) / interval_seconds[index]
                 for index in range(1, len(frame_speeds))
                 if interval_seconds[index] > 0
             ]
@@ -177,9 +172,7 @@ class VideoBehaviorAnalysisService:
                     maximum_speed_pixels_per_second=maximum_speed,
                     mean_acceleration_pixels_per_second_squared=mean_acceleration,
                     maximum_acceleration_pixels_per_second_squared=maximum_acceleration,
-                    mean_turning_angle_degrees=(
-                        mean(turning_angles) if turning_angles else None
-                    ),
+                    mean_turning_angle_degrees=(mean(turning_angles) if turning_angles else None),
                     cumulative_turning_angle_degrees=sum(turning_angles),
                     mean_distance_to_wall_pixels=mean_wall_distance,
                     active_time_seconds=active_time,
@@ -195,9 +188,7 @@ class VideoBehaviorAnalysisService:
                         else None
                     ),
                     mean_speed_physical_per_second=(
-                        mean_speed * distance_per_pixel
-                        if distance_per_pixel is not None
-                        else None
+                        mean_speed * distance_per_pixel if distance_per_pixel is not None else None
                     ),
                     maximum_speed_physical_per_second=(
                         maximum_speed * distance_per_pixel
@@ -221,8 +212,7 @@ class VideoBehaviorAnalysisService:
                     ),
                     physical_unit=physical_unit,
                     zone_time_seconds={
-                        name: count / video.fps
-                        for name, count in sorted(zone_counts.items())
+                        name: count / video.fps for name, count in sorted(zone_counts.items())
                     },
                 )
             )
@@ -241,15 +231,12 @@ class VideoBehaviorAnalysisService:
                     nearest.append(min(distances))
                     for second_index in range(first_index + 1, len(centers)):
                         second = centers[second_index]
-                        pairwise.append(
-                            hypot(first[0] - second[0], first[1] - second[1])
-                        )
+                        pairwise.append(hypot(first[0] - second[0], first[1] - second[1]))
                 center_x = mean(point[0] for point in centers)
                 center_y = mean(point[1] for point in centers)
                 spread = sqrt(
                     mean(
-                        (point[0] - center_x) ** 2 + (point[1] - center_y) ** 2
-                        for point in centers
+                        (point[0] - center_x) ** 2 + (point[1] - center_y) ** 2 for point in centers
                     )
                 )
                 mean_nearest = mean(nearest)

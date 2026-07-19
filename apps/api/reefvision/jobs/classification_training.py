@@ -97,9 +97,7 @@ def process_classification_training_job(
             )
             images = list(
                 session.scalars(
-                    select(ImageAsset).where(
-                        ImageAsset.id.in_([item.image_id for item in items])
-                    )
+                    select(ImageAsset).where(ImageAsset.id.in_([item.image_id for item in items]))
                 )
             )
             image_paths = {
@@ -217,9 +215,7 @@ def process_classification_training_job(
                 {
                     "data": str(dataset_root),
                     "device": resolve_torch_device(run.device),
-                    "project": str(
-                        resolve_managed_project_path(settings, f"{base_relative}/runs")
-                    ),
+                    "project": str(resolve_managed_project_path(settings, f"{base_relative}/runs")),
                     "name": "classify",
                     "exist_ok": True,
                     "save": True,
@@ -254,19 +250,13 @@ def process_classification_training_job(
                 **dict(run.artifact_manifest_json),
                 "run_save_dir": _relative_to_data_dir(settings, save_dir),
                 "results_csv": (
-                    _relative_to_data_dir(settings, results_csv)
-                    if results_csv.is_file()
-                    else None
+                    _relative_to_data_dir(settings, results_csv) if results_csv.is_file() else None
                 ),
                 "best_checkpoint_path": (
-                    _relative_to_data_dir(settings, best_ckpt)
-                    if best_ckpt.is_file()
-                    else None
+                    _relative_to_data_dir(settings, best_ckpt) if best_ckpt.is_file() else None
                 ),
                 "last_checkpoint_path": (
-                    _relative_to_data_dir(settings, last_ckpt)
-                    if last_ckpt.is_file()
-                    else None
+                    _relative_to_data_dir(settings, last_ckpt) if last_ckpt.is_file() else None
                 ),
             }
             run.result_checkpoint_path = (

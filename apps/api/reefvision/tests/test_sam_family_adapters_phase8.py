@@ -11,18 +11,12 @@ from reefvision.services import provider_capabilities
 
 
 def test_sam2_config_is_inferred_from_standard_checkpoint_names() -> None:
-    assert infer_sam2_config(Path("sam2.1_hiera_tiny.pt")) == (
-        "configs/sam2.1/sam2.1_hiera_t.yaml"
-    )
-    assert infer_sam2_config(Path("sam2_hiera_small.pth")) == (
-        "configs/sam2/sam2_hiera_s.yaml"
-    )
+    assert infer_sam2_config(Path("sam2.1_hiera_tiny.pt")) == ("configs/sam2.1/sam2.1_hiera_t.yaml")
+    assert infer_sam2_config(Path("sam2_hiera_small.pth")) == ("configs/sam2/sam2_hiera_s.yaml")
     assert infer_sam2_config(Path("sam2.1_hiera_base_plus.pt")) == (
         "configs/sam2.1/sam2.1_hiera_b+.yaml"
     )
-    assert infer_sam2_config(Path("sam2_hiera_large.pth")) == (
-        "configs/sam2/sam2_hiera_l.yaml"
-    )
+    assert infer_sam2_config(Path("sam2_hiera_large.pth")) == ("configs/sam2/sam2_hiera_l.yaml")
 
 
 def test_sam2_config_rejects_ambiguous_checkpoint_name() -> None:

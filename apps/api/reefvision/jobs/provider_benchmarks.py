@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 from PIL import Image
@@ -68,7 +70,9 @@ def _cuda_peak(device: str) -> int | None:
         return None
 
 
-def _mock_runner(width: int, height: int, batch_size: int) -> Callable[[Path | None], dict[str, float]]:
+def _mock_runner(
+    width: int, height: int, batch_size: int
+) -> Callable[[Path | None], dict[str, float]]:
     side = max(8, min(512, int((width * height) ** 0.5)))
     seed = np.arange(side * side, dtype=np.float32).reshape(side, side)
 
@@ -116,8 +120,8 @@ def _ultralytics_runner(
         for result in results:
             boxes = getattr(result, "boxes", None)
             masks = getattr(result, "masks", None)
-            detections += int(len(boxes)) if boxes is not None else 0
-            mask_instances += int(len(masks)) if masks is not None else 0
+            detections += len(boxes) if boxes is not None else 0
+            mask_instances += len(masks) if masks is not None else 0
         return {
             "detections": float(detections),
             "mask_instances": float(mask_instances),
@@ -183,7 +187,8 @@ def _depth_runner(
 ) -> Callable[[Path | None], dict[str, float]]:
     runtime_provider = (
         provider_id
-        if provider_id in {"luminance_relative", "depth_anything_v2_relative", "depth_anything_v2_metric"}
+        if provider_id
+        in {"luminance_relative", "depth_anything_v2_relative", "depth_anything_v2_metric"}
         else "depth_anything_v2_relative"
     )
 
@@ -217,9 +222,7 @@ def _prepare_runner(
     device = _resolved_device(str(request.get("device_id", "auto")))
     image_ids = [str(value) for value in request.get("image_ids", [])]
     with factory() as session:
-        images = list(
-            session.scalars(select(ImageAsset).where(ImageAsset.id.in_(image_ids)))
-        )
+        images = list(session.scalars(select(ImageAsset).where(ImageAsset.id.in_(image_ids))))
         image_paths = [
             resolve_managed_project_path(settings, image.managed_path) for image in images
         ]
@@ -315,7 +318,10 @@ def process_provider_benchmark_job(
         request = dict(job.request_json)
 
     runner: Callable[[Path | None], dict[str, float]] | None = None
-    close: Callable[[], None] = lambda: None
+
+    def close() -> None:
+        pass
+
     try:
         runner, close, image_paths, device = _prepare_runner(settings, factory, request)
         warmup_count = int(request.get("warmup_count", 0))
@@ -370,9 +376,7 @@ def process_provider_benchmark_job(
                 session.commit()
 
         elapsed_seconds = sum(latencies) / 1000.0
-        quality_metrics = {
-            key: value / sample_count for key, value in metric_sums.items()
-        }
+        quality_metrics = {key: value / sample_count for key, value in metric_sums.items()}
         benchmark_request = ProviderBenchmarkCreateRequest(
             provider_id=str(request["provider_id"]),
             model_id=(str(request["model_id"]) if request.get("model_id") else None),
@@ -386,9 +390,7 @@ def process_provider_benchmark_job(
             latencies_ms=latencies,
             elapsed_seconds=max(elapsed_seconds, 1e-9),
             peak_ram_bytes=(
-                max((peak_ram or 0) - (baseline_ram or 0), 0)
-                if peak_ram is not None
-                else None
+                max((peak_ram or 0) - (baseline_ram or 0), 0) if peak_ram is not None else None
             ),
             peak_vram_bytes=_cuda_peak(device),
             quality_metrics=quality_metrics,
@@ -426,7 +428,5 @@ def process_provider_benchmark_job(
                 session.commit()
         return False
     finally:
-        try:
+        with contextlib.suppress(Exception):
             close()
-        except Exception:
-            pass

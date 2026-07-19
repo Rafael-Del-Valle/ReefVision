@@ -43,9 +43,7 @@ class ClassificationModelService(SemanticModelService):
     ) -> DetectionProvider | AnnotationAssistProvider:
         if purpose == CLASSIFIER_PURPOSE:
             if provider_name.strip().casefold() != ULTRALYTICS_PROVIDER_ID:
-                raise ValidationError(
-                    f"Unsupported classification provider: {provider_name}"
-                )
+                raise ValidationError(f"Unsupported classification provider: {provider_name}")
             return UltralyticsClassificationRegistrationProvider()
         return super()._provider_for_registration(purpose, provider_name)
 
@@ -100,9 +98,7 @@ class ClassificationModelService(SemanticModelService):
                 "source_metrics": dict(run.metrics_json),
                 "classification_mode": mode,
                 "classification_scope": "annotation_crop",
-                "minimum_crop_size_px": int(
-                    artifact.get("minimum_crop_size_px", 10)
-                ),
+                "minimum_crop_size_px": int(artifact.get("minimum_crop_size_px", 10)),
                 "padding_fraction": float(artifact.get("padding_fraction", 0.0)),
             },
         )
@@ -136,7 +132,5 @@ class ClassificationModelService(SemanticModelService):
             or 0
         )
         if prediction_count:
-            raise ConflictError(
-                "Classifiers with classification predictions cannot be removed"
-            )
+            raise ConflictError("Classifiers with classification predictions cannot be removed")
         super().delete_model(model_id)

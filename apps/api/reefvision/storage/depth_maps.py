@@ -141,7 +141,10 @@ def load_depth_map(
         raise ValidationError("Depth map content could not be read") from exc
     if values.ndim != 2:
         raise ValidationError("Stored depth map is not two-dimensional")
-    if expected_width is not None and expected_height is not None:
-        if values.shape != (expected_height, expected_width):
-            raise ValidationError("Stored depth map dimensions no longer match the image")
+    if (
+        expected_width is not None
+        and expected_height is not None
+        and values.shape != (expected_height, expected_width)
+    ):
+        raise ValidationError("Stored depth map dimensions no longer match the image")
     return np.asarray(values, dtype=np.float32)

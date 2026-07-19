@@ -118,7 +118,8 @@ export function WorkflowDashboard({ project }: { project: Project }) {
     } catch (error) {
       return {
         workflow: null,
-        error: error instanceof Error ? error.message : "Workflow JSON is invalid",
+        error:
+          error instanceof Error ? error.message : "Workflow JSON is invalid",
       };
     }
   }, [workflowJson]);
@@ -170,8 +171,9 @@ export function WorkflowDashboard({ project }: { project: Project }) {
             <h3>Fusion workflow planner and executor</h3>
             <span>
               Design typed detection, segmentation, classification, tracking,
-              measurement, active-learning, and export graphs with resumable execution,
-              artifact lineage, cache reuse, and resource-aware scheduling.
+              measurement, active-learning, and export graphs with resumable
+              execution, artifact lineage, cache reuse, and resource-aware
+              scheduling.
             </span>
           </div>
           <span>{definitions.data?.length ?? 0} node types</span>
@@ -188,8 +190,9 @@ export function WorkflowDashboard({ project }: { project: Project }) {
               <p className="eyebrow">Immutable dataset export</p>
               <h4>COCO instance snapshot</h4>
               <p>
-                Export frozen boxes, polygon masks, raster RLE masks, categories,
-                splits, source IDs, and checksums without changing the dataset version.
+                Export frozen boxes, polygon masks, raster RLE masks,
+                categories, splits, source IDs, and checksums without changing
+                the dataset version.
               </p>
               <label>
                 Immutable dataset version
@@ -223,11 +226,16 @@ export function WorkflowDashboard({ project }: { project: Project }) {
                 Starting workflow
                 <select
                   value={selectedTemplateId}
-                  onChange={(event) => setSelectedTemplateId(event.target.value)}
+                  onChange={(event) =>
+                    setSelectedTemplateId(event.target.value)
+                  }
                 >
                   <option value="">Blank workflow</option>
                   {templates.data?.map((template) => (
-                    <option key={template.template_id} value={template.template_id}>
+                    <option
+                      key={template.template_id}
+                      value={template.template_id}
+                    >
                       {template.name}
                     </option>
                   ))}
@@ -256,8 +264,8 @@ export function WorkflowDashboard({ project }: { project: Project }) {
                     <div>
                       <strong>{definition.display_name}</strong>
                       <p>
-                        {definition.inputs.length} inputs · {definition.outputs.length}{" "}
-                        outputs
+                        {definition.inputs.length} inputs ·{" "}
+                        {definition.outputs.length} outputs
                       </p>
                       <small>
                         {definition.requires_model
@@ -296,13 +304,16 @@ export function WorkflowDashboard({ project }: { project: Project }) {
                     JSON editor
                   </button>
                   {validation.data && (
-                    <span>{validation.data.workflow_checksum.slice(0, 12)}...</span>
+                    <span>
+                      {validation.data.workflow_checksum.slice(0, 12)}...
+                    </span>
                   )}
                 </div>
               </div>
               <p>
-                Drag nodes, connect compatible ports, and edit node configuration. The
-                visual canvas remains synchronized with the persisted JSON workflow.
+                Drag nodes, connect compatible ports, and edit node
+                configuration. The visual canvas remains synchronized with the
+                persisted JSON workflow.
               </p>
 
               {editorMode === "visual" ? (
@@ -320,7 +331,8 @@ export function WorkflowDashboard({ project }: { project: Project }) {
                   <div className="empty-state">
                     <h5>Visual editor cannot load this graph</h5>
                     <p className="form-error">
-                      {parsedWorkflow.error ?? "Workflow node definitions are loading."}
+                      {parsedWorkflow.error ??
+                        "Workflow node definitions are loading."}
                     </p>
                     <button type="button" onClick={() => setEditorMode("json")}>
                       Repair in JSON editor
@@ -366,7 +378,9 @@ export function WorkflowDashboard({ project }: { project: Project }) {
               </div>
               {(parseError || parsedWorkflow.error || validation.error) && (
                 <p className="form-error">
-                  {parseError ?? parsedWorkflow.error ?? validation.error?.message}
+                  {parseError ??
+                    parsedWorkflow.error ??
+                    validation.error?.message}
                 </p>
               )}
             </article>
@@ -407,7 +421,10 @@ export function WorkflowDashboard({ project }: { project: Project }) {
                       </div>
                     ))}
                     {validation.data.issues.length === 0 && (
-                      <p>No missing ports, type mismatches, cycles, or model conflicts.</p>
+                      <p>
+                        No missing ports, type mismatches, cycles, or model
+                        conflicts.
+                      </p>
                     )}
                   </div>
                 </article>
@@ -420,8 +437,9 @@ export function WorkflowDashboard({ project }: { project: Project }) {
                     </div>
                   </div>
                   <p>
-                    Nodes in the same stage have no dependency on one another and can
-                    be scheduled in parallel when hardware resources permit.
+                    Nodes in the same stage have no dependency on one another
+                    and can be scheduled in parallel when hardware resources
+                    permit.
                   </p>
                   <div className="dashboard-list">
                     {validation.data.execution_stages.map((stage) => (
@@ -435,7 +453,8 @@ export function WorkflowDashboard({ project }: { project: Project }) {
                     ))}
                   </div>
                   <small>
-                    Topological order: {validation.data.topological_order.join(" → ")}
+                    Topological order:{" "}
+                    {validation.data.topological_order.join(" → ")}
                   </small>
                 </article>
               </>

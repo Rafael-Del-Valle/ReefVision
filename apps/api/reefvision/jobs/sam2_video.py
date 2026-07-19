@@ -141,11 +141,7 @@ def process_sam2_video_propagation_job(
 ) -> bool:
     with factory() as session:
         job = session.get(Job, job_id)
-        if (
-            job is None
-            or job.job_type != "sam2_video_propagation"
-            or job.status != "queued"
-        ):
+        if job is None or job.job_type != "sam2_video_propagation" or job.status != "queued":
             return False
         request = dict(job.request_json)
         video = session.get(VideoAsset, str(request.get("video_id", "")))
@@ -170,8 +166,6 @@ def process_sam2_video_propagation_job(
 
     temporary_root = output_root.with_name(f".{output_root.name}.{uuid4().hex[:8]}.tmp")
     frames_dir = temporary_root / "frames"
-    masks_dir = temporary_root / "masks"
-    previews_dir = temporary_root / "previews"
     try:
         if not video_path.is_file() or not model_path.is_file():
             raise ValidationError("The managed video or SAM 2 checkpoint is missing")
@@ -188,7 +182,9 @@ def process_sam2_video_propagation_job(
         )
         sampled_seed_index = min(
             range(len(original_indices)),
-            key=lambda index: abs(original_indices[index] - int(request.get("seed_frame_index", 0))),
+            key=lambda index: abs(
+                original_indices[index] - int(request.get("seed_frame_index", 0))
+            ),
         )
         with factory() as session:
             job = session.get(Job, job_id)
@@ -223,9 +219,7 @@ def process_sam2_video_propagation_job(
             positive_points=list(request.get("positive_points") or []),
             negative_points=list(request.get("negative_points") or []),
             prompt_box=(
-                dict(request["prompt_box"])
-                if isinstance(request.get("prompt_box"), dict)
-                else None
+                dict(request["prompt_box"]) if isinstance(request.get("prompt_box"), dict) else None
             ),
         )
 
@@ -310,9 +304,7 @@ def process_sam2_video_propagation_job(
             for frame in manifest_frames:
                 archive.write(temporary_root / frame["mask_path"], frame["mask_path"])
                 if frame["preview_path"]:
-                    archive.write(
-                        temporary_root / frame["preview_path"], frame["preview_path"]
-                    )
+                    archive.write(temporary_root / frame["preview_path"], frame["preview_path"])
         shutil.rmtree(frames_dir, ignore_errors=True)
         output_root.parent.mkdir(parents=True, exist_ok=True)
         if output_root.exists():

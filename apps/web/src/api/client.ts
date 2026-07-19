@@ -50,7 +50,9 @@ async function compatibilityRequest<T>(
   return (await response.json()) as T;
 }
 
-function querySuffix(values: Record<string, string | number | boolean | null | undefined>): string {
+function querySuffix(
+  values: Record<string, string | number | boolean | null | undefined>,
+): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(values)) {
     if (value !== undefined && value !== null && value !== "") {
@@ -73,9 +75,7 @@ export interface ModelCatalogEntry {
   display_name: string;
   display_summary: string;
   category:
-    | "pretrained_catalog"
-    | "my_trained_models"
-    | "imported_custom_models";
+    "pretrained_catalog" | "my_trained_models" | "imported_custom_models";
   provider_id: string;
   provider: string;
   provider_version: string;
@@ -193,29 +193,39 @@ function normalizeModelCatalogEntry(
     tiling_compatibility: entry.tiling_compatibility ?? false,
     tuning_compatibility: entry.tuning_compatibility ?? false,
     checkpoint_identifier: entry.checkpoint_identifier ?? null,
-    checkpoint_source: entry.checkpoint_source ?? entry.source_type ?? "unknown",
+    checkpoint_source:
+      entry.checkpoint_source ?? entry.source_type ?? "unknown",
     download_source_type: entry.download_source_type ?? "unknown",
     expected_files: entry.expected_files ?? [],
     expected_size: entry.expected_size ?? entry.expected_file_size ?? null,
     expected_file_size: entry.expected_file_size ?? entry.expected_size ?? null,
     expected_checksum: entry.expected_checksum ?? entry.checksum ?? null,
-    license_summary: entry.license_summary ?? entry.model_weight_license ?? "Unknown",
-    model_weight_license: entry.model_weight_license ?? entry.license_summary ?? "Unknown",
+    license_summary:
+      entry.license_summary ?? entry.model_weight_license ?? "Unknown",
+    model_weight_license:
+      entry.model_weight_license ?? entry.license_summary ?? "Unknown",
     package_license: entry.package_license ?? "Unknown",
-    provider_pack_id: entry.provider_pack_id ?? entry.required_provider_pack ?? null,
-    required_provider_pack: entry.required_provider_pack ?? entry.provider_pack_id ?? null,
+    provider_pack_id:
+      entry.provider_pack_id ?? entry.required_provider_pack ?? null,
+    required_provider_pack:
+      entry.required_provider_pack ?? entry.provider_pack_id ?? null,
     required_package_versions: entry.required_package_versions ?? [],
-    recommended_ram: entry.recommended_ram ?? entry.minimum_recommended_ram_gb ?? null,
-    recommended_vram: entry.recommended_vram ?? entry.minimum_recommended_vram_gb ?? null,
+    recommended_ram:
+      entry.recommended_ram ?? entry.minimum_recommended_ram_gb ?? null,
+    recommended_vram:
+      entry.recommended_vram ?? entry.minimum_recommended_vram_gb ?? null,
     minimum_recommended_ram_gb:
       entry.minimum_recommended_ram_gb ?? entry.recommended_ram ?? null,
     minimum_recommended_vram_gb:
       entry.minimum_recommended_vram_gb ?? entry.recommended_vram ?? null,
     supported_devices: entry.supported_devices ?? [],
-    supported_runtimes: entry.supported_runtimes ?? entry.supported_runtime ?? [],
-    supported_runtime: entry.supported_runtime ?? entry.supported_runtimes ?? [],
+    supported_runtimes:
+      entry.supported_runtimes ?? entry.supported_runtime ?? [],
+    supported_runtime:
+      entry.supported_runtime ?? entry.supported_runtimes ?? [],
     supported_precision: entry.supported_precision ?? [],
-    desktop_support: entry.desktop_support ?? entry.desktop_package_status ?? "unknown",
+    desktop_support:
+      entry.desktop_support ?? entry.desktop_package_status ?? "unknown",
     desktop_package_status:
       entry.desktop_package_status ?? entry.desktop_support ?? "unknown",
     clean_machine_verification_status:
@@ -228,7 +238,8 @@ function normalizeModelCatalogEntry(
     installation_reason: entry.installation_reason ?? null,
     installation_job_id: entry.installation_job_id ?? null,
     installed_asset_id: entry.installed_asset_id ?? null,
-    installed_path: entry.installed_path ?? entry.managed_path ?? entry.local_path ?? null,
+    installed_path:
+      entry.installed_path ?? entry.managed_path ?? entry.local_path ?? null,
     installed_checksum: entry.installed_checksum ?? entry.checksum ?? null,
     advanced_only: entry.advanced_only ?? false,
     requires_confirmation: entry.requires_confirmation ?? false,
@@ -240,7 +251,11 @@ function normalizeModelCatalogEntry(
     managed_path: entry.managed_path ?? entry.installed_path ?? null,
     catalog_revision: entry.catalog_revision ?? "unknown",
     checksum: entry.checksum ?? entry.installed_checksum ?? null,
-    size_bytes: entry.size_bytes ?? entry.expected_file_size ?? entry.expected_size ?? null,
+    size_bytes:
+      entry.size_bytes ??
+      entry.expected_file_size ??
+      entry.expected_size ??
+      null,
     source_type: entry.source_type ?? entry.checkpoint_source ?? "unknown",
     scratch_only: entry.scratch_only ?? false,
     pretrained: entry.pretrained ?? true,
@@ -582,10 +597,13 @@ export interface TrainingRunSummary {
 
 export type TrainingRunDetail = TrainingRunSummary;
 
-function normalizeTrainingRun(run: Partial<TrainingRunSummary>): TrainingRunSummary {
+function normalizeTrainingRun(
+  run: Partial<TrainingRunSummary>,
+): TrainingRunSummary {
   const tuning = run.tuning_config ?? run.tuning_config_json ?? {};
   const metrics = run.metrics ?? run.metrics_json ?? {};
-  const artifactManifest = run.artifact_manifest ?? run.artifact_manifest_json ?? {};
+  const artifactManifest =
+    run.artifact_manifest ?? run.artifact_manifest_json ?? {};
   return {
     id: run.id ?? "",
     project_id: run.project_id ?? "",
@@ -620,7 +638,8 @@ function normalizeTrainingRun(run: Partial<TrainingRunSummary>): TrainingRunSumm
     status: run.status ?? "queued",
     stage: run.stage ?? "queued",
     progress_epoch: run.progress_epoch ?? run.progress_current_epoch ?? 0,
-    progress_current_epoch: run.progress_current_epoch ?? run.progress_epoch ?? 0,
+    progress_current_epoch:
+      run.progress_current_epoch ?? run.progress_epoch ?? 0,
     progress_total_epochs: run.progress_total_epochs ?? 0,
     metrics,
     metrics_json: metrics as Record<string, number>,
@@ -790,7 +809,9 @@ export interface ImageImportReport {
   failed: ImportItem[];
 }
 
-function normalizeImportReport(report: core.ImageImportReport): ImageImportReport {
+function normalizeImportReport(
+  report: core.ImageImportReport,
+): ImageImportReport {
   const map = (items: core.ImportItem[]): ImportItem[] =>
     items.map((item) => ({
       ...item,
@@ -914,7 +935,8 @@ export async function getModels(
   purposeOrSignal?: string | AbortSignal,
   signal?: AbortSignal,
 ): Promise<core.ModelRegistration[]> {
-  const purpose = typeof purposeOrSignal === "string" ? purposeOrSignal : undefined;
+  const purpose =
+    typeof purposeOrSignal === "string" ? purposeOrSignal : undefined;
   const requestSignal =
     typeof purposeOrSignal === "string" ? signal : purposeOrSignal;
   return compatibilityRequest<core.ModelRegistration[]>(
@@ -942,7 +964,8 @@ export async function registerModel(
           const data = new FormData();
           data.append("file", input.file);
           data.append("purpose", input.purpose);
-          if (input.providerName) data.append("provider_name", input.providerName);
+          if (input.providerName)
+            data.append("provider_name", input.providerName);
           if (input.displayName) data.append("display_name", input.displayName);
           if (input.notes) data.append("notes", input.notes);
           return data;

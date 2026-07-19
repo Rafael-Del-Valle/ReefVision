@@ -265,7 +265,7 @@ def _video_fixtures(root: Path) -> dict[str, Any]:
         image = Image.new("RGB", (192, 128), (18, 45, 65))
         draw = ImageDraw.Draw(image)
         x = 12 + frame_index * 6
-        y = 54 + int(round(8 * math.sin(frame_index / 4)))
+        y = 54 + round(8 * math.sin(frame_index / 4))
         draw.ellipse((x, y, x + 28, y + 14), fill=(238, 182, 81))
         draw.polygon([(x, y + 7), (x - 10, y), (x - 10, y + 14)], fill=(238, 182, 81))
         simple_tracks["fish-1"].append(

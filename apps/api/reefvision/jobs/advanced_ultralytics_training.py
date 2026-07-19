@@ -23,7 +23,6 @@ from reefvision.db.models import (
 from reefvision.jobs.segmentation_training import process_segmentation_training_job
 from reefvision.jobs.training import (
     _append_log,
-    _relative_to_data_dir,
     _resolve_model_source,
     process_training_job,
 )
@@ -34,7 +33,6 @@ from reefvision.ml.ultralytics_tuning import normalize_tuning_config, run_ultral
 from reefvision.storage.datasets import write_yolo_detection_export
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.storage.segmentation_exports import write_yolo_segmentation_export
-
 
 ULTRALYTICS_TASKS = {"detect", "segment"}
 PROTECTED_TRAINING_KEYS = {
@@ -109,8 +107,7 @@ def _dataset_records(
         )
     )
     image_paths = {
-        image.id: resolve_managed_project_path(settings, image.managed_path)
-        for image in images
+        image.id: resolve_managed_project_path(settings, image.managed_path) for image in images
     }
     missing = [image_id for image_id, path in image_paths.items() if not path.is_file()]
     if missing:

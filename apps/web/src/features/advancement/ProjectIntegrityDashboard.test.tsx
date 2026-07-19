@@ -96,7 +96,11 @@ describe("ProjectIntegrityDashboard", () => {
     await user.click(screen.getByRole("button", { name: /inspect project/i }));
 
     await waitFor(() =>
-      expect(inspectProjectIntegrity).toHaveBeenCalledWith(project.id, true, 60),
+      expect(inspectProjectIntegrity).toHaveBeenCalledWith(
+        project.id,
+        true,
+        60,
+      ),
     );
     expect(await screen.findByText("Attention required")).toBeInTheDocument();
     expect(screen.getByText(/managed path missing/i)).toBeInTheDocument();

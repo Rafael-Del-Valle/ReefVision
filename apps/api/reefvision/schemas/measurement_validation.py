@@ -143,8 +143,6 @@ class ProjectMeasurementValidationResponse(BaseModel):
     passed_count: int = Field(ge=0)
     failed_count: int = Field(ge=0)
     summaries: list[MeasurementValidationMetricSummary]
-    subgroup_summaries: list[MeasurementValidationSubgroupSummary] = Field(
-        default_factory=list
-    )
+    subgroup_summaries: list[MeasurementValidationSubgroupSummary] = Field(default_factory=list)
     observations: list[MeasurementValidationObservation]
     warnings: list[str]

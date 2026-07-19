@@ -227,9 +227,7 @@ def evaluate_tracking(
         if matched_count + false_positives + false_negatives
         else 1.0
     )
-    association_accuracy = (
-        association_correct / association_total if association_total else 1.0
-    )
+    association_accuracy = association_correct / association_total if association_total else 1.0
     hota = math.sqrt(max(detection_accuracy * association_accuracy, 0.0))
     depth_errors = [match.depth_error for match in matches if match.depth_error is not None]
     return TrackingMetrics(
@@ -240,7 +238,9 @@ def evaluate_tracking(
         false_negative_count=false_negatives,
         identity_switch_count=identity_switches,
         fragmentation_count=fragmentations,
-        mostly_tracked_count=sum(ratio >= mostly_tracked_threshold for ratio in track_ratios.values()),
+        mostly_tracked_count=sum(
+            ratio >= mostly_tracked_threshold for ratio in track_ratios.values()
+        ),
         mostly_lost_count=sum(ratio <= mostly_lost_threshold for ratio in track_ratios.values()),
         mota=mota,
         motp=motp,
@@ -258,7 +258,9 @@ def evaluate_tracking(
         mean_track_continuity=(
             sum(continuity_scores) / len(continuity_scores) if continuity_scores else None
         ),
-        matches=tuple(sorted(matches, key=lambda item: (item.frame_index, item.reference_track_id))),
+        matches=tuple(
+            sorted(matches, key=lambda item: (item.frame_index, item.reference_track_id))
+        ),
     )
 
 

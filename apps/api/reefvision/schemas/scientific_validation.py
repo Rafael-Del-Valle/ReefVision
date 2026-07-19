@@ -47,9 +47,7 @@ class ScientificValidationRequest(BaseModel):
         metrics = {item.metric for item in self.observations}
         missing = sorted(metrics - set(self.thresholds))
         if missing:
-            raise ValueError(
-                "Every metric requires an acceptance threshold: " + ", ".join(missing)
-            )
+            raise ValueError("Every metric requires an acceptance threshold: " + ", ".join(missing))
         return self
 
 

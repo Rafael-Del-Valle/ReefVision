@@ -125,9 +125,15 @@ export function VideoDashboard({ project }: { project: Project }) {
     },
     onSuccess: async (result) => {
       setSelectedVideoId(result.video.id);
-      setMessage(result.duplicate ? "Existing managed video selected." : "Video imported.");
+      setMessage(
+        result.duplicate
+          ? "Existing managed video selected."
+          : "Video imported.",
+      );
       setFile(null);
-      await queryClient.invalidateQueries({ queryKey: ["phase6_videos", project.id] });
+      await queryClient.invalidateQueries({
+        queryKey: ["phase6_videos", project.id],
+      });
     },
   });
   const calibrate = useMutation({
@@ -143,7 +149,9 @@ export function VideoDashboard({ project }: { project: Project }) {
     },
     onSuccess: async () => {
       setMessage("Video calibration saved.");
-      await queryClient.invalidateQueries({ queryKey: ["phase6_videos", project.id] });
+      await queryClient.invalidateQueries({
+        queryKey: ["phase6_videos", project.id],
+      });
     },
   });
   const automaticTracking = useMutation({
@@ -179,7 +187,9 @@ export function VideoDashboard({ project }: { project: Project }) {
       setTrackJson(defaultTrackJson);
       setEditingTrackId(null);
       setMessage("Track saved.");
-      await queryClient.invalidateQueries({ queryKey: ["phase6_tracks", selectedVideoId] });
+      await queryClient.invalidateQueries({
+        queryKey: ["phase6_tracks", selectedVideoId],
+      });
     },
     onError: (error) => {
       if (error instanceof SyntaxError) setParseError(error.message);
@@ -188,7 +198,9 @@ export function VideoDashboard({ project }: { project: Project }) {
   const removeTrack = useMutation({
     mutationFn: (trackId: string) => deleteVideoTrack(trackId),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["phase6_tracks", selectedVideoId] });
+      await queryClient.invalidateQueries({
+        queryKey: ["phase6_tracks", selectedVideoId],
+      });
     },
   });
   const analytics = useMutation({
@@ -239,7 +251,8 @@ export function VideoDashboard({ project }: { project: Project }) {
           <p className="eyebrow">Phase 6</p>
           <h3>Video and fish tracking</h3>
           <span>
-            Managed source video → ByteTrack/BoT-SORT → correction → behavior analytics
+            Managed source video → ByteTrack/BoT-SORT → correction → behavior
+            analytics
           </span>
         </div>
         <span>{videos.data?.length ?? 0} managed videos</span>
@@ -262,7 +275,11 @@ export function VideoDashboard({ project }: { project: Project }) {
                 onChange={(event) => setFile(event.target.files?.[0] ?? null)}
               />
             </label>
-            <button type="button" disabled={!file || upload.isPending} onClick={() => upload.mutate()}>
+            <button
+              type="button"
+              disabled={!file || upload.isPending}
+              onClick={() => upload.mutate()}
+            >
               {upload.isPending ? "Importing..." : "Import managed video"}
             </button>
             <label>
@@ -305,7 +322,9 @@ export function VideoDashboard({ project }: { project: Project }) {
             </div>
             <button
               type="button"
-              disabled={!selectedVideoId || !distancePerPixel || calibrate.isPending}
+              disabled={
+                !selectedVideoId || !distancePerPixel || calibrate.isPending
+              }
               onClick={() => calibrate.mutate()}
             >
               Save calibration
@@ -317,7 +336,10 @@ export function VideoDashboard({ project }: { project: Project }) {
             <h4>Detector plus tracker</h4>
             <label>
               Detector
-              <select value={detectorId} onChange={(event) => setDetectorId(event.target.value)}>
+              <select
+                value={detectorId}
+                onChange={(event) => setDetectorId(event.target.value)}
+              >
                 <option value="">Choose detector</option>
                 {detectors.map((model) => (
                   <option key={model.id} value={model.id}>
@@ -347,7 +369,9 @@ export function VideoDashboard({ project }: { project: Project }) {
                   max="1"
                   step="0.05"
                   value={confidence}
-                  onChange={(event) => setConfidence(Number(event.target.value))}
+                  onChange={(event) =>
+                    setConfidence(Number(event.target.value))
+                  }
                 />
               </label>
               <label>
@@ -367,13 +391,17 @@ export function VideoDashboard({ project }: { project: Project }) {
                   type="number"
                   min="1"
                   value={everyNFrames}
-                  onChange={(event) => setEveryNFrames(Number(event.target.value))}
+                  onChange={(event) =>
+                    setEveryNFrames(Number(event.target.value))
+                  }
                 />
               </label>
             </div>
             <button
               type="button"
-              disabled={!selectedVideoId || !detectorId || automaticTracking.isPending}
+              disabled={
+                !selectedVideoId || !detectorId || automaticTracking.isPending
+              }
               onClick={() => automaticTracking.mutate()}
             >
               {automaticTracking.isPending ? "Queuing..." : "Run fish tracking"}
@@ -415,8 +443,8 @@ export function VideoDashboard({ project }: { project: Project }) {
               {editingTrackId && <span>Editing existing track</span>}
             </div>
             <p>
-              Keyframes remain editable. Linear or hold interpolation generates the
-              intermediate trajectory without modifying the source video.
+              Keyframes remain editable. Linear or hold interpolation generates
+              the intermediate trajectory without modifying the source video.
             </p>
             <label>
               Track JSON
@@ -457,15 +485,23 @@ export function VideoDashboard({ project }: { project: Project }) {
                   <div>
                     <strong>Track {track.track_number}</strong>
                     <p>
-                      {track.status} · {track.interpolation} · {track.keyframes.length}{" "}
-                      keyframes
+                      {track.status} · {track.interpolation} ·{" "}
+                      {track.keyframes.length} keyframes
                     </p>
                     <small>
-                      {String(track.metadata_json.tracker ?? track.metadata_json.source ?? "unknown source")}
+                      {String(
+                        track.metadata_json.tracker ??
+                          track.metadata_json.source ??
+                          "unknown source",
+                      )}
                     </small>
                   </div>
                   <div className="dashboard-actions">
-                    <button type="button" className="secondary" onClick={() => editTrack(track)}>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => editTrack(track)}
+                    >
                       Edit
                     </button>
                     <button
@@ -492,19 +528,25 @@ export function VideoDashboard({ project }: { project: Project }) {
                 <div className="version-actions">
                   <a
                     className="button-link secondary"
-                    href={downloadUrl(`/videos/${selectedVideo.id}/tracking-export?format=csv`)}
+                    href={downloadUrl(
+                      `/videos/${selectedVideo.id}/tracking-export?format=csv`,
+                    )}
                   >
                     CSV
                   </a>
                   <a
                     className="button-link secondary"
-                    href={downloadUrl(`/videos/${selectedVideo.id}/tracking-export?format=mot`)}
+                    href={downloadUrl(
+                      `/videos/${selectedVideo.id}/tracking-export?format=mot`,
+                    )}
                   >
                     MOT
                   </a>
                   <a
                     className="button-link secondary"
-                    href={downloadUrl(`/videos/${selectedVideo.id}/tracking-export?format=json`)}
+                    href={downloadUrl(
+                      `/videos/${selectedVideo.id}/tracking-export?format=json`,
+                    )}
                   >
                     ReefVision JSON
                   </a>
@@ -527,7 +569,9 @@ export function VideoDashboard({ project }: { project: Project }) {
                   min="2"
                   max="100"
                   value={heatmapBins}
-                  onChange={(event) => setHeatmapBins(Number(event.target.value))}
+                  onChange={(event) =>
+                    setHeatmapBins(Number(event.target.value))
+                  }
                 />
               </label>
               <label>
@@ -537,7 +581,9 @@ export function VideoDashboard({ project }: { project: Project }) {
                   min="0"
                   step="any"
                   value={activityThreshold}
-                  onChange={(event) => setActivityThreshold(Number(event.target.value))}
+                  onChange={(event) =>
+                    setActivityThreshold(Number(event.target.value))
+                  }
                 />
               </label>
             </div>
@@ -546,7 +592,9 @@ export function VideoDashboard({ project }: { project: Project }) {
               disabled={!selectedVideoId || analytics.isPending}
               onClick={() => analytics.mutate()}
             >
-              {analytics.isPending ? "Analyzing..." : "Calculate behavior metrics"}
+              {analytics.isPending
+                ? "Analyzing..."
+                : "Calculate behavior metrics"}
             </button>
             {analytics.data?.warnings.map((warning) => (
               <p key={warning} className="form-warning">
@@ -573,7 +621,9 @@ export function VideoDashboard({ project }: { project: Project }) {
                   </div>
                   <span>
                     {Object.entries(track.zone_time_seconds)
-                      .map(([zone, seconds]) => `${zone}: ${seconds.toFixed(2)} s`)
+                      .map(
+                        ([zone, seconds]) => `${zone}: ${seconds.toFixed(2)} s`,
+                      )
                       .join(" · ") || "No zone occupancy"}
                   </span>
                 </article>
@@ -581,12 +631,18 @@ export function VideoDashboard({ project }: { project: Project }) {
             </div>
             {analytics.data && (
               <div className="version-preview-metrics">
-                <span>{analytics.data.school_by_frame.length} school frames</span>
-                <span>{analytics.data.heatmap.length} occupied heatmap cells</span>
                 <span>
-                  {analytics.data.school_by_frame.filter(
-                    (item) => item.active_track_count > 1,
-                  ).length}{" "}
+                  {analytics.data.school_by_frame.length} school frames
+                </span>
+                <span>
+                  {analytics.data.heatmap.length} occupied heatmap cells
+                </span>
+                <span>
+                  {
+                    analytics.data.school_by_frame.filter(
+                      (item) => item.active_track_count > 1,
+                    ).length
+                  }{" "}
                   multi-fish frames
                 </span>
               </div>

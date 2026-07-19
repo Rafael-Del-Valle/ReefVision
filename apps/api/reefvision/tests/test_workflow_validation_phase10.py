@@ -184,9 +184,7 @@ def test_workflow_cycle_is_rejected_and_templates_are_available(
     )
     assert response.status_code == 200, response.text
     assert response.json()["valid"] is False
-    assert "workflow_cycle" in {
-        item["code"] for item in response.json()["issues"]
-    }
+    assert "workflow_cycle" in {item["code"] for item in response.json()["issues"]}
 
     definitions = client.get("/api/v1/workflow-node-definitions")
     templates = client.get("/api/v1/workflow-templates")

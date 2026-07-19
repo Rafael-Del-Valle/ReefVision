@@ -141,9 +141,7 @@ def _parse_coco(document: dict[str, Any], *, panoptic: bool) -> ParsedInterchang
             width=int(item["width"]) if item.get("width") is not None else None,
             height=int(item["height"]) if item.get("height") is not None else None,
             reefvision_image_id=(
-                str(item["reefvision_image_id"])
-                if item.get("reefvision_image_id")
-                else None
+                str(item["reefvision_image_id"]) if item.get("reefvision_image_id") else None
             ),
         )
         for item in images_raw
@@ -162,11 +160,17 @@ def _parse_coco(document: dict[str, Any], *, panoptic: bool) -> ParsedInterchang
             mask_name = str(item.get("file_name", ""))
             encoded = panoptic_masks.get(mask_name)
             if not isinstance(encoded, str):
-                warnings.append(f"Panoptic annotation {source_id} has no base64 mask for {mask_name}")
+                warnings.append(
+                    f"Panoptic annotation {source_id} has no base64 mask for {mask_name}"
+                )
                 continue
             ids = _panoptic_rgb_to_ids(encoded)
             for segment in item["segments_info"]:
-                if not isinstance(segment, dict) or "id" not in segment or "category_id" not in segment:
+                if (
+                    not isinstance(segment, dict)
+                    or "id" not in segment
+                    or "category_id" not in segment
+                ):
                     continue
                 segment_id = int(segment["id"])
                 raster = ids == segment_id
@@ -189,7 +193,9 @@ def _parse_coco(document: dict[str, Any], *, panoptic: bool) -> ParsedInterchang
         bbox = _bbox_xywh(item["bbox"]) if item.get("bbox") is not None else None
         segmentation = item.get("segmentation")
         if isinstance(segmentation, list) and segmentation:
-            polygons = [entry for entry in segmentation if isinstance(entry, list) and len(entry) >= 6]
+            polygons = [
+                entry for entry in segmentation if isinstance(entry, list) and len(entry) >= 6
+            ]
             if not polygons:
                 warnings.append(f"COCO annotation {source_id} has no valid polygon")
                 continue
@@ -254,8 +260,14 @@ def _parse_cvat(document: dict[str, Any]) -> ParsedInterchange:
     for image_element in root.findall(".//image"):
         key = str(image_element.attrib.get("id", len(images)))
         filename = Path(str(image_element.attrib.get("name", key))).name
-        width = int(float(image_element.attrib["width"])) if image_element.attrib.get("width") else None
-        height = int(float(image_element.attrib["height"])) if image_element.attrib.get("height") else None
+        width = (
+            int(float(image_element.attrib["width"])) if image_element.attrib.get("width") else None
+        )
+        height = (
+            int(float(image_element.attrib["height"]))
+            if image_element.attrib.get("height")
+            else None
+        )
         images.append(SourceImage(key=key, filename=filename, width=width, height=height))
         for shape_index, shape in enumerate(image_element):
             label = str(shape.attrib.get("label", "")).strip()
@@ -269,16 +281,23 @@ def _parse_cvat(document: dict[str, Any]) -> ParsedInterchange:
                     _float(shape.attrib.get("xbr"), "CVAT xbr"),
                     _float(shape.attrib.get("ybr"), "CVAT ybr"),
                 )
-                annotations.append(SourceAnnotation(source_id, key, label, "bounding_box", bbox=bbox))
+                annotations.append(
+                    SourceAnnotation(source_id, key, label, "bounding_box", bbox=bbox)
+                )
             elif shape.tag == "polygon":
                 points_text = str(shape.attrib.get("points", ""))
                 polygon = [
-                    [_float(pair.split(",")[0], "CVAT polygon x"), _float(pair.split(",")[1], "CVAT polygon y")]
+                    [
+                        _float(pair.split(",")[0], "CVAT polygon x"),
+                        _float(pair.split(",")[1], "CVAT polygon y"),
+                    ]
                     for pair in points_text.split(";")
                     if "," in pair
                 ]
                 if len(polygon) >= 3:
-                    annotations.append(SourceAnnotation(source_id, key, label, "polygon", polygon=polygon))
+                    annotations.append(
+                        SourceAnnotation(source_id, key, label, "polygon", polygon=polygon)
+                    )
     return ParsedInterchange(categories, images, annotations)
 
 
@@ -340,7 +359,9 @@ def _parse_labelme(document: dict[str, Any]) -> ParsedInterchange:
                     for point in points
                 ]
                 annotations.append(
-                    SourceAnnotation(source_id, key, str(shape["label"]), "polygon", polygon=polygon)
+                    SourceAnnotation(
+                        source_id, key, str(shape["label"]), "polygon", polygon=polygon
+                    )
                 )
     return ParsedInterchange(categories, images, annotations)
 
@@ -380,18 +401,28 @@ def _parse_roboflow_yolo(document: dict[str, Any]) -> ParsedInterchange:
                 x_max = (center_x + normalized_width / 2.0) * width
                 y_max = (center_y + normalized_height / 2.0) * height
                 annotations.append(
-                    SourceAnnotation(source_id, key, category_key, "bounding_box", bbox=(x_min, y_min, x_max, y_max))
+                    SourceAnnotation(
+                        source_id,
+                        key,
+                        category_key,
+                        "bounding_box",
+                        bbox=(x_min, y_min, x_max, y_max),
+                    )
                 )
             elif len(coordinates) >= 6 and len(coordinates) % 2 == 0:
                 polygon = [
                     [coordinates[index] * width, coordinates[index + 1] * height]
                     for index in range(0, len(coordinates), 2)
                 ]
-                annotations.append(SourceAnnotation(source_id, key, category_key, "polygon", polygon=polygon))
+                annotations.append(
+                    SourceAnnotation(source_id, key, category_key, "polygon", polygon=polygon)
+                )
     return ParsedInterchange(categories, images, annotations, warnings=warnings)
 
 
-def parse_interchange(format_name: InterchangeFormat, document: dict[str, Any]) -> ParsedInterchange:
+def parse_interchange(
+    format_name: InterchangeFormat, document: dict[str, Any]
+) -> ParsedInterchange:
     if format_name in {"coco_detection", "coco_instance", "roboflow_coco"}:
         return _parse_coco(document, panoptic=False)
     if format_name == "coco_panoptic":

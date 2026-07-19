@@ -84,12 +84,16 @@ def depth_anything_v2(
     with torch.inference_mode():
         outputs = model(**inputs)
         predicted = outputs.predicted_depth
-        resized = functional.interpolate(
-            predicted.unsqueeze(1),
-            size=(image.height, image.width),
-            mode="bicubic",
-            align_corners=False,
-        ).squeeze(0).squeeze(0)
+        resized = (
+            functional.interpolate(
+                predicted.unsqueeze(1),
+                size=(image.height, image.width),
+                mode="bicubic",
+                align_corners=False,
+            )
+            .squeeze(0)
+            .squeeze(0)
+        )
     values = resized.detach().float().cpu().numpy().astype(np.float32)
     if metric:
         if maximum_metric_depth is not None:

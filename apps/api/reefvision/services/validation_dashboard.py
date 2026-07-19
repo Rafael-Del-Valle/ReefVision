@@ -20,7 +20,6 @@ from reefvision.db.models import (
     DatasetVersion,
     ExportRecord,
     ImageAsset,
-    Job,
     LabelClass,
     MaskAnnotation,
     ModelRegistration,
@@ -263,11 +262,7 @@ class ValidationDashboardService:
                 )
             )
         )
-        invalid = [
-            mask.id
-            for mask in masks
-            if not mask.mask_path and not mask.polygon_json
-        ]
+        invalid = [mask.id for mask in masks if not mask.mask_path and not mask.polygon_json]
         status: CheckStatus = "error" if invalid else "pass"
         return ValidationDashboardCheck(
             category="annotations",
@@ -299,10 +294,7 @@ class ValidationDashboardService:
             select(ModelRegistration).where(ModelRegistration.project_id == project_id)
         ):
             raw = model.class_map_json
-            names = {
-                str(value)
-                for value in (raw.values() if isinstance(raw, dict) else [])
-            }
+            names = {str(value) for value in (raw.values() if isinstance(raw, dict) else [])}
             unknown = sorted(names - active_names)
             if unknown:
                 unknown_model_classes[model.id] = unknown
@@ -328,9 +320,7 @@ class ValidationDashboardService:
 
     def _training_check(self, project_id: str) -> ValidationDashboardCheck:
         runs = list(
-            self.session.scalars(
-                select(TrainingRun).where(TrainingRun.project_id == project_id)
-            )
+            self.session.scalars(select(TrainingRun).where(TrainingRun.project_id == project_id))
         )
         failed = [run.id for run in runs if run.status == "failed"]
         completed_without_checkpoint = [
@@ -339,11 +329,7 @@ class ValidationDashboardService:
             if run.status in {"completed", "succeeded"} and not run.result_checkpoint_path
         ]
         status: CheckStatus = (
-            "error"
-            if completed_without_checkpoint
-            else "warning"
-            if failed
-            else "pass"
+            "error" if completed_without_checkpoint else "warning" if failed else "pass"
         )
         return ValidationDashboardCheck(
             category="training",
@@ -364,9 +350,7 @@ class ValidationDashboardService:
 
     def _videos_check(self, project_id: str) -> ValidationDashboardCheck:
         videos = list(
-            self.session.scalars(
-                select(VideoAsset).where(VideoAsset.project_id == project_id)
-            )
+            self.session.scalars(select(VideoAsset).where(VideoAsset.project_id == project_id))
         )
         missing = []
         for video in videos:
@@ -389,9 +373,7 @@ class ValidationDashboardService:
 
     def _exports_check(self, project_id: str) -> ValidationDashboardCheck:
         exports = list(
-            self.session.scalars(
-                select(ExportRecord).where(ExportRecord.project_id == project_id)
-            )
+            self.session.scalars(select(ExportRecord).where(ExportRecord.project_id == project_id))
         )
         failed = [item.id for item in exports if item.status == "failed"]
         queued = [item.id for item in exports if item.status in {"queued", "running"}]
@@ -402,7 +384,9 @@ class ValidationDashboardService:
             code="export_status",
             summary=f"{len(exports)} export records inspected.",
             details={"failed_ids": failed, "active_ids": queued},
-            recommendation="Retry failed exports after resolving integrity issues." if failed else None,
+            recommendation="Retry failed exports after resolving integrity issues."
+            if failed
+            else None,
         )
 
     def _workflows_check(self, project_id: str) -> ValidationDashboardCheck:
@@ -424,7 +408,9 @@ class ValidationDashboardService:
                 "published": sum(item.status == "published" for item in workflows),
                 "failed_run_ids": failed,
             },
-            recommendation="Inspect failed workflow node state and retry from checkpoint." if failed else None,
+            recommendation="Inspect failed workflow node state and retry from checkpoint."
+            if failed
+            else None,
         )
 
     def _disk_check(self, project: Project) -> ValidationDashboardCheck:
@@ -432,9 +418,11 @@ class ValidationDashboardService:
         ratio = disk.free / max(disk.total, 1)
         try:
             project_root = resolve_managed_project_path(self.settings, project.storage_root)
-            project_bytes = sum(
-                path.stat().st_size for path in project_root.rglob("*") if path.is_file()
-            ) if project_root.is_dir() else 0
+            project_bytes = (
+                sum(path.stat().st_size for path in project_root.rglob("*") if path.is_file())
+                if project_root.is_dir()
+                else 0
+            )
         except Exception:
             project_bytes = 0
         status: CheckStatus = "error" if ratio < 0.02 else "warning" if ratio < 0.10 else "pass"
@@ -495,9 +483,7 @@ class ValidationDashboardService:
             stale_after_seconds=max(stale_job_minutes * 60, 30),
         )
         manual = [item.issue_id for item in plan.issues if not item.safe_automatic]
-        status: CheckStatus = (
-            "error" if manual else "warning" if plan.issues else "pass"
-        )
+        status: CheckStatus = "error" if manual else "warning" if plan.issues else "pass"
         return ValidationDashboardCheck(
             category="recovery",
             status=status,

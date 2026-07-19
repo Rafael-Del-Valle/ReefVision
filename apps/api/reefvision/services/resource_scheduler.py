@@ -86,11 +86,7 @@ class ResourceScheduler:
         self.session = session
 
     def _active_reservations(self) -> list[Job]:
-        return list(
-            self.session.scalars(
-                select(Job).where(Job.status.in_(_ACTIVE_STATUSES))
-            )
-        )
+        return list(self.session.scalars(select(Job).where(Job.status.in_(_ACTIVE_STATUSES))))
 
     def evaluate(self, job: Job) -> ResourceDecision:
         requirements = dict(job.resource_requirements_json or {})
@@ -148,9 +144,11 @@ class ResourceScheduler:
             blockers.append("Another disk-intensive job is currently running.")
 
         requested_device = str(requirements.get("device", "auto") or "auto").casefold()
-        gpu_required = bool(requirements.get("gpu_required", False)) or requested_device.startswith(
-            "cuda"
-        ) or requested_device in {"gpu"}
+        gpu_required = (
+            bool(requirements.get("gpu_required", False))
+            or requested_device.startswith("cuda")
+            or requested_device in {"gpu"}
+        )
         minimum_vram = max(0, int(requirements.get("minimum_vram_bytes", 0) or 0))
         exclusive_gpu = bool(requirements.get("exclusive_gpu", False))
         selected_gpu: GPUInventory | None = None
@@ -186,8 +184,7 @@ class ResourceScheduler:
                 and (
                     not exclusive_gpu
                     or not any(
-                        (active_job.resource_assignment_json or {}).get("gpu_index")
-                        == item.index
+                        (active_job.resource_assignment_json or {}).get("gpu_index") == item.index
                         for active_job in active
                         if active_job.id != job.id
                     )
@@ -203,9 +200,7 @@ class ResourceScheduler:
                     ),
                 )
             elif not blockers:
-                blockers.append(
-                    "No compatible GPU has the requested free VRAM and exclusivity."
-                )
+                blockers.append("No compatible GPU has the requested free VRAM and exclusivity.")
 
         assignment: dict[str, Any] = {
             "assigned_at": datetime.now(UTC).isoformat(),

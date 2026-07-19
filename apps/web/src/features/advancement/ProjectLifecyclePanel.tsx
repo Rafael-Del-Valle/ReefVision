@@ -16,14 +16,14 @@ import {
 function jobIsActive(job: JobRecord | undefined): boolean {
   return Boolean(
     job &&
-      [
-        "queued",
-        "blocked",
-        "running",
-        "pause_requested",
-        "paused",
-        "cancel_requested",
-      ].includes(job.status),
+    [
+      "queued",
+      "blocked",
+      "running",
+      "pause_requested",
+      "paused",
+      "cancel_requested",
+    ].includes(job.status),
   );
 }
 
@@ -40,7 +40,10 @@ function JobStatusCard({ job }: { job: JobRecord }) {
   const result = job.result_json ?? {};
   const progress =
     job.progress_total > 0
-      ? Math.min(100, Math.round((job.progress_current / job.progress_total) * 100))
+      ? Math.min(
+          100,
+          Math.round((job.progress_current / job.progress_total) * 100),
+        )
       : 0;
   return (
     <article className="dashboard-card">
@@ -102,8 +105,7 @@ export function ProjectLifecyclePanel({ project }: { project: Project }) {
     queryKey: ["project-lifecycle-job", activeJobId],
     queryFn: () => getLifecycleJob(activeJobId as string),
     enabled: Boolean(activeJobId),
-    refetchInterval: (query) =>
-      jobIsActive(query.state.data) ? 1000 : false,
+    refetchInterval: (query) => (jobIsActive(query.state.data) ? 1000 : false),
   });
 
   useEffect(() => {
@@ -111,7 +113,9 @@ export function ProjectLifecyclePanel({ project }: { project: Project }) {
     void Promise.all([
       queryClient.invalidateQueries({ queryKey: ["project", project.id] }),
       queryClient.invalidateQueries({ queryKey: ["project_summaries"] }),
-      queryClient.invalidateQueries({ queryKey: ["project-images", project.id] }),
+      queryClient.invalidateQueries({
+        queryKey: ["project-images", project.id],
+      }),
     ]);
   }, [job.data, project.id, queryClient]);
 
@@ -195,8 +199,8 @@ export function ProjectLifecyclePanel({ project }: { project: Project }) {
           <p className="eyebrow">Project lifecycle</p>
           <h3>Identity, duplication, archives, and storage</h3>
           <span>
-            Safely rename, duplicate, archive, import, restore, or move a complete
-            ReefVision project with schema and checksum verification.
+            Safely rename, duplicate, archive, import, restore, or move a
+            complete ReefVision project with schema and checksum verification.
           </span>
         </div>
         <span>{project.archived_at ? "Archived" : "Active"}</span>
@@ -205,7 +209,9 @@ export function ProjectLifecyclePanel({ project }: { project: Project }) {
       {actionError && <p className="form-error">{actionError.message}</p>}
       {project.archived_at && (
         <div className="editor-message error">
-          <p>This project is archived and hidden from the normal project list.</p>
+          <p>
+            This project is archived and hidden from the normal project list.
+          </p>
           <button
             type="button"
             disabled={restore.isPending}
@@ -221,11 +227,17 @@ export function ProjectLifecyclePanel({ project }: { project: Project }) {
           <h4>Rename and describe</h4>
           <label>
             Name
-            <input value={name} onChange={(event) => setName(event.target.value)} />
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
           </label>
           <label>
             Slug
-            <input value={slug} onChange={(event) => setSlug(event.target.value)} />
+            <input
+              value={slug}
+              onChange={(event) => setSlug(event.target.value)}
+            />
           </label>
           <label>
             Description
@@ -248,8 +260,9 @@ export function ProjectLifecyclePanel({ project }: { project: Project }) {
         <article className="dashboard-card">
           <h4>Duplicate complete project</h4>
           <p>
-            Creates a portable archive, remaps every project-owned identifier and
-            managed path, repairs immutable checksums, then imports it as a new project.
+            Creates a portable archive, remaps every project-owned identifier
+            and managed path, repairs immutable checksums, then imports it as a
+            new project.
           </p>
           <label>
             Duplicate name
@@ -278,8 +291,9 @@ export function ProjectLifecyclePanel({ project }: { project: Project }) {
         <article className="dashboard-card">
           <h4>Portable full-project archive</h4>
           <p>
-            Includes the reachable database graph, schema signature, Alembic revision,
-            immutable snapshots, and all managed files with SHA-256 checksums.
+            Includes the reachable database graph, schema signature, Alembic
+            revision, immutable snapshots, and all managed files with SHA-256
+            checksums.
           </p>
           <label>
             Archive notes
@@ -301,8 +315,9 @@ export function ProjectLifecyclePanel({ project }: { project: Project }) {
         <article className="dashboard-card">
           <h4>Storage migration</h4>
           <p>
-            Copies every managed file, rewrites project-owned database paths, commits
-            atomically, then optionally removes the old project directory.
+            Copies every managed file, rewrites project-owned database paths,
+            commits atomically, then optionally removes the old project
+            directory.
           </p>
           <label>
             New relative storage root
@@ -380,7 +395,9 @@ export function ProjectLifecyclePanel({ project }: { project: Project }) {
           <button
             type="button"
             disabled={
-              !verify.data?.valid || importArchive.isPending || !archivePath.trim()
+              !verify.data?.valid ||
+              importArchive.isPending ||
+              !archivePath.trim()
             }
             onClick={() => importArchive.mutate()}
           >
@@ -396,8 +413,8 @@ export function ProjectLifecyclePanel({ project }: { project: Project }) {
               <span>{formatBytes(verify.data.total_file_bytes)}</span>
             </div>
             <p>
-              Source project: {verify.data.source_project_name ?? "Unknown"} · schema{" "}
-              {verify.data.source_schema_revision ?? "Unknown"}
+              Source project: {verify.data.source_project_name ?? "Unknown"} ·
+              schema {verify.data.source_schema_revision ?? "Unknown"}
             </p>
             {verify.data.blockers.map((blocker) => (
               <p key={blocker} className="form-error">

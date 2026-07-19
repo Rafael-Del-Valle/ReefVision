@@ -29,11 +29,14 @@ def test_project_archive_export_verify_and_import(client: TestClient) -> None:
     )
     assert queued.status_code == 202
     export_job_id = queued.json()["job"]["id"]
-    assert process_project_archive_export_job(
-        client.app.state.settings,
-        client.app.state.session_factory,
-        export_job_id,
-    ) is True
+    assert (
+        process_project_archive_export_job(
+            client.app.state.settings,
+            client.app.state.session_factory,
+            export_job_id,
+        )
+        is True
+    )
 
     export_job = client.get(f"/api/v1/jobs/{export_job_id}").json()
     assert export_job["status"] == "succeeded"
@@ -59,11 +62,14 @@ def test_project_archive_export_verify_and_import(client: TestClient) -> None:
     )
     assert import_queued.status_code == 202
     import_job_id = import_queued.json()["job"]["id"]
-    assert process_project_archive_import_job(
-        client.app.state.settings,
-        client.app.state.session_factory,
-        import_job_id,
-    ) is True
+    assert (
+        process_project_archive_import_job(
+            client.app.state.settings,
+            client.app.state.session_factory,
+            import_job_id,
+        )
+        is True
+    )
 
     import_job = client.get(f"/api/v1/jobs/{import_job_id}").json()
     assert import_job["status"] == "succeeded"

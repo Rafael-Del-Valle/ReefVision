@@ -338,8 +338,7 @@ class WorkflowService:
                     code="model_task_mismatch",
                     node_id=node.id,
                     message=(
-                        f"Model task {model.task!r} is incompatible with "
-                        f"{definition.display_name}."
+                        f"Model task {model.task!r} is incompatible with {definition.display_name}."
                     ),
                 )
             )
@@ -385,10 +384,7 @@ class WorkflowService:
                         code="source_port_missing",
                         edge_index=edge_index,
                         node_id=source.id,
-                        message=(
-                            f"Node {source.id!r} has no output port "
-                            f"{edge.source_port!r}."
-                        ),
+                        message=(f"Node {source.id!r} has no output port {edge.source_port!r}."),
                     )
                 )
                 continue
@@ -399,10 +395,7 @@ class WorkflowService:
                         code="target_port_missing",
                         edge_index=edge_index,
                         node_id=target.id,
-                        message=(
-                            f"Node {target.id!r} has no input port "
-                            f"{edge.target_port!r}."
-                        ),
+                        message=(f"Node {target.id!r} has no input port {edge.target_port!r}."),
                     )
                 )
                 continue
@@ -414,10 +407,7 @@ class WorkflowService:
                         code="port_type_mismatch",
                         edge_index=edge_index,
                         node_id=target.id,
-                        message=(
-                            f"Cannot connect {source_type!r} to input type "
-                            f"{target_type!r}."
-                        ),
+                        message=(f"Cannot connect {source_type!r} to input type {target_type!r}."),
                     )
                 )
                 continue
@@ -429,9 +419,7 @@ class WorkflowService:
                         code="input_already_connected",
                         edge_index=edge_index,
                         node_id=target.id,
-                        message=(
-                            f"Input {edge.target_port!r} already has a connection."
-                        ),
+                        message=(f"Input {edge.target_port!r} already has a connection."),
                     )
                 )
                 continue
@@ -450,9 +438,7 @@ class WorkflowService:
                             severity="error",
                             code="required_input_missing",
                             node_id=node.id,
-                            message=(
-                                f"Required input {port_name!r} is not connected."
-                            ),
+                            message=(f"Required input {port_name!r} is not connected."),
                         )
                     )
             if definition.outputs and not outgoing[node.id] and node.node_type != "export":
@@ -496,10 +482,7 @@ class WorkflowService:
                 WorkflowValidationIssue(
                     severity="error",
                     code="workflow_cycle",
-                    message=(
-                        "The workflow contains a cycle involving: "
-                        + ", ".join(cyclic_nodes)
-                    ),
+                    message=("The workflow contains a cycle involving: " + ", ".join(cyclic_nodes)),
                 )
             )
 

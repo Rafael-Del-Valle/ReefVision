@@ -261,8 +261,8 @@ export function RasterMaskWorkspace({
               />
             </label>
             <p className="annotation-helper">
-              Strokes update the selected raster layer. Use Create another mask only
-              when you intentionally want a separate layer.
+              Strokes update the selected raster layer. Use Create another mask
+              only when you intentionally want a separate layer.
             </p>
             {editMutation.error && (
               <p className="form-error">{editMutation.error.message}</p>
@@ -348,13 +348,16 @@ export function RasterMaskWorkspace({
                 type="checkbox"
                 checked={autoMaskContiguous}
                 disabled={!autoMaskEnabled || operationPending}
-                onChange={(event) => setAutoMaskContiguous(event.target.checked)}
+                onChange={(event) =>
+                  setAutoMaskContiguous(event.target.checked)
+                }
               />
               Keep only the connected region reached from the stroke
             </label>
             <p className="annotation-helper">
-              Auto Mask samples the pixels beneath the stroke, stops at strong edges,
-              and saves the result as a normal immutable raster-mask revision.
+              Auto Mask samples the pixels beneath the stroke, stops at strong
+              edges, and saves the result as a normal immutable raster-mask
+              revision.
             </p>
           </section>
 
@@ -436,8 +439,8 @@ export function RasterMaskWorkspace({
                 : "Create cleaned revision"}
             </button>
             <p className="annotation-helper">
-              Cleanup creates a new immutable mask revision. The prior raster file and
-              audit event remain available.
+              Cleanup creates a new immutable mask revision. The prior raster
+              file and audit event remain available.
             </p>
             {cleanupMutation.error && (
               <p className="form-error">{cleanupMutation.error.message}</p>

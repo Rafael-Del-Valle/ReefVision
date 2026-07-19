@@ -6,11 +6,7 @@ import {
   type AnnotationSession,
   type Project,
 } from "../../api/client";
-import {
-  getImages,
-  getJob,
-  type ImageListItem,
-} from "../phase456/api";
+import { getImages, getJob, type ImageListItem } from "../phase456/api";
 import {
   depthContentUrl,
   depthPreviewUrl,
@@ -76,10 +72,12 @@ export function DepthDashboard({ project }: { project: Project }) {
   });
   const masks = useMemo(
     () =>
-      ((session.data as DepthAnnotationSession | undefined)?.mask_annotations ?? [])
-        .filter((mask) =>
-          ["polygon", "raster_mask"].includes(mask.geometry_kind),
-        ),
+      (
+        (session.data as DepthAnnotationSession | undefined)
+          ?.mask_annotations ?? []
+      ).filter((mask) =>
+        ["polygon", "raster_mask"].includes(mask.geometry_kind),
+      ),
     [session.data],
   );
   const selectedDepthMap =
@@ -165,7 +163,10 @@ export function DepthDashboard({ project }: { project: Project }) {
             <h4>Source image</h4>
             <label>
               Image
-              <select value={imageId} onChange={(event) => setImageId(event.target.value)}>
+              <select
+                value={imageId}
+                onChange={(event) => setImageId(event.target.value)}
+              >
                 <option value="">Choose an image</option>
                 {images.data?.items.map((image: ImageListItem) => (
                   <option key={image.id} value={image.id}>
@@ -188,7 +189,9 @@ export function DepthDashboard({ project }: { project: Project }) {
                   if (provider === "luminance_relative") {
                     setModelId("reefvision-luminance-fixture");
                   } else if (provider === "depth_anything_v2_metric") {
-                    setModelId("depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf");
+                    setModelId(
+                      "depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf",
+                    );
                   } else {
                     setModelId("depth-anything/Depth-Anything-V2-Small-hf");
                   }
@@ -207,11 +210,17 @@ export function DepthDashboard({ project }: { project: Project }) {
             </label>
             <label>
               Model ID or local path
-              <input value={modelId} onChange={(event) => setModelId(event.target.value)} />
+              <input
+                value={modelId}
+                onChange={(event) => setModelId(event.target.value)}
+              />
             </label>
             <label>
               Device
-              <select value={device} onChange={(event) => setDevice(event.target.value)}>
+              <select
+                value={device}
+                onChange={(event) => setDevice(event.target.value)}
+              >
                 <option value="auto">Auto</option>
                 <option value="cpu">CPU</option>
                 <option value="cuda">CUDA</option>
@@ -233,7 +242,9 @@ export function DepthDashboard({ project }: { project: Project }) {
                   min="1"
                   max="100"
                   value={maximumDepth}
-                  onChange={(event) => setMaximumDepth(Number(event.target.value))}
+                  onChange={(event) =>
+                    setMaximumDepth(Number(event.target.value))
+                  }
                 />
               </label>
             )}
@@ -242,13 +253,17 @@ export function DepthDashboard({ project }: { project: Project }) {
               disabled={!imageId || generation.isPending}
               onClick={() => generation.mutate()}
             >
-              {generation.isPending ? "Queueing..." : "Generate aligned depth map"}
+              {generation.isPending
+                ? "Queueing..."
+                : "Generate aligned depth map"}
             </button>
-            {generation.error && <p className="form-error">{generation.error.message}</p>}
+            {generation.error && (
+              <p className="form-error">{generation.error.message}</p>
+            )}
             {activeJob.data && (
               <p>
-                Job: {activeJob.data.status} · {activeJob.data.progress_current}/
-                {activeJob.data.progress_total}
+                Job: {activeJob.data.status} · {activeJob.data.progress_current}
+                /{activeJob.data.progress_total}
               </p>
             )}
           </article>
@@ -268,19 +283,35 @@ export function DepthDashboard({ project }: { project: Project }) {
                 <div className="version-form-row">
                   <label>
                     fx
-                    <input type="number" value={fx} onChange={(event) => setFx(Number(event.target.value))} />
+                    <input
+                      type="number"
+                      value={fx}
+                      onChange={(event) => setFx(Number(event.target.value))}
+                    />
                   </label>
                   <label>
                     fy
-                    <input type="number" value={fy} onChange={(event) => setFy(Number(event.target.value))} />
+                    <input
+                      type="number"
+                      value={fy}
+                      onChange={(event) => setFy(Number(event.target.value))}
+                    />
                   </label>
                   <label>
                     cx
-                    <input type="number" value={cx} onChange={(event) => setCx(Number(event.target.value))} />
+                    <input
+                      type="number"
+                      value={cx}
+                      onChange={(event) => setCx(Number(event.target.value))}
+                    />
                   </label>
                   <label>
                     cy
-                    <input type="number" value={cy} onChange={(event) => setCy(Number(event.target.value))} />
+                    <input
+                      type="number"
+                      value={cy}
+                      onChange={(event) => setCy(Number(event.target.value))}
+                    />
                   </label>
                 </div>
               )}
@@ -305,7 +336,8 @@ export function DepthDashboard({ project }: { project: Project }) {
                 <option value="">Choose a map</option>
                 {depthMaps.data?.map((depthMap) => (
                   <option key={depthMap.id} value={depthMap.id}>
-                    {depthMap.depth_kind} · {depthMap.provider_id} · {depthMap.model_id}
+                    {depthMap.depth_kind} · {depthMap.provider_id} ·{" "}
+                    {depthMap.model_id}
                   </option>
                 ))}
               </select>
@@ -315,14 +347,24 @@ export function DepthDashboard({ project }: { project: Project }) {
                 <img
                   src={depthPreviewUrl(selectedDepthMap.id)}
                   alt="Depth map preview"
-                  style={{ width: "100%", maxHeight: "520px", objectFit: "contain" }}
+                  style={{
+                    width: "100%",
+                    maxHeight: "520px",
+                    objectFit: "contain",
+                  }}
                 />
                 <div className="version-preview-metrics">
                   <span>Kind: {selectedDepthMap.depth_kind}</span>
-                  <span>Median: {selectedDepthMap.median_depth.toFixed(4)}</span>
-                  <span>Valid pixels: {selectedDepthMap.valid_pixel_count}</span>
+                  <span>
+                    Median: {selectedDepthMap.median_depth.toFixed(4)}
+                  </span>
+                  <span>
+                    Valid pixels: {selectedDepthMap.valid_pixel_count}
+                  </span>
                 </div>
-                <a href={depthContentUrl(selectedDepthMap.id)}>Download NumPy depth array</a>
+                <a href={depthContentUrl(selectedDepthMap.id)}>
+                  Download NumPy depth array
+                </a>
               </>
             ) : (
               <p>No depth map has been generated for this image.</p>
@@ -345,26 +387,46 @@ export function DepthDashboard({ project }: { project: Project }) {
                 <option value="">Choose a polygon or raster mask</option>
                 {masks.map((mask) => (
                   <option key={mask.id} value={mask.id}>
-                    {mask.geometry_kind} · {mask.area_pixels ?? 0}px² · {mask.id.slice(0, 8)}
+                    {mask.geometry_kind} · {mask.area_pixels ?? 0}px² ·{" "}
+                    {mask.id.slice(0, 8)}
                   </option>
                 ))}
               </select>
             </label>
-            {depthMeasurement.isPending && selectedMaskId && <p>Calculating...</p>}
+            {depthMeasurement.isPending && selectedMaskId && (
+              <p>Calculating...</p>
+            )}
             {depthMeasurement.error && (
               <p className="form-error">{depthMeasurement.error.message}</p>
             )}
             {depthMeasurement.data && (
               <>
                 <div className="version-preview-metrics">
-                  <span>Median depth: {depthMeasurement.data.depth.median?.toFixed(4)}</span>
-                  <span>Metric area: {depthMeasurement.data.metric_area?.toFixed(6) ?? "Unavailable"}</span>
-                  <span>Metric width: {depthMeasurement.data.metric_width?.toFixed(4) ?? "Unavailable"}</span>
-                  <span>Metric height: {depthMeasurement.data.metric_height?.toFixed(4) ?? "Unavailable"}</span>
+                  <span>
+                    Median depth:{" "}
+                    {depthMeasurement.data.depth.median?.toFixed(4)}
+                  </span>
+                  <span>
+                    Metric area:{" "}
+                    {depthMeasurement.data.metric_area?.toFixed(6) ??
+                      "Unavailable"}
+                  </span>
+                  <span>
+                    Metric width:{" "}
+                    {depthMeasurement.data.metric_width?.toFixed(4) ??
+                      "Unavailable"}
+                  </span>
+                  <span>
+                    Metric height:{" "}
+                    {depthMeasurement.data.metric_height?.toFixed(4) ??
+                      "Unavailable"}
+                  </span>
                 </div>
                 <p>Method: {depthMeasurement.data.method}</p>
                 {depthMeasurement.data.warnings.map((warning) => (
-                  <p key={warning} className="annotation-helper">{warning}</p>
+                  <p key={warning} className="annotation-helper">
+                    {warning}
+                  </p>
                 ))}
               </>
             )}
@@ -373,13 +435,15 @@ export function DepthDashboard({ project }: { project: Project }) {
           <article className="dashboard-card">
             <h4>How depth is used</h4>
             <p>
-              Relative depth can improve foreground/background reasoning, occlusion
-              recovery, and track association. Metric depth plus camera intrinsics can
-              produce 3D positions, distance, speed, and approximate projected size.
+              Relative depth can improve foreground/background reasoning,
+              occlusion recovery, and track association. Metric depth plus
+              camera intrinsics can produce 3D positions, distance, speed, and
+              approximate projected size.
             </p>
             <p>
-              Standard Ultralytics checkpoints remain RGB models. A separate RGB-D
-              training path is required before depth becomes an actual model input.
+              Standard Ultralytics checkpoints remain RGB models. A separate
+              RGB-D training path is required before depth becomes an actual
+              model input.
             </p>
           </article>
         </div>

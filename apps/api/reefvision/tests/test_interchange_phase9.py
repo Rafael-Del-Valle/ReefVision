@@ -104,16 +104,20 @@ def test_labelme_preview_apply_and_coco_export(client: TestClient) -> None:
     assert len(applied.json()["created_mask_annotation_ids"]) == 1
 
     with client.app.state.session_factory() as session:
-        assert len(
-            list(session.scalars(select(Annotation).where(Annotation.image_id == image_id)))
-        ) == 1
-        assert len(
-            list(
-                session.scalars(
-                    select(MaskAnnotation).where(MaskAnnotation.image_id == image_id)
+        assert (
+            len(list(session.scalars(select(Annotation).where(Annotation.image_id == image_id))))
+            == 1
+        )
+        assert (
+            len(
+                list(
+                    session.scalars(
+                        select(MaskAnnotation).where(MaskAnnotation.image_id == image_id)
+                    )
                 )
             )
-        ) == 1
+            == 1
+        )
 
     exported = client.post(
         f"/api/v1/projects/{project_id}/interchange/export",

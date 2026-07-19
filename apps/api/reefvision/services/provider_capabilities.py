@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import importlib.util
 import json
@@ -13,7 +14,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -281,15 +281,11 @@ class ProviderCapabilityService:
             for index in range(torch.cuda.device_count()):
                 properties = torch.cuda.get_device_properties(index)
                 free_memory = None
-                try:
+                with contextlib.suppress(RuntimeError, TypeError):
                     free_memory, _total = torch.cuda.mem_get_info(index)
-                except (RuntimeError, TypeError):
-                    pass
                 major = getattr(properties, "major", None)
                 minor = getattr(properties, "minor", None)
-                capability = (
-                    f"{major}.{minor}" if major is not None and minor is not None else None
-                )
+                capability = f"{major}.{minor}" if major is not None and minor is not None else None
                 devices.append(
                     ProviderDeviceStatus(
                         device_id=f"cuda:{index}",
@@ -317,7 +313,9 @@ class ProviderCapabilityService:
     def _model_assets(self, spec: _ProviderSpec) -> list[ProviderModelAssetStatus]:
         models = list(
             self.session.scalars(
-                select(ModelRegistration).order_by(ModelRegistration.created_at, ModelRegistration.id)
+                select(ModelRegistration).order_by(
+                    ModelRegistration.created_at, ModelRegistration.id
+                )
             )
         )
         output: list[ProviderModelAssetStatus] = []
@@ -348,9 +346,7 @@ class ProviderCapabilityService:
             else:
                 messages.append("Registered model file is missing.")
             task = str(getattr(model, "task", "") or getattr(model, "purpose", ""))
-            compatible = task in spec.tasks or (
-                task == "segmenter" and "segment" in spec.tasks
-            )
+            compatible = task in spec.tasks or (task == "segmenter" and "segment" in spec.tasks)
             if not compatible:
                 messages.append("Registered task is not advertised by this provider.")
             output.append(
@@ -407,24 +403,44 @@ class ProviderCapabilityService:
         for spec in _PROVIDER_SPECS:
             dependencies = self._dependencies(spec)
             assets = self._model_assets(spec)
-            missing_required = [item.package for item in dependencies if item.required and not item.installed]
-            broken_assets = [item.model_id for item in assets if not item.exists or item.checksum_verified is False]
+            missing_required = [
+                item.package for item in dependencies if item.required and not item.installed
+            ]
+            broken_assets = [
+                item.model_id
+                for item in assets
+                if not item.exists or item.checksum_verified is False
+            ]
             warnings: list[str] = []
             remediation: list[str] = []
             if missing_required:
-                warnings.append("Required optional packages are not installed: " + ", ".join(missing_required))
-                remediation.append("Install the provider from the Model Catalog or use offline import.")
+                warnings.append(
+                    "Required optional packages are not installed: " + ", ".join(missing_required)
+                )
+                remediation.append(
+                    "Install the provider from the Model Catalog or use offline import."
+                )
             if broken_assets:
-                warnings.append(f"{len(broken_assets)} registered model assets are missing or corrupted.")
-                remediation.append("Reinstall affected model assets after reviewing their registration checksums.")
+                warnings.append(
+                    f"{len(broken_assets)} registered model assets are missing or corrupted."
+                )
+                remediation.append(
+                    "Reinstall affected model assets after reviewing their registration checksums."
+                )
             compatible_device = any(
                 device.available
-                and ((device.kind == "cpu" and spec.cpu) or (device.kind == "cuda" and spec.cuda) or device.kind == "mps")
+                and (
+                    (device.kind == "cpu" and spec.cpu)
+                    or (device.kind == "cuda" and spec.cuda)
+                    or device.kind == "mps"
+                )
                 for device in devices
             )
             if not compatible_device:
                 warnings.append("No compatible execution device is available.")
-                remediation.append("Install a compatible runtime or choose a provider that supports CPU execution.")
+                remediation.append(
+                    "Install a compatible runtime or choose a provider that supports CPU execution."
+                )
             if missing_required or not compatible_device:
                 health = "unavailable"
             elif broken_assets:
@@ -432,9 +448,9 @@ class ProviderCapabilityService:
             else:
                 health = "ready"
             provider_version = next((item.version for item in dependencies if item.version), None)
-            recent = [
-                item for item in benchmark_records if item.provider_id == spec.provider_id
-            ][-20:]
+            recent = [item for item in benchmark_records if item.provider_id == spec.provider_id][
+                -20:
+            ]
             providers.append(
                 ProviderCapabilityResponse(
                     provider_id=spec.provider_id,

@@ -101,12 +101,10 @@ def point_prompt_assist_session(
     updated = runtime.apply_point_prompts(
         session_id=session_id,
         positive_points=[
-            PixelPoint(x=float(point.x), y=float(point.y))
-            for point in payload.positive_points
+            PixelPoint(x=float(point.x), y=float(point.y)) for point in payload.positive_points
         ],
         negative_points=[
-            PixelPoint(x=float(point.x), y=float(point.y))
-            for point in payload.negative_points
+            PixelPoint(x=float(point.x), y=float(point.y)) for point in payload.negative_points
         ],
         context_box=context_box,
         image_width=image.width_px,

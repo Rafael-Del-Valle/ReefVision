@@ -34,8 +34,8 @@ export function ProjectIntegrityDashboard({ project }: { project: Project }) {
             <p className="eyebrow">Phase 1</p>
             <h3>Project integrity</h3>
             <span>
-              Verify database records, managed files, model checksums, exports, and
-              interrupted jobs without changing project data.
+              Verify database records, managed files, model checksums, exports,
+              and interrupted jobs without changing project data.
             </span>
           </div>
           {report.data && (
@@ -75,11 +75,13 @@ export function ProjectIntegrityDashboard({ project }: { project: Project }) {
                 disabled={report.isPending || staleJobMinutes < 1}
                 onClick={() => report.mutate()}
               >
-                {report.isPending ? "Inspecting..." : "Inspect project integrity"}
+                {report.isPending
+                  ? "Inspecting..."
+                  : "Inspect project integrity"}
               </button>
               <p>
-                Checksum verification reads entire managed files and can take longer
-                on large projects.
+                Checksum verification reads entire managed files and can take
+                longer on large projects.
               </p>
               {report.error && (
                 <p className="form-error">{report.error.message}</p>
@@ -91,7 +93,9 @@ export function ProjectIntegrityDashboard({ project }: { project: Project }) {
             {!report.data && (
               <div className="empty-state">
                 <h4>No integrity report yet</h4>
-                <p>Run an inspection to inventory all managed project resources.</p>
+                <p>
+                  Run an inspection to inventory all managed project resources.
+                </p>
               </div>
             )}
             {report.data && (
@@ -99,10 +103,12 @@ export function ProjectIntegrityDashboard({ project }: { project: Project }) {
                 <div className="dashboard-grid">
                   <article className="dashboard-card">
                     <p className="eyebrow">Overall status</p>
-                    <h4>{report.data.valid ? "Valid" : "Attention required"}</h4>
+                    <h4>
+                      {report.data.valid ? "Valid" : "Attention required"}
+                    </h4>
                     <p>
-                      {report.data.error_count} errors · {report.data.warning_count}{" "}
-                      warnings
+                      {report.data.error_count} errors ·{" "}
+                      {report.data.warning_count} warnings
                     </p>
                   </article>
                   <article className="dashboard-card">
@@ -132,7 +138,10 @@ export function ProjectIntegrityDashboard({ project }: { project: Project }) {
                           category.referenced_file_count > 0,
                       )
                       .map((category) => (
-                        <div key={category.resource_kind} className="dashboard-row">
+                        <div
+                          key={category.resource_kind}
+                          className="dashboard-row"
+                        >
                           <div>
                             <strong>
                               {category.resource_kind.replaceAll("_", " ")}
@@ -144,7 +153,8 @@ export function ProjectIntegrityDashboard({ project }: { project: Project }) {
                             </p>
                             <small>
                               {formatBytes(category.total_existing_bytes)} ·{" "}
-                              {category.checksum_verified_count} checksums verified
+                              {category.checksum_verified_count} checksums
+                              verified
                             </small>
                           </div>
                           <span>
@@ -164,7 +174,10 @@ export function ProjectIntegrityDashboard({ project }: { project: Project }) {
                     </div>
                   </div>
                   {report.data.issues.length === 0 && (
-                    <p>No missing, unsafe, stale, or inconsistent records were found.</p>
+                    <p>
+                      No missing, unsafe, stale, or inconsistent records were
+                      found.
+                    </p>
                   )}
                   <div className="dashboard-list">
                     {report.data.issues.map((issue, index) => (
@@ -181,10 +194,14 @@ export function ProjectIntegrityDashboard({ project }: { project: Project }) {
                           <small>
                             {issue.resource_kind}
                             {issue.record_id ? ` · ${issue.record_id}` : ""}
-                            {issue.managed_path ? ` · ${issue.managed_path}` : ""}
+                            {issue.managed_path
+                              ? ` · ${issue.managed_path}`
+                              : ""}
                           </small>
                         </div>
-                        <span>{issue.repairable ? "Repairable" : "Review"}</span>
+                        <span>
+                          {issue.repairable ? "Repairable" : "Review"}
+                        </span>
                       </div>
                     ))}
                   </div>
