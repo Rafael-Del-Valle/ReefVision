@@ -43,6 +43,7 @@ from reefvision.api.routes.system import router as system_router
 from reefvision.api.routes.training import router as training_router
 from reefvision.api.routes.training_reports import router as training_reports_router
 from reefvision.api.routes.validation_dashboard import router as validation_dashboard_router
+from reefvision.api.routes.video_exports import router as video_exports_router
 from reefvision.api.routes.videos import router as videos_router
 from reefvision.api.routes.workflow_persistence import router as workflow_persistence_router
 from reefvision.api.routes.workflows import router as workflows_router
@@ -57,6 +58,7 @@ api_router.include_router(training_reports_router)
 api_router.include_router(classification_router)
 api_router.include_router(classification_evaluation_router)
 api_router.include_router(videos_router)
+api_router.include_router(video_exports_router)
 api_router.include_router(sam2_video_router)
 api_router.include_router(backups_router)
 api_router.include_router(projects_router)
