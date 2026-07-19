@@ -1,5 +1,5 @@
-import { getApiBaseUrl } from "../../runtime";
 import type { ProjectImage } from "../../api/client";
+import { getApiBaseUrl } from "../../runtime";
 import type { MaskAnnotationRecord, Point } from "./types";
 
 export type RasterEditMode = "paint" | "erase";
@@ -13,6 +13,16 @@ export interface RasterMaskEditPayload {
   strokes: Array<{ points: Point[] }>;
 }
 
+export interface RasterMaskCleanupPayload {
+  base_revision: number;
+  mask_annotation_id: string;
+  remove_small_components: boolean;
+  minimum_component_area: number;
+  keep_largest_component: boolean;
+  fill_holes: boolean;
+  connectivity: 4 | 8;
+}
+
 export interface RasterMaskEditResponse {
   image: ProjectImage;
   mask_annotation: MaskAnnotationRecord;
@@ -23,20 +33,17 @@ export interface RasterMaskContentReference {
   revision?: number;
 }
 
-export async function editRasterMask(
-  imageId: string,
-  payload: RasterMaskEditPayload,
+async function postRasterOperation(
+  path: string,
+  payload: RasterMaskEditPayload | RasterMaskCleanupPayload,
 ): Promise<RasterMaskEditResponse> {
-  const response = await fetch(
-    `${getApiBaseUrl()}/images/${imageId}/raster-mask-edits`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    },
-  );
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
   if (!response.ok) {
-    let message = `Raster mask edit failed with HTTP ${response.status}`;
+    let message = `Raster mask operation failed with HTTP ${response.status}`;
     try {
       const body = (await response.json()) as { detail?: string };
       if (body.detail) message = body.detail;
@@ -46,6 +53,20 @@ export async function editRasterMask(
     throw new Error(message);
   }
   return (await response.json()) as RasterMaskEditResponse;
+}
+
+export function editRasterMask(
+  imageId: string,
+  payload: RasterMaskEditPayload,
+): Promise<RasterMaskEditResponse> {
+  return postRasterOperation(`/images/${imageId}/raster-mask-edits`, payload);
+}
+
+export function cleanupRasterMask(
+  imageId: string,
+  payload: RasterMaskCleanupPayload,
+): Promise<RasterMaskEditResponse> {
+  return postRasterOperation(`/images/${imageId}/raster-mask-cleanup`, payload);
 }
 
 export function rasterMaskContentUrl(mask: RasterMaskContentReference): string {
