@@ -203,14 +203,22 @@ describe("PromptPointAssistOverlay", () => {
         name: /positive and negative points/i,
       }),
     ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Assist model")).toHaveValue("model-1"),
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("Accept mask as")).toHaveValue("class-1"),
+    );
 
     fireEvent.pointerDown(svg, { button: 0, clientX: 100, clientY: 120 });
     expect(await screen.findByText("1 include")).toBeInTheDocument();
     expect(screen.getByText(/\(100.0, 120.0\)/)).toBeInTheDocument();
 
-    await user.click(
-      screen.getByRole("button", { name: /generate mask preview/i }),
-    );
+    const previewButton = screen.getByRole("button", {
+      name: /generate mask preview/i,
+    });
+    expect(previewButton).toBeEnabled();
+    await user.click(previewButton);
     await waitFor(() =>
       expect(applyPromptAssistPoints).toHaveBeenCalledWith("assist-1", {
         positive_points: [{ x: 100, y: 120 }],
@@ -218,7 +226,9 @@ describe("PromptPointAssistOverlay", () => {
         context_box: null,
       }),
     );
-    expect(await screen.findByText(/candidate ready via efficientvit_sam/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/candidate ready via efficientvit_sam/i),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^accept mask$/i }));
     await waitFor(() =>
@@ -227,13 +237,18 @@ describe("PromptPointAssistOverlay", () => {
         "class-1",
       ),
     );
-    expect(await screen.findByText(/no point prompts placed yet/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/no point prompts placed yet/i),
+    ).toBeInTheDocument();
   });
 
   it("requires an include point before exclusion points", async () => {
     const user = userEvent.setup();
     const { svg } = renderOverlay();
     await screen.findByRole("heading", { name: /positive and negative points/i });
+    await waitFor(() =>
+      expect(screen.getByLabelText("Accept mask as")).toHaveValue("class-1"),
+    );
 
     fireEvent.pointerDown(svg, {
       button: 0,
