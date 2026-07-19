@@ -22,6 +22,7 @@ from reefvision.schemas.classification_evaluation import (
     ClassificationConfusionCell,
     ClassificationEvaluationRequest,
     ClassificationEvaluationResponse,
+    ClassificationReviewFilter,
 )
 
 
@@ -40,9 +41,13 @@ class ClassificationEvaluationService:
         if model is None:
             raise NotFoundError("Classifier not found")
         if model.project_id != project_id:
-            raise ValidationError("The evaluation classifier must belong to the project")
+            raise ValidationError(
+                "The evaluation classifier must belong to the project"
+            )
         if model.purpose != "classifier" or model.task != "classify":
-            raise ValidationError("Classification evaluation requires a classifier")
+            raise ValidationError(
+                "Classification evaluation requires a classifier"
+            )
         return model
 
     def _validate_images(self, project_id: str, image_ids: list[str]) -> None:
@@ -69,9 +74,13 @@ class ClassificationEvaluationService:
         self._project(project_id)
         self._model(project_id, request.model_id)
         self._validate_images(project_id, request.image_ids)
-        statuses = list(dict.fromkeys(request.review_statuses))
+        statuses: list[ClassificationReviewFilter] = list(
+            dict.fromkeys(request.review_statuses)
+        )
         if not statuses:
-            raise ValidationError("Choose at least one prediction review status")
+            raise ValidationError(
+                "Choose at least one prediction review status"
+            )
 
         query = select(ClassificationPrediction).where(
             ClassificationPrediction.project_id == project_id,
@@ -142,10 +151,19 @@ class ClassificationEvaluationService:
                 "immutable dataset version for an unbiased final evaluation."
             )
 
-        confusion = Counter((actual, predicted) for actual, predicted, _, _ in observations)
+        confusion = Counter(
+            (actual, predicted)
+            for actual, predicted, _confidence, _correct in observations
+        )
         classes = sorted(
-            {actual for actual, _, _, _ in observations}
-            | {predicted for _, predicted, _, _ in observations}
+            {
+                actual
+                for actual, _predicted, _confidence, _correct in observations
+            }
+            | {
+                predicted
+                for _actual, predicted, _confidence, _correct in observations
+            }
         )
         class_results: list[ClassificationClassEvaluation] = []
         for label_class_id in classes:
@@ -163,7 +181,9 @@ class ClassificationEvaluationService:
             false_positive_count = predicted_count - true_positive_count
             false_negative_count = support - true_positive_count
             precision = (
-                true_positive_count / predicted_count if predicted_count else 0.0
+                true_positive_count / predicted_count
+                if predicted_count
+                else 0.0
             )
             recall = true_positive_count / support if support else 0.0
             f1 = (
@@ -186,15 +206,25 @@ class ClassificationEvaluationService:
             )
 
         sample_count = len(observations)
-        correct_count = sum(1 for *_prefix, correct in observations if correct)
+        correct_count = sum(
+            1 for observation in observations if observation[3]
+        )
         accuracy = correct_count / sample_count if sample_count else 0.0
         macro_precision = (
-            mean(item.precision for item in class_results) if class_results else 0.0
+            mean(item.precision for item in class_results)
+            if class_results
+            else 0.0
         )
         macro_recall = (
-            mean(item.recall for item in class_results) if class_results else 0.0
+            mean(item.recall for item in class_results)
+            if class_results
+            else 0.0
         )
-        macro_f1 = mean(item.f1 for item in class_results) if class_results else 0.0
+        macro_f1 = (
+            mean(item.f1 for item in class_results)
+            if class_results
+            else 0.0
+        )
         weighted_f1 = (
             sum(item.f1 * item.support for item in class_results) / sample_count
             if sample_count
@@ -211,7 +241,10 @@ class ClassificationEvaluationService:
                 (confidence, correct)
                 for _actual, _predicted, confidence, correct in observations
                 if confidence >= lower
-                and (confidence < upper or (index == bin_count - 1 and confidence <= upper))
+                and (
+                    confidence < upper
+                    or (index == bin_count - 1 and confidence <= upper)
+                )
             ]
             if values:
                 average_confidence = mean(value[0] for value in values)
@@ -237,7 +270,9 @@ class ClassificationEvaluationService:
                 )
             )
 
-        confidence_values = [confidence for *_prefix, confidence, _correct in observations]
+        confidence_values = [
+            observation[2] for observation in observations
+        ]
         top_label_brier_score = (
             mean(
                 (confidence - float(correct)) ** 2
@@ -256,7 +291,9 @@ class ClassificationEvaluationService:
             macro_recall=macro_recall,
             macro_f1=macro_f1,
             weighted_f1=weighted_f1,
-            mean_confidence=(mean(confidence_values) if confidence_values else None),
+            mean_confidence=(
+                mean(confidence_values) if confidence_values else None
+            ),
             expected_calibration_error=(
                 expected_calibration_error if observations else None
             ),
