@@ -7,6 +7,7 @@ import { AnnotationEditor } from "./AnnotationEditor";
 import "./annotationTypeVisibility.css";
 import { MaskAnnotationWorkspace } from "./MaskAnnotationWorkspace";
 import "./polygonWorkspace.css";
+import { PromptPointAssistOverlay } from "./PromptPointAssistOverlay";
 import { RasterMaskWorkspace } from "./RasterMaskWorkspace";
 
 interface AnnotationLaunchContext {
@@ -64,12 +65,17 @@ export function EnhancedAnnotationEditor({
   const queryClient = useQueryClient();
   const [workspace, setWorkspace] = useState<EditorWorkspace>("boxes");
   const [vertexEditMode, setVertexEditMode] = useState<VertexEditMode>("move");
+  const [pointAssistEnabled, setPointAssistEnabled] = useState(false);
   const [activeImageId, setActiveImageId] = useState(initialImageId);
   const [toolbarTarget, setToolbarTarget] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     setActiveImageId(initialImageId);
   }, [initialImageId]);
+
+  useEffect(() => {
+    if (workspace !== "boxes") setPointAssistEnabled(false);
+  }, [workspace]);
 
   useEffect(() => {
     return queryClient.getQueryCache().subscribe((event) => {
@@ -258,6 +264,17 @@ export function EnhancedAnnotationEditor({
           <option value="raster">Raster masks</option>
         </select>
       </label>
+      {workspace === "boxes" && (
+        <button
+          type="button"
+          className={pointAssistEnabled ? "active" : "secondary"}
+          data-testid="toggle-point-assist"
+          aria-pressed={pointAssistEnabled}
+          onClick={() => setPointAssistEnabled((current) => !current)}
+        >
+          {pointAssistEnabled ? "Close Point Assist" : "Point Assist"}
+        </button>
+      )}
       {workspace === "masks" && (
         <div
           role="group"
@@ -302,6 +319,7 @@ export function EnhancedAnnotationEditor({
         data-polygons-visible={workspace === "masks"}
         data-raster-visible={workspace === "raster"}
         data-vertex-edit-mode={vertexEditMode}
+        data-point-assist-enabled={pointAssistEnabled}
         style={{ display: "contents" }}
       >
         {workspaceContent}
@@ -315,6 +333,14 @@ export function EnhancedAnnotationEditor({
           {annotationControls}
         </div>,
         toolbarTarget ?? document.body,
+      )}
+      {workspace === "boxes" && pointAssistEnabled && (
+        <PromptPointAssistOverlay
+          key={activeImageId}
+          project={project}
+          imageId={activeImageId}
+          onClose={() => setPointAssistEnabled(false)}
+        />
       )}
     </>
   );
