@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from math import sqrt
-from statistics import mean
+from statistics import mean, stdev
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -20,6 +20,30 @@ from reefvision.schemas.measurement_validation import (
     ProjectMeasurementValidationResponse,
 )
 from reefvision.services.mask_measurements import MaskMeasurementService
+
+
+def _pearson_correlation(
+    measured_values: list[float],
+    reference_values: list[float],
+) -> float | None:
+    if len(measured_values) < 2 or len(measured_values) != len(reference_values):
+        return None
+    measured_mean = mean(measured_values)
+    reference_mean = mean(reference_values)
+    measured_variance = sum((value - measured_mean) ** 2 for value in measured_values)
+    reference_variance = sum((value - reference_mean) ** 2 for value in reference_values)
+    if measured_variance <= 0 or reference_variance <= 0:
+        return None
+    covariance = sum(
+        (measured - measured_mean) * (reference - reference_mean)
+        for measured, reference in zip(
+            measured_values,
+            reference_values,
+            strict=True,
+        )
+    )
+    correlation = covariance / sqrt(measured_variance * reference_variance)
+    return max(-1.0, min(1.0, correlation))
 
 
 class MeasurementValidationService:
@@ -142,14 +166,55 @@ class MeasurementValidationService:
             percent_errors = [
                 row.percent_error for row in rows if row.percent_error is not None
             ]
+            bias = mean(row.signed_error for row in rows)
+            bias_standard_deviation = (
+                stdev(row.signed_error for row in rows) if len(rows) >= 2 else None
+            )
+            confidence_half_width = (
+                1.96 * bias_standard_deviation / sqrt(len(rows))
+                if bias_standard_deviation is not None
+                else None
+            )
+            agreement_half_width = (
+                1.96 * bias_standard_deviation
+                if bias_standard_deviation is not None
+                else None
+            )
+            measured_values = [row.measured_value for row in rows]
+            reference_values = [row.reference_value for row in rows]
             summaries.append(
                 MeasurementValidationMetricSummary(
                     metric=metric,
                     unit=unit,
                     observation_count=len(rows),
-                    mean_measured=mean(row.measured_value for row in rows),
-                    mean_reference=mean(row.reference_value for row in rows),
-                    mean_bias=mean(row.signed_error for row in rows),
+                    mean_measured=mean(measured_values),
+                    mean_reference=mean(reference_values),
+                    mean_bias=bias,
+                    standard_deviation_bias=bias_standard_deviation,
+                    bias_confidence_interval_lower=(
+                        bias - confidence_half_width
+                        if confidence_half_width is not None
+                        else None
+                    ),
+                    bias_confidence_interval_upper=(
+                        bias + confidence_half_width
+                        if confidence_half_width is not None
+                        else None
+                    ),
+                    lower_limit_of_agreement=(
+                        bias - agreement_half_width
+                        if agreement_half_width is not None
+                        else None
+                    ),
+                    upper_limit_of_agreement=(
+                        bias + agreement_half_width
+                        if agreement_half_width is not None
+                        else None
+                    ),
+                    pearson_correlation=_pearson_correlation(
+                        measured_values,
+                        reference_values,
+                    ),
                     mean_absolute_error=mean(row.absolute_error for row in rows),
                     root_mean_square_error=sqrt(
                         mean(row.signed_error**2 for row in rows)
