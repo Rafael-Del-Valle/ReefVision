@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
+from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import (
+    ClassificationCrop,
     DatasetVersion,
     DatasetVersionItem,
     ExportRecord,
@@ -44,6 +47,41 @@ def _fail_export(
         session.commit()
 
 
+def _classification_crop_rows(
+    settings: Settings,
+    *,
+    manifest_path: str,
+    expected_count: int,
+) -> list[dict[str, Any]]:
+    manifest_file = resolve_managed_project_path(settings, manifest_path)
+    payload = json.loads(manifest_file.read_text(encoding="utf-8"))
+    raw_rows = payload.get("items")
+    if not isinstance(raw_rows, list):
+        raise RuntimeError("Classification export manifest is missing crop items")
+    rows = [dict(item) for item in raw_rows if isinstance(item, dict)]
+    if len(rows) != len(raw_rows) or len(rows) != expected_count:
+        raise RuntimeError("Classification export crop manifest is incomplete")
+    return rows
+
+
+def _box_dict(value: object, *, integer: bool) -> dict[str, float] | dict[str, int]:
+    if not isinstance(value, list) or len(value) != 4:
+        raise RuntimeError("Classification crop manifest contains an invalid box")
+    if integer:
+        return {
+            "x_min": int(value[0]),
+            "y_min": int(value[1]),
+            "x_max": int(value[2]),
+            "y_max": int(value[3]),
+        }
+    return {
+        "x_min": float(value[0]),
+        "y_min": float(value[1]),
+        "x_max": float(value[2]),
+        "y_max": float(value[3]),
+    }
+
+
 def process_export_job(
     settings: Settings,
     factory: sessionmaker[Session],
@@ -51,6 +89,7 @@ def process_export_job(
 ) -> bool:
     output_path: str | None = None
     archive_path: str | None = None
+    classification_rows: list[dict[str, Any]] | None = None
     with factory() as session:
         job = session.get(Job, job_id)
         if job is None or job.job_type != "export" or job.status != "queued":
@@ -184,6 +223,11 @@ def process_export_job(
                         export.request_json.get("padding_fraction", 0.0)
                     ),
                 )
+                classification_rows = _classification_crop_rows(
+                    settings,
+                    manifest_path=export.manifest_path,
+                    expected_count=int(result["item_count"]),
+                )
             else:
                 raise RuntimeError(
                     f"Unsupported export format: {export.format}"
@@ -196,6 +240,49 @@ def process_export_job(
                 raise RuntimeError(
                     "Export job references missing database rows"
                 )
+            if classification_rows is not None:
+                session.execute(
+                    delete(ClassificationCrop).where(
+                        ClassificationCrop.export_id == export.id
+                    )
+                )
+                for item in classification_rows:
+                    crop_path = str(item["crop_path"])
+                    managed_path = (
+                        f"{export.output_path.rstrip('/')}/{crop_path.lstrip('/')}"
+                    )
+                    session.add(
+                        ClassificationCrop(
+                            project_id=export.project_id,
+                            export_id=export.id,
+                            dataset_version_id=export.dataset_version_id,
+                            image_id=str(item["image_id"]),
+                            annotation_id=str(item["annotation_id"]),
+                            label_class_id=str(item["source_label_class_id"]),
+                            split=str(item["split"]),
+                            managed_path=managed_path,
+                            sha256=str(item["crop_sha256"]),
+                            source_box_json=_box_dict(
+                                item.get("source_bbox"),
+                                integer=False,
+                            ),
+                            crop_box_json=_box_dict(
+                                item.get("crop_bbox"),
+                                integer=True,
+                            ),
+                            metadata_json={
+                                "class_key": item.get("class_key"),
+                                "class_label": item.get("class_label"),
+                                "group_key": item.get("group_key"),
+                                "image_sha256": item.get("image_sha256"),
+                                "snapshot_sha256": item.get("snapshot_sha256"),
+                            },
+                        )
+                    )
+                result = {
+                    **result,
+                    "classification_crop_count": len(classification_rows),
+                }
             export.status = "succeeded"
             export.completed_at = datetime.now(UTC)
             export.request_json = {**export.request_json, **result}
