@@ -56,6 +56,7 @@ def test_classification_export_registers_crops_for_qa(client: TestClient) -> Non
             (app.state.settings.resolved_data_dir / crop.managed_path).is_file()
             for crop in crops
         )
+        assert all(len(crop.managed_path.rsplit("/", 1)[-1]) <= 32 for crop in crops)
 
     response = client.post(
         f"/api/v1/projects/{project_id}/classification-crops/qa",
