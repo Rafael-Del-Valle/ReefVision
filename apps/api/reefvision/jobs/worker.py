@@ -23,6 +23,7 @@ from reefvision.jobs.model_install import process_model_install_job
 from reefvision.jobs.provider_benchmarks import process_provider_benchmark_job
 from reefvision.jobs.quality_control import process_quality_control_job
 from reefvision.jobs.restores import process_restore_job
+from reefvision.jobs.sam2_video import process_sam2_video_propagation_job
 from reefvision.jobs.training_dispatch import process_task_aware_training_job
 from reefvision.jobs.video import process_video_extract_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
@@ -157,6 +158,8 @@ def process_next_thumbnail_job(
             return process_workflow_run_job(settings, factory, job_id)
         if job_type == "provider_benchmark":
             return process_provider_benchmark_job(settings, factory, job_id)
+        if job_type == "sam2_video_propagation":
+            return process_sam2_video_propagation_job(settings, factory, job_id)
 
         message = f"Unsupported queued job type: {job_type}"
         _fail_job(factory, job_id, message)
