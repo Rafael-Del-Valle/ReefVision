@@ -26,6 +26,7 @@ class JobResponse(BaseModel):
     result_json: dict[str, Any] | None
     checkpoint_json: dict[str, Any] = Field(default_factory=dict)
     resource_requirements_json: dict[str, Any] = Field(default_factory=dict)
+    resource_assignment_json: dict[str, Any] = Field(default_factory=dict)
     resume_supported: bool = False
     worker_id: str | None = None
     error_message: str | None
