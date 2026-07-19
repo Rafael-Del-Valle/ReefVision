@@ -39,10 +39,10 @@ try {
     $env:REEFVISION_DATA_DIR = $MigrationDataRoot
     $env:REEFVISION_DATABASE_FILENAME = $MigrationDatabaseFilename
 
-    Write-Host "`n=== Alembic upgrade to 0023 ===" -ForegroundColor Cyan
-    uv run --project $ApiProject alembic -c apps/api/alembic.ini upgrade 0023
+    Write-Host "`n=== Alembic upgrade to head ===" -ForegroundColor Cyan
+    uv run --project $ApiProject alembic -c apps/api/alembic.ini upgrade head
     if ($LASTEXITCODE -ne 0) {
-        throw "Alembic upgrade to 0023 failed."
+        throw "Alembic upgrade to head failed."
     }
 
     Write-Host "`n=== Alembic downgrade to 0019 ===" -ForegroundColor Cyan
@@ -55,6 +55,18 @@ try {
     uv run --project $ApiProject alembic -c apps/api/alembic.ini upgrade head
     if ($LASTEXITCODE -ne 0) {
         throw "Alembic re-upgrade to head failed."
+    }
+
+    Write-Host "`n=== Alembic downgrade to base ===" -ForegroundColor Cyan
+    uv run --project $ApiProject alembic -c apps/api/alembic.ini downgrade base
+    if ($LASTEXITCODE -ne 0) {
+        throw "Alembic downgrade to base failed."
+    }
+
+    Write-Host "`n=== Alembic final upgrade to head ===" -ForegroundColor Cyan
+    uv run --project $ApiProject alembic -c apps/api/alembic.ini upgrade head
+    if ($LASTEXITCODE -ne 0) {
+        throw "Alembic final upgrade to head failed."
     }
 
     $databasePath = Join-Path $MigrationDataRoot $MigrationDatabaseFilename
