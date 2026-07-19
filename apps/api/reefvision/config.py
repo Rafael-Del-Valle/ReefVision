@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     safe_mode: bool = False
     background_worker_enabled: bool = True
     worker_poll_seconds: float = Field(default=0.5, gt=0, le=60)
+    worker_concurrency: int = Field(default=1, ge=1, le=64)
     thumbnail_max_width: int = Field(default=512, ge=64, le=4096)
     thumbnail_max_height: int = Field(default=512, ge=64, le=4096)
     model_max_upload_bytes: int = Field(default=2_147_483_648, ge=1_048_576)
