@@ -36,6 +36,7 @@ from reefvision.api.routes.segmentation_evaluation import (
 from reefvision.api.routes.system import router as system_router
 from reefvision.api.routes.training import router as training_router
 from reefvision.api.routes.training_reports import router as training_reports_router
+from reefvision.api.routes.validation_dashboard import router as validation_dashboard_router
 from reefvision.api.routes.videos import router as videos_router
 from reefvision.api.routes.workflow_persistence import router as workflow_persistence_router
 from reefvision.api.routes.workflows import router as workflows_router
@@ -53,6 +54,7 @@ api_router.include_router(backups_router)
 api_router.include_router(projects_router)
 api_router.include_router(project_integrity_router)
 api_router.include_router(project_recovery_router)
+api_router.include_router(validation_dashboard_router)
 api_router.include_router(artifacts_router)
 api_router.include_router(class_operations_router)
 api_router.include_router(class_visibility_router)
