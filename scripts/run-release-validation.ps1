@@ -99,11 +99,11 @@ Invoke-ReleaseGate "Alembic upgrade downgrade round trip" {
     New-Item -ItemType Directory -Path $MigrationDataDir -Force | Out-Null
     $env:REEFVISION_DATA_DIR = $MigrationDataDir
     try {
-        Invoke-External "alembic" @("-c", "apps/api/alembic.ini", "upgrade", "head")
-        Invoke-External "alembic" @("-c", "apps/api/alembic.ini", "downgrade", "0019")
-        Invoke-External "alembic" @("-c", "apps/api/alembic.ini", "upgrade", "head")
-        Invoke-External "alembic" @("-c", "apps/api/alembic.ini", "downgrade", "base")
-        Invoke-External "alembic" @("-c", "apps/api/alembic.ini", "upgrade", "head")
+        Invoke-External $Python @("-m", "alembic", "-c", "apps/api/alembic.ini", "upgrade", "head")
+        Invoke-External $Python @("-m", "alembic", "-c", "apps/api/alembic.ini", "downgrade", "0019")
+        Invoke-External $Python @("-m", "alembic", "-c", "apps/api/alembic.ini", "upgrade", "head")
+        Invoke-External $Python @("-m", "alembic", "-c", "apps/api/alembic.ini", "downgrade", "base")
+        Invoke-External $Python @("-m", "alembic", "-c", "apps/api/alembic.ini", "upgrade", "head")
     }
     finally {
         $env:REEFVISION_DATA_DIR = $PreviousDataDir
@@ -131,7 +131,7 @@ try {
         Invoke-External "npm" @("run", "build")
     }
     Invoke-ReleaseGate "Playwright Chromium install" {
-        Invoke-External "npx" @("playwright", "install", "--with-deps", "chromium")
+        Invoke-External "npx" @("playwright", "install", "chromium")
     }
     Invoke-ReleaseGate "Playwright browser tests" {
         Invoke-External "npm" @("run", "test:e2e")
