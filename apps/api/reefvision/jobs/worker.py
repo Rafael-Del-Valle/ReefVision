@@ -14,6 +14,7 @@ from reefvision.config import Settings
 from reefvision.db.models import BackupRecord, ImageAsset, Job, QualityControlRun
 from reefvision.jobs.backups import process_backup_job
 from reefvision.jobs.classification_inference import process_classification_inference_job
+from reefvision.jobs.depth import process_depth_map_job
 from reefvision.jobs.diagnostics import process_diagnostics_job
 from reefvision.jobs.export import process_export_job
 from reefvision.jobs.inference import process_inference_job
@@ -145,6 +146,8 @@ def process_next_thumbnail_job(
             return process_video_extract_job(settings, factory, job_id)
         if job_type == "video_track":
             return process_video_tracking_job(settings, factory, job_id)
+        if job_type == "depth_map":
+            return process_depth_map_job(settings, factory, job_id)
 
         message = f"Unsupported queued job type: {job_type}"
         _fail_job(factory, job_id, message)
