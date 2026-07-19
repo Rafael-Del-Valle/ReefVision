@@ -99,12 +99,13 @@ def _process_ultralytics_training(
             run = session.get(TrainingRun, run_id)
             if run is not None:
                 run.warnings_json = [
-                    *list(run.warnings_json or []),
+                    *list(getattr(run, "warnings_json", None) or []),
                     f"Post-training class-wise validation failed: {exc}",
                 ]
-                if run.logs_path:
+                logs_path = getattr(run, "logs_path", None)
+                if logs_path:
                     _append_log(
-                        resolve_managed_project_path(settings, run.logs_path),
+                        resolve_managed_project_path(settings, logs_path),
                         f"[{datetime.now(UTC).isoformat()}] validation warning: {exc}",
                     )
                 session.commit()
