@@ -81,6 +81,8 @@ def get_video_content(
         video_service.video_path(video_id),
         media_type=video.media_type,
         filename=video.original_filename,
+        content_disposition_type="inline",
+        headers={"Cache-Control": "private, max-age=3600"},
     )
 
 
