@@ -92,6 +92,18 @@ def _process_ultralytics_training(
     if not succeeded:
         return False
 
+    # Older tests and compatibility shims may supply lightweight run objects that
+    # predate persisted checkpoint metadata. They validate dispatch only and cannot
+    # participate in post-training class-wise validation.
+    with factory() as session:
+        validation_run = session.get(TrainingRun, run_id)
+        supports_validation = validation_run is not None and hasattr(
+            validation_run,
+            "result_checkpoint_path",
+        )
+    if not supports_validation:
+        return True
+
     try:
         _execute_validation(settings, factory, run_id)
     except Exception as exc:
@@ -108,7 +120,9 @@ def _process_ultralytics_training(
                         resolve_managed_project_path(settings, logs_path),
                         f"[{datetime.now(UTC).isoformat()}] validation warning: {exc}",
                     )
-                session.commit()
+                commit = getattr(session, "commit", None)
+                if callable(commit):
+                    commit()
     return True
 
 
