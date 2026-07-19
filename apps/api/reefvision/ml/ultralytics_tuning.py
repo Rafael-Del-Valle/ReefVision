@@ -100,7 +100,8 @@ def _read_csv_rows(path: Path) -> list[dict[str, Any]]:
             for key, value in row.items():
                 if key is None:
                     continue
-                resolved[key.strip()] = _numeric(value) if _numeric(value) is not None else value
+                numeric = _numeric(value)
+                resolved[key.strip()] = numeric if numeric is not None else value
             rows.append(resolved)
     return rows
 
@@ -148,9 +149,11 @@ def summarize_tuning_rows(
     ranked = list(rows)
     if fitness_key is not None:
         ranked.sort(
-            key=lambda row: _numeric(row.get(fitness_key))
-            if _numeric(row.get(fitness_key)) is not None
-            else float("-inf"),
+            key=lambda row: (
+                _numeric(row.get(fitness_key))
+                if _numeric(row.get(fitness_key)) is not None
+                else float("-inf")
+            ),
             reverse=True,
         )
     trials: list[dict[str, Any]] = []
@@ -159,7 +162,11 @@ def summarize_tuning_rows(
             {
                 "trial": index,
                 "fitness": _numeric(row.get(fitness_key)) if fitness_key else None,
-                "parameters": {key: row.get(key) for key in sorted(search_space_keys) if key in row},
+                "parameters": {
+                    key: row.get(key)
+                    for key in sorted(search_space_keys)
+                    if key in row
+                },
                 "metrics": {
                     key: value
                     for key, value in row.items()
@@ -185,7 +192,11 @@ def summarize_tuning_rows(
 
 def _find_tuning_root(search_root: Path) -> Path:
     candidates: list[Path] = []
-    for pattern in ("tune_results.csv", "tune_results.ndjson", "best_hyperparameters.yaml"):
+    for pattern in (
+        "tune_results.csv",
+        "tune_results.ndjson",
+        "best_hyperparameters.yaml",
+    ):
         candidates.extend(path.parent for path in search_root.rglob(pattern) if path.is_file())
     if not candidates:
         return search_root
@@ -241,25 +252,30 @@ def run_ultralytics_tuning(
     if not rows and ndjson_path is not None:
         rows = _read_ndjson_rows(ndjson_path)
     summary = summarize_tuning_rows(rows, search_space_keys=set(search_space))
-    summary.update(
-        {
-            "enabled": True,
-            "configuration": config,
-            "ultralytics_result": result if isinstance(result, dict) else str(result),
-        }
-    )
-    summary_path = tuning_root / "reefvision-tuning-summary.json"
-    summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
     plots = sorted(str(path) for path in tuning_root.glob("*.png") if path.is_file())
+    summary_path = tuning_root / "reefvision-tuning-summary.json"
     artifacts = {
         "root": str(tuning_root),
         "summary_json": str(summary_path),
         "results_csv": str(csv_path) if csv_path is not None else None,
         "results_ndjson": str(ndjson_path) if ndjson_path is not None else None,
-        "best_hyperparameters_yaml": str(tuning_root / "best_hyperparameters.yaml")
-        if (tuning_root / "best_hyperparameters.yaml").is_file()
-        else None,
+        "best_hyperparameters_yaml": (
+            str(tuning_root / "best_hyperparameters.yaml")
+            if (tuning_root / "best_hyperparameters.yaml").is_file()
+            else None
+        ),
         "plots": plots,
     }
-    summary["artifacts"] = artifacts
+    summary.update(
+        {
+            "enabled": True,
+            "configuration": config,
+            "ultralytics_result": result if isinstance(result, dict) else str(result),
+            "artifacts": artifacts,
+        }
+    )
+    summary_path.write_text(
+        json.dumps(summary, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     return summary
