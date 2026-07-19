@@ -57,7 +57,9 @@ def _finite(value: Any) -> float | None:
     return None
 
 
-def _measurement_value(measurement: MaskMeasurementResponse, metric: str) -> float | None:
+def _measurement_value(
+    measurement: MaskMeasurementResponse, metric: str
+) -> float | None:
     aliases = {
         "area": "area_pixels",
         "area_px": "area_pixels",
@@ -100,9 +102,7 @@ def _icc_absolute_agreement(ratings: np.ndarray) -> float | None:
     ms_raters = ss_raters / (raters - 1)
     ms_error = ss_error / ((targets - 1) * (raters - 1))
     denominator = (
-        ms_targets
-        + (raters - 1) * ms_error
-        + raters * (ms_raters - ms_error) / targets
+        ms_targets + (raters - 1) * ms_error + raters * (ms_raters - ms_error) / targets
     )
     if math.isclose(denominator, 0.0, abs_tol=1e-15):
         return 1.0 if np.allclose(ratings, ratings[:, :1]) else None
@@ -201,8 +201,12 @@ class ScientificValidationService:
         resolved: list[ScientificObservationResult] = []
         blockers: list[str] = []
         warnings: list[str] = []
-        observations_by_metric: dict[str, list[ScientificReferenceObservation]] = defaultdict(list)
-        measurement_cache: dict[str, tuple[MaskAnnotation, MaskMeasurementResponse] | None] = {}
+        observations_by_metric: dict[str, list[ScientificReferenceObservation]] = (
+            defaultdict(list)
+        )
+        measurement_cache: dict[
+            str, tuple[MaskAnnotation, MaskMeasurementResponse] | None
+        ] = {}
 
         for observation in request.observations:
             observations_by_metric[observation.metric].append(observation)
@@ -219,7 +223,9 @@ class ScientificValidationService:
                         try:
                             cached = (
                                 mask,
-                                self.measurements.measure(observation.mask_annotation_id),
+                                self.measurements.measure(
+                                    observation.mask_annotation_id
+                                ),
                             )
                         except (NotFoundError, ValidationError) as exc:
                             warnings.append(
@@ -253,9 +259,13 @@ class ScientificValidationService:
                     observer_id=observation.observer_id,
                     session_id=observation.session_id,
                     mask_annotation_id=observation.mask_annotation_id,
-                    measurement_id=mask.id if measurement is not None and mask is not None else None,
+                    measurement_id=mask.id
+                    if measurement is not None and mask is not None
+                    else None,
                     measurement_revision=(
-                        mask.revision if measurement is not None and mask is not None else None
+                        mask.revision
+                        if measurement is not None and mask is not None
+                        else None
                     ),
                     reference_value=observation.reference_value,
                     predicted_value=float(predicted),
@@ -286,7 +296,9 @@ class ScientificValidationService:
                     [item.predicted_value for item in rows], dtype=np.float64
                 )
             else:
-                failures.append("No observations have both reference and predicted values.")
+                failures.append(
+                    "No observations have both reference and predicted values."
+                )
                 reference = np.asarray([0.0], dtype=np.float64)
                 predicted = np.asarray([0.0], dtype=np.float64)
             errors = predicted - reference
@@ -315,7 +327,9 @@ class ScientificValidationService:
             if threshold.maximum_mae is not None and mae > threshold.maximum_mae:
                 failures.append(f"MAE {mae:.6g} exceeds {threshold.maximum_mae:.6g}.")
             if threshold.maximum_rmse is not None and rmse > threshold.maximum_rmse:
-                failures.append(f"RMSE {rmse:.6g} exceeds {threshold.maximum_rmse:.6g}.")
+                failures.append(
+                    f"RMSE {rmse:.6g} exceeds {threshold.maximum_rmse:.6g}."
+                )
             if (
                 threshold.maximum_absolute_bias is not None
                 and abs(bias) > threshold.maximum_absolute_bias
@@ -427,7 +441,9 @@ class ScientificValidationService:
             "passed": passed,
             "calibration_metadata": request.calibration_metadata,
             "notes": request.notes,
-            "metric_results": [result.model_dump(mode="json") for result in metric_results],
+            "metric_results": [
+                result.model_dump(mode="json") for result in metric_results
+            ],
             "observations": [item.model_dump(mode="json") for item in resolved],
             "warnings": warnings,
             "blockers": blockers,
@@ -457,9 +473,7 @@ class ScientificValidationService:
                     fieldnames = list(ScientificObservationResult.model_fields)
                     writer = csv.DictWriter(handle, fieldnames=fieldnames)
                     writer.writeheader()
-                    writer.writerows(
-                        item.model_dump(mode="json") for item in resolved
-                    )
+                    writer.writerows(item.model_dump(mode="json") for item in resolved)
                 metric_rows = "".join(_metric_html(result) for result in metric_results)
                 html_path.write_text(
                     "<!doctype html><html><head><meta charset='utf-8'>"
