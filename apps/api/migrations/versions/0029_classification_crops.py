@@ -38,14 +38,26 @@ def upgrade() -> None:
             ["dataset_versions.id"],
             ondelete="CASCADE",
         ),
-        sa.ForeignKeyConstraint(["export_id"], ["exports.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["image_id"], ["images.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["export_id"],
+            ["exports.id"],
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["image_id"],
+            ["images.id"],
+            ondelete="CASCADE",
+        ),
         sa.ForeignKeyConstraint(
             ["label_class_id"],
             ["label_classes.id"],
             ondelete="RESTRICT",
         ),
-        sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["project_id"],
+            ["projects.id"],
+            ondelete="CASCADE",
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
             "export_id",
@@ -101,7 +113,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_classification_crops_sha256", table_name="classification_crops")
+    op.drop_index(
+        "ix_classification_crops_sha256",
+        table_name="classification_crops",
+    )
     op.drop_index(
         "ix_classification_crops_export_split",
         table_name="classification_crops",
@@ -118,11 +133,20 @@ def downgrade() -> None:
         "ix_classification_crops_annotation_id",
         table_name="classification_crops",
     )
-    op.drop_index("ix_classification_crops_image_id", table_name="classification_crops")
+    op.drop_index(
+        "ix_classification_crops_image_id",
+        table_name="classification_crops",
+    )
     op.drop_index(
         "ix_classification_crops_dataset_version_id",
         table_name="classification_crops",
     )
-    op.drop_index("ix_classification_crops_export_id", table_name="classification_crops")
-    op.drop_index("ix_classification_crops_project_id", table_name="classification_crops")
+    op.drop_index(
+        "ix_classification_crops_export_id",
+        table_name="classification_crops",
+    )
+    op.drop_index(
+        "ix_classification_crops_project_id",
+        table_name="classification_crops",
+    )
     op.drop_table("classification_crops")
