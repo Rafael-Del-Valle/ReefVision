@@ -2,6 +2,7 @@
 
 from reefvision.db.models.annotation import Annotation
 from reefvision.db.models.annotation_event import AnnotationEvent
+from reefvision.db.models.artifact_record import ArtifactRecord
 from reefvision.db.models.backup_record import BackupRecord
 from reefvision.db.models.class_operation import ClassOperation
 from reefvision.db.models.class_visibility_preference import ClassVisibilityPreference
@@ -15,6 +16,7 @@ from reefvision.db.models.image import ImageAsset
 from reefvision.db.models.image_embedding import ImageEmbedding
 from reefvision.db.models.image_label import ImageLabel
 from reefvision.db.models.job import Job
+from reefvision.db.models.job_control import JobDependency, JobEvent
 from reefvision.db.models.label_class import LabelClass
 from reefvision.db.models.mask_annotation import MaskAnnotation
 from reefvision.db.models.mask_annotation_event import MaskAnnotationEvent
@@ -40,6 +42,7 @@ from reefvision.db.models.workflow import (
 __all__ = [
     "Annotation",
     "AnnotationEvent",
+    "ArtifactRecord",
     "BackupRecord",
     "ClassOperation",
     "ClassVisibilityPreference",
@@ -53,6 +56,8 @@ __all__ = [
     "ImageEmbedding",
     "ImageLabel",
     "Job",
+    "JobDependency",
+    "JobEvent",
     "LabelClass",
     "MaskAnnotation",
     "MaskAnnotationEvent",
