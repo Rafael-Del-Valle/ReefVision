@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 from PIL import Image
 
 from reefvision.testing.synthetic_acceptance import generate_synthetic_acceptance_dataset
@@ -33,8 +34,8 @@ def test_synthetic_acceptance_bundle_is_deterministic_and_measurable(tmp_path: P
 
     metric = np.load(Path(first.root) / "depth" / "metric-depth-metres.npy")
     assert metric.shape == (192, 256)
-    assert float(metric.min()) == 0.6
-    assert float(metric.max()) == 1.8
+    assert float(metric.min()) == pytest.approx(0.6)
+    assert float(metric.max()) == pytest.approx(1.8)
 
     avi = (Path(first.root) / "video" / "identity-crossing.avi").read_bytes()
     assert avi[:4] == b"RIFF"
