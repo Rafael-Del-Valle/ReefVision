@@ -96,6 +96,7 @@ class VideoTrackResponse(BaseModel):
     keyframes: list[VideoTrackKeyframe]
     interpolation: str
     status: str
+    metadata_json: dict[str, Any]
 
 
 class VideoTrackingJobRequest(BaseModel):
@@ -124,6 +125,9 @@ class VideoZone(BaseModel):
 
 class VideoAnalyticsRequest(BaseModel):
     zones: list[VideoZone] = Field(default_factory=list)
+    heatmap_bins_x: int = Field(default=20, ge=2, le=100)
+    heatmap_bins_y: int = Field(default=20, ge=2, le=100)
+    activity_speed_threshold_pixels_per_second: float = Field(default=1.0, ge=0)
 
 
 class VideoTrackAnalytics(BaseModel):
@@ -137,6 +141,8 @@ class VideoTrackAnalytics(BaseModel):
     distance_pixels: float
     mean_speed_pixels_per_second: float
     maximum_speed_pixels_per_second: float
+    active_time_seconds: float
+    inactive_time_seconds: float
     distance_physical: float | None
     mean_speed_physical_per_second: float | None
     maximum_speed_physical_per_second: float | None
@@ -154,6 +160,13 @@ class VideoFrameSchoolAnalytics(BaseModel):
     school_spread_physical: float | None
 
 
+class VideoHeatmapCell(BaseModel):
+    column: int
+    row: int
+    observation_count: int
+    occupancy_seconds: float
+
+
 class VideoAnalyticsResponse(BaseModel):
     video_id: str
     fps: float
@@ -161,4 +174,7 @@ class VideoAnalyticsResponse(BaseModel):
     physical_unit: str | None
     tracks: list[VideoTrackAnalytics]
     school_by_frame: list[VideoFrameSchoolAnalytics]
+    heatmap_bins_x: int
+    heatmap_bins_y: int
+    heatmap: list[VideoHeatmapCell]
     warnings: list[str]
