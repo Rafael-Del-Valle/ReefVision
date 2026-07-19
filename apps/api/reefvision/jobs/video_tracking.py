@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy import delete
@@ -50,7 +49,11 @@ def process_video_tracking_job(
             job.completed_at = datetime.now(UTC)
             session.commit()
             return False
-        if model.project_id != video.project_id or model.purpose != "detector" or model.task != "detect":
+        if (
+            model.project_id != video.project_id
+            or model.purpose != "detector"
+            or model.task != "detect"
+        ):
             job.status = "failed"
             job.error_message = "Video tracking requires a detector from the same project"
             job.completed_at = datetime.now(UTC)
@@ -71,8 +74,8 @@ def process_video_tracking_job(
         video_path = resolve_managed_project_path(settings, video.managed_path)
         model_path = resolve_managed_project_path(settings, model.managed_path)
         video_id = video.id
+        video_checksum = video.sha256
         model_id = model.id
-        project_id = video.project_id
         model_checksum = model.sha256
         provider_version = model.provider_version
         class_map = dict(model.class_map_json or {})
@@ -115,7 +118,11 @@ def process_video_tracking_job(
                 track_ids = boxes.id.int().tolist()
                 confidences = boxes.conf.tolist()
                 classes = boxes.cls.int().tolist()
-                names = getattr(result, "names", None) or getattr(detector, "names", None) or {}
+                names = (
+                    getattr(result, "names", None)
+                    or getattr(detector, "names", None)
+                    or {}
+                )
                 for index, raw_track_id in enumerate(track_ids):
                     track_number = int(raw_track_id)
                     if track_number < 1:
@@ -140,7 +147,10 @@ def process_video_tracking_job(
                             "source": tracker_kind,
                         }
                     )
-                    labels_by_track[track_number] = _mapped_label_class_id(class_map, label)
+                    labels_by_track[track_number] = _mapped_label_class_id(
+                        class_map,
+                        label,
+                    )
                     predicted_labels[track_number] = label
             with factory() as session:
                 job = session.get(Job, job_id)
@@ -192,7 +202,7 @@ def process_video_tracking_job(
                             "iou_threshold": iou,
                             "every_n_frames": every_n_frames,
                             "device": device,
-                            "source_video_sha256": session.get(VideoAsset, video_id).sha256,
+                            "source_video_sha256": video_checksum,
                         },
                     )
                 )
