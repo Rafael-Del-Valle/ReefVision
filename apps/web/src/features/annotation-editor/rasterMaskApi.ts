@@ -11,6 +11,12 @@ export interface RasterMaskEditPayload {
   mode: RasterEditMode;
   brush_radius: number;
   strokes: Array<{ points: Point[] }>;
+  auto_mask_enabled?: boolean;
+  auto_mask_color_tolerance?: number;
+  auto_mask_luminance_tolerance?: number;
+  auto_mask_edge_sensitivity?: number;
+  auto_mask_contiguous?: boolean;
+  auto_mask_sample_radius?: number;
 }
 
 export interface RasterMaskCleanupPayload {
