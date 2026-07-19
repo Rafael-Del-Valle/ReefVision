@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from sqlalchemy.orm import Session
+
 from reefvision.db.models import Job, JobEvent
 from reefvision.domain.errors import ConflictError
 from reefvision.repositories.backups import BackupRepository
 from reefvision.repositories.jobs import JobRepository
 from reefvision.repositories.quality_control import QualityControlRepository
 from reefvision.services.job_orchestration import JobOrchestrationService
-from sqlalchemy.orm import Session
 
 
 class JobService:
