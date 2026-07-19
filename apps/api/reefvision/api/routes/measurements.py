@@ -11,6 +11,12 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
+from reefvision.schemas.advanced_measurements import (
+    AdvancedMeasurementRequest,
+    AdvancedMeasurementResponse,
+    MultiReferenceCalibrationRequest,
+    MultiReferenceCalibrationResponse,
+)
 from reefvision.schemas.measurement_validation import (
     ProjectMeasurementValidationRequest,
     ProjectMeasurementValidationResponse,
@@ -23,6 +29,7 @@ from reefvision.schemas.measurements import (
     MeasurementCalibrationUpdate,
     ProjectMeasurementSummaryResponse,
 )
+from reefvision.services.advanced_measurements import AdvancedMeasurementService
 from reefvision.services.mask_measurements import MaskMeasurementService
 from reefvision.services.measurement_analytics import MeasurementAnalyticsService
 from reefvision.services.measurement_validation import MeasurementValidationService
@@ -34,6 +41,11 @@ DbSession = Annotated[Session, Depends(get_db_session)]
 def service(request: Request, session: Session) -> MaskMeasurementService:
     settings: Settings = request.app.state.settings
     return MaskMeasurementService(session, settings)
+
+
+def advanced_service(request: Request, session: Session) -> AdvancedMeasurementService:
+    settings: Settings = request.app.state.settings
+    return AdvancedMeasurementService(session, settings)
 
 
 def analytics_service(request: Request, session: Session) -> MeasurementAnalyticsService:
@@ -69,6 +81,22 @@ def update_measurement_calibration(
     session: DbSession,
 ) -> MeasurementCalibrationResponse:
     return service(request, session).update_calibration(image_id, payload)
+
+
+@router.put(
+    "/images/{image_id}/measurement-calibration/multi-reference",
+    response_model=MultiReferenceCalibrationResponse,
+)
+def update_multi_reference_calibration(
+    image_id: str,
+    payload: MultiReferenceCalibrationRequest,
+    request: Request,
+    session: DbSession,
+) -> MultiReferenceCalibrationResponse:
+    return advanced_service(request, session).update_multi_reference_calibration(
+        image_id,
+        payload,
+    )
 
 
 @router.delete(
@@ -127,6 +155,19 @@ def get_mask_measurements(
         scientific_names=scientific_name,
         state_names=state_name,
     )
+
+
+@router.post(
+    "/mask-annotations/{mask_annotation_id}/advanced-measurements",
+    response_model=AdvancedMeasurementResponse,
+)
+def get_advanced_mask_measurements(
+    mask_annotation_id: str,
+    payload: AdvancedMeasurementRequest,
+    request: Request,
+    session: DbSession,
+) -> AdvancedMeasurementResponse:
+    return advanced_service(request, session).measure(mask_annotation_id, payload)
 
 
 @router.get(
