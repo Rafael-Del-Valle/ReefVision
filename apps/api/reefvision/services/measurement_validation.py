@@ -12,38 +12,24 @@ from sqlalchemy.orm import Session
 from reefvision.config import Settings
 from reefvision.db.models import ImageAsset, MaskAnnotation, Project
 from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.ml.agreement_statistics import (
+    bootstrap_paired,
+    concordance_correlation,
+    icc_two_way_absolute_single,
+    mean_absolute_error as bootstrap_mae_statistic,
+    mean_bias as bootstrap_bias_statistic,
+    pearson,
+    spearman,
+)
 from reefvision.schemas.measurement_validation import (
     MeasurementMetric,
     MeasurementValidationMetricSummary,
     MeasurementValidationObservation,
+    MeasurementValidationSubgroupSummary,
     ProjectMeasurementValidationRequest,
     ProjectMeasurementValidationResponse,
 )
 from reefvision.services.mask_measurements import MaskMeasurementService
-
-
-def _pearson_correlation(
-    measured_values: list[float],
-    reference_values: list[float],
-) -> float | None:
-    if len(measured_values) < 2 or len(measured_values) != len(reference_values):
-        return None
-    measured_mean = mean(measured_values)
-    reference_mean = mean(reference_values)
-    measured_variance = sum((value - measured_mean) ** 2 for value in measured_values)
-    reference_variance = sum((value - reference_mean) ** 2 for value in reference_values)
-    if measured_variance <= 0 or reference_variance <= 0:
-        return None
-    covariance = sum(
-        (measured - measured_mean) * (reference - reference_mean)
-        for measured, reference in zip(
-            measured_values,
-            reference_values,
-            strict=True,
-        )
-    )
-    correlation = covariance / sqrt(measured_variance * reference_variance)
-    return max(-1.0, min(1.0, correlation))
 
 
 class MeasurementValidationService:
@@ -84,6 +70,52 @@ class MeasurementValidationService:
         if metric == "contained_box_count":
             return "count"
         return "pixels"
+
+    @staticmethod
+    def _subgroup_summaries(
+        observations: list[MeasurementValidationObservation],
+    ) -> list[MeasurementValidationSubgroupSummary]:
+        grouped: dict[
+            tuple[MeasurementMetric, str | None, str, str],
+            list[MeasurementValidationObservation],
+        ] = defaultdict(list)
+        fields = (
+            ("observer", "observer_id"),
+            ("repeat", "repeat_id"),
+            ("species", "species"),
+            ("size_group", "size_group"),
+            ("image_resolution_group", "image_resolution_group"),
+            ("segmentation_method", "segmentation_method"),
+        )
+        for observation in observations:
+            for group_type, field_name in fields:
+                value = getattr(observation, field_name)
+                if value:
+                    grouped[(observation.metric, observation.unit, group_type, value)].append(
+                        observation
+                    )
+        output: list[MeasurementValidationSubgroupSummary] = []
+        for (metric, unit, group_type, group_value), rows in sorted(
+            grouped.items(),
+            key=lambda item: (item[0][0], item[0][2], item[0][3]),
+        ):
+            output.append(
+                MeasurementValidationSubgroupSummary(
+                    metric=metric,
+                    unit=unit,
+                    group_type=group_type,
+                    group_value=group_value,
+                    observation_count=len(rows),
+                    mean_bias=mean(row.signed_error for row in rows),
+                    mean_absolute_error=mean(row.absolute_error for row in rows),
+                    root_mean_square_error=sqrt(
+                        mean(row.signed_error**2 for row in rows)
+                    ),
+                    passed_count=sum(row.passed for row in rows),
+                    failed_count=sum(not row.passed for row in rows),
+                )
+            )
+        return output
 
     def validate(
         self,
@@ -148,6 +180,12 @@ class MeasurementValidationService:
                         percent_error=percent_error,
                         tolerance_percent=tolerance,
                         passed=percent_error is not None and percent_error <= tolerance,
+                        observer_id=reference.observer_id,
+                        repeat_id=reference.repeat_id,
+                        species=reference.species,
+                        size_group=reference.size_group,
+                        image_resolution_group=reference.image_resolution_group,
+                        segmentation_method=reference.segmentation_method,
                     )
                 )
 
@@ -159,9 +197,8 @@ class MeasurementValidationService:
             grouped[(observation.metric, observation.unit)].append(observation)
 
         summaries: list[MeasurementValidationMetricSummary] = []
-        for (metric, unit), rows in sorted(
-            grouped.items(),
-            key=lambda item: item[0][0],
+        for summary_index, ((metric, unit), rows) in enumerate(
+            sorted(grouped.items(), key=lambda item: item[0][0])
         ):
             percent_errors = [
                 row.percent_error for row in rows if row.percent_error is not None
@@ -182,6 +219,43 @@ class MeasurementValidationService:
             )
             measured_values = [row.measured_value for row in rows]
             reference_values = [row.reference_value for row in rows]
+            bootstrap_seed = request.random_seed + summary_index * 104729
+            bias_interval = (
+                bootstrap_paired(
+                    measured_values,
+                    reference_values,
+                    bootstrap_bias_statistic,
+                    iterations=request.bootstrap_iterations,
+                    confidence=request.confidence_level,
+                    seed=bootstrap_seed,
+                )
+                if request.bootstrap_iterations
+                else None
+            )
+            mae_interval = (
+                bootstrap_paired(
+                    measured_values,
+                    reference_values,
+                    bootstrap_mae_statistic,
+                    iterations=request.bootstrap_iterations,
+                    confidence=request.confidence_level,
+                    seed=bootstrap_seed + 1,
+                )
+                if request.bootstrap_iterations
+                else None
+            )
+            concordance_interval = (
+                bootstrap_paired(
+                    measured_values,
+                    reference_values,
+                    concordance_correlation,
+                    iterations=request.bootstrap_iterations,
+                    confidence=request.confidence_level,
+                    seed=bootstrap_seed + 2,
+                )
+                if request.bootstrap_iterations
+                else None
+            )
             summaries.append(
                 MeasurementValidationMetricSummary(
                     metric=metric,
@@ -211,7 +285,13 @@ class MeasurementValidationService:
                         if agreement_half_width is not None
                         else None
                     ),
-                    pearson_correlation=_pearson_correlation(
+                    pearson_correlation=pearson(measured_values, reference_values),
+                    spearman_correlation=spearman(measured_values, reference_values),
+                    concordance_correlation_coefficient=concordance_correlation(
+                        measured_values,
+                        reference_values,
+                    ),
+                    intraclass_correlation_coefficient=icc_two_way_absolute_single(
                         measured_values,
                         reference_values,
                     ),
@@ -223,8 +303,30 @@ class MeasurementValidationService:
                         mean(percent_errors) if percent_errors else None
                     ),
                     maximum_absolute_error=max(row.absolute_error for row in rows),
-                    passed_count=sum(1 for row in rows if row.passed),
-                    failed_count=sum(1 for row in rows if not row.passed),
+                    bootstrap_bias_lower=(
+                        bias_interval.lower if bias_interval is not None else None
+                    ),
+                    bootstrap_bias_upper=(
+                        bias_interval.upper if bias_interval is not None else None
+                    ),
+                    bootstrap_mae_lower=(
+                        mae_interval.lower if mae_interval is not None else None
+                    ),
+                    bootstrap_mae_upper=(
+                        mae_interval.upper if mae_interval is not None else None
+                    ),
+                    bootstrap_concordance_lower=(
+                        concordance_interval.lower
+                        if concordance_interval is not None
+                        else None
+                    ),
+                    bootstrap_concordance_upper=(
+                        concordance_interval.upper
+                        if concordance_interval is not None
+                        else None
+                    ),
+                    passed_count=sum(row.passed for row in rows),
+                    failed_count=sum(not row.passed for row in rows),
                 )
             )
 
@@ -232,9 +334,10 @@ class MeasurementValidationService:
             project_id=project_id,
             mask_count=len({row.mask_annotation_id for row in observations}),
             observation_count=len(observations),
-            passed_count=sum(1 for row in observations if row.passed),
-            failed_count=sum(1 for row in observations if not row.passed),
+            passed_count=sum(row.passed for row in observations),
+            failed_count=sum(not row.passed for row in observations),
             summaries=summaries,
+            subgroup_summaries=self._subgroup_summaries(observations),
             observations=observations,
             warnings=list(dict.fromkeys(warnings)),
         )
