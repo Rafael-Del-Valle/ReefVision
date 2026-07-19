@@ -83,20 +83,28 @@ def boundary_metrics(
 ) -> BoundaryMetrics:
     if tolerance_pixels < 0:
         raise ValueError("Boundary tolerance cannot be negative")
-    gt = _coordinates(boundary(ground_truth))
-    pred = _coordinates(boundary(prediction))
-    if len(gt) == 0 and len(pred) == 0:
+    ground_truth_points = _coordinates(boundary(ground_truth))
+    prediction_points = _coordinates(boundary(prediction))
+    if len(ground_truth_points) == 0 and len(prediction_points) == 0:
         return BoundaryMetrics(1.0, 1.0, 1.0, 0.0, 0.0)
-    if len(gt) == 0 or len(pred) == 0:
+    if len(ground_truth_points) == 0 or len(prediction_points) == 0:
         return BoundaryMetrics(0.0, 0.0, 0.0, None, None)
-    pred_to_gt = _directed_nearest_distances(pred, gt)
-    gt_to_pred = _directed_nearest_distances(gt, pred)
-    precision = float(np.mean(pred_to_gt <= tolerance_pixels))
-    recall = float(np.mean(gt_to_pred <= tolerance_pixels))
+    prediction_distances = _directed_nearest_distances(
+        prediction_points,
+        ground_truth_points,
+    )
+    ground_truth_distances = _directed_nearest_distances(
+        ground_truth_points,
+        prediction_points,
+    )
+    precision = float(np.mean(prediction_distances <= tolerance_pixels))
+    recall = float(np.mean(ground_truth_distances <= tolerance_pixels))
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
-    hausdorff = float(max(np.max(pred_to_gt), np.max(gt_to_pred)))
-    assd = float((np.mean(pred_to_gt) + np.mean(gt_to_pred)) / 2)
-    return BoundaryMetrics(precision, recall, f1, hausdorff, assd)
+    hausdorff = float(max(np.max(prediction_distances), np.max(ground_truth_distances)))
+    average_distance = float(
+        (np.mean(prediction_distances) + np.mean(ground_truth_distances)) / 2
+    )
+    return BoundaryMetrics(precision, recall, f1, hausdorff, average_distance)
 
 
 def panoptic_metrics(
@@ -146,10 +154,16 @@ def confidence_calibration(
     for index in range(bin_count):
         lower = index / bin_count
         upper = (index + 1) / bin_count
+
+        def in_current_bin(confidence: float) -> bool:
+            if index == bin_count - 1:
+                return lower <= confidence <= upper
+            return lower <= confidence < upper
+
         selected = [
             (float(confidence), bool(matched))
             for confidence, matched in observations
-            if lower <= confidence <= upper if index == bin_count - 1 else lower <= confidence < upper
+            if in_current_bin(float(confidence))
         ]
         if selected:
             mean_confidence = sum(item[0] for item in selected) / len(selected)
@@ -157,7 +171,9 @@ def confidence_calibration(
             gap = abs(mean_confidence - match_rate)
             weighted_gap += gap * len(selected)
         else:
-            mean_confidence = match_rate = gap = None
+            mean_confidence = None
+            match_rate = None
+            gap = None
         bins.append(
             CalibrationBin(
                 lower=lower,
@@ -178,7 +194,7 @@ def precision_recall_at_thresholds(
     confidence_thresholds: Sequence[float],
     match_iou_threshold: float,
 ) -> list[dict[str, float | int]]:
-    """Summarize confidence sweeps from `(confidence, best_iou)` prediction rows."""
+    """Summarize confidence sweeps from confidence and best-IoU rows."""
 
     output: list[dict[str, float | int]] = []
     for confidence_threshold in confidence_thresholds:
@@ -213,15 +229,18 @@ def average_precision(
     if ground_truth_count <= 0:
         return 0.0
     rows = sorted(ranked_predictions, key=lambda item: item[0], reverse=True)
-    cumulative_tp = 0
-    cumulative_fp = 0
+    cumulative_true_positives = 0
+    cumulative_false_positives = 0
     recalls = [0.0]
     precisions = [1.0]
     for _, matched in rows:
-        cumulative_tp += int(matched)
-        cumulative_fp += int(not matched)
-        recalls.append(cumulative_tp / ground_truth_count)
-        precisions.append(cumulative_tp / max(cumulative_tp + cumulative_fp, 1))
+        cumulative_true_positives += int(matched)
+        cumulative_false_positives += int(not matched)
+        recalls.append(cumulative_true_positives / ground_truth_count)
+        precisions.append(
+            cumulative_true_positives
+            / max(cumulative_true_positives + cumulative_false_positives, 1)
+        )
     recalls.append(1.0)
     precisions.append(0.0)
     for index in range(len(precisions) - 2, -1, -1):
