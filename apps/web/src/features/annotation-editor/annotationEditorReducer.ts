@@ -77,6 +77,7 @@ type AnnotationEditorAction =
   | { type: "undo" }
   | { type: "redo" }
   | { type: "saveStarted"; sentVersion: number }
+  | { type: "saveConfirmed" }
   | {
       type: "saveSucceeded";
       sentVersion: number;
@@ -415,6 +416,12 @@ export function annotationEditorReducer(
         ...state,
         saveState: "saving",
         saveMessage: null,
+      };
+    case "saveConfirmed":
+      return {
+        ...state,
+        saveState: "saved",
+        saveMessage: "Saved",
       };
     case "saveSucceeded": {
       const currentHasNewerChanges = state.documentVersion > action.sentVersion;
