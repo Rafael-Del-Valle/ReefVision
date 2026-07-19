@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from reefvision.config import Settings
 from reefvision.db.models import (
     ExportRecord,
+    ImageAsset,
     Job,
     MaskAnnotation,
     ModelRegistration,
@@ -21,6 +22,7 @@ from reefvision.db.models import (
 )
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.recovery import (
+    RecoveryAction,
     RecoveryApplyResponse,
     RecoveryIssue,
     RecoveryPlanResponse,
@@ -69,7 +71,13 @@ class RecoveryService:
         issues.extend(self._missing_model_issues(project.id, now))
         issues.extend(self._export_issues(project.id, now))
         issues.extend(self._temporary_file_issues(project, cutoff, now))
-        issues.sort(key=lambda item: (item.category, item.record_id or "", item.managed_path or ""))
+        issues.sort(
+            key=lambda item: (
+                item.category,
+                item.record_id or "",
+                item.managed_path or "",
+            )
+        )
         return RecoveryPlanResponse(
             project_id=project.id,
             generated_at=now,
@@ -91,8 +99,7 @@ class RecoveryService:
         plan = self.plan(project_id, stale_after_seconds=stale_after_seconds)
         requested = set(issue_ids)
         known = {issue.issue_id: issue for issue in plan.issues}
-        unknown = requested - known.keys()
-        if unknown:
+        if requested - known.keys():
             raise ValidationError("Recovery plan changed; regenerate it before applying actions")
         applied: list[str] = []
         skipped: list[str] = []
@@ -135,6 +142,7 @@ class RecoveryService:
             heartbeat = _utc(job.heartbeat_at) or _utc(job.started_at) or _utc(job.created_at)
             if heartbeat is not None and heartbeat >= cutoff:
                 continue
+            action: RecoveryAction
             if job.status == "cancel_requested":
                 action = "complete_cancellation"
             elif job.resume_supported:
@@ -181,25 +189,25 @@ class RecoveryService:
                     recommended_action="mark_failed",
                     safe_automatic=True,
                     detected_at=now,
-                    details={"workflow_id": run.workflow_id, "job_status": job.status if job else None},
+                    details={
+                        "workflow_id": run.workflow_id,
+                        "job_status": job.status if job else None,
+                    },
                 )
             )
         return issues
 
-    def _missing_annotation_issues(self, project_id: str, now: datetime) -> list[RecoveryIssue]:
+    def _missing_annotation_issues(
+        self,
+        project_id: str,
+        now: datetime,
+    ) -> list[RecoveryIssue]:
         issues: list[RecoveryIssue] = []
         masks = self.session.scalars(
-            select(MaskAnnotation).join(
-                Project,
-                Project.id
-                == select(Project.id)
-                .where(Project.id == project_id)
-                .scalar_subquery(),
-                isouter=True,
-            )
+            select(MaskAnnotation)
+            .join(ImageAsset, ImageAsset.id == MaskAnnotation.image_id)
+            .where(ImageAsset.project_id == project_id)
         )
-        # The project filter is applied through image ownership without importing ORM
-        # relationships, which keeps this scanner safe during partial migrations.
         for mask in masks:
             if mask.geometry_kind != "raster_mask" or not mask.mask_path:
                 continue
@@ -253,10 +261,17 @@ class RecoveryService:
         for export in self.session.scalars(
             select(ExportRecord).where(ExportRecord.project_id == project_id)
         ):
-            missing = []
-            for managed_path in (export.output_path, export.manifest_path, export.archive_path):
+            missing: list[str] = []
+            for managed_path in (
+                export.output_path,
+                export.manifest_path,
+                export.archive_path,
+            ):
                 try:
-                    exists = resolve_managed_project_path(self.settings, managed_path).exists()
+                    exists = resolve_managed_project_path(
+                        self.settings,
+                        managed_path,
+                    ).exists()
                 except ValidationError:
                     exists = False
                 if not exists:
@@ -309,7 +324,10 @@ class RecoveryService:
                     recommended_action="quarantine",
                     safe_automatic=True,
                     detected_at=now,
-                    details={"size_bytes": path.stat().st_size, "modified_at": modified.isoformat()},
+                    details={
+                        "size_bytes": path.stat().st_size,
+                        "modified_at": modified.isoformat(),
+                    },
                 )
             )
         return issues
