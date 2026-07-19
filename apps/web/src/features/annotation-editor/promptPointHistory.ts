@@ -22,6 +22,7 @@ export type PromptPointHistoryAction =
   | { type: "add"; point: PromptPoint }
   | { type: "remove"; pointId: string }
   | { type: "clear" }
+  | { type: "reset" }
   | { type: "undo" }
   | { type: "redo" };
 
@@ -63,6 +64,8 @@ export function promptPointHistoryReducer(
       return state.present.points.length === 0
         ? state
         : commit(state, { points: [] });
+    case "reset":
+      return initialPromptPointHistoryState;
     case "undo": {
       const previous = state.past.at(-1);
       if (!previous) return state;
