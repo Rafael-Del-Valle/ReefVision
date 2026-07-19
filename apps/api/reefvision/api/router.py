@@ -19,6 +19,7 @@ from reefvision.api.routes.depth import router as depth_router
 from reefvision.api.routes.health import router as health_router
 from reefvision.api.routes.image_embeddings import router as image_embeddings_router
 from reefvision.api.routes.images import router as images_router
+from reefvision.api.routes.interchange import router as interchange_router
 from reefvision.api.routes.jobs import router as jobs_router
 from reefvision.api.routes.measurements import router as measurements_router
 from reefvision.api.routes.model_catalog import router as model_catalog_router
@@ -71,6 +72,7 @@ api_router.include_router(annotations_router)
 api_router.include_router(raster_edits_router)
 api_router.include_router(measurements_router)
 api_router.include_router(dataset_versions_router)
+api_router.include_router(interchange_router)
 api_router.include_router(jobs_router)
 api_router.include_router(model_catalog_router)
 api_router.include_router(models_router)
