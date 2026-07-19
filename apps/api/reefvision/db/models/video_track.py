@@ -35,6 +35,7 @@ class VideoTrack(Base):
     )
     interpolation: Mapped[str] = mapped_column(String(30), nullable=False, default="linear")
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft")
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
