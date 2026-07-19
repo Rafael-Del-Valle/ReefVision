@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -77,3 +77,29 @@ class ArtifactLineageResponse(BaseModel):
     ancestors: list[ArtifactResponse]
     descendants: list[ArtifactResponse]
     superseded_by: list[ArtifactResponse]
+
+
+class ArtifactPreviewResponse(BaseModel):
+    artifact_id: str
+    preview_kind: Literal[
+        "image",
+        "video",
+        "audio",
+        "html",
+        "json",
+        "text",
+        "table",
+        "archive",
+        "binary",
+        "payload",
+    ]
+    media_type: str | None
+    content_url: str | None
+    filename: str | None
+    text: str | None
+    payload: dict[str, Any] | list[Any] | None
+    columns: list[str]
+    rows: list[list[Any]]
+    archive_entries: list[str]
+    truncated: bool
+    checksum_verified: bool | None
