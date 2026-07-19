@@ -40,6 +40,7 @@ class JobService:
             "depth_map",
             "image_embeddings",
             "workflow_run",
+            "provider_benchmark",
         }
         if job.status != "failed" or job.job_type not in retryable_types:
             raise ConflictError("Only failed recoverable jobs can be retried")
