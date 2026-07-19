@@ -30,12 +30,7 @@ class JobRepository:
         return self.session.get(Job, job_id)
 
     def next_queued(self, worker_id: str | None = None) -> Job | None:
-        """Atomically claim the highest-priority runnable, resource-compatible job.
-
-        A job remains in ``queued`` while claimed so historical processors that perform
-        their own queued-to-running transition remain compatible. ``worker_id`` and a
-        heartbeat form the short dispatch lease; a crashed claim becomes eligible again.
-        """
+        """Atomically claim the highest-priority runnable, resource-compatible job."""
 
         resolved_worker_id = worker_id or f"worker-{os.getpid()}-{uuid4().hex[:8]}"
         now = datetime.now(UTC)
@@ -72,6 +67,13 @@ class JobRepository:
             decision = scheduler.evaluate(candidate)
             if not decision.eligible:
                 continue
+            assignment_device = str(decision.assignment.get("device", "cpu"))
+            request_json = dict(candidate.request_json or {})
+            requirements = dict(candidate.resource_requirements_json or {})
+            if "device" in request_json or requirements.get("gpu_required"):
+                request_json["device"] = assignment_device
+            if "device_id" in request_json or candidate.job_type == "provider_benchmark":
+                request_json["device_id"] = assignment_device
             claimed = cast(
                 CursorResult[Any],
                 self.session.execute(
@@ -84,6 +86,7 @@ class JobRepository:
                     .values(
                         worker_id=resolved_worker_id,
                         heartbeat_at=now,
+                        request_json=request_json,
                         resource_assignment_json=decision.assignment,
                     )
                 ),
