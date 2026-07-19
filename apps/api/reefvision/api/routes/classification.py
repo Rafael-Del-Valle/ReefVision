@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
@@ -60,6 +60,30 @@ def create_classification_training_run(
     session: DbSession,
 ) -> TrainingRunResponse:
     return service(request, session).create_training_run(project_id, payload)
+
+
+@router.post(
+    "/projects/{project_id}/classifiers",
+    response_model=ModelRegistrationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def import_classifier(
+    project_id: str,
+    request: Request,
+    session: DbSession,
+    model_file: Annotated[UploadFile, File()],
+    display_name: Annotated[str | None, Form()] = None,
+    notes: Annotated[str | None, Form()] = None,
+) -> ModelRegistrationResponse:
+    return model_service(request, session).register_model_upload(
+        project_id,
+        purpose="classifier",
+        provider_name="ultralytics",
+        upload_filename=model_file.filename,
+        upload_stream=model_file.file,
+        display_name=display_name,
+        notes=notes,
+    )
 
 
 @router.post(
