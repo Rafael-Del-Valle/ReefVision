@@ -255,7 +255,7 @@ export function getWorkflowTemplates() {
 
 export function validateWorkflow(
   projectId: string,
-  payload: Record<string, unknown>,
+  payload: object,
 ) {
   return request<WorkflowValidation>(
     `/projects/${projectId}/workflows/validate`,

@@ -24,8 +24,6 @@ function provider(
     Pick<ProviderCapability, "provider_id" | "display_name">,
 ): ProviderCapability {
   return {
-    provider_id: overrides.provider_id,
-    display_name: overrides.display_name,
     description: "Provider acceptance fixture",
     health: "ready",
     supported_tasks: ["segment"],
@@ -139,7 +137,7 @@ describe("ProviderDashboard", () => {
 
     expect(await screen.findByText("1 ready")).toBeInTheDocument();
     expect(screen.getByText("1 unavailable")).toBeInTheDocument();
-    expect(screen.getByText(/83.33\/s/i)).toBeInTheDocument();
+    expect(await screen.findByText(/83.33\/s/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /SAM 2/i }));
 

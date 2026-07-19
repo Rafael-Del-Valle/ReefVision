@@ -92,6 +92,7 @@ function entry(
     deprecation_status: "active",
     replacement_model_id: null,
     known_limitations: [],
+    compatibility_reasons: [],
     installation_state: state,
     installation_reason:
       state === "Ready" ? "Installed and verified." : "Not installed yet.",

@@ -94,6 +94,7 @@ export interface ModelCatalogEntry {
   tuning_compatibility: boolean;
   checkpoint_identifier: string | null;
   checkpoint_source: string;
+  download_source_type: string;
   expected_files: ModelCatalogExpectedFile[];
   expected_size: number | null;
   expected_file_size: number | null;
@@ -112,6 +113,10 @@ export interface ModelCatalogEntry {
   supported_runtimes: string[];
   supported_runtime: string[];
   supported_precision: string[];
+  expected_input_size?: {
+    width: number;
+    height: number;
+  } | null;
   desktop_support: string;
   desktop_package_status: string;
   clean_machine_verification_status: string;
@@ -153,14 +158,14 @@ export interface ModelCatalogResponse {
   rejected_entries: number;
   source_path: string | null;
   last_refresh_timestamp: string | null;
-  entries: ModelCatalogEntry[];
-  pagination: {
+  entries?: ModelCatalogEntry[];
+  pagination?: {
     page: number;
     page_size: number;
     total: number;
     pages: number;
   };
-  filters: core.ModelCatalogFilters;
+  filters?: core.ModelCatalogFilters;
 }
 
 function normalizeModelCatalogEntry(
@@ -189,6 +194,7 @@ function normalizeModelCatalogEntry(
     tuning_compatibility: entry.tuning_compatibility ?? false,
     checkpoint_identifier: entry.checkpoint_identifier ?? null,
     checkpoint_source: entry.checkpoint_source ?? entry.source_type ?? "unknown",
+    download_source_type: entry.download_source_type ?? "unknown",
     expected_files: entry.expected_files ?? [],
     expected_size: entry.expected_size ?? entry.expected_file_size ?? null,
     expected_file_size: entry.expected_file_size ?? entry.expected_size ?? null,
@@ -497,7 +503,7 @@ export interface TrainingLeakageAudit {
   group_leak_count: number;
 }
 
-export interface TrainingPreflight {
+export interface TrainingPreflight extends JsonRecord {
   status: "ready" | "ready_with_warnings" | "blocked";
   warnings: string[];
   blockers: string[];
@@ -1334,11 +1340,25 @@ export async function getTrainingWorkspaceBootstrap(
   };
 }
 
+export interface TrainingProviderParameter {
+  name: string;
+  display_name: string;
+  value_type: string;
+  default_value: unknown;
+  supported_tasks: string[];
+  supported_modes: string[];
+  reefvision_supported: boolean;
+}
+
+export interface TrainingProviderParametersResponse extends JsonRecord {
+  parameters: TrainingProviderParameter[];
+}
+
 export async function getTrainingProviderParameters(
   providerId: string,
   signal?: AbortSignal,
-): Promise<JsonRecord> {
-  return compatibilityRequest<JsonRecord>(
+): Promise<TrainingProviderParametersResponse> {
+  return compatibilityRequest<TrainingProviderParametersResponse>(
     `/training/providers/${providerId}/parameters`,
     { signal },
   );
@@ -1395,7 +1415,7 @@ export async function updateTrainingDraft(
 
 export async function runTrainingPreflight(
   projectId: string,
-  payload: TrainingDraftWritePayload,
+  payload: TrainingDraftWritePayload | JsonRecord,
 ): Promise<TrainingPreflight> {
   return compatibilityRequest<TrainingPreflight>(
     `/projects/${projectId}/training-preflight`,

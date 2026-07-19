@@ -297,6 +297,10 @@ export function getModels(projectId: string, signal?: AbortSignal) {
   return request<ModelRecord[]>(`/projects/${projectId}/models`, { signal });
 }
 
+export function getJob(jobId: string, signal?: AbortSignal) {
+  return request<JobRecord>(`/jobs/${jobId}`, { signal });
+}
+
 export function getImages(projectId: string, signal?: AbortSignal) {
   return request<ImagePage>(`/projects/${projectId}/images?page=1&page_size=100`, {
     signal,

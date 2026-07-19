@@ -2013,7 +2013,10 @@ export async function getJob(
   jobId: string,
   signal?: AbortSignal,
 ): Promise<JobRecord> {
-  return request<JobRecord>(`/jobs/${jobId}`, { signal });
+  return request<JobRecord>(`/jobs/${jobId}?poll=${Date.now()}`, {
+    signal,
+    cache: "no-store",
+  });
 }
 
 export async function cancelJob(jobId: string): Promise<JobRecord> {

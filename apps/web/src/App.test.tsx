@@ -1069,7 +1069,7 @@ function mockApi({
       if (url.endsWith(`/projects/${project.id}/class-visibility`)) {
         return jsonResponse(defaultClassVisibilityBundle);
       }
-      if (url.endsWith(`/images/${image.id}/annotations`)) {
+      if (url.endsWith(`/images/${image.id}/annotation-session`)) {
         return jsonResponse(session);
       }
       throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
@@ -1379,7 +1379,7 @@ describe("App", () => {
 
     await waitFor(() =>
       expect(screen.getByTestId("annotation-save-state")).toHaveTextContent(
-        "Ready",
+        "Saved",
       ),
     );
     expect(screen.getByText("Manual annotation editor")).toBeInTheDocument();

@@ -326,7 +326,7 @@ describe("AnnotationEditor", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (
-        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        url.endsWith(`/images/${session.image.id}/annotation-session`) &&
         (!init?.method || init.method === "GET")
       ) {
         return jsonResponse(session);
@@ -373,7 +373,7 @@ describe("AnnotationEditor", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (
-        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        url.endsWith(`/images/${session.image.id}/annotation-session`) &&
         (!init?.method || init.method === "GET")
       ) {
         return jsonResponse(session);
@@ -432,7 +432,7 @@ describe("AnnotationEditor", () => {
       .mockImplementation(async (input, init) => {
         const url = String(input);
         if (
-          url.endsWith(`/images/${session.image.id}/annotations`) &&
+          url.endsWith(`/images/${session.image.id}/annotation-session`) &&
           (!init?.method || init.method === "GET")
         ) {
           return jsonResponse(session);
@@ -487,7 +487,9 @@ describe("AnnotationEditor", () => {
 
     const annotationGets = fetchMock.mock.calls.filter(
       ([request, requestInit]) =>
-        String(request).endsWith(`/images/${session.image.id}/annotations`) &&
+        String(request).endsWith(
+          `/images/${session.image.id}/annotation-session`,
+        ) &&
         (!requestInit?.method || requestInit.method === "GET"),
     );
     const predictionGets = fetchMock.mock.calls.filter(
@@ -515,7 +517,7 @@ describe("AnnotationEditor", () => {
       .mockImplementation(async (input, init) => {
         const url = String(input);
         if (
-          url.endsWith(`/images/${session.image.id}/annotations`) &&
+          url.endsWith(`/images/${session.image.id}/annotation-session`) &&
           (!init?.method || init.method === "GET")
         ) {
           return jsonResponse(session);
@@ -588,7 +590,9 @@ describe("AnnotationEditor", () => {
 
     const annotationGets = fetchMock.mock.calls.filter(
       ([request, requestInit]) =>
-        String(request).endsWith(`/images/${session.image.id}/annotations`) &&
+        String(request).endsWith(
+          `/images/${session.image.id}/annotation-session`,
+        ) &&
         (!requestInit?.method || requestInit.method === "GET"),
     );
     expect(annotationGets).toHaveLength(1);
@@ -598,7 +602,7 @@ describe("AnnotationEditor", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (
-        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        url.endsWith(`/images/${session.image.id}/annotation-session`) &&
         (!init?.method || init.method === "GET")
       ) {
         return jsonResponse(session);
@@ -644,7 +648,7 @@ describe("AnnotationEditor", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (
-        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        url.endsWith(`/images/${session.image.id}/annotation-session`) &&
         (!init?.method || init.method === "GET")
       ) {
         return jsonResponse(session);
@@ -689,7 +693,7 @@ describe("AnnotationEditor", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (
-        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        url.endsWith(`/images/${session.image.id}/annotation-session`) &&
         (!init?.method || init.method === "GET")
       ) {
         return jsonResponse(session);
@@ -733,7 +737,7 @@ describe("AnnotationEditor", () => {
       .mockImplementation(async (input, init) => {
         const url = String(input);
         if (
-          url.endsWith(`/images/${session.image.id}/annotations`) &&
+          url.endsWith(`/images/${session.image.id}/annotation-session`) &&
           (!init?.method || init.method === "GET")
         ) {
           return jsonResponse(session);

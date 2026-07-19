@@ -72,3 +72,5 @@ tmp_dataset_debug/
 *.pfx
 /signing-keys/
 /private-keys/
+
+.artifacts/

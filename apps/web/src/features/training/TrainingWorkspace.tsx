@@ -53,6 +53,7 @@ const taskLabels: Record<ModelCatalogTask, string> = {
   detect: "Object detection",
   segment: "Instance segmentation",
   semantic_segment: "Semantic segmentation",
+  classify: "Classification",
   open_vocabulary_detect: "Open-vocabulary detection",
   example_guided_detect: "Example-guided detection",
   assist_segmentation: "Interactive masking",
