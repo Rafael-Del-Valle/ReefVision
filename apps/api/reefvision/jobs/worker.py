@@ -20,11 +20,13 @@ from reefvision.jobs.export import process_export_job
 from reefvision.jobs.image_embeddings import process_image_embedding_job
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.model_install import process_model_install_job
+from reefvision.jobs.provider_benchmarks import process_provider_benchmark_job
 from reefvision.jobs.quality_control import process_quality_control_job
 from reefvision.jobs.restores import process_restore_job
 from reefvision.jobs.training_dispatch import process_task_aware_training_job
 from reefvision.jobs.video import process_video_extract_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
+from reefvision.jobs.workflow_runs import process_workflow_run_job
 from reefvision.repositories.jobs import JobRepository
 from reefvision.storage.images import create_thumbnail
 from reefvision.storage.projects import resolve_managed_project_path
@@ -151,6 +153,10 @@ def process_next_thumbnail_job(
             return process_depth_map_job(settings, factory, job_id)
         if job_type == "image_embeddings":
             return process_image_embedding_job(settings, factory, job_id)
+        if job_type == "workflow_run":
+            return process_workflow_run_job(settings, factory, job_id)
+        if job_type == "provider_benchmark":
+            return process_provider_benchmark_job(settings, factory, job_id)
 
         message = f"Unsupported queued job type: {job_type}"
         _fail_job(factory, job_id, message)
