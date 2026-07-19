@@ -12,6 +12,9 @@ import {
   type ReviewQueueItem,
 } from "./api/client";
 import { EnhancedAnnotationEditor } from "./features/annotation-editor/EnhancedAnnotationEditor";
+import { ModelEvaluationDashboard } from "./features/advancement/ModelEvaluationDashboard";
+import { ProjectIntegrityDashboard } from "./features/advancement/ProjectIntegrityDashboard";
+import { WorkflowDashboard } from "./features/advancement/WorkflowDashboard";
 import { ClassManagerPanel } from "./features/classes/ClassManagerPanel";
 import { ClassificationDashboard } from "./features/classification/ClassificationDashboard";
 import { DatasetVersionsPanel } from "./features/dataset-versions/DatasetVersionsPanel";
@@ -44,6 +47,9 @@ type ProjectView =
   | "measurements"
   | "classification"
   | "videos"
+  | "evaluation"
+  | "integrity"
+  | "workflows"
   | "classes"
   | "quality_control"
   | "review_queue"
@@ -137,8 +143,11 @@ export function App() {
     { id: "measurements", label: "Measurements" },
     { id: "classification", label: "Classification" },
     { id: "videos", label: "Video" },
+    { id: "evaluation", label: "Evaluation" },
     { id: "quality_control", label: "Quality Control" },
     { id: "review_queue", label: "Review Queue" },
+    { id: "integrity", label: "Integrity" },
+    { id: "workflows", label: "Workflows" },
     { id: "classes", label: "Classes" },
   ];
 
@@ -340,6 +349,9 @@ export function App() {
               {activeView === "videos" && (
                 <VideoDashboard project={selectedProject} />
               )}
+              {activeView === "evaluation" && (
+                <ModelEvaluationDashboard project={selectedProject} />
+              )}
               {activeView === "quality_control" && (
                 <QualityControlDashboard
                   project={selectedProject}
@@ -369,6 +381,12 @@ export function App() {
                     })
                   }
                 />
+              )}
+              {activeView === "integrity" && (
+                <ProjectIntegrityDashboard project={selectedProject} />
+              )}
+              {activeView === "workflows" && (
+                <WorkflowDashboard project={selectedProject} />
               )}
               {activeView === "classes" && (
                 <ClassManagerPanel project={selectedProject} />
