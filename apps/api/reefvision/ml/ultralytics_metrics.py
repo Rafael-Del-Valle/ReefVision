@@ -1,9 +1,9 @@
 """Version-tolerant Ultralytics validation metrics and artifact export.
 
 The pinned ReefVision stack currently uses Ultralytics 8.x, while newer releases expose
-additional export helpers.  This module intentionally reads the stable metric attributes
-used across those versions and writes a ReefVision-owned JSON/CSV contract so reports do
-not depend on a particular Ultralytics HTML or plotting implementation.
+additional export helpers. This module intentionally reads stable metric attributes and
+writes a ReefVision-owned JSON/CSV contract so reports do not depend on a particular
+Ultralytics HTML or plotting implementation.
 """
 
 from __future__ import annotations
@@ -117,7 +117,12 @@ def _per_class_ap75(scope: Any, position: int) -> float | None:
     return _value_at(row, 5)
 
 
-def _per_class_map(scope: Any, class_id: int, position: int, class_count: int) -> float | None:
+def _per_class_map(
+    scope: Any,
+    class_id: int,
+    position: int,
+    class_count: int,
+) -> float | None:
     maps = _as_list(getattr(scope, "maps", None))
     if len(maps) == class_count and class_id < len(maps):
         return _value_at(maps, class_id)
@@ -125,12 +130,20 @@ def _per_class_map(scope: Any, class_id: int, position: int, class_count: int) -
         return _value_at(maps, position)
     ap_rows = _as_list(getattr(scope, "ap", None))
     if position < len(ap_rows):
-        values = [value for value in (_as_float(item) for item in _as_list(ap_rows[position])) if value is not None]
+        values = [
+            value
+            for value in (_as_float(item) for item in _as_list(ap_rows[position]))
+            if value is not None
+        ]
         return sum(values) / len(values) if values else None
     return None
 
 
-def _extract_scope(scope: Any, names: dict[int, str], scope_name: str) -> dict[str, Any]:
+def _extract_scope(
+    scope: Any,
+    names: dict[int, str],
+    scope_name: str,
+) -> dict[str, Any]:
     precision = _as_list(getattr(scope, "p", None))
     recall = _as_list(getattr(scope, "r", None))
     f1 = _as_list(getattr(scope, "f1", None))
@@ -158,7 +171,12 @@ def _extract_scope(scope: Any, names: dict[int, str], scope_name: str) -> dict[s
                     "f1": _value_at(f1, position),
                     "map50": _value_at(ap50, position),
                     "map75": _per_class_ap75(scope, position),
-                    "map50_95": _per_class_map(scope, class_id, position, len(names)),
+                    "map50_95": _per_class_map(
+                        scope,
+                        class_id,
+                        position,
+                        len(names),
+                    ),
                 }
             )
         rows.append(row)
@@ -214,7 +232,9 @@ def extract_ultralytics_validation(metrics: Any, *, task: str) -> dict[str, Any]
     raw_results = _python_value(getattr(metrics, "results_dict", {}))
     aggregate = {
         str(key): value
-        for key, raw_value in (raw_results.items() if isinstance(raw_results, Mapping) else [])
+        for key, raw_value in (
+            raw_results.items() if isinstance(raw_results, Mapping) else []
+        )
         if (value := _as_float(raw_value)) is not None
     }
     speed = _python_value(getattr(metrics, "speed", {}))
@@ -237,7 +257,10 @@ def write_ultralytics_validation_artifacts(
     output_directory.mkdir(parents=True, exist_ok=True)
     json_path = output_directory / "reefvision-validation.json"
     csv_path = output_directory / "reefvision-per-class-metrics.csv"
-    json_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    json_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
 
     fieldnames = [
         "scope",
@@ -259,6 +282,18 @@ def write_ultralytics_validation_artifacts(
     return {"json": str(json_path), "csv": str(csv_path)}
 
 
+def _validation_split(value: object) -> str:
+    normalized = str(value or "val").strip().casefold()
+    aliases = {
+        "validation": "val",
+        "valid": "val",
+        "val": "val",
+        "test": "test",
+        "train": "train",
+    }
+    return aliases.get(normalized, "val")
+
+
 def run_ultralytics_validation(
     *,
     checkpoint_path: Path,
@@ -268,7 +303,7 @@ def run_ultralytics_validation(
     evaluation_config: Mapping[str, Any],
     output_directory: Path,
 ) -> tuple[dict[str, Any], dict[str, str], list[str]]:
-    """Run an explicit Ultralytics validation pass and preserve its standard plots."""
+    """Run an explicit Ultralytics validation pass and preserve standard plots."""
 
     from ultralytics import YOLO
 
@@ -277,7 +312,7 @@ def run_ultralytics_validation(
     val_args: dict[str, Any] = {
         "data": str(data_yaml),
         "device": device,
-        "split": str(evaluation_config.get("split", "val")),
+        "split": _validation_split(evaluation_config.get("split", "val")),
         "conf": float(evaluation_config.get("conf", 0.001)),
         "iou": float(evaluation_config.get("iou", 0.6)),
         "max_det": int(evaluation_config.get("max_det", 300)),
