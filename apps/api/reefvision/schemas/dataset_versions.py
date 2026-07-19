@@ -22,6 +22,8 @@ DatasetExportFormat = Literal[
     "yolo_detection",
     "yolo_segmentation",
     "semantic_masks",
+    "classification_multiclass",
+    "classification_binary_state",
 ]
 DatasetVersionStatus = Literal[
     "validating",
@@ -212,6 +214,8 @@ class DatasetVersionComparisonResponse(BaseModel):
 
 class DatasetExportCreateRequest(BaseModel):
     format: DatasetExportFormat = "yolo_detection"
+    minimum_crop_size_px: int = Field(default=10, ge=1, le=4096)
+    padding_fraction: float = Field(default=0.0, ge=0, le=1)
 
 
 class ExportResponse(BaseModel):
