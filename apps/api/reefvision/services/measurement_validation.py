@@ -41,7 +41,9 @@ class MeasurementValidationService:
             raise NotFoundError(f"Mask annotation not found: {mask_id}")
         image = self.session.get(ImageAsset, mask.image_id)
         if image is None or image.project_id != project_id:
-            raise ValidationError("All validation masks must belong to the selected project")
+            raise ValidationError(
+                "All validation masks must belong to the selected project"
+            )
         return mask
 
     @staticmethod
@@ -80,8 +82,16 @@ class MeasurementValidationService:
                     )
                     continue
                 expected_unit = self._expected_unit(measured, value.metric)
-                supplied_unit = value.unit.strip() if value.unit and value.unit.strip() else None
-                if supplied_unit and expected_unit and supplied_unit.casefold() != expected_unit.casefold():
+                supplied_unit = (
+                    value.unit.strip()
+                    if value.unit is not None and value.unit.strip()
+                    else None
+                )
+                if (
+                    supplied_unit
+                    and expected_unit
+                    and supplied_unit.casefold() != expected_unit.casefold()
+                ):
                     warnings.append(
                         f"{mask.id}: reference unit {supplied_unit!r} does not match "
                         f"ReefVision unit {expected_unit!r} for {value.metric}"
@@ -117,20 +127,24 @@ class MeasurementValidationService:
                     )
                 )
 
-        grouped: dict[tuple[str, str | None], list[MeasurementValidationObservation]] = defaultdict(
-            list
-        )
+        grouped: dict[
+            tuple[MeasurementMetric, str | None],
+            list[MeasurementValidationObservation],
+        ] = defaultdict(list)
         for observation in observations:
             grouped[(observation.metric, observation.unit)].append(observation)
 
         summaries: list[MeasurementValidationMetricSummary] = []
-        for (metric, unit), rows in sorted(grouped.items(), key=lambda item: item[0][0]):
+        for (metric, unit), rows in sorted(
+            grouped.items(),
+            key=lambda item: item[0][0],
+        ):
             percent_errors = [
                 row.percent_error for row in rows if row.percent_error is not None
             ]
             summaries.append(
                 MeasurementValidationMetricSummary(
-                    metric=metric,  # type: ignore[arg-type]
+                    metric=metric,
                     unit=unit,
                     observation_count=len(rows),
                     mean_measured=mean(row.measured_value for row in rows),
