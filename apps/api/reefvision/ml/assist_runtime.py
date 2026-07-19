@@ -16,6 +16,7 @@ from reefvision.ml.providers import (
     AssistPrediction,
     BrushStroke,
     PixelBox,
+    PixelPoint,
     mask_to_png_base64,
     resample_stroke_points,
     stroke_bounds,
@@ -52,6 +53,8 @@ class AssistSessionState:
     brush_radius: float | None = None
     add_strokes: list[BrushStroke] = field(default_factory=list)
     subtract_strokes: list[BrushStroke] = field(default_factory=list)
+    positive_points: list[PixelPoint] = field(default_factory=list)
+    negative_points: list[PixelPoint] = field(default_factory=list)
     candidate_prediction: AssistPrediction | None = None
     candidate_mask_png_base64: str | None = None
     source_prediction_id: str | None = None
@@ -93,12 +96,25 @@ class AssistRuntime:
         self._trim_cache()
 
     def _trim_cache(self) -> None:
-        referenced = {session.prepared_cache_key for session in self._sessions.values()}
+        referenced = {
+            session.prepared_cache_key for session in self._sessions.values()
+        }
         unreferenced = sorted(
-            (entry for key, entry in self._prepared.items() if key not in referenced),
-            key=lambda entry: (entry.last_used_at, entry.created_at, entry.cache_key),
+            (
+                entry
+                for key, entry in self._prepared.items()
+                if key not in referenced
+            ),
+            key=lambda entry: (
+                entry.last_used_at,
+                entry.created_at,
+                entry.cache_key,
+            ),
         )
-        while len(self._prepared) > self.settings.assist_cache_max_items and unreferenced:
+        while (
+            len(self._prepared) > self.settings.assist_cache_max_items
+            and unreferenced
+        ):
             entry = unreferenced.pop(0)
             self._prepared.pop(entry.cache_key, None)
             entry.provider.unload_model()
@@ -174,11 +190,32 @@ class AssistRuntime:
             prepared_cache_key=cache_key,
             created_at=now,
             last_used_at=now,
-            expires_at=now + timedelta(seconds=self.settings.assist_session_ttl_seconds),
+            expires_at=now
+            + timedelta(seconds=self.settings.assist_session_ttl_seconds),
             source_prediction_id=source_prediction_id,
         )
         self._sessions[session.session_id] = session
         return session
+
+    @staticmethod
+    def _validate_pixel_points(
+        points: list[PixelPoint],
+        *,
+        image_width: int,
+        image_height: int,
+    ) -> None:
+        for point in points:
+            if point.x != point.x or point.y != point.y:
+                raise ValidationError("Prompt points must be finite")
+            if (
+                point.x < 0
+                or point.y < 0
+                or point.x > image_width
+                or point.y > image_height
+            ):
+                raise ValidationError(
+                    "Prompt points must remain inside the image bounds"
+                )
 
     def _validate_points(
         self,
@@ -191,14 +228,50 @@ class AssistRuntime:
             if stroke.brush_radius <= 0:
                 raise ValidationError("Brush radius must be positive")
             if not stroke.points:
-                raise ValidationError("Brush strokes must contain at least one point")
-            for point in stroke.points:
-                if point.x != point.x or point.y != point.y:
-                    raise ValidationError("Brush points must be finite")
-                if point.x < 0 or point.y < 0 or point.x > image_width or point.y > image_height:
-                    raise ValidationError("Brush points must remain inside the image bounds")
+                raise ValidationError(
+                    "Brush strokes must contain at least one point"
+                )
+            self._validate_pixel_points(
+                stroke.points,
+                image_width=image_width,
+                image_height=image_height,
+            )
 
-    def _update_candidate(self, session: AssistSessionState, prediction: AssistPrediction) -> None:
+    def _combined_prompt_points(
+        self,
+        session: AssistSessionState,
+    ) -> tuple[list[PixelPoint], list[PixelPoint]]:
+        positive_points = [
+            point
+            for stroke in session.add_strokes
+            for point in resample_stroke_points(
+                stroke.points,
+                max(
+                    self.settings.smart_mask_sample_spacing,
+                    stroke.brush_radius,
+                ),
+            )
+        ]
+        positive_points.extend(session.positive_points)
+        negative_points = [
+            point
+            for stroke in session.subtract_strokes
+            for point in resample_stroke_points(
+                stroke.points,
+                max(
+                    self.settings.smart_mask_sample_spacing,
+                    stroke.brush_radius,
+                ),
+            )
+        ]
+        negative_points.extend(session.negative_points)
+        return positive_points, negative_points
+
+    def _update_candidate(
+        self,
+        session: AssistSessionState,
+        prediction: AssistPrediction,
+    ) -> None:
         session.candidate_prediction = prediction
         session.candidate_mask_png_base64 = mask_to_png_base64(prediction.mask)
 
@@ -216,6 +289,45 @@ class AssistRuntime:
         self._update_candidate(session, prediction)
         return session
 
+    def apply_point_prompts(
+        self,
+        *,
+        session_id: str,
+        positive_points: list[PixelPoint],
+        negative_points: list[PixelPoint],
+        context_box: PixelBox | None,
+        image_width: int,
+        image_height: int,
+    ) -> AssistSessionState:
+        session = self._session(session_id)
+        self._validate_pixel_points(
+            positive_points + negative_points,
+            image_width=image_width,
+            image_height=image_height,
+        )
+        if not positive_points:
+            raise ValidationError(
+                "Point prompting requires at least one positive point"
+            )
+        session.positive_points.extend(positive_points)
+        session.negative_points.extend(negative_points)
+        combined_positive, combined_negative = self._combined_prompt_points(session)
+        entry = self._entry(session.prepared_cache_key)
+        prediction = entry.provider.predict_from_points(
+            entry.prepared_image,
+            positive_points=combined_positive,
+            negative_points=combined_negative,
+            context_box=context_box,
+        )
+        session.prompt_type = (
+            "mixed_point_brush"
+            if session.add_strokes or session.subtract_strokes
+            else "point_prompt"
+        )
+        session.prompt_box = context_box
+        self._update_candidate(session, prediction)
+        return session
+
     def apply_brush_prompts(
         self,
         *,
@@ -226,31 +338,26 @@ class AssistRuntime:
         image_height: int,
     ) -> AssistSessionState:
         session = self._session(session_id)
-        self._validate_points(strokes=strokes, image_width=image_width, image_height=image_height)
+        self._validate_points(
+            strokes=strokes,
+            image_width=image_width,
+            image_height=image_height,
+        )
         if mode == "add":
             session.add_strokes.extend(strokes)
         else:
             session.subtract_strokes.extend(strokes)
         session.brush_radius = strokes[-1].brush_radius
-        positive_points = [
-            point
-            for stroke in session.add_strokes
-            for point in resample_stroke_points(
-                stroke.points,
-                max(self.settings.smart_mask_sample_spacing, stroke.brush_radius),
-            )
-        ]
-        negative_points = [
-            point
-            for stroke in session.subtract_strokes
-            for point in resample_stroke_points(
-                stroke.points,
-                max(self.settings.smart_mask_sample_spacing, stroke.brush_radius),
-            )
-        ]
+        positive_points, negative_points = self._combined_prompt_points(session)
         if not positive_points:
-            raise ValidationError("Smart Mask needs at least one Add stroke before refinement")
-        context_box = stroke_bounds(session.add_strokes)
+            raise ValidationError(
+                "Smart Mask needs at least one Add stroke or positive point before refinement"
+            )
+        context_box = (
+            stroke_bounds(session.add_strokes)
+            if session.add_strokes
+            else session.prompt_box
+        )
         entry = self._entry(session.prepared_cache_key)
         prediction = entry.provider.predict_from_points(
             entry.prepared_image,
@@ -258,7 +365,11 @@ class AssistRuntime:
             negative_points=negative_points,
             context_box=context_box,
         )
-        session.prompt_type = "smart_mask"
+        session.prompt_type = (
+            "mixed_point_brush"
+            if session.positive_points or session.negative_points
+            else "smart_mask"
+        )
         session.prompt_box = context_box
         self._update_candidate(session, prediction)
         return session
@@ -267,6 +378,8 @@ class AssistRuntime:
         session = self._session(session_id)
         session.add_strokes.clear()
         session.subtract_strokes.clear()
+        session.positive_points.clear()
+        session.negative_points.clear()
         session.candidate_prediction = None
         session.candidate_mask_png_base64 = None
         session.brush_radius = None
@@ -281,11 +394,14 @@ class AssistRuntime:
         self._trim_cache()
 
     def accept_session(
-        self, session_id: str
+        self,
+        session_id: str,
     ) -> tuple[AssistSessionState, PixelBox, dict[str, Any]]:
         session = self._session(session_id)
         if session.candidate_prediction is None:
-            raise ValidationError("There is no current Smart Mask candidate to accept")
+            raise ValidationError(
+                "There is no current Smart Mask candidate to accept"
+            )
         box = session.candidate_prediction.box
         provenance = {
             "source_type": "assist_mask",
@@ -294,17 +410,31 @@ class AssistRuntime:
             "provider_version": session.provider_version,
             "prompt_type": session.prompt_type or "smart_mask",
             "source_prediction_id": session.source_prediction_id,
+            "positive_points": [
+                {"x": point.x, "y": point.y}
+                for point in session.positive_points
+            ],
+            "negative_points": [
+                {"x": point.x, "y": point.y}
+                for point in session.negative_points
+            ],
             "add_strokes": [
                 {
                     "brush_radius": stroke.brush_radius,
-                    "points": [{"x": point.x, "y": point.y} for point in stroke.points],
+                    "points": [
+                        {"x": point.x, "y": point.y}
+                        for point in stroke.points
+                    ],
                 }
                 for stroke in session.add_strokes
             ],
             "subtract_strokes": [
                 {
                     "brush_radius": stroke.brush_radius,
-                    "points": [{"x": point.x, "y": point.y} for point in stroke.points],
+                    "points": [
+                        {"x": point.x, "y": point.y}
+                        for point in stroke.points
+                    ],
                 }
                 for stroke in session.subtract_strokes
             ],
