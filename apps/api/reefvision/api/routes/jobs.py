@@ -27,12 +27,38 @@ router = APIRouter(tags=["jobs"])
 DbSession = Annotated[Session, Depends(get_db_session)]
 
 
-def _live_model_install_response(job: Job, settings: Settings) -> JobResponse:
-    """Overlay the on-disk partial-download size onto the persisted job state."""
+def _materialize_job_defaults(job: Job) -> None:
+    """Populate ORM insert defaults for transient Job instances used by adapters/tests."""
 
+    scalar_defaults: tuple[tuple[str, object], ...] = (
+        ("priority", 100),
+        ("retry_count", 0),
+        ("max_retries", 0),
+        ("state_version", 0),
+        ("progress_current", 0),
+        ("progress_total", 0),
+        ("resume_supported", False),
+    )
+    mapping_defaults = (
+        "request_json",
+        "checkpoint_json",
+        "resource_requirements_json",
+        "resource_assignment_json",
+    )
+    for attribute, default in scalar_defaults:
+        if getattr(job, attribute, None) is None:
+            setattr(job, attribute, default)
+    for attribute in mapping_defaults:
+        if getattr(job, attribute, None) is None:
+            setattr(job, attribute, {})
     if getattr(job, "created_at", None) is None:
         job.created_at = datetime.now(UTC)
 
+
+def _live_model_install_response(job: Job, settings: Settings) -> JobResponse:
+    """Overlay the on-disk partial-download size onto the persisted job state."""
+
+    _materialize_job_defaults(job)
     response = JobResponse.model_validate(job)
     if job.job_type != "model_install" or job.status not in {
         "running",
