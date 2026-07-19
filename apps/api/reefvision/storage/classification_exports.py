@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import shutil
 import zipfile
 from collections import Counter
 from hashlib import sha256
@@ -19,6 +18,11 @@ from reefvision.storage.projects import resolve_managed_project_path
 
 CLASSIFICATION_MODES = ("multiclass", "binary_state")
 CLASSIFICATION_SPLITS = ("train", "validation", "test")
+CLASSIFICATION_SPLIT_DIRECTORIES = {
+    "train": "train",
+    "validation": "val",
+    "test": "test",
+}
 
 
 def _slug(value: str) -> str:
@@ -182,7 +186,8 @@ def write_classification_export(
                 bottom = min(item.height_px, int(y_max + padding_y + 0.999999))
                 if right <= left or bottom <= top:
                     continue
-                destination_root = output_root / item.split / class_key
+                split_directory = CLASSIFICATION_SPLIT_DIRECTORIES[item.split]
+                destination_root = output_root / split_directory / class_key
                 destination_root.mkdir(parents=True, exist_ok=True)
                 annotation_id = str(annotation.get("id") or f"crop-{crop_index}")
                 filename = f"{item.image_id}_{_slug(annotation_id)}.jpg"
@@ -211,6 +216,7 @@ def write_classification_export(
                         "image_sha256": item.image_sha256,
                         "snapshot_sha256": item.snapshot_sha256,
                         "split": item.split,
+                        "dataset_split_directory": split_directory,
                         "group_key": item.group_key,
                         "source_bbox": [x_min, y_min, x_max, y_max],
                         "crop_bbox": [left, top, right, bottom],
@@ -239,6 +245,7 @@ def write_classification_export(
             f"Crops smaller than {minimum_crop_size_px}×{minimum_crop_size_px} pixels "
             "were removed during preprocessing."
         ),
+        "split_directory_map": CLASSIFICATION_SPLIT_DIRECTORIES,
         "split_counts": dict(split_counts),
         "class_counts": dict(class_counts),
         "class_map": class_map,
