@@ -14,6 +14,7 @@ from reefvision.api.routes.classification_evaluation import (
     router as classification_evaluation_router,
 )
 from reefvision.api.routes.dataset_versions import router as dataset_versions_router
+from reefvision.api.routes.depth import router as depth_router
 from reefvision.api.routes.health import router as health_router
 from reefvision.api.routes.image_embeddings import router as image_embeddings_router
 from reefvision.api.routes.images import router as images_router
@@ -52,6 +53,7 @@ api_router.include_router(class_operations_router)
 api_router.include_router(class_visibility_router)
 api_router.include_router(images_router)
 api_router.include_router(image_embeddings_router)
+api_router.include_router(depth_router)
 api_router.include_router(annotations_router)
 api_router.include_router(raster_edits_router)
 api_router.include_router(measurements_router)
