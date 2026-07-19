@@ -44,6 +44,9 @@ class Job(Base):
     resource_requirements_json: Mapped[dict[str, Any]] = mapped_column(
         JSON, nullable=False, default=dict
     )
+    resource_assignment_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     resume_supported: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     worker_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
