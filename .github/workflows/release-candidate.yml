@@ -1,0 +1,97 @@
+name: Release Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Windows Rust target triple
+        required: true
+        default: x86_64-pc-windows-msvc
+        type: choice
+        options:
+          - x86_64-pc-windows-msvc
+          - aarch64-pc-windows-msvc
+  push:
+    tags:
+      - "v*-rc*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    timeout-minutes: 240
+    env:
+      TARGET_TRIPLE: ${{ inputs.target || 'x86_64-pc-windows-msvc' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements/providers-windows-cu121-py312.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.TARGET_TRIPLE }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/web/src-tauri
+      - name: Bootstrap build environment
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          .\scripts\bootstrap.ps1 -NonInteractive -SkipPlaywrightBrowser *>&1 |
+            Tee-Object -FilePath release-bootstrap.log
+      - name: Run provider-free acceptance before packaging
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          .\scripts\run-all-phases-acceptance.ps1 *>&1 |
+            Tee-Object -FilePath release-acceptance.log
+      - name: Build MSI installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          .\scripts\build-desktop.ps1 -TargetTriple $env:TARGET_TRIPLE *>&1 |
+            Tee-Object -FilePath release-build.log
+      - name: Smoke packaged API sidecar
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          python .\scripts\smoke-desktop-sidecar.py `
+            .\apps\web\src-tauri\binaries\reefvision-api\reefvision-api.exe `
+            --timeout 90 *>&1 | Tee-Object -FilePath release-sidecar-smoke.log
+      - name: Inventory release files
+        shell: pwsh
+        run: |
+          $InstallerRoot = "apps\web\src-tauri\target\$env:TARGET_TRIPLE\release\bundle\msi"
+          Get-ChildItem -LiteralPath $InstallerRoot -Filter *.msi -File |
+            Select-Object Name, Length, LastWriteTimeUtc |
+            ConvertTo-Json | Set-Content -Encoding utf8 release-files.json
+          if (-not (Get-ChildItem -LiteralPath $InstallerRoot -Filter *.msi -File)) {
+            throw "No MSI installer was produced."
+          }
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reefvision-release-candidate-${{ env.TARGET_TRIPLE }}
+          path: |
+            release-*.log
+            release-files.json
+            apps/web/src-tauri/target/${{ env.TARGET_TRIPLE }}/release/bundle/msi/*.msi
+            apps/web/src-tauri/binaries/reefvision-api
+            .artifacts
+          if-no-files-found: warn
+          retention-days: 30
