@@ -1,4 +1,6 @@
-"""Background-job status and retry endpoints."""
+"""Background-job status, orchestration, dependency, and retry endpoints."""
+
+from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Annotated
@@ -9,7 +11,15 @@ from sqlalchemy.orm import Session
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
 from reefvision.db.models import Job
-from reefvision.schemas.jobs import JobResponse
+from reefvision.schemas.jobs import (
+    JobDependencyCreateRequest,
+    JobDependencyResponse,
+    JobDependencyStatus,
+    JobEventResponse,
+    JobHeartbeatRequest,
+    JobResponse,
+    JobRetryRequest,
+)
 from reefvision.services.jobs import JobService
 from reefvision.storage.catalog_models import catalog_model_directories
 
@@ -18,13 +28,7 @@ DbSession = Annotated[Session, Depends(get_db_session)]
 
 
 def _live_model_install_response(job: Job, settings: Settings) -> JobResponse:
-    """Overlay the on-disk partial-download size onto the persisted job state.
-
-    SQLite remains the durable source of truth, but the temporary file is the
-    most direct measurement of bytes received by the downloader. Reading it
-    here keeps the desktop progress bar live even if a database progress write
-    is delayed or not yet visible to the polling connection.
-    """
+    """Overlay the on-disk partial-download size onto the persisted job state."""
 
     if getattr(job, "created_at", None) is None:
         job.created_at = datetime.now(UTC)
@@ -42,8 +46,6 @@ def _live_model_install_response(job: Job, settings: Settings) -> JobResponse:
         try:
             partial_sizes.append(partial_path.stat().st_size)
         except FileNotFoundError:
-            # The downloader may atomically move or remove the file between
-            # directory enumeration and stat during finalization.
             continue
     if not partial_sizes:
         return response
@@ -72,8 +74,6 @@ def get_job(
     session: DbSession,
     response: Response,
 ) -> JobResponse:
-    # Job status is live state. Desktop webviews must never reuse a cached
-    # response while polling model-download progress.
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
@@ -83,10 +83,77 @@ def get_job(
 
 
 @router.post("/jobs/{job_id}/retry", response_model=JobResponse)
-def retry_job(job_id: str, session: DbSession) -> JobResponse:
-    return JobResponse.model_validate(JobService(session).retry(job_id))
+def retry_job(
+    job_id: str,
+    session: DbSession,
+    payload: JobRetryRequest | None = None,
+) -> JobResponse:
+    request = payload or JobRetryRequest()
+    return JobResponse.model_validate(
+        JobService(session).retry(job_id, from_checkpoint=request.from_checkpoint)
+    )
 
 
 @router.post("/jobs/{job_id}/cancel", response_model=JobResponse)
 def cancel_job(job_id: str, session: DbSession) -> JobResponse:
     return JobResponse.model_validate(JobService(session).cancel(job_id))
+
+
+@router.post("/jobs/{job_id}/pause", response_model=JobResponse)
+def pause_job(job_id: str, session: DbSession) -> JobResponse:
+    return JobResponse.model_validate(JobService(session).request_pause(job_id))
+
+
+@router.post("/jobs/{job_id}/resume", response_model=JobResponse)
+def resume_job(job_id: str, session: DbSession) -> JobResponse:
+    return JobResponse.model_validate(JobService(session).resume(job_id))
+
+
+@router.post("/jobs/{job_id}/heartbeat", response_model=JobResponse)
+def heartbeat_job(
+    job_id: str,
+    payload: JobHeartbeatRequest,
+    session: DbSession,
+) -> JobResponse:
+    return JobResponse.model_validate(
+        JobService(session).heartbeat(
+            job_id,
+            worker_id=payload.worker_id,
+            progress_current=payload.progress_current,
+            progress_total=payload.progress_total,
+            checkpoint=payload.checkpoint,
+        )
+    )
+
+
+@router.post("/jobs/{job_id}/dependencies", response_model=JobDependencyResponse)
+def add_job_dependency(
+    job_id: str,
+    payload: JobDependencyCreateRequest,
+    session: DbSession,
+) -> JobDependencyResponse:
+    service = JobService(session)
+    service.add_dependency(
+        job_id,
+        payload.depends_on_job_id,
+        required_status=payload.required_status,
+    )
+    satisfied, dependencies = service.dependency_status(job_id)
+    return JobDependencyResponse(
+        satisfied=satisfied,
+        dependencies=[JobDependencyStatus.model_validate(item) for item in dependencies],
+    )
+
+
+@router.get("/jobs/{job_id}/dependencies", response_model=JobDependencyResponse)
+def get_job_dependencies(job_id: str, session: DbSession) -> JobDependencyResponse:
+    satisfied, dependencies = JobService(session).dependency_status(job_id)
+    return JobDependencyResponse(
+        satisfied=satisfied,
+        dependencies=[JobDependencyStatus.model_validate(item) for item in dependencies],
+    )
+
+
+@router.get("/jobs/{job_id}/events", response_model=list[JobEventResponse])
+def get_job_events(job_id: str, session: DbSession) -> list[JobEventResponse]:
+    return [JobEventResponse.model_validate(item) for item in JobService(session).events(job_id)]
