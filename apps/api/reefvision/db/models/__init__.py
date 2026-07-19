@@ -30,6 +30,12 @@ from reefvision.db.models.training_draft import TrainingDraft
 from reefvision.db.models.training_run import TrainingRun
 from reefvision.db.models.video_asset import VideoAsset
 from reefvision.db.models.video_track import VideoTrack
+from reefvision.db.models.workflow import (
+    Workflow,
+    WorkflowArtifact,
+    WorkflowRevision,
+    WorkflowRun,
+)
 
 __all__ = [
     "Annotation",
@@ -62,4 +68,8 @@ __all__ = [
     "TrainingRun",
     "VideoAsset",
     "VideoTrack",
+    "Workflow",
+    "WorkflowArtifact",
+    "WorkflowRevision",
+    "WorkflowRun",
 ]
