@@ -23,6 +23,7 @@ from reefvision.ml.assist_runtime import AssistRuntime
 from reefvision.ml.catalog_expansion import apply_catalog_expansion_runtime_patches
 from reefvision.ml.dependencies import configure_provider_runtime
 from reefvision.ml.fastsam_runtime_patch import apply_fastsam_runtime_patch
+from reefvision.ml.sam_runtime_patch import apply_sam_runtime_patch
 from reefvision.services.bundled_models import (
     install_bundled_catalog_models,
     reconcile_bundled_model_jobs,
@@ -40,6 +41,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     os.environ["REEFVISION_CONFIG_DIR"] = str(active_settings.resolved_data_dir / "config")
     apply_catalog_expansion_runtime_patches()
     apply_fastsam_runtime_patch()
+    apply_sam_runtime_patch()
     configure_rotating_json_logging(
         default_api_log_path(active_settings),
         default_component="api",
