@@ -22,6 +22,7 @@ from reefvision.schemas.videos import (
     VideoTrackResponse,
     VideoTrackUpdateRequest,
 )
+from reefvision.services.video_behavior import VideoBehaviorAnalysisService
 from reefvision.services.videos import VideoService
 
 router = APIRouter(tags=["videos"])
@@ -195,7 +196,10 @@ def analyze_video_tracks(
     request: Request,
     session: DbSession,
 ) -> VideoAnalyticsResponse:
-    return service(request, session).analytics(video_id, payload)
+    return VideoBehaviorAnalysisService(
+        session,
+        request.app.state.settings,
+    ).analytics(video_id, payload)
 
 
 @router.get("/videos/{video_id}/tracking-export")
