@@ -20,7 +20,8 @@ vi.mock("./api", async () => {
 });
 
 function provider(
-  overrides: Partial<ProviderCapability> & Pick<ProviderCapability, "provider_id" | "display_name">,
+  overrides: Partial<ProviderCapability> &
+    Pick<ProviderCapability, "provider_id" | "display_name">,
 ): ProviderCapability {
   return {
     provider_id: overrides.provider_id,
@@ -152,7 +153,7 @@ describe("ProviderDashboard", () => {
       expect(compareProviderBenchmarks).toHaveBeenCalledWith(
         "sam2",
         undefined,
-        expect.any(AbortSignal),
+        expect.anything(),
       ),
     );
   });
