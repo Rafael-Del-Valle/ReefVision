@@ -10,6 +10,7 @@ import {
   getWorkflowTemplates,
   validateWorkflow,
 } from "./api";
+import { InterchangeDashboard } from "./InterchangeDashboard";
 import {
   type EditableWorkflow,
   WorkflowGraphEditor,
@@ -161,15 +162,16 @@ export function WorkflowDashboard({ project }: { project: Project }) {
   return (
     <>
       <ProviderDashboard />
+      <InterchangeDashboard project={project} />
       <section className="dashboard-panel">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Phases 9 and 10</p>
-            <h3>Interoperability and fusion workflow planner</h3>
+            <p className="eyebrow">Phase 10</p>
+            <h3>Fusion workflow planner and executor</h3>
             <span>
-              Export immutable COCO datasets and design typed detection,
-              segmentation, classification, tracking, measurement, active-learning,
-              and export graphs.
+              Design typed detection, segmentation, classification, tracking,
+              measurement, active-learning, and export graphs with resumable execution,
+              artifact lineage, cache reuse, and resource-aware scheduling.
             </span>
           </div>
           <span>{definitions.data?.length ?? 0} node types</span>
@@ -183,8 +185,8 @@ export function WorkflowDashboard({ project }: { project: Project }) {
         <div className="dashboard-layout">
           <div className="dashboard-sidebar">
             <article className="dashboard-card">
-              <p className="eyebrow">Phase 9</p>
-              <h4>COCO instance export</h4>
+              <p className="eyebrow">Immutable dataset export</p>
+              <h4>COCO instance snapshot</h4>
               <p>
                 Export frozen boxes, polygon masks, raster RLE masks, categories,
                 splits, source IDs, and checksums without changing the dataset version.
@@ -216,7 +218,7 @@ export function WorkflowDashboard({ project }: { project: Project }) {
             </article>
 
             <article className="dashboard-card">
-              <p className="eyebrow">Phase 10 templates</p>
+              <p className="eyebrow">Workflow templates</p>
               <label>
                 Starting workflow
                 <select
