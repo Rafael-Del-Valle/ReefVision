@@ -125,7 +125,10 @@ class JobRepository:
                 update(Job)
                 .where(
                     Job.status.in_(("running", "pause_requested")),
-                    Job.resume_supported.is_(True),
+                    or_(
+                        Job.resume_supported.is_(True),
+                        Job.job_type == "thumbnail",
+                    ),
                 )
                 .values(
                     status="queued",
@@ -143,7 +146,8 @@ class JobRepository:
                 update(Job)
                 .where(
                     Job.status.in_(("running", "pause_requested")),
-                    Job.resume_supported.is_(False),
+                    Job.resume_supported.is_not(True),
+                    Job.job_type != "thumbnail",
                 )
                 .values(
                     status="failed",
