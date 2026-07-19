@@ -10,6 +10,10 @@ import {
   getWorkflowTemplates,
   validateWorkflow,
 } from "./api";
+import {
+  type EditableWorkflow,
+  WorkflowGraphEditor,
+} from "./WorkflowGraphEditor";
 
 const blankWorkflow = JSON.stringify(
   {
@@ -21,10 +25,70 @@ const blankWorkflow = JSON.stringify(
   2,
 );
 
+function parseWorkflow(value: string): EditableWorkflow {
+  const parsed = JSON.parse(value) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Workflow JSON must be an object");
+  }
+  const record = parsed as Record<string, unknown>;
+  if (typeof record.name !== "string" || !record.name.trim()) {
+    throw new Error("Workflow name is required");
+  }
+  if (!Array.isArray(record.nodes) || !Array.isArray(record.edges)) {
+    throw new Error("Workflow JSON requires nodes and edges arrays");
+  }
+  const nodes = record.nodes.map((value, index) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(`Node ${index + 1} must be an object`);
+    }
+    const node = value as Record<string, unknown>;
+    if (typeof node.id !== "string" || typeof node.node_type !== "string") {
+      throw new Error(`Node ${index + 1} requires id and node_type`);
+    }
+    const configuration =
+      node.configuration &&
+      typeof node.configuration === "object" &&
+      !Array.isArray(node.configuration)
+        ? (node.configuration as Record<string, unknown>)
+        : {};
+    return {
+      id: node.id,
+      node_type: node.node_type,
+      label: typeof node.label === "string" ? node.label : null,
+      configuration,
+    };
+  });
+  const edges = record.edges.map((value, index) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(`Edge ${index + 1} must be an object`);
+    }
+    const edge = value as Record<string, unknown>;
+    const fields = [
+      "source_node_id",
+      "source_port",
+      "target_node_id",
+      "target_port",
+    ] as const;
+    for (const field of fields) {
+      if (typeof edge[field] !== "string") {
+        throw new Error(`Edge ${index + 1} requires ${field}`);
+      }
+    }
+    return {
+      source_node_id: edge.source_node_id as string,
+      source_port: edge.source_port as string,
+      target_node_id: edge.target_node_id as string,
+      target_port: edge.target_port as string,
+    };
+  });
+  return { name: record.name, nodes, edges };
+}
+
 export function WorkflowDashboard({ project }: { project: Project }) {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [workflowJson, setWorkflowJson] = useState(blankWorkflow);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [editorMode, setEditorMode] = useState<"visual" | "json">("visual");
   const [cocoVersionId, setCocoVersionId] = useState("");
   const [exportMessage, setExportMessage] = useState<string | null>(null);
 
@@ -47,6 +111,16 @@ export function WorkflowDashboard({ project }: { project: Project }) {
       ) ?? null,
     [selectedTemplateId, templates.data],
   );
+  const parsedWorkflow = useMemo(() => {
+    try {
+      return { workflow: parseWorkflow(workflowJson), error: null };
+    } catch (error) {
+      return {
+        workflow: null,
+        error: error instanceof Error ? error.message : "Workflow JSON is invalid",
+      };
+    }
+  }, [workflowJson]);
 
   useEffect(() => {
     if (selectedTemplate) {
@@ -67,7 +141,7 @@ export function WorkflowDashboard({ project }: { project: Project }) {
   const validation = useMutation({
     mutationFn: () => {
       try {
-        const payload = JSON.parse(workflowJson) as Record<string, unknown>;
+        const payload = parseWorkflow(workflowJson);
         setParseError(null);
         return validateWorkflow(project.id, payload);
       } catch (error) {
@@ -165,6 +239,7 @@ export function WorkflowDashboard({ project }: { project: Project }) {
                   setSelectedTemplateId("");
                   setWorkflowJson(blankWorkflow);
                   setParseError(null);
+                  validation.reset();
                 }}
               >
                 Reset to blank
@@ -199,34 +274,97 @@ export function WorkflowDashboard({ project }: { project: Project }) {
               <div className="section-heading">
                 <div>
                   <p className="eyebrow">Workflow graph</p>
-                  <h4>Typed JSON definition</h4>
+                  <h4>Visual and typed JSON definition</h4>
                 </div>
-                {validation.data && (
-                  <span>{validation.data.workflow_checksum.slice(0, 12)}...</span>
-                )}
+                <div className="annotation-editor-inline-actions">
+                  <button
+                    type="button"
+                    className={editorMode === "visual" ? "active" : "secondary"}
+                    aria-pressed={editorMode === "visual"}
+                    onClick={() => setEditorMode("visual")}
+                  >
+                    Visual editor
+                  </button>
+                  <button
+                    type="button"
+                    className={editorMode === "json" ? "active" : "secondary"}
+                    aria-pressed={editorMode === "json"}
+                    onClick={() => setEditorMode("json")}
+                  >
+                    JSON editor
+                  </button>
+                  {validation.data && (
+                    <span>{validation.data.workflow_checksum.slice(0, 12)}...</span>
+                  )}
+                </div>
               </div>
               <p>
-                Replace template model placeholders with registered model IDs before
-                validation. Every edge names a source and target port.
+                Drag nodes, connect compatible ports, and edit node configuration. The
+                visual canvas remains synchronized with the persisted JSON workflow.
               </p>
-              <label>
-                Workflow JSON
-                <textarea
-                  rows={28}
-                  value={workflowJson}
-                  onChange={(event) => setWorkflowJson(event.target.value)}
-                />
-              </label>
-              <button
-                type="button"
-                disabled={validation.isPending}
-                onClick={() => validation.mutate()}
-              >
-                {validation.isPending ? "Validating..." : "Validate workflow"}
-              </button>
-              {(parseError || validation.error) && (
+
+              {editorMode === "visual" ? (
+                parsedWorkflow.workflow && definitions.data ? (
+                  <WorkflowGraphEditor
+                    workflow={parsedWorkflow.workflow}
+                    definitions={definitions.data}
+                    onChange={(workflow) => {
+                      setWorkflowJson(JSON.stringify(workflow, null, 2));
+                      setParseError(null);
+                      validation.reset();
+                    }}
+                  />
+                ) : (
+                  <div className="empty-state">
+                    <h5>Visual editor cannot load this graph</h5>
+                    <p className="form-error">
+                      {parsedWorkflow.error ?? "Workflow node definitions are loading."}
+                    </p>
+                    <button type="button" onClick={() => setEditorMode("json")}>
+                      Repair in JSON editor
+                    </button>
+                  </div>
+                )
+              ) : (
+                <label>
+                  Workflow JSON
+                  <textarea
+                    rows={30}
+                    value={workflowJson}
+                    aria-label="Workflow JSON"
+                    onChange={(event) => {
+                      setWorkflowJson(event.target.value);
+                      setParseError(null);
+                      validation.reset();
+                    }}
+                  />
+                </label>
+              )}
+
+              <div className="annotation-editor-inline-actions">
+                <button
+                  type="button"
+                  disabled={validation.isPending || !parsedWorkflow.workflow}
+                  onClick={() => validation.mutate()}
+                >
+                  {validation.isPending ? "Validating..." : "Validate workflow"}
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={!parsedWorkflow.workflow}
+                  onClick={() =>
+                    setWorkflowJson(
+                      JSON.stringify(parsedWorkflow.workflow, null, 2),
+                    )
+                  }
+                >
+                  Format JSON
+                </button>
+              </div>
+              {(parseError || parsedWorkflow.error || validation.error) && (
                 <p className="form-error">
-                  {parseError ?? validation.error?.message}
+                  {parseError ?? parsedWorkflow.error ?? validation.error?.message}
                 </p>
               )}
             </article>
