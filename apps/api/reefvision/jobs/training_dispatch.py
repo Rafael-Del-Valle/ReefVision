@@ -6,9 +6,11 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import Job, TrainingRun
+from reefvision.jobs.classification_training import process_classification_training_job
 from reefvision.jobs.segmentation_training import process_segmentation_training_job
 from reefvision.jobs.semantic_training import process_semantic_training_job
 from reefvision.jobs.training import process_training_job
+from reefvision.ml.classification import CLASSIFICATION_TASK
 from reefvision.ml.semantic_segmentation import SEMANTIC_SEGMENTATION_TASK
 
 
@@ -33,4 +35,6 @@ def process_task_aware_training_job(
         return process_segmentation_training_job(settings, factory, job_id)
     if task == SEMANTIC_SEGMENTATION_TASK:
         return process_semantic_training_job(settings, factory, job_id)
+    if task == CLASSIFICATION_TASK:
+        return process_classification_training_job(settings, factory, job_id)
     return process_training_job(settings, factory, job_id)
