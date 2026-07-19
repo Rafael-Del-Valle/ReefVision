@@ -1,11 +1,13 @@
 """Classification dataset, training, inference, label, and review endpoints."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
+from reefvision.db.models import ModelRegistration
+from reefvision.domain.errors import NotFoundError
 from reefvision.schemas.classification import (
     ClassificationDatasetPreviewResponse,
     ClassificationDatasetRequest,
@@ -72,10 +74,15 @@ def import_classifier(
     request: Request,
     session: DbSession,
     model_file: Annotated[UploadFile, File()],
+    classification_mode: Annotated[
+        Literal["multiclass", "binary_state"],
+        Form(),
+    ] = "multiclass",
     display_name: Annotated[str | None, Form()] = None,
     notes: Annotated[str | None, Form()] = None,
 ) -> ModelRegistrationResponse:
-    return model_service(request, session).register_model_upload(
+    models = model_service(request, session)
+    registered = models.register_model_upload(
         project_id,
         purpose="classifier",
         provider_name="ultralytics",
@@ -84,6 +91,25 @@ def import_classifier(
         display_name=display_name,
         notes=notes,
     )
+    model = session.get(ModelRegistration, registered.id)
+    if model is None:
+        raise NotFoundError("Imported classifier could not be reloaded")
+    model.class_map_json = {
+        **dict(model.class_map_json or {}),
+        "classification_mode": classification_mode,
+        "state_labels": ["open", "closed"]
+        if classification_mode == "binary_state"
+        else [],
+    }
+    model.metadata_json = {
+        **dict(model.metadata_json or {}),
+        "classification_mode": classification_mode,
+        "classification_scope": "annotation_crop",
+        "registered_from": "trusted_upload",
+    }
+    session.commit()
+    session.refresh(model)
+    return ModelRegistrationResponse.model_validate(model)
 
 
 @router.post(
