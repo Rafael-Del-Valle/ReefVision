@@ -1,4 +1,4 @@
-"""Persisted image embedding and diversity-selection endpoints."""
+"""Persisted image embedding, generation, and diversity-selection endpoints."""
 
 from typing import Annotated
 
@@ -9,9 +9,12 @@ from reefvision.api.dependencies import get_db_session
 from reefvision.schemas.image_embeddings import (
     EmbeddingDiversitySelectionRequest,
     EmbeddingDiversitySelectionResponse,
+    ImageEmbeddingGenerateRequest,
+    ImageEmbeddingGenerationResponse,
     ImageEmbeddingResponse,
     ImageEmbeddingWriteRequest,
 )
+from reefvision.services.embedding_generation import ImageEmbeddingGenerationService
 from reefvision.services.image_embeddings import ImageEmbeddingService
 
 router = APIRouter(tags=["image-embeddings"])
@@ -28,6 +31,19 @@ def upsert_image_embedding(
     session: DbSession,
 ) -> ImageEmbeddingResponse:
     return ImageEmbeddingService(session).upsert(image_id, payload)
+
+
+@router.post(
+    "/projects/{project_id}/embedding-jobs",
+    response_model=ImageEmbeddingGenerationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def queue_project_embeddings(
+    project_id: str,
+    payload: ImageEmbeddingGenerateRequest,
+    session: DbSession,
+) -> ImageEmbeddingGenerationResponse:
+    return ImageEmbeddingGenerationService(session).queue(project_id, payload)
 
 
 @router.get(
