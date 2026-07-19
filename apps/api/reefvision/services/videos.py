@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import csv
 import io
-import json
 import os
 import re
 from collections import Counter, defaultdict
 from hashlib import sha256
 from math import hypot, sqrt
 from pathlib import Path
-from typing import BinaryIO, Any
+from typing import BinaryIO
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -34,6 +33,7 @@ from reefvision.schemas.videos import (
     VideoAssetResponse,
     VideoCalibrationUpdate,
     VideoFrameSchoolAnalytics,
+    VideoHeatmapCell,
     VideoImportResponse,
     VideoTrackAnalytics,
     VideoTrackCreateRequest,
@@ -71,6 +71,7 @@ def _track_response(track: VideoTrack) -> VideoTrackResponse:
         keyframes=[VideoTrackKeyframe.model_validate(item) for item in track.keyframes_json],
         interpolation=track.interpolation,
         status=track.status,
+        metadata_json=dict(track.metadata_json or {}),
     )
 
 
@@ -322,6 +323,7 @@ class VideoService:
             keyframes_json=[item.model_dump(mode="json") for item in request.keyframes],
             interpolation=request.interpolation,
             status=request.status,
+            metadata_json={"source": "human"},
         )
         self.session.add(track)
         self.session.commit()
@@ -423,6 +425,7 @@ class VideoService:
         )
         track_results: list[VideoTrackAnalytics] = []
         centers_by_frame: dict[int, list[tuple[float, float]]] = defaultdict(list)
+        heatmap_counts: Counter[tuple[int, int]] = Counter()
         warnings: list[str] = []
         if distance_per_pixel is None:
             warnings.append(
@@ -436,9 +439,19 @@ class VideoService:
             centers = [_center(item) for item in points]
             frame_distances: list[float] = []
             frame_speeds: list[float] = []
+            interval_seconds: list[float] = []
             zone_counts: Counter[str] = Counter()
             for index, (point, center) in enumerate(zip(points, centers, strict=True)):
                 centers_by_frame[point.frame_index].append(center)
+                column = min(
+                    request.heatmap_bins_x - 1,
+                    max(0, int(center[0] / video.width_px * request.heatmap_bins_x)),
+                )
+                row = min(
+                    request.heatmap_bins_y - 1,
+                    max(0, int(center[1] / video.height_px * request.heatmap_bins_y)),
+                )
+                heatmap_counts[(column, row)] += 1
                 for zone in request.zones:
                     if (
                         zone.x_min <= center[0] <= zone.x_max
@@ -451,16 +464,24 @@ class VideoService:
                 frame_delta = point.frame_index - previous.frame_index
                 if frame_delta <= 0:
                     continue
+                elapsed = frame_delta / video.fps
                 distance = hypot(
                     center[0] - centers[index - 1][0],
                     center[1] - centers[index - 1][1],
                 )
                 frame_distances.append(distance)
-                frame_speeds.append(distance / (frame_delta / video.fps))
+                frame_speeds.append(distance / elapsed)
+                interval_seconds.append(elapsed)
             duration = (points[-1].frame_index - points[0].frame_index) / video.fps
             distance_pixels = sum(frame_distances)
             mean_speed = distance_pixels / duration if duration > 0 else 0.0
             maximum_speed = max(frame_speeds, default=0.0)
+            active_time = sum(
+                elapsed
+                for elapsed, speed in zip(interval_seconds, frame_speeds, strict=True)
+                if speed >= request.activity_speed_threshold_pixels_per_second
+            )
+            inactive_time = max(0.0, duration - active_time)
             track_results.append(
                 VideoTrackAnalytics(
                     track_id=track.id,
@@ -473,6 +494,8 @@ class VideoService:
                     distance_pixels=distance_pixels,
                     mean_speed_pixels_per_second=mean_speed,
                     maximum_speed_pixels_per_second=maximum_speed,
+                    active_time_seconds=active_time,
+                    inactive_time_seconds=inactive_time,
                     distance_physical=(
                         distance_pixels * distance_per_pixel
                         if distance_per_pixel is not None
@@ -540,6 +563,15 @@ class VideoService:
                 )
             )
 
+        heatmap = [
+            VideoHeatmapCell(
+                column=column,
+                row=row,
+                observation_count=count,
+                occupancy_seconds=count / video.fps,
+            )
+            for (column, row), count in sorted(heatmap_counts.items())
+        ]
         return VideoAnalyticsResponse(
             video_id=video.id,
             fps=video.fps,
@@ -547,6 +579,9 @@ class VideoService:
             physical_unit=physical_unit,
             tracks=track_results,
             school_by_frame=school_results,
+            heatmap_bins_x=request.heatmap_bins_x,
+            heatmap_bins_y=request.heatmap_bins_y,
+            heatmap=heatmap,
             warnings=warnings,
         )
 
