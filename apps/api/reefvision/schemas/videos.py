@@ -139,13 +139,24 @@ class VideoTrackAnalytics(BaseModel):
     observed_frame_count: int
     duration_seconds: float
     distance_pixels: float
+    net_displacement_pixels: float
+    path_tortuosity: float | None
     mean_speed_pixels_per_second: float
     maximum_speed_pixels_per_second: float
+    mean_acceleration_pixels_per_second_squared: float
+    maximum_acceleration_pixels_per_second_squared: float
+    mean_turning_angle_degrees: float | None
+    cumulative_turning_angle_degrees: float
+    mean_distance_to_wall_pixels: float
     active_time_seconds: float
     inactive_time_seconds: float
     distance_physical: float | None
+    net_displacement_physical: float | None
     mean_speed_physical_per_second: float | None
     maximum_speed_physical_per_second: float | None
+    mean_acceleration_physical_per_second_squared: float | None
+    maximum_acceleration_physical_per_second_squared: float | None
+    mean_distance_to_wall_physical: float | None
     physical_unit: str | None
     zone_time_seconds: dict[str, float]
 
@@ -155,8 +166,11 @@ class VideoFrameSchoolAnalytics(BaseModel):
     timestamp_seconds: float
     active_track_count: int
     mean_nearest_neighbor_pixels: float | None
+    mean_pairwise_distance_pixels: float | None
     school_spread_pixels: float | None
+    polarization: float | None = Field(default=None, ge=0, le=1)
     mean_nearest_neighbor_physical: float | None
+    mean_pairwise_distance_physical: float | None
     school_spread_physical: float | None
 
 
