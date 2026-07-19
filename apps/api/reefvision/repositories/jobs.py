@@ -12,6 +12,10 @@ from sqlalchemy.orm import Session
 from reefvision.db.models import Job, JobDependency
 
 
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
 class JobRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -35,7 +39,7 @@ class JobRepository:
         )
         now = datetime.now(UTC)
         for candidate in candidates:
-            if candidate.cancel_after is not None and candidate.cancel_after <= now:
+            if candidate.cancel_after is not None and _as_utc(candidate.cancel_after) <= now:
                 continue
             dependencies = list(
                 self.session.execute(
