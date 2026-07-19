@@ -19,7 +19,9 @@ from reefvision.tests.test_annotations import create_project, import_one
 from reefvision.tests.test_dataset_versions import create_version
 
 
-def _seed_classification_project(client: TestClient) -> tuple[dict[str, object], str, dict[str, str]]:
+def _seed_classification_project(
+    client: TestClient,
+) -> tuple[dict[str, object], str, dict[str, str]]:
     project = create_project(client, "Phase 5 classification")
     report = import_one(client, str(project["id"]), size=(100, 80))
     image_id = str(report["successful"][0]["image_id"])
@@ -66,7 +68,9 @@ def _seed_classification_project(client: TestClient) -> tuple[dict[str, object],
     return project, image_id, class_ids
 
 
-def test_classification_preview_and_export_remove_small_crops(client: TestClient) -> None:
+def test_classification_preview_and_export_remove_small_crops(
+    client: TestClient,
+) -> None:
     project, _image_id, _class_ids = _seed_classification_project(client)
     version = create_version(client, str(project["id"]), name="Classification crops")
 
@@ -138,6 +142,8 @@ def test_classification_training_run_is_queued_with_immutable_provenance(
     assert run["preflight_report"]["eligible_crop_count"] == 2
     assert run["training_config"]["classification_mode"] == "multiclass"
     assert run["training_config"]["minimum_crop_size_px"] == 10
+    assert run["initial_checkpoint_source"] == "scratch"
+    assert run["resolved_model_checksum"] is None
 
 
 def test_accepting_classification_prediction_changes_class_with_audit_event(
@@ -210,8 +216,11 @@ def test_accepting_classification_prediction_changes_class_with_audit_event(
         assert annotation.source_type == "accepted_prediction"
         assert annotation.revision == 2
         assert image.annotation_revision == 2
-        event = session.query(AnnotationEvent).filter_by(annotation_id=annotation.id).one()
-        assert event.event_type == "class_changed"
+        event = (
+            session.query(AnnotationEvent)
+            .filter_by(annotation_id=annotation.id, event_type="class_changed")
+            .one()
+        )
         assert event.before_json["label_class_id"] == class_ids["closed"]
         assert event.after_json["label_class_id"] == class_ids["open"]
 
@@ -219,7 +228,7 @@ def test_accepting_classification_prediction_changes_class_with_audit_event(
 def test_image_level_classification_labels_are_reviewable_metadata(
     client: TestClient,
 ) -> None:
-    project, image_id, class_ids = _seed_classification_project(client)
+    _project, image_id, class_ids = _seed_classification_project(client)
     created = client.post(
         f"/api/v1/images/{image_id}/labels",
         json={
