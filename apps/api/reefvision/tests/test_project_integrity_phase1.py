@@ -102,7 +102,7 @@ def test_integrity_report_detects_missing_checksum_and_stale_job(
     payload = response.json()
     assert payload["valid"] is False
     codes = {item["code"] for item in payload["issues"]}
-    assert "managed_file_missing" in codes
+    assert "managed_path_missing" in codes
     assert "checksum_mismatch" in codes
     assert "stale_active_job" in codes
     categories = {item["resource_kind"]: item for item in payload["categories"]}
