@@ -22,6 +22,26 @@ from reefvision.ml.ultralytics_tuning import normalize_tuning_config
 from reefvision.storage.projects import resolve_managed_project_path
 
 
+def _restore_tuning_provenance(
+    factory: sessionmaker[Session],
+    run_id: str,
+    requested_tuning: dict,
+    tuning_artifact: object,
+) -> None:
+    if requested_tuning["mode"] == "disabled":
+        return
+    with factory() as session:
+        run = session.get(TrainingRun, run_id)
+        if run is None:
+            return
+        run.tuning_config_json = requested_tuning
+        manifest = dict(run.artifact_manifest_json or {})
+        if tuning_artifact is not None:
+            manifest["tuning"] = tuning_artifact
+        run.artifact_manifest_json = manifest
+        session.commit()
+
+
 def _process_ultralytics_training(
     settings: Settings,
     factory: sessionmaker[Session],
@@ -45,7 +65,7 @@ def _process_ultralytics_training(
             manifest = dict(run.artifact_manifest_json or {})
             tuning_artifact = manifest.get("tuning")
             # The stable task workers deliberately reject unexecuted tuning. Mark it
-            # disabled only for their final-training pass, then restore it below.
+            # disabled only for their final-training pass, then restore it in finally.
             run.tuning_config_json = {
                 "mode": "disabled",
                 "executed": True,
@@ -53,23 +73,21 @@ def _process_ultralytics_training(
             }
             session.commit()
 
-    succeeded = (
-        process_segmentation_training_job(settings, factory, job_id)
-        if task == "segment"
-        else process_training_job(settings, factory, job_id)
-    )
+    try:
+        succeeded = (
+            process_segmentation_training_job(settings, factory, job_id)
+            if task == "segment"
+            else process_training_job(settings, factory, job_id)
+        )
+    finally:
+        _restore_tuning_provenance(
+            factory,
+            run_id,
+            requested_tuning,
+            tuning_artifact,
+        )
     if not succeeded:
         return False
-
-    with factory() as session:
-        run = session.get(TrainingRun, run_id)
-        if run is not None and requested_tuning["mode"] != "disabled":
-            run.tuning_config_json = requested_tuning
-            manifest = dict(run.artifact_manifest_json or {})
-            if tuning_artifact is not None:
-                manifest["tuning"] = tuning_artifact
-            run.artifact_manifest_json = manifest
-            session.commit()
 
     try:
         _execute_validation(settings, factory, run_id)
