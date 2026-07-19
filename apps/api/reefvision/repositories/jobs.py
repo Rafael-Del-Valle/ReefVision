@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import os
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
+from uuid import uuid4
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import Job, JobDependency
+from reefvision.services.resource_scheduler import ResourceScheduler
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -26,18 +29,31 @@ class JobRepository:
     def get(self, job_id: str) -> Job | None:
         return self.session.get(Job, job_id)
 
-    def next_queued(self) -> Job | None:
-        """Return the highest-priority runnable job whose dependencies are satisfied."""
+    def next_queued(self, worker_id: str | None = None) -> Job | None:
+        """Atomically claim the highest-priority runnable, resource-compatible job.
 
+        A job remains in ``queued`` while claimed so historical processors that perform
+        their own queued-to-running transition remain compatible. ``worker_id`` and a
+        heartbeat form the short dispatch lease; a crashed claim becomes eligible again.
+        """
+
+        resolved_worker_id = worker_id or f"worker-{os.getpid()}-{uuid4().hex[:8]}"
+        now = datetime.now(UTC)
+        stale_claim = now - timedelta(minutes=2)
+        claimable = or_(
+            Job.worker_id.is_(None),
+            Job.heartbeat_at.is_(None),
+            Job.heartbeat_at < stale_claim,
+        )
         candidates = list(
             self.session.scalars(
                 select(Job)
-                .where(Job.status == "queued")
+                .where(Job.status == "queued", claimable)
                 .order_by(Job.priority, Job.created_at, Job.id)
                 .limit(200)
             )
         )
-        now = datetime.now(UTC)
+        scheduler = ResourceScheduler(self.session)
         for candidate in candidates:
             if candidate.cancel_after is not None and _as_utc(candidate.cancel_after) <= now:
                 continue
@@ -48,11 +64,37 @@ class JobRepository:
                     .where(JobDependency.job_id == candidate.id)
                 )
             )
-            if all(
+            if not all(
                 upstream.status == dependency.required_status
                 for dependency, upstream in dependencies
             ):
-                return candidate
+                continue
+            decision = scheduler.evaluate(candidate)
+            if not decision.eligible:
+                continue
+            claimed = cast(
+                CursorResult[Any],
+                self.session.execute(
+                    update(Job)
+                    .where(
+                        Job.id == candidate.id,
+                        Job.status == "queued",
+                        claimable,
+                    )
+                    .values(
+                        worker_id=resolved_worker_id,
+                        heartbeat_at=now,
+                        resource_assignment_json=decision.assignment,
+                    )
+                ),
+            )
+            if (claimed.rowcount or 0) != 1:
+                self.session.rollback()
+                continue
+            self.session.commit()
+            refreshed = self.session.get(Job, candidate.id)
+            if refreshed is not None:
+                return refreshed
         return None
 
     def has_active_jobs(self) -> bool:
@@ -77,7 +119,6 @@ class JobRepository:
         This fallback requeues resumable work and fails non-resumable work instead of
         silently replaying side effects.
         """
-
         resumable = cast(
             CursorResult[Any],
             self.session.execute(
@@ -91,6 +132,7 @@ class JobRepository:
                     started_at=None,
                     heartbeat_at=None,
                     worker_id=None,
+                    resource_assignment_json={},
                     error_message="Recovered resumable job after interruption",
                 )
             ),
@@ -112,6 +154,22 @@ class JobRepository:
                 )
             ),
         )
+        released_claims = cast(
+            CursorResult[Any],
+            self.session.execute(
+                update(Job)
+                .where(
+                    Job.status == "queued",
+                    Job.worker_id.is_not(None),
+                    or_(Job.heartbeat_at.is_(None), Job.heartbeat_at < stale_claim),
+                )
+                .values(
+                    worker_id=None,
+                    heartbeat_at=None,
+                    resource_assignment_json={},
+                )
+            ),
+        )
         cancelled = cast(
             CursorResult[Any],
             self.session.execute(
@@ -126,4 +184,9 @@ class JobRepository:
                 )
             ),
         )
-        return int((resumable.rowcount or 0) + (failed.rowcount or 0) + (cancelled.rowcount or 0))
+        return int(
+            (resumable.rowcount or 0)
+            + (failed.rowcount or 0)
+            + (released_claims.rowcount or 0)
+            + (cancelled.rowcount or 0)
+        )
