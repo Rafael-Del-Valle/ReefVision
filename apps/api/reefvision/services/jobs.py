@@ -42,6 +42,9 @@ class JobService:
             "workflow_run",
             "provider_benchmark",
             "sam2_video_propagation",
+            "project_archive_export",
+            "project_archive_import",
+            "project_duplicate",
         }
         if job.status != "failed" or job.job_type not in retryable_types:
             raise ConflictError("Only failed recoverable jobs can be retried")
