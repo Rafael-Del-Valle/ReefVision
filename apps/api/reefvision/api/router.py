@@ -33,6 +33,7 @@ from reefvision.api.routes.segmentation_evaluation import (
 from reefvision.api.routes.system import router as system_router
 from reefvision.api.routes.training import router as training_router
 from reefvision.api.routes.videos import router as videos_router
+from reefvision.api.routes.workflows import router as workflows_router
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health_router)
@@ -62,3 +63,4 @@ api_router.include_router(segmentation_evaluation_router)
 api_router.include_router(quality_control_router)
 api_router.include_router(review_queues_router)
 api_router.include_router(active_learning_router)
+api_router.include_router(workflows_router)
