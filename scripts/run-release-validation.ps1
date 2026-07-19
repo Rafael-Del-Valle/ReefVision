@@ -49,7 +49,7 @@ function Invoke-ReleaseGate {
         Write-Host "FAIL: $Name - $ErrorText" -ForegroundColor Red
     }
     $CompletedAt = Get-Date
-    $Results.Add(
+    [void]$Results.Add(
         [pscustomobject]@{
             name = $Name
             status = $Status
@@ -65,8 +65,8 @@ function Invoke-ReleaseGate {
 if (-not $SkipBootstrap) {
     Invoke-ReleaseGate "Bootstrap build environment" {
         & (Join-Path $PSScriptRoot "bootstrap.ps1") -NonInteractive -SkipPlaywrightBrowser
-        if ($LASTEXITCODE -ne 0) {
-            throw "bootstrap.ps1 exited with code $LASTEXITCODE."
+        if (-not $?) {
+            throw "bootstrap.ps1 failed."
         }
     }
 }
@@ -164,8 +164,8 @@ finally {
 if (-not $SkipPackaging) {
     Invoke-ReleaseGate "Tauri MSI packaging" {
         & (Join-Path $PSScriptRoot "build-desktop.ps1") -TargetTriple $TargetTriple
-        if ($LASTEXITCODE -ne 0) {
-            throw "build-desktop.ps1 exited with code $LASTEXITCODE."
+        if (-not $?) {
+            throw "build-desktop.ps1 failed."
         }
     }
     Invoke-ReleaseGate "Packaged API sidecar smoke" {
