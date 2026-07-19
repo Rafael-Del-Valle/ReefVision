@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.schemas.project_integrity import ProjectIntegrityResponse
-from reefvision.services.project_integrity import ProjectIntegrityService
+from reefvision.services.project_integrity_runtime import ProjectIntegrityRuntimeService
 
 router = APIRouter(tags=["project-integrity"])
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -24,7 +24,7 @@ def inspect_project_integrity(
     verify_checksums: Annotated[bool, Query()] = False,
     stale_job_minutes: Annotated[int, Query(ge=1, le=43_200)] = 60,
 ) -> ProjectIntegrityResponse:
-    return ProjectIntegrityService(
+    return ProjectIntegrityRuntimeService(
         session,
         request.app.state.settings,
     ).inspect(
