@@ -199,6 +199,10 @@ def _build_payload(
         "created_at": datetime.now(UTC).isoformat(),
         "job_id": job_id,
         "strict_redaction": strict_redaction,
+        "paths": {
+            "data_dir": str(settings.resolved_data_dir),
+            "logs_dir": str(default_logs_dir(settings)),
+        },
         "configuration": {
             "environment": settings.env,
             "api_host": settings.api_host,
