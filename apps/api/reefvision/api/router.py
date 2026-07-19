@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from reefvision.api.routes.active_learning import router as active_learning_router
 from reefvision.api.routes.annotations import router as annotations_router
+from reefvision.api.routes.artifacts import router as artifacts_router
 from reefvision.api.routes.assist import router as assist_router
 from reefvision.api.routes.backups import router as backups_router
 from reefvision.api.routes.capabilities import router as capabilities_router
@@ -35,6 +36,7 @@ from reefvision.api.routes.system import router as system_router
 from reefvision.api.routes.training import router as training_router
 from reefvision.api.routes.training_reports import router as training_reports_router
 from reefvision.api.routes.videos import router as videos_router
+from reefvision.api.routes.workflow_persistence import router as workflow_persistence_router
 from reefvision.api.routes.workflows import router as workflows_router
 
 api_router = APIRouter(prefix="/api/v1")
@@ -49,6 +51,7 @@ api_router.include_router(videos_router)
 api_router.include_router(backups_router)
 api_router.include_router(projects_router)
 api_router.include_router(project_integrity_router)
+api_router.include_router(artifacts_router)
 api_router.include_router(class_operations_router)
 api_router.include_router(class_visibility_router)
 api_router.include_router(images_router)
@@ -68,3 +71,4 @@ api_router.include_router(quality_control_router)
 api_router.include_router(review_queues_router)
 api_router.include_router(active_learning_router)
 api_router.include_router(workflows_router)
+api_router.include_router(workflow_persistence_router)
