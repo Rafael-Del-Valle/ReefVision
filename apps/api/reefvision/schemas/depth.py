@@ -142,6 +142,54 @@ class DepthAwareMaskMeasurementResponse(BaseModel):
     warnings: list[str]
 
 
+class DepthTrackSample(BaseModel):
+    track_id: str = Field(min_length=1, max_length=100)
+    frame_index: int = Field(ge=0)
+    center_x_px: FiniteFloat
+    center_y_px: FiniteFloat
+    depth: FiniteFloat = Field(gt=0)
+    confidence: float | None = Field(default=None, ge=0, le=1)
+
+
+class DepthTrackAnalyticsRequest(BaseModel):
+    fps: FiniteFloat = Field(gt=0)
+    camera_intrinsics: CameraIntrinsics
+    unit: str = Field(default="m", min_length=1, max_length=30)
+    samples: list[DepthTrackSample] = Field(min_length=2, max_length=2_000_000)
+    maximum_frame_gap: int | None = Field(default=None, ge=1, le=100_000)
+
+
+class DepthTrackPoint3D(BaseModel):
+    frame_index: int
+    x: float
+    y: float
+    z: float
+
+
+class DepthTrack3DAnalytics(BaseModel):
+    track_id: str
+    observed_frame_count: int
+    first_frame: int
+    last_frame: int
+    duration_seconds: float
+    distance_3d: float
+    net_displacement_3d: float
+    mean_speed_3d_per_second: float
+    maximum_speed_3d_per_second: float
+    mean_depth: float
+    minimum_depth: float
+    maximum_depth: float
+    points: list[DepthTrackPoint3D]
+    skipped_gap_count: int
+
+
+class DepthTrackAnalyticsResponse(BaseModel):
+    fps: float
+    unit: str
+    tracks: list[DepthTrack3DAnalytics]
+    warnings: list[str]
+
+
 class DepthTrainingConfiguration(BaseModel):
     input_mode: Literal[
         "none",
