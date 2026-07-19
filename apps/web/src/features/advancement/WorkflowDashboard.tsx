@@ -2,7 +2,9 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
 import type { Project } from "../../api/client";
+import { getDatasetVersions } from "../phase456/api";
 import {
+  createCocoExport,
   getWorkflowDefinitions,
   getWorkflowTemplates,
   validateWorkflow,
@@ -22,6 +24,8 @@ export function WorkflowDashboard({ project }: { project: Project }) {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [workflowJson, setWorkflowJson] = useState(blankWorkflow);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [cocoVersionId, setCocoVersionId] = useState("");
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
 
   const definitions = useQuery({
     queryKey: ["workflow_node_definitions"],
@@ -30,6 +34,10 @@ export function WorkflowDashboard({ project }: { project: Project }) {
   const templates = useQuery({
     queryKey: ["workflow_templates"],
     queryFn: getWorkflowTemplates,
+  });
+  const versions = useQuery({
+    queryKey: ["workflow_dataset_versions", project.id],
+    queryFn: ({ signal }) => getDatasetVersions(project.id, signal),
   });
   const selectedTemplate = useMemo(
     () =>
@@ -46,6 +54,15 @@ export function WorkflowDashboard({ project }: { project: Project }) {
     }
   }, [selectedTemplate]);
 
+  useEffect(() => {
+    if (!cocoVersionId) {
+      const firstComplete = versions.data?.find(
+        (version) => version.status === "complete",
+      );
+      if (firstComplete) setCocoVersionId(firstComplete.id);
+    }
+  }, [cocoVersionId, versions.data]);
+
   const validation = useMutation({
     mutationFn: () => {
       try {
@@ -60,25 +77,69 @@ export function WorkflowDashboard({ project }: { project: Project }) {
       }
     },
   });
+  const cocoExport = useMutation({
+    mutationFn: () => createCocoExport(cocoVersionId),
+    onSuccess: (result) =>
+      setExportMessage(`COCO export queued as job ${result.job.id}.`),
+  });
 
   return (
     <section className="dashboard-panel">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Phase 10</p>
-          <h3>Fusion workflow planner</h3>
+          <p className="eyebrow">Phases 9 and 10</p>
+          <h3>Interoperability and fusion workflow planner</h3>
           <span>
-            Design typed detection, segmentation, classification, tracking,
-            measurement, active-learning, and export graphs before execution.
+            Export immutable COCO datasets and design typed detection,
+            segmentation, classification, tracking, measurement, active-learning,
+            and export graphs.
           </span>
         </div>
         <span>{definitions.data?.length ?? 0} node types</span>
       </div>
 
+      {exportMessage && <p className="form-success">{exportMessage}</p>}
+      {cocoExport.error && (
+        <p className="form-error">{cocoExport.error.message}</p>
+      )}
+
       <div className="dashboard-layout">
         <div className="dashboard-sidebar">
           <article className="dashboard-card">
-            <p className="eyebrow">Templates</p>
+            <p className="eyebrow">Phase 9</p>
+            <h4>COCO instance export</h4>
+            <p>
+              Export frozen boxes, polygon masks, raster RLE masks, categories,
+              splits, source IDs, and checksums without changing the dataset version.
+            </p>
+            <label>
+              Immutable dataset version
+              <select
+                value={cocoVersionId}
+                onChange={(event) => setCocoVersionId(event.target.value)}
+              >
+                <option value="">Choose a complete version</option>
+                {versions.data
+                  ?.filter((version) => version.status === "complete")
+                  .map((version) => (
+                    <option key={version.id} value={version.id}>
+                      v{version.version_number} · {version.name} ·{" "}
+                      {version.annotation_count} boxes
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={!cocoVersionId || cocoExport.isPending}
+              onClick={() => cocoExport.mutate()}
+            >
+              {cocoExport.isPending ? "Queuing..." : "Export COCO instances"}
+            </button>
+          </article>
+
+          <article className="dashboard-card">
+            <p className="eyebrow">Phase 10 templates</p>
             <label>
               Starting workflow
               <select
