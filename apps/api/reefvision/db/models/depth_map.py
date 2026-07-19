@@ -46,13 +46,11 @@ class DepthMap(Base):
         String(36),
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     image_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("images.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     provider_id: Mapped[str] = mapped_column(String(120), nullable=False)
     model_id: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -68,7 +66,11 @@ class DepthMap(Base):
     maximum_depth: Mapped[float] = mapped_column(Float, nullable=False)
     median_depth: Mapped[float] = mapped_column(Float, nullable=False)
     valid_pixel_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,
