@@ -15,6 +15,7 @@ from reefvision.db.models import (
     ImageAsset,
     Job,
 )
+from reefvision.storage.classification_exports import write_classification_export
 from reefvision.storage.datasets import (
     remove_export_artifacts,
     write_yolo_detection_export,
@@ -91,7 +92,9 @@ def process_export_job(
             )
             images = list(
                 session.scalars(
-                    select(ImageAsset).where(ImageAsset.id.in_([item.image_id for item in items]))
+                    select(ImageAsset).where(
+                        ImageAsset.id.in_([item.image_id for item in items])
+                    )
                 )
             )
             image_paths = {
@@ -140,6 +143,32 @@ def process_export_job(
                     output_path=export.output_path,
                     manifest_path=export.manifest_path,
                     archive_path=export.archive_path,
+                )
+            elif export.format in {
+                "classification_multiclass",
+                "classification_binary_state",
+            }:
+                mode = (
+                    "binary_state"
+                    if export.format == "classification_binary_state"
+                    else "multiclass"
+                )
+                result = write_classification_export(
+                    settings,
+                    export_id=export.id,
+                    version=version,
+                    items=items,
+                    image_paths=image_paths,
+                    output_path=export.output_path,
+                    manifest_path=export.manifest_path,
+                    archive_path=export.archive_path,
+                    mode=mode,
+                    minimum_crop_size_px=int(
+                        export.request_json.get("minimum_crop_size_px", 10)
+                    ),
+                    padding_fraction=float(
+                        export.request_json.get("padding_fraction", 0.0)
+                    ),
                 )
             else:
                 raise RuntimeError(f"Unsupported export format: {export.format}")
