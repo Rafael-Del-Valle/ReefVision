@@ -113,12 +113,9 @@ class JobRepository:
         return self.session.scalar(statement) is not None
 
     def recover_interrupted_jobs(self) -> int:
-        """Legacy startup recovery retained for older job producers.
+        """Recover interrupted execution and expired queued dispatch leases."""
 
-        New workers should use JobOrchestrationService heartbeats and structured events.
-        This fallback requeues resumable work and fails non-resumable work instead of
-        silently replaying side effects.
-        """
+        stale_claim = datetime.now(UTC) - timedelta(minutes=2)
         resumable = cast(
             CursorResult[Any],
             self.session.execute(
