@@ -257,6 +257,14 @@ class ImageEmbeddingService:
                 )
             if not options:
                 break
+            options.sort(
+                key=lambda item: (
+                    -item[0],
+                    -item[1],
+                    -item[2],
+                    item[3],
+                )
+            )
             (
                 selection_score,
                 novelty,
@@ -264,15 +272,7 @@ class ImageEmbeddingService:
                 image_id,
                 group_key,
                 nearest_image_id,
-            ) = max(
-                options,
-                key=lambda item: (
-                    item[0],
-                    item[1],
-                    item[2],
-                    tuple(-ord(character) for character in item[3]),
-                ),
-            )
+            ) = options[0]
             selected_ids.add(image_id)
             selected_vectors.append((image_id, normalized_vectors[image_id]))
             group_counts[group_key or "__ungrouped__"] += 1
