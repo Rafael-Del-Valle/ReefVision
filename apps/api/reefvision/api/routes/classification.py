@@ -18,8 +18,10 @@ from reefvision.schemas.classification import (
     ImageLabelWriteRequest,
 )
 from reefvision.schemas.jobs import JobResponse
+from reefvision.schemas.models import ModelRegistrationResponse, RegisterModelFromRunRequest
 from reefvision.schemas.training import TrainingRunResponse
 from reefvision.services.classification import ClassificationService
+from reefvision.services.classification_models import ClassificationModelService
 
 router = APIRouter(tags=["classification"])
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -27,6 +29,10 @@ DbSession = Annotated[Session, Depends(get_db_session)]
 
 def service(request: Request, session: Session) -> ClassificationService:
     return ClassificationService(session, request.app.state.settings)
+
+
+def model_service(request: Request, session: Session) -> ClassificationModelService:
+    return ClassificationModelService(session, request.app.state.settings)
 
 
 @router.post(
@@ -54,6 +60,20 @@ def create_classification_training_run(
     session: DbSession,
 ) -> TrainingRunResponse:
     return service(request, session).create_training_run(project_id, payload)
+
+
+@router.post(
+    "/projects/{project_id}/classifiers/register-from-run",
+    response_model=ModelRegistrationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def register_classifier_from_run(
+    project_id: str,
+    payload: RegisterModelFromRunRequest,
+    request: Request,
+    session: DbSession,
+) -> ModelRegistrationResponse:
+    return model_service(request, session).register_model_from_run(project_id, payload)
 
 
 @router.post(
