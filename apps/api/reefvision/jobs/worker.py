@@ -33,6 +33,7 @@ from reefvision.jobs.restores import process_restore_job
 from reefvision.jobs.sam2_video import process_sam2_video_propagation_job
 from reefvision.jobs.training_dispatch import process_task_aware_training_job
 from reefvision.jobs.video import process_video_extract_job
+from reefvision.jobs.video_exports import process_video_render_export_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.jobs.workflow_runs import process_workflow_run_job
 from reefvision.repositories.jobs import JobRepository
@@ -147,6 +148,7 @@ def process_next_thumbnail_job(
             "model_install": process_model_install_job,
             "video_extract": process_video_extract_job,
             "video_track": process_video_tracking_job,
+            "video_render_export": process_video_render_export_job,
             "depth_map": process_depth_map_job,
             "image_embeddings": process_image_embedding_job,
             "workflow_run": process_workflow_run_job,
