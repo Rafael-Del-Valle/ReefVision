@@ -282,7 +282,9 @@ class ClassificationQAService:
                         )
                     )
 
-        error_crop_ids = {issue.crop_id for issue in issues if issue.severity == "error"}
+        error_crop_ids = {
+            issue.crop_id for issue in issues if issue.severity == "error"
+        }
         checked_at = datetime.now(UTC).isoformat()
         input_payload = {
             "project_id": project_id,
