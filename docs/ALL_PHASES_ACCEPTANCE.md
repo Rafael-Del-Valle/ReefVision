@@ -1,6 +1,6 @@
 # ReefVision all-phase acceptance
 
-## Windows entry point
+## Provider-free acceptance
 
 Run this command from the ReefVision repository root:
 
@@ -8,11 +8,9 @@ Run this command from the ReefVision repository root:
 .\scripts\run-all-phases-acceptance.ps1
 ```
 
-This wrapper runs the static/backend/frontend acceptance suite and then performs the database migration round trip using ReefVision's actual `REEFVISION_DATA_DIR` and `REEFVISION_DATABASE_FILENAME` settings.
+This wrapper runs the static/backend/frontend acceptance suite and performs a database migration round trip using ReefVision's actual `REEFVISION_DATA_DIR` and `REEFVISION_DATABASE_FILENAME` settings.
 
-## Automated checks
-
-The acceptance workflow covers:
+The provider-free workflow covers:
 
 - Ruff lint and formatting;
 - strict mypy;
@@ -21,8 +19,8 @@ The acceptance workflow covers:
 - frontend formatting and TypeScript checks;
 - frontend unit tests;
 - the production frontend build unless skipped;
-- an Alembic `0019 -> 0023 -> 0019 -> head` round trip on a disposable database;
-- environment and commit metadata written beneath `.desktop/acceptance/all-phases`.
+- an Alembic round trip through the current linear migration head;
+- environment and commit metadata beneath `.desktop/acceptance/all-phases`.
 
 Optional flags:
 
@@ -32,18 +30,49 @@ Optional flags:
 .\scripts\run-all-phases-acceptance.ps1 -SkipMigrationRoundTrip
 ```
 
-## Manual release gates
+## Complete Windows release gate
 
-Passing the script does not replace the following checks:
+Run the full release sequence, including browser and packaged-desktop checks, with:
+
+```powershell
+.\scripts\run-release-validation.ps1
+```
+
+The release runner preserves one log per gate plus `release-validation-summary.json` beneath `.artifacts/release-validation-<timestamp>`. It runs:
+
+- environment bootstrap;
+- Ruff lint and formatting;
+- strict mypy;
+- the complete pytest suite;
+- `upgrade head -> downgrade 0019 -> upgrade head -> downgrade base -> upgrade head` against a disposable database;
+- npm lockfile verification and clean installation;
+- Prettier, TypeScript, Vitest, and the production frontend build;
+- Chromium installation and Playwright browser tests;
+- `cargo fmt --check` and target-specific `cargo check --locked`;
+- Tauri MSI packaging;
+- packaged API-sidecar smoke testing;
+- MSI output inventory.
+
+Useful release-runner options:
+
+```powershell
+.\scripts\run-release-validation.ps1 -SkipBootstrap
+.\scripts\run-release-validation.ps1 -SkipPackaging
+.\scripts\run-release-validation.ps1 -TargetTriple aarch64-pc-windows-msvc
+```
+
+## Manual and hardware acceptance
+
+Passing either script does not replace:
 
 - real YOLO and nnU-Net segmentation runs;
 - representative manual coral measurement comparisons;
 - real six-class and binary classifier training and inference;
 - real ByteTrack and BoT-SORT fish-video validation;
-- real SAM-family point-prompt acceptance;
-- COCO archive testing in external tools;
-- application restart-persistence testing;
-- packaged Windows installation and smoke testing;
-- Phase 10 workflow execution, artifact handoff, recovery, and GPU scheduling.
+- real SAM-family point-prompt and SAM 2 video acceptance;
+- metric-depth and camera-calibration validation;
+- COCO, panoptic, CVAT, LabelMe, and Roboflow round trips in external tools;
+- multi-GPU scheduling tests on the intended workstation;
+- clean-machine Windows installation and uninstall testing.
 
-The all-phase pull request should remain a draft until automated checks run successfully and the applicable real-model and packaged-application gates are completed.
+The all-phase pull request should remain a draft until the automated checks run successfully and the applicable real-model, hardware, scientific, and packaged-application gates are completed.
