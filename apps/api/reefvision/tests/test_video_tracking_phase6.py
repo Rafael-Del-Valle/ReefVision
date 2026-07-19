@@ -13,7 +13,8 @@ from reefvision.tests.test_annotations import create_project
 
 def _seed_video(client: TestClient) -> tuple[dict[str, object], str, str]:
     project = create_project(client, "Phase 6 fish tracking")
-    label_class_id = str(cast(list[dict[str, object]], project["label_classes"])[0]["id"])
+    label_classes = cast(list[dict[str, object]], project["label_classes"])
+    label_class_id = str(label_classes[0]["id"])
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
         video = VideoAsset(
@@ -38,7 +39,7 @@ def _seed_video(client: TestClient) -> tuple[dict[str, object], str, str]:
 def test_manual_tracks_interpolate_and_produce_research_analytics(
     client: TestClient,
 ) -> None:
-    project, video_id, label_class_id = _seed_video(client)
+    _project, video_id, label_class_id = _seed_video(client)
     first = client.post(
         f"/api/v1/videos/{video_id}/tracks",
         json={
@@ -110,7 +111,13 @@ def test_manual_tracks_interpolate_and_produce_research_analytics(
         f"/api/v1/videos/{video_id}/analytics",
         json={
             "zones": [
-                {"name": "left wall", "x_min": 0, "y_min": 0, "x_max": 15, "y_max": 100}
+                {
+                    "name": "left wall",
+                    "x_min": 0,
+                    "y_min": 0,
+                    "x_max": 15,
+                    "y_max": 100,
+                }
             ],
             "heatmap_bins_x": 10,
             "heatmap_bins_y": 10,
@@ -121,7 +128,9 @@ def test_manual_tracks_interpolate_and_produce_research_analytics(
     payload = analytics.json()
     assert payload["distance_per_pixel"] == pytest.approx(0.1)
     assert len(payload["tracks"]) == 2
-    first_track = next(item for item in payload["tracks"] if item["tracker_id"] == 1)
+    first_track = next(
+        item for item in payload["tracks"] if item["tracker_id"] == 1
+    )
     assert first_track["observed_frame_count"] == 11
     assert first_track["distance_pixels"] == pytest.approx(10)
     assert first_track["duration_seconds"] == pytest.approx(1)
@@ -131,7 +140,9 @@ def test_manual_tracks_interpolate_and_produce_research_analytics(
     assert first_track["inactive_time_seconds"] == pytest.approx(0)
     assert first_track["zone_time_seconds"]["left wall"] > 0
     assert payload["school_by_frame"][0]["active_track_count"] == 2
-    assert payload["school_by_frame"][0]["mean_nearest_neighbor_pixels"] == pytest.approx(20)
+    assert payload["school_by_frame"][0][
+        "mean_nearest_neighbor_pixels"
+    ] == pytest.approx(20)
     assert payload["heatmap"]
     assert sum(item["observation_count"] for item in payload["heatmap"]) == 22
 
