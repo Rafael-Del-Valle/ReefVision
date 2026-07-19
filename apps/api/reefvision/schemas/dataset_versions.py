@@ -24,6 +24,7 @@ DatasetExportFormat = Literal[
     "semantic_masks",
     "classification_multiclass",
     "classification_binary_state",
+    "coco_instances",
 ]
 DatasetVersionStatus = Literal[
     "validating",
