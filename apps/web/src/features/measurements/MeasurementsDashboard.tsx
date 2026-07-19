@@ -68,7 +68,9 @@ export function MeasurementsDashboard({ project }: { project: Project }) {
         <div>
           <p className="eyebrow">Phase 4</p>
           <h3>Coral measurements</h3>
-          <span>Revisioned measurements, scientific summaries, and reference validation</span>
+          <span>
+            Revisioned measurements, scientific summaries, and reference validation
+          </span>
         </div>
         <div className="version-actions">
           <a
@@ -117,12 +119,13 @@ export function MeasurementsDashboard({ project }: { project: Project }) {
             <p>Surface: {valueList(summary.data.surface_area_by_unit)}</p>
           </article>
           <article className="dashboard-card">
-            <p className="eyebrow">Calibrated perimeter</p>
-            <h4>{valueList(summary.data.calibrated_perimeter_by_unit)}</h4>
-          </article>
-          <article className="dashboard-card">
             <p className="eyebrow">Calibrated TLE</p>
             <h4>{valueList(summary.data.calibrated_tle_by_unit)}</h4>
+          </article>
+          <article className="dashboard-card">
+            <p className="eyebrow">Grouping</p>
+            <h4>{summary.data.by_class.length} class summaries</h4>
+            <p>Species and state groupings are included in the CSV export.</p>
           </article>
         </div>
       )}
