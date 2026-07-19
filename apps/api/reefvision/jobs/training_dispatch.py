@@ -2,18 +2,92 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import Job, TrainingRun
 from reefvision.jobs.advanced_ultralytics_training import (
-    process_advanced_ultralytics_training_job,
+    _execute_tuning,
+    _execute_validation,
 )
 from reefvision.jobs.classification_training import process_classification_training_job
+from reefvision.jobs.segmentation_training import process_segmentation_training_job
 from reefvision.jobs.semantic_training import process_semantic_training_job
-from reefvision.jobs.training import process_training_job
+from reefvision.jobs.training import _append_log, process_training_job
 from reefvision.ml.classification import CLASSIFICATION_TASK
 from reefvision.ml.semantic_segmentation import SEMANTIC_SEGMENTATION_TASK
+from reefvision.ml.ultralytics_tuning import normalize_tuning_config
+from reefvision.storage.projects import resolve_managed_project_path
+
+
+def _process_ultralytics_training(
+    settings: Settings,
+    factory: sessionmaker[Session],
+    job_id: str,
+    run_id: str,
+    task: str,
+) -> bool:
+    with factory() as session:
+        run = session.get(TrainingRun, run_id)
+        if run is None:
+            return False
+        requested_tuning = normalize_tuning_config(run.tuning_config_json)
+
+    tuning_artifact = None
+    if requested_tuning["mode"] != "disabled":
+        _execute_tuning(settings, factory, job_id, run_id)
+        with factory() as session:
+            run = session.get(TrainingRun, run_id)
+            if run is None:
+                return False
+            manifest = dict(run.artifact_manifest_json or {})
+            tuning_artifact = manifest.get("tuning")
+            # The stable task workers deliberately reject unexecuted tuning. Mark it
+            # disabled only for their final-training pass, then restore it below.
+            run.tuning_config_json = {
+                "mode": "disabled",
+                "executed": True,
+                "requested_configuration": requested_tuning,
+            }
+            session.commit()
+
+    succeeded = (
+        process_segmentation_training_job(settings, factory, job_id)
+        if task == "segment"
+        else process_training_job(settings, factory, job_id)
+    )
+    if not succeeded:
+        return False
+
+    with factory() as session:
+        run = session.get(TrainingRun, run_id)
+        if run is not None and requested_tuning["mode"] != "disabled":
+            run.tuning_config_json = requested_tuning
+            manifest = dict(run.artifact_manifest_json or {})
+            if tuning_artifact is not None:
+                manifest["tuning"] = tuning_artifact
+            run.artifact_manifest_json = manifest
+            session.commit()
+
+    try:
+        _execute_validation(settings, factory, run_id)
+    except Exception as exc:
+        with factory() as session:
+            run = session.get(TrainingRun, run_id)
+            if run is not None:
+                run.warnings_json = [
+                    *list(run.warnings_json or []),
+                    f"Post-training class-wise validation failed: {exc}",
+                ]
+                if run.logs_path:
+                    _append_log(
+                        resolve_managed_project_path(settings, run.logs_path),
+                        f"[{datetime.now(UTC).isoformat()}] validation warning: {exc}",
+                    )
+                session.commit()
+    return True
 
 
 def process_task_aware_training_job(
@@ -34,7 +108,7 @@ def process_task_aware_training_job(
         task = run.task
 
     if task in {"detect", "segment"}:
-        return process_advanced_ultralytics_training_job(settings, factory, job_id)
+        return _process_ultralytics_training(settings, factory, job_id, run_id, task)
     if task == SEMANTIC_SEGMENTATION_TASK:
         return process_semantic_training_job(settings, factory, job_id)
     if task == CLASSIFICATION_TASK:
