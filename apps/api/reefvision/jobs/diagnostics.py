@@ -1,15 +1,9 @@
-"""Managed diagnostic-bundle job processing for Milestone 8."""
+"""Managed diagnostic-bundle job processing with strict privacy controls."""
 
 from __future__ import annotations
 
 import logging
-import os
-import platform
-import shutil
-import sys
 from datetime import UTC, datetime
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as package_version
 from typing import Any, cast
 
 from sqlalchemy import select
@@ -20,6 +14,7 @@ from reefvision.config import Settings
 from reefvision.db.models import Job
 from reefvision.jobs.restores import JobCancelled, ensure_job_not_cancelled
 from reefvision.logging_utils import default_logs_dir
+from reefvision.services.system_inventory import collect_system_inventory
 from reefvision.storage.backups import BACKUP_FORMAT_VERSION
 from reefvision.storage.diagnostics import (
     DIAGNOSTIC_BUNDLE_VERSION,
@@ -31,7 +26,26 @@ from reefvision.storage.diagnostics import (
 )
 
 LOGGER = logging.getLogger("reefvision.diagnostics")
-_DEPENDENCY_NAMES = ("fastapi", "sqlalchemy", "pydantic", "alembic")
+
+
+def _heartbeat(
+    factory: sessionmaker[Session],
+    job_id: str,
+    *,
+    stage: str,
+    progress: int,
+    checkpoint: dict[str, Any] | None = None,
+) -> None:
+    with factory() as session:
+        job = session.get(Job, job_id)
+        if job is None:
+            return
+        job.progress_current = progress
+        job.progress_total = 3
+        job.heartbeat_at = datetime.now(UTC)
+        job.checkpoint_json = {"stage": stage, **(checkpoint or {})}
+        job.result_json = {"stage": stage}
+        session.commit()
 
 
 def process_diagnostics_job(
@@ -45,8 +59,12 @@ def process_diagnostics_job(
             return False
         job.status = "running"
         job.started_at = datetime.now(UTC)
+        job.heartbeat_at = job.started_at
+        job.progress_current = 0
+        job.progress_total = 3
+        job.checkpoint_json = {"stage": "collecting_inventory"}
         job.error_message = None
-        job.result_json = {"stage": "collecting"}
+        job.result_json = {"stage": "collecting_inventory"}
         session.commit()
         request = dict(job.request_json)
         created_at = job.created_at
@@ -71,10 +89,27 @@ def process_diagnostics_job(
             job_id=job_id,
             strict_redaction=strict_redaction,
         )
+        _heartbeat(
+            factory,
+            job_id,
+            stage="collecting_logs",
+            progress=1,
+            checkpoint={"inventory_collected": True},
+        )
         ensure_job_not_cancelled(factory, job_id)
         log_snippets = _collect_log_snippets(
             settings=settings,
             strict_redaction=strict_redaction,
+        )
+        _heartbeat(
+            factory,
+            job_id,
+            stage="writing_bundle",
+            progress=2,
+            checkpoint={
+                "inventory_collected": True,
+                "log_file_count": len(log_snippets),
+            },
         )
         ensure_job_not_cancelled(factory, job_id)
         bundle_size = write_diagnostic_bundle(
@@ -88,6 +123,7 @@ def process_diagnostics_job(
             bundle_path=destination_relative,
             bundle_size=bundle_size,
             strict_redaction=strict_redaction,
+            log_file_count=len(log_snippets),
         )
         LOGGER.info(
             "ReefVision diagnostic bundle created",
@@ -127,7 +163,6 @@ def _build_payload(
     job_id: str,
     strict_redaction: bool,
 ) -> dict[str, Any]:
-    disk_usage = shutil.disk_usage(settings.resolved_data_dir)
     with factory() as session:
         recent_failures = [
             {
@@ -135,13 +170,26 @@ def _build_payload(
                 "job_type": item.job_type,
                 "status": item.status,
                 "error_message": item.error_message,
+                "request_summary": {
+                    key: value
+                    for key, value in (item.request_json or {}).items()
+                    if key
+                    not in {
+                        "document",
+                        "notes",
+                        "positive_points",
+                        "negative_points",
+                    }
+                },
+                "resource_requirements": item.resource_requirements_json,
+                "resource_assignment": item.resource_assignment_json,
                 "completed_at": item.completed_at.isoformat() if item.completed_at else None,
             }
             for item in session.scalars(
                 select(Job)
                 .where(Job.status == "failed")
                 .order_by(Job.completed_at.desc().nullslast(), Job.created_at.desc())
-                .limit(10)
+                .limit(25)
             )
         ]
     payload = {
@@ -151,27 +199,30 @@ def _build_payload(
         "created_at": datetime.now(UTC).isoformat(),
         "job_id": job_id,
         "strict_redaction": strict_redaction,
-        "environment": settings.env,
-        "platform": {
-            "platform": platform.platform(),
-            "python_version": sys.version.split()[0],
-            "python_executable": sys.executable,
-            "machine": platform.machine(),
-            "processor": platform.processor() or None,
-            "cpu_count": os.cpu_count(),
-        },
-        "paths": {
-            "data_dir": str(settings.resolved_data_dir),
+        "configuration": {
+            "environment": settings.env,
+            "api_host": settings.api_host,
+            "api_port": settings.api_port,
+            "web_origin": settings.web_origin,
             "database_url": settings.resolved_database_url,
-            "logs_dir": str(default_logs_dir(settings)),
+            "data_dir": str(settings.resolved_data_dir),
+            "safe_mode": settings.safe_mode,
+            "background_worker_enabled": settings.background_worker_enabled,
+            "worker_concurrency": settings.worker_concurrency,
+            "worker_poll_seconds": settings.worker_poll_seconds,
+            "thumbnail_max_width": settings.thumbnail_max_width,
+            "thumbnail_max_height": settings.thumbnail_max_height,
+            "model_max_upload_bytes": settings.model_max_upload_bytes,
+            "allow_unsafe_pickled_models": settings.allow_unsafe_pickled_models,
         },
-        "disk": {
-            "total_bytes": disk_usage.total,
-            "used_bytes": disk_usage.used,
-            "free_bytes": disk_usage.free,
-        },
-        "dependencies": {name: _dependency_version(name) for name in _DEPENDENCY_NAMES},
+        "system_inventory": collect_system_inventory(settings, factory),
         "recent_failed_jobs": recent_failures,
+        "redaction": {
+            "paths": True,
+            "credentials": True,
+            "environment_secret_values": True,
+            "email_phone_ip_and_hostname": strict_redaction,
+        },
     }
     return cast(
         dict[str, Any],
@@ -194,13 +245,6 @@ def _collect_log_snippets(*, settings: Settings, strict_redaction: bool) -> dict
     return snippets
 
 
-def _dependency_version(name: str) -> str | None:
-    try:
-        return package_version(name)
-    except PackageNotFoundError:
-        return None
-
-
 def _finalize_success(
     factory: sessionmaker[Session],
     *,
@@ -208,21 +252,28 @@ def _finalize_success(
     bundle_path: str,
     bundle_size: int,
     strict_redaction: bool,
+    log_file_count: int,
 ) -> None:
     with factory() as session:
         job = session.get(Job, job_id)
         if job is None:
             return
         job.status = "succeeded"
-        job.progress_current = 1
-        job.progress_total = 1
-        job.completed_at = datetime.now(UTC)
+        job.progress_current = 3
+        job.progress_total = 3
+        job.heartbeat_at = datetime.now(UTC)
+        job.completed_at = job.heartbeat_at
+        job.checkpoint_json = {
+            "stage": "completed",
+            "bundle_path": bundle_path,
+        }
         job.result_json = {
             "stage": "completed",
             "bundle_path": bundle_path,
             "bundle_size_bytes": bundle_size,
             "diagnostic_bundle_version": DIAGNOSTIC_BUNDLE_VERSION,
             "strict_redaction": strict_redaction,
+            "log_file_count": log_file_count,
         }
         session.commit()
 
@@ -234,6 +285,7 @@ def _finalize_cancel(factory: sessionmaker[Session], *, job_id: str) -> None:
             return
         job.status = "cancelled"
         job.completed_at = datetime.now(UTC)
+        job.heartbeat_at = job.completed_at
         job.result_json = {"stage": "cancelled"}
         session.commit()
 
@@ -251,5 +303,6 @@ def _finalize_failure(
         job.status = "failed"
         job.error_message = message
         job.completed_at = datetime.now(UTC)
+        job.heartbeat_at = job.completed_at
         job.result_json = {"stage": "failed", "error": message}
         session.commit()
