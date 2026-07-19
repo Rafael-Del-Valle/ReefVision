@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from math import ceil
 from pathlib import Path
-from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -43,6 +42,7 @@ from reefvision.schemas.training import TrainingRunResponse
 from reefvision.services.semantic_training import SemanticTrainingService
 from reefvision.storage.classification_exports import preview_classification_dataset
 from reefvision.storage.datasets import canonical_json_sha256
+from reefvision.storage.projects import resolve_managed_project_path
 
 
 class ClassificationService:
@@ -64,7 +64,9 @@ class ClassificationService:
         if version.project_id != project_id:
             raise ValidationError("The dataset version must belong to the selected project")
         if version.status != "complete":
-            raise ValidationError("Classification requires a complete immutable dataset version")
+            raise ValidationError(
+                "Classification requires a complete immutable dataset version"
+            )
         return version
 
     def preview(
@@ -90,7 +92,9 @@ class ClassificationService:
                 preview["removed_during_preprocessing_count"]
             ),
             missing_state_count=int(preview["missing_state_count"]),
-            split_counts={str(key): int(value) for key, value in preview["split_counts"].items()},
+            split_counts={
+                str(key): int(value) for key, value in preview["split_counts"].items()
+            },
             classes=[
                 ClassificationDatasetClassSummary.model_validate(item)
                 for item in preview["classes"]
@@ -107,13 +111,55 @@ class ClassificationService:
         version = self._version(project_id, request.dataset_version_id)
         preview = self.preview(project_id, request)
         if preview.eligible_crop_count <= 0:
-            raise ValidationError("No eligible classification crops remain after preprocessing")
+            raise ValidationError(
+                "No eligible classification crops remain after preprocessing"
+            )
         if len([item for item in preview.classes if item.crop_count > 0]) < 2:
-            raise ValidationError("Classification training requires at least two eligible classes")
+            raise ValidationError(
+                "Classification training requires at least two eligible classes"
+            )
         if preview.split_counts.get("train", 0) <= 0:
-            raise ValidationError("The training split contains no eligible classification crops")
-        if not request.architecture.casefold().endswith(("-cls.yaml", "-cls.pt", "-cls.pth")):
-            raise ValidationError("Choose an installed or trusted Ultralytics classification model")
+            raise ValidationError(
+                "The training split contains no eligible classification crops"
+            )
+
+        initial_model: ModelRegistration | None = None
+        initial_source = "scratch"
+        resolved_model_asset_id: str | None = None
+        resolved_model_checksum: str | None = None
+        architecture = request.architecture.strip()
+        if request.initial_checkpoint_model_id:
+            initial_model = self.session.get(
+                ModelRegistration,
+                request.initial_checkpoint_model_id,
+            )
+            if (
+                initial_model is None
+                or initial_model.project_id != project.id
+                or initial_model.purpose != CLASSIFIER_PURPOSE
+                or initial_model.task != CLASSIFICATION_TASK
+            ):
+                raise ValidationError(
+                    "The initial checkpoint must be a registered classifier from this project"
+                )
+            managed_checkpoint = resolve_managed_project_path(
+                self.settings,
+                initial_model.managed_path,
+            )
+            if not managed_checkpoint.is_file():
+                raise ValidationError("The registered classifier checkpoint is missing")
+            initial_source = "registered_model"
+            resolved_model_asset_id = f"registered_model:{initial_model.id}"
+            resolved_model_checksum = initial_model.sha256
+            architecture = initial_model.source_filename
+        else:
+            if Path(architecture).name != architecture or not architecture.casefold().endswith(
+                "-cls.yaml"
+            ):
+                raise ValidationError(
+                    "Scratch classification training requires an installed *-cls.yaml "
+                    "architecture. Use a registered classifier for pretrained training."
+                )
 
         split_manifest = [
             {
@@ -130,8 +176,11 @@ class ClassificationService:
             split_manifest_sha256=canonical_json_sha256(split_manifest),
             task=CLASSIFICATION_TASK,
             provider_id="ultralytics",
-            architecture=request.architecture,
-            initial_checkpoint_source="scratch",
+            architecture=architecture,
+            initial_checkpoint_source=initial_source,
+            initial_checkpoint_model_id=(initial_model.id if initial_model else None),
+            resolved_model_asset_id=resolved_model_asset_id,
+            resolved_model_checksum=resolved_model_checksum,
             device=request.device,
             precision=request.precision,
             run_name=request.run_name,
@@ -169,7 +218,10 @@ class ClassificationService:
             job_type="training",
             status="queued",
             progress_total=request.epochs,
-            request_json={"training_run_id": run.id, "training_task": CLASSIFICATION_TASK},
+            request_json={
+                "training_run_id": run.id,
+                "training_task": CLASSIFICATION_TASK,
+            },
             result_json={"stage": "queued"},
         )
         self.session.add(job)
@@ -193,13 +245,20 @@ class ClassificationService:
             or model.task != CLASSIFICATION_TASK
         ):
             raise ValidationError("Choose a registered classifier from this project")
+        checkpoint = resolve_managed_project_path(self.settings, model.managed_path)
+        if not checkpoint.is_file():
+            raise ValidationError("The registered classifier checkpoint is missing")
         images = list(
-            self.session.scalars(select(ImageAsset).where(ImageAsset.id.in_(request.image_ids)))
+            self.session.scalars(
+                select(ImageAsset).where(ImageAsset.id.in_(request.image_ids))
+            )
         )
         if len(images) != len(set(request.image_ids)):
             raise ValidationError("One or more requested images do not exist")
         if any(image.project_id != project.id for image in images):
-            raise ValidationError("All inference images must belong to the selected project")
+            raise ValidationError(
+                "All inference images must belong to the selected project"
+            )
         job = Job(
             project_id=project.id,
             job_type="classification_inference",
@@ -208,6 +267,7 @@ class ClassificationService:
             request_json={
                 **request.model_dump(mode="json"),
                 "model_task": CLASSIFICATION_TASK,
+                "model_checksum": model.sha256,
             },
         )
         self.session.add(job)
@@ -252,7 +312,9 @@ class ClassificationService:
             )
         )
         return ClassificationPredictionPage(
-            items=[ClassificationPredictionResponse.model_validate(item) for item in rows],
+            items=[
+                ClassificationPredictionResponse.model_validate(item) for item in rows
+            ],
             total=total,
             page=page,
             page_size=page_size,
@@ -268,7 +330,9 @@ class ClassificationService:
         if prediction is None:
             raise NotFoundError("Classification prediction not found")
         if prediction.review_status != "pending":
-            raise ConflictError("Only pending classification predictions may be reviewed")
+            raise ConflictError(
+                "Only pending classification predictions may be reviewed"
+            )
         if request.action == "reject":
             prediction.review_status = "rejected"
             prediction.reviewed_at = datetime.now(UTC)
@@ -282,13 +346,19 @@ class ClassificationService:
             else None
         )
         if annotation is None or annotation.deleted_at is not None:
-            raise ValidationError("Accepting this crop prediction requires its source annotation")
+            raise ValidationError(
+                "Accepting this crop prediction requires its source annotation"
+            )
         target_class_id = request.label_class_id or prediction.label_class_id
         target_class = (
-            self.session.get(LabelClass, target_class_id) if target_class_id is not None else None
+            self.session.get(LabelClass, target_class_id)
+            if target_class_id is not None
+            else None
         )
         if target_class is None or target_class.project_id != prediction.project_id:
-            raise ValidationError("Choose a valid project class before accepting this prediction")
+            raise ValidationError(
+                "Choose a valid project class before accepting this prediction"
+            )
         image = self.session.get(ImageAsset, prediction.image_id)
         if image is None:
             raise NotFoundError("Source image not found")
@@ -357,7 +427,9 @@ class ClassificationService:
         if image is None:
             raise NotFoundError("Image not found")
         if label_class is None or label_class.project_id != image.project_id:
-            raise ValidationError("Image labels must use a class from the same project")
+            raise ValidationError(
+                "Image labels must use a class from the same project"
+            )
         existing = self.session.scalar(
             select(ImageLabel).where(
                 ImageLabel.image_id == image.id,
