@@ -9,6 +9,7 @@ import {
 } from "../../api/client";
 import { RasterBrushLayer } from "./RasterBrushLayer";
 import {
+  cleanupRasterMask,
   editRasterMask,
   rasterMaskContentUrl,
   type RasterEditMode,
@@ -42,6 +43,11 @@ export function RasterMaskWorkspace({
   const [activeClassId, setActiveClassId] = useState<string | null>(null);
   const [mode, setMode] = useState<RasterEditMode>("paint");
   const [brushRadius, setBrushRadius] = useState(12);
+  const [minimumComponentArea, setMinimumComponentArea] = useState(25);
+  const [removeSmallComponents, setRemoveSmallComponents] = useState(true);
+  const [keepLargestComponent, setKeepLargestComponent] = useState(false);
+  const [fillHoles, setFillHoles] = useState(false);
+  const [connectivity, setConnectivity] = useState<4 | 8>(8);
 
   const sessionQuery = useQuery({
     queryKey: ["annotation-session", imageId],
@@ -93,6 +99,18 @@ export function RasterMaskWorkspace({
     }
   }, [activeClassId, createAnotherMaskRequested, selectedMask]);
 
+  async function refreshAfterMaskChange(response: {
+    mask_annotation: MaskAnnotationRecord;
+  }) {
+    setActiveClassId(response.mask_annotation.label_class_id);
+    await sessionQuery.refetch();
+    setSelectedMaskId(response.mask_annotation.id);
+    setCreateAnotherMaskRequested(false);
+    await queryClient.invalidateQueries({
+      queryKey: ["project-images", project.id],
+    });
+  }
+
   const editMutation = useMutation({
     mutationFn: (points: Point[]) => {
       if (!session || !activeClassId) {
@@ -107,16 +125,31 @@ export function RasterMaskWorkspace({
         strokes: [{ points }],
       });
     },
-    onSuccess: async (response) => {
-      setActiveClassId(response.mask_annotation.label_class_id);
-      await sessionQuery.refetch();
-      setSelectedMaskId(response.mask_annotation.id);
-      setCreateAnotherMaskRequested(false);
-      await queryClient.invalidateQueries({
-        queryKey: ["project-images", project.id],
+    onSuccess: refreshAfterMaskChange,
+  });
+
+  const cleanupMutation = useMutation({
+    mutationFn: () => {
+      if (!session || !selectedMask) {
+        throw new Error("Choose a raster mask before cleanup");
+      }
+      if (!removeSmallComponents && !keepLargestComponent && !fillHoles) {
+        throw new Error("Choose at least one cleanup operation");
+      }
+      return cleanupRasterMask(imageId, {
+        base_revision: session.image.annotation_revision,
+        mask_annotation_id: selectedMask.id,
+        remove_small_components: removeSmallComponents,
+        minimum_component_area: minimumComponentArea,
+        keep_largest_component: keepLargestComponent,
+        fill_holes: fillHoles,
+        connectivity,
       });
     },
+    onSuccess: refreshAfterMaskChange,
   });
+
+  const operationPending = editMutation.isPending || cleanupMutation.isPending;
 
   if (sessionQuery.isPending || !session) {
     return (
@@ -156,7 +189,7 @@ export function RasterMaskWorkspace({
           <button
             type="button"
             className="secondary"
-            disabled={editMutation.isPending}
+            disabled={operationPending}
             onClick={onReturnToMasks}
           >
             Polygon tool
@@ -164,16 +197,12 @@ export function RasterMaskWorkspace({
           <button
             type="button"
             className="secondary"
-            disabled={editMutation.isPending}
+            disabled={operationPending}
             onClick={onReturnToBoxes}
           >
             Box editor
           </button>
-          <button
-            type="button"
-            disabled={editMutation.isPending}
-            onClick={onClose}
-          >
+          <button type="button" disabled={operationPending} onClick={onClose}>
             Close editor
           </button>
         </div>
@@ -187,13 +216,13 @@ export function RasterMaskWorkspace({
                 <p className="eyebrow">Tool</p>
                 <h3>Brush controls</h3>
               </div>
-              <span>{editMutation.isPending ? "Saving..." : "Ready"}</span>
+              <span>{operationPending ? "Saving..." : "Ready"}</span>
             </div>
             <div className="annotation-editor-inline-actions">
               <button
                 type="button"
                 className={mode === "paint" ? "active" : "secondary"}
-                disabled={editMutation.isPending}
+                disabled={operationPending}
                 onClick={() => setMode("paint")}
               >
                 Paint
@@ -201,7 +230,7 @@ export function RasterMaskWorkspace({
               <button
                 type="button"
                 className={mode === "erase" ? "active" : "secondary"}
-                disabled={!canErase || editMutation.isPending}
+                disabled={!canErase || operationPending}
                 onClick={() => setMode("erase")}
               >
                 Erase
@@ -214,16 +243,102 @@ export function RasterMaskWorkspace({
                 min="1"
                 max="128"
                 value={brushRadius}
-                disabled={editMutation.isPending}
+                disabled={operationPending}
                 onChange={(event) => setBrushRadius(Number(event.target.value))}
               />
             </label>
             <p className="annotation-helper">
-              Strokes update the selected raster layer. Use Create another mask
-              only when you intentionally want a separate layer.
+              Strokes update the selected raster layer. Use Create another mask only
+              when you intentionally want a separate layer.
             </p>
             {editMutation.error && (
               <p className="form-error">{editMutation.error.message}</p>
+            )}
+          </section>
+
+          <section className="annotation-sidebar-section">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Topology cleanup</p>
+                <h3>Repair selected mask</h3>
+              </div>
+            </div>
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={removeSmallComponents}
+                disabled={operationPending}
+                onChange={(event) =>
+                  setRemoveSmallComponents(event.target.checked)
+                }
+              />
+              Remove small disconnected islands
+            </label>
+            <label>
+              Minimum island area: {minimumComponentArea}px²
+              <input
+                type="number"
+                min="1"
+                max="100000000"
+                value={minimumComponentArea}
+                disabled={!removeSmallComponents || operationPending}
+                onChange={(event) =>
+                  setMinimumComponentArea(Number(event.target.value))
+                }
+              />
+            </label>
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={keepLargestComponent}
+                disabled={operationPending}
+                onChange={(event) =>
+                  setKeepLargestComponent(event.target.checked)
+                }
+              />
+              Keep only the largest connected component
+            </label>
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={fillHoles}
+                disabled={operationPending}
+                onChange={(event) => setFillHoles(event.target.checked)}
+              />
+              Fill enclosed holes
+            </label>
+            <label>
+              Connectivity
+              <select
+                value={connectivity}
+                disabled={operationPending}
+                onChange={(event) =>
+                  setConnectivity(Number(event.target.value) as 4 | 8)
+                }
+              >
+                <option value={4}>4-neighbor</option>
+                <option value={8}>8-neighbor</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={
+                !selectedMask ||
+                operationPending ||
+                (!removeSmallComponents && !keepLargestComponent && !fillHoles)
+              }
+              onClick={() => cleanupMutation.mutate()}
+            >
+              {cleanupMutation.isPending
+                ? "Cleaning..."
+                : "Create cleaned revision"}
+            </button>
+            <p className="annotation-helper">
+              Cleanup creates a new immutable mask revision. The prior raster file and
+              audit event remain available.
+            </p>
+            {cleanupMutation.error && (
+              <p className="form-error">{cleanupMutation.error.message}</p>
             )}
           </section>
 
@@ -243,7 +358,7 @@ export function RasterMaskWorkspace({
                   <button
                     type="button"
                     className="annotation-class-button"
-                    disabled={editMutation.isPending}
+                    disabled={operationPending}
                     onClick={() => setActiveClassId(labelClass.id)}
                   >
                     <span
@@ -268,7 +383,7 @@ export function RasterMaskWorkspace({
               <button
                 type="button"
                 className="secondary"
-                disabled={rasterMasks.length === 0 || editMutation.isPending}
+                disabled={rasterMasks.length === 0 || operationPending}
                 onClick={() => {
                   setCreateAnotherMaskRequested(true);
                   setSelectedMaskId(null);
@@ -293,7 +408,7 @@ export function RasterMaskWorkspace({
                     className={
                       selectedMaskId === mask.id ? "active" : "secondary"
                     }
-                    disabled={editMutation.isPending}
+                    disabled={operationPending}
                     onClick={() => {
                       setCreateAnotherMaskRequested(false);
                       setSelectedMaskId(mask.id);
@@ -363,7 +478,7 @@ export function RasterMaskWorkspace({
                 height={image.height_px}
                 mode={mode}
                 brushRadius={brushRadius}
-                disabled={editMutation.isPending || activeClassId === null}
+                disabled={operationPending || activeClassId === null}
                 onStroke={(points) => editMutation.mutate(points)}
               />
             </div>
