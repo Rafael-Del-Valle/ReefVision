@@ -18,12 +18,14 @@ import { WorkflowDashboard } from "./features/advancement/WorkflowDashboard";
 import { ClassManagerPanel } from "./features/classes/ClassManagerPanel";
 import { ClassificationDashboard } from "./features/classification/ClassificationDashboard";
 import { DatasetVersionsPanel } from "./features/dataset-versions/DatasetVersionsPanel";
+import { DepthDashboard } from "./features/depth/DepthDashboard";
 import { Gallery } from "./features/gallery/Gallery";
 import { MeasurementsDashboard } from "./features/measurements/MeasurementsDashboard";
 import { ModelManager } from "./features/models/ModelManager";
 import { OnboardingModal } from "./features/onboarding/OnboardingModal";
 import "./features/phase456/phase456.css";
 import { QualityControlDashboard } from "./features/quality-control/QualityControlDashboard";
+import { TrainingReportsDashboard } from "./features/reports/TrainingReportsDashboard";
 import { ReviewQueueDashboard } from "./features/review-queues/ReviewQueueDashboard";
 import { SystemPanel } from "./features/system/SystemPanel";
 import { TrainingWorkspace } from "./features/training/TrainingWorkspace";
@@ -44,7 +46,9 @@ type ProjectView =
   | "versions"
   | "models"
   | "training"
+  | "reports"
   | "measurements"
+  | "depth"
   | "classification"
   | "videos"
   | "evaluation"
@@ -139,8 +143,10 @@ export function App() {
     { id: "gallery", label: "Images" },
     { id: "versions", label: "Versions" },
     { id: "training", label: "Training" },
+    { id: "reports", label: "Reports" },
     { id: "models", label: "Models" },
     { id: "measurements", label: "Measurements" },
+    { id: "depth", label: "Depth" },
     { id: "classification", label: "Classification" },
     { id: "videos", label: "Video" },
     { id: "evaluation", label: "Evaluation" },
@@ -340,8 +346,14 @@ export function App() {
                   }
                 />
               )}
+              {activeView === "reports" && (
+                <TrainingReportsDashboard project={selectedProject} />
+              )}
               {activeView === "measurements" && (
                 <MeasurementsDashboard project={selectedProject} />
+              )}
+              {activeView === "depth" && (
+                <DepthDashboard project={selectedProject} />
               )}
               {activeView === "classification" && (
                 <ClassificationDashboard project={selectedProject} />
