@@ -1,4 +1,4 @@
-"""Read-only integrity inspection for project records and managed files."""
+"""Read-only integrity inspection for project records and managed paths."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
-from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -98,6 +97,16 @@ class ProjectIntegrityService:
                 digest.update(chunk)
         return digest.hexdigest()
 
+    @staticmethod
+    def _path_size(path: Path) -> int:
+        if path.is_file():
+            return path.stat().st_size
+        return sum(
+            child.stat().st_size
+            for child in path.rglob("*")
+            if child.is_file()
+        )
+
     def _issue(
         self,
         *,
@@ -121,12 +130,13 @@ class ProjectIntegrityService:
             )
         )
 
-    def _inspect_file(
+    def _inspect_path(
         self,
         *,
         resource_kind: IntegrityResourceKind,
         record_id: str,
         managed_path: str,
+        expected_kind: str,
         expected_sha256: str | None = None,
         missing_severity: IntegritySeverity = "error",
         repairable: bool = False,
@@ -150,28 +160,46 @@ class ProjectIntegrityService:
             category.missing_file_count += 1
             self._issue(
                 severity=missing_severity,
-                code="managed_file_missing",
+                code="managed_path_missing",
                 resource_kind=resource_kind,
                 record_id=record_id,
                 managed_path=managed_path,
-                message="The database record references a managed file that is missing.",
+                message="The database record references a managed path that is missing.",
                 repairable=repairable,
             )
             return
-        if not path.is_file():
+        kind_matches = (
+            expected_kind == "either"
+            or (expected_kind == "file" and path.is_file())
+            or (expected_kind == "directory" and path.is_dir())
+        )
+        if not kind_matches:
             category.missing_file_count += 1
             self._issue(
                 severity="error",
-                code="managed_path_not_file",
+                code="managed_path_type_mismatch",
                 resource_kind=resource_kind,
                 record_id=record_id,
                 managed_path=managed_path,
-                message="The managed path exists but is not a regular file.",
+                message=(
+                    f"The managed path exists but is not the expected "
+                    f"{expected_kind} type."
+                ),
             )
             return
         category.existing_file_count += 1
-        category.total_existing_bytes += path.stat().st_size
+        category.total_existing_bytes += self._path_size(path)
         if self.verify_checksums and expected_sha256:
+            if not path.is_file():
+                self._issue(
+                    severity="error",
+                    code="checksum_target_not_file",
+                    resource_kind=resource_kind,
+                    record_id=record_id,
+                    managed_path=managed_path,
+                    message="A checksum can only be verified against a regular file.",
+                )
+                return
             category.checksum_verified_count += 1
             actual = self._file_checksum(path)
             if actual.casefold() != expected_sha256.casefold():
@@ -187,6 +215,40 @@ class ProjectIntegrityService:
                         "checksum stored in the database."
                     ),
                 )
+
+    def _inspect_file(
+        self,
+        *,
+        resource_kind: IntegrityResourceKind,
+        record_id: str,
+        managed_path: str,
+        expected_sha256: str | None = None,
+        missing_severity: IntegritySeverity = "error",
+        repairable: bool = False,
+    ) -> None:
+        self._inspect_path(
+            resource_kind=resource_kind,
+            record_id=record_id,
+            managed_path=managed_path,
+            expected_kind="file",
+            expected_sha256=expected_sha256,
+            missing_severity=missing_severity,
+            repairable=repairable,
+        )
+
+    def _inspect_directory(
+        self,
+        *,
+        resource_kind: IntegrityResourceKind,
+        record_id: str,
+        managed_path: str,
+    ) -> None:
+        self._inspect_path(
+            resource_kind=resource_kind,
+            record_id=record_id,
+            managed_path=managed_path,
+            expected_kind="directory",
+        )
 
     def _inspect_project_root(self, project: Project) -> None:
         category = self.categories["project_root"]
@@ -313,11 +375,13 @@ class ProjectIntegrityService:
                 .order_by(ExportRecord.created_at, ExportRecord.id)
             )
         )
-        completed = [item for item in exports if item.status in {"completed", "succeeded"}]
+        completed = [
+            item for item in exports if item.status in {"completed", "succeeded"}
+        ]
         for kind in ("export_output", "export_manifest", "export_archive"):
             self.categories[kind].record_count = len(completed)
         for export in completed:
-            self._inspect_file(
+            self._inspect_directory(
                 resource_kind="export_output",
                 record_id=export.id,
                 managed_path=export.output_path,
@@ -342,14 +406,17 @@ class ProjectIntegrityService:
             )
         )
         self.categories["training_log"].record_count = len(runs)
-        completed = [run for run in runs if run.status in {"completed", "succeeded"}]
+        completed = [
+            run for run in runs if run.status in {"completed", "succeeded"}
+        ]
         self.categories["training_checkpoint"].record_count = len(completed)
         for run in runs:
             if run.logs_path:
-                self._inspect_file(
+                self._inspect_path(
                     resource_kind="training_log",
                     record_id=run.id,
                     managed_path=run.logs_path,
+                    expected_kind="either",
                     missing_severity="warning",
                 )
             elif run.status in {"running", "completed", "succeeded", "failed"}:
@@ -445,8 +512,12 @@ class ProjectIntegrityService:
         self._inspect_jobs(project.id, stale_job_minutes)
 
         categories = [self.categories[kind].response() for kind in CATEGORY_ORDER]
-        error_count = sum(1 for issue in self.issues if issue.severity == "error")
-        warning_count = sum(1 for issue in self.issues if issue.severity == "warning")
+        error_count = sum(
+            1 for issue in self.issues if issue.severity == "error"
+        )
+        warning_count = sum(
+            1 for issue in self.issues if issue.severity == "warning"
+        )
         referenced = sum(item.referenced_file_count for item in categories)
         existing = sum(item.existing_file_count for item in categories)
         missing = sum(item.missing_file_count for item in categories)
