@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import math
-from collections import defaultdict, deque
-from collections.abc import Iterable, Sequence
+from collections import deque
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -12,7 +12,6 @@ import numpy as np
 from PIL import Image
 
 from reefvision.domain.errors import ValidationError
-from reefvision.ml.mask_tools import as_binary if False else None
 
 Point = tuple[float, float]
 SurfaceMethod = Literal[
@@ -101,7 +100,9 @@ def _convex_hull(points: np.ndarray) -> np.ndarray:
         return np.asarray(unique, dtype=np.float64)
 
     def cross(origin: Point, a: Point, b: Point) -> float:
-        return (a[0] - origin[0]) * (b[1] - origin[1]) - (a[1] - origin[1]) * (b[0] - origin[0])
+        return (a[0] - origin[0]) * (b[1] - origin[1]) - (
+            a[1] - origin[1]
+        ) * (b[0] - origin[0])
 
     lower: list[Point] = []
     for point in unique:
@@ -162,9 +163,7 @@ def shape_measurements(values: np.ndarray | Image.Image) -> ShapeMeasurements:
     eigenvectors = eigenvectors[:, order]
     major = float(4 * math.sqrt(eigenvalues[0])) if len(eigenvalues) else 0.0
     minor = float(4 * math.sqrt(eigenvalues[1])) if len(eigenvalues) > 1 else 0.0
-    orientation = float(
-        math.degrees(math.atan2(eigenvectors[1, 0], eigenvectors[0, 0]))
-    )
+    orientation = float(math.degrees(math.atan2(eigenvectors[1, 0], eigenvectors[0, 0])))
     rows, columns = coordinates[:, 0], coordinates[:, 1]
     width = int(columns.max() - columns.min() + 1)
     height = int(rows.max() - rows.min() + 1)
@@ -256,7 +255,11 @@ def _edge_length(first: tuple[int, int], second: tuple[int, int]) -> float:
     return math.sqrt(2) if first[0] != second[0] and first[1] != second[1] else 1.0
 
 
-def bridge_skeleton_gaps(skeleton: np.ndarray, *, maximum_gap_pixels: float) -> tuple[np.ndarray, int]:
+def bridge_skeleton_gaps(
+    skeleton: np.ndarray,
+    *,
+    maximum_gap_pixels: float,
+) -> tuple[np.ndarray, int]:
     if maximum_gap_pixels <= 0:
         return binary_mask(skeleton), 0
     output = binary_mask(skeleton).copy()
@@ -370,7 +373,10 @@ def _branch_segments(skeleton: np.ndarray) -> list[list[tuple[int, int]]]:
 
 
 def _path_length(path: Sequence[tuple[int, int]]) -> float:
-    return sum(_edge_length(first, second) for first, second in zip(path, path[1:], strict=False))
+    return sum(
+        _edge_length(first, second)
+        for first, second in zip(path, path[1:], strict=False)
+    )
 
 
 def _longest_shortest_path(skeleton: np.ndarray) -> float:
@@ -447,7 +453,9 @@ def calibrate_references(
     standard_error = None
     lower = upper = None
     if len(references) > 1:
-        residual_variance = float(np.dot(residuals, residuals) / (len(references) - 1))
+        residual_variance = float(
+            np.dot(residuals, residuals) / (len(references) - 1)
+        )
         standard_error = math.sqrt(residual_variance / denominator)
         lower = max(0.0, scale - 1.96 * standard_error)
         upper = scale + 1.96 * standard_error
@@ -498,12 +506,16 @@ def surface_area_estimate(
             raise ValidationError("Elliptical surface area requires two positive diameters")
         a = diameter_major / 2
         b = diameter_minor / 2
-        circumference = math.pi * (3 * (a + b) - math.sqrt((3 * a + b) * (a + 3 * b)))
+        circumference = math.pi * (
+            3 * (a + b) - math.sqrt((3 * a + b) * (a + 3 * b))
+        )
         area = circumference * centerline_length
         assumptions.append("Elliptical branch cross section with constant diameters")
     elif method == "pixel_frustum":
         if pixel_area_scale is None or pixel_area_scale <= 0:
-            raise ValidationError("Pixel-frustum surface area requires a positive pixel scale")
+            raise ValidationError(
+                "Pixel-frustum surface area requires a positive pixel scale"
+            )
         area = projected_area * pixel_area_scale
         assumptions.append("Locally fronto-parallel depth projection")
     else:
