@@ -70,6 +70,12 @@ class MeasurementValidationMetricSummary(BaseModel):
     mean_measured: float
     mean_reference: float
     mean_bias: float
+    standard_deviation_bias: float | None
+    bias_confidence_interval_lower: float | None
+    bias_confidence_interval_upper: float | None
+    lower_limit_of_agreement: float | None
+    upper_limit_of_agreement: float | None
+    pearson_correlation: float | None = Field(default=None, ge=-1, le=1)
     mean_absolute_error: float
     root_mean_square_error: float
     mean_absolute_percentage_error: float | None
