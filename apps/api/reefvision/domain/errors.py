@@ -13,8 +13,8 @@ class ConflictError(ReefVisionError):
     """Requested operation conflicts with existing data."""
 
 
-class ValidationError(ReefVisionError):
-    """Requested operation violates a domain rule."""
+class ValidationError(ReefVisionError, ValueError):
+    """Requested operation violates a domain rule or invalid value contract."""
 
 
 class CatalogResourceError(ReefVisionError):
