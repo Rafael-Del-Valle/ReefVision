@@ -41,6 +41,7 @@ class JobService:
             "image_embeddings",
             "workflow_run",
             "provider_benchmark",
+            "sam2_video_propagation",
         }
         if job.status != "failed" or job.job_type not in retryable_types:
             raise ConflictError("Only failed recoverable jobs can be retried")
