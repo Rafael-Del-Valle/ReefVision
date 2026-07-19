@@ -65,7 +65,11 @@ class ClassificationCrop(Base):
         nullable=False,
         index=True,
     )
-    annotation_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    annotation_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+        index=True,
+    )
     label_class_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("label_classes.id", ondelete="RESTRICT"),
