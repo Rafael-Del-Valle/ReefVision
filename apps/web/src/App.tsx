@@ -7,21 +7,24 @@ import {
   getHealth,
   getProject,
   getProjectSummaries,
-  type Project,
   type ProjectSummary,
   type QualityControlIssue,
   type ReviewQueueItem,
 } from "./api/client";
 import { EnhancedAnnotationEditor } from "./features/annotation-editor/EnhancedAnnotationEditor";
 import { ClassManagerPanel } from "./features/classes/ClassManagerPanel";
+import { ClassificationDashboard } from "./features/classification/ClassificationDashboard";
 import { DatasetVersionsPanel } from "./features/dataset-versions/DatasetVersionsPanel";
 import { Gallery } from "./features/gallery/Gallery";
+import { MeasurementsDashboard } from "./features/measurements/MeasurementsDashboard";
 import { ModelManager } from "./features/models/ModelManager";
 import { OnboardingModal } from "./features/onboarding/OnboardingModal";
+import "./features/phase456/phase456.css";
 import { QualityControlDashboard } from "./features/quality-control/QualityControlDashboard";
 import { ReviewQueueDashboard } from "./features/review-queues/ReviewQueueDashboard";
 import { SystemPanel } from "./features/system/SystemPanel";
 import { TrainingWorkspace } from "./features/training/TrainingWorkspace";
+import { VideoDashboard } from "./features/videos/VideoDashboard";
 import "./styles/app.css";
 
 interface AnnotationLaunchState {
@@ -33,7 +36,21 @@ interface AnnotationLaunchState {
   highlightPredictionIds?: string[];
 }
 
+type ProjectView =
+  | "gallery"
+  | "versions"
+  | "models"
+  | "training"
+  | "measurements"
+  | "classification"
+  | "videos"
+  | "classes"
+  | "quality_control"
+  | "review_queue"
+  | "system";
+
 const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.6.0";
+
 export function App() {
   const queryClient = useQueryClient();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
@@ -45,16 +62,7 @@ export function App() {
   const [trainingCatalogModelId, setTrainingCatalogModelId] = useState<
     string | null
   >(null);
-  const [activeView, setActiveView] = useState<
-    | "gallery"
-    | "versions"
-    | "models"
-    | "training"
-    | "classes"
-    | "quality_control"
-    | "review_queue"
-    | "system"
-  >("gallery");
+  const [activeView, setActiveView] = useState<ProjectView>("gallery");
   const [projectName, setProjectName] = useState("");
   const [description, setDescription] = useState("");
   const [template, setTemplate] = useState<"blank" | "octocoral">("octocoral");
@@ -120,6 +128,19 @@ export function App() {
     window.localStorage.setItem(ONBOARDING_DISMISS_KEY, "true");
     setShowOnboarding(false);
   }
+
+  const projectTabs: Array<{ id: ProjectView; label: string }> = [
+    { id: "gallery", label: "Images" },
+    { id: "versions", label: "Versions" },
+    { id: "training", label: "Training" },
+    { id: "models", label: "Models" },
+    { id: "measurements", label: "Measurements" },
+    { id: "classification", label: "Classification" },
+    { id: "videos", label: "Video" },
+    { id: "quality_control", label: "Quality Control" },
+    { id: "review_queue", label: "Review Queue" },
+    { id: "classes", label: "Classes" },
+  ];
 
   return (
     <main className="app-shell">
@@ -264,73 +285,18 @@ export function App() {
                 role="tablist"
                 aria-label="Project sections"
               >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeView === "gallery"}
-                  className={activeView === "gallery" ? "active" : "secondary"}
-                  onClick={() => setActiveView("gallery")}
-                >
-                  Images
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeView === "versions"}
-                  className={activeView === "versions" ? "active" : "secondary"}
-                  onClick={() => setActiveView("versions")}
-                >
-                  Versions
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeView === "training"}
-                  className={activeView === "training" ? "active" : "secondary"}
-                  onClick={() => setActiveView("training")}
-                >
-                  Training
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeView === "models"}
-                  className={activeView === "models" ? "active" : "secondary"}
-                  onClick={() => setActiveView("models")}
-                >
-                  Models
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeView === "quality_control"}
-                  className={
-                    activeView === "quality_control" ? "active" : "secondary"
-                  }
-                  onClick={() => setActiveView("quality_control")}
-                >
-                  Quality Control
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeView === "review_queue"}
-                  className={
-                    activeView === "review_queue" ? "active" : "secondary"
-                  }
-                  onClick={() => setActiveView("review_queue")}
-                >
-                  Review Queue
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeView === "classes"}
-                  className={activeView === "classes" ? "active" : "secondary"}
-                  onClick={() => setActiveView("classes")}
-                >
-                  Classes
-                </button>
+                {projectTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeView === tab.id}
+                    className={activeView === tab.id ? "active" : "secondary"}
+                    onClick={() => setActiveView(tab.id)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
 
               {activeView === "gallery" && (
@@ -364,6 +330,15 @@ export function App() {
                     setTrainingCatalogModelId(null)
                   }
                 />
+              )}
+              {activeView === "measurements" && (
+                <MeasurementsDashboard project={selectedProject} />
+              )}
+              {activeView === "classification" && (
+                <ClassificationDashboard project={selectedProject} />
+              )}
+              {activeView === "videos" && (
+                <VideoDashboard project={selectedProject} />
               )}
               {activeView === "quality_control" && (
                 <QualityControlDashboard
