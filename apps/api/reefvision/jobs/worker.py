@@ -20,6 +20,12 @@ from reefvision.jobs.export import process_export_job
 from reefvision.jobs.image_embeddings import process_image_embedding_job
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.model_install import process_model_install_job
+from reefvision.jobs.project_archives import (
+    process_project_archive_export_job,
+    process_project_archive_import_job,
+    process_project_duplicate_job,
+    process_project_storage_migration_job,
+)
 from reefvision.jobs.provider_benchmarks import process_provider_benchmark_job
 from reefvision.jobs.quality_control import process_quality_control_job
 from reefvision.jobs.restores import process_restore_job
@@ -126,40 +132,32 @@ def process_next_thumbnail_job(
         return False
 
     try:
-        if job_type == "thumbnail":
-            return process_thumbnail_job(settings, factory, job_id)
-        if job_type == "inference":
-            return process_inference_job(settings, factory, job_id)
-        if job_type == "classification_inference":
-            return process_classification_inference_job(settings, factory, job_id)
-        if job_type == "export":
-            return process_export_job(settings, factory, job_id)
-        if job_type == "qc":
-            return process_quality_control_job(settings, factory, job_id)
-        if job_type == "backup":
-            return process_backup_job(settings, factory, job_id)
-        if job_type == "restore":
-            return process_restore_job(settings, factory, job_id)
-        if job_type == "diagnostics":
-            return process_diagnostics_job(settings, factory, job_id)
-        if job_type == "training":
-            return process_task_aware_training_job(settings, factory, job_id)
-        if job_type == "model_install":
-            return process_model_install_job(settings, factory, job_id)
-        if job_type == "video_extract":
-            return process_video_extract_job(settings, factory, job_id)
-        if job_type == "video_track":
-            return process_video_tracking_job(settings, factory, job_id)
-        if job_type == "depth_map":
-            return process_depth_map_job(settings, factory, job_id)
-        if job_type == "image_embeddings":
-            return process_image_embedding_job(settings, factory, job_id)
-        if job_type == "workflow_run":
-            return process_workflow_run_job(settings, factory, job_id)
-        if job_type == "provider_benchmark":
-            return process_provider_benchmark_job(settings, factory, job_id)
-        if job_type == "sam2_video_propagation":
-            return process_sam2_video_propagation_job(settings, factory, job_id)
+        processors = {
+            "thumbnail": process_thumbnail_job,
+            "inference": process_inference_job,
+            "classification_inference": process_classification_inference_job,
+            "export": process_export_job,
+            "qc": process_quality_control_job,
+            "backup": process_backup_job,
+            "restore": process_restore_job,
+            "diagnostics": process_diagnostics_job,
+            "training": process_task_aware_training_job,
+            "model_install": process_model_install_job,
+            "video_extract": process_video_extract_job,
+            "video_track": process_video_tracking_job,
+            "depth_map": process_depth_map_job,
+            "image_embeddings": process_image_embedding_job,
+            "workflow_run": process_workflow_run_job,
+            "provider_benchmark": process_provider_benchmark_job,
+            "sam2_video_propagation": process_sam2_video_propagation_job,
+            "project_archive_export": process_project_archive_export_job,
+            "project_archive_import": process_project_archive_import_job,
+            "project_duplicate": process_project_duplicate_job,
+            "project_storage_migration": process_project_storage_migration_job,
+        }
+        processor = processors.get(str(job_type))
+        if processor is not None:
+            return processor(settings, factory, job_id)
 
         message = f"Unsupported queued job type: {job_type}"
         _fail_job(factory, job_id, message)
