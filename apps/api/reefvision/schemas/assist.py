@@ -59,6 +59,12 @@ class AssistBoxRequest(BaseModel):
         return value
 
 
+class AssistPointPromptRequest(BaseModel):
+    positive_points: list[AssistPoint] = Field(min_length=1, max_length=10_000)
+    negative_points: list[AssistPoint] = Field(default_factory=list, max_length=10_000)
+    context_box: AssistBoxRequest | None = None
+
+
 class AssistAcceptRequest(BaseModel):
     label_class_id: str = Field(min_length=1, max_length=36)
 
@@ -83,6 +89,8 @@ class AssistSessionResponse(BaseModel):
     expires_at: datetime
     add_stroke_count: int
     subtract_stroke_count: int
+    positive_point_count: int = 0
+    negative_point_count: int = 0
     brush_radius: float | None
     source_prediction_id: str | None
     prompt_type: str | None
