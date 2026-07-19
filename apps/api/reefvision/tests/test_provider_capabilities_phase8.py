@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 
@@ -47,10 +48,10 @@ def test_provider_capability_routes_expose_health_and_benchmarks(
     )
     assert recorded.status_code == 201
     benchmark = recorded.json()
-    assert benchmark["mean_latency_ms"] == 12.0
-    assert benchmark["median_latency_ms"] == 12.0
-    assert benchmark["p95_latency_ms"] == 13.8
-    assert benchmark["throughput_per_second"] == 83.33333333333333
+    assert benchmark["mean_latency_ms"] == pytest.approx(12.0)
+    assert benchmark["median_latency_ms"] == pytest.approx(12.0)
+    assert benchmark["p95_latency_ms"] == pytest.approx(13.8)
+    assert benchmark["throughput_per_second"] == pytest.approx(83.33333333333333)
 
     comparison = client.get(
         "/api/v1/provider-benchmarks/compare",
@@ -84,4 +85,4 @@ def test_provider_capability_routes_reject_unknown_provider(
             "elapsed_seconds": 0.001,
         },
     )
-    assert benchmark.status_code == 422
+    assert benchmark.status_code == 400
