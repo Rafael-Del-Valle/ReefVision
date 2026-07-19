@@ -10,13 +10,18 @@ JobType = Literal[
     "thumbnail",
     "import",
     "inference",
+    "classification_inference",
     "export",
     "qc",
     "backup",
     "restore",
     "diagnostics",
+    "training",
+    "model_install",
+    "video_extract",
+    "video_track",
 ]
-ModelPurpose = Literal["detector", "segmenter", "semantic_segmenter", "assist"]
+ModelPurpose = Literal["detector", "segmenter", "semantic_segmenter", "classifier", "assist"]
 PredictionReviewStatus = Literal[
     "pending",
     "accepted",
@@ -65,6 +70,7 @@ MODEL_PURPOSES: tuple[ModelPurpose, ...] = (
     "detector",
     "segmenter",
     "semantic_segmenter",
+    "classifier",
     "assist",
 )
 PREDICTION_REVIEW_STATUSES: tuple[PredictionReviewStatus, ...] = (
