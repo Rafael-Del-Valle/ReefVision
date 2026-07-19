@@ -16,6 +16,7 @@ from reefvision.db.models import (
     Job,
 )
 from reefvision.storage.classification_exports import write_classification_export
+from reefvision.storage.coco_exports import write_coco_instances_export
 from reefvision.storage.datasets import (
     remove_export_artifacts,
     write_yolo_detection_export,
@@ -75,7 +76,9 @@ def process_export_job(
             if export is None:
                 raise RuntimeError("Export record is missing")
             version = session.scalar(
-                select(DatasetVersion).where(DatasetVersion.id == export.dataset_version_id)
+                select(DatasetVersion).where(
+                    DatasetVersion.id == export.dataset_version_id
+                )
             )
             if version is None:
                 raise RuntimeError("Dataset version is missing")
@@ -144,6 +147,17 @@ def process_export_job(
                     manifest_path=export.manifest_path,
                     archive_path=export.archive_path,
                 )
+            elif export.format == "coco_instances":
+                result = write_coco_instances_export(
+                    settings,
+                    export_id=export.id,
+                    version=version,
+                    items=items,
+                    image_paths=image_paths,
+                    output_path=export.output_path,
+                    manifest_path=export.manifest_path,
+                    archive_path=export.archive_path,
+                )
             elif export.format in {
                 "classification_multiclass",
                 "classification_binary_state",
@@ -171,13 +185,17 @@ def process_export_job(
                     ),
                 )
             else:
-                raise RuntimeError(f"Unsupported export format: {export.format}")
+                raise RuntimeError(
+                    f"Unsupported export format: {export.format}"
+                )
 
         with factory() as session:
             job = session.get(Job, job_id)
             export = session.get(ExportRecord, export_id)
             if job is None or export is None:
-                raise RuntimeError("Export job references missing database rows")
+                raise RuntimeError(
+                    "Export job references missing database rows"
+                )
             export.status = "succeeded"
             export.completed_at = datetime.now(UTC)
             export.request_json = {**export.request_json, **result}
