@@ -9,6 +9,10 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
+from reefvision.schemas.provider_benchmark_jobs import (
+    ProviderBenchmarkRunRequest,
+    ProviderBenchmarkRunResponse,
+)
 from reefvision.schemas.provider_capabilities import (
     ProviderBenchmarkComparisonResponse,
     ProviderBenchmarkCreateRequest,
@@ -16,6 +20,7 @@ from reefvision.schemas.provider_capabilities import (
     ProviderCapabilityListResponse,
     ProviderCapabilityResponse,
 )
+from reefvision.services.provider_benchmark_jobs import ProviderBenchmarkJobService
 from reefvision.services.provider_capabilities import ProviderCapabilityService
 
 router = APIRouter(tags=["provider-capabilities"])
@@ -64,6 +69,22 @@ def record_provider_benchmark(
     """Persist a benchmark produced by an accepted provider execution."""
 
     return service(request, session).record_benchmark(payload)
+
+
+@router.post(
+    "/provider-benchmarks/runs",
+    response_model=ProviderBenchmarkRunResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def queue_provider_benchmark(
+    payload: ProviderBenchmarkRunRequest,
+    request: Request,
+    session: DbSession,
+) -> ProviderBenchmarkRunResponse:
+    """Queue a provider benchmark that executes through the restart-aware worker."""
+
+    settings: Settings = request.app.state.settings
+    return ProviderBenchmarkJobService(session, settings).queue(payload)
 
 
 @router.get(
