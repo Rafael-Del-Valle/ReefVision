@@ -286,6 +286,8 @@ export function annotationEditorReducer(
         baseRevision: action.session.image.annotation_revision,
         document: nextDocument,
         activeClassId,
+        saveState: "saved",
+        saveMessage: "Saved",
       };
     }
     case "setTool":
