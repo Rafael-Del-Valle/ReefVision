@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from reefvision.db.models import ClassificationCrop
+from reefvision.db.models import ClassificationCrop, Job
 from reefvision.jobs.export import process_export_job
 from reefvision.tests.test_classification_phase5 import _seed_classification_project
 from reefvision.tests.test_dataset_versions import create_version
@@ -30,11 +30,17 @@ def test_classification_export_registers_crops_for_qa(client: TestClient) -> Non
     job = created.json()["job"]
     app = cast(FastAPI, client.app)
 
-    assert process_export_job(
+    processed = process_export_job(
         app.state.settings,
         app.state.session_factory,
         job["id"],
     )
+    failure_message = None
+    if not processed:
+        with app.state.session_factory() as session:
+            failed_job = session.get(Job, job["id"])
+            failure_message = failed_job.error_message if failed_job is not None else None
+    assert processed, failure_message or "Classification export failed without an error message"
 
     with app.state.session_factory() as session:
         crops = list(
