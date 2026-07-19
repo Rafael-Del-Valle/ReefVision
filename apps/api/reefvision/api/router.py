@@ -14,6 +14,7 @@ from reefvision.api.routes.classification import router as classification_router
 from reefvision.api.routes.classification_evaluation import (
     router as classification_evaluation_router,
 )
+from reefvision.api.routes.classification_qa import router as classification_qa_router
 from reefvision.api.routes.dataset_versions import router as dataset_versions_router
 from reefvision.api.routes.depth import router as depth_router
 from reefvision.api.routes.health import router as health_router
@@ -60,6 +61,7 @@ api_router.include_router(training_router)
 api_router.include_router(training_reports_router)
 api_router.include_router(classification_router)
 api_router.include_router(classification_evaluation_router)
+api_router.include_router(classification_qa_router)
 api_router.include_router(videos_router)
 api_router.include_router(video_exports_router)
 api_router.include_router(sam2_video_router)
