@@ -1,5 +1,6 @@
 """Database model exports."""
 
+from reefvision.db.models.active_learning_cycle import ActiveLearningCycle
 from reefvision.db.models.annotation import Annotation
 from reefvision.db.models.annotation_event import AnnotationEvent
 from reefvision.db.models.artifact_record import ArtifactRecord
@@ -41,6 +42,7 @@ from reefvision.db.models.workflow import (
 )
 
 __all__ = [
+    "ActiveLearningCycle",
     "Annotation",
     "AnnotationEvent",
     "ArtifactRecord",
