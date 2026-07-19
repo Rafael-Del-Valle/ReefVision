@@ -29,6 +29,7 @@ import { TrainingReportsDashboard } from "./features/reports/TrainingReportsDash
 import { ReviewQueueDashboard } from "./features/review-queues/ReviewQueueDashboard";
 import { SystemPanel } from "./features/system/SystemPanel";
 import { TrainingWorkspace } from "./features/training/TrainingWorkspace";
+import { TuningDashboard } from "./features/tuning/TuningDashboard";
 import { VideoDashboard } from "./features/videos/VideoDashboard";
 import "./styles/app.css";
 
@@ -46,6 +47,7 @@ type ProjectView =
   | "versions"
   | "models"
   | "training"
+  | "tuning"
   | "reports"
   | "measurements"
   | "depth"
@@ -143,6 +145,7 @@ export function App() {
     { id: "gallery", label: "Images" },
     { id: "versions", label: "Versions" },
     { id: "training", label: "Training" },
+    { id: "tuning", label: "Tuning" },
     { id: "reports", label: "Reports" },
     { id: "models", label: "Models" },
     { id: "measurements", label: "Measurements" },
@@ -345,6 +348,9 @@ export function App() {
                     setTrainingCatalogModelId(null)
                   }
                 />
+              )}
+              {activeView === "tuning" && (
+                <TuningDashboard project={selectedProject} />
               )}
               {activeView === "reports" && (
                 <TrainingReportsDashboard project={selectedProject} />
