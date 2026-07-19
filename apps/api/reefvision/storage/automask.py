@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from collections import deque
 from pathlib import Path
 from typing import cast
@@ -36,7 +35,9 @@ def _load_rgb_source(
                 raise ValidationError("Auto Mask source dimensions do not match the image")
             return cast(Image.Image, image.convert("RGB"))
     except (OSError, UnidentifiedImageError) as exc:
-        raise ValidationError("The source image required for Auto Mask could not be read") from exc
+        raise ValidationError(
+            "The source image required for Auto Mask could not be read"
+        ) from exc
 
 
 def _luminance(rgb: tuple[int, int, int]) -> float:
@@ -54,7 +55,9 @@ def _seed_colors(
     width, height = image.size
     pixels = image.load()
     colors: list[tuple[int, int, int]] = []
-    stride = max(1, len(stroke.points) // max(limit // max((sample_radius * 2 + 1) ** 2, 1), 1))
+    sample_area = max((sample_radius * 2 + 1) ** 2, 1)
+    points_per_limit = max(limit // sample_area, 1)
+    stride = max(1, len(stroke.points) // points_per_limit)
     for point in stroke.points[::stride]:
         center_x = min(width - 1, max(0, round(float(point.x))))
         center_y = min(height - 1, max(0, round(float(point.y))))
@@ -85,7 +88,10 @@ def _pixel_allowed(
     for seed in seeds:
         if abs(pixel_luminance - _luminance(seed)) > luminance_tolerance:
             continue
-        distance_squared = sum((float(left) - float(right)) ** 2 for left, right in zip(color, seed))
+        distance_squared = sum(
+            (float(left) - float(right)) ** 2
+            for left, right in zip(color, seed, strict=True)
+        )
         if distance_squared <= color_tolerance_squared:
             return True
     return False
@@ -114,9 +120,7 @@ def _accepted_footprint(
         return Image.new("L", source.size, 0)
     source_pixels = source.load()
     footprint_bytes = bytearray(footprint.tobytes())
-    gray = source.convert("L")
-    edge = gray.filter(ImageFilter.FIND_EDGES)
-    edge_bytes = edge.tobytes()
+    edge_bytes = source.convert("L").filter(ImageFilter.FIND_EDGES).tobytes()
     allowed = bytearray(width * height)
     left, top, right, bottom = bounds
     color_tolerance_squared = float(color_tolerance) ** 2
