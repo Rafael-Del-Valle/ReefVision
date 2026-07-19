@@ -20,9 +20,22 @@ function Invoke-External {
         [Parameter(Mandatory = $false)][string[]]$Arguments = @()
     )
 
-    & $Executable @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "$Executable exited with code $LASTEXITCODE."
+    # Windows PowerShell surfaces a native program's stderr as ErrorRecord objects.
+    # Tools such as npm, Alembic, Cargo, and Rustup routinely write warnings or
+    # informational messages to stderr even when they exit successfully. Temporarily
+    # use Continue and decide success exclusively from the native process exit code.
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        & $Executable @Arguments 2>&1
+        $ExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $PreviousErrorActionPreference
+    }
+
+    if ($ExitCode -ne 0) {
+        throw "$Executable exited with code $ExitCode."
     }
 }
 
@@ -131,7 +144,7 @@ try {
         Invoke-External "npm" @("run", "build")
     }
     Invoke-ReleaseGate "Playwright Chromium install" {
-        Invoke-External "npx" @("playwright", "install", "chromium")
+        Invoke-External "npx" @("--no-install", "playwright", "install", "chromium")
     }
     Invoke-ReleaseGate "Playwright browser tests" {
         Invoke-External "npm" @("run", "test:e2e")
