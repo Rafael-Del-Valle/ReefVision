@@ -11,6 +11,7 @@ from reefvision.db.models.dataset_version_item import DatasetVersionItem
 from reefvision.db.models.experiment_record import ExperimentRecord
 from reefvision.db.models.export_record import ExportRecord
 from reefvision.db.models.image import ImageAsset
+from reefvision.db.models.image_embedding import ImageEmbedding
 from reefvision.db.models.image_label import ImageLabel
 from reefvision.db.models.job import Job
 from reefvision.db.models.label_class import LabelClass
@@ -41,6 +42,7 @@ __all__ = [
     "ExperimentRecord",
     "ExportRecord",
     "ImageAsset",
+    "ImageEmbedding",
     "ImageLabel",
     "Job",
     "LabelClass",
