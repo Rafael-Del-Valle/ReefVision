@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from hashlib import sha256
 from pathlib import Path
 from uuid import uuid4
@@ -16,10 +17,21 @@ from reefvision.storage.projects import resolve_managed_project_path
 
 
 def _publish_exclusively(temporary: Path, destination: Path) -> None:
+    """Publish without replacing an artifact created by another worker."""
+
     try:
-        os.replace(temporary, destination)
+        os.link(temporary, destination)
     except FileExistsError as exc:
         raise ConflictError("Depth map artifact already exists") from exc
+    except OSError:
+        try:
+            with temporary.open("rb") as source, destination.open("xb") as target:
+                shutil.copyfileobj(source, target, length=1024 * 1024)
+                target.flush()
+                os.fsync(target.fileno())
+        except FileExistsError as exc:
+            raise ConflictError("Depth map artifact already exists") from exc
+    temporary.unlink(missing_ok=True)
 
 
 def validate_depth_array(
