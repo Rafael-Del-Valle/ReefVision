@@ -1,4 +1,4 @@
-"""Raster mask brush, eraser, and cleanup request schemas."""
+"""Raster mask brush, automask, eraser, and cleanup request schemas."""
 
 from __future__ import annotations
 
@@ -26,6 +26,12 @@ class RasterMaskEditRequest(BaseModel):
     mode: Literal["paint", "erase"]
     brush_radius: FiniteFloat = Field(gt=0, le=4096)
     strokes: list[RasterEditStroke] = Field(min_length=1, max_length=10_000)
+    auto_mask_enabled: bool = False
+    auto_mask_color_tolerance: FiniteFloat = Field(default=55, ge=0, le=441.7)
+    auto_mask_luminance_tolerance: FiniteFloat = Field(default=45, ge=0, le=255)
+    auto_mask_edge_sensitivity: FiniteFloat = Field(default=0.35, ge=0, le=1)
+    auto_mask_contiguous: bool = True
+    auto_mask_sample_radius: int = Field(default=2, ge=0, le=32)
 
 
 class RasterMaskCleanupRequest(BaseModel):
