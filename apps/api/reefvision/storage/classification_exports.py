@@ -190,7 +190,8 @@ def write_classification_export(
                 destination_root = output_root / split_directory / class_key
                 destination_root.mkdir(parents=True, exist_ok=True)
                 annotation_id = str(annotation.get("id") or f"crop-{crop_index}")
-                filename = f"{item.image_id}_{_slug(annotation_id)}.jpg"
+                crop_identity = f"{item.image_id}:{annotation_id}".encode("utf-8")
+                filename = f"{sha256(crop_identity).hexdigest()[:24]}.jpg"
                 destination = destination_root / filename
                 image.crop((left, top, right, bottom)).save(
                     destination,
