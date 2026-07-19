@@ -50,7 +50,11 @@ def signed_area(points: Sequence[Point]) -> float:
         return 0.0
     return 0.5 * sum(
         x1 * y2 - x2 * y1
-        for (x1, y1), (x2, y2) in zip(points, (*points[1:], points[0]), strict=True)
+        for (x1, y1), (x2, y2) in zip(
+            points,
+            (*points[1:], points[0]),
+            strict=True,
+        )
     )
 
 
@@ -63,7 +67,11 @@ def polygon_perimeter(points: Sequence[Point]) -> float:
         return 0.0
     return sum(
         math.hypot(x2 - x1, y2 - y1)
-        for (x1, y1), (x2, y2) in zip(points, (*points[1:], points[0]), strict=True)
+        for (x1, y1), (x2, y2) in zip(
+            points,
+            (*points[1:], points[0]),
+            strict=True,
+        )
     )
 
 
@@ -72,6 +80,7 @@ def normalize_ring(
     *,
     clockwise: bool | None = None,
     close: bool = False,
+    allow_zero_area: bool = False,
 ) -> Ring:
     cleaned: Ring = []
     for raw_x, raw_y in points:
@@ -85,10 +94,11 @@ def normalize_ring(
     if len(cleaned) < 3:
         raise ValidationError("Polygon rings require at least three distinct vertices")
     area = signed_area(cleaned)
-    if math.isclose(area, 0.0, abs_tol=1e-12):
+    if not allow_zero_area and math.isclose(area, 0.0, abs_tol=1e-12):
         raise ValidationError("Polygon ring has zero area")
-    if clockwise is not None and (area < 0) != clockwise:
-        cleaned.reverse()
+    if clockwise is not None and not math.isclose(area, 0.0, abs_tol=1e-12):
+        if (area < 0) != clockwise:
+            cleaned.reverse()
     if close:
         cleaned.append(cleaned[0])
     return cleaned
@@ -119,7 +129,9 @@ def _point_line_distance(point: Point, start: Point, end: Point) -> float:
         return math.dist(point, start)
     dx = end[0] - start[0]
     dy = end[1] - start[1]
-    numerator = abs(dy * point[0] - dx * point[1] + end[0] * start[1] - end[1] * start[0])
+    numerator = abs(
+        dy * point[0] - dx * point[1] + end[0] * start[1] - end[1] * start[0]
+    )
     return numerator / math.hypot(dx, dy)
 
 
@@ -131,7 +143,10 @@ def _rdp(points: Sequence[Point], tolerance: float) -> Ring:
     if not distances or max(distances) <= tolerance:
         return [start, end]
     index = distances.index(max(distances)) + 1
-    return [*_rdp(points[: index + 1], tolerance)[:-1], *_rdp(points[index:], tolerance)]
+    return [
+        *_rdp(points[: index + 1], tolerance)[:-1],
+        *_rdp(points[index:], tolerance),
+    ]
 
 
 def simplify_ring(points: Sequence[Point], *, tolerance: float) -> Ring:
@@ -163,7 +178,9 @@ def _on_segment(a: Point, b: Point, p: Point, epsilon: float = 1e-9) -> bool:
 def segments_intersect(a: Point, b: Point, c: Point, d: Point) -> bool:
     ab_c, ab_d = _orientation(a, b, c), _orientation(a, b, d)
     cd_a, cd_b = _orientation(c, d, a), _orientation(c, d, b)
-    if (ab_c > 0 > ab_d or ab_d > 0 > ab_c) and (cd_a > 0 > cd_b or cd_b > 0 > cd_a):
+    if (ab_c > 0 > ab_d or ab_d > 0 > ab_c) and (
+        cd_a > 0 > cd_b or cd_b > 0 > cd_a
+    ):
         return True
     return any(
         (
@@ -179,7 +196,9 @@ def segments_intersect(a: Point, b: Point, c: Point, d: Point) -> bool:
 
 
 def self_intersections(points: Sequence[Point]) -> list[tuple[int, int]]:
-    ring = normalize_ring(points)
+    # A self-crossing ring can have a net signed area of zero. Permit that shape
+    # here so QA can identify its crossing edges before normal polygon validation.
+    ring = normalize_ring(points, allow_zero_area=True)
     edges = list(zip(ring, (*ring[1:], ring[0]), strict=True))
     intersections: list[tuple[int, int]] = []
     for first_index, (a, b) in enumerate(edges):
@@ -200,7 +219,9 @@ def convex_hull(points: Iterable[Point]) -> Ring:
         raise ValidationError("Convex-hull repair requires at least three distinct points")
 
     def cross(origin: Point, a: Point, b: Point) -> float:
-        return (a[0] - origin[0]) * (b[1] - origin[1]) - (a[1] - origin[1]) * (b[0] - origin[0])
+        return (a[0] - origin[0]) * (b[1] - origin[1]) - (
+            a[1] - origin[1]
+        ) * (b[0] - origin[0])
 
     lower: Ring = []
     for point in unique:
@@ -243,7 +264,12 @@ def snap_ring(
     return normalize_ring(output)
 
 
-def polygon_quality(points: Sequence[Point], *, width: int, height: int) -> PolygonQuality:
+def polygon_quality(
+    points: Sequence[Point],
+    *,
+    width: int,
+    height: int,
+) -> PolygonQuality:
     ring = normalize_ring(points)
     area = signed_area(ring)
     outside = sum(not (0 <= x <= width and 0 <= y <= height) for x, y in ring)
@@ -274,7 +300,13 @@ def polygon_to_mask(
     return np.asarray(image, dtype=np.uint8) > 0
 
 
-def _neighbors(y: int, x: int, height: int, width: int, connectivity: int) -> Iterable[tuple[int, int]]:
+def _neighbors(
+    y: int,
+    x: int,
+    height: int,
+    width: int,
+    connectivity: int,
+) -> Iterable[tuple[int, int]]:
     offsets = ((-1, 0), (1, 0), (0, -1), (0, 1))
     if connectivity == 8:
         offsets = (*offsets, (-1, -1), (-1, 1), (1, -1), (1, 1))
@@ -358,7 +390,11 @@ def closing(values: np.ndarray | Image.Image, *, radius: int = 1) -> np.ndarray:
     return erode(dilate(values, radius=radius), radius=radius)
 
 
-def fill_holes(values: np.ndarray | Image.Image, *, maximum_area: int | None = None) -> np.ndarray:
+def fill_holes(
+    values: np.ndarray | Image.Image,
+    *,
+    maximum_area: int | None = None,
+) -> np.ndarray:
     mask = _mask(values)
     inverse = ~mask
     height, width = mask.shape
@@ -399,13 +435,15 @@ def remove_small_components(
 ) -> np.ndarray:
     if minimum_area < 1:
         raise ValidationError("minimum_area must be at least one")
-    components = connected_components(values, connectivity=connectivity)
+    source_mask = _mask(values)
+    components = connected_components(source_mask, connectivity=connectivity)
     if keep_largest and components:
         components = [max(components, key=lambda component: int(component.sum()))]
-    return np.logical_or.reduce(
-        [component for component in components if int(component.sum()) >= minimum_area],
-        initial=np.zeros(_mask(values).shape, dtype=bool),
-    )
+    result = np.zeros(source_mask.shape, dtype=bool)
+    for component in components:
+        if int(component.sum()) >= minimum_area:
+            result |= component
+    return result
 
 
 def flood_select(
@@ -418,7 +456,9 @@ def flood_select(
 ) -> np.ndarray:
     array = np.asarray(image, dtype=np.float32)
     if array.ndim not in {2, 3}:
-        raise ValidationError("Flood selection requires grayscale or multichannel image data")
+        raise ValidationError(
+            "Flood selection requires grayscale or multichannel image data"
+        )
     height, width = array.shape[:2]
     if not (0 <= seed_x < width and 0 <= seed_y < height):
         raise ValidationError("Flood-selection seed lies outside the image")
@@ -458,7 +498,9 @@ def boolean_masks(
     raise ValidationError("Unsupported boolean mask operation")
 
 
-def _boundary_edges(mask: np.ndarray) -> list[tuple[tuple[int, int], tuple[int, int]]]:
+def _boundary_edges(
+    mask: np.ndarray,
+) -> list[tuple[tuple[int, int], tuple[int, int]]]:
     height, width = mask.shape
     edges: list[tuple[tuple[int, int], tuple[int, int]]] = []
     for y, x in zip(*np.nonzero(mask), strict=True):
