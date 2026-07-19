@@ -4,37 +4,238 @@ on:
   push:
     branches:
       - main
+      - "feat/**"
+      - "fix/**"
+    paths:
+      - ".github/workflows/ci.yml"
+      - "apps/**"
+      - "config/**"
+      - "pyproject.toml"
+      - "scripts/**"
   pull_request:
+    paths:
+      - ".github/workflows/ci.yml"
+      - "apps/**"
+      - "config/**"
+      - "pyproject.toml"
+      - "scripts/**"
   workflow_dispatch:
+    inputs:
+      run_full_suite:
+        description: Run the four-shard complete backend suite
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  PYTHONUNBUFFERED: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FORCE_COLOR: "1"
+
 jobs:
-  backend:
+  backend-style:
+    name: Backend lint and formatting
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
           cache: pip
+          cache-dependency-path: pyproject.toml
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[dev]"
-      - run: python -m ruff check apps/api
-      - run: python -m ruff format --check apps/api
-      - run: python -m mypy apps/api/reefvision
-      - run: python -m pytest apps/api/reefvision/tests
-      - name: Verify migrations
+      - name: Ruff lint
         shell: bash
         run: |
-          export REEFVISION_DATA_DIR="$RUNNER_TEMP/reefvision-migration-test"
-          alembic -c apps/api/alembic.ini upgrade head
-          alembic -c apps/api/alembic.ini downgrade base
+          set -o pipefail
+          python -m ruff check apps/api 2>&1 | tee ruff-lint.log
+      - name: Ruff format
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m ruff format --check apps/api 2>&1 | tee ruff-format.log
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-style-logs
+          path: "ruff-*.log"
+          if-no-files-found: ignore
+          retention-days: 14
 
-  frontend:
+  backend-typecheck:
+    name: Strict mypy
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Run strict mypy
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m mypy apps/api/reefvision 2>&1 | tee mypy.log
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-mypy-log
+          path: mypy.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  backend-unit:
+    name: Fast backend unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Run unit suite with coverage
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m pytest -m "unit and not slow and not provider and not gpu" \
+            --cov=apps/api/reefvision --cov-report=xml:coverage-unit.xml \
+            --cov-report=term-missing 2>&1 | tee pytest-unit.log
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-unit-results
+          path: |
+            coverage-unit.xml
+            pytest-unit.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  backend-integration:
+    name: Backend integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Run integration suite with coverage
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m pytest -m "integration and not slow and not provider and not gpu" \
+            --cov=apps/api/reefvision --cov-report=xml:coverage-integration.xml \
+            --cov-report=term-missing 2>&1 | tee pytest-integration.log
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-integration-results
+          path: |
+            coverage-integration.xml
+            pytest-integration.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  backend-full-shards:
+    name: Full backend shard ${{ matrix.shard }} of 4
+    if: github.event_name != 'workflow_dispatch' || inputs.run_full_suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Resolve deterministic shard
+        id: shard
+        shell: bash
+        run: echo "paths=$(python scripts/pytest-shard.py --index ${{ matrix.shard }} --count 4)" >> "$GITHUB_OUTPUT"
+      - name: Run shard
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m pytest ${{ steps.shard.outputs.paths }} -m "not slow and not provider and not gpu" \
+            --junitxml=junit-shard-${{ matrix.shard }}.xml 2>&1 | tee pytest-shard-${{ matrix.shard }}.log
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-shard-${{ matrix.shard }}-results
+          path: |
+            junit-shard-${{ matrix.shard }}.xml
+            pytest-shard-${{ matrix.shard }}.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  migrations:
+    name: Alembic lineage and round trip
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Fresh database and upgrade-downgrade round trip
+        shell: bash
+        run: |
+          set -o pipefail
+          export REEFVISION_DATA_DIR="$RUNNER_TEMP/reefvision-migration-test"
+          mkdir -p "$REEFVISION_DATA_DIR"
+          {
+            alembic -c apps/api/alembic.ini upgrade head
+            alembic -c apps/api/alembic.ini downgrade 0019
+            alembic -c apps/api/alembic.ini upgrade head
+            alembic -c apps/api/alembic.ini downgrade base
+            alembic -c apps/api/alembic.ini upgrade head
+          } 2>&1 | tee alembic-roundtrip.log
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-log
+          path: alembic-roundtrip.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  frontend-format:
+    name: Frontend formatting
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/web
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,18 +244,209 @@ jobs:
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
       - run: npm run lockfile:check
-        working-directory: apps/web
       - run: npm ci
+      - name: Prettier check
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run format:check 2>&1 | tee ../../frontend-format.log
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-format-log
+          path: frontend-format.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  frontend-typecheck:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
         working-directory: apps/web
-      - run: npm run format:check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - name: TypeScript check
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run typecheck 2>&1 | tee ../../typescript.log
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-log
+          path: typescript.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  frontend-unit:
+    name: Vitest
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
         working-directory: apps/web
-      - run: npm run typecheck
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - name: Run Vitest
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test -- --reporter=verbose 2>&1 | tee ../../vitest.log
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-log
+          path: vitest.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  frontend-e2e:
+    name: Playwright browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
         working-directory: apps/web
-      - run: npm run test
-        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - name: Run Playwright
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:e2e 2>&1 | tee ../../playwright.log
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: |
+            playwright.log
+            apps/web/playwright-report
+            apps/web/test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
+  frontend-build:
+    name: Production frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
         working-directory: apps/web
-      - run: npm run test:e2e
-        working-directory: apps/web
-      - run: npm run build
-        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - name: Build production bundle
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee ../../frontend-build.log
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-production-build
+          path: |
+            frontend-build.log
+            apps/web/dist
+          if-no-files-found: ignore
+          retention-days: 14
+
+  phase-gates:
+    name: Roadmap phase ${{ matrix.phase }} gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        phase: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Run phase tests
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m pytest -m "phase${{ matrix.phase }} and not provider and not gpu" \
+            --junitxml=phase-${{ matrix.phase }}.xml 2>&1 | tee phase-${{ matrix.phase }}.log
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase-${{ matrix.phase }}-results
+          path: |
+            phase-${{ matrix.phase }}.xml
+            phase-${{ matrix.phase }}.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  failure-collection:
+    name: Collect test and failure artifacts
+    if: always()
+    needs:
+      - backend-style
+      - backend-typecheck
+      - backend-unit
+      - backend-integration
+      - backend-full-shards
+      - migrations
+      - frontend-format
+      - frontend-typecheck
+      - frontend-unit
+      - frontend-e2e
+      - frontend-build
+      - phase-gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: collected
+          merge-multiple: false
+      - name: Build artifact inventory
+        shell: bash
+        run: |
+          find collected -type f -print | sort > ci-artifact-inventory.txt || true
+          printf 'CI result: %s\nCommit: %s\nRun: %s\n' \
+            '${{ contains(needs.*.result, 'failure') && 'failure' || 'success' }}' \
+            '${{ github.sha }}' '${{ github.run_id }}' > ci-summary.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: complete-ci-diagnostics
+          path: |
+            collected
+            ci-artifact-inventory.txt
+            ci-summary.txt
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Fail when an upstream gate failed
+        if: contains(needs.*.result, 'failure')
+        run: exit 1
