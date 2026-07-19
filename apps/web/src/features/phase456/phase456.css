@@ -1,0 +1,48 @@
+.research-video-player {
+  display: block;
+  width: 100%;
+  max-height: 68vh;
+  margin-top: 1rem;
+  border-radius: 0.75rem;
+  background: #000;
+}
+
+.dashboard-card textarea {
+  width: 100%;
+  min-height: 7rem;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.45rem;
+  padding: 0.55rem 0.9rem;
+  border-radius: 0.55rem;
+  text-decoration: none;
+  font-weight: 650;
+}
+
+.phase-metric-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.phase-metric-table th,
+.phase-metric-table td {
+  padding: 0.6rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid currentColor;
+}
+
+@media (max-width: 900px) {
+  .research-video-player {
+    max-height: 52vh;
+  }
+}
