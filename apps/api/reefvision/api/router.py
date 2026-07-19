@@ -33,6 +33,7 @@ from reefvision.api.routes.provider_capabilities import (
 from reefvision.api.routes.quality_control import router as quality_control_router
 from reefvision.api.routes.raster_edits import router as raster_edits_router
 from reefvision.api.routes.review_queues import router as review_queues_router
+from reefvision.api.routes.sam2_video import router as sam2_video_router
 from reefvision.api.routes.segmentation_evaluation import (
     router as segmentation_evaluation_router,
 )
@@ -54,6 +55,7 @@ api_router.include_router(training_reports_router)
 api_router.include_router(classification_router)
 api_router.include_router(classification_evaluation_router)
 api_router.include_router(videos_router)
+api_router.include_router(sam2_video_router)
 api_router.include_router(backups_router)
 api_router.include_router(projects_router)
 api_router.include_router(project_integrity_router)
