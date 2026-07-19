@@ -43,6 +43,13 @@ export function RasterMaskWorkspace({
   const [activeClassId, setActiveClassId] = useState<string | null>(null);
   const [mode, setMode] = useState<RasterEditMode>("paint");
   const [brushRadius, setBrushRadius] = useState(12);
+  const [autoMaskEnabled, setAutoMaskEnabled] = useState(false);
+  const [autoMaskColorTolerance, setAutoMaskColorTolerance] = useState(55);
+  const [autoMaskLuminanceTolerance, setAutoMaskLuminanceTolerance] =
+    useState(45);
+  const [autoMaskEdgeSensitivity, setAutoMaskEdgeSensitivity] = useState(0.35);
+  const [autoMaskContiguous, setAutoMaskContiguous] = useState(true);
+  const [autoMaskSampleRadius, setAutoMaskSampleRadius] = useState(2);
   const [minimumComponentArea, setMinimumComponentArea] = useState(25);
   const [removeSmallComponents, setRemoveSmallComponents] = useState(true);
   const [keepLargestComponent, setKeepLargestComponent] = useState(false);
@@ -123,6 +130,12 @@ export function RasterMaskWorkspace({
         mode,
         brush_radius: brushRadius,
         strokes: [{ points }],
+        auto_mask_enabled: autoMaskEnabled,
+        auto_mask_color_tolerance: autoMaskColorTolerance,
+        auto_mask_luminance_tolerance: autoMaskLuminanceTolerance,
+        auto_mask_edge_sensitivity: autoMaskEdgeSensitivity,
+        auto_mask_contiguous: autoMaskContiguous,
+        auto_mask_sample_radius: autoMaskSampleRadius,
       });
     },
     onSuccess: refreshAfterMaskChange,
@@ -254,6 +267,95 @@ export function RasterMaskWorkspace({
             {editMutation.error && (
               <p className="form-error">{editMutation.error.message}</p>
             )}
+          </section>
+
+          <section className="annotation-sidebar-section">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Edge-aware selection</p>
+                <h3>Auto Mask</h3>
+              </div>
+              <span>{autoMaskEnabled ? "On" : "Off"}</span>
+            </div>
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                aria-label="Enable Auto Mask"
+                checked={autoMaskEnabled}
+                disabled={operationPending}
+                onChange={(event) => setAutoMaskEnabled(event.target.checked)}
+              />
+              Confine strokes to similar colors and luminance
+            </label>
+            <label>
+              Color tolerance: {autoMaskColorTolerance.toFixed(0)}
+              <input
+                type="range"
+                min="0"
+                max="220"
+                step="1"
+                value={autoMaskColorTolerance}
+                disabled={!autoMaskEnabled || operationPending}
+                onChange={(event) =>
+                  setAutoMaskColorTolerance(Number(event.target.value))
+                }
+              />
+            </label>
+            <label>
+              Luminance tolerance: {autoMaskLuminanceTolerance.toFixed(0)}
+              <input
+                type="range"
+                min="0"
+                max="128"
+                step="1"
+                value={autoMaskLuminanceTolerance}
+                disabled={!autoMaskEnabled || operationPending}
+                onChange={(event) =>
+                  setAutoMaskLuminanceTolerance(Number(event.target.value))
+                }
+              />
+            </label>
+            <label>
+              Edge sensitivity: {autoMaskEdgeSensitivity.toFixed(2)}
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={autoMaskEdgeSensitivity}
+                disabled={!autoMaskEnabled || operationPending}
+                onChange={(event) =>
+                  setAutoMaskEdgeSensitivity(Number(event.target.value))
+                }
+              />
+            </label>
+            <label>
+              Seed sample radius: {autoMaskSampleRadius}px
+              <input
+                type="range"
+                min="0"
+                max="12"
+                step="1"
+                value={autoMaskSampleRadius}
+                disabled={!autoMaskEnabled || operationPending}
+                onChange={(event) =>
+                  setAutoMaskSampleRadius(Number(event.target.value))
+                }
+              />
+            </label>
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={autoMaskContiguous}
+                disabled={!autoMaskEnabled || operationPending}
+                onChange={(event) => setAutoMaskContiguous(event.target.checked)}
+              />
+              Keep only the connected region reached from the stroke
+            </label>
+            <p className="annotation-helper">
+              Auto Mask samples the pixels beneath the stroke, stops at strong edges,
+              and saves the result as a normal immutable raster-mask revision.
+            </p>
           </section>
 
           <section className="annotation-sidebar-section">
@@ -433,7 +535,10 @@ export function RasterMaskWorkspace({
                   ? "Painting a separate raster mask"
                   : "Painting the initial raster mask"}
             </span>
-            <span>{mode === "paint" ? "Paint mode" : "Eraser mode"}</span>
+            <span>
+              {mode === "paint" ? "Paint mode" : "Eraser mode"}
+              {autoMaskEnabled ? " · Auto Mask" : ""}
+            </span>
           </div>
           <div
             className="annotation-canvas-frame"
