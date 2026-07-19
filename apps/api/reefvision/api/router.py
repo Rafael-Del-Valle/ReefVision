@@ -27,6 +27,9 @@ from reefvision.api.routes.predictions import router as predictions_router
 from reefvision.api.routes.project_integrity import router as project_integrity_router
 from reefvision.api.routes.project_recovery import router as project_recovery_router
 from reefvision.api.routes.projects import router as projects_router
+from reefvision.api.routes.provider_capabilities import (
+    router as provider_capabilities_router,
+)
 from reefvision.api.routes.quality_control import router as quality_control_router
 from reefvision.api.routes.raster_edits import router as raster_edits_router
 from reefvision.api.routes.review_queues import router as review_queues_router
@@ -45,6 +48,7 @@ api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health_router)
 api_router.include_router(capabilities_router)
 api_router.include_router(system_router)
+api_router.include_router(provider_capabilities_router)
 api_router.include_router(training_router)
 api_router.include_router(training_reports_router)
 api_router.include_router(classification_router)
