@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -25,7 +26,7 @@ from reefvision.storage.projects import resolve_managed_project_path
 def _restore_tuning_provenance(
     factory: sessionmaker[Session],
     run_id: str,
-    requested_tuning: dict,
+    requested_tuning: dict[str, Any],
     tuning_artifact: object,
 ) -> None:
     if requested_tuning["mode"] == "disabled":
@@ -53,7 +54,9 @@ def _process_ultralytics_training(
         run = session.get(TrainingRun, run_id)
         if run is None:
             return False
-        requested_tuning = normalize_tuning_config(run.tuning_config_json)
+        requested_tuning = normalize_tuning_config(
+            getattr(run, "tuning_config_json", None)
+        )
 
     tuning_artifact = None
     if requested_tuning["mode"] != "disabled":
@@ -62,7 +65,7 @@ def _process_ultralytics_training(
             run = session.get(TrainingRun, run_id)
             if run is None:
                 return False
-            manifest = dict(run.artifact_manifest_json or {})
+            manifest = dict(getattr(run, "artifact_manifest_json", None) or {})
             tuning_artifact = manifest.get("tuning")
             # The stable task workers deliberately reject unexecuted tuning. Mark it
             # disabled only for their final-training pass, then restore it in finally.
