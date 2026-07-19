@@ -1,4 +1,4 @@
-"""Raster mask brush, eraser, and topology-cleanup endpoints."""
+"""Raster mask brush, Auto Mask, eraser, and topology-cleanup endpoints."""
 
 from typing import Annotated
 
@@ -12,6 +12,7 @@ from reefvision.schemas.raster_edits import (
     RasterMaskEditRequest,
     RasterMaskEditResponse,
 )
+from reefvision.services.automask import AutoMaskEditService
 from reefvision.services.raster_edits import RasterMaskEditService
 
 router = APIRouter(tags=["raster_edits"])
@@ -29,7 +30,7 @@ def edit_raster_mask(
     session: DbSession,
 ) -> RasterMaskEditResponse:
     settings: Settings = request.app.state.settings
-    return RasterMaskEditService(session, settings).edit(image_id, payload)
+    return AutoMaskEditService(session, settings).edit(image_id, payload)
 
 
 @router.post(
