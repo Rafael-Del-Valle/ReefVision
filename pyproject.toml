@@ -42,10 +42,40 @@ exclude = ["reefvision.tests*"]
 [tool.pytest.ini_options]
 testpaths = ["apps/api/reefvision/tests"]
 addopts = "-ra --strict-markers --strict-config"
+markers = [
+  "unit: fast deterministic test that does not exercise a complete persisted workflow",
+  "integration: persisted API, worker, migration, import/export, training, video, or workflow test",
+  "phase1: roadmap Phase 1 foundation coverage",
+  "phase2: roadmap Phase 2 annotation coverage",
+  "phase3: roadmap Phase 3 segmentation coverage",
+  "phase4: roadmap Phase 4 measurement coverage",
+  "phase5: roadmap Phase 5 classification coverage",
+  "phase6: roadmap Phase 6 video and tracking coverage",
+  "phase7: roadmap Phase 7 active-learning coverage",
+  "phase8: roadmap Phase 8 provider and prompt-assist coverage",
+  "phase9: roadmap Phase 9 interoperability coverage",
+  "phase10: roadmap Phase 10 workflow coverage",
+  "provider: test requiring a local optional ML provider",
+  "gpu: test requiring a CUDA-compatible GPU",
+  "slow: deterministic test intentionally excluded from fast pull-request gates",
+]
 filterwarnings = [
   "error::DeprecationWarning",
   "error::ResourceWarning",
 ]
+
+[tool.coverage.run]
+branch = true
+parallel = true
+source = ["apps/api/reefvision"]
+omit = [
+  "apps/api/reefvision/tests/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+precision = 2
 
 [tool.ruff]
 target-version = "py311"
