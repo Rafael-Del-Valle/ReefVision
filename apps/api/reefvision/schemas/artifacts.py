@@ -37,8 +37,6 @@ class ArtifactCreateRequest(BaseModel):
             raise ValueError("source_kind and source_id must be supplied together")
         if self.managed_path is None and not self.payload:
             raise ValueError("Artifact creation requires managed_path or payload")
-        if self.parent_artifact_id == self.supersedes_artifact_id and self.parent_artifact_id:
-            raise ValueError("parent and superseded artifacts must be distinct")
         return self
 
 
