@@ -2,7 +2,7 @@
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, File, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
@@ -110,8 +110,10 @@ def update_video_calibration(
 def create_video_extract_job(
     project_id: str,
     payload: VideoExtractJobRequest,
+    request: Request,
     session: DbSession,
 ) -> JobResponse:
+    service(request, session)._project(project_id)
     if ".." in payload.video_path.replace("\\", "/").split("/"):
         raise ValidationError("video_path must be a managed relative path")
     if ".." in payload.frames_path.replace("\\", "/").split("/"):
@@ -197,9 +199,12 @@ def analyze_video_tracks(
 @router.get("/videos/{video_id}/tracking-export")
 def export_video_tracks(
     video_id: str,
-    export_format: Literal["csv", "mot", "json"] = "csv",
-    request: Request = None,  # type: ignore[assignment]
-    session: DbSession = None,  # type: ignore[assignment]
+    request: Request,
+    session: DbSession,
+    export_format: Annotated[
+        Literal["csv", "mot", "json"],
+        Query(alias="format"),
+    ] = "csv",
 ) -> Response:
     content, media_type, filename = service(request, session).export_tracks(
         video_id,
