@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, FiniteFloat, field_validator
+from pydantic import BaseModel, Field, FiniteFloat, model_validator
 
 from reefvision.schemas.annotations import AnnotationResponse, MaskAnnotationResponse
 
@@ -37,26 +37,16 @@ class AssistBoxRequest(BaseModel):
     x_max: FiniteFloat
     y_max: FiniteFloat
 
-    @field_validator("x_max")
-    @classmethod
-    def validate_box_area(cls, value: float, info: object) -> float:
-        data = getattr(info, "data", {})
-        x_min = data.get("x_min")
-        y_min = data.get("y_min")
-        y_max = data.get("y_max")
-        if (
-            x_min is not None
-            and y_min is not None
-            and y_max is not None
-            and not _box_has_positive_area(
-                float(x_min),
-                float(y_min),
-                float(value),
-                float(y_max),
-            )
+    @model_validator(mode="after")
+    def validate_box_area(self) -> AssistBoxRequest:
+        if not _box_has_positive_area(
+            float(self.x_min),
+            float(self.y_min),
+            float(self.x_max),
+            float(self.y_max),
         ):
             raise ValueError("Bounding boxes must have positive width and height")
-        return value
+        return self
 
 
 class AssistPointPromptRequest(BaseModel):
