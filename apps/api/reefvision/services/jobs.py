@@ -37,6 +37,7 @@ class JobService:
             "training",
             "video_extract",
             "video_track",
+            "video_render_export",
             "depth_map",
             "image_embeddings",
             "workflow_run",
