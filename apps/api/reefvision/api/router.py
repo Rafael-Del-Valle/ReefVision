@@ -25,6 +25,7 @@ from reefvision.api.routes.measurements import router as measurements_router
 from reefvision.api.routes.model_catalog import router as model_catalog_router
 from reefvision.api.routes.models import router as models_router
 from reefvision.api.routes.predictions import router as predictions_router
+from reefvision.api.routes.project_archives import router as project_archives_router
 from reefvision.api.routes.project_integrity import router as project_integrity_router
 from reefvision.api.routes.project_recovery import router as project_recovery_router
 from reefvision.api.routes.projects import router as projects_router
@@ -59,6 +60,7 @@ api_router.include_router(videos_router)
 api_router.include_router(sam2_video_router)
 api_router.include_router(backups_router)
 api_router.include_router(projects_router)
+api_router.include_router(project_archives_router)
 api_router.include_router(project_integrity_router)
 api_router.include_router(project_recovery_router)
 api_router.include_router(validation_dashboard_router)
