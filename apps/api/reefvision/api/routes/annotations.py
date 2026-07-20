@@ -103,6 +103,10 @@ def _normalize_save_counts(
 
 
 @router.get(
+    "/images/{image_id}/annotation-session",
+    response_model=AnnotationSessionResponse,
+)
+@router.get(
     "/images/{image_id}/annotations",
     response_model=AnnotationSessionResponse,
 )

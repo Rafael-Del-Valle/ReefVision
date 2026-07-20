@@ -54,6 +54,21 @@ def test_annotation_session_starts_empty_and_exposes_revision(client: TestClient
     assert payload["counts_by_class"][0]["count"] == 0
 
 
+def test_annotation_session_alias_matches_annotations(
+    client: TestClient,
+) -> None:
+    project = create_project(client)
+    report = import_one(client, project["id"])
+    image_id = report["successful"][0]["image_id"]
+
+    canonical = client.get(f"/api/v1/images/{image_id}/annotations")
+    alias = client.get(f"/api/v1/images/{image_id}/annotation-session")
+
+    assert canonical.status_code == 200
+    assert alias.status_code == 200
+    assert alias.json() == canonical.json()
+
+
 def test_annotation_session_reports_adjacent_images_in_gallery_order(
     client: TestClient,
 ) -> None:
