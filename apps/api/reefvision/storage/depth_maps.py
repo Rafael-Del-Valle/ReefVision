@@ -6,9 +6,11 @@ import os
 import shutil
 from hashlib import sha256
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 import numpy as np
+from numpy.typing import NDArray
 from PIL import Image
 
 from reefvision.config import Settings
@@ -35,12 +37,12 @@ def _publish_exclusively(temporary: Path, destination: Path) -> None:
 
 
 def validate_depth_array(
-    values: np.ndarray,
+    values: NDArray[Any],
     *,
     expected_width: int,
     expected_height: int,
     depth_kind: str,
-) -> np.ndarray:
+) -> NDArray[Any]:
     array = np.asarray(values, dtype=np.float32)
     if array.ndim != 2:
         raise ValidationError("Depth maps must be two-dimensional")
@@ -56,7 +58,7 @@ def validate_depth_array(
     return result
 
 
-def _preview_image(values: np.ndarray) -> Image.Image:
+def _preview_image(values: NDArray[Any]) -> Image.Image:
     finite = np.isfinite(values)
     valid = values[finite]
     low = float(np.percentile(valid, 2))
@@ -77,7 +79,7 @@ def write_depth_map(
     project_storage_root: str,
     image_id: str,
     depth_map_id: str,
-    values: np.ndarray,
+    values: NDArray[Any],
     expected_width: int,
     expected_height: int,
     depth_kind: str,
@@ -131,7 +133,7 @@ def load_depth_map(
     *,
     expected_width: int | None = None,
     expected_height: int | None = None,
-) -> np.ndarray:
+) -> NDArray[Any]:
     path = resolve_managed_project_path(settings, managed_path)
     if not path.is_file():
         raise ValidationError("Depth map content is missing")

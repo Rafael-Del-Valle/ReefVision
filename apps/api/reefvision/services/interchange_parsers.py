@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from numpy.typing import NDArray
 from PIL import Image
 
 from reefvision.domain.errors import ValidationError
@@ -39,7 +40,7 @@ class SourceAnnotation:
     geometry_kind: str
     bbox: tuple[float, float, float, float] | None = None
     polygon: list[list[float]] | None = None
-    raster: np.ndarray | None = None
+    raster: NDArray[Any] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -85,7 +86,7 @@ def _polygon_from_flat(values: Any) -> list[list[float]]:
     return points
 
 
-def _decode_uncompressed_rle(segmentation: dict[str, Any]) -> np.ndarray:
+def _decode_uncompressed_rle(segmentation: dict[str, Any]) -> NDArray[Any]:
     size = segmentation.get("size")
     counts = segmentation.get("counts")
     if not isinstance(size, list) or len(size) != 2:
@@ -113,7 +114,7 @@ def _decode_uncompressed_rle(segmentation: dict[str, Any]) -> np.ndarray:
     return values.reshape((width, height)).T.astype(bool)
 
 
-def _panoptic_rgb_to_ids(encoded: str) -> np.ndarray:
+def _panoptic_rgb_to_ids(encoded: str) -> NDArray[Any]:
     try:
         raw = base64.b64decode(encoded, validate=True)
         with Image.open(io.BytesIO(raw)) as image:

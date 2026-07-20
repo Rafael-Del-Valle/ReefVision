@@ -158,8 +158,8 @@ class ResourceScheduler:
             for active_job in active:
                 if active_job.id == job.id:
                     continue
-                assignment = dict(active_job.resource_assignment_json or {})
-                gpu_index = assignment.get("gpu_index")
+                active_assignment = dict(active_job.resource_assignment_json or {})
+                gpu_index = active_assignment.get("gpu_index")
                 if not isinstance(gpu_index, int):
                     continue
                 active_requirements = dict(active_job.resource_requirements_json or {})

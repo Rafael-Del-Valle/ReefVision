@@ -6,12 +6,13 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from numpy.typing import NDArray
 from PIL import Image
 
 from reefvision.domain.errors import ValidationError
 
 
-def luminance_relative_depth(image: Image.Image) -> np.ndarray:
+def luminance_relative_depth(image: Image.Image) -> NDArray[Any]:
     """Produce a deterministic relative-depth fixture from image luminance.
 
     This provider is intended for workflow testing and previews, not scientific depth.
@@ -47,7 +48,7 @@ def depth_anything_v2(
     local_files_only: bool,
     metric: bool,
     maximum_metric_depth: float | None,
-) -> tuple[np.ndarray, dict[str, Any]]:
+) -> tuple[NDArray[Any], dict[str, Any]]:
     """Run a local Hugging Face Depth Anything V2-compatible checkpoint."""
 
     try:
@@ -61,7 +62,7 @@ def depth_anything_v2(
 
     resolved_device = _device_name(device)
     try:
-        processor = AutoImageProcessor.from_pretrained(
+        processor = AutoImageProcessor.from_pretrained(  # type: ignore[no-untyped-call]
             model_id,
             local_files_only=local_files_only,
         )
@@ -126,7 +127,7 @@ def generate_depth_map(
     device: str,
     local_files_only: bool,
     maximum_metric_depth: float | None,
-) -> tuple[np.ndarray, dict[str, Any]]:
+) -> tuple[NDArray[Any], dict[str, Any]]:
     if not image_path.is_file():
         raise ValidationError("The managed source image is missing")
     with Image.open(image_path) as source:

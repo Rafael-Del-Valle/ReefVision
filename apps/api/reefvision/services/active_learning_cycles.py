@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 from datetime import UTC, datetime
 from typing import Any
 
@@ -107,11 +108,11 @@ class ActiveLearningCycleService:
             candidate_metrics=dict(cycle.candidate_metrics_json or {}),
             promotion_gates=[
                 PromotionGate.model_validate(item)
-                for item in list(cycle.promotion_gates_json or {}).get("gates", [])
+                for item in dict(cycle.promotion_gates_json or {}).get("gates", [])
             ],
             promotion_results=[
                 PromotionGateResult.model_validate(item)
-                for item in list(cycle.promotion_result_json or {}).get("results", [])
+                for item in dict(cycle.promotion_result_json or {}).get("results", [])
             ],
             stop_conditions=dict(cycle.stop_conditions_json or {}),
             history=list(cycle.history_json or []),
@@ -396,9 +397,12 @@ class ActiveLearningCycleService:
             stop_reasons=stop_reasons,
         )
 
-    def _stop_reasons(self, cycle: ActiveLearningCycle) -> list[str]:
+    def _stop_reasons(
+        self,
+        cycle: ActiveLearningCycle,
+    ) -> builtins.list[str]:
         conditions = dict(cycle.stop_conditions_json or {})
-        reasons: list[str] = []
+        reasons: builtins.list[str] = []
         stop_after_cycles = conditions.get("stop_after_cycles")
         if isinstance(stop_after_cycles, int) and cycle.cycle_index >= stop_after_cycles:
             reasons.append("maximum cycle count reached")

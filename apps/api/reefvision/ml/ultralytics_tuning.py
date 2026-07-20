@@ -147,12 +147,13 @@ def summarize_tuning_rows(
     fitness_key = _fitness_key(rows)
     ranked = list(rows)
     if fitness_key is not None:
+
+        def fitness_sort_value(row: dict[str, Any]) -> float:
+            value = _numeric(row.get(fitness_key))
+            return value if value is not None else float("-inf")
+
         ranked.sort(
-            key=lambda row: (
-                _numeric(row.get(fitness_key))
-                if _numeric(row.get(fitness_key)) is not None
-                else float("-inf")
-            ),
+            key=fitness_sort_value,
             reverse=True,
         )
     trials: list[dict[str, Any]] = []
@@ -209,7 +210,7 @@ def run_ultralytics_tuning(
 ) -> dict[str, Any]:
     """Run Ultralytics tuning and return a stable summary plus generated artifacts."""
 
-    from ultralytics import YOLO
+    from ultralytics import YOLO  # type: ignore[attr-defined]
 
     config = normalize_tuning_config(tuning_config)
     if config["mode"] == "disabled":

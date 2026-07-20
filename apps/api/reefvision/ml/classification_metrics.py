@@ -5,8 +5,10 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
+from numpy.typing import NDArray
 
 
 @dataclass(frozen=True)
@@ -26,7 +28,7 @@ class IsotonicBlock:
     count: int
 
 
-def multiclass_matthews(confusion: np.ndarray) -> float:
+def multiclass_matthews(confusion: NDArray[Any]) -> float:
     matrix = np.asarray(confusion, dtype=np.float64)
     total = float(matrix.sum())
     if total <= 0:
@@ -42,7 +44,7 @@ def multiclass_matthews(confusion: np.ndarray) -> float:
     return numerator / denominator if denominator else 0.0
 
 
-def cohen_kappa(confusion: np.ndarray) -> float:
+def cohen_kappa(confusion: NDArray[Any]) -> float:
     matrix = np.asarray(confusion, dtype=np.float64)
     total = float(matrix.sum())
     if total <= 0:

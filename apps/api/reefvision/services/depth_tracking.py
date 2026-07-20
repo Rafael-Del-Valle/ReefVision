@@ -11,6 +11,7 @@ from reefvision.schemas.depth import (
     DepthTrackAnalyticsRequest,
     DepthTrackAnalyticsResponse,
     DepthTrackPoint3D,
+    DepthTrackSample,
 )
 
 
@@ -18,7 +19,7 @@ def analyze_depth_tracks(
     request: DepthTrackAnalyticsRequest,
 ) -> DepthTrackAnalyticsResponse:
     intrinsics = request.camera_intrinsics
-    by_track: dict[str, list] = defaultdict(list)
+    by_track: dict[str, list[DepthTrackSample]] = defaultdict(list)
     for sample in request.samples:
         by_track[sample.track_id].append(sample)
 

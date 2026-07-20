@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -17,7 +18,7 @@ from reefvision.storage.project_archives import (
 
 def _start(
     factory: sessionmaker[Session], job_id: str, expected_type: str
-) -> tuple[dict, str | None]:
+) -> tuple[dict[str, Any], str | None]:
     with factory() as session:
         job = session.get(Job, job_id)
         if job is None or job.job_type != expected_type or job.status != "queued":
@@ -34,7 +35,7 @@ def _start(
 def _success(
     factory: sessionmaker[Session],
     job_id: str,
-    result: dict,
+    result: dict[str, Any],
     *,
     progress_current: int = 1,
     progress_total: int = 1,

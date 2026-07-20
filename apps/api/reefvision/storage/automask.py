@@ -52,6 +52,8 @@ def _seed_colors(
 ) -> list[tuple[int, int, int]]:
     width, height = image.size
     pixels = image.load()
+    if pixels is None:
+        raise ValidationError("Source image pixels could not be loaded")
     colors: list[tuple[int, int, int]] = []
     sample_area = max((sample_radius * 2 + 1) ** 2, 1)
     points_per_limit = max(limit // sample_area, 1)
@@ -64,7 +66,7 @@ def _seed_colors(
                 x = center_x + offset_x
                 y = center_y + offset_y
                 if 0 <= x < width and 0 <= y < height:
-                    color = pixels[x, y]
+                    color = cast(tuple[int, int, int], pixels[x, y])
                     colors.append((int(color[0]), int(color[1]), int(color[2])))
                     if len(colors) >= limit:
                         return colors
@@ -116,6 +118,8 @@ def _accepted_footprint(
     if not seeds:
         return Image.new("L", source.size, 0)
     source_pixels = source.load()
+    if source_pixels is None:
+        raise ValidationError("Source image pixels could not be loaded")
     footprint_bytes = bytearray(footprint.tobytes())
     edge_bytes = source.convert("L").filter(ImageFilter.FIND_EDGES).tobytes()
     allowed = bytearray(width * height)
@@ -129,7 +133,7 @@ def _accepted_footprint(
             index = row_offset + x
             if footprint_bytes[index] == 0:
                 continue
-            raw_color = source_pixels[x, y]
+            raw_color = cast(tuple[int, int, int], source_pixels[x, y])
             color = (int(raw_color[0]), int(raw_color[1]), int(raw_color[2]))
             if _pixel_allowed(
                 color,

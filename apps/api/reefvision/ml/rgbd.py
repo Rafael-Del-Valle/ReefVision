@@ -4,20 +4,21 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
+from numpy.typing import NDArray
 
 from reefvision.domain.errors import ValidationError
 
 
 def normalize_depth(
-    depth: np.ndarray,
+    depth: NDArray[Any],
     *,
     mode: str = "per_image",
     dataset_mean: float | None = None,
     dataset_std: float | None = None,
-) -> np.ndarray:
+) -> NDArray[Any]:
     """Normalize an aligned depth plane while preserving invalid-pixel masking."""
 
     values = np.asarray(depth, dtype=np.float32)
@@ -48,13 +49,13 @@ def normalize_depth(
 
 
 def stack_rgbd(
-    rgb: np.ndarray,
-    depth: np.ndarray,
+    rgb: NDArray[Any],
+    depth: NDArray[Any],
     *,
     depth_normalization: str = "per_image",
     dataset_mean: float | None = None,
     dataset_std: float | None = None,
-) -> np.ndarray:
+) -> NDArray[Any]:
     """Create an HxWx4 RGB-D array with an explicitly normalized depth channel."""
 
     image = np.asarray(rgb)
@@ -102,10 +103,13 @@ def adapt_first_convolution_to_rgbd(
     replacement = nn.Conv2d(
         in_channels=4,
         out_channels=convolution.out_channels,
-        kernel_size=convolution.kernel_size,
-        stride=convolution.stride,
-        padding=convolution.padding,
-        dilation=convolution.dilation,
+        kernel_size=cast(tuple[int, int], convolution.kernel_size),
+        stride=cast(tuple[int, int], convolution.stride),
+        padding=cast(
+            str | int | tuple[int, int],
+            convolution.padding,
+        ),
+        dilation=cast(tuple[int, int], convolution.dilation),
         groups=convolution.groups,
         bias=convolution.bias is not None,
         padding_mode=convolution.padding_mode,

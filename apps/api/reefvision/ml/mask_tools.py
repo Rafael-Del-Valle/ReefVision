@@ -6,9 +6,10 @@ import math
 from collections import defaultdict, deque
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Literal, TypeAlias
+from typing import Any, Literal, TypeAlias
 
 import numpy as np
+from numpy.typing import NDArray
 from PIL import Image, ImageDraw
 
 from reefvision.domain.errors import ValidationError
@@ -38,7 +39,7 @@ class RasterQuality:
     bounds: tuple[int, int, int, int] | None
 
 
-def _mask(values: np.ndarray | Image.Image) -> np.ndarray:
+def _mask(values: NDArray[Any] | Image.Image) -> NDArray[Any]:
     array = np.asarray(values if isinstance(values, np.ndarray) else values.convert("L"))
     if array.ndim != 2:
         raise ValidationError("Mask operations require a two-dimensional raster")
@@ -288,7 +289,7 @@ def polygon_to_mask(
     width: int,
     height: int,
     holes: Sequence[Sequence[Point]] = (),
-) -> np.ndarray:
+) -> NDArray[Any]:
     image = Image.new("L", (width, height), 0)
     draw = ImageDraw.Draw(image)
     draw.polygon(normalize_ring(outer), fill=255)
@@ -304,7 +305,12 @@ def _neighbors(
     width: int,
     connectivity: int,
 ) -> Iterable[tuple[int, int]]:
-    offsets = ((-1, 0), (1, 0), (0, -1), (0, 1))
+    offsets: tuple[tuple[int, int], ...] = (
+        (-1, 0),
+        (1, 0),
+        (0, -1),
+        (0, 1),
+    )
     if connectivity == 8:
         offsets = (*offsets, (-1, -1), (-1, 1), (1, -1), (1, 1))
     for dy, dx in offsets:
@@ -314,16 +320,16 @@ def _neighbors(
 
 
 def connected_components(
-    values: np.ndarray | Image.Image,
+    values: NDArray[Any] | Image.Image,
     *,
     connectivity: int = 8,
-) -> list[np.ndarray]:
+) -> list[NDArray[Any]]:
     if connectivity not in {4, 8}:
         raise ValidationError("Connectivity must be four or eight")
     mask = _mask(values)
     height, width = mask.shape
     visited = np.zeros(mask.shape, dtype=bool)
-    components: list[np.ndarray] = []
+    components: list[NDArray[Any]] = []
     for y, x in zip(*np.nonzero(mask), strict=True):
         if visited[y, x]:
             continue
@@ -341,7 +347,7 @@ def connected_components(
     return components
 
 
-def _shift(mask: np.ndarray, dy: int, dx: int, *, fill: bool) -> np.ndarray:
+def _shift(mask: NDArray[Any], dy: int, dx: int, *, fill: bool) -> NDArray[Any]:
     height, width = mask.shape
     result = np.full(mask.shape, fill, dtype=bool)
     source_y = slice(max(0, -dy), min(height, height - dy))
@@ -363,7 +369,7 @@ def _disk_offsets(radius: int) -> list[tuple[int, int]]:
     ]
 
 
-def dilate(values: np.ndarray | Image.Image, *, radius: int = 1) -> np.ndarray:
+def dilate(values: NDArray[Any] | Image.Image, *, radius: int = 1) -> NDArray[Any]:
     mask = _mask(values)
     result = np.zeros(mask.shape, dtype=bool)
     for dy, dx in _disk_offsets(radius):
@@ -371,7 +377,7 @@ def dilate(values: np.ndarray | Image.Image, *, radius: int = 1) -> np.ndarray:
     return result
 
 
-def erode(values: np.ndarray | Image.Image, *, radius: int = 1) -> np.ndarray:
+def erode(values: NDArray[Any] | Image.Image, *, radius: int = 1) -> NDArray[Any]:
     mask = _mask(values)
     result = np.ones(mask.shape, dtype=bool)
     for dy, dx in _disk_offsets(radius):
@@ -379,19 +385,19 @@ def erode(values: np.ndarray | Image.Image, *, radius: int = 1) -> np.ndarray:
     return result
 
 
-def opening(values: np.ndarray | Image.Image, *, radius: int = 1) -> np.ndarray:
+def opening(values: NDArray[Any] | Image.Image, *, radius: int = 1) -> NDArray[Any]:
     return dilate(erode(values, radius=radius), radius=radius)
 
 
-def closing(values: np.ndarray | Image.Image, *, radius: int = 1) -> np.ndarray:
+def closing(values: NDArray[Any] | Image.Image, *, radius: int = 1) -> NDArray[Any]:
     return erode(dilate(values, radius=radius), radius=radius)
 
 
 def fill_holes(
-    values: np.ndarray | Image.Image,
+    values: NDArray[Any] | Image.Image,
     *,
     maximum_area: int | None = None,
-) -> np.ndarray:
+) -> NDArray[Any]:
     mask = _mask(values)
     inverse = ~mask
     height, width = mask.shape
@@ -415,7 +421,7 @@ def fill_holes(
                 queue.append((ny, nx))
     holes = inverse & ~exterior
     if maximum_area is None:
-        return mask | holes
+        return np.asarray(mask | holes, dtype=bool)
     result = mask.copy()
     for component in connected_components(holes, connectivity=4):
         if int(component.sum()) <= maximum_area:
@@ -424,12 +430,12 @@ def fill_holes(
 
 
 def remove_small_components(
-    values: np.ndarray | Image.Image,
+    values: NDArray[Any] | Image.Image,
     *,
     minimum_area: int,
     connectivity: int = 8,
     keep_largest: bool = False,
-) -> np.ndarray:
+) -> NDArray[Any]:
     if minimum_area < 1:
         raise ValidationError("minimum_area must be at least one")
     source_mask = _mask(values)
@@ -444,13 +450,13 @@ def remove_small_components(
 
 
 def flood_select(
-    image: np.ndarray,
+    image: NDArray[Any],
     *,
     seed_x: int,
     seed_y: int,
     tolerance: float,
     connectivity: int = 8,
-) -> np.ndarray:
+) -> NDArray[Any]:
     array = np.asarray(image, dtype=np.float32)
     if array.ndim not in {2, 3}:
         raise ValidationError("Flood selection requires grayscale or multichannel image data")
@@ -474,27 +480,27 @@ def flood_select(
 
 
 def boolean_masks(
-    first: np.ndarray | Image.Image,
-    second: np.ndarray | Image.Image,
+    first: NDArray[Any] | Image.Image,
+    second: NDArray[Any] | Image.Image,
     *,
     operation: BooleanOperation,
-) -> np.ndarray:
+) -> NDArray[Any]:
     a, b = _mask(first), _mask(second)
     if a.shape != b.shape:
         raise ValidationError("Boolean mask operands must share dimensions")
     if operation == "union":
-        return a | b
+        return np.asarray(a | b, dtype=bool)
     if operation == "intersection":
-        return a & b
+        return np.asarray(a & b, dtype=bool)
     if operation == "subtract":
-        return a & ~b
+        return np.asarray(a & ~b, dtype=bool)
     if operation == "xor":
-        return a ^ b
+        return np.asarray(a ^ b, dtype=bool)
     raise ValidationError("Unsupported boolean mask operation")
 
 
 def _boundary_edges(
-    mask: np.ndarray,
+    mask: NDArray[Any],
 ) -> list[tuple[tuple[int, int], tuple[int, int]]]:
     height, width = mask.shape
     edges: list[tuple[tuple[int, int], tuple[int, int]]] = []
@@ -523,7 +529,7 @@ def _remove_collinear(points: Ring) -> Ring:
     return output if len(output) >= 3 else points
 
 
-def mask_to_rings(values: np.ndarray | Image.Image) -> list[Ring]:
+def mask_to_rings(values: NDArray[Any] | Image.Image) -> list[Ring]:
     mask = _mask(values)
     outgoing: dict[tuple[int, int], list[tuple[int, int]]] = defaultdict(list)
     for start, end in _boundary_edges(mask):
@@ -550,7 +556,7 @@ def mask_to_rings(values: np.ndarray | Image.Image) -> list[Ring]:
 
 
 def raster_quality(
-    values: np.ndarray | Image.Image,
+    values: NDArray[Any] | Image.Image,
     *,
     connectivity: int = 8,
 ) -> RasterQuality:
@@ -585,7 +591,7 @@ def raster_quality(
     )
 
 
-def mask_iou(first: np.ndarray | Image.Image, second: np.ndarray | Image.Image) -> float:
+def mask_iou(first: NDArray[Any] | Image.Image, second: NDArray[Any] | Image.Image) -> float:
     a, b = _mask(first), _mask(second)
     if a.shape != b.shape:
         raise ValidationError("Mask IoU operands must share dimensions")

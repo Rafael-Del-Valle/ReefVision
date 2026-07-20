@@ -301,8 +301,8 @@ def write_project_archive(
         "archive_path": relative_archive,
         "archive_sha256": _sha256_file(destination),
         "archive_size_bytes": destination.stat().st_size,
-        "table_count": manifest["records"]["table_count"],
-        "record_count": manifest["records"]["record_count"],
+        "table_count": len(rows),
+        "record_count": sum(len(items) for items in rows.values()),
         "file_count": len(files),
         "total_file_bytes": sum(int(item["size_bytes"]) for item in files),
     }

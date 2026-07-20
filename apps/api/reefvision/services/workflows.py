@@ -125,7 +125,7 @@ class WorkflowService:
     def definitions() -> list[WorkflowNodeDefinition]:
         return [
             WorkflowNodeDefinition(
-                node_type=node_type,  # type: ignore[arg-type]
+                node_type=node_type,
                 display_name=definition.display_name,
                 inputs=[
                     WorkflowPortDefinition(

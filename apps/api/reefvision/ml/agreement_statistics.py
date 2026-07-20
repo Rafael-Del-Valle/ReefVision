@@ -5,8 +5,10 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
+from numpy.typing import NDArray
 
 
 @dataclass(frozen=True)
@@ -97,7 +99,7 @@ def icc_two_way_absolute_single(
 def bootstrap_paired(
     first: Sequence[float],
     second: Sequence[float],
-    statistic: Callable[[np.ndarray, np.ndarray], float | None],
+    statistic: Callable[[NDArray[Any], NDArray[Any]], float | None],
     *,
     iterations: int = 2000,
     confidence: float = 0.95,
@@ -123,9 +125,9 @@ def bootstrap_paired(
     )
 
 
-def mean_bias(first: np.ndarray, second: np.ndarray) -> float:
+def mean_bias(first: NDArray[Any], second: NDArray[Any]) -> float:
     return float(np.mean(first - second))
 
 
-def mean_absolute_error(first: np.ndarray, second: np.ndarray) -> float:
+def mean_absolute_error(first: NDArray[Any], second: NDArray[Any]) -> float:
     return float(np.mean(np.abs(first - second)))

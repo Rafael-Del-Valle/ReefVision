@@ -109,3 +109,7 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = ["cv2", "numpy", "psutil", "segment_anything", "torch", "ultralytics"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["mobile_sam", "efficientvit.*", "sam2.*"]
+ignore_missing_imports = true

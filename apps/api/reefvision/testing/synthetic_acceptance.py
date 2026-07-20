@@ -245,11 +245,11 @@ def _write_mjpeg_avi(path: Path, frames: list[Image.Image], *, fps: int = 8) -> 
 
     movie_payload = bytearray()
     index_entries = bytearray()
-    for frame in encoded:
+    for encoded_frame in encoded:
         offset = len(movie_payload)
-        chunk = _riff_chunk(b"00dc", frame)
+        chunk = _riff_chunk(b"00dc", encoded_frame)
         movie_payload.extend(chunk)
-        index_entries.extend(struct.pack("<4sIII", b"00dc", 0x10, offset, len(frame)))
+        index_entries.extend(struct.pack("<4sIII", b"00dc", 0x10, offset, len(encoded_frame)))
     movie_list = _riff_list(b"movi", bytes(movie_payload))
     avi_payload = b"AVI " + header_list + movie_list + _riff_chunk(b"idx1", bytes(index_entries))
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -121,13 +121,16 @@ def _verified_raster_mask(
 def _uncompressed_coco_rle(mask: Image.Image) -> dict[str, Any]:
     width, height = mask.size
     pixels = mask.load()
+    if pixels is None:
+        raise ValidationError("Raster mask pixels could not be loaded")
     counts: list[int] = []
     current_value = 0
     current_count = 0
     area = 0
     for x in range(width):
         for y in range(height):
-            value = 1 if int(pixels[x, y]) > 0 else 0
+            raw_value = cast(int, pixels[x, y])
+            value = 1 if raw_value > 0 else 0
             area += value
             if value == current_value:
                 current_count += 1

@@ -7,9 +7,10 @@ import random
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal, cast
 
 import numpy as np
+from numpy.typing import NDArray
 
 SelectionStrategy = Literal[
     "uncertainty",
@@ -103,7 +104,7 @@ def ensemble_disagreement(
 
 def _embedding_matrix(
     candidates: Sequence[SelectionCandidate],
-) -> tuple[np.ndarray, list[int]]:
+) -> tuple[NDArray[Any], list[int]]:
     indices = [index for index, item in enumerate(candidates) if item.embedding]
     if not indices:
         return np.empty((0, 0), dtype=np.float64), []
@@ -116,22 +117,26 @@ def _embedding_matrix(
     )
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     norms[norms == 0] = 1
-    return matrix / norms, indices
+    normalized = np.asarray(matrix / norms, dtype=np.float64)
+    return normalized, indices
 
 
-def _pairwise_distances(matrix: np.ndarray) -> np.ndarray:
+def _pairwise_distances(matrix: NDArray[Any]) -> NDArray[Any]:
     if matrix.size == 0:
         return np.empty((0, 0), dtype=np.float64)
-    return np.clip(1 - matrix @ matrix.T, 0, 2)
+    return np.asarray(
+        np.clip(1 - matrix @ matrix.T, 0, 2),
+        dtype=np.float64,
+    )
 
 
 def _kmeans(
-    matrix: np.ndarray,
+    matrix: NDArray[Any],
     cluster_count: int,
     *,
     seed: int,
     iterations: int = 50,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[NDArray[Any], NDArray[Any]]:
     if len(matrix) == 0:
         return np.empty((0,), dtype=np.int64), np.empty((0, 0), dtype=np.float64)
     cluster_count = max(1, min(cluster_count, len(matrix)))
@@ -150,7 +155,7 @@ def _kmeans(
         if np.array_equal(assignments, next_assignments):
             break
         assignments = next_assignments
-        next_centers: list[np.ndarray] = []
+        next_centers: list[NDArray[Any]] = []
         for cluster_id in range(cluster_count):
             members = matrix[assignments == cluster_id]
             if len(members) == 0:
@@ -262,16 +267,18 @@ def select_candidates(
             if strategy in {"farthest_point", "k_center"}:
                 strategy_score = diversity
             elif strategy == "kmeans_representative":
-                embedding_index = candidate_to_embedding.get(index)
-                cluster_id = cluster_ids[index]
-                strategy_score = (
-                    float(np.dot(matrix[embedding_index], centers[cluster_id]))
-                    if embedding_index is not None and cluster_id is not None
-                    else -1.0
-                )
+                candidate_embedding_index = candidate_to_embedding.get(index)
+                if candidate_embedding_index is not None and cluster_ids[index] is not None:
+                    strategy_score = float(
+                        np.dot(
+                            matrix[candidate_embedding_index],
+                            centers[cast(int, cluster_ids[index])],
+                        )
+                    )
+                else:
+                    strategy_score = -1.0
             elif strategy == "cluster_balanced":
-                cluster_id = cluster_ids[index]
-                cluster_selected = sum(cluster_ids[item] == cluster_id for item in selected)
+                cluster_selected = sum(cluster_ids[item] == cluster_ids[index] for item in selected)
                 strategy_score = uncertainty[index] + diversity - cluster_selected
             elif strategy == "density_aware":
                 strategy_score = uncertainty[index] * 0.7 + density[index] * 0.3
@@ -298,8 +305,9 @@ def select_candidates(
         selected.append(index)
         selected_details[index] = (score, diversity)
         remaining.remove(index)
-        if candidates[index].group_id is not None:
-            group_counts[candidates[index].group_id] += 1
+        group_id = candidates[index].group_id
+        if group_id is not None:
+            group_counts[group_id] += 1
 
     results: list[SelectionResult] = []
     for rank, index in enumerate(selected, start=1):

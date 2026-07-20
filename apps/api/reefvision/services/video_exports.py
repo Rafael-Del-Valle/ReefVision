@@ -30,7 +30,7 @@ class VideoRenderExportService:
         if payload.track_ids:
             query = query.where(VideoTrack.id.in_(payload.track_ids))
         if not payload.include_archived_tracks:
-            query = query.where(VideoTrack.archived_at.is_(None))
+            query = query.where(VideoTrack.status != "archived")
         tracks = list(self.session.scalars(query))
         if payload.track_ids and len(tracks) != len(set(payload.track_ids)):
             raise ValidationError("One or more requested tracks are missing or archived")

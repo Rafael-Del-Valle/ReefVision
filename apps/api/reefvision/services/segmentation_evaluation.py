@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from statistics import mean
-from typing import TypeAlias
+from typing import Any, TypeAlias, cast
 
 import numpy as np
+from numpy.typing import NDArray
 from PIL import Image, ImageDraw, UnidentifiedImageError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -124,12 +125,15 @@ def _raster_mask(
             source.load()
             if source.size != (width, height):
                 raise ValidationError("Segmentation mask dimensions do not match the source image")
-            return source.convert("L").point(lambda value: 255 if value > 0 else 0)
+            return cast(
+                Image.Image,
+                source.convert("L").point(lambda value: 255 if value > 0 else 0),
+            )
     except (OSError, UnidentifiedImageError) as exc:
         raise ValidationError("Segmentation mask content could not be read") from exc
 
 
-def _array(mask: BinaryMask) -> np.ndarray:
+def _array(mask: BinaryMask) -> NDArray[Any]:
     return np.asarray(mask, dtype=np.uint8) > 0
 
 

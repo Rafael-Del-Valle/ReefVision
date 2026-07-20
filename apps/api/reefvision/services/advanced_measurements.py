@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+from numpy.typing import NDArray
 from PIL import Image, ImageDraw, UnidentifiedImageError
 from sqlalchemy.orm import Session
 
@@ -76,7 +77,7 @@ class AdvancedMeasurementService:
             raise NotFoundError("Mask annotation not found")
         return mask
 
-    def _mask_array(self, mask: MaskAnnotation, image: ImageAsset) -> np.ndarray:
+    def _mask_array(self, mask: MaskAnnotation, image: ImageAsset) -> NDArray[Any]:
         if mask.geometry_kind == "raster_mask" and mask.mask_path:
             path = resolve_managed_project_path(self.settings, mask.mask_path)
             if not path.is_file():

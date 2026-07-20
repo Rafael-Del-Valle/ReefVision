@@ -68,7 +68,7 @@ class MeasurementValidationService:
     @staticmethod
     def _expected_unit(payload: Any, metric: MeasurementMetric) -> str | None:
         if metric.endswith("_physical"):
-            return payload.physical_unit
+            return str(payload.physical_unit) if payload.physical_unit is not None else None
         if metric == "contained_box_count":
             return "count"
         return "pixels"
@@ -242,7 +242,10 @@ class MeasurementValidationService:
                 bootstrap_paired(
                     measured_values,
                     reference_values,
-                    concordance_correlation,
+                    lambda first, second: concordance_correlation(
+                        first.tolist(),
+                        second.tolist(),
+                    ),
                     iterations=request.bootstrap_iterations,
                     confidence=request.confidence_level,
                     seed=bootstrap_seed + 2,

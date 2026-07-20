@@ -166,7 +166,7 @@ def _execute_tuning(
             )
         checkpoint_source = _resolve_model_source(settings, session, run)
         configure_provider_runtime(settings)
-        device = resolve_torch_device(run.device)
+        device = str(resolve_torch_device(run.device))
         base_args = dict(run.training_config_json)
         base_args.pop("epochs", None)
         base_args.pop("patience", None)
@@ -260,7 +260,7 @@ def _execute_validation(
         output_relative = f"{project.storage_root}/training/{run.id}/validation"
         output_directory = resolve_managed_project_path(settings, output_relative)
         shutil.rmtree(output_directory, ignore_errors=True)
-        device = resolve_torch_device(run.device)
+        device = str(resolve_torch_device(run.device))
         evaluation_config = dict(run.evaluation_config_json or {})
 
     payload, artifact_paths, plot_paths = run_ultralytics_validation(

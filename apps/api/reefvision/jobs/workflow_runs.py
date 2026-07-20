@@ -38,6 +38,9 @@ from reefvision.services.image_embeddings import ImageEmbeddingService
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
+ArtifactOutput = tuple[str, dict[str, Any]] | tuple[str, dict[str, Any], str, int]
+ArtifactOutputs = dict[str, ArtifactOutput]
+
 
 def _artifact_payload(artifact: WorkflowArtifact) -> dict[str, Any]:
     return dict(artifact.payload_json or {})
@@ -55,7 +58,7 @@ def _list_values(payloads: list[dict[str, Any]], *keys: str) -> list[str]:
 
 def _cache_key(
     node_type: str,
-    configuration: dict[str, object],
+    configuration: dict[str, Any],
     inputs: list[WorkflowArtifact],
 ) -> str:
     return canonical_json_sha256(
@@ -183,8 +186,8 @@ def _require_child_success(factory: sessionmaker[Session], child_id: str) -> dic
 def _image_input(
     session: Session,
     run: WorkflowRun,
-    configuration: dict[str, object],
-) -> dict[str, tuple[str, dict[str, Any]]]:
+    configuration: dict[str, Any],
+) -> ArtifactOutputs:
     configured = configuration.get("image_ids")
     requested = (
         [str(item) for item in configured]
@@ -212,8 +215,8 @@ def _image_input(
 def _video_input(
     session: Session,
     run: WorkflowRun,
-    configuration: dict[str, object],
-) -> dict[str, tuple[str, dict[str, Any]]]:
+    configuration: dict[str, Any],
+) -> ArtifactOutputs:
     configured = configuration.get("video_ids")
     requested = (
         [str(item) for item in configured]
@@ -242,9 +245,9 @@ def _depth_estimation(
     settings: Settings,
     factory: sessionmaker[Session],
     run: WorkflowRun,
-    configuration: dict[str, object],
+    configuration: dict[str, Any],
     inputs: list[WorkflowArtifact],
-) -> dict[str, tuple[str, dict[str, Any]]]:
+) -> ArtifactOutputs:
     image_ids = _list_values([_artifact_payload(item) for item in inputs], "image_ids")
     provider_id = str(configuration.get("provider_id", "depth_anything_v2_relative"))
     model_id = str(configuration.get("model_id", "depth-anything/Depth-Anything-V2-Small-hf"))
@@ -306,9 +309,9 @@ def _embedding_generation(
     settings: Settings,
     factory: sessionmaker[Session],
     run: WorkflowRun,
-    configuration: dict[str, object],
+    configuration: dict[str, Any],
     inputs: list[WorkflowArtifact],
-) -> dict[str, tuple[str, dict[str, Any]]]:
+) -> ArtifactOutputs:
     image_ids = _list_values([_artifact_payload(item) for item in inputs], "image_ids")
     model_id = str(configuration.get("model_id", "reefvision-color-texture-v1"))
     with factory() as session:
@@ -360,9 +363,9 @@ def _model_inference(
     factory: sessionmaker[Session],
     run: WorkflowRun,
     node_type: str,
-    configuration: dict[str, object],
+    configuration: dict[str, Any],
     inputs: list[WorkflowArtifact],
-) -> dict[str, tuple[str, dict[str, Any]]]:
+) -> ArtifactOutputs:
     image_ids = _list_values([_artifact_payload(item) for item in inputs], "image_ids")
     model_id = str(configuration.get("model_id", ""))
     if not model_id:
@@ -417,9 +420,9 @@ def _classification(
     settings: Settings,
     factory: sessionmaker[Session],
     run: WorkflowRun,
-    configuration: dict[str, object],
+    configuration: dict[str, Any],
     inputs: list[WorkflowArtifact],
-) -> dict[str, tuple[str, dict[str, Any]]]:
+) -> ArtifactOutputs:
     payloads = [_artifact_payload(item) for item in inputs]
     image_ids = _list_values(payloads, "image_ids")
     annotation_ids = _list_values(payloads, "annotation_ids")
@@ -482,9 +485,9 @@ def _tracker(
     settings: Settings,
     factory: sessionmaker[Session],
     run: WorkflowRun,
-    configuration: dict[str, object],
+    configuration: dict[str, Any],
     inputs: list[WorkflowArtifact],
-) -> dict[str, tuple[str, dict[str, Any]]]:
+) -> ArtifactOutputs:
     video_ids = _list_values([_artifact_payload(item) for item in inputs], "video_ids")
     model_id = str(configuration.get("model_id", ""))
     if not model_id:
@@ -540,9 +543,9 @@ def _tracker(
 def _measurement_snapshot(
     factory: sessionmaker[Session],
     run: WorkflowRun,
-    configuration: dict[str, object],
+    configuration: dict[str, Any],
     inputs: list[WorkflowArtifact],
-) -> dict[str, tuple[str, dict[str, Any]]]:
+) -> ArtifactOutputs:
     payloads = [_artifact_payload(item) for item in inputs]
     image_ids = _list_values(payloads, "image_ids")
     configured = configuration.get("mask_annotation_ids")
@@ -593,7 +596,7 @@ def _behavior_snapshot(
     factory: sessionmaker[Session],
     run: WorkflowRun,
     inputs: list[WorkflowArtifact],
-) -> dict[str, tuple[str, dict[str, Any]]]:
+) -> ArtifactOutputs:
     video_ids = _list_values([_artifact_payload(item) for item in inputs], "video_ids")
     with factory() as session:
         tracks = list(
@@ -632,9 +635,9 @@ def _behavior_snapshot(
 def _active_learning(
     factory: sessionmaker[Session],
     run: WorkflowRun,
-    configuration: dict[str, object],
+    configuration: dict[str, Any],
     inputs: list[WorkflowArtifact],
-) -> dict[str, tuple[str, dict[str, Any]]]:
+) -> ArtifactOutputs:
     payloads = [_artifact_payload(item) for item in inputs]
     image_ids = _list_values(payloads, "image_ids")
     embedding_model_id = str(configuration.get("embedding_model_id", ""))
@@ -679,9 +682,9 @@ def _active_learning(
 
 
 def _filter_artifact(
-    configuration: dict[str, object],
+    configuration: dict[str, Any],
     inputs: list[WorkflowArtifact],
-) -> dict[str, tuple[str, dict[str, Any]]]:
+) -> ArtifactOutputs:
     if not inputs:
         raise RuntimeError("Filter nodes require an input artifact")
     source = inputs[0]
@@ -707,9 +710,9 @@ def _export_json(
     factory: sessionmaker[Session],
     run: WorkflowRun,
     node_id: str,
-    configuration: dict[str, object],
+    configuration: dict[str, Any],
     inputs: list[WorkflowArtifact],
-) -> dict[str, tuple[str, dict[str, Any], str, int]]:
+) -> ArtifactOutputs:
     with factory() as session:
         project = session.get(Project, run.project_id)
         if project is None:
@@ -843,7 +846,7 @@ def process_workflow_run_job(
                         cache_key=cache_key,
                     )
                     if cached:
-                        created = _copy_cached_outputs(
+                        cached_artifacts = _copy_cached_outputs(
                             session,
                             run=run,
                             node_id=node.id,
@@ -852,7 +855,7 @@ def process_workflow_run_job(
                         state = dict(run.node_state_json or {})
                         state[node.id] = {
                             "status": "succeeded",
-                            "artifact_ids": [item.id for item in created],
+                            "artifact_ids": [item.id for item in cached_artifacts],
                             "cache_hit": True,
                         }
                         run.node_state_json = state
@@ -954,13 +957,13 @@ def process_workflow_run_job(
                 job = session.get(Job, job_id)
                 if run is None or job is None:
                     raise RuntimeError("Workflow run disappeared while saving artifacts")
-                created: list[WorkflowArtifact] = []
+                saved_artifacts: list[WorkflowArtifact] = []
                 for port_name, output in outputs.items():
                     artifact_type = output[0]
                     payload = {**output[1], "_cache_key": cache_key}
                     managed_path = output[2] if len(output) > 2 else None
                     size_bytes = output[3] if len(output) > 3 else None
-                    created.append(
+                    saved_artifacts.append(
                         _save_artifact(
                             session,
                             run=run,
@@ -975,7 +978,7 @@ def process_workflow_run_job(
                 state = dict(run.node_state_json or {})
                 state[node.id] = {
                     "status": "succeeded",
-                    "artifact_ids": [item.id for item in created],
+                    "artifact_ids": [item.id for item in saved_artifacts],
                     "completed_at": datetime.now(UTC).isoformat(),
                     "cache_hit": False,
                 }

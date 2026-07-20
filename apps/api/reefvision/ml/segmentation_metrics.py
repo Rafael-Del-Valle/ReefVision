@@ -5,8 +5,10 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
+from numpy.typing import NDArray
 from PIL import Image
 
 from reefvision.ml.mask_tools import erode
@@ -38,30 +40,33 @@ class CalibrationBin:
     calibration_gap: float | None
 
 
-def as_binary(mask: np.ndarray | Image.Image) -> np.ndarray:
+def as_binary(mask: NDArray[Any] | Image.Image) -> NDArray[Any]:
     array = np.asarray(mask if isinstance(mask, np.ndarray) else mask.convert("L"))
     if array.ndim != 2:
         raise ValueError("Segmentation metric masks must be two-dimensional")
     return array > 0
 
 
-def boundary(mask: np.ndarray | Image.Image) -> np.ndarray:
+def boundary(mask: NDArray[Any] | Image.Image) -> NDArray[Any]:
     values = as_binary(mask)
     if not values.any():
         return values.copy()
-    return values & ~erode(values, radius=1)
+    return np.asarray(
+        values & ~erode(values, radius=1),
+        dtype=bool,
+    )
 
 
-def _coordinates(mask: np.ndarray) -> np.ndarray:
+def _coordinates(mask: NDArray[Any]) -> NDArray[Any]:
     return np.column_stack(np.nonzero(mask)).astype(np.float64, copy=False)
 
 
 def _directed_nearest_distances(
-    source: np.ndarray,
-    target: np.ndarray,
+    source: NDArray[Any],
+    target: NDArray[Any],
     *,
     chunk_size: int = 2048,
-) -> np.ndarray:
+) -> NDArray[Any]:
     if source.size == 0:
         return np.empty((0,), dtype=np.float64)
     if target.size == 0:
@@ -76,8 +81,8 @@ def _directed_nearest_distances(
 
 
 def boundary_metrics(
-    ground_truth: np.ndarray | Image.Image,
-    prediction: np.ndarray | Image.Image,
+    ground_truth: NDArray[Any] | Image.Image,
+    prediction: NDArray[Any] | Image.Image,
     *,
     tolerance_pixels: float = 2.0,
 ) -> BoundaryMetrics:

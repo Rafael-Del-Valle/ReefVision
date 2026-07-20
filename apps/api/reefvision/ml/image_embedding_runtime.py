@@ -86,7 +86,7 @@ def transformers_embedding(
     if normalized_device in {"", "auto"}:
         normalized_device = "cuda" if torch.cuda.is_available() else "cpu"
     try:
-        processor = AutoImageProcessor.from_pretrained(
+        processor = AutoImageProcessor.from_pretrained(  # type: ignore[no-untyped-call]
             model_id,
             local_files_only=local_files_only,
         )

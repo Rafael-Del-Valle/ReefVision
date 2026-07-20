@@ -70,11 +70,17 @@ def _process_rss() -> int | None:
 
         return int(psutil.Process(os.getpid()).memory_info().rss)
     except ImportError:
+        if os.name == "nt":
+            return None
         try:
             import resource
 
-            observed = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
-            return observed if os.name == "nt" else observed * 1024
+            getrusage = getattr(resource, "getrusage", None)
+            rusage_self = getattr(resource, "RUSAGE_SELF", None)
+            if getrusage is None or rusage_self is None:
+                return None
+            observed = int(getrusage(rusage_self).ru_maxrss)
+            return observed * 1024
         except ImportError:
             return None
 
@@ -196,7 +202,8 @@ def synthetic_benchmark_suite(root: Path) -> BenchmarkSuiteResult:
     def switch_image() -> tuple[int, int]:
         with Image.open(first_image) as image:
             image.load()
-            return image.size
+            width, height = image.size
+            return int(width), int(height)
 
     results.append(run_benchmark("image_switching", switch_image))
     annotation_path = output_root / "annotation.json"

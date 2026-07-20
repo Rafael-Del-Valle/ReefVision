@@ -15,6 +15,7 @@ from typing import Any
 from uuid import uuid4
 
 import numpy as np
+from numpy.typing import NDArray
 from sqlalchemy.orm import Session
 
 from reefvision import __version__
@@ -74,14 +75,14 @@ def _measurement_value(measurement: MaskMeasurementResponse, metric: str) -> flo
     return _finite(getattr(measurement, aliases.get(metric, metric), None))
 
 
-def _pearson(reference: np.ndarray, predicted: np.ndarray) -> float | None:
+def _pearson(reference: NDArray[Any], predicted: NDArray[Any]) -> float | None:
     if reference.size < 2 or np.std(reference) == 0 or np.std(predicted) == 0:
         return None
     value = float(np.corrcoef(reference, predicted)[0, 1])
     return value if math.isfinite(value) else None
 
 
-def _icc_absolute_agreement(ratings: np.ndarray) -> float | None:
+def _icc_absolute_agreement(ratings: NDArray[Any]) -> float | None:
     """Return two-way random absolute-agreement single-measure ICC(A,1)."""
 
     if ratings.ndim != 2:
@@ -273,26 +274,30 @@ class ScientificValidationService:
             rows = [item for item in resolved if item.metric == metric]
             threshold = request.thresholds[metric]
             if rows:
-                reference = np.asarray([item.reference_value for item in rows], dtype=np.float64)
-                predicted = np.asarray([item.predicted_value for item in rows], dtype=np.float64)
+                reference_values = np.asarray(
+                    [item.reference_value for item in rows], dtype=np.float64
+                )
+                predicted_values = np.asarray(
+                    [item.predicted_value for item in rows], dtype=np.float64
+                )
             else:
                 failures.append("No observations have both reference and predicted values.")
-                reference = np.asarray([0.0], dtype=np.float64)
-                predicted = np.asarray([0.0], dtype=np.float64)
-            errors = predicted - reference
+                reference_values = np.asarray([0.0], dtype=np.float64)
+                predicted_values = np.asarray([0.0], dtype=np.float64)
+            errors = predicted_values - reference_values
             absolute = np.abs(errors)
             bias = float(np.mean(errors))
             mae = float(np.mean(absolute))
             rmse = float(np.sqrt(np.mean(np.square(errors))))
-            nonzero = np.abs(reference) > np.finfo(np.float64).eps
+            nonzero = np.abs(reference_values) > np.finfo(np.float64).eps
             relative_mae = (
-                float(np.mean(absolute[nonzero] / np.abs(reference[nonzero])) * 100.0)
+                float(np.mean(absolute[nonzero] / np.abs(reference_values[nonzero])) * 100.0)
                 if np.any(nonzero)
                 else None
             )
-            pearson = _pearson(reference, predicted) if rows else None
+            pearson = _pearson(reference_values, predicted_values) if rows else None
             model_icc = (
-                _icc_absolute_agreement(np.column_stack([reference, predicted]))
+                _icc_absolute_agreement(np.column_stack([reference_values, predicted_values]))
                 if len(rows) >= 2
                 else None
             )
@@ -360,8 +365,8 @@ class ScientificValidationService:
                     metric=metric,
                     unit=unit,
                     sample_count=len(rows),
-                    mean_reference=float(np.mean(reference)),
-                    mean_predicted=float(np.mean(predicted)),
+                    mean_reference=float(np.mean(reference_values)),
+                    mean_predicted=float(np.mean(predicted_values)),
                     bias=bias,
                     mae=mae,
                     rmse=rmse,

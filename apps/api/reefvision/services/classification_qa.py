@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
+from numpy.typing import NDArray
 from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -27,7 +28,7 @@ from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
 
-def _sharpness(gray: np.ndarray) -> float:
+def _sharpness(gray: NDArray[Any]) -> float:
     try:
         import cv2
 

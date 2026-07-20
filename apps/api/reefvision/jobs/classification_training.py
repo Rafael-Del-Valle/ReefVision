@@ -164,7 +164,7 @@ def process_classification_training_job(
             }
             session.commit()
 
-        from ultralytics import YOLO
+        from ultralytics import YOLO  # type: ignore[attr-defined]
 
         cancellation_requested = {"value": False}
         model = YOLO(checkpoint_source)

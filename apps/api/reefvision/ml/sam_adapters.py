@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 import numpy as np
+from numpy.typing import NDArray
 from PIL import Image
 
 from reefvision.domain.errors import ValidationError
@@ -47,7 +48,7 @@ def _device_string(requested: str) -> str:
 def _points_payload(
     positive_points: list[PixelPoint],
     negative_points: list[PixelPoint],
-) -> tuple[np.ndarray | None, np.ndarray | None]:
+) -> tuple[NDArray[Any] | None, NDArray[Any] | None]:
     points = [*positive_points, *negative_points]
     if not points:
         return None, None
@@ -60,7 +61,7 @@ def _points_payload(
     )
 
 
-def _box_array(box: PixelBox | None) -> np.ndarray | None:
+def _box_array(box: PixelBox | None) -> NDArray[Any] | None:
     if box is None:
         return None
     return np.asarray([box.x_min, box.y_min, box.x_max, box.y_max], dtype=np.float32)

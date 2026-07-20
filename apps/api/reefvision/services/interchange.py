@@ -14,6 +14,7 @@ from typing import Any
 from uuid import uuid4
 
 import numpy as np
+from numpy.typing import NDArray
 from PIL import Image, ImageDraw
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -73,7 +74,7 @@ def _polygon_area(points: list[list[float]]) -> float:
     )
 
 
-def _raster_bounds(mask: np.ndarray) -> tuple[float, float, float, float]:
+def _raster_bounds(mask: NDArray[Any]) -> tuple[float, float, float, float]:
     rows, columns = np.where(mask)
     if rows.size == 0 or columns.size == 0:
         raise ValidationError("Imported raster masks cannot be empty")
@@ -85,7 +86,7 @@ def _raster_bounds(mask: np.ndarray) -> tuple[float, float, float, float]:
     )
 
 
-def _uncompressed_rle(mask: np.ndarray) -> dict[str, Any]:
+def _uncompressed_rle(mask: NDArray[Any]) -> dict[str, Any]:
     height, width = mask.shape
     flattened = mask.astype(np.uint8).T.reshape(-1)
     counts: list[int] = []
@@ -449,7 +450,7 @@ class InterchangeService:
         self,
         project: Project,
         image: ImageAsset,
-        mask: np.ndarray,
+        mask: NDArray[Any],
         mask_id: str,
     ) -> tuple[str, Path]:
         if mask.shape != (image.height_px, image.width_px):
@@ -617,7 +618,9 @@ class InterchangeService:
                     if len({(point[0], point[1]) for point in points}) < 3:
                         skipped += 1
                         continue
-                    x_min, y_min, x_max, y_max = _polygon_bounds(points)
+                    polygon_x_min, polygon_y_min, polygon_x_max, polygon_y_max = _polygon_bounds(
+                        points
+                    )
                     mask_id = str(uuid4())
                     self.session.add(
                         MaskAnnotation(
@@ -626,10 +629,10 @@ class InterchangeService:
                             label_class_id=class_id,
                             geometry_kind="polygon",
                             polygon_json=points,
-                            x_min=x_min,
-                            y_min=y_min,
-                            x_max=x_max,
-                            y_max=y_max,
+                            x_min=polygon_x_min,
+                            y_min=polygon_y_min,
+                            x_max=polygon_x_max,
+                            y_max=polygon_y_max,
                             area_pixels=max(1, round(_polygon_area(points))),
                             measurement_json={},
                             source_type="external_import",
@@ -698,7 +701,7 @@ class InterchangeService:
             warnings=preview.warnings,
         )
 
-    def _load_raster(self, mask: MaskAnnotation, image: ImageAsset) -> np.ndarray:
+    def _load_raster(self, mask: MaskAnnotation, image: ImageAsset) -> NDArray[Any]:
         if not mask.mask_path:
             raise ValidationError("Raster mask is missing its managed path")
         path = resolve_managed_project_path(self.settings, mask.mask_path)
@@ -937,7 +940,7 @@ class InterchangeService:
             for item in images
         ]
         if request.format == "coco_panoptic":
-            annotations: list[dict[str, Any]] = []
+            panoptic_annotations: list[dict[str, Any]] = []
             panoptic_directory = root / "panoptic"
             panoptic_directory.mkdir(parents=True, exist_ok=True)
             segment_id = 1
@@ -999,7 +1002,7 @@ class InterchangeService:
                     axis=-1,
                 ).astype(np.uint8)
                 Image.fromarray(rgb, mode="RGB").save(panoptic_directory / filename)
-                annotations.append(
+                panoptic_annotations.append(
                     {
                         "image_id": image_id[image.id],
                         "file_name": f"panoptic/{filename}",
@@ -1010,7 +1013,7 @@ class InterchangeService:
                 "info": {"description": "ReefVision panoptic export"},
                 "images": image_records,
                 "categories": categories,
-                "annotations": annotations,
+                "annotations": panoptic_annotations,
             }
             (root / "panoptic.json").write_bytes(canonical_json_bytes(payload))
             return
@@ -1045,19 +1048,24 @@ class InterchangeService:
                 if mask.geometry_kind == "polygon" and mask.polygon_json:
                     points = [[float(point[0]), float(point[1])] for point in mask.polygon_json]
                     segmentation: Any = [[coordinate for point in points for coordinate in point]]
-                    x_min, y_min, x_max, y_max = _polygon_bounds(points)
+                    mask_x_min, mask_y_min, mask_x_max, mask_y_max = _polygon_bounds(points)
                     area = _polygon_area(points)
                 else:
                     raster = self._load_raster(mask, image)
                     segmentation = _uncompressed_rle(raster)
-                    x_min, y_min, x_max, y_max = _raster_bounds(raster)
+                    mask_x_min, mask_y_min, mask_x_max, mask_y_max = _raster_bounds(raster)
                     area = float(raster.sum())
                 annotations.append(
                     {
                         "id": annotation_id,
                         "image_id": image_id[image.id],
                         "category_id": category_id[mask.label_class_id],
-                        "bbox": [x_min, y_min, x_max - x_min, y_max - y_min],
+                        "bbox": [
+                            mask_x_min,
+                            mask_y_min,
+                            mask_x_max - mask_x_min,
+                            mask_y_max - mask_y_min,
+                        ],
                         "area": area,
                         "segmentation": segmentation,
                         "iscrowd": 0,
@@ -1174,7 +1182,7 @@ class InterchangeService:
                         "flags": {},
                     }
                 )
-            payload = {
+            payload: dict[str, Any] = {
                 "version": "5.0.0",
                 "flags": {},
                 "shapes": shapes,

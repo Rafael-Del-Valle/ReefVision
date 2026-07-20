@@ -6,9 +6,10 @@ import itertools
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
+from numpy.typing import NDArray
 from PIL import Image
 
 from reefvision.domain.errors import ValidationError
@@ -75,14 +76,14 @@ class CalibrationEstimate:
     upper_95: float | None
 
 
-def binary_mask(values: np.ndarray | Image.Image) -> np.ndarray:
+def binary_mask(values: NDArray[Any] | Image.Image) -> NDArray[Any]:
     array = np.asarray(values if isinstance(values, np.ndarray) else values.convert("L"))
     if array.ndim != 2:
         raise ValidationError("Measurements require a two-dimensional mask")
     return array > 0
 
 
-def _pixel_perimeter(mask: np.ndarray) -> float:
+def _pixel_perimeter(mask: NDArray[Any]) -> float:
     padded = np.pad(mask, 1, constant_values=False)
     center = padded[1:-1, 1:-1]
     perimeter = (
@@ -94,7 +95,7 @@ def _pixel_perimeter(mask: np.ndarray) -> float:
     return float(perimeter)
 
 
-def _convex_hull(points: np.ndarray) -> np.ndarray:
+def _convex_hull(points: NDArray[Any]) -> NDArray[Any]:
     unique = sorted({(float(x), float(y)) for y, x in points})
     if len(unique) <= 2:
         return np.asarray(unique, dtype=np.float64)
@@ -115,7 +116,7 @@ def _convex_hull(points: np.ndarray) -> np.ndarray:
     return np.asarray([*lower[:-1], *upper[:-1]], dtype=np.float64)
 
 
-def _polygon_area(points: np.ndarray) -> float:
+def _polygon_area(points: NDArray[Any]) -> float:
     if len(points) < 3:
         return 0.0
     x = points[:, 0]
@@ -123,7 +124,7 @@ def _polygon_area(points: np.ndarray) -> float:
     return float(abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))) / 2)
 
 
-def _feret(points: np.ndarray) -> tuple[float, float]:
+def _feret(points: NDArray[Any]) -> tuple[float, float]:
     if len(points) < 2:
         return 0.0, 0.0
     differences = points[:, None, :] - points[None, :, :]
@@ -142,7 +143,7 @@ def _feret(points: np.ndarray) -> tuple[float, float]:
     return maximum, 0.0 if not math.isfinite(minimum) else minimum
 
 
-def shape_measurements(values: np.ndarray | Image.Image) -> ShapeMeasurements:
+def shape_measurements(values: NDArray[Any] | Image.Image) -> ShapeMeasurements:
     mask = binary_mask(values)
     coordinates = np.column_stack(np.nonzero(mask))
     if len(coordinates) == 0:
@@ -183,7 +184,7 @@ def shape_measurements(values: np.ndarray | Image.Image) -> ShapeMeasurements:
     )
 
 
-def _neighbor_values(mask: np.ndarray, y: int, x: int) -> list[bool]:
+def _neighbor_values(mask: NDArray[Any], y: int, x: int) -> list[bool]:
     return [
         bool(mask[y - 1, x]),
         bool(mask[y - 1, x + 1]),
@@ -196,7 +197,7 @@ def _neighbor_values(mask: np.ndarray, y: int, x: int) -> list[bool]:
     ]
 
 
-def skeletonize(values: np.ndarray | Image.Image) -> np.ndarray:
+def skeletonize(values: NDArray[Any] | Image.Image) -> NDArray[Any]:
     """Zhang-Suen thinning with deterministic two-subiteration deletion."""
 
     mask = np.pad(binary_mask(values), 1, constant_values=False)
@@ -235,7 +236,7 @@ def skeletonize(values: np.ndarray | Image.Image) -> np.ndarray:
     return mask[1:-1, 1:-1]
 
 
-def _skeleton_neighbors(mask: np.ndarray, node: tuple[int, int]) -> list[tuple[int, int]]:
+def _skeleton_neighbors(mask: NDArray[Any], node: tuple[int, int]) -> list[tuple[int, int]]:
     y, x = node
     output = []
     for dy in (-1, 0, 1):
@@ -253,10 +254,10 @@ def _edge_length(first: tuple[int, int], second: tuple[int, int]) -> float:
 
 
 def bridge_skeleton_gaps(
-    skeleton: np.ndarray,
+    skeleton: NDArray[Any],
     *,
     maximum_gap_pixels: float,
-) -> tuple[np.ndarray, int]:
+) -> tuple[NDArray[Any], int]:
     if maximum_gap_pixels <= 0:
         return binary_mask(skeleton), 0
     output = binary_mask(skeleton).copy()
@@ -292,10 +293,10 @@ def bridge_skeleton_gaps(
 
 
 def prune_skeleton_spurs(
-    skeleton: np.ndarray,
+    skeleton: NDArray[Any],
     *,
     maximum_spur_length_pixels: float,
-) -> tuple[np.ndarray, int]:
+) -> tuple[NDArray[Any], int]:
     output = binary_mask(skeleton).copy()
     removed = 0
     changed = True
@@ -332,7 +333,7 @@ def prune_skeleton_spurs(
     return output, removed
 
 
-def _branch_segments(skeleton: np.ndarray) -> list[list[tuple[int, int]]]:
+def _branch_segments(skeleton: NDArray[Any]) -> list[list[tuple[int, int]]]:
     nodes = {(int(y), int(x)) for y, x in zip(*np.nonzero(skeleton), strict=True)}
     degrees = {node: len(_skeleton_neighbors(skeleton, node)) for node in nodes}
     terminals = {node for node, degree in degrees.items() if degree != 2}
@@ -370,7 +371,7 @@ def _path_length(path: Sequence[tuple[int, int]]) -> float:
     return sum(_edge_length(first, second) for first, second in itertools.pairwise(path))
 
 
-def _longest_shortest_path(skeleton: np.ndarray) -> float:
+def _longest_shortest_path(skeleton: NDArray[Any]) -> float:
     nodes = [(int(y), int(x)) for y, x in zip(*np.nonzero(skeleton), strict=True)]
     endpoints = [node for node in nodes if len(_skeleton_neighbors(skeleton, node)) == 1]
     sources = endpoints or nodes[:1]
@@ -393,11 +394,11 @@ def _longest_shortest_path(skeleton: np.ndarray) -> float:
 
 
 def skeleton_measurements(
-    values: np.ndarray | Image.Image,
+    values: NDArray[Any] | Image.Image,
     *,
     prune_spurs_pixels: float = 0,
     bridge_gaps_pixels: float = 0,
-) -> tuple[np.ndarray, SkeletonMeasurements]:
+) -> tuple[NDArray[Any], SkeletonMeasurements]:
     skeleton = skeletonize(values)
     skeleton, bridged = bridge_skeleton_gaps(
         skeleton,

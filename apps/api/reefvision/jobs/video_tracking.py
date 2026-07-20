@@ -88,7 +88,7 @@ def process_video_tracking_job(
     try:
         if not video_path.is_file() or not model_path.is_file():
             raise FileNotFoundError("Managed video or detector checkpoint is missing")
-        from ultralytics import YOLO
+        from ultralytics import YOLO  # type: ignore[attr-defined]
 
         detector = YOLO(str(model_path))
         if str(getattr(detector, "task", "") or "") != "detect":

@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 import numpy as np
+from numpy.typing import NDArray
 from PIL import Image, ImageDraw, UnidentifiedImageError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -51,7 +52,7 @@ def _mask_array(
     settings: Settings,
     mask: MaskAnnotation,
     image: ImageAsset,
-) -> np.ndarray:
+) -> NDArray[Any]:
     if mask.geometry_kind == "raster_mask" and mask.mask_path:
         path = resolve_managed_project_path(settings, mask.mask_path)
         if not path.is_file():

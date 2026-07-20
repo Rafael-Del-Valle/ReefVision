@@ -92,7 +92,11 @@ def _patch_provider_catalog() -> None:
 
     original_list = provider_hub._list_model_providers_uncached
 
-    def list_with_sam(settings: Any = None, *, refresh: bool = False):
+    def list_with_sam(
+        settings: Any = None,
+        *,
+        refresh: bool = False,
+    ) -> list[Any]:
         providers = original_list(settings, refresh=refresh)
         output = []
         for descriptor in providers:
@@ -188,7 +192,7 @@ def _patch_provider_catalog() -> None:
         *,
         provider_name: str | None = None,
         settings: Any = None,
-    ):
+    ) -> Any:
         if purpose == "assist" and (provider_name or "").strip().casefold() in {
             "mobilesam",
             "mobile_sam",
@@ -208,7 +212,7 @@ def _patch_provider_catalog() -> None:
 
     from reefvision.ml import assist_runtime
 
-    assist_runtime.assist_provider_for_name = _provider
+    assist_runtime.assist_provider_for_name = _provider  # type: ignore[attr-defined]
 
 
 def apply_sam_runtime_patch() -> None:

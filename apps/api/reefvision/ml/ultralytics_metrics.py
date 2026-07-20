@@ -302,7 +302,7 @@ def run_ultralytics_validation(
 ) -> tuple[dict[str, Any], dict[str, str], list[str]]:
     """Run an explicit Ultralytics validation pass and preserve standard plots."""
 
-    from ultralytics import YOLO
+    from ultralytics import YOLO  # type: ignore[attr-defined]
 
     output_directory.mkdir(parents=True, exist_ok=True)
     model = YOLO(str(checkpoint_path))

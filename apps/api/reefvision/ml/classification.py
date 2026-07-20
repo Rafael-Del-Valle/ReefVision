@@ -44,7 +44,7 @@ class UltralyticsClassificationRegistrationProvider(UltralyticsDetectionProvider
         configure_provider_runtime()
         require_provider_ready(ULTRALYTICS_PROVIDER_ID)
         try:
-            from ultralytics import YOLO
+            from ultralytics import YOLO  # type: ignore[attr-defined]
         except Exception as exc:  # pragma: no cover - dependency failure
             raise ValidationError(f"Ultralytics is unavailable: {exc}") from exc
         model = YOLO(str(model_path))
@@ -95,7 +95,7 @@ class UltralyticsClassificationProvider:
         configure_provider_runtime()
         require_provider_ready(self.provider_name)
         try:
-            from ultralytics import YOLO
+            from ultralytics import YOLO  # type: ignore[attr-defined]
         except Exception as exc:  # pragma: no cover
             raise ValidationError(f"Ultralytics is unavailable: {exc}") from exc
         resolve_torch_device(device)

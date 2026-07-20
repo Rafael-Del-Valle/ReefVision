@@ -12,6 +12,7 @@ from typing import Any
 from uuid import uuid4
 
 import numpy as np
+from numpy.typing import NDArray
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -33,7 +34,11 @@ def _sha256(path: Path) -> str:
 
 def _color(track_id: str) -> tuple[int, int, int]:
     digest = hashlib.sha256(track_id.encode("utf-8")).digest()
-    return tuple(64 + int(value) % 192 for value in digest[:3])
+    return (
+        64 + int(digest[0]) % 192,
+        64 + int(digest[1]) % 192,
+        64 + int(digest[2]) % 192,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,7 +130,7 @@ def _build_heatmap(
     height: int,
     maximum_frames: int,
     radius: int,
-) -> np.ndarray:
+) -> NDArray[Any]:
     try:
         import cv2
     except Exception as exc:
@@ -148,14 +153,27 @@ def _build_heatmap(
         sigmaX=max(1.0, radius / 3.0),
         sigmaY=max(1.0, radius / 3.0),
     )
-    normalized = cv2.normalize(blurred, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-    return cv2.applyColorMap(normalized, cv2.COLORMAP_TURBO)
+    normalized_float = np.empty_like(blurred)
+    cv2.normalize(
+        blurred,
+        normalized_float,
+        0,
+        255,
+        cv2.NORM_MINMAX,
+    )
+    normalized = normalized_float.astype(np.uint8)
+    return np.asarray(
+        cv2.applyColorMap(normalized, cv2.COLORMAP_TURBO),
+        dtype=np.uint8,
+    )
 
 
-def _label_for_track(track: VideoTrack, class_names: dict[str, str]) -> str:
+def _label_for_track(
+    track: VideoTrack,
+    class_names: dict[str, str],
+) -> str:
     class_name = class_names.get(str(track.label_class_id)) if track.label_class_id else None
-    label = class_name or track.track_label or f"Track {track.track_index}"
-    return f"{label} · {track.track_index}"
+    return class_name or f"Track {track.track_number}"
 
 
 def process_video_render_export_job(
@@ -223,7 +241,7 @@ def process_video_render_export_job(
         capture = cv2.VideoCapture(str(source_path))
         if not capture.isOpened():
             raise ValidationError("The managed source video could not be opened")
-        source_fps = float(capture.get(cv2.CAP_PROP_FPS)) or video.frames_per_second
+        source_fps = float(capture.get(cv2.CAP_PROP_FPS)) or video.fps
         output_fps = float(request.get("output_fps") or source_fps)
         width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)) or video.width_px
         height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT)) or video.height_px
@@ -234,7 +252,7 @@ def process_video_render_export_job(
         codec = str(request.get("codec", "mp4v"))
         writer = cv2.VideoWriter(
             str(output_path),
-            cv2.VideoWriter_fourcc(*codec),
+            cv2.VideoWriter_fourcc(*codec),  # type: ignore[attr-defined]
             output_fps,
             (width, height),
         )
@@ -242,7 +260,7 @@ def process_video_render_export_job(
             writer.release()
             writer = cv2.VideoWriter(
                 str(output_path),
-                cv2.VideoWriter_fourcc(*"mp4v"),
+                cv2.VideoWriter_fourcc(*"mp4v"),  # type: ignore[attr-defined]
                 output_fps,
                 (width, height),
             )

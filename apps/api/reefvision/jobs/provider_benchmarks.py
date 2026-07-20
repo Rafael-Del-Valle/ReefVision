@@ -96,11 +96,11 @@ def _ultralytics_runner(
     parameters: dict[str, Any],
 ) -> tuple[Callable[[Path | None], dict[str, float]], Callable[[], None]]:
     try:
-        from ultralytics import YOLO
+        from ultralytics import YOLO  # type: ignore[attr-defined]
     except Exception as exc:
         raise ValidationError(f"Ultralytics is unavailable: {exc}") from exc
 
-    model = YOLO(str(model_path))
+    model: Any = YOLO(str(model_path))
     image_size: int | tuple[int, int] = max(width, height)
 
     def run(image_path: Path | None) -> dict[str, float]:
@@ -332,7 +332,7 @@ def process_provider_benchmark_job(
         peak_ram = baseline_ram
         metric_sums: dict[str, float] = {}
         latencies: list[float] = []
-        sample_paths = image_paths or [None]
+        sample_paths: list[Path | None] = [*image_paths] if image_paths else [None]
 
         for index in range(total):
             with factory() as session:

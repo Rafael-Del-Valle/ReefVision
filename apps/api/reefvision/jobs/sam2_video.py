@@ -12,6 +12,7 @@ from typing import Any
 from uuid import uuid4
 
 import numpy as np
+from numpy.typing import NDArray
 from PIL import Image
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -129,7 +130,7 @@ def _seed_predictor(
         predictor.add_new_points_or_box(**kwargs)
 
 
-def _write_mask(path: Path, mask: np.ndarray) -> None:
+def _write_mask(path: Path, mask: NDArray[Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(mask.astype(np.uint8) * 255, mode="L").save(path, format="PNG")
 

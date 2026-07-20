@@ -116,17 +116,20 @@ def _gpu_inventory() -> list[dict[str, Any]]:
         import torch
 
         for item in output:
-            properties = torch.cuda.get_device_properties(int(item["index"]))
+            index = item.get("index")
+            if not isinstance(index, int):
+                continue
+
+            properties = torch.cuda.get_device_properties(index)
+            cudnn_available = bool(torch.backends.cudnn.is_available())  # type: ignore[no-untyped-call]
+            cudnn_version = torch.backends.cudnn.version() if cudnn_available else None  # type: ignore[no-untyped-call]
+
             item.update(
                 {
-                    "compute_capability": f"{properties.major}.{properties.minor}",
+                    "compute_capability": (f"{properties.major}.{properties.minor}"),
                     "multi_processor_count": int(properties.multi_processor_count),
                     "torch_cuda_version": torch.version.cuda,
-                    "cudnn_version": (
-                        int(torch.backends.cudnn.version())
-                        if torch.backends.cudnn.is_available()
-                        else None
-                    ),
+                    "cudnn_version": (int(cudnn_version) if cudnn_version is not None else None),
                 }
             )
     except Exception:
