@@ -533,8 +533,19 @@ textarea {
 
 .project-tabs {
   display: flex;
+  flex-wrap: nowrap;
   gap: 0.6rem;
   margin-bottom: 1rem;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.15rem 0 0.55rem;
+  scrollbar-gutter: stable;
+  white-space: nowrap;
+  overscroll-behavior-x: contain;
+}
+.project-tabs button {
+  flex: 0 0 auto;
 }
 .project-tabs button.active,
 .annotation-editor-actions button.active {

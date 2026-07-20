@@ -57,6 +57,7 @@ class AssistPointPromptRequest(BaseModel):
 
 class AssistAcceptRequest(BaseModel):
     label_class_id: str = Field(min_length=1, max_length=36)
+    output_kind: Literal["raster_mask", "polygon"] = "raster_mask"
 
 
 class AssistCandidateBox(BaseModel):

@@ -74,10 +74,6 @@ export function EnhancedAnnotationEditor({
   }, [initialImageId]);
 
   useEffect(() => {
-    if (workspace !== "boxes") setPointAssistEnabled(false);
-  }, [workspace]);
-
-  useEffect(() => {
     return queryClient.getQueryCache().subscribe((event) => {
       const query = event.query;
       if (query.queryKey[0] !== "annotation-session") {
@@ -125,6 +121,9 @@ export function EnhancedAnnotationEditor({
     };
 
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (pointAssistEnabled) {
+        return;
+      }
       if (
         !(event.target instanceof Element) ||
         !event.target.closest('[data-testid="polygon-mask-layer"]')
@@ -149,6 +148,9 @@ export function EnhancedAnnotationEditor({
     };
 
     const handlePointerDown = (event: globalThis.PointerEvent) => {
+      if (pointAssistEnabled) {
+        return;
+      }
       if (!(event.target instanceof Element)) {
         return;
       }
@@ -204,7 +206,7 @@ export function EnhancedAnnotationEditor({
       document.removeEventListener("keydown", handleKeyDown, true);
       document.removeEventListener("pointerdown", handlePointerDown, true);
     };
-  }, [vertexEditMode, workspace]);
+  }, [pointAssistEnabled, vertexEditMode, workspace]);
 
   const workspaceContent = useMemo(() => {
     if (workspace === "raster") {
@@ -264,7 +266,7 @@ export function EnhancedAnnotationEditor({
           <option value="raster">Raster masks</option>
         </select>
       </label>
-      {workspace === "boxes" && (
+      {
         <button
           type="button"
           className={pointAssistEnabled ? "active" : "secondary"}
@@ -274,7 +276,7 @@ export function EnhancedAnnotationEditor({
         >
           {pointAssistEnabled ? "Close Point Assist" : "Point Assist"}
         </button>
-      )}
+      }
       {workspace === "masks" && (
         <div
           role="group"
@@ -285,6 +287,7 @@ export function EnhancedAnnotationEditor({
             type="button"
             className={vertexEditMode === "move" ? "active" : "secondary"}
             data-testid="move-polygon-nodes"
+            disabled={pointAssistEnabled}
             onClick={() => activateVertexEditMode("move")}
           >
             Move nodes
@@ -293,6 +296,7 @@ export function EnhancedAnnotationEditor({
             type="button"
             className={vertexEditMode === "insert" ? "active" : "secondary"}
             data-testid="insert-polygon-node"
+            disabled={pointAssistEnabled}
             onClick={() => activateVertexEditMode("insert")}
           >
             Insert node
@@ -301,6 +305,7 @@ export function EnhancedAnnotationEditor({
             type="button"
             className={vertexEditMode === "delete" ? "active" : "secondary"}
             data-testid="delete-polygon-node"
+            disabled={pointAssistEnabled}
             onClick={() => activateVertexEditMode("delete")}
           >
             Delete node
@@ -334,11 +339,16 @@ export function EnhancedAnnotationEditor({
         </div>,
         toolbarTarget ?? document.body,
       )}
-      {workspace === "boxes" && pointAssistEnabled && (
+      {pointAssistEnabled && (
         <PromptPointAssistOverlay
           key={activeImageId}
           project={project}
           imageId={activeImageId}
+          activeWorkspace={workspace}
+          onAccepted={(kind) => {
+            setPointAssistEnabled(false);
+            setWorkspace(kind === "polygon" ? "masks" : "raster");
+          }}
           onClose={() => setPointAssistEnabled(false)}
         />
       )}

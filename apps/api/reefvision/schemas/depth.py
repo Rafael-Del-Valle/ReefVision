@@ -60,6 +60,24 @@ class DepthMapGenerateRequest(BaseModel):
         return self
 
 
+class DepthProviderReadinessResponse(BaseModel):
+    provider_id: str
+    model_id: str
+    ready: bool
+    resolved_device: str
+    model_source: Literal[
+        "fixture",
+        "local_path",
+        "huggingface_cache",
+        "remote",
+        "missing",
+        "invalid",
+    ]
+    requires_network: bool
+    reason: str | None
+    dependencies: dict[str, bool]
+
+
 class DepthMapImportRequest(BaseModel):
     values: list[list[FiniteFloat]] = Field(min_length=1, max_length=16_384)
     depth_kind: DepthKind

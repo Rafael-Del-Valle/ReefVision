@@ -1182,6 +1182,15 @@ describe("App", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: /CPT Coral Study/ }),
     );
+    for (const tabName of ["Video", "Review Queue", "Workflows", "Classes"]) {
+      expect(screen.getByRole("tab", { name: tabName })).toBeVisible();
+    }
+    expect(
+      screen.getByRole("tablist", { name: "Project sections" }),
+    ).toHaveAttribute(
+      "aria-description",
+      expect.stringContaining("Scroll horizontally"),
+    );
     await userEvent.click(screen.getByRole("tab", { name: "Classes" }));
 
     expect(

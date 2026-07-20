@@ -87,6 +87,7 @@ export function applyPromptAssistPoints(
 export function acceptPromptAssistSession(
   sessionId: string,
   labelClassId: string,
+  outputKind: "raster_mask" | "polygon",
 ) {
   return request<{
     session_id: string;
@@ -94,7 +95,10 @@ export function acceptPromptAssistSession(
     mask_annotation?: Record<string, unknown> | null;
   }>(`/assist-sessions/${sessionId}/accept`, {
     method: "POST",
-    body: JSON.stringify({ label_class_id: labelClassId }),
+    body: JSON.stringify({
+      label_class_id: labelClassId,
+      output_kind: outputKind,
+    }),
   });
 }
 

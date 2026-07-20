@@ -17,6 +17,23 @@ export interface DepthMapRecord {
   created_at: string;
 }
 
+export interface DepthProviderReadiness {
+  provider_id: string;
+  model_id: string;
+  ready: boolean;
+  resolved_device: string;
+  model_source:
+    | "fixture"
+    | "local_path"
+    | "huggingface_cache"
+    | "remote"
+    | "missing"
+    | "invalid";
+  requires_network: boolean;
+  reason: string | null;
+  dependencies: Record<string, boolean>;
+}
+
 export interface DepthJobResult {
   depth_map_id: string;
   job: {
@@ -67,6 +84,29 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(message);
   }
   return (await response.json()) as T;
+}
+
+export function getDepthProviderReadiness(
+  values: {
+    providerId: string;
+    modelId: string;
+    device: string;
+    localFilesOnly: boolean;
+  },
+  signal?: AbortSignal,
+) {
+  const search = new URLSearchParams({
+    provider_id: values.providerId,
+    model_id: values.modelId,
+    device: values.device,
+    local_files_only: String(values.localFilesOnly),
+  });
+  return request<DepthProviderReadiness>(
+    `/depth/provider-readiness?${search}`,
+    {
+      signal,
+    },
+  );
 }
 
 export function listDepthMaps(imageId: string, signal?: AbortSignal) {

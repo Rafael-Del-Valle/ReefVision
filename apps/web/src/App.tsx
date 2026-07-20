@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   archiveProject,
@@ -75,6 +75,18 @@ export function App() {
     string | null
   >(null);
   const [activeView, setActiveView] = useState<ProjectView>("gallery");
+  const activeProjectTabRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const activeTab = activeProjectTabRef.current;
+    if (activeTab && typeof activeTab.scrollIntoView === "function") {
+      activeTab.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "nearest",
+      });
+    }
+  }, [activeView]);
   const [projectName, setProjectName] = useState("");
   const [description, setDescription] = useState("");
   const [template, setTemplate] = useState<"blank" | "octocoral">("octocoral");
@@ -302,12 +314,16 @@ export function App() {
                 className="project-tabs"
                 role="tablist"
                 aria-label="Project sections"
+                aria-description="Scroll horizontally to reach additional project sections."
               >
                 {projectTabs.map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
                     role="tab"
+                    ref={
+                      activeView === tab.id ? activeProjectTabRef : undefined
+                    }
                     aria-selected={activeView === tab.id}
                     className={activeView === tab.id ? "active" : "secondary"}
                     onClick={() => setActiveView(tab.id)}

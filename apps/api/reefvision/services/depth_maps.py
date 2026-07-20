@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
 from reefvision.db.models import DepthMap, ImageAsset, Job, MaskAnnotation, Project
-from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.domain.errors import ArtifactMissingError, NotFoundError, ValidationError
 from reefvision.schemas.depth import (
     CameraIntrinsics,
     DepthAwareMaskMeasurementResponse,
@@ -245,7 +245,8 @@ class DepthMapService:
         managed = depth_map.preview_path if preview else depth_map.managed_path
         path = resolve_managed_project_path(self.settings, managed)
         if not path.is_file():
-            raise NotFoundError("Depth map content is missing")
+            artifact = "preview" if preview else "content"
+            raise ArtifactMissingError(f"The depth map {artifact} artifact is missing")
         return path
 
     def measure_mask(

@@ -12,6 +12,7 @@ import { createPortal } from "react-dom";
 import {
   getAnnotationSession,
   getProjectModelCatalog,
+  type ModelCatalogEntry,
   type Project,
 } from "../../api/client";
 import {
@@ -31,18 +32,14 @@ import {
 interface PromptPointAssistOverlayProps {
   project: Project;
   imageId: string;
+  activeWorkspace?: "boxes" | "masks" | "raster";
+  onAccepted?: (kind: PromptAssistOutputKind) => void;
   onClose: () => void;
 }
 
-interface PromptAssistModel {
-  catalog_id: string;
-  display_name: string;
-  provider?: string;
-  provider_id?: string;
-  installation_state: string;
-  selection_kind: string;
-  resolved_model_id?: string | null;
-}
+type PromptAssistOutputKind = "raster_mask" | "polygon";
+
+type ReadyPromptAssistModel = ModelCatalogEntry & { resolved_model_id: string };
 
 const fallbackPanelStyle = {
   position: "fixed" as const,
@@ -71,12 +68,18 @@ function pointLabel(kind: PromptPointKind): string {
 export function PromptPointAssistOverlay({
   project,
   imageId,
+  activeWorkspace = "boxes",
+  onAccepted = () => undefined,
   onClose,
 }: PromptPointAssistOverlayProps) {
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<PromptPointKind>("positive");
   const [modelId, setModelId] = useState("");
   const [labelClassId, setLabelClassId] = useState("");
+  const [outputKind, setOutputKind] = useState<PromptAssistOutputKind>(
+    activeWorkspace === "masks" ? "polygon" : "raster_mask",
+  );
+  const outputKindExplicitRef = useRef(false);
   const [session, setSession] = useState<PromptAssistSession | null>(null);
   const [candidateStale, setCandidateStale] = useState(false);
   const [interactionError, setInteractionError] = useState<string | null>(null);
@@ -110,13 +113,18 @@ export function PromptPointAssistOverlay({
       }),
   });
 
+  useEffect(() => {
+    if (outputKindExplicitRef.current) return;
+    setOutputKind(activeWorkspace === "masks" ? "polygon" : "raster_mask");
+  }, [activeWorkspace]);
+
   const readyModels = useMemo(() => {
-    const payload = modelCatalog.data as unknown as {
-      models?: PromptAssistModel[];
-      entries?: PromptAssistModel[];
-    };
-    return (payload?.models ?? payload?.entries ?? []).filter(
-      (model) =>
+    const models =
+      modelCatalog.data?.models ?? modelCatalog.data?.entries ?? [];
+    return models.filter(
+      (model): model is ReadyPromptAssistModel =>
+        (model.task === "assist_segmentation" ||
+          model.prompt_assist_compatibility === true) &&
         model.selection_kind === "registered_model" &&
         typeof model.resolved_model_id === "string" &&
         model.resolved_model_id.length > 0 &&
@@ -124,6 +132,16 @@ export function PromptPointAssistOverlay({
           model.installation_state === "Available"),
     );
   }, [modelCatalog.data]);
+  const unavailableModels = useMemo(() => {
+    const models =
+      modelCatalog.data?.models ?? modelCatalog.data?.entries ?? [];
+    return models.filter(
+      (model) =>
+        !readyModels.some(
+          (candidate) => candidate.catalog_id === model.catalog_id,
+        ),
+    );
+  }, [modelCatalog.data, readyModels]);
 
   useEffect(() => {
     const storageKey = `reefvision:point-assist-model:${project.id}`;
@@ -161,9 +179,16 @@ export function PromptPointAssistOverlay({
   useEffect(() => {
     const findTargets = () => {
       const svg = document.querySelector<SVGSVGElement>(
-        "svg.annotation-canvas",
+        activeWorkspace === "boxes"
+          ? "svg.annotation-canvas"
+          : activeWorkspace === "masks"
+            ? '[data-testid="polygon-mask-layer"]'
+            : '[data-testid="raster-brush-layer"]',
       );
-      const group = svg?.querySelector<SVGGElement>(":scope > g") ?? null;
+      const group =
+        activeWorkspace === "boxes"
+          ? (svg?.querySelector<SVGGElement>(":scope > g") ?? null)
+          : svg;
       const sidebar = document.querySelector<HTMLElement>(
         ".annotation-editor-sidebar",
       );
@@ -175,7 +200,7 @@ export function PromptPointAssistOverlay({
     const observer = new MutationObserver(findTargets);
     observer.observe(document.body, { childList: true, subtree: true });
     return () => observer.disconnect();
-  }, []);
+  }, [activeWorkspace]);
 
   const deleteRemoteSession = useCallback(async (sessionId: string) => {
     try {
@@ -207,6 +232,25 @@ export function PromptPointAssistOverlay({
 
     const handlePointerDown = (event: PointerEvent) => {
       if (event.button !== 0) return;
+      const eventTarget = event.target instanceof Element ? event.target : null;
+      if (
+        eventTarget?.closest(
+          "button, input, select, textarea, a, [role='button']",
+        )
+      ) {
+        return;
+      }
+      const bounds = svgTarget.getBoundingClientRect();
+      if (
+        bounds.width <= 0 ||
+        bounds.height <= 0 ||
+        event.clientX < bounds.left ||
+        event.clientX > bounds.right ||
+        event.clientY < bounds.top ||
+        event.clientY > bounds.bottom
+      ) {
+        return;
+      }
       const effectiveMode: PromptPointKind = event.altKey ? "negative" : mode;
       const currentPoints = historyRef.current.present.points;
       if (
@@ -252,9 +296,9 @@ export function PromptPointAssistOverlay({
       setInteractionError(null);
     };
 
-    svgTarget.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("pointerdown", handlePointerDown, true);
     return () =>
-      svgTarget.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("pointerdown", handlePointerDown, true);
   }, [annotationSession.data, mode, overlayTarget, svgTarget]);
 
   const previewMutation = useMutation({
@@ -288,31 +332,43 @@ export function PromptPointAssistOverlay({
   });
 
   const acceptMutation = useMutation({
-    mutationFn: async () => {
-      if (!session || !session.candidate_box || candidateStale) {
+    mutationFn: async ({
+      outputKind: acceptedOutputKind,
+      labelClassId: acceptedLabelClassId,
+    }: {
+      outputKind: PromptAssistOutputKind;
+      labelClassId: string;
+    }) => {
+      const activeSession = sessionRef.current;
+      if (!activeSession || !activeSession.candidate_box || candidateStale) {
         throw new Error("Update the mask preview before accepting it.");
       }
-      if (!labelClassId) throw new Error("Choose an annotation class.");
+      if (!acceptedLabelClassId) {
+        throw new Error("Choose an annotation class.");
+      }
       const accepted = await acceptPromptAssistSession(
-        session.session_id,
-        labelClassId,
+        activeSession.session_id,
+        acceptedLabelClassId,
+        acceptedOutputKind,
       );
-      await deleteRemoteSession(session.session_id);
-      return accepted;
+      return { accepted, outputKind: acceptedOutputKind };
     },
-    onSuccess: async () => {
+    onSuccess: async ({ outputKind: acceptedOutputKind }) => {
+      sessionRef.current = null;
       setSession(null);
       dispatchHistory({ type: "reset" });
       setCandidateStale(false);
       await Promise.all([
-        queryClient.invalidateQueries({
+        queryClient.refetchQueries({
           queryKey: ["annotation-session", imageId],
+          exact: true,
         }),
         queryClient.invalidateQueries({
           queryKey: ["project-images", project.id],
         }),
         queryClient.invalidateQueries({ queryKey: ["images", project.id] }),
       ]);
+      onAccepted(acceptedOutputKind);
     },
   });
 
@@ -362,7 +418,11 @@ export function PromptPointAssistOverlay({
         Assist model
         <select
           value={modelId}
-          disabled={readyModels.length === 0 || previewMutation.isPending}
+          disabled={
+            readyModels.length === 0 ||
+            previewMutation.isPending ||
+            acceptMutation.isPending
+          }
           onChange={(event) => {
             setModelId(event.target.value);
             setCandidateStale(true);
@@ -382,10 +442,52 @@ export function PromptPointAssistOverlay({
           )}
         </select>
       </label>
+      {readyModels.length === 0 && modelCatalog.isSuccess && (
+        <div className="form-warning" role="status">
+          No compatible ready Prompt Assist model is installed. Open the Models
+          tab, choose Assist / Smart Mask, select a ready provider, and import a
+          real compatible checkpoint.
+        </div>
+      )}
+      {readyModels.map((model) => (
+        <div
+          key={`${model.catalog_id}-capabilities`}
+          className="version-preview-metrics"
+        >
+          <span>Point prompts</span>
+          <span>Raster output</span>
+          <span>Polygon conversion</span>
+          {model.supported_devices?.map((item) => (
+            <span key={item}>{item.toUpperCase()}</span>
+          ))}
+        </div>
+      ))}
+      {unavailableModels.length > 0 && (
+        <details>
+          <summary>
+            Unavailable model diagnostics ({unavailableModels.length})
+          </summary>
+          <div className="annotation-selection-list">
+            {unavailableModels.map((model) => (
+              <div key={model.catalog_id} className="annotation-selection-row">
+                <strong>{model.display_name}</strong>
+                <span>
+                  {model.installation_state}:{" "}
+                  {model.installation_reason ?? "Not ready."}
+                  {model.required_provider_pack || model.provider_pack_id
+                    ? ` Provider: ${model.required_provider_pack ?? model.provider_pack_id}.`
+                    : ""}
+                </span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}{" "}
       <label>
         Accept mask as
         <select
           value={labelClassId}
+          disabled={acceptMutation.isPending}
           onChange={(event) => setLabelClassId(event.target.value)}
         >
           {annotationSession.data?.label_classes
@@ -397,6 +499,38 @@ export function PromptPointAssistOverlay({
             ))}
         </select>
       </label>
+      <fieldset disabled={acceptMutation.isPending}>
+        <legend>Acceptance output</legend>
+        <label className="toggle-row">
+          <input
+            type="radio"
+            name="prompt-assist-output"
+            checked={outputKind === "raster_mask"}
+            onChange={() => {
+              outputKindExplicitRef.current = true;
+              setOutputKind("raster_mask");
+            }}
+          />
+          Accept as raster mask
+        </label>
+        <label className="toggle-row">
+          <input
+            type="radio"
+            name="prompt-assist-output"
+            checked={outputKind === "polygon"}
+            onChange={() => {
+              outputKindExplicitRef.current = true;
+              setOutputKind("polygon");
+            }}
+          />
+          Accept as polygon
+        </label>
+      </fieldset>
+      <p className="annotation-helper">
+        Prompt models produce a raster mask internally. Polygon output uses a
+        deterministic one-source-pixel contour simplification and remains
+        editable.
+      </p>{" "}
       <div
         className="annotation-editor-inline-actions"
         role="group"
@@ -471,9 +605,18 @@ export function PromptPointAssistOverlay({
             !labelClassId ||
             acceptMutation.isPending
           }
-          onClick={() => acceptMutation.mutate()}
+          onClick={() =>
+            acceptMutation.mutate({
+              outputKind,
+              labelClassId,
+            })
+          }
         >
-          {acceptMutation.isPending ? "Accepting..." : "Accept mask"}
+          {acceptMutation.isPending
+            ? "Accepting..."
+            : outputKind === "polygon"
+              ? "Accept polygon"
+              : "Accept mask"}
         </button>
       </div>
       {candidateStale && session?.candidate_box && (

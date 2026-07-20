@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from io import BytesIO
+from typing import cast
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project
 
 
@@ -63,6 +66,22 @@ def test_metric_depth_and_intrinsics_produce_pinhole_size_estimates(
     )
     assert imported.status_code == 200, imported.text
     depth_map_id = imported.json()["id"]
+
+    preview = client.get(f"/api/v1/depth-maps/{depth_map_id}/preview")
+    assert preview.status_code == 200
+    assert preview.headers["content-type"].startswith("image/png")
+    assert preview.headers["content-disposition"].startswith("inline")
+    assert preview.headers["cache-control"] == "private, no-cache"
+    assert preview.headers["etag"]
+    missing = client.get("/api/v1/depth-maps/missing-depth-map/preview")
+    assert missing.status_code == 404
+
+    app = cast(FastAPI, client.app)
+    preview_path = resolve_managed_project_path(app.state.settings, imported.json()["preview_path"])
+    preview_path.unlink()
+    missing_artifact = client.get(f"/api/v1/depth-maps/{depth_map_id}/preview")
+    assert missing_artifact.status_code == 410
+    assert "preview artifact is missing" in missing_artifact.json()["detail"]
 
     measurement = client.get(
         f"/api/v1/mask-annotations/{mask_id}/depth-measurement",

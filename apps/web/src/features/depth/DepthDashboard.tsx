@@ -10,6 +10,7 @@ import { getImages, getJob, type ImageListItem } from "../phase456/api";
 import {
   depthContentUrl,
   depthPreviewUrl,
+  getDepthProviderReadiness,
   listDepthMaps,
   measureMaskDepth,
   queueDepthMap,
@@ -44,7 +45,31 @@ export function DepthDashboard({ project }: { project: Project }) {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [selectedDepthMapId, setSelectedDepthMapId] = useState("");
   const [selectedMaskId, setSelectedMaskId] = useState("");
+  const [previewRevision, setPreviewRevision] = useState(0);
+  const [previewState, setPreviewState] = useState<
+    "idle" | "loading" | "loaded" | "error"
+  >("idle");
 
+  const usesFixture = providerId === "luminance_relative";
+  const providerReadiness = useQuery({
+    queryKey: [
+      "depth-provider-readiness",
+      providerId,
+      modelId,
+      device,
+      localOnly,
+    ],
+    queryFn: () =>
+      getDepthProviderReadiness({
+        providerId,
+        modelId: modelId.trim(),
+        device,
+        localFilesOnly: localOnly,
+      }),
+    enabled: modelId.trim().length > 0,
+    staleTime: 10_000,
+    retry: false,
+  });
   const images = useQuery({
     queryKey: ["depth_images", project.id],
     queryFn: ({ signal }) => getImages(project.id, signal),
@@ -80,6 +105,14 @@ export function DepthDashboard({ project }: { project: Project }) {
       ),
     [session.data],
   );
+  const providerReady = providerReadiness.data?.ready === true;
+  const generationBlockedReason =
+    providerReadiness.isSuccess && !providerReady
+      ? (providerReadiness.data.reason ??
+        "The selected depth model is not ready.")
+      : null;
+  const providerCheckPending = providerReadiness.isPending;
+  const providerCheckFailed = providerReadiness.isError;
   const selectedDepthMap =
     depthMaps.data?.find((item) => item.id === selectedDepthMapId) ?? null;
   const depthMeasurement = useQuery({
@@ -101,6 +134,8 @@ export function DepthDashboard({ project }: { project: Project }) {
     }
     setSelectedDepthMapId("");
     setSelectedMaskId("");
+    setPreviewState("idle");
+    setPreviewRevision(0);
   }, [imageId, session.data]);
 
   useEffect(() => {
@@ -250,21 +285,73 @@ export function DepthDashboard({ project }: { project: Project }) {
             )}
             <button
               type="button"
-              disabled={!imageId || generation.isPending}
+              disabled={
+                !imageId ||
+                generation.isPending ||
+                providerCheckPending ||
+                providerCheckFailed ||
+                Boolean(generationBlockedReason)
+              }
               onClick={() => generation.mutate()}
             >
               {generation.isPending
                 ? "Queueing..."
                 : "Generate aligned depth map"}
             </button>
+            {generationBlockedReason && (
+              <p className="form-warning">{generationBlockedReason}</p>
+            )}
+            {providerCheckPending && (
+              <p className="annotation-helper" role="status">
+                Checking Depth Anything dependencies and devices...
+              </p>
+            )}
+            {providerCheckFailed && (
+              <div className="form-error" role="alert">
+                <p>
+                  Provider readiness could not be checked:{" "}
+                  {providerReadiness.error.message}
+                </p>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => void providerReadiness.refetch()}
+                >
+                  Retry provider check
+                </button>
+              </div>
+            )}
+            {!usesFixture && !localOnly && (
+              <p className="form-warning">
+                Network downloads are enabled for this generation request.
+              </p>
+            )}
+            {usesFixture && (
+              <p className="form-warning">
+                The luminance fixture is non-scientific and only verifies the
+                workflow.
+              </p>
+            )}
             {generation.error && (
               <p className="form-error">{generation.error.message}</p>
             )}
             {activeJob.data && (
-              <p>
-                Job: {activeJob.data.status} · {activeJob.data.progress_current}
-                /{activeJob.data.progress_total}
-              </p>
+              <div>
+                <p>
+                  Job: {activeJob.data.status} ·{" "}
+                  {activeJob.data.progress_current}/
+                  {activeJob.data.progress_total}
+                </p>
+                {activeJob.data.error_message && (
+                  <p className="form-error">{activeJob.data.error_message}</p>
+                )}
+                {activeJob.data.status === "failed" &&
+                  activeJob.data.result_json && (
+                    <pre>
+                      {JSON.stringify(activeJob.data.result_json, null, 2)}
+                    </pre>
+                  )}
+              </div>
             )}
           </article>
 
@@ -331,7 +418,11 @@ export function DepthDashboard({ project }: { project: Project }) {
               Depth map
               <select
                 value={selectedDepthMapId}
-                onChange={(event) => setSelectedDepthMapId(event.target.value)}
+                onChange={(event) => {
+                  setSelectedDepthMapId(event.target.value);
+                  setPreviewRevision(0);
+                  setPreviewState(event.target.value ? "loading" : "idle");
+                }}
               >
                 <option value="">Choose a map</option>
                 {depthMaps.data?.map((depthMap) => (
@@ -344,10 +435,32 @@ export function DepthDashboard({ project }: { project: Project }) {
             </label>
             {selectedDepthMap ? (
               <>
+                {previewState === "loading" && <p>Loading depth preview...</p>}
+                {previewState === "error" && (
+                  <div className="form-error" role="alert">
+                    <p>
+                      Preview failed to load from{" "}
+                      {depthPreviewUrl(selectedDepthMap.id)}.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewRevision((current) => current + 1);
+                        setPreviewState("loading");
+                      }}
+                    >
+                      Retry preview
+                    </button>
+                  </div>
+                )}
                 <img
-                  src={depthPreviewUrl(selectedDepthMap.id)}
+                  key={`${selectedDepthMap.id}:${previewRevision}`}
+                  src={`${depthPreviewUrl(selectedDepthMap.id)}?revision=${previewRevision}`}
                   alt="Depth map preview"
+                  onLoad={() => setPreviewState("loaded")}
+                  onError={() => setPreviewState("error")}
                   style={{
+                    display: previewState === "error" ? "none" : "block",
                     width: "100%",
                     maxHeight: "520px",
                     objectFit: "contain",

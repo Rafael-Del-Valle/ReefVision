@@ -16,7 +16,12 @@ from reefvision import __version__
 from reefvision.api.router import api_router
 from reefvision.config import Settings, get_settings
 from reefvision.db.session import create_database_engine, create_session_factory
-from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
+from reefvision.domain.errors import (
+    ArtifactMissingError,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
 from reefvision.jobs.worker import thumbnail_worker_loop
 from reefvision.logging_utils import configure_rotating_json_logging, default_api_log_path
 from reefvision.ml.assist_runtime import AssistRuntime
@@ -114,6 +119,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
+
+    @app.exception_handler(ArtifactMissingError)
+    async def handle_missing_artifact(_: Request, exc: ArtifactMissingError) -> JSONResponse:
+        LOGGER.warning(
+            "Managed artifact missing",
+            extra={
+                "event_id": "api_artifact_missing",
+                "component": "api",
+                "error_code": "artifact_missing",
+            },
+        )
+        return JSONResponse(status_code=410, content={"detail": str(exc)})
 
     @app.exception_handler(NotFoundError)
     async def handle_not_found(_: Request, exc: NotFoundError) -> JSONResponse:

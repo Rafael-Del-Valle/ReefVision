@@ -53,6 +53,31 @@ Auto Mask does not replace the original image or overwrite an old mask file. Eve
 
 Auto Mask is a classical edge-aware local-selection method. It is useful when the target has visually distinct boundaries. SAM-family Prompt Assist remains the stronger option for complex semantic selections.
 
+## Prompt Assist acceptance outputs
+
+Prompt Assist candidates remain temporary proposals while the user adds or removes points and
+reviews the preview. Accepting a candidate is an explicit action that selects an annotation class
+and calls:
+
+```text
+POST /api/v1/assist-sessions/{session_id}/accept
+```
+
+`AssistAcceptRequest.output_kind` supports:
+
+- `raster_mask`, the default and faithful representation of the reviewed candidate; or
+- `polygon`, an editable source-coordinate contour derived at acceptance time.
+
+Polygon acceptance is intentionally narrow. ReefVision requires a source-aligned candidate with
+one simple contour and rejects masks with holes, multiple components, non-faithful simplification,
+or excessive contour complexity. A rejected polygon conversion does not accept or modify the
+candidate; the user can keep reviewing it or accept the raster representation instead. This is not
+a general raster-to-polygon or polygon-to-raster conversion workspace.
+
+Neither the preview nor its prompts are verified annotations. Only a successful, explicit user
+acceptance creates the linked verified mask and bounding-box records with model, prompt, output,
+and source-prediction provenance.
+
 ## Depth maps and object measurements
 
 ReefVision can persist depth maps aligned to project images. A map may contain either:
@@ -73,6 +98,22 @@ For an annotated polygon or raster mask, ReefVision can report:
 - projected metric area when metric depth and camera intrinsics are available.
 
 The current projected-area method uses a pinhole-camera, locally fronto-parallel approximation. It is more realistic than assuming every object lies on the same flat image plane, but it is not a substitute for calibrated stereo, structured light, photogrammetry, or multi-view surface reconstruction when true curved surface area is required.
+
+### Provider readiness and preview revalidation
+
+The Depth workspace reports local runtime readiness before a Depth Anything request is queued.
+Real providers require the optional PyTorch/Transformers runtime plus a usable local or cached
+checkpoint when local-only mode is selected. Network checkpoint retrieval occurs only when the
+user explicitly disables local-only mode. The luminance provider bypasses model readiness solely
+as a deterministic workflow fixture and remains non-scientific.
+
+Frontend readiness is advisory; the backend still validates the provider, requested device,
+checkpoint policy, and image when it handles the queued job and returns a structured failure when
+the request cannot run.
+
+Depth preview PNGs are served inline with private, short-lived caching and revalidation. Retrying a
+failed preview uses a cache-busting revision URL; it does not regenerate the depth map, change its
+numeric array, or alter its provenance.
 
 ## Is depth used during model training?
 

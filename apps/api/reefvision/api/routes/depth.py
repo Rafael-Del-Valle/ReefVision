@@ -8,12 +8,14 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
+from reefvision.ml.depth_runtime import inspect_depth_provider_readiness
 from reefvision.schemas.depth import (
     DepthAwareMaskMeasurementResponse,
     DepthMapGenerateRequest,
     DepthMapImportRequest,
     DepthMapJobResponse,
     DepthMapResponse,
+    DepthProviderReadinessResponse,
     DepthTrackAnalyticsRequest,
     DepthTrackAnalyticsResponse,
 )
@@ -27,6 +29,26 @@ DbSession = Annotated[Session, Depends(get_db_session)]
 def service(request: Request, session: Session) -> DepthMapService:
     settings: Settings = request.app.state.settings
     return DepthMapService(session, settings)
+
+
+@router.get(
+    "/depth/provider-readiness",
+    response_model=DepthProviderReadinessResponse,
+)
+def get_depth_provider_readiness(
+    provider_id: Annotated[str, Query(min_length=1, max_length=120)],
+    model_id: Annotated[str, Query(min_length=1, max_length=500)],
+    device: Annotated[str, Query(min_length=1, max_length=60)] = "auto",
+    local_files_only: bool = True,
+) -> DepthProviderReadinessResponse:
+    return DepthProviderReadinessResponse.model_validate(
+        inspect_depth_provider_readiness(
+            provider_id=provider_id,
+            model_id=model_id,
+            device=device,
+            local_files_only=local_files_only,
+        )
+    )
 
 
 @router.get(
@@ -88,6 +110,8 @@ def get_depth_map_preview(
         path,
         media_type="image/png",
         filename=f"{depth_map_id}-depth.png",
+        content_disposition_type="inline",
+        headers={"Cache-Control": "private, no-cache"},
     )
 
 

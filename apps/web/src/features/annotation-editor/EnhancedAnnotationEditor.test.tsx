@@ -67,6 +67,23 @@ vi.mock("./RasterMaskWorkspace", () => ({
   ),
 }));
 
+vi.mock("./PromptPointAssistOverlay", () => ({
+  PromptPointAssistOverlay: ({
+    activeWorkspace,
+    onAccepted,
+  }: {
+    activeWorkspace: "boxes" | "masks" | "raster";
+    onAccepted: (kind: "raster_mask" | "polygon") => void;
+  }) => (
+    <div data-testid="prompt-point-assist">
+      <span>{activeWorkspace}</span>
+      <button type="button" onClick={() => onAccepted("polygon")}>
+        Accept polygon fixture
+      </button>
+    </div>
+  ),
+}));
+
 import { EnhancedAnnotationEditor } from "./EnhancedAnnotationEditor";
 
 function renderEditor() {
@@ -178,6 +195,49 @@ describe("EnhancedAnnotationEditor", () => {
     fireEvent.pointerDown(screen.getByTestId("mask-vertex-mask-1-0"));
     expect(vertexPointerHandler).toHaveBeenCalledTimes(1);
     expect(vertexPointerHandler.mock.calls[0][0].altKey).toBe(true);
+  });
+
+  it("locks polygon node tools while point assist owns canvas input", () => {
+    renderEditor();
+    fireEvent.change(screen.getByLabelText("Annotation type"), {
+      target: { value: "masks" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Insert node" }));
+    fireEvent.pointerDown(screen.getByTestId("editable-polygon"), {
+      clientX: 30,
+      clientY: 10,
+    });
+    expect(polygonInsertHandler).toHaveBeenCalledTimes(1);
+    polygonInsertHandler.mockClear();
+
+    fireEvent.click(screen.getByTestId("toggle-point-assist"));
+    expect(screen.getByRole("button", { name: "Move nodes" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Insert node" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Delete node" })).toBeDisabled();
+
+    fireEvent.pointerDown(screen.getByTestId("editable-polygon"), {
+      clientX: 30,
+      clientY: 10,
+    });
+    expect(polygonInsertHandler).not.toHaveBeenCalled();
+  });
+
+  it("closes point assist and switches workspace after accepting output", () => {
+    renderEditor();
+    const editor = screen.getByTestId("enhanced-annotation-editor");
+    fireEvent.click(screen.getByTestId("toggle-point-assist"));
+    expect(screen.getByTestId("prompt-point-assist")).toHaveTextContent(
+      "boxes",
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Accept polygon fixture" }),
+    );
+
+    expect(screen.queryByTestId("prompt-point-assist")).not.toBeInTheDocument();
+    expect(screen.getByTestId("mask-workspace")).toBeInTheDocument();
+    expect(editor).toHaveAttribute("data-active-annotation-type", "masks");
+    expect(editor).toHaveAttribute("data-point-assist-enabled", "false");
   });
 
   it("keeps whole-polygon removal explicit", () => {

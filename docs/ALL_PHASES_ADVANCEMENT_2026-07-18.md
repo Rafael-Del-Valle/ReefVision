@@ -38,7 +38,7 @@ This branch advances every roadmap phase in order. It does not claim that every 
 ### Remaining
 
 - Polygon self-intersection repair.
-- Raster/polygon conversion tools.
+- General raster/polygon conversion tools with editable previews and conversion controls.
 - Very-large-mask performance profiling.
 
 ## Phase 3 — Segmentation
@@ -156,6 +156,19 @@ This branch advances every roadmap phase in order. It does not claim that every 
 - Real SAM-family checkpoint acceptance.
 - Direct desktop point interaction on the annotation canvas.
 - Video mask propagation and depth-estimation providers.
+
+### July 20 corrective clarification
+
+Prompt Assist acceptance may now materialize the current reviewed raster candidate as either a
+`raster_mask` (the API default) or an editable `polygon`. The polygon option is an
+acceptance-time representation choice for one current Prompt Assist candidate, not a general
+raster/polygon conversion tool. It accepts only one source-aligned simple contour and rejects
+holes, multipart masks, non-faithful simplification, or overly complex contours with a structured
+validation error. The user can retain the faithful raster output instead.
+
+Both output kinds remain proposals until the user explicitly accepts the current candidate and
+class. Only that acceptance creates the linked verified mask and bounding-box records; previews
+and prompt edits never become verified annotations automatically.
 
 ## Phase 9 — Project interoperability
 

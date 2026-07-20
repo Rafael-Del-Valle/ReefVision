@@ -7,6 +7,8 @@ import {
   getAnnotationSession,
   getProjectModelCatalog,
   type AnnotationSession,
+  type ModelCatalogEntry,
+  type ModelCatalogResponse,
   type Project,
 } from "../../api/client";
 import {
@@ -56,13 +58,89 @@ const project: Project = {
   label_classes: [],
 };
 
+function promptAssistModel(): ModelCatalogEntry {
+  return {
+    catalog_id: "efficientvit-sam",
+    display_name: "SAM ViT-B",
+    display_summary: "Registered point-prompt segmentation model.",
+    category: "imported_custom_models",
+    provider_id: "segment_anything",
+    provider: "segment_anything",
+    provider_version: "1.0",
+    architecture: "SAM ViT-B",
+    architecture_family: "SAM",
+    variant: "l0",
+    model_variant: "l0",
+    model_size: "l0",
+    task: "assist_segmentation",
+    trainable: false,
+    inference_supported: true,
+    inference: true,
+    video_compatibility: false,
+    prompt_assist_compatibility: true,
+    tiling_compatibility: false,
+    tuning_compatibility: false,
+    checkpoint_identifier: "efficientvit-sam-l0.pt",
+    checkpoint_source: "registered_model",
+    download_source_type: "local_registration",
+    expected_files: [],
+    expected_size: null,
+    expected_file_size: null,
+    expected_checksum: null,
+    license_summary: "User supplied.",
+    model_weight_license: "User supplied.",
+    package_license: "Apache-2.0",
+    provider_pack_id: "efficientvit-sam",
+    required_provider_pack: "efficientvit-sam",
+    required_package_versions: [],
+    recommended_ram: 8,
+    recommended_vram: 4,
+    minimum_recommended_ram_gb: 8,
+    minimum_recommended_vram_gb: 4,
+    supported_devices: ["cpu", "cuda"],
+    supported_runtimes: ["pytorch"],
+    supported_runtime: ["pytorch"],
+    supported_precision: ["fp32"],
+    desktop_support: "provider_pack",
+    desktop_package_status: "installed",
+    clean_machine_verification_status: "verified",
+    availability: "available",
+    deprecation_status: "active",
+    replacement_model_id: null,
+    known_limitations: [],
+    installation_state: "Ready",
+    installation_reason: "Installed and verified.",
+    installation_job_id: null,
+    installed_asset_id: "registered-model:model-1",
+    installed_path: "models/registered/model-1",
+    installed_checksum: null,
+    advanced_only: false,
+    requires_confirmation: false,
+    selection_kind: "registered_model",
+    architecture_reference: null,
+    resolved_model_id: "model-1",
+    compatibility_reasons: [],
+  };
+}
+
+const modelCatalog: ModelCatalogResponse = {
+  schema_version: 2,
+  catalog_version: "2.0.0",
+  application_version: "1.6.0",
+  models: [promptAssistModel()],
+  validation_warnings: [],
+  rejected_entries: 0,
+  source_path: "config/model_catalog.json",
+  last_refresh_timestamp: "2026-07-19T00:00:00Z",
+};
+
 const baseSession: PromptAssistSession = {
   session_id: "assist-1",
   project_id: project.id,
   image_id: "image-1",
   model_id: "model-1",
-  model_display_name: "EfficientViT-SAM",
-  provider_name: "efficientvit_sam",
+  model_display_name: "SAM ViT-B",
+  provider_name: "segment_anything",
   provider_version: "1.0",
   created_at: "2026-07-19T12:00:00Z",
   last_used_at: "2026-07-19T12:00:00Z",
@@ -78,18 +156,58 @@ const baseSession: PromptAssistSession = {
   candidate_mask_png_base64: null,
 };
 
-function renderOverlay() {
+function configureCanvas(
+  svg: SVGSVGElement,
+  coordinateTarget: SVGGraphicsElement = svg,
+) {
+  Object.defineProperty(svg, "getBoundingClientRect", {
+    value: () => ({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 640,
+      bottom: 480,
+      width: 640,
+      height: 480,
+      toJSON: () => ({}),
+    }),
+  });
+  Object.defineProperty(coordinateTarget, "getScreenCTM", {
+    value: () => ({ inverse: () => ({}) }),
+  });
+}
+
+function renderOverlay({
+  activeWorkspace = "boxes",
+  onAccepted = vi.fn(),
+}: {
+  activeWorkspace?: "boxes" | "masks" | "raster";
+  onAccepted?: (kind: "raster_mask" | "polygon") => void;
+} = {}) {
   const sidebar = document.createElement("aside");
   sidebar.className = "annotation-editor-sidebar";
   document.body.appendChild(sidebar);
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.classList.add("annotation-canvas");
   const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-  Object.defineProperty(group, "getScreenCTM", {
-    value: () => ({ inverse: () => ({}) }),
-  });
   svg.appendChild(group);
+  configureCanvas(svg, group);
   document.body.appendChild(svg);
+  const polygonSvg = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "svg",
+  );
+  polygonSvg.dataset.testid = "polygon-mask-layer";
+  configureCanvas(polygonSvg);
+  document.body.appendChild(polygonSvg);
+  const rasterSvg = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "svg",
+  );
+  rasterSvg.dataset.testid = "raster-brush-layer";
+  configureCanvas(rasterSvg);
+  document.body.appendChild(rasterSvg);
 
   class TestDomPoint {
     constructor(
@@ -106,16 +224,27 @@ function renderOverlay() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  const view = render(
+  const component = (workspace: "boxes" | "masks" | "raster") => (
     <QueryClientProvider client={queryClient}>
       <PromptPointAssistOverlay
         project={project}
         imageId="image-1"
+        activeWorkspace={workspace}
+        onAccepted={onAccepted}
         onClose={vi.fn()}
       />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
-  return { ...view, svg, sidebar };
+  const view = render(component(activeWorkspace));
+  return {
+    ...view,
+    svg,
+    polygonSvg,
+    rasterSvg,
+    sidebar,
+    rerenderWorkspace: (workspace: "boxes" | "masks" | "raster") =>
+      view.rerender(component(workspace)),
+  };
 }
 
 describe("PromptPointAssistOverlay", () => {
@@ -167,17 +296,7 @@ describe("PromptPointAssistOverlay", () => {
       previous_image_id: null,
       next_image_id: null,
     } satisfies AnnotationSession);
-    vi.mocked(getProjectModelCatalog).mockResolvedValue({
-      models: [
-        {
-          catalog_id: "efficientvit-sam",
-          display_name: "EfficientViT-SAM",
-          installation_state: "Ready",
-          selection_kind: "registered_model",
-          resolved_model_id: "model-1",
-        },
-      ],
-    } as never);
+    vi.mocked(getProjectModelCatalog).mockResolvedValue(modelCatalog);
     vi.mocked(createPromptAssistSession).mockResolvedValue(baseSession);
     vi.mocked(applyPromptAssistPoints).mockResolvedValue({
       ...baseSession,
@@ -197,7 +316,11 @@ describe("PromptPointAssistOverlay", () => {
 
   it("places a point, previews the mask, and accepts it", async () => {
     const user = userEvent.setup();
-    const { svg } = renderOverlay();
+    const refetchCounts: number[] = [];
+    const onAccepted = vi.fn(() => {
+      refetchCounts.push(vi.mocked(getAnnotationSession).mock.calls.length);
+    });
+    const { svg } = renderOverlay({ onAccepted });
 
     expect(
       await screen.findByRole("heading", {
@@ -228,7 +351,7 @@ describe("PromptPointAssistOverlay", () => {
       }),
     );
     expect(
-      await screen.findByText(/candidate ready via efficientvit_sam/i),
+      await screen.findByText(/candidate ready via segment_anything/i),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^accept mask$/i }));
@@ -236,11 +359,105 @@ describe("PromptPointAssistOverlay", () => {
       expect(acceptPromptAssistSession).toHaveBeenCalledWith(
         "assist-1",
         "class-1",
+        "raster_mask",
       ),
     );
+    await waitFor(() => expect(onAccepted).toHaveBeenCalledWith("raster_mask"));
+    expect(refetchCounts).toEqual([2]);
+    expect(deletePromptAssistSession).not.toHaveBeenCalled();
     expect(
       await screen.findByText(/no point prompts placed yet/i),
     ).toBeInTheDocument();
+  });
+
+  it("keeps a live remote session when the active workspace changes", async () => {
+    const user = userEvent.setup();
+    const { svg, rerenderWorkspace, unmount } = renderOverlay();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Assist model")).toHaveValue("model-1"),
+    );
+
+    fireEvent.pointerDown(svg, { button: 0, clientX: 100, clientY: 120 });
+    await user.click(
+      screen.getByRole("button", { name: /generate mask preview/i }),
+    );
+    expect(
+      await screen.findByText(/candidate ready via segment_anything/i),
+    ).toBeInTheDocument();
+
+    rerenderWorkspace("masks");
+    await waitFor(() =>
+      expect(screen.getByTestId("point-assist-overlay")).toBeInTheDocument(),
+    );
+    expect(deletePromptAssistSession).not.toHaveBeenCalled();
+
+    unmount();
+    expect(deletePromptAssistSession).toHaveBeenCalledWith("assist-1");
+  });
+
+  it("captures point input above a topmost sibling canvas", async () => {
+    const { polygonSvg } = renderOverlay({ activeWorkspace: "masks" });
+    await waitFor(() =>
+      expect(screen.getByLabelText("Assist model")).toHaveValue("model-1"),
+    );
+    const topmostCanvas = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "svg",
+    );
+    const competingHandler = vi.fn();
+    topmostCanvas.addEventListener("pointerdown", competingHandler);
+    polygonSvg.insertAdjacentElement("afterend", topmostCanvas);
+
+    fireEvent.pointerDown(topmostCanvas, {
+      button: 0,
+      clientX: 140,
+      clientY: 160,
+    });
+
+    expect(await screen.findByText("1 include")).toBeInTheDocument();
+    expect(competingHandler).not.toHaveBeenCalled();
+  });
+
+  it("captures polygon output at mutation time and locks output controls", async () => {
+    const user = userEvent.setup();
+    let resolveAccept!: () => void;
+    vi.mocked(acceptPromptAssistSession).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveAccept = () =>
+            resolve({
+              session_id: baseSession.session_id,
+              annotation: {},
+              mask_annotation: {},
+            });
+        }),
+    );
+    const onAccepted = vi.fn();
+    const { svg } = renderOverlay({ onAccepted });
+    await waitFor(() =>
+      expect(screen.getByLabelText("Assist model")).toHaveValue("model-1"),
+    );
+    fireEvent.pointerDown(svg, { button: 0, clientX: 100, clientY: 120 });
+    await user.click(
+      screen.getByRole("button", { name: /generate mask preview/i }),
+    );
+    await screen.findByText(/candidate ready via segment_anything/i);
+
+    const polygonOutput = screen.getByLabelText("Accept as polygon");
+    await user.click(polygonOutput);
+    await user.click(screen.getByRole("button", { name: /^accept polygon$/i }));
+    await waitFor(() =>
+      expect(acceptPromptAssistSession).toHaveBeenCalledWith(
+        "assist-1",
+        "class-1",
+        "polygon",
+      ),
+    );
+    expect(polygonOutput).toBeDisabled();
+
+    resolveAccept();
+    await waitFor(() => expect(onAccepted).toHaveBeenCalledWith("polygon"));
+    expect(deletePromptAssistSession).not.toHaveBeenCalled();
   });
 
   it("requires an include point before exclusion points", async () => {
@@ -270,5 +487,24 @@ describe("PromptPointAssistOverlay", () => {
       screen.getByRole("button", { name: /exclude point/i }),
     ).toBeDisabled();
     await user.click(screen.getByRole("button", { name: /close/i }));
+  });
+
+  it("tracks the workspace default until the user chooses an output", async () => {
+  const user = userEvent.setup();
+  const { rerenderWorkspace } = renderOverlay({ activeWorkspace: "boxes" });
+  await waitFor(() =>
+    expect(screen.getByLabelText("Assist model")).toHaveValue("model-1"),
+  );
+
+  expect(screen.getByLabelText("Accept as raster mask")).toBeChecked();
+  rerenderWorkspace("masks");
+  await waitFor(() =>
+    expect(screen.getByLabelText("Accept as polygon")).toBeChecked(),
+  );
+
+  await user.click(screen.getByLabelText("Accept as raster mask"));
+  rerenderWorkspace("boxes");
+  rerenderWorkspace("masks");
+  expect(screen.getByLabelText("Accept as raster mask")).toBeChecked();
   });
 });

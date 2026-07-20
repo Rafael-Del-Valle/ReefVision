@@ -9,6 +9,10 @@ class NotFoundError(ReefVisionError):
     """Requested entity does not exist."""
 
 
+class ArtifactMissingError(ReefVisionError):
+    """A database record exists, but its managed artifact is unavailable."""
+
+
 class ConflictError(ReefVisionError):
     """Requested operation conflicts with existing data."""
 
