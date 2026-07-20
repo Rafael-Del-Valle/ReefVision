@@ -163,7 +163,10 @@ test("stores source-image coordinates correctly after zooming and reloads saved 
       });
       return;
     }
-    if (url.pathname.endsWith(`/images/${baseImage.id}/annotations`)) {
+    if (
+      url.pathname.endsWith(`/images/${baseImage.id}/annotation-session`) ||
+      url.pathname.endsWith(`/images/${baseImage.id}/annotations`)
+    ) {
       if (request.method() === "GET") {
         await route.fulfill({ json: sessionState });
         return;
@@ -426,7 +429,10 @@ test("keeps unsaved boxes visible after a failed save and allows retry", async (
       });
       return;
     }
-    if (url.pathname.endsWith(`/images/${baseImage.id}/annotations`)) {
+    if (
+      url.pathname.endsWith(`/images/${baseImage.id}/annotation-session`) ||
+      url.pathname.endsWith(`/images/${baseImage.id}/annotations`)
+    ) {
       if (request.method() === "GET") {
         await route.fulfill({ json: sessionState });
         return;
@@ -662,7 +668,10 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
       });
       return;
     }
-    if (url.pathname.endsWith(`/images/${baseImage.id}/annotations`)) {
+    if (
+      url.pathname.endsWith(`/images/${baseImage.id}/annotation-session`) ||
+      url.pathname.endsWith(`/images/${baseImage.id}/annotations`)
+    ) {
       await route.fulfill({
         json: {
           image: {

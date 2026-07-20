@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+﻿import { expect, test } from "@playwright/test";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
@@ -260,7 +260,7 @@ test("quality-control workflow opens the flagged image and returns to the QC das
       });
       return;
     }
-    if (url.pathname.endsWith(`/images/${baseImage.id}/annotations`)) {
+    if (url.pathname.endsWith(`/images/${baseImage.id}/annotation-session`)) {
       await route.fulfill({ json: annotationSession() });
       return;
     }
@@ -520,7 +520,7 @@ test("review-queue workflow preserves score context and item state transitions",
       await route.fulfill({ json: queueItem() });
       return;
     }
-    if (url.pathname.endsWith(`/images/${baseImage.id}/annotations`)) {
+    if (url.pathname.endsWith(`/images/${baseImage.id}/annotation-session`)) {
       await route.fulfill({ json: annotationSession() });
       return;
     }
@@ -551,7 +551,7 @@ test("review-queue workflow preserves score context and item state transitions",
   await mountBuiltApp(page);
   await page.getByRole("button", { name: /CPT Coral Study/ }).click();
   await page.getByRole("tab", { name: "Review Queue" }).click();
-  await page.getByRole("button", { name: "Generate queue" }).click();
+  await page.getByRole("button", { name: "Generate priority queue" }).click();
 
   await expect(page.getByText("Rank #1")).toBeVisible();
   await expect(
