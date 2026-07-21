@@ -54,6 +54,25 @@ class SegmentationPredictionService(PredictionService):
         response.accepted_mask_annotation_id = proposal.accepted_mask_annotation_id
         return response
 
+    def _accepted_mask_for_retry(
+        self,
+        proposal: PredictionProposal,
+    ) -> MaskAnnotation | None:
+        """Return the original accepted mask when an accept request is retried."""
+
+        if proposal.review_status not in {"accepted", "edited_and_accepted"}:
+            return None
+        if proposal.accepted_mask_annotation_id is None:
+            raise ConflictError(
+                "Accepted segmentation proposal is missing its mask annotation link"
+            )
+        annotation = self.mask_annotations.get(proposal.accepted_mask_annotation_id)
+        if annotation is None or annotation.image_id != proposal.image_id:
+            raise ConflictError(
+                "Accepted segmentation proposal references a missing mask annotation"
+            )
+        return annotation
+
     def _validated_polygon(
         self,
         proposal: PredictionProposal,
@@ -128,10 +147,20 @@ class SegmentationPredictionService(PredictionService):
                 "source_model_id": proposal.model_id,
                 "source_prediction_id": proposal.id,
                 "inference_job_id": proposal.inference_job_id,
+                "source_run_id": proposal.inference_job_id,
                 "original_confidence": proposal.confidence,
                 "original_predicted_label": proposal.predicted_label,
+                "original_predicted_index": proposal.predicted_index,
+                "original_label_class_id": proposal.label_class_id,
+                "original_predicted_box": {
+                    "x_min": proposal.x_min,
+                    "y_min": proposal.y_min,
+                    "x_max": proposal.x_max,
+                    "y_max": proposal.y_max,
+                },
                 "original_polygon": original_polygon,
                 "accepted_polygon": polygon,
+                "source_proposal_provenance": proposal.provenance_json,
                 "class_changed": label_class_id != proposal.label_class_id,
                 "geometry_changed": polygon != original_polygon,
                 "accepted_at": _utc_now().isoformat(),
@@ -174,6 +203,13 @@ class SegmentationPredictionService(PredictionService):
         proposal = self._proposal(proposal_id)
         if proposal.geometry_kind != "polygon_mask":
             return super().accept(proposal_id, payload)
+        existing = self._accepted_mask_for_retry(proposal)
+        if existing is not None:
+            return PredictionReviewResponse(
+                proposal=self._response(proposal),
+                annotation=None,
+                mask_annotation=MaskAnnotationResponse.model_validate(existing),
+            )
         mask_annotation = self._create_mask_from_proposal(
             proposal,
             payload,

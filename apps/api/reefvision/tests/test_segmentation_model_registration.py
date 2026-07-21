@@ -29,7 +29,7 @@ class FakeSegmentationRegistrationProvider:
             input_size={"imgsz": 640},
             metadata={
                 "trusted_checkpoint": True,
-                "proposal_geometry": "polygon_mask",
+                "proposal_geometry": "polygon_or_managed_raster_mask",
             },
         )
 
@@ -100,5 +100,5 @@ def test_completed_segmentation_run_registers_as_segmenter(
     assert model["provider_name"] == "ultralytics"
     assert model["metadata_json"]["registered_from"] == "training_run"
     assert model["metadata_json"]["source_training_run_id"] == run_id
-    assert model["metadata_json"]["proposal_geometry"] == "polygon_mask"
+    assert model["metadata_json"]["proposal_geometry"] == "polygon_or_managed_raster_mask"
     assert model["metadata_json"]["source_metrics"] == {"metrics/mAP50(M)": 0.7}

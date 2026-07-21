@@ -40,6 +40,7 @@ def segmentation_provider_descriptor(
             [
                 *descriptor.supported_output_types,
                 "polygon_mask_proposals",
+                "raster_mask_proposals",
                 "yolo_segmentation_datasets",
             ]
         )
@@ -50,9 +51,8 @@ def segmentation_provider_descriptor(
         supported_output_types=outputs,
         known_limitations=(
             "Instance-segmentation training currently consumes polygon masks "
-            "only; raster masks remain reserved for semantic providers.",
-            "Tuning execution and tiled segmentation training remain disabled "
-            "in this vertical slice.",
+            "only; inference can retain unsuitable polygons as managed raster proposals.",
+            "Segmentation tuning and tiled training or inference remain disabled in this workflow.",
             "Automatic checkpoint downloads remain disabled; local or managed "
             "checkpoints must be selected explicitly.",
         ),

@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import os
+from contextlib import suppress
 from datetime import UTC, datetime
-from hashlib import sha256
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from PIL import Image, UnidentifiedImageError
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
@@ -27,6 +28,10 @@ from reefvision.ml.semantic_segmentation import (
 )
 from reefvision.repositories.images import ImageRepository
 from reefvision.repositories.models import ModelRepository
+from reefvision.storage.masks import (
+    remove_prediction_mask_png,
+    write_prediction_mask_png,
+)
 from reefvision.storage.projects import resolve_managed_project_path
 
 
@@ -52,12 +57,18 @@ def _mapped_label_class_id(
     return str(value) if value else None
 
 
-def _file_sha256(path: Path) -> str:
-    digest = sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+def _model_source_provenance(model_metadata: dict[str, Any]) -> dict[str, Any]:
+    keys = (
+        "source_training_run_id",
+        "source_dataset_version_id",
+        "source_dataset_manifest_sha256",
+        "source_split_manifest_sha256",
+        "source_catalog_model_id",
+        "source_resolved_model_asset_id",
+        "source_resolved_model_checksum",
+        "source_result_checkpoint_path",
+    )
+    return {key: model_metadata[key] for key in keys if model_metadata.get(key) is not None}
 
 
 def _semantic_proposals(
@@ -76,6 +87,7 @@ def _semantic_proposals(
     model_metadata: dict[str, Any],
     job_id: str,
     device: str,
+    uncommitted_mask_paths: dict[str, str],
 ) -> list[PredictionProposal]:
     classes = model_metadata.get("classes")
     if not isinstance(classes, list):
@@ -105,24 +117,18 @@ def _semantic_proposals(
         if area_pixels <= 0:
             continue
         proposal_id = str(uuid4())
-        # Keep proposal paths short enough for Windows environments whose Python or
-        # imaging stack still observes the traditional MAX_PATH boundary. The UUID
-        # remains the authoritative identity; the two-character shard only limits
-        # directory fan-out and does not encode job or image provenance.
-        output_root = resolve_managed_project_path(
+        encoded = BytesIO()
+        binary.save(encoded, format="PNG", optimize=True)
+        stored = write_prediction_mask_png(
             settings,
-            f"{project.storage_root}/prediction-masks/{proposal_id[:2]}",
+            project_storage_root=project.storage_root,
+            proposal_id=proposal_id,
+            png_bytes=encoded.getvalue(),
+            expected_width=image_width,
+            expected_height=image_height,
         )
-        output_root.mkdir(parents=True, exist_ok=True)
-        destination = output_root / f"{proposal_id}.png"
-        temporary = output_root / f".{proposal_id}.tmp"
-        try:
-            binary.save(temporary, format="PNG", optimize=True)
-            os.replace(temporary, destination)
-        finally:
-            temporary.unlink(missing_ok=True)
+        uncommitted_mask_paths[stored.relative_path] = proposal_id
         x_min, y_min, x_max, y_max = bounds
-        relative_mask = destination.relative_to(settings.resolved_data_dir).as_posix()
         proposals.append(
             PredictionProposal(
                 id=proposal_id,
@@ -137,8 +143,8 @@ def _semantic_proposals(
                 confidence=1.0,
                 geometry_kind="raster_mask",
                 polygon_json=None,
-                mask_path=relative_mask,
-                mask_content_sha256=_file_sha256(destination),
+                mask_path=stored.relative_path,
+                mask_content_sha256=stored.content_sha256,
                 x_min=float(x_min),
                 y_min=float(y_min),
                 x_max=float(x_max),
@@ -156,6 +162,7 @@ def _semantic_proposals(
                     "proposal_geometry": "raster_mask",
                     "pixel_value": pixel_value,
                     "area_pixels": area_pixels,
+                    **_model_source_provenance(model_metadata),
                 },
             )
         )
@@ -211,6 +218,8 @@ def process_inference_job(
                 session.commit()
         return False
 
+    uncommitted_mask_paths: dict[str, str] = {}
+    project_storage_root: str | None = None
     try:
         if provider is not None:
             provider.load_model(model_path, inference_settings.device)
@@ -228,6 +237,7 @@ def process_inference_job(
                 project = session.get(Project, project_id)
                 if image is None or project is None:
                     raise ValidationError("The inference job references a missing image or project")
+                project_storage_root = project.storage_root
                 image_path = resolve_managed_project_path(settings, image.managed_path)
 
                 if semantic_provider is not None:
@@ -252,6 +262,7 @@ def process_inference_job(
                             model_metadata=model_metadata,
                             job_id=job_id,
                             device=inference_settings.device,
+                            uncommitted_mask_paths=uncommitted_mask_paths,
                         )
                     finally:
                         indexed_path.unlink(missing_ok=True)
@@ -262,9 +273,45 @@ def process_inference_job(
                     proposals = []
                     for prediction in predictions:
                         polygon = getattr(prediction, "polygon", None)
-                        geometry_kind = "polygon_mask" if polygon is not None else "bounding_box"
+                        mask_png_bytes = getattr(prediction, "mask_png_bytes", None)
+                        proposal_id = str(uuid4())
+                        geometry_kind = "bounding_box"
+                        mask_path: str | None = None
+                        mask_content_sha256: str | None = None
+                        raster_metadata: dict[str, Any] = {}
+                        if model_task == "segment":
+                            if polygon is not None:
+                                geometry_kind = "polygon_mask"
+                            elif isinstance(mask_png_bytes, bytes):
+                                stored = write_prediction_mask_png(
+                                    settings,
+                                    project_storage_root=project.storage_root,
+                                    proposal_id=proposal_id,
+                                    png_bytes=mask_png_bytes,
+                                    expected_width=image.width_px,
+                                    expected_height=image.height_px,
+                                )
+                                uncommitted_mask_paths[stored.relative_path] = proposal_id
+                                geometry_kind = "raster_mask"
+                                mask_path = stored.relative_path
+                                mask_content_sha256 = stored.content_sha256
+                                raster_metadata = {
+                                    "area_pixels": stored.area_pixels,
+                                    "raster_bounds": {
+                                        "x_min": stored.x_min,
+                                        "y_min": stored.y_min,
+                                        "x_max": stored.x_max,
+                                        "y_max": stored.y_max,
+                                    },
+                                }
+                            else:
+                                raise ValidationError(
+                                    "Segmentation inference returned an instance without "
+                                    "reviewable polygon or raster-mask geometry"
+                                )
                         proposals.append(
                             PredictionProposal(
+                                id=proposal_id,
                                 project_id=image.project_id,
                                 image_id=image.id,
                                 model_id=model_id,
@@ -279,6 +326,8 @@ def process_inference_job(
                                 confidence=prediction.confidence,
                                 geometry_kind=geometry_kind,
                                 polygon_json=polygon,
+                                mask_path=mask_path,
+                                mask_content_sha256=mask_content_sha256,
                                 x_min=prediction.box.x_min,
                                 y_min=prediction.box.y_min,
                                 x_max=prediction.box.x_max,
@@ -297,6 +346,8 @@ def process_inference_job(
                                     "provider_version": provider_version,
                                     "model_task": model_task,
                                     "proposal_geometry": geometry_kind,
+                                    **raster_metadata,
+                                    **_model_source_provenance(model_metadata),
                                 },
                             )
                         )
@@ -318,11 +369,35 @@ def process_inference_job(
                     job.status = "succeeded"
                     job.completed_at = _utc_now()
                 session.commit()
+                uncommitted_mask_paths.clear()
         return True
     except Exception as exc:
+        if project_storage_root is not None:
+            for relative_path, proposal_id in tuple(uncommitted_mask_paths.items()):
+                with suppress(Exception):
+                    remove_prediction_mask_png(
+                        settings,
+                        project_storage_root=project_storage_root,
+                        proposal_id=proposal_id,
+                        relative_path=relative_path,
+                    )
+        uncommitted_mask_paths.clear()
+        committed_mask_paths: set[tuple[str, str]] = set()
         with factory() as session:
             job = session.get(Job, job_id)
             if job is not None:
+                if model_task in {"segment", SEMANTIC_SEGMENTATION_TASK}:
+                    partial_proposals = list(
+                        session.scalars(
+                            select(PredictionProposal).where(
+                                PredictionProposal.inference_job_id == job_id
+                            )
+                        )
+                    )
+                    for proposal in partial_proposals:
+                        if proposal.mask_path is not None:
+                            committed_mask_paths.add((proposal.id, proposal.mask_path))
+                        session.delete(proposal)
                 job.status = "failed"
                 job.error_message = str(exc)
                 job.result_json = {
@@ -332,6 +407,15 @@ def process_inference_job(
                 }
                 job.completed_at = _utc_now()
                 session.commit()
+        if project_storage_root is not None:
+            for proposal_id, relative_path in committed_mask_paths:
+                with suppress(Exception):
+                    remove_prediction_mask_png(
+                        settings,
+                        project_storage_root=project_storage_root,
+                        proposal_id=proposal_id,
+                        relative_path=relative_path,
+                    )
         return False
     finally:
         if provider is not None:

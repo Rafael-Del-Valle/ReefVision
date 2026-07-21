@@ -14,6 +14,7 @@ import type {
   AnnotationSession,
   ClassVisibilityBundle,
   ClassVisibilityLayerType,
+  PredictionProposal,
   Project,
 } from "../../api/client";
 import { AnnotationEditor } from "./AnnotationEditor";
@@ -133,7 +134,20 @@ const assistModel = {
   updated_at: "2026-07-08T00:00:00Z",
 };
 
-const pendingProposal = {
+const segmenterModel = {
+  ...assistModel,
+  id: "segment-model-1",
+  purpose: "segmenter" as const,
+  display_name: "Fixture Segmenter",
+  source_filename: "segmenter-fixture.pt",
+  managed_path: "projects/project-1/models/segment-model-1.pt",
+  framework: "ultralytics",
+  task: "segment",
+  provider_name: "ultralytics",
+  provider_version: "8.3.228",
+};
+
+const pendingProposal: PredictionProposal = {
   id: "proposal-1",
   project_id: project.id,
   image_id: session.image.id,
@@ -145,6 +159,10 @@ const pendingProposal = {
   predicted_label: "Muricea Closed",
   predicted_index: 0,
   confidence: 0.88,
+  geometry_kind: "bounding_box",
+  polygon_json: null,
+  mask_path: null,
+  mask_content_sha256: null,
   x_min: 320,
   y_min: 240,
   x_max: 520,
@@ -153,9 +171,47 @@ const pendingProposal = {
   was_edited: false,
   reviewer_action_at: null,
   accepted_annotation_id: null,
+  accepted_mask_annotation_id: null,
   inference_settings_json: {},
   provenance_json: { provider_name: "ultralytics" },
   created_at: "2026-07-08T00:00:00Z",
+};
+
+const polygonProposal: PredictionProposal = {
+  ...pendingProposal,
+  id: "proposal-polygon",
+  model_id: "segment-model-1",
+  model_display_name: "Fixture Segmenter",
+  predicted_label: "Muricea Open",
+  predicted_index: 1,
+  label_class_id: "class-2",
+  confidence: 0.93,
+  geometry_kind: "polygon_mask",
+  polygon_json: [
+    [600, 300],
+    [760, 320],
+    [730, 500],
+    [590, 470],
+  ],
+  x_min: 590,
+  y_min: 300,
+  x_max: 760,
+  y_max: 500,
+};
+
+const rasterProposal: PredictionProposal = {
+  ...pendingProposal,
+  id: "proposal-raster",
+  model_id: "segment-model-1",
+  model_display_name: "Fixture Segmenter",
+  confidence: 0.79,
+  geometry_kind: "raster_mask",
+  mask_path: "projects/project-1/predictions/job-1/image-1/proposal-raster.png",
+  mask_content_sha256: "d".repeat(64),
+  x_min: 850,
+  y_min: 350,
+  x_max: 1040,
+  y_max: 590,
 };
 
 function buildVisibilityBundle(options?: {
@@ -251,7 +307,7 @@ function handleDefaultEditorRequests(
       rejected_entries: [],
     });
   }
-  if (url.includes(`/projects/${project.id}/models?purpose=detector`)) {
+  if (url.endsWith(`/projects/${project.id}/models`)) {
     return jsonResponse([]);
   }
   if (url.includes(`/projects/${project.id}/models?purpose=assist`)) {
@@ -272,7 +328,7 @@ function handleDefaultEditorRequests(
   return undefined;
 }
 
-function renderEditor(onClose = vi.fn()) {
+function renderEditor(onClose = vi.fn(), onMaskPredictionAccepted = vi.fn()) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -281,11 +337,12 @@ function renderEditor(onClose = vi.fn()) {
       <AnnotationEditor
         project={project}
         initialImageId={session.image.id}
+        onMaskPredictionAccepted={onMaskPredictionAccepted}
         onClose={onClose}
       />
     </QueryClientProvider>,
   );
-  return { onClose };
+  return { onClose, onMaskPredictionAccepted, queryClient };
 }
 
 function selectionPanel(): HTMLElement {
@@ -642,6 +699,234 @@ describe("AnnotationEditor", () => {
     expect(
       screen.queryByTestId(`prediction-row-${pendingProposal.id}`),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders selectable polygon and raster overlays without changing bounding boxes", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (
+        url.endsWith(`/images/${session.image.id}/annotation-session`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse(session);
+      }
+      if (
+        url.includes(`/images/${session.image.id}/prediction-proposals`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse({
+          items: [pendingProposal, polygonProposal, rasterProposal],
+          counts: { pending: 3 },
+        });
+      }
+      if (
+        url.endsWith(`/projects/${project.id}/models`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse([assistModel, segmenterModel]);
+      }
+      const shared = handleDefaultEditorRequests(url, init);
+      if (shared) {
+        return shared;
+      }
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+
+    expect(
+      await screen.findByTestId(`prediction-polygon-${polygonProposal.id}`),
+    ).toHaveAttribute("points", "600,300 760,320 730,500 590,470");
+    expect(
+      screen.getByTestId(`prediction-raster-${rasterProposal.id}`),
+    ).toHaveAttribute("mask", `url(#prediction-mask-${rasterProposal.id})`);
+    expect(
+      screen.getByTestId(`prediction-raster-source-${rasterProposal.id}`),
+    ).toHaveAttribute(
+      "href",
+      expect.stringContaining(
+        `/prediction-proposals/${rasterProposal.id}/mask`,
+      ),
+    );
+    expect(
+      screen.getByTestId(`prediction-bbox-${pendingProposal.id}`),
+    ).toHaveAttribute("width", "200");
+    expect(
+      screen.getByRole("option", { name: segmenterModel.display_name }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: assistModel.display_name }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(`prediction-bbox-${polygonProposal.id}`),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(`prediction-bbox-${rasterProposal.id}`),
+    ).not.toBeInTheDocument();
+
+    fireEvent.pointerDown(
+      screen.getByTestId(`prediction-geometry-${polygonProposal.id}`),
+    );
+    expect(
+      within(
+        screen.getByTestId(`prediction-row-${polygonProposal.id}`),
+      ).getByText("Selected for bulk review"),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Hide predictions" }),
+    );
+    expect(
+      screen.queryByTestId(`prediction-polygon-${polygonProposal.id}`),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(`prediction-raster-${rasterProposal.id}`),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(`prediction-bbox-${pendingProposal.id}`),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show predictions" }),
+    );
+    expect(
+      await screen.findByTestId(`prediction-polygon-${polygonProposal.id}`),
+    ).toBeInTheDocument();
+  });
+
+  it("accepts a mask proposal and rejects another through the shared controls", async () => {
+    const onMaskPredictionAccepted = vi.fn();
+    let proposals = [polygonProposal, rasterProposal];
+    const acceptedMask = {
+      id: "accepted-mask-1",
+      image_id: session.image.id,
+      label_class_id: "class-2",
+      geometry_kind: "polygon",
+      mask_path: null,
+      polygon_json: polygonProposal.polygon_json,
+      x_min: polygonProposal.x_min,
+      y_min: polygonProposal.y_min,
+      x_max: polygonProposal.x_max,
+      y_max: polygonProposal.y_max,
+      area_pixels: 24_000,
+      source_type: "accepted_prediction",
+      provenance_json: {
+        source_prediction_id: polygonProposal.id,
+        source_model_id: polygonProposal.model_id,
+      },
+      status: "verified",
+      created_by: "local_user",
+      created_at: "2026-07-08T00:00:01Z",
+      updated_at: "2026-07-08T00:00:01Z",
+      deleted_at: null,
+      revision: 1,
+    };
+    let accepted = false;
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (
+          url.endsWith(`/images/${session.image.id}/annotation-session`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse(
+            accepted
+              ? {
+                  ...session,
+                  mask_annotations: [acceptedMask],
+                }
+              : session,
+          );
+        }
+        if (
+          url.includes(`/images/${session.image.id}/prediction-proposals`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse({
+            items: proposals,
+            counts: { pending: proposals.length },
+          });
+        }
+        if (
+          url.endsWith(`/prediction-proposals/${polygonProposal.id}/accept`) &&
+          init?.method === "POST"
+        ) {
+          accepted = true;
+          proposals = proposals.filter(
+            (proposal) => proposal.id !== polygonProposal.id,
+          );
+          return jsonResponse({
+            proposal: { ...polygonProposal, review_status: "accepted" },
+            annotation: null,
+            mask_annotation: acceptedMask,
+          });
+        }
+        if (
+          url.endsWith(`/prediction-proposals/${rasterProposal.id}/reject`) &&
+          init?.method === "POST"
+        ) {
+          proposals = proposals.filter(
+            (proposal) => proposal.id !== rasterProposal.id,
+          );
+          return jsonResponse({
+            proposal: { ...rasterProposal, review_status: "rejected" },
+            annotation: null,
+            mask_annotation: null,
+          });
+        }
+        const shared = handleDefaultEditorRequests(url, init);
+        if (shared) {
+          return shared;
+        }
+        throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+      });
+
+    const { queryClient } = renderEditor(vi.fn(), onMaskPredictionAccepted);
+    const polygonRow = await screen.findByTestId(
+      `prediction-row-${polygonProposal.id}`,
+    );
+    await userEvent.click(
+      within(polygonRow).getByRole("button", { name: "Accept" }),
+    );
+
+    await waitFor(() =>
+      expect(onMaskPredictionAccepted).toHaveBeenCalledWith("polygon"),
+    );
+    expect(
+      queryClient.getQueryData<
+        AnnotationSession & {
+          mask_annotations?: Array<{ id: string }>;
+        }
+      >(["annotation-session", session.image.id])?.mask_annotations,
+    ).toEqual([expect.objectContaining({ id: acceptedMask.id })]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        `/prediction-proposals/${polygonProposal.id}/accept`,
+      ),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ label_class_id: "class-2" }),
+      }),
+    );
+
+    const rasterRow = await screen.findByTestId(
+      `prediction-row-${rasterProposal.id}`,
+    );
+    await userEvent.click(
+      within(rasterRow).getByRole("button", { name: "Reject" }),
+    );
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `/prediction-proposals/${rasterProposal.id}/reject`,
+        ),
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
   });
 
   it("shows a friendly API message instead of a raw fetch error when saving fails", async () => {

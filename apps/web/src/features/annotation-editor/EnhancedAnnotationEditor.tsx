@@ -235,6 +235,9 @@ export function EnhancedAnnotationEditor({
         project={project}
         initialImageId={activeImageId}
         launchContext={launchContext}
+        onMaskPredictionAccepted={(kind) =>
+          setWorkspace(kind === "raster_mask" ? "raster" : "masks")
+        }
         onClose={onClose}
       />
     );

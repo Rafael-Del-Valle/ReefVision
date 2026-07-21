@@ -116,7 +116,8 @@ class RasterMaskEditService:
                 mask.x_max = x_max
                 mask.y_max = y_max
                 mask.area_pixels = area_pixels
-                mask.source_type = "human_brush"
+                if mask.source_type != "accepted_prediction":
+                    mask.source_type = "human_brush"
                 mask.provenance_json = {
                     **(mask.provenance_json or {}),
                     "last_edit_mode": payload.mode,
@@ -209,7 +210,8 @@ class RasterMaskEditService:
             mask.x_max = x_max
             mask.y_max = y_max
             mask.area_pixels = area_pixels
-            mask.source_type = "human_cleanup"
+            if mask.source_type != "accepted_prediction":
+                mask.source_type = "human_cleanup"
             mask.provenance_json = {
                 **(mask.provenance_json or {}),
                 "previous_mask_path": source_path,

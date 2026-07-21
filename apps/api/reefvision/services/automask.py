@@ -116,7 +116,8 @@ class AutoMaskEditService(RasterMaskEditService):
                 mask.x_max = x_max
                 mask.y_max = y_max
                 mask.area_pixels = area_pixels
-                mask.source_type = "human_automask"
+                if mask.source_type != "accepted_prediction":
+                    mask.source_type = "human_automask"
                 mask.provenance_json = {
                     **(mask.provenance_json or {}),
                     "last_edit_mode": payload.mode,

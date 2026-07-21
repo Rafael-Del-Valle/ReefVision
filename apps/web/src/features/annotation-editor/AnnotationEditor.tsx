@@ -32,12 +32,14 @@ import {
   saveClassVisibilityPreference,
   saveProjectClassVisibilityDefault,
   type AssistSession,
+  type AnnotationSession,
   type ClassVisibilityBundle,
   type ClassVisibilityLayerType,
   type ClassVisibilityScopeState,
   type LabelClass,
   type ModelCatalogEntry,
   type PredictionProposal,
+  type PredictionMaskAnnotation,
   type Project,
 } from "../../api/client";
 import {
@@ -73,6 +75,7 @@ import {
   visibilitySourceLabel,
   type VisibilityScopeKey,
 } from "./classVisibility";
+import { PredictionProposalOverlay } from "./SegmentationProposalOverlay";
 
 interface AnnotationEditorProps {
   project: Project;
@@ -84,6 +87,7 @@ interface AnnotationEditorProps {
     highlightAnnotationIds?: string[];
     highlightPredictionIds?: string[];
   };
+  onMaskPredictionAccepted?: (geometryKind: "polygon" | "raster_mask") => void;
   onClose: () => void;
 }
 
@@ -240,6 +244,7 @@ export function AnnotationEditor({
   project,
   initialImageId,
   launchContext,
+  onMaskPredictionAccepted,
   onClose,
 }: AnnotationEditorProps) {
   const queryClient = useQueryClient();
@@ -321,9 +326,14 @@ export function AnnotationEditor({
     refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
-  const detectorModels = useQuery({
-    queryKey: ["models", project.id, "detector"],
-    queryFn: () => getModels(project.id, "detector"),
+  const predictionModels = useQuery({
+    queryKey: ["models", project.id, "prediction"],
+    queryFn: async ({ signal }) => {
+      const models = await getModels(project.id, signal);
+      return models.filter((model) =>
+        ["detector", "segmenter", "semantic_segmenter"].includes(model.purpose),
+      );
+    },
   });
   const assistModels = useQuery({
     queryKey: ["model_catalog", project.id, "smart_mask"],
@@ -856,13 +866,39 @@ export function AnnotationEditor({
           proposal.label_class_id ||
           activeClassId,
       }),
-    onSuccess: async () => {
+    onSuccess: async (response) => {
+      setSelectedPredictionIds([]);
+      const acceptedMask = response.mask_annotation;
+      const acceptedKind = acceptedMask?.geometry_kind;
+      if (acceptedKind) {
+        queryClient.setQueryData<
+          AnnotationSession & {
+            mask_annotations?: PredictionMaskAnnotation[];
+          }
+        >(["annotation-session", currentImageId], (current) => {
+          if (
+            !current ||
+            current.mask_annotations?.some(
+              (mask) => mask.id === acceptedMask.id,
+            )
+          ) {
+            return current;
+          }
+          return {
+            ...current,
+            mask_annotations: [
+              ...(current.mask_annotations ?? []),
+              acceptedMask,
+            ],
+          };
+        });
+        onMaskPredictionAccepted?.(acceptedKind);
+      }
       await Promise.all([
         predictionQuery.refetch(),
         sessionQuery.refetch(),
         queryClient.invalidateQueries({ queryKey: ["images", project.id] }),
       ]);
-      setSelectedPredictionIds([]);
     },
   });
   const promptAssistMutation = useMutation({
@@ -1794,8 +1830,8 @@ export function AnnotationEditor({
                   setPredictionModelFilter(event.target.value)
                 }
               >
-                <option value="">All detector models</option>
-                {detectorModels.data?.map((model) => (
+                <option value="">All prediction models</option>
+                {predictionModels.data?.map((model) => (
                   <option key={model.id} value={model.id}>
                     {model.display_name}
                   </option>
@@ -1891,7 +1927,14 @@ export function AnnotationEditor({
                       {labelClass?.name ?? proposal.predicted_label} @{" "}
                       {proposal.confidence.toFixed(2)}
                     </strong>
-                    <span>{proposal.model_display_name}</span>
+                    <span>
+                      {proposal.model_display_name} |{" "}
+                      {proposal.geometry_kind === "polygon_mask"
+                        ? "polygon mask"
+                        : proposal.geometry_kind === "raster_mask"
+                          ? "raster mask"
+                          : "bounding box"}
+                    </span>
                     <label>
                       Accept as
                       <select
@@ -2453,37 +2496,17 @@ export function AnnotationEditor({
                       proposal.id,
                     );
                     return (
-                      <g key={`prediction-${proposal.id}`}>
-                        <rect
-                          x={proposal.x_min}
-                          y={proposal.y_min}
-                          width={proposal.x_max - proposal.x_min}
-                          height={proposal.y_max - proposal.y_min}
-                          fill={
-                            selected
-                              ? "rgba(255, 196, 0, 0.14)"
-                              : highlighted
-                                ? "rgba(255, 196, 0, 0.16)"
-                                : "rgba(255, 196, 0, 0.06)"
-                          }
-                          stroke={labelClass?.display_color ?? "#f5c542"}
-                          strokeWidth={highlighted ? 2.5 : 1.5}
-                          strokeDasharray={`${6 * strokeScale} ${4 * strokeScale}`}
-                          vectorEffect="non-scaling-stroke"
-                          onPointerDown={(event) => {
-                            event.stopPropagation();
-                            togglePredictionSelection(proposal.id);
-                          }}
-                        />
-                        <text
-                          x={proposal.x_min + 4 * strokeScale}
-                          y={proposal.y_min + 14 * strokeScale}
-                          fill={labelClass?.display_color ?? "#f5c542"}
-                          fontSize={12 * strokeScale}
-                        >
-                          {`${labelClass?.name ?? proposal.predicted_label} ${proposal.confidence.toFixed(2)}`}
-                        </text>
-                      </g>
+                      <PredictionProposalOverlay
+                        key={`prediction-${proposal.id}`}
+                        proposal={proposal}
+                        imageWidth={image.width_px}
+                        imageHeight={image.height_px}
+                        color={labelClass?.display_color ?? "#f5c542"}
+                        selected={selected}
+                        highlighted={highlighted}
+                        strokeScale={strokeScale}
+                        onSelect={() => togglePredictionSelection(proposal.id)}
+                      />
                     );
                   })}
                 {!hideAnnotations &&

@@ -89,6 +89,9 @@ class ExpandedUltralyticsDetectionProvider(BaseUltralyticsDetectionProvider):
         else:
             class_labels = [str(item) for item in names]
         input_size = {"imgsz": getattr(model, "overrides", {}).get("imgsz")}
+        proposal_geometry = (
+            "polygon_or_managed_raster_mask" if task == "segment" else "bounding_box"
+        )
         return DetectionModelMetadata(
             framework="ultralytics",
             task=task,
@@ -101,8 +104,8 @@ class ExpandedUltralyticsDetectionProvider(BaseUltralyticsDetectionProvider):
                 "automatic_downloads_disabled": True,
                 "explicit_checkpoint_required": True,
                 "registered_execution_runtime": "pytorch",
-                "proposal_geometry": "bounding_box",
-                "segmentation_masks_exposed_in_editor": False,
+                "proposal_geometry": proposal_geometry,
+                "segmentation_masks_exposed_in_editor": task == "segment",
                 "expanded_catalog_runtime": True,
                 "checkpoint_family": model_path.stem,
             },

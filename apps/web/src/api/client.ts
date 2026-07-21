@@ -770,6 +770,40 @@ export interface PredictionListResponse {
   total?: number;
 }
 
+export interface PredictionMaskAnnotation {
+  id: string;
+  image_id: string;
+  label_class_id: string | null;
+  geometry_kind: "polygon" | "raster_mask";
+  mask_path: string | null;
+  polygon_json: number[][] | null;
+  x_min: number | null;
+  y_min: number | null;
+  x_max: number | null;
+  y_max: number | null;
+  area_pixels: number | null;
+  source_type: string;
+  provenance_json: JsonRecord | null;
+  status: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  revision: number;
+}
+
+export interface PredictionReviewResponse {
+  proposal: PredictionProposal;
+  annotation: core.AnnotationRecord | null;
+  mask_annotation: PredictionMaskAnnotation | null;
+}
+
+export interface PredictionBulkReviewResponse {
+  reviewed_count: number;
+  created_annotations: core.AnnotationRecord[];
+  created_mask_annotations: PredictionMaskAnnotation[];
+}
+
 export interface AssistSession {
   session_id: string;
   project_id: string;
@@ -1287,6 +1321,52 @@ export async function getPredictions(
     })}`,
     { signal },
   );
+}
+
+export async function acceptPrediction(
+  proposalId: string,
+  payload: {
+    label_class_id?: string | null;
+    x_min?: number;
+    y_min?: number;
+    x_max?: number;
+    y_max?: number;
+    polygon_json?: number[][];
+  },
+): Promise<PredictionReviewResponse> {
+  return compatibilityRequest<PredictionReviewResponse>(
+    `/prediction-proposals/${proposalId}/accept`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function rejectPrediction(
+  proposalId: string,
+): Promise<PredictionReviewResponse> {
+  return compatibilityRequest<PredictionReviewResponse>(
+    `/prediction-proposals/${proposalId}/reject`,
+    { method: "POST" },
+  );
+}
+
+export async function bulkReviewPredictions(payload: {
+  action: "accept" | "reject";
+  proposal_ids: string[];
+}): Promise<PredictionBulkReviewResponse> {
+  return compatibilityRequest<PredictionBulkReviewResponse>(
+    "/prediction-proposals/bulk-review",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function predictionMaskContentUrl(proposalId: string): string {
+  return `${getApiBaseUrl()}/prediction-proposals/${encodeURIComponent(proposalId)}/mask`;
 }
 
 export async function createAssistSession(

@@ -44,9 +44,9 @@ Deferred from this slice:
 - raster-to-polygon conversion and polygon simplification controls
 - local multi-stroke undo before a server revision is committed
 
-### Phase 3 — Segmentation datasets and training
+### Phase 3 — Segmentation datasets, training, inference, and review
 
-Status: immutable segmentation datasets and exports implemented; model-training integration remains next.
+Status: immutable datasets, Ultralytics polygon training, and mask-preserving inference/review are implemented; real-model and packaged-desktop validation remain.
 
 Implemented:
 
@@ -60,11 +60,16 @@ Implemented:
 8. selectable detection, polygon-segmentation, and semantic-mask exports in the UI
 9. stable export IDs and paths assigned before the background job is queued
 10. unchanged YOLO detection export behavior
+11. task-aware Ultralytics instance-segmentation training and checkpoint registration
+12. validated polygon-first instance proposals with managed source-aligned raster fallback
+13. explicit mask accept/reject review that creates editable, provenance-linked mask annotations
+14. atomic project-relative proposal storage, failed-job cleanup, restart-safe review, and retry-idempotent acceptance
 
 Next:
 
-- task-aware training-draft eligibility for detection, instance segmentation, and semantic segmentation
-- segmentation dataset preflight warnings in the training workspace
+- real-checkpoint inference acceptance across representative coral images
+- tiled inference for source images that cannot be processed safely at one inference scale
+- boundary metrics and visual false-positive/false-negative overlays
 - provider-specific export adaptation where a trainer requires a format other than YOLO polygons or indexed PNGs
 
 Out of scope for the July 20 slice unless the above is green:

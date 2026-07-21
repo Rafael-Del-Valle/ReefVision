@@ -38,7 +38,7 @@ class UltralyticsSegmentationRegistrationProvider(UltralyticsDetectionProvider):
             metadata,
             metadata={
                 **metadata.metadata,
-                "proposal_geometry": "polygon_mask",
+                "proposal_geometry": "polygon_or_managed_raster_mask",
                 "segmentation_masks_exposed_in_editor": True,
             },
         )
@@ -105,7 +105,7 @@ class SegmentationModelService(ModelService):
             "source_architecture_family": _humanize_catalog_family(run.catalog_model_id),
             "source_result_checkpoint_path": run.result_checkpoint_path,
             "source_metrics": dict(run.metrics_json),
-            "proposal_geometry": "polygon_mask",
+            "proposal_geometry": "polygon_or_managed_raster_mask",
             "segmentation_masks_exposed_in_editor": True,
         }
         if experiment is not None:

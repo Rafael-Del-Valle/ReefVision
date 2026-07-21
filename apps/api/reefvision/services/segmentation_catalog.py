@@ -275,8 +275,9 @@ class SegmentationModelCatalogService(ModelCatalogService):
                     "inference_supported": True,
                     "prompt_assist_compatibility": False,
                     "known_limitations": [
-                        "This model produces reviewable polygon-mask proposals.",
-                        "Raster-mask semantic inference uses a separate provider.",
+                        "This model prefers reviewable polygon-mask proposals and falls "
+                        "back to managed source-aligned raster masks when needed.",
+                        "Per-class semantic label maps use a separate provider workflow.",
                     ],
                 }
             )

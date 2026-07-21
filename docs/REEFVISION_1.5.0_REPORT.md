@@ -11,8 +11,9 @@ This repository now contains an honest `v1.5.0-J` foundation slice rather than a
   - pinned dependency preflight
   - local checkpoint registration
   - detection inference
-  - segmentation-checkpoint registration for box-proposal workflows
-  - packaged desktop operation claimed through the existing pinned stack
+  - segmentation-checkpoint registration with polygon-first, raster-fallback mask proposals
+  - packaged desktop operation previously claimed for the existing pinned detection stack;
+    the mask-preserving segmentation path still requires packaged validation
 - `segment_anything`
   - formal provider catalog entry
   - pinned dependency preflight
@@ -39,10 +40,13 @@ These providers are represented in the catalog with explicit capability and avai
 ## Capability-matrix summary
 
 - Implemented image detection: `ultralytics`
+- Implemented polygon-first, raster-fallback instance-segmentation inference and review: `ultralytics`
 - Implemented click/box/brush prompting: `segment_anything`
-- Implemented packaged desktop operation: `ultralytics`, `segment_anything`
+- Previously reported packaged desktop operation: `ultralytics`, `segment_anything`; this
+  segmentation-inference change has not yet been exercised in the packaged application
 - Runtime backend reporting: `pytorch`, `torchscript`, `onnxruntime`, `openvino`, `tensorrt`
-- Training, video propagation, semantic segmentation, and tracking remain cataloged but unavailable in this slice
+- Ultralytics training supports detection and polygon instance segmentation; tiled training and inference remain unavailable
+- Video propagation, built-in semantic segmentation, and tracking remain cataloged but unavailable in this slice
 
 ## Prompt Assist workflow
 
@@ -92,5 +96,6 @@ C:\Program Files\nodejs\npm.cmd --prefix reefvision\apps\web run typecheck
 
 - The app version string still remains on the `1.4.0` line in this repository snapshot.
 - The provider hub exposes future families honestly, but only two providers are actually wired end to end today.
-- Ultralytics segmentation checkpoints currently feed ReefVision's box-proposal review workflow rather than editable instance masks.
+- Ultralytics segmentation checkpoints now preserve editable instance masks as polygon proposals when valid and managed raster proposals otherwise.
+- Tiled inference and scientific acceptance against representative real segmentation checkpoints remain outstanding.
 - The runtime catalog reports backend availability, but ONNX Runtime, OpenVINO, and TensorRT are not yet wired into model execution.

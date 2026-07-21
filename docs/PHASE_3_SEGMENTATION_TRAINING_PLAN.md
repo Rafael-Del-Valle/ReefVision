@@ -19,9 +19,10 @@ Phase 3 development on this stacked branch.
 
 ## Delivery status
 
-Implementation status: vertical slices 3A through 3D are present on the branch and
-await executable validation. Slice 3E has a provider-neutral contract and an explicitly
-blocked nnU-Net placeholder; semantic training execution is not presented as available.
+Implementation status: vertical slices 3A through 3D are present on the branch. Slice 3D
+now has synthetic provider, persisted-job, review, restart, rollback, and detection-regression
+coverage; real-checkpoint and packaged-desktop acceptance remain. Slice 3E has a
+provider-neutral contract and a separately capability-gated semantic provider workflow.
 
 The stable detection worker, detection export, detector registration, and bounding-box
 review flow remain separate. Task dispatch sends only `segment` runs through the new
@@ -83,26 +84,37 @@ polish, not a registration blocker.
 
 ## Vertical slice 3D — Segmentation inference and review
 
-Status: implemented, validation pending.
+Status: implemented with automated synthetic coverage; real-model acceptance pending.
 
-- A dedicated Ultralytics segmentation provider validates task `segment` and converts
-  `masks.xy` output into source-coordinate polygon predictions.
+- A dedicated Ultralytics segmentation provider validates task `segment`, requests
+  `retina_masks=True`, and prefers valid source-coordinate `masks.xy` polygons.
+- Invalid, self-intersecting, out-of-bounds, or overly complex polygons fall back to the
+  corresponding `masks.data` instance as a source-sized binary PNG; an instance without
+  either valid geometry is not degraded to a bounding-box-only proposal.
 - Inference jobs dispatch by registered model task.
 - Migration `0017` adds proposal geometry, polygon content, and accepted-mask linkage while
-  defaulting all existing proposals to `bounding_box`.
-- Pending polygon-mask proposals retain confidence, class mapping, model checksum,
-  inference settings, provider identity, and task provenance.
+  defaulting all existing proposals to `bounding_box`; existing migration `0018` adds the
+  immutable raster payload path and checksum used by fallback proposals.
+- Pending polygon and raster proposals retain confidence, class mapping, bounding extent,
+  model checksum, inference settings, provider identity, job ID, and training-run lineage.
+- Raster proposal PNGs are normalized, atomically written beneath the owning project, stored
+  as restart-safe project-relative paths, and checksum-verified when served or accepted.
+- A failed segmentation job removes every partial proposal row and both uncommitted and
+  previously committed proposal-mask artifacts from that job.
 - The annotation editor exposes a registered-segmenter selector and a Run segmentation
   action for the open image.
-- Pending mask proposals render as source-coordinate polygon overlays.
+- Pending polygon and raster masks render in the normal transformed review canvas and use
+  the same selection, class-remap, accept, reject, and mixed bulk-review controls as boxes.
 - Accept, reject, class-remap, edited-polygon accept, and mixed bulk review are supported.
-- Accepted proposals become verified polygon `MaskAnnotation` records, increment the image
-  revision, create append-only mask audit events, and retain original and accepted geometry.
+- Accepted proposals become editable polygon or raster `MaskAnnotation` records, increment
+  the image revision, create append-only mask audit events, and retain original geometry,
+  model/job/training lineage, class mapping, confidence, and accepted geometry.
+- Polygon and raster acceptance is retry-idempotent; accepted-prediction provenance survives
+  subsequent polygon, brush, automask, and topology-cleanup edits.
 - Detection proposals continue through the original bounding-box acceptance path.
 
-UI note: until the legacy box proposal layer is made geometry-aware, a mask proposal may
-also show its bounding extent alongside the polygon overlay. The polygon is the persisted
-and accepted geometry.
+Current inference limitations: tiled inference is not implemented, and scientific acceptance
+still requires representative real Ultralytics segmentation checkpoints and coral images.
 
 ## Vertical slice 3E — Semantic segmentation provider contract
 
@@ -121,7 +133,8 @@ Status: contract implemented; execution intentionally unavailable.
 
 Before this branch is considered integration-ready:
 
-1. Run Alembic upgrade through `0017` and downgrade to base on a test database.
+1. Run Alembic upgrade through head (including `0017` and `0018`) and downgrade to base on
+   a test database.
 2. Run Ruff, Ruff formatting, strict mypy, and the complete backend test suite.
 3. Run focused Phase 3 tests for task preflight, worker dispatch, training, registration,
    inference, proposal review, migration lineage, and semantic contracts.
@@ -129,7 +142,8 @@ Before this branch is considered integration-ready:
 5. Build and launch the packaged Windows desktop application.
 6. Confirm one detection training and inference regression path remains unchanged.
 7. Train a one-epoch segmentation smoke model from verified polygon annotations.
-8. Register the result, run it on an image, and accept and reject polygon proposals.
+8. Register the result, run it on an image, and accept and reject polygon and raster-fallback
+   proposals.
 9. Close and reopen the project and verify accepted masks, audit events, measurements, and
    proposal review states persist.
 10. Keep this branch stacked until Phase 2 packaged-desktop acceptance passes, then rebase it

@@ -93,7 +93,7 @@ def _seed_segmenter(
                 "mapping": {"soft coral": label_class_id},
             },
             input_size_json={"imgsz": 640},
-            metadata_json={"proposal_geometry": "polygon_mask"},
+            metadata_json={"proposal_geometry": "polygon_or_managed_raster_mask"},
         )
         session.add(model)
         session.commit()

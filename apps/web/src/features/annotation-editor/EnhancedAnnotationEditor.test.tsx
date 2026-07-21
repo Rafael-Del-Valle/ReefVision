@@ -18,8 +18,28 @@ const { polygonKeyHandler, polygonInsertHandler, vertexPointerHandler } =
   }));
 
 vi.mock("./AnnotationEditor", () => ({
-  AnnotationEditor: ({ initialImageId }: { initialImageId: string }) => (
-    <div data-testid="box-workspace">{initialImageId}</div>
+  AnnotationEditor: ({
+    initialImageId,
+    onMaskPredictionAccepted,
+  }: {
+    initialImageId: string;
+    onMaskPredictionAccepted?: (kind: "polygon" | "raster_mask") => void;
+  }) => (
+    <div data-testid="box-workspace">
+      {initialImageId}
+      <button
+        type="button"
+        onClick={() => onMaskPredictionAccepted?.("polygon")}
+      >
+        Accept polygon prediction fixture
+      </button>
+      <button
+        type="button"
+        onClick={() => onMaskPredictionAccepted?.("raster_mask")}
+      >
+        Accept raster prediction fixture
+      </button>
+    </div>
   ),
 }));
 
@@ -63,7 +83,10 @@ vi.mock("./MaskAnnotationWorkspace", () => ({
 
 vi.mock("./RasterMaskWorkspace", () => ({
   RasterMaskWorkspace: ({ imageId }: { imageId: string }) => (
-    <div data-testid="raster-workspace">{imageId}</div>
+    <div data-testid="raster-workspace">
+      {imageId}
+      <img alt="Accepted raster mask fixture" />
+    </div>
   ),
 }));
 
@@ -238,6 +261,40 @@ describe("EnhancedAnnotationEditor", () => {
     expect(screen.getByTestId("mask-workspace")).toBeInTheDocument();
     expect(editor).toHaveAttribute("data-active-annotation-type", "masks");
     expect(editor).toHaveAttribute("data-point-assist-enabled", "false");
+  });
+
+  it("opens the editable polygon workspace after accepting a polygon prediction", () => {
+    renderEditor();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Accept polygon prediction fixture",
+      }),
+    );
+
+    expect(screen.getByTestId("mask-workspace")).toBeInTheDocument();
+    expect(screen.getByTestId("editable-polygon")).toBeInTheDocument();
+    expect(screen.getByTestId("enhanced-annotation-editor")).toHaveAttribute(
+      "data-active-annotation-type",
+      "masks",
+    );
+  });
+
+  it("opens the editable raster workspace after accepting a raster prediction", () => {
+    renderEditor();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Accept raster prediction fixture",
+      }),
+    );
+
+    expect(screen.getByTestId("raster-workspace")).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "Accepted raster mask fixture" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("enhanced-annotation-editor")).toHaveAttribute(
+      "data-active-annotation-type",
+      "raster",
+    );
   });
 
   it("keeps whole-polygon removal explicit", () => {

@@ -1,231 +1,186 @@
-import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
+import type { PointerEvent } from "react";
 
-import { getApiBaseUrl } from "../../runtime";
+import {
+  predictionMaskContentUrl,
+  type PredictionProposal,
+} from "../../api/client";
 
-interface SegmentationProposal {
-  id: string;
-  geometry_kind?: string;
-  polygon_json?: number[][] | null;
-  mask_path?: string | null;
-  predicted_label: string;
-  confidence: number;
-  x_min: number;
-  y_min: number;
-  x_max: number;
-  y_max: number;
+interface PredictionProposalOverlayProps {
+  proposal: PredictionProposal;
+  imageWidth: number;
+  imageHeight: number;
+  color: string;
+  selected: boolean;
+  highlighted: boolean;
+  strokeScale: number;
+  onSelect: () => void;
 }
 
-interface PredictionListResponse {
-  items: SegmentationProposal[];
-}
-
-interface OverlayTarget {
-  imageId: string;
-  group: SVGGElement;
-  width: number;
-  height: number;
-}
-
-function currentOverlayTarget(): OverlayTarget | null {
-  const canvas = document.querySelector<SVGSVGElement>("svg.annotation-canvas");
-  const group = canvas?.querySelector<SVGGElement>(":scope > g") ?? null;
-  const image = group?.querySelector<SVGImageElement>(":scope > image") ?? null;
-  const href =
-    image?.getAttribute("href") ?? image?.getAttribute("xlink:href") ?? "";
-  const match = href.match(/\/images\/([^/]+)\/(?:content|thumbnail)(?:\?|$)/);
-  if (!canvas || !group || !image || !match?.[1]) {
-    return null;
-  }
-  const width =
-    Number(image.getAttribute("width")) || canvas.viewBox.baseVal.width || 1;
-  const height =
-    Number(image.getAttribute("height")) || canvas.viewBox.baseVal.height || 1;
-  return {
-    imageId: decodeURIComponent(match[1]),
-    group,
-    width,
-    height,
-  };
-}
-
-async function loadSegmentationProposals(
-  imageId: string,
-  signal: AbortSignal,
-): Promise<SegmentationProposal[]> {
-  const response = await fetch(
-    `${getApiBaseUrl()}/images/${encodeURIComponent(imageId)}/prediction-proposals?review_status=pending`,
-    { signal },
+function isValidPolygon(points: number[][] | null): points is number[][] {
+  return Boolean(
+    points &&
+    points.length >= 3 &&
+    points.every(
+      (point) =>
+        point.length === 2 &&
+        Number.isFinite(point[0]) &&
+        Number.isFinite(point[1]),
+    ),
   );
-  if (!response.ok) {
-    throw new Error(
-      `Prediction overlay request failed with HTTP ${response.status}`,
+}
+
+export function PredictionProposalOverlay({
+  proposal,
+  imageWidth,
+  imageHeight,
+  color,
+  selected,
+  highlighted,
+  strokeScale,
+  onSelect,
+}: PredictionProposalOverlayProps) {
+  const kind = proposal.geometry_kind || "bounding_box";
+  const width = Math.max(proposal.x_max - proposal.x_min, 1);
+  const height = Math.max(proposal.y_max - proposal.y_min, 1);
+  const strokeWidth = highlighted ? 2.5 : selected ? 2.25 : 1.5;
+  const select = (event: PointerEvent<SVGGElement>) => {
+    event.stopPropagation();
+    onSelect();
+  };
+  const label = (
+    <text
+      x={proposal.x_min + 4 * strokeScale}
+      y={proposal.y_min + 14 * strokeScale}
+      fill={color}
+      fontSize={12 * strokeScale}
+      pointerEvents="none"
+    >
+      {`${proposal.predicted_label} ${proposal.confidence.toFixed(2)}`}
+    </text>
+  );
+
+  if (kind === "polygon_mask" && isValidPolygon(proposal.polygon_json)) {
+    return (
+      <g
+        data-testid={`prediction-geometry-${proposal.id}`}
+        data-geometry-kind={kind}
+        onPointerDown={select}
+        style={{ cursor: "pointer" }}
+      >
+        <polygon
+          data-testid={`prediction-polygon-${proposal.id}`}
+          points={proposal.polygon_json.map(([x, y]) => `${x},${y}`).join(" ")}
+          fill={color}
+          fillOpacity={selected ? 0.36 : highlighted ? 0.3 : 0.18}
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeDasharray={`${6 * strokeScale} ${4 * strokeScale}`}
+          vectorEffect="non-scaling-stroke"
+        />
+        {label}
+      </g>
     );
   }
-  const payload = (await response.json()) as PredictionListResponse;
-  return payload.items.filter(
-    (proposal) =>
-      (proposal.geometry_kind === "polygon_mask" &&
-        Array.isArray(proposal.polygon_json) &&
-        proposal.polygon_json.length >= 3) ||
-      (proposal.geometry_kind === "raster_mask" && Boolean(proposal.mask_path)),
-  );
-}
 
-export function SegmentationProposalOverlay() {
-  const [target, setTarget] = useState<OverlayTarget | null>(null);
-  const [proposals, setProposals] = useState<SegmentationProposal[]>([]);
-
-  useEffect(() => {
-    const updateTarget = () => {
-      const next = currentOverlayTarget();
-      setTarget((current) =>
-        current?.imageId === next?.imageId &&
-        current?.group === next?.group &&
-        current?.width === next?.width &&
-        current?.height === next?.height
-          ? current
-          : next,
-      );
-    };
-    updateTarget();
-    const observer = new MutationObserver(updateTarget);
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-    });
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!target) {
-      setProposals([]);
-      return;
-    }
-    let controller: AbortController | null = null;
-    let stopped = false;
-    const refresh = async () => {
-      controller?.abort();
-      const nextController = new AbortController();
-      controller = nextController;
-      try {
-        const items = await loadSegmentationProposals(
-          target.imageId,
-          nextController.signal,
-        );
-        if (!stopped) {
-          setProposals(items);
-        }
-      } catch (error) {
-        if (!nextController.signal.aborted && !stopped) {
-          console.warn(
-            "Segmentation proposal overlay could not refresh",
-            error,
-          );
-        }
-      }
-    };
-    void refresh();
-    const interval = window.setInterval(() => void refresh(), 2000);
-    return () => {
-      stopped = true;
-      controller?.abort();
-      window.clearInterval(interval);
-    };
-  }, [target]);
-
-  const overlay = useMemo(() => {
-    if (!target) return null;
-    return proposals.map((proposal) => {
-      if (proposal.geometry_kind === "raster_mask") {
-        const maskId = `semantic-proposal-mask-${proposal.id}`;
-        const maskUrl = `${getApiBaseUrl()}/prediction-proposals/${encodeURIComponent(proposal.id)}/mask`;
-        return (
-          <g
-            key={`semantic-proposal-${proposal.id}`}
-            data-segmentation-proposal-id={proposal.id}
-            pointerEvents="none"
+  if (kind === "raster_mask" && proposal.mask_path) {
+    const maskId = `prediction-mask-${proposal.id.replace(
+      /[^a-zA-Z0-9_-]/g,
+      "_",
+    )}`;
+    return (
+      <g
+        data-testid={`prediction-geometry-${proposal.id}`}
+        data-geometry-kind={kind}
+        onPointerDown={select}
+        style={{ cursor: "pointer" }}
+      >
+        <defs>
+          <mask
+            id={maskId}
+            maskUnits="userSpaceOnUse"
+            width={imageWidth}
+            height={imageHeight}
           >
-            <defs>
-              <mask
-                id={maskId}
-                maskUnits="userSpaceOnUse"
-                x={0}
-                y={0}
-                width={target.width}
-                height={target.height}
-              >
-                <image
-                  href={maskUrl}
-                  x={0}
-                  y={0}
-                  width={target.width}
-                  height={target.height}
-                  preserveAspectRatio="none"
-                />
-              </mask>
-            </defs>
-            <rect
-              x={0}
-              y={0}
-              width={target.width}
-              height={target.height}
-              fill="rgba(74, 222, 128, 0.42)"
-              mask={`url(#${maskId})`}
+            <image
+              data-testid={`prediction-raster-source-${proposal.id}`}
+              href={predictionMaskContentUrl(proposal.id)}
+              width={imageWidth}
+              height={imageHeight}
+              preserveAspectRatio="none"
             />
-            <rect
-              x={proposal.x_min}
-              y={proposal.y_min}
-              width={Math.max(proposal.x_max - proposal.x_min, 1)}
-              height={Math.max(proposal.y_max - proposal.y_min, 1)}
-              fill="none"
-              stroke="#4ade80"
-              strokeWidth={2}
-              strokeDasharray="7 4"
-              vectorEffect="non-scaling-stroke"
-            />
-            <text
-              x={proposal.x_min + 4}
-              y={proposal.y_min + 14}
-              fill="#4ade80"
-              fontSize={12}
-            >
-              {`${proposal.predicted_label} semantic mask`}
-            </text>
-          </g>
-        );
-      }
+          </mask>
+        </defs>
+        <rect
+          data-testid={`prediction-raster-${proposal.id}`}
+          width={imageWidth}
+          height={imageHeight}
+          fill={color}
+          fillOpacity={selected ? 0.5 : highlighted ? 0.44 : 0.32}
+          mask={`url(#${maskId})`}
+          pointerEvents="none"
+        />
+        <rect
+          x={proposal.x_min}
+          y={proposal.y_min}
+          width={width}
+          height={height}
+          fill="transparent"
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeDasharray={`${6 * strokeScale} ${4 * strokeScale}`}
+          vectorEffect="non-scaling-stroke"
+        />
+        {label}
+      </g>
+    );
+  }
 
-      const points = (proposal.polygon_json ?? [])
-        .map(([x, y]) => `${Number(x)},${Number(y)}`)
-        .join(" ");
-      return (
-        <g
-          key={`segmentation-proposal-${proposal.id}`}
-          data-segmentation-proposal-id={proposal.id}
+  const invalidMask = kind !== "bounding_box";
+  return (
+    <g
+      data-testid={`prediction-geometry-${proposal.id}`}
+      data-geometry-kind={kind}
+      data-invalid-geometry={invalidMask || undefined}
+      onPointerDown={select}
+      style={{ cursor: "pointer" }}
+    >
+      <rect
+        data-testid={
+          invalidMask
+            ? `prediction-invalid-${proposal.id}`
+            : `prediction-bbox-${proposal.id}`
+        }
+        x={proposal.x_min}
+        y={proposal.y_min}
+        width={width}
+        height={height}
+        fill={
+          invalidMask
+            ? "rgba(255, 107, 107, 0.08)"
+            : selected
+              ? "rgba(255, 196, 0, 0.14)"
+              : highlighted
+                ? "rgba(255, 196, 0, 0.16)"
+                : "rgba(255, 196, 0, 0.06)"
+        }
+        stroke={invalidMask ? "#ff6b6b" : color}
+        strokeWidth={strokeWidth}
+        strokeDasharray={`${6 * strokeScale} ${4 * strokeScale}`}
+        vectorEffect="non-scaling-stroke"
+      />
+      {invalidMask ? (
+        <text
+          x={proposal.x_min + 4 * strokeScale}
+          y={proposal.y_min + 14 * strokeScale}
+          fill="#ff6b6b"
+          fontSize={12 * strokeScale}
           pointerEvents="none"
         >
-          <polygon
-            points={points}
-            fill="rgba(245, 197, 66, 0.14)"
-            stroke="#f5c542"
-            strokeWidth={2}
-            strokeDasharray="7 4"
-            vectorEffect="non-scaling-stroke"
-          />
-          <text
-            x={proposal.x_min + 4}
-            y={proposal.y_min + 14}
-            fill="#f5c542"
-            fontSize={12}
-          >
-            {`${proposal.predicted_label} mask ${proposal.confidence.toFixed(2)}`}
-          </text>
-        </g>
-      );
-    });
-  }, [proposals, target]);
-
-  return target ? createPortal(overlay, target.group) : null;
+          {`${proposal.predicted_label} mask geometry unavailable`}
+        </text>
+      ) : (
+        label
+      )}
+    </g>
+  );
 }
