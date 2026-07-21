@@ -68,6 +68,10 @@ class ActiveLearningEvaluationRequest(BaseModel):
     baseline_metrics: dict[str, FiniteFloat] = Field(default_factory=dict)
     candidate_metrics: dict[str, FiniteFloat] = Field(default_factory=dict)
     candidate_model_id: str | None = Field(default=None, max_length=36)
+    baseline_dataset_version_id: str | None = Field(default=None, max_length=36)
+    candidate_dataset_version_id: str | None = Field(default=None, max_length=36)
+    baseline_metric_schema_id: str | None = Field(default=None, max_length=200)
+    candidate_metric_schema_id: str | None = Field(default=None, max_length=200)
 
 
 class PromotionGateResult(BaseModel):
@@ -100,6 +104,13 @@ class ActiveLearningCycleResponse(BaseModel):
     dataset_version_id: str | None
     training_run_id: str | None
     review_queue_id: str | None
+    embedding_provider_id: str | None = None
+    embedding_model_id: str | None = None
+    embedding_model_checksum: str | None = None
+    queue_revision: int | None = None
+    accepted_annotation_ids: list[str] = Field(default_factory=list)
+    rejected_item_ids: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
     selection_config: dict[str, object]
     selection_result: dict[str, object]
     baseline_metrics: dict[str, object]
@@ -120,6 +131,8 @@ class ActiveLearningPromotionResponse(BaseModel):
     promoted: bool
     stopped: bool
     stop_reasons: list[str]
+    comparison_compatible: bool = True
+    compatibility_warnings: list[str] = Field(default_factory=list)
 
 
 class ActiveLearningNextCycleRequest(BaseModel):

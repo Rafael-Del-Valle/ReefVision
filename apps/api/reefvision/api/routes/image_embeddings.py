@@ -9,6 +9,7 @@ from reefvision.api.dependencies import get_db_session
 from reefvision.schemas.image_embeddings import (
     EmbeddingDiversitySelectionRequest,
     EmbeddingDiversitySelectionResponse,
+    ImageEmbeddingCoverageResponse,
     ImageEmbeddingGenerateRequest,
     ImageEmbeddingGenerationResponse,
     ImageEmbeddingResponse,
@@ -58,6 +59,31 @@ def list_project_embeddings(
     return ImageEmbeddingService(session).list_project_embeddings(
         project_id,
         embedding_model_id=embedding_model_id,
+    )
+
+
+@router.get(
+    "/projects/{project_id}/embedding-coverage",
+    response_model=ImageEmbeddingCoverageResponse,
+)
+def get_project_embedding_coverage(
+    project_id: str,
+    session: DbSession,
+    provider_id: Annotated[str, Query(min_length=1, max_length=100)] = "ultralytics_backbone",
+    embedding_model_id: Annotated[
+        str, Query(min_length=1, max_length=300)
+    ] = "ultralytics/yolo11/detect/n",
+    embedding_model_checksum: Annotated[str | None, Query(min_length=64, max_length=64)] = None,
+    preprocessing_version: Annotated[
+        str, Query(min_length=1, max_length=100)
+    ] = "ultralytics-rgb-imgsz224-embed-v1",
+) -> ImageEmbeddingCoverageResponse:
+    return ImageEmbeddingService(session).coverage(
+        project_id,
+        provider_id=provider_id,
+        embedding_model_id=embedding_model_id,
+        embedding_model_checksum=embedding_model_checksum,
+        preprocessing_version=preprocessing_version,
     )
 
 

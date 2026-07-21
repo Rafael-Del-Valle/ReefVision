@@ -6,7 +6,16 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from reefvision.db.base import Base
@@ -23,6 +32,7 @@ class ReviewQueue(Base):
 
     __tablename__ = "review_queues"
     __table_args__ = (
+        UniqueConstraint("generation_key", name="uq_review_queues_generation_key"),
         Index("ix_review_queues_project_created", "project_id", "created_at"),
         Index("ix_review_queues_dataset_created", "dataset_version_id", "created_at"),
         Index("ix_review_queues_status_created", "status", "created_at"),
@@ -43,6 +53,8 @@ class ReviewQueue(Base):
     )
     scope_type: Mapped[str] = mapped_column(String(30), nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="complete")
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    generation_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     formula_id: Mapped[str] = mapped_column(String(100), nullable=False)
     formula_version: Mapped[str] = mapped_column(String(40), nullable=False)
     configuration_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
@@ -55,9 +67,23 @@ class ReviewQueue(Base):
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    promoted_dataset_version_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("dataset_versions.id", ondelete="SET NULL"), nullable=True
+    )
+    promoted_cycle_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "active_learning_cycles.id",
+            name="fk_review_queues_promoted_cycle_id",
+            ondelete="SET NULL",
+            use_alter=True,
+        ),
+        nullable=True,
+    )
+    promoted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     project: Mapped[Project] = relationship()
-    dataset_version: Mapped[DatasetVersion | None] = relationship()
+    dataset_version: Mapped[DatasetVersion | None] = relationship(foreign_keys=[dataset_version_id])
     items: Mapped[list[ReviewQueueItem]] = relationship(
         back_populates="review_queue",
         cascade="all, delete-orphan",

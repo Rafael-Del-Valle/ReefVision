@@ -61,25 +61,53 @@ Later milestones add image-managed storage and a separate local worker. Framewor
 
 ## Model-provider hub
 
-The current provider layer now separates provider identity, capability reporting, and runtime availability from the specific routes or React components that consume those providers.
+The provider layer separates provider identity, checkpoint verification, capability reporting,
+runtime availability, and real software acceptance from the routes or React components that
+consume models.
 
 ```text
-Model Hub UI -> /api/v1/model-providers
-             -> /api/v1/runtime-providers/status
-             -> provider hub
-             -> provider preflight + provider factories
-             -> concrete detection or assist adapters
+Provider UI -> /api/v1/provider-models
+            -> persistent provider_model_assets
+            -> verify + diagnose (no model load)
+            -> one lazy ProviderRuntimeManager
+            -> detection / segmentation / prompt / depth adapters
+            -> append-only provider_acceptance_records
 ```
 
 The provider hub owns:
 
 - stable provider IDs;
-- capability matrices;
-- runtime backend status reporting;
-- registerable versus blocked provider states;
-- centralized provider factories for model registration, inference, and assist-session loading.
+- checkpoint paths, formats, sizes, SHA-256 checksums, sources, revisions, and licenses;
+- capability matrices that gate frontend controls;
+- explicit CPU, CUDA, and automatic device resolution;
+- metadata-only verification separately from real load health checks;
+- lazy load, cooperative cancellation, unload, out-of-memory cleanup, and restart reconciliation;
+- trusted external registrations that preserve their source paths;
+- append-only software-acceptance results that are not scientific validation.
 
-This keeps ReefVision operational when future provider families remain unimplemented or require optional packs.
+Only one lifecycle model is resident at a time. Inference never downloads checkpoints. Managed
+downloads and imports remain explicit installation operations, while missing dependencies or
+weights produce an unavailable state without taking down the application.
+
+## Active-learning subsystem
+
+Phase 7 uses versioned local image embeddings and persistent review queues rather than treating
+review priority as an ephemeral UI calculation.
+
+```text
+Verified local YOLO backbone -> restart-safe embedding job -> image_embeddings
+                             -> uncertainty + cosine novelty + diversity selection
+                             -> review_queue revision + explanations
+                             -> explicit annotation review
+                             -> immutable dataset version
+                             -> optional training run + registered result model
+                             -> compatible before/after evaluation
+```
+
+Embedding identity includes provider, model, checkpoint checksum, preprocessing version, source
+image checksum, dimension, crop identity, and normalization. Queue generation is deterministic and
+retry-idempotent for the same inputs. Dataset promotion is transactional and can occur only once
+for a finished queue revision.
 
 ## Dataset-version subsystem
 

@@ -55,6 +55,10 @@ class ReviewQueueItem(Base):
     )
     input_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
     reason_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    selection_reasons_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    manual_state: Mapped[str] = mapped_column(String(30), nullable=False, default="automatic")
+    fragment_key: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    near_duplicate_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
     skip_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False

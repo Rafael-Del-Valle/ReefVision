@@ -45,6 +45,8 @@ const activeQueue: ReviewQueueRecord = {
   regenerated_from_queue_id: null,
   scope_type: "project",
   status: "complete",
+  revision: 1,
+  generation_key: "review-queue-generation-1",
   formula_id: "active_learning_diversity_v1",
   formula_version: "1.0.0",
   configuration_json: {
@@ -68,6 +70,9 @@ const activeQueue: ReviewQueueRecord = {
   created_at: "2026-07-18T12:00:00Z",
   completed_at: "2026-07-18T12:00:01Z",
   error_message: null,
+  promoted_dataset_version_id: null,
+  promoted_cycle_id: null,
+  promoted_at: null,
 };
 
 function renderDashboard() {

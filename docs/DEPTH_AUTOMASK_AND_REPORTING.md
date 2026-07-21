@@ -102,10 +102,15 @@ The current projected-area method uses a pinhole-camera, locally fronto-parallel
 ### Provider readiness and preview revalidation
 
 The Depth workspace reports local runtime readiness before a Depth Anything request is queued.
-Real providers require the optional PyTorch/Transformers runtime plus a usable local or cached
-checkpoint when local-only mode is selected. Network checkpoint retrieval occurs only when the
-user explicitly disables local-only mode. The luminance provider bypasses model readiness solely
-as a deterministic workflow fixture and remains non-scientific.
+Real providers require the optional PyTorch/Transformers runtime plus an explicitly registered,
+verified local checkpoint folder. Provider inference is always local-only and never downloads
+weights. The luminance provider bypasses model readiness solely as a deterministic workflow
+fixture and remains non-scientific.
+
+Depth Anything V2 output is persisted as raw relative-depth values. The preview uses a separate
+per-image display normalization and does not overwrite the numeric array. Relative output has no
+centimeter or meter unit and cannot be interpreted as physical coral height without independent
+metric calibration.
 
 Frontend readiness is advisory; the backend still validates the provider, requested device,
 checkpoint policy, and image when it handles the queued job and returns a structured failure when

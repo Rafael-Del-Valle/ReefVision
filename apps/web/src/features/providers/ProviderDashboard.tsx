@@ -1,135 +1,245 @@
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { getImages, type Project } from "../../api/client";
 import {
-  compareProviderBenchmarks,
-  getProviderCapabilities,
-  type ProviderCapability,
-  type ProviderHealth,
+  cancelProviderRequest,
+  diagnoseProviderModel,
+  discoverProviderModels,
+  healthCheckProviderModel,
+  inferProviderModel,
+  listProviderAcceptance,
+  listProviderModels,
+  loadProviderModel,
+  unloadProviderModel,
+  verifyProviderModel,
+  type ProviderLifecycleAction,
+  type ProviderLifecycleState,
+  type ProviderModelAsset,
 } from "./api";
+
+type DeviceMode = "auto" | "cpu" | "cuda";
+type LifecycleAction = "verify" | "diagnose" | "load" | "health" | "unload";
 
 function bytesLabel(value: number | null | undefined): string {
   if (value == null) return "Unknown";
   if (value >= 1_073_741_824)
     return `${(value / 1_073_741_824).toFixed(2)} GiB`;
   if (value >= 1_048_576) return `${(value / 1_048_576).toFixed(1)} MiB`;
-  if (value >= 1024) return `${(value / 1024).toFixed(1)} KiB`;
-  return `${value} B`;
+  return `${value.toLocaleString()} B`;
 }
 
-function healthLabel(health: ProviderHealth): string {
-  if (health === "ready") return "Ready";
-  if (health === "degraded") return "Needs attention";
-  return "Unavailable";
+function stateLabel(state: ProviderLifecycleState): string {
+  return state.replaceAll("_", " ");
 }
 
-function ProviderSummaryCard({
-  provider,
-  selected,
-  onSelect,
-}: {
-  provider: ProviderCapability;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  const installedDependencies = provider.dependencies.filter(
-    (dependency) => dependency.installed,
-  ).length;
-  return (
-    <button
-      type="button"
-      className={`project-card ${selected ? "selected" : ""}`}
-      aria-pressed={selected}
-      onClick={onSelect}
-    >
-      <strong>{provider.display_name}</strong>
-      <span>{healthLabel(provider.health)}</span>
-      <small>
-        {installedDependencies}/{provider.dependencies.length} dependencies ·{" "}
-        {provider.model_assets.length} registered assets
-      </small>
-    </button>
-  );
+function capability(asset: ProviderModelAsset | null, name: string): boolean {
+  return asset?.capabilities[name] === true;
 }
 
-export function ProviderDashboard() {
-  const [selectedProviderId, setSelectedProviderId] = useState("");
-  const [taskFilter, setTaskFilter] = useState("");
+function requestId(): string {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `provider-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
-  const capabilities = useQuery({
-    queryKey: ["provider-capabilities"],
-    queryFn: ({ signal }) => getProviderCapabilities(signal),
+export function ProviderDashboard({ project }: { project?: Project }) {
+  const queryClient = useQueryClient();
+  const [selectedAssetId, setSelectedAssetId] = useState("");
+  const [device, setDevice] = useState<DeviceMode>("auto");
+  const [healthKind, setHealthKind] = useState<"metadata" | "load">("metadata");
+  const [selectedImageId, setSelectedImageId] = useState("");
+  const [textPrompts, setTextPrompts] = useState("coral polyp");
+  const [usePositivePoint, setUsePositivePoint] = useState(false);
+  const [positivePoint, setPositivePoint] = useState({ x: 10, y: 10 });
+  const [useNegativePoint, setUseNegativePoint] = useState(false);
+  const [negativePoint, setNegativePoint] = useState({ x: 1, y: 1 });
+  const [useBox, setUseBox] = useState(false);
+  const [box, setBox] = useState({ x_min: 1, y_min: 1, x_max: 40, y_max: 40 });
+  const [inferenceResult, setInferenceResult] = useState<{
+    outputCount: number;
+    empty: boolean;
+    device: string;
+    warnings: string[];
+  } | null>(null);
+  const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
+  const requestEpoch = useRef(0);
+  const previousAssetId = useRef<string | null>(null);
+
+  const models = useQuery({
+    queryKey: ["provider-models"],
+    queryFn: ({ signal }) => listProviderModels(signal),
     refetchInterval: 30_000,
   });
+  const assets = models.data?.items ?? [];
+  const selectedAsset =
+    assets.find((asset) => asset.id === selectedAssetId) ?? null;
 
-  const providers = capabilities.data?.providers ?? [];
-  useEffect(() => {
-    if (!selectedProviderId && providers.length > 0) {
-      setSelectedProviderId(providers[0].provider_id);
-    }
-  }, [providers, selectedProviderId]);
-
-  const selectedProvider = useMemo(
-    () =>
-      providers.find(
-        (provider) => provider.provider_id === selectedProviderId,
-      ) ?? null,
-    [providers, selectedProviderId],
-  );
-
-  useEffect(() => {
-    if (
-      taskFilter &&
-      selectedProvider &&
-      !selectedProvider.supported_tasks.includes(taskFilter)
-    ) {
-      setTaskFilter("");
-    }
-  }, [selectedProvider, taskFilter]);
-
-  const benchmarks = useQuery({
-    queryKey: ["provider-benchmarks", selectedProviderId, taskFilter],
+  const images = useQuery({
+    queryKey: ["provider-inference-images", project?.id],
     queryFn: ({ signal }) =>
-      compareProviderBenchmarks(
-        selectedProviderId || undefined,
-        taskFilter || undefined,
-        signal,
-      ),
-    enabled: Boolean(selectedProviderId),
-    refetchInterval: 30_000,
+      getImages(project?.id as string, { page: 1, pageSize: 100 }, signal),
+    enabled: Boolean(project?.id),
+  });
+  const acceptance = useQuery({
+    queryKey: ["provider-acceptance", selectedAssetId],
+    queryFn: ({ signal }) => listProviderAcceptance(selectedAssetId, signal),
+    enabled: Boolean(selectedAssetId),
   });
 
-  const healthCounts = useMemo(
+  useEffect(() => {
+    if (!assets.length) {
+      setSelectedAssetId("");
+      return;
+    }
+    if (!assets.some((asset) => asset.id === selectedAssetId)) {
+      setSelectedAssetId(assets[0].id);
+    }
+  }, [assets, selectedAssetId]);
+
+  useEffect(() => {
+    const availableImages = images.data?.items ?? [];
+    if (!availableImages.some((image) => image.id === selectedImageId)) {
+      setSelectedImageId(availableImages[0]?.id ?? "");
+    }
+  }, [images.data?.items, selectedImageId]);
+
+  const refresh = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["provider-models"] }),
+      queryClient.invalidateQueries({
+        queryKey: ["provider-acceptance", selectedAssetId],
+      }),
+    ]);
+  };
+
+  const discovery = useMutation({
+    mutationFn: discoverProviderModels,
+    onSuccess: refresh,
+  });
+  const lifecycle = useMutation<
+    ProviderLifecycleAction,
+    Error,
+    { action: LifecycleAction; assetId: string }
+  >({
+    mutationFn: ({ action, assetId }) => {
+      if (action === "verify") return verifyProviderModel(assetId);
+      if (action === "diagnose") return diagnoseProviderModel(assetId, device);
+      if (action === "load") return loadProviderModel(assetId, device);
+      if (action === "unload") return unloadProviderModel(assetId);
+      return healthCheckProviderModel(assetId, {
+        device,
+        kind: healthKind,
+        keep_loaded: healthKind === "load",
+      });
+    },
+    onSuccess: refresh,
+  });
+  const inference = useMutation({
+    mutationFn: async ({
+      asset,
+      epoch,
+      id,
+    }: {
+      asset: ProviderModelAsset;
+      epoch: number;
+      id: string;
+    }) => {
+      const parameters: Record<string, unknown> = {};
+      if (capability(asset, "text_prompt")) {
+        parameters.text_prompts = textPrompts
+          .split(/[,\n]/)
+          .map((value) => value.trim())
+          .filter(Boolean);
+      }
+      if (capability(asset, "point_prompt") && usePositivePoint) {
+        parameters.positive_points = [positivePoint];
+      }
+      if (capability(asset, "negative_point_prompt") && useNegativePoint) {
+        parameters.negative_points = [negativePoint];
+      }
+      if (capability(asset, "box_prompt") && useBox) parameters.box = box;
+      const result = await inferProviderModel(asset.id, {
+        request_id: id,
+        image_id: selectedImageId,
+        device,
+        parameters,
+      });
+      return { result, epoch };
+    },
+    onSuccess: ({ result, epoch }) => {
+      if (epoch !== requestEpoch.current) return;
+      setInferenceResult({
+        outputCount: result.outputs.length,
+        empty:
+          Boolean(result.metadata.empty_result) || result.outputs.length === 0,
+        device: result.resolved_device,
+        warnings: result.warnings,
+      });
+      setActiveRequestId(null);
+      void refresh();
+    },
+    onError: () => setActiveRequestId(null),
+  });
+
+  useEffect(() => {
+    const prior = previousAssetId.current;
+    if (prior && prior !== selectedAssetId) {
+      requestEpoch.current += 1;
+      if (activeRequestId) void cancelProviderRequest(activeRequestId);
+      void unloadProviderModel(prior).finally(refresh);
+      setInferenceResult(null);
+      setActiveRequestId(null);
+      if (!capability(selectedAsset, "text_prompt")) setTextPrompts("");
+      if (!capability(selectedAsset, "point_prompt"))
+        setUsePositivePoint(false);
+      if (!capability(selectedAsset, "negative_point_prompt"))
+        setUseNegativePoint(false);
+      if (!capability(selectedAsset, "box_prompt")) setUseBox(false);
+    }
+    previousAssetId.current = selectedAssetId || null;
+  }, [activeRequestId, selectedAsset, selectedAssetId]);
+
+  const statusCounts = useMemo(
     () =>
-      providers.reduce<Record<ProviderHealth, number>>(
-        (counts, provider) => {
-          counts[provider.health] += 1;
+      assets.reduce<Record<ProviderLifecycleState, number>>(
+        (counts, asset) => {
+          counts[asset.state] += 1;
           return counts;
         },
-        { ready: 0, degraded: 0, unavailable: 0 },
+        {
+          ready: 0,
+          unavailable: 0,
+          degraded: 0,
+          loading: 0,
+          loaded: 0,
+          failed: 0,
+          unloaded: 0,
+        },
       ),
-    [providers],
+    [assets],
   );
+  const selectedImage = images.data?.items.find(
+    (image) => image.id === selectedImageId,
+  );
+  const promptRequired =
+    capability(selectedAsset, "text_prompt") && !textPrompts.trim();
+  const spatialPromptRequired =
+    selectedAsset?.task === "assist_segmentation" &&
+    !usePositivePoint &&
+    !useBox;
+  const canInfer =
+    Boolean(selectedAsset?.supports_inference) &&
+    Boolean(selectedImageId) &&
+    !promptRequired &&
+    !spatialPromptRequired &&
+    !inference.isPending;
 
-  if (capabilities.isPending) {
+  if (models.isPending) {
     return (
       <section className="dashboard-panel">
         <div className="empty-state">
-          <h3>Inspecting provider health</h3>
-          <p>
-            Checking dependencies, devices, model files, and stored benchmarks.
-          </p>
-        </div>
-      </section>
-    );
-  }
-
-  if (capabilities.error) {
-    return (
-      <section className="dashboard-panel">
-        <div className="empty-state">
-          <h3>Provider health unavailable</h3>
-          <p className="form-error">{capabilities.error.message}</p>
+          <h3>Loading provider lifecycle</h3>
+          <p>Reading checkpoint verification and runtime state.</p>
         </div>
       </section>
     );
@@ -139,232 +249,401 @@ export function ProviderDashboard() {
     <section className="dashboard-panel" data-testid="provider-dashboard">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Phase 8 runtime acceptance</p>
-          <h3>Provider health and benchmarks</h3>
+          <p className="eyebrow">Phase 8 provider lifecycle</p>
+          <h3>Installed model providers</h3>
           <span>
-            Inspect optional packages, execution devices, model integrity,
-            prompt support, and real-hardware benchmark records.
+            Metadata verification, real loading, inference acceptance, and GPU
+            residency are reported separately.
           </span>
         </div>
         <button
           type="button"
           className="secondary"
-          disabled={capabilities.isFetching}
-          onClick={() => void capabilities.refetch()}
+          disabled={discovery.isPending}
+          onClick={() => discovery.mutate()}
         >
-          {capabilities.isFetching ? "Refreshing..." : "Refresh health"}
+          {discovery.isPending ? "Discovering..." : "Discover and verify"}
         </button>
       </div>
 
       <div className="version-preview-metrics">
-        <span>{healthCounts.ready} ready</span>
-        <span>{healthCounts.degraded} degraded</span>
-        <span>{healthCounts.unavailable} unavailable</span>
-        <span>ReefVision {capabilities.data?.reefvision_version}</span>
+        <span>{models.data?.total ?? 0} registered</span>
+        <span>{statusCounts.ready + statusCounts.unloaded} provider-ready</span>
+        <span>{statusCounts.loaded} loaded</span>
+        <span>
+          {statusCounts.unavailable + statusCounts.failed} unavailable/failed
+        </span>
+        <span>
+          {models.data?.duplicate_checksum_groups.length ?? 0} duplicate
+          checksum groups
+        </span>
       </div>
+      {models.error && <p className="form-error">{models.error.message}</p>}
+      {discovery.error && (
+        <p className="form-error">{discovery.error.message}</p>
+      )}
 
       <div className="dashboard-layout">
         <div className="dashboard-sidebar">
           <article className="dashboard-card">
-            <p className="eyebrow">Provider registry</p>
+            <h4>Model inventory</h4>
             <div className="project-list">
-              {providers.map((provider) => (
-                <ProviderSummaryCard
-                  key={provider.provider_id}
-                  provider={provider}
-                  selected={provider.provider_id === selectedProviderId}
-                  onSelect={() => setSelectedProviderId(provider.provider_id)}
-                />
+              {assets.map((asset) => (
+                <button
+                  key={asset.id}
+                  type="button"
+                  className={`project-card ${asset.id === selectedAssetId ? "selected" : ""}`}
+                  aria-pressed={asset.id === selectedAssetId}
+                  onClick={() => setSelectedAssetId(asset.id)}
+                >
+                  <strong>{asset.model_id}</strong>
+                  <span>{stateLabel(asset.state)}</span>
+                  <small>
+                    {asset.task} · {asset.provider_id}
+                  </small>
+                </button>
               ))}
             </div>
           </article>
         </div>
 
         <div className="dashboard-main">
-          {selectedProvider && (
+          {selectedAsset && (
             <>
               <article className="dashboard-card">
                 <div className="section-heading">
                   <div>
-                    <p className="eyebrow">{selectedProvider.provider_id}</p>
-                    <h4>{selectedProvider.display_name}</h4>
-                    <p>{selectedProvider.description}</p>
+                    <p className="eyebrow">{selectedAsset.provider_id}</p>
+                    <h4>{selectedAsset.architecture}</h4>
+                    <p>{selectedAsset.model_id}</p>
                   </div>
                   <span className="status-chip">
-                    {healthLabel(selectedProvider.health)}
+                    {stateLabel(selectedAsset.state)}
                   </span>
                 </div>
                 <div className="version-preview-metrics">
                   <span>
-                    Tasks:{" "}
-                    {selectedProvider.supported_tasks.join(", ") || "None"}
+                    Metadata{" "}
+                    {selectedAsset.verification.verified
+                      ? "verified"
+                      : "unverified"}
                   </span>
                   <span>
-                    Prompts:{" "}
-                    {selectedProvider.supported_prompt_types.join(", ") ||
-                      "None"}
+                    Acceptance{" "}
+                    {selectedAsset.latest_acceptance_status ?? "not run"}
                   </span>
                   <span>
-                    Training {selectedProvider.supports_training ? "yes" : "no"}
+                    {selectedAsset.checkpoint_path_kind.replace("_", " ")}
+                  </span>
+                  <span>{bytesLabel(selectedAsset.checkpoint_size_bytes)}</span>
+                  <span>
+                    Training {selectedAsset.supports_training ? "yes" : "no"}
                   </span>
                   <span>
-                    Video {selectedProvider.supports_video ? "yes" : "no"}
-                  </span>
-                  <span>
-                    CUDA {selectedProvider.supports_cuda ? "yes" : "no"}
+                    Video {selectedAsset.supports_video ? "yes" : "no"}
                   </span>
                 </div>
-                {selectedProvider.warnings.map((warning) => (
-                  <p key={warning} className="form-warning">
-                    {warning}
-                  </p>
-                ))}
-                {selectedProvider.remediation.map((item) => (
-                  <p key={item} className="annotation-helper">
-                    {item}
-                  </p>
-                ))}
-              </article>
-
-              <article className="dashboard-card">
-                <div className="section-heading">
-                  <div>
-                    <p className="eyebrow">Runtime inventory</p>
-                    <h4>Dependencies and devices</h4>
-                  </div>
-                </div>
-                <div className="dashboard-list">
-                  {selectedProvider.dependencies.map((dependency) => (
-                    <div key={dependency.package} className="dashboard-row">
-                      <div>
-                        <strong>{dependency.package}</strong>
-                        <p>
-                          {dependency.message ?? "Dependency is installed."}
-                        </p>
-                      </div>
-                      <span>
-                        {dependency.installed
-                          ? (dependency.version ?? "Installed")
-                          : dependency.required
-                            ? "Missing"
-                            : "Optional"}
-                      </span>
-                    </div>
-                  ))}
-                  {selectedProvider.dependencies.length === 0 && (
-                    <p>No optional package dependencies are required.</p>
-                  )}
-                  {selectedProvider.devices.map((device) => (
-                    <div key={device.device_id} className="dashboard-row">
-                      <div>
-                        <strong>{device.display_name}</strong>
-                        <p>
-                          {device.kind.toUpperCase()} · {device.device_id}
-                          {device.compute_capability
-                            ? ` · compute ${device.compute_capability}`
-                            : ""}
-                        </p>
-                      </div>
-                      <span>
-                        {device.free_memory_bytes == null
-                          ? bytesLabel(device.total_memory_bytes)
-                          : `${bytesLabel(device.free_memory_bytes)} free`}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </article>
-
-              <article className="dashboard-card">
-                <div className="section-heading">
-                  <div>
-                    <p className="eyebrow">Registered checkpoints</p>
-                    <h4>Model integrity</h4>
-                  </div>
-                  <span>{selectedProvider.model_assets.length} assets</span>
-                </div>
-                <div className="dashboard-list">
-                  {selectedProvider.model_assets.map((asset) => (
-                    <div key={asset.model_id} className="dashboard-row">
-                      <div>
-                        <strong>{asset.name}</strong>
-                        <p>
-                          {asset.task} · {asset.managed_path}
-                        </p>
-                        {asset.messages.map((message) => (
-                          <small key={message}>{message}</small>
-                        ))}
-                      </div>
-                      <span>
-                        {!asset.exists
-                          ? "Missing"
-                          : asset.checksum_verified === false
-                            ? "Checksum mismatch"
-                            : asset.compatible
-                              ? "Ready"
-                              : "Task mismatch"}
-                      </span>
-                    </div>
-                  ))}
-                  {selectedProvider.model_assets.length === 0 && (
-                    <p>No registered checkpoints use this provider.</p>
-                  )}
-                </div>
-              </article>
-
-              <article className="dashboard-card">
-                <div className="section-heading">
-                  <div>
-                    <p className="eyebrow">Persisted acceptance results</p>
-                    <h4>Benchmark comparison</h4>
-                  </div>
-                  <label>
-                    Task
-                    <select
-                      value={taskFilter}
-                      onChange={(event) => setTaskFilter(event.target.value)}
+                {selectedAsset.failure_reason && (
+                  <p className="form-error">{selectedAsset.failure_reason}</p>
+                )}
+                <p className="annotation-helper">
+                  Outputs: {selectedAsset.output_types.join(", ") || "None"}.
+                  Prompts: {selectedAsset.prompt_types.join(", ") || "None"}.
+                </p>
+                <label>
+                  Device
+                  <select
+                    value={device}
+                    onChange={(event) =>
+                      setDevice(event.target.value as DeviceMode)
+                    }
+                  >
+                    <option value="auto">Automatic</option>
+                    <option value="cpu">CPU</option>
+                    <option value="cuda">CUDA</option>
+                  </select>
+                </label>
+                <div className="annotation-editor-inline-actions">
+                  {(
+                    [
+                      "verify",
+                      "diagnose",
+                      "load",
+                      "unload",
+                    ] as LifecycleAction[]
+                  ).map((action) => (
+                    <button
+                      key={action}
+                      type="button"
+                      className={action === "load" ? undefined : "secondary"}
+                      disabled={lifecycle.isPending}
+                      onClick={() =>
+                        lifecycle.mutate({ action, assetId: selectedAsset.id })
+                      }
                     >
-                      <option value="">All tasks</option>
-                      {selectedProvider.supported_tasks.map((task) => (
-                        <option key={task} value={task}>
-                          {task}
+                      {action[0].toUpperCase() + action.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                <div className="annotation-editor-inline-actions">
+                  <select
+                    aria-label="Health check kind"
+                    value={healthKind}
+                    onChange={(event) =>
+                      setHealthKind(event.target.value as "metadata" | "load")
+                    }
+                  >
+                    <option value="metadata">Metadata-only health</option>
+                    <option value="load">Real load health</option>
+                  </select>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={lifecycle.isPending}
+                    onClick={() =>
+                      lifecycle.mutate({
+                        action: "health",
+                        assetId: selectedAsset.id,
+                      })
+                    }
+                  >
+                    Run health check
+                  </button>
+                </div>
+                {lifecycle.error && (
+                  <p className="form-error">{lifecycle.error.message}</p>
+                )}
+              </article>
+
+              <article className="dashboard-card">
+                <div className="section-heading">
+                  <div>
+                    <p className="eyebrow">Capability-driven inference</p>
+                    <h4>Managed image smoke test</h4>
+                  </div>
+                </div>
+                {!project ? (
+                  <p>Select a project to run managed-image inference.</p>
+                ) : (
+                  <label>
+                    Project image
+                    <select
+                      value={selectedImageId}
+                      onChange={(event) =>
+                        setSelectedImageId(event.target.value)
+                      }
+                    >
+                      {(images.data?.items ?? []).map((image) => (
+                        <option key={image.id} value={image.id}>
+                          {image.original_filename} ({image.width_px}×
+                          {image.height_px})
                         </option>
                       ))}
                     </select>
                   </label>
-                </div>
-                {benchmarks.error && (
-                  <p className="form-error">{benchmarks.error.message}</p>
                 )}
-                {benchmarks.data?.warnings.map((warning) => (
-                  <p key={warning} className="annotation-helper">
-                    {warning}
-                  </p>
-                ))}
-                <div className="dashboard-list">
-                  {benchmarks.data?.records.map((record) => (
-                    <div
-                      key={`${record.recorded_at}-${record.device_id}-${record.task}`}
-                      className="dashboard-row"
-                    >
-                      <div>
-                        <strong>
-                          {record.task} · {record.device_id}
-                        </strong>
-                        <p>
-                          {record.input_width}×{record.input_height} · batch{" "}
-                          {record.batch_size} · {record.sample_count} samples
-                        </p>
-                        <small>
-                          {new Date(record.recorded_at).toLocaleString()}
-                        </small>
+                {capability(selectedAsset, "text_prompt") && (
+                  <label>
+                    Required text classes (comma or line separated)
+                    <textarea
+                      value={textPrompts}
+                      onChange={(event) => setTextPrompts(event.target.value)}
+                    />
+                  </label>
+                )}
+                {capability(selectedAsset, "point_prompt") && (
+                  <fieldset>
+                    <legend>Point and box prompts</legend>
+                    <label className="toggle-row">
+                      <input
+                        type="checkbox"
+                        checked={usePositivePoint}
+                        onChange={(event) =>
+                          setUsePositivePoint(event.target.checked)
+                        }
+                      />
+                      Positive point
+                    </label>
+                    {usePositivePoint && (
+                      <div className="annotation-editor-inline-actions">
+                        <input
+                          aria-label="Positive point x"
+                          type="number"
+                          value={positivePoint.x}
+                          onChange={(event) =>
+                            setPositivePoint({
+                              ...positivePoint,
+                              x: Number(event.target.value),
+                            })
+                          }
+                        />
+                        <input
+                          aria-label="Positive point y"
+                          type="number"
+                          value={positivePoint.y}
+                          onChange={(event) =>
+                            setPositivePoint({
+                              ...positivePoint,
+                              y: Number(event.target.value),
+                            })
+                          }
+                        />
                       </div>
-                      <span>
-                        {record.throughput_per_second.toFixed(2)}/s · p95{" "}
-                        {record.p95_latency_ms.toFixed(2)} ms · VRAM{" "}
-                        {bytesLabel(record.peak_vram_bytes)}
-                      </span>
-                    </div>
+                    )}
+                    <label className="toggle-row">
+                      <input
+                        type="checkbox"
+                        checked={useNegativePoint}
+                        disabled={
+                          !capability(selectedAsset, "negative_point_prompt")
+                        }
+                        onChange={(event) =>
+                          setUseNegativePoint(event.target.checked)
+                        }
+                      />
+                      Negative point
+                    </label>
+                    {useNegativePoint && (
+                      <div className="annotation-editor-inline-actions">
+                        <input
+                          aria-label="Negative point x"
+                          type="number"
+                          value={negativePoint.x}
+                          onChange={(event) =>
+                            setNegativePoint({
+                              ...negativePoint,
+                              x: Number(event.target.value),
+                            })
+                          }
+                        />
+                        <input
+                          aria-label="Negative point y"
+                          type="number"
+                          value={negativePoint.y}
+                          onChange={(event) =>
+                            setNegativePoint({
+                              ...negativePoint,
+                              y: Number(event.target.value),
+                            })
+                          }
+                        />
+                      </div>
+                    )}
+                    <label className="toggle-row">
+                      <input
+                        type="checkbox"
+                        checked={useBox}
+                        disabled={!capability(selectedAsset, "box_prompt")}
+                        onChange={(event) => setUseBox(event.target.checked)}
+                      />
+                      Box prompt / mixed refinement
+                    </label>
+                    {useBox && (
+                      <div className="annotation-editor-inline-actions">
+                        {Object.entries(box).map(([key, value]) => (
+                          <input
+                            key={key}
+                            aria-label={`Box ${key}`}
+                            type="number"
+                            value={value}
+                            onChange={(event) =>
+                              setBox({
+                                ...box,
+                                [key]: Number(event.target.value),
+                              })
+                            }
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </fieldset>
+                )}
+                {selectedAsset.task === "depth" && (
+                  <p className="form-warning">
+                    Depth output is relative, not meters or centimeters. Use the
+                    Depth tab for source-aligned visualization and export.
+                  </p>
+                )}
+                <div className="annotation-editor-inline-actions">
+                  <button
+                    type="button"
+                    disabled={!canInfer}
+                    onClick={() => {
+                      const id = requestId();
+                      const epoch = ++requestEpoch.current;
+                      setActiveRequestId(id);
+                      setInferenceResult(null);
+                      inference.mutate({ asset: selectedAsset, epoch, id });
+                    }}
+                  >
+                    {inference.isPending
+                      ? "Running..."
+                      : "Run managed inference"}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={!activeRequestId}
+                    onClick={() => {
+                      if (activeRequestId)
+                        void cancelProviderRequest(activeRequestId);
+                      requestEpoch.current += 1;
+                      setActiveRequestId(null);
+                    }}
+                  >
+                    Cancel request
+                  </button>
+                </div>
+                {inference.error && (
+                  <p className="form-error">{inference.error.message}</p>
+                )}
+                {inferenceResult && (
+                  <p className="form-success">
+                    {inferenceResult.empty
+                      ? "Valid empty result"
+                      : `${inferenceResult.outputCount} normalized proposals`}{" "}
+                    · {inferenceResult.device}
+                  </p>
+                )}
+                {selectedImage && spatialPromptRequired && (
+                  <p className="annotation-helper">
+                    Choose at least one supported point or box prompt.
+                  </p>
+                )}
+              </article>
+
+              <article className="dashboard-card">
+                <div className="section-heading">
+                  <div>
+                    <p className="eyebrow">Software acceptance</p>
+                    <h4>Validation records</h4>
+                  </div>
+                  <span>{acceptance.data?.total ?? 0} records</span>
+                </div>
+                {acceptance.isPending && <p>Loading validation records...</p>}
+                {acceptance.error && (
+                  <p className="form-error">{acceptance.error.message}</p>
+                )}
+                <div className="dashboard-list">
+                  {acceptance.data?.items.map((record) => (
+                    <details key={record.id} className="dashboard-row">
+                      <summary>
+                        {record.load_result}/{record.inference_result}/
+                        {record.unload_result} · {record.device} ·{" "}
+                        {record.execution_time_ms.toLocaleString()} ms
+                      </summary>
+                      <p>
+                        {new Date(record.recorded_at).toLocaleString()} · peak{" "}
+                        {bytesLabel(record.peak_memory_bytes)}
+                      </p>
+                      <small>
+                        Software/runtime acceptance only; not coral scientific
+                        validation.
+                      </small>
+                      {record.failure_reason && (
+                        <p className="form-error">{record.failure_reason}</p>
+                      )}
+                    </details>
                   ))}
                 </div>
               </article>

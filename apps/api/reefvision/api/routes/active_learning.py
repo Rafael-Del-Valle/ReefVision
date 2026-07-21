@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
-from reefvision.schemas.active_learning import ActiveLearningQueueCreateRequest
+from reefvision.schemas.active_learning import (
+    ActiveLearningQueueCreateRequest,
+    ActiveLearningQueuePromotionRequest,
+    ActiveLearningQueuePromotionResponse,
+)
 from reefvision.schemas.review_queues import ReviewQueueResponse
 from reefvision.services.active_learning_queues import ActiveLearningQueueService
 
@@ -58,3 +62,16 @@ def regenerate_active_learning_queue(
     session: DbSession,
 ) -> ReviewQueueResponse:
     return service(request, session).regenerate(queue_id)
+
+
+@router.post(
+    "/active-learning-queues/{queue_id}/promote",
+    response_model=ActiveLearningQueuePromotionResponse,
+)
+def promote_active_learning_queue(
+    queue_id: str,
+    payload: ActiveLearningQueuePromotionRequest,
+    request: Request,
+    session: DbSession,
+) -> ActiveLearningQueuePromotionResponse:
+    return service(request, session).promote(queue_id, payload)

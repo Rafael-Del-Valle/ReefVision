@@ -82,6 +82,13 @@ export function PromptPointAssistOverlay({
   const outputKindExplicitRef = useRef(false);
   const [session, setSession] = useState<PromptAssistSession | null>(null);
   const [candidateStale, setCandidateStale] = useState(false);
+  const [useContextBox, setUseContextBox] = useState(false);
+  const [contextBox, setContextBox] = useState({
+    x_min: 0,
+    y_min: 0,
+    x_max: 64,
+    y_max: 64,
+  });
   const [interactionError, setInteractionError] = useState<string | null>(null);
   const [panelTarget, setPanelTarget] = useState<HTMLElement | null>(null);
   const [svgTarget, setSvgTarget] = useState<SVGSVGElement | null>(null);
@@ -92,6 +99,8 @@ export function PromptPointAssistOverlay({
   );
   const historyRef = useRef(history);
   const sessionRef = useRef(session);
+  const previewAbortRef = useRef<AbortController | null>(null);
+  const requestEpochRef = useRef(0);
 
   useEffect(() => {
     historyRef.current = history;
@@ -128,10 +137,23 @@ export function PromptPointAssistOverlay({
         model.selection_kind === "registered_model" &&
         typeof model.resolved_model_id === "string" &&
         model.resolved_model_id.length > 0 &&
+        model.metadata_verified !== false &&
+        model.provider_ready !== false &&
         (model.installation_state === "Ready" ||
           model.installation_state === "Available"),
     );
   }, [modelCatalog.data]);
+  const selectedModel = useMemo(
+    () =>
+      readyModels.find((model) => model.resolved_model_id === modelId) ?? null,
+    [modelId, readyModels],
+  );
+  const supportsPoint = selectedModel?.capabilities.point_prompt ?? true;
+  const supportsNegative =
+    selectedModel?.capabilities.negative_point_prompt ?? true;
+  const supportsBox = selectedModel?.capabilities.box_prompt ?? false;
+  const supportsMixed =
+    selectedModel?.capabilities.mixed_point_box_prompt ?? false;
   const unavailableModels = useMemo(() => {
     const models =
       modelCatalog.data?.models ?? modelCatalog.data?.entries ?? [];
@@ -212,6 +234,7 @@ export function PromptPointAssistOverlay({
 
   useEffect(() => {
     return () => {
+      previewAbortRef.current?.abort();
       const sessionId = sessionRef.current?.session_id;
       if (sessionId) void deleteRemoteSession(sessionId);
     };
@@ -232,6 +255,7 @@ export function PromptPointAssistOverlay({
 
     const handlePointerDown = (event: PointerEvent) => {
       if (event.button !== 0) return;
+      if (!supportsPoint) return;
       const eventTarget = event.target instanceof Element ? event.target : null;
       if (
         eventTarget?.closest(
@@ -252,6 +276,12 @@ export function PromptPointAssistOverlay({
         return;
       }
       const effectiveMode: PromptPointKind = event.altKey ? "negative" : mode;
+      if (effectiveMode === "negative" && !supportsNegative) {
+        setInteractionError(
+          "The selected provider does not support negative point prompts.",
+        );
+        return;
+      }
       const currentPoints = historyRef.current.present.points;
       if (
         effectiveMode === "negative" &&
@@ -299,32 +329,70 @@ export function PromptPointAssistOverlay({
     document.addEventListener("pointerdown", handlePointerDown, true);
     return () =>
       document.removeEventListener("pointerdown", handlePointerDown, true);
-  }, [annotationSession.data, mode, overlayTarget, svgTarget]);
+  }, [
+    annotationSession.data,
+    mode,
+    overlayTarget,
+    supportsNegative,
+    supportsPoint,
+    svgTarget,
+  ]);
 
   const previewMutation = useMutation({
     mutationFn: async () => {
       if (!modelId) throw new Error("Choose a ready point-assist model.");
-      if (positivePoints.length === 0) {
-        throw new Error("Place at least one Include point on the image.");
+      if (positivePoints.length === 0 && !useContextBox) {
+        throw new Error("Place an Include point or enable a box prompt.");
       }
+      if (useContextBox && !supportsBox) {
+        throw new Error("The selected provider does not support box prompts.");
+      }
+      if (negativePoints.length > 0 && !supportsNegative) {
+        throw new Error(
+          "The selected provider does not support negative points.",
+        );
+      }
+      if (useContextBox && points.length > 0 && !supportsMixed) {
+        throw new Error(
+          "The selected provider does not support mixed point/box prompts.",
+        );
+      }
+      previewAbortRef.current?.abort();
+      const controller = new AbortController();
+      previewAbortRef.current = controller;
+      const epoch = ++requestEpochRef.current;
+      const requestedModelId = modelId;
       const previousSessionId = sessionRef.current?.session_id;
       if (previousSessionId) await deleteRemoteSession(previousSessionId);
-      const created = await createPromptAssistSession(imageId, {
-        model_id: modelId,
-        device: "auto",
-      });
+      const created = await createPromptAssistSession(
+        imageId,
+        {
+          model_id: modelId,
+          device: "auto",
+        },
+        controller.signal,
+      );
       try {
-        return await applyPromptAssistPoints(created.session_id, {
-          positive_points: positivePoints.map(({ x, y }) => ({ x, y })),
-          negative_points: negativePoints.map(({ x, y }) => ({ x, y })),
-          context_box: null,
-        });
+        const updatedSession = await applyPromptAssistPoints(
+          created.session_id,
+          {
+            positive_points: positivePoints.map(({ x, y }) => ({ x, y })),
+            negative_points: negativePoints.map(({ x, y }) => ({ x, y })),
+            context_box: useContextBox ? contextBox : null,
+          },
+          controller.signal,
+        );
+        return { updatedSession, epoch, requestedModelId };
       } catch (error) {
         await deleteRemoteSession(created.session_id);
         throw error;
       }
     },
-    onSuccess: (updatedSession) => {
+    onSuccess: ({ updatedSession, epoch, requestedModelId }) => {
+      if (epoch !== requestEpochRef.current || requestedModelId !== modelId) {
+        void deleteRemoteSession(updatedSession.session_id);
+        return;
+      }
       setSession(updatedSession);
       setCandidateStale(false);
       setInteractionError(null);
@@ -373,9 +441,12 @@ export function PromptPointAssistOverlay({
   });
 
   const resetPrompts = useCallback(async () => {
+    previewAbortRef.current?.abort();
+    requestEpochRef.current += 1;
     const sessionId = sessionRef.current?.session_id;
     setSession(null);
     dispatchHistory({ type: "reset" });
+    setUseContextBox(false);
     setCandidateStale(false);
     setInteractionError(null);
     if (sessionId) await deleteRemoteSession(sessionId);
@@ -418,13 +489,35 @@ export function PromptPointAssistOverlay({
         Assist model
         <select
           value={modelId}
-          disabled={
-            readyModels.length === 0 ||
-            previewMutation.isPending ||
-            acceptMutation.isPending
-          }
+          disabled={readyModels.length === 0 || acceptMutation.isPending}
           onChange={(event) => {
-            setModelId(event.target.value);
+            const nextModelId = event.target.value;
+            const nextModel = readyModels.find(
+              (model) => model.resolved_model_id === nextModelId,
+            );
+            const nextSupportsPoint =
+              nextModel?.capabilities.point_prompt ?? true;
+            const nextSupportsNegative =
+              nextModel?.capabilities.negative_point_prompt ?? true;
+            const nextSupportsBox = nextModel?.capabilities.box_prompt ?? false;
+            previewAbortRef.current?.abort();
+            requestEpochRef.current += 1;
+            const priorSessionId = sessionRef.current?.session_id;
+            if (priorSessionId) void deleteRemoteSession(priorSessionId);
+            sessionRef.current = null;
+            setSession(null);
+            dispatchHistory({
+              type: "replace",
+              points: nextSupportsPoint
+                ? historyRef.current.present.points.filter(
+                    (point) =>
+                      point.kind === "positive" || nextSupportsNegative,
+                  )
+                : [],
+            });
+            if (!nextSupportsBox) setUseContextBox(false);
+            if (!nextSupportsNegative) setMode("positive");
+            setModelId(nextModelId);
             setCandidateStale(true);
           }}
         >
@@ -449,19 +542,22 @@ export function PromptPointAssistOverlay({
           real compatible checkpoint.
         </div>
       )}
-      {readyModels.map((model) => (
+      {selectedModel && (
         <div
-          key={`${model.catalog_id}-capabilities`}
+          key={`${selectedModel.catalog_id}-capabilities`}
           className="version-preview-metrics"
         >
-          <span>Point prompts</span>
+          {supportsPoint && <span>Point prompts</span>}
+          {supportsNegative && <span>Negative points</span>}
+          {supportsBox && <span>Box prompts</span>}
+          {supportsMixed && <span>Mixed point/box</span>}
           <span>Raster output</span>
           <span>Polygon conversion</span>
-          {model.supported_devices?.map((item) => (
+          {selectedModel.supported_devices?.map((item) => (
             <span key={item}>{item.toUpperCase()}</span>
           ))}
         </div>
-      ))}
+      )}
       {unavailableModels.length > 0 && (
         <details>
           <summary>
@@ -539,6 +635,7 @@ export function PromptPointAssistOverlay({
         <button
           type="button"
           className={mode === "positive" ? "active" : "secondary"}
+          disabled={!supportsPoint}
           onClick={() => setMode("positive")}
         >
           Include point
@@ -546,12 +643,53 @@ export function PromptPointAssistOverlay({
         <button
           type="button"
           className={mode === "negative" ? "active" : "secondary"}
-          disabled={positivePoints.length === 0}
+          disabled={!supportsNegative || positivePoints.length === 0}
           onClick={() => setMode("negative")}
         >
           Exclude point
         </button>
       </div>
+      <fieldset disabled={!supportsBox || previewMutation.isPending}>
+        <legend>Box prompt</legend>
+        <label className="toggle-row">
+          <input
+            type="checkbox"
+            checked={useContextBox}
+            onChange={(event) => {
+              setUseContextBox(event.target.checked);
+              setCandidateStale(true);
+            }}
+          />
+          Use source-pixel context box
+        </label>
+        {useContextBox && (
+          <div className="annotation-editor-inline-actions">
+            {Object.entries(contextBox).map(([key, value]) => (
+              <label key={key}>
+                {key}
+                <input
+                  type="number"
+                  min="0"
+                  value={value}
+                  onChange={(event) => {
+                    setContextBox({
+                      ...contextBox,
+                      [key]: Number(event.target.value),
+                    });
+                    setCandidateStale(true);
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+        )}
+      </fieldset>
+      {useContextBox && points.length > 0 && !supportsMixed && (
+        <p className="form-warning">
+          This provider cannot combine point and box prompts. Clear one prompt
+          type before previewing.
+        </p>
+      )}
       <div className="version-preview-metrics">
         <span>{positivePoints.length} include</span>
         <span>{negativePoints.length} exclude</span>
@@ -587,7 +725,10 @@ export function PromptPointAssistOverlay({
         <button
           type="button"
           disabled={
-            !modelId || positivePoints.length === 0 || previewMutation.isPending
+            !modelId ||
+            (positivePoints.length === 0 && !useContextBox) ||
+            previewMutation.isPending ||
+            (useContextBox && points.length > 0 && !supportsMixed)
           }
           onClick={() => previewMutation.mutate()}
         >

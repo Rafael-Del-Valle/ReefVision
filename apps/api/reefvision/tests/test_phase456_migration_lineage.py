@@ -15,7 +15,7 @@ def test_phase456_migrations_form_one_linear_head() -> None:
     )
     scripts = ScriptDirectory.from_config(configuration)
 
-    assert scripts.get_heads() == ["0030"]
+    assert scripts.get_heads() == ["0031"]
     assert scripts.get_revision("0020").down_revision == "0019"
     assert scripts.get_revision("0021").down_revision == "0020"
     assert scripts.get_revision("0022").down_revision == "0021"

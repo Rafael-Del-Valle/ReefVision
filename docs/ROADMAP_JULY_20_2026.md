@@ -135,19 +135,23 @@ scientific-validity boundaries, and remaining limitations.
 
 ### Phase 7 — Active learning
 
-Status: review-queue and prediction foundations exist.
+Status: the practical source-runtime cycle is implemented: automatic versioned embeddings,
+uncertainty/novelty/diversity selection, persistent explainable revisions, annotation review,
+transactional immutable-dataset promotion, training linkage, and compatible model comparison.
 
-Next vertical slice:
-
-- uncertainty ranking from detector confidence and disagreement
-- diversity-aware sampling
-- direct queue-to-annotation workflow for masks and boxes
+Deferred: ensemble disagreement, scientific batch-quality validation, and packaged-desktop
+acceptance.
 
 ### Phase 8 — Advanced model providers
 
-Status: model catalog and Prompt Assist provider foundations exist.
+Status: the practical provider workflow is implemented for installed YOLO detection/segmentation,
+RT-DETR, managed SAM-family image prompting, YOLO-World text prompts, YOLOE prompt-free masks,
+original Meta SAM, and Depth Anything V2. Capabilities gate load, health, prompt, and depth controls;
+acceptance records distinguish metadata verification from real inference.
 
-This branch extends provider output preservation by storing accepted Prompt Assist raster masks. Additional SAM, SAM2, U-Net, nnU-Net, depth, and video providers should remain modular and capability-gated.
+SAM 2 video propagation remains deferred because the installed image checkpoint/runtime does not
+provide the required video predictor API. Packaged-desktop and scientific accuracy validation also
+remain deferred.
 
 ### Phase 9 — Project data and interoperability
 

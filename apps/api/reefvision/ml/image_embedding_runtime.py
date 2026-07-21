@@ -2,14 +2,166 @@
 
 from __future__ import annotations
 
+import gc
 from hashlib import sha256
+from importlib import import_module
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 from PIL import Image
 
 from reefvision.domain.errors import ValidationError
+from reefvision.ml.provider_verification import resolve_device
+
+ULTRALYTICS_EMBEDDING_PREPROCESSING_VERSION = "ultralytics-rgb-imgsz224-embed-v1"
+
+
+class EmbeddingProvider(Protocol):
+    provider_id: str
+    model_id: str
+    model_version: str
+    checkpoint_checksum: str | None
+    preprocessing_version: str
+
+    def load(self, device: str) -> str: ...
+
+    def embed_batch(
+        self,
+        inputs: list[tuple[Path, tuple[float, float, float, float] | None]],
+    ) -> list[tuple[list[float], dict[str, Any]]]: ...
+
+    def unload(self) -> None: ...
+
+
+def _read_embedding_input(
+    path: Path,
+    crop: tuple[float, float, float, float] | None,
+) -> np.ndarray[Any, Any]:
+    if not path.is_file():
+        raise ValidationError("The managed source image is missing")
+    try:
+        with Image.open(path) as source:
+            source.load()
+            image = source.convert("RGB")
+            if crop is not None:
+                x_min, y_min, x_max, y_max = crop
+                if not (x_max > x_min and y_max > y_min):
+                    raise ValidationError("Embedding crop must have positive width and height")
+                if x_min < 0 or y_min < 0 or x_max > image.width or y_max > image.height:
+                    raise ValidationError("Embedding crop must remain inside the source image")
+                image = image.crop(crop)
+            return np.asarray(image)
+    except OSError as exc:
+        raise ValidationError("The managed source image could not be read") from exc
+
+
+class UltralyticsBackboneEmbeddingProvider:
+    """Pool the deterministic feature vector exposed by a local Ultralytics backbone."""
+
+    provider_id = "ultralytics_backbone"
+    preprocessing_version = ULTRALYTICS_EMBEDDING_PREPROCESSING_VERSION
+
+    def __init__(
+        self,
+        *,
+        model_id: str,
+        model_version: str,
+        checkpoint_path: Path,
+        checkpoint_checksum: str,
+    ) -> None:
+        self.model_id = model_id
+        self.model_version = model_version
+        self.checkpoint_path = checkpoint_path
+        self.checkpoint_checksum = checkpoint_checksum
+        self._model: Any | None = None
+        self._device = "cpu"
+
+    def load(self, device: str) -> str:
+        if not self.checkpoint_path.is_file():
+            raise ValidationError(
+                "The local embedding checkpoint is missing; automatic downloads are disabled"
+            )
+        self._device = resolve_device(device)
+        try:
+            ultralytics: Any = import_module("ultralytics")
+        except ImportError as exc:
+            raise ValidationError("Ultralytics is unavailable for embedding generation") from exc
+        self._model = ultralytics.YOLO(str(self.checkpoint_path))
+        return self._device
+
+    def embed_batch(
+        self,
+        inputs: list[tuple[Path, tuple[float, float, float, float] | None]],
+    ) -> list[tuple[list[float], dict[str, Any]]]:
+        if self._model is None:
+            raise ValidationError("The embedding provider is not loaded")
+        if not inputs:
+            return []
+        source_arrays = [_read_embedding_input(path, crop) for path, crop in inputs]
+        try:
+            outputs = self._model.embed(
+                source_arrays,
+                imgsz=224,
+                device=self._device,
+                verbose=False,
+            )
+        except Exception as exc:
+            if "out of memory" in str(exc).casefold():
+                self.unload()
+                raise ValidationError(
+                    "Embedding generation exhausted device memory; the model was unloaded"
+                ) from exc
+            raise ValidationError(f"Ultralytics embedding generation failed: {exc}") from exc
+        if len(outputs) != len(inputs):
+            raise ValidationError("The embedding provider returned an unexpected batch size")
+        results: list[tuple[list[float], dict[str, Any]]] = []
+        for output, (path, crop) in zip(outputs, inputs, strict=True):
+            if hasattr(output, "detach"):
+                vector = output.detach().float().cpu().numpy().reshape(-1).astype(np.float32)
+            else:
+                vector = np.asarray(output, dtype=np.float32).reshape(-1)
+            if not np.isfinite(vector).all():
+                raise ValidationError("The embedding provider returned NaN or infinite values")
+            norm = float(np.linalg.norm(vector))
+            if norm <= 0:
+                raise ValidationError("The embedding provider returned an all-zero vector")
+            vector /= norm
+            results.append(
+                (
+                    vector.tolist(),
+                    {
+                        "runtime": "ultralytics.YOLO.embed",
+                        "provider_id": self.provider_id,
+                        "model_id": self.model_id,
+                        "model_version": self.model_version,
+                        "checkpoint_sha256": self.checkpoint_checksum,
+                        "resolved_device": self._device,
+                        "preprocessing_version": self.preprocessing_version,
+                        "input_color_space": "RGB",
+                        "input_size": [224, 224],
+                        "feature_layer": "ultralytics_default_embed_layer",
+                        "global_spatial_pooling": True,
+                        "normalization": "l2",
+                        "dimension": int(vector.size),
+                        "crop": list(crop) if crop is not None else None,
+                        "source_image_sha256": sha256(path.read_bytes()).hexdigest(),
+                        "semantic_embedding": True,
+                    },
+                )
+            )
+        return results
+
+    def unload(self) -> None:
+        self._model = None
+        gc.collect()
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            return
 
 
 def color_texture_embedding(image: Image.Image) -> tuple[list[float], dict[str, Any]]:
@@ -45,8 +197,11 @@ def color_texture_embedding(image: Image.Image) -> tuple[list[float], dict[str, 
         bins=16,
         range=(-np.pi, np.pi),
         weights=magnitude,
-        density=True,
+        density=False,
     )
+    orientation_total = float(orientation_histogram.sum())
+    if orientation_total > 0:
+        orientation_histogram = orientation_histogram / orientation_total
     features.extend(np.nan_to_num(magnitude_histogram).astype(np.float32).tolist())
     features.extend(np.nan_to_num(orientation_histogram).astype(np.float32).tolist())
     # Preserve coarse spatial structure through an 8x8 grayscale grid.

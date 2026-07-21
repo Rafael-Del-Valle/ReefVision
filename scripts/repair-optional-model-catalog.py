@@ -32,6 +32,67 @@ OPTIONAL_CATALOG_IDS = {
 }
 
 
+def corrected_metadata(catalog_id: str) -> dict[str, Any]:
+    if "/segment/" in catalog_id:
+        return {
+            "trainable": True,
+            "tuning_compatibility": True,
+            "known_limitations": [
+                "Native masks are preserved as polygon proposals with a "
+                "source-aligned raster fallback.",
+                "Accepted masks remain editable and unverified until explicit human review.",
+                "Ultralytics polygon segmentation training is supported; tiled training "
+                "and packaged-desktop validation remain unavailable.",
+            ],
+        }
+    if "/rtdetr/" in catalog_id:
+        return {
+            "provider": "ultralytics",
+            "provider_id": "ultralytics",
+            "provider_version": "8.3.228",
+            "inference": True,
+            "inference_supported": True,
+            "trainable": False,
+            "known_limitations": [
+                "RT-DETR training is not advertised by ReefVision; inference proposals "
+                "require review."
+            ],
+        }
+    if catalog_id == "sam2/image/base":
+        return {
+            "video_compatibility": False,
+            "known_limitations": [
+                "Image prompting is supported through Ultralytics SAM.",
+                "Video propagation requires the separate SAM 2 video runtime and remains "
+                "unavailable.",
+            ],
+        }
+    if catalog_id == "fastsam/default":
+        return {
+            "known_limitations": [
+                "Positive-point and box prompts are exposed; negative and mixed prompts "
+                "are not advertised."
+            ]
+        }
+    if catalog_id == "ultralytics/yolo_world/base":
+        return {
+            "known_limitations": [
+                "Inference requires an explicit user-provided text-class prompt list.",
+                "Open-vocabulary proposals remain unverified until explicit review.",
+            ]
+        }
+    if catalog_id == "ultralytics/yoloe/base":
+        return {
+            "task": "prompt_free_segment",
+            "model_variant": "prompt_free_segment",
+            "known_limitations": [
+                "YOLOE is prompt-free segmentation, not ordinary closed-set detection.",
+                "Native mask proposals remain unverified until explicit review.",
+            ],
+        }
+    return {}
+
+
 def default_data_dir() -> Path:
     appdata = os.environ.get("APPDATA")
     if appdata:
@@ -85,7 +146,12 @@ def repair_catalog(data_dir: Path) -> tuple[list[str], list[str]]:
         expected_size = record.get("size_bytes")
         expected_sha = str(record.get("sha256") or "")
         relative_path = str(record.get("relative_path") or "")
-        if not filename or not relative_path or not isinstance(expected_size, int) or not expected_sha:
+        if (
+            not filename
+            or not relative_path
+            or not isinstance(expected_size, int)
+            or not expected_sha
+        ):
             skipped.append(f"{catalog_id}: manifest record is incomplete")
             continue
         checkpoint = (data_dir / Path(relative_path)).resolve()
@@ -104,14 +170,18 @@ def repair_catalog(data_dir: Path) -> tuple[list[str], list[str]]:
                 "availability": "available",
                 "selection_kind": "managed_catalog_model",
                 "installation_state": "Ready",
-                "installation_reason": "Installed and verified by the optional ReefVision model pack.",
+                "installation_reason": (
+                    "Installed and verified by the optional ReefVision model pack."
+                ),
                 "advanced_only": False,
                 "requires_confirmation": False,
+                "desktop_support": "source_runtime_validation_required",
+                **corrected_metadata(catalog_id),
             }
         )
         repaired.append(catalog_id)
 
-    catalog["catalog_version"] = "2.1.1-local-model-pack"
+    catalog["catalog_version"] = "2.2.0-local-model-pack"
     atomic_json(catalog_path, catalog)
     return repaired, skipped
 

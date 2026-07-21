@@ -9,6 +9,7 @@ import {
   type Project,
 } from "../../api/client";
 import { getImages, getJob } from "../phase456/api";
+import { listProviderModels, type ProviderModelAsset } from "../providers/api";
 import {
   getDepthProviderReadiness,
   listDepthMaps,
@@ -31,6 +32,14 @@ vi.mock("../phase456/api", async () => {
   const actual =
     await vi.importActual<typeof import("../phase456/api")>("../phase456/api");
   return { ...actual, getImages: vi.fn(), getJob: vi.fn() };
+});
+
+vi.mock("../providers/api", async () => {
+  const actual =
+    await vi.importActual<typeof import("../providers/api")>(
+      "../providers/api",
+    );
+  return { ...actual, listProviderModels: vi.fn() };
 });
 
 vi.mock("./api", async () => {
@@ -123,6 +132,45 @@ const depthMap: DepthMapRecord = {
   created_at: "2026-07-20T00:00:00Z",
 };
 
+const registeredDepthAsset: ProviderModelAsset = {
+  id: "depth-asset-1",
+  provider_id: "depth_anything_v2",
+  provider_version: "transformers-5.13.1",
+  model_id: "external/depth-anything-v2/small",
+  architecture: "Depth Anything V2 Small",
+  task: "depth",
+  capabilities: { depth_output: true, inference: true },
+  checkpoint_path: "C:\\Models\\Depth-Anything-V2-Small-hf",
+  checkpoint_path_kind: "trusted_external",
+  checkpoint_sha256: "d".repeat(64),
+  checkpoint_size_bytes: 99,
+  checkpoint_format: "huggingface_directory",
+  source: "trusted_external_huggingface_folder",
+  revision: "local-folder",
+  required_packages: ["transformers", "torch"],
+  optional_packages: [],
+  supported_devices: ["cpu", "cuda"],
+  preferred_device: "auto",
+  estimated_vram_bytes: null,
+  input_types: ["image"],
+  output_types: ["relative_depth_raw", "relative_depth_display"],
+  prompt_types: [],
+  supports_training: false,
+  supports_inference: true,
+  supports_video: false,
+  state: "unloaded",
+  failure_reason: null,
+  verification: { verified: true },
+  last_health_check: {},
+  last_health_check_at: null,
+  last_successful_load_at: "2026-07-21T12:00:00Z",
+  last_successful_inference_at: "2026-07-21T12:01:00Z",
+  metadata: { relative_depth_only: true },
+  latest_acceptance_status: "passed",
+  created_at: "2026-07-21T12:00:00Z",
+  updated_at: "2026-07-21T12:01:00Z",
+};
+
 function renderDashboard() {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -140,6 +188,13 @@ function renderDashboard() {
 describe("DepthDashboard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(listProviderModels).mockResolvedValue({
+      items: [],
+      total: 0,
+      limit: 200,
+      offset: 0,
+      duplicate_checksum_groups: [],
+    });
     vi.mocked(getDepthProviderReadiness).mockImplementation(
       async ({ device }) =>
         device === "cuda"
@@ -210,6 +265,28 @@ describe("DepthDashboard", () => {
     expect(
       screen.getByText(/cannot use an available cuda device/i),
     ).toBeInTheDocument();
+  });
+
+  it("reopens a verified external Depth Anything registration without downloading", async () => {
+    vi.mocked(listProviderModels).mockResolvedValue({
+      items: [registeredDepthAsset],
+      total: 1,
+      limit: 200,
+      offset: 0,
+      duplicate_checksum_groups: [],
+    });
+    renderDashboard();
+
+    expect(
+      await screen.findByLabelText("Verified registered checkpoint"),
+    ).toHaveValue(registeredDepthAsset.id);
+    expect(screen.getByLabelText("Model ID or local path")).toHaveValue(
+      registeredDepthAsset.checkpoint_path,
+    );
+    expect(
+      screen.getByLabelText("Use installed/local checkpoints only"),
+    ).toBeDisabled();
+    expect(screen.getByText(/never downloads weights/i)).toBeInTheDocument();
   });
 
   it("blocks unavailable providers with backend remediation", async () => {

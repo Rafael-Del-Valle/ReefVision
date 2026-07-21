@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -18,7 +19,13 @@ from sqlalchemy.orm import Session
 
 from reefvision import __version__
 from reefvision.config import Settings
-from reefvision.db.models import Job, ModelRegistration, Project
+from reefvision.db.models import (
+    Job,
+    ModelRegistration,
+    Project,
+    ProviderAcceptanceRecord,
+    ProviderModelAsset,
+)
 from reefvision.domain.errors import CatalogResourceError, NotFoundError, ValidationError
 from reefvision.repositories.models import ModelRepository
 from reefvision.repositories.projects import ProjectRepository
@@ -40,6 +47,14 @@ MODEL_CATALOG_FILENAME = "model_catalog.json"
 TRACKER_CATALOG_FILENAME = "tracker_catalog.json"
 EXPECTED_MODEL_CATALOG_SCHEMA = 2
 EXPECTED_MODEL_CATALOG_VERSION = "2.0.0"
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for block in iter(lambda: source.read(4 * 1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 @dataclass(frozen=True)
@@ -208,6 +223,7 @@ def _task_allowed_for_workflow(task: CatalogTask, workflow: CatalogWorkflow | No
         return task in {
             "assist_segmentation",
             "open_vocabulary_detect",
+            "prompt_free_segment",
             "example_guided_detect",
             "phrase_grounding",
             "caption",
@@ -220,7 +236,12 @@ def _task_allowed_for_workflow(task: CatalogTask, workflow: CatalogWorkflow | No
 
 
 def _installed_provider_version(provider_id: str) -> str | None:
-    distribution = {"ultralytics": "ultralytics"}.get(provider_id)
+    distribution = {
+        "ultralytics": "ultralytics",
+        "ultralytics_sam": "ultralytics",
+        "segment_anything": "segment-anything",
+        "depth_anything_v2": "transformers",
+    }.get(provider_id)
     if distribution is None:
         return None
     try:
@@ -269,14 +290,44 @@ class ModelCatalogService:
             "installed_asset_id": None,
             "installed_path": None,
             "installed_checksum": None,
+            "metadata_verified": False,
+            "provider_ready": False,
+            "provider_state": "unavailable",
+            "provider_failure_reason": None,
+            "capabilities": {},
+            "latest_acceptance_status": None,
         }
-        if entry.availability == "unavailable":
+
+        provider_asset = self.session.scalar(
+            select(ProviderModelAsset).where(ProviderModelAsset.model_id == entry.catalog_id)
+        )
+        if provider_asset is not None:
             updates.update(
-                installation_state="Unavailable",
-                installation_reason=entry.installation_reason
-                or "This catalog definition is not available for installation.",
+                provider_ready=provider_asset.state in {"ready", "loaded", "unloaded"}
+                and bool(provider_asset.verification_json.get("verified")),
+                provider_state=provider_asset.state,
+                provider_failure_reason=provider_asset.failure_reason,
+                capabilities=dict(provider_asset.capabilities_json),
+                metadata_verified=bool(provider_asset.verification_json.get("verified")),
             )
-            return entry.model_copy(update=updates)
+            acceptance = self.session.scalar(
+                select(ProviderAcceptanceRecord)
+                .where(ProviderAcceptanceRecord.provider_asset_id == provider_asset.id)
+                .order_by(
+                    ProviderAcceptanceRecord.recorded_at.desc(),
+                    ProviderAcceptanceRecord.id.desc(),
+                )
+                .limit(1)
+            )
+            if acceptance is not None:
+                updates["latest_acceptance_status"] = (
+                    "passed"
+                    if acceptance.load_result
+                    == acceptance.inference_result
+                    == acceptance.unload_result
+                    == "passed"
+                    else "failed"
+                )
 
         if job is not None and job.status in {"queued", "running", "cancel_requested"}:
             stage = str((job.result_json or {}).get("stage") or "downloading")
@@ -334,12 +385,57 @@ class ModelCatalogService:
                     ),
                 )
             else:
+                actual_checksum = _sha256(path)
+                if actual_checksum != expected.sha256:
+                    updates.update(
+                        installation_state="Corrupted",
+                        installation_reason=(
+                            "The managed checkpoint SHA-256 no longer matches the catalog."
+                        ),
+                        installed_checksum=actual_checksum,
+                        metadata_verified=False,
+                        provider_state="unavailable",
+                    )
+                    return entry.model_copy(update=updates)
+                provider_version = _installed_provider_version(entry.provider_id)
+                provider_ready = (
+                    bool(updates["provider_ready"])
+                    if provider_asset is not None
+                    else provider_version is not None
+                )
                 updates.update(
-                    installation_state="Ready",
+                    installation_state="Ready" if provider_ready else "Provider Required",
                     installation_reason=(
-                        "Managed checkpoint is installed and verified for offline use."
+                        "Managed checkpoint and provider runtime are verified for offline use."
+                        if provider_ready
+                        else "Checkpoint metadata is verified, but its provider is unavailable."
+                    ),
+                    installed_checksum=actual_checksum,
+                    metadata_verified=True,
+                    provider_ready=provider_ready,
+                    provider_state=(
+                        str(updates["provider_state"])
+                        if provider_asset is not None
+                        else "ready"
+                        if provider_ready
+                        else "unavailable"
+                    ),
+                    provider_failure_reason=(
+                        updates["provider_failure_reason"]
+                        if provider_asset is not None
+                        else None
+                        if provider_ready
+                        else f"Provider runtime {entry.provider_id} is not installed."
                     ),
                 )
+            return entry.model_copy(update=updates)
+
+        if entry.availability == "unavailable":
+            updates.update(
+                installation_state="Unavailable",
+                installation_reason=entry.installation_reason
+                or "This catalog definition is not available for installation.",
+            )
             return entry.model_copy(update=updates)
 
         if entry.expected_files:

@@ -19,12 +19,14 @@ import { ClassManagerPanel } from "./features/classes/ClassManagerPanel";
 import { ClassificationDashboard } from "./features/classification/ClassificationDashboard";
 import { DatasetVersionsPanel } from "./features/dataset-versions/DatasetVersionsPanel";
 import { DepthDashboard } from "./features/depth/DepthDashboard";
+import { EmbeddingDashboard } from "./features/embeddings/EmbeddingDashboard";
 import { Gallery } from "./features/gallery/Gallery";
 import { MeasurementsDashboard } from "./features/measurements/MeasurementsDashboard";
 import { ModelManager } from "./features/models/ModelManager";
 import { OnboardingModal } from "./features/onboarding/OnboardingModal";
 import "./features/phase456/phase456.css";
 import { QualityControlDashboard } from "./features/quality-control/QualityControlDashboard";
+import { ProviderDashboard } from "./features/providers/ProviderDashboard";
 import { TrainingReportsDashboard } from "./features/reports/TrainingReportsDashboard";
 import { ReviewQueueDashboard } from "./features/review-queues/ReviewQueueDashboard";
 import { SystemPanel } from "./features/system/SystemPanel";
@@ -54,6 +56,8 @@ type ProjectView =
   | "classification"
   | "videos"
   | "evaluation"
+  | "active_learning"
+  | "providers"
   | "integrity"
   | "workflows"
   | "classes"
@@ -165,6 +169,8 @@ export function App() {
     { id: "classification", label: "Classification" },
     { id: "videos", label: "Video" },
     { id: "evaluation", label: "Evaluation" },
+    { id: "active_learning", label: "Active Learning" },
+    { id: "providers", label: "Providers" },
     { id: "quality_control", label: "Quality Control" },
     { id: "review_queue", label: "Review Queue" },
     { id: "integrity", label: "Integrity" },
@@ -385,6 +391,26 @@ export function App() {
               )}
               {activeView === "evaluation" && (
                 <ModelEvaluationDashboard project={selectedProject} />
+              )}
+              {activeView === "active_learning" && (
+                <EmbeddingDashboard
+                  project={selectedProject}
+                  onOpenImage={(item: ReviewQueueItem) =>
+                    setEditorLaunch({
+                      imageId: item.image_id,
+                      returnLabel: "Back to Active Learning",
+                      contextTitle: `Active-learning rank ${item.rank_position}`,
+                      contextDescription:
+                        item.reason_summary ||
+                        item.selection_reasons_json.join(" · ") ||
+                        "Selected for active-learning review.",
+                    })
+                  }
+                  onLaunchTraining={() => setActiveView("training")}
+                />
+              )}
+              {activeView === "providers" && (
+                <ProviderDashboard project={selectedProject} />
               )}
               {activeView === "quality_control" && (
                 <QualityControlDashboard

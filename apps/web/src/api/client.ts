@@ -35,7 +35,9 @@ async function compatibilityRequest<T>(
         message = payload.detail;
       } else if (payload.detail && typeof payload.detail === "object") {
         details = payload.detail;
-        if (typeof payload.detail.reason === "string") {
+        if (typeof payload.detail.message === "string") {
+          message = payload.detail.message;
+        } else if (typeof payload.detail.reason === "string") {
           message = payload.detail.reason;
         }
       }
@@ -130,6 +132,12 @@ export interface ModelCatalogEntry {
   installed_asset_id: string | null;
   installed_path: string | null;
   installed_checksum: string | null;
+  metadata_verified: boolean;
+  provider_ready: boolean;
+  provider_state: string;
+  provider_failure_reason: string | null;
+  capabilities: Record<string, boolean>;
+  latest_acceptance_status: string | null;
   advanced_only: boolean;
   requires_confirmation: boolean;
   selection_kind: core.ModelCatalogSelectionKind;
@@ -241,6 +249,12 @@ function normalizeModelCatalogEntry(
     installed_path:
       entry.installed_path ?? entry.managed_path ?? entry.local_path ?? null,
     installed_checksum: entry.installed_checksum ?? entry.checksum ?? null,
+    metadata_verified: entry.metadata_verified ?? false,
+    provider_ready: entry.provider_ready ?? false,
+    provider_state: entry.provider_state ?? "unavailable",
+    provider_failure_reason: entry.provider_failure_reason ?? null,
+    capabilities: entry.capabilities ?? {},
+    latest_acceptance_status: entry.latest_acceptance_status ?? null,
     advanced_only: entry.advanced_only ?? false,
     requires_confirmation: entry.requires_confirmation ?? false,
     selection_kind: entry.selection_kind ?? "planned_unavailable",

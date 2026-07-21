@@ -102,6 +102,12 @@ function entry(
     installed_path:
       state === "Ready" ? "models/catalog-models/yolo11x.pt" : null,
     installed_checksum: state === "Ready" ? "7".repeat(64) : null,
+    metadata_verified: state === "Ready",
+    provider_ready: state === "Ready",
+    provider_state: state === "Ready" ? "unloaded" : "unavailable",
+    provider_failure_reason: null,
+    capabilities: { detection: true, inference: true, training: true },
+    latest_acceptance_status: state === "Ready" ? "passed" : null,
     advanced_only: false,
     requires_confirmation: true,
     selection_kind: "managed_catalog_model",

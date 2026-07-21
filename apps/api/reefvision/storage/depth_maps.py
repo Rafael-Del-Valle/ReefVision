@@ -49,13 +49,11 @@ def validate_depth_array(
     if array.shape != (expected_height, expected_width):
         raise ValidationError("Depth map dimensions do not match the source image")
     finite = np.isfinite(array)
-    if not finite.any():
-        raise ValidationError("Depth maps must contain at least one finite value")
+    if not finite.all():
+        raise ValidationError("Depth maps cannot contain NaN or infinite values")
     if depth_kind == "metric" and np.any(array[finite] <= 0):
         raise ValidationError("Metric depth values must be greater than zero")
-    result = array.copy()
-    result[~finite] = np.nan
-    return result
+    return array.copy()
 
 
 def _preview_image(values: NDArray[Any]) -> Image.Image:

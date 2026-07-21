@@ -17,6 +17,7 @@ CatalogTask = Literal[
     "segment",
     "semantic_segment",
     "open_vocabulary_detect",
+    "prompt_free_segment",
     "example_guided_detect",
     "assist_segmentation",
     "video_propagation",
@@ -151,6 +152,12 @@ class ModelCatalogEntryResponse(BaseModel):
     installed_asset_id: str | None = None
     installed_path: str | None = None
     installed_checksum: str | None = None
+    metadata_verified: bool = False
+    provider_ready: bool = False
+    provider_state: str = "unavailable"
+    provider_failure_reason: str | None = None
+    capabilities: dict[str, bool] = Field(default_factory=dict)
+    latest_acceptance_status: str | None = None
     advanced_only: bool = False
     requires_confirmation: bool = False
     selection_kind: CatalogSelectionKind
@@ -185,6 +192,9 @@ class ModelCatalogEntryResponse(BaseModel):
         "installed_asset_id",
         "installed_path",
         "installed_checksum",
+        "provider_state",
+        "provider_failure_reason",
+        "latest_acceptance_status",
         "architecture_reference",
         "resolved_model_id",
         mode="before",

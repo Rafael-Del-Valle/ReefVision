@@ -58,6 +58,8 @@ class ReviewQueueResponse(BaseModel):
     regenerated_from_queue_id: str | None
     scope_type: str
     status: str
+    revision: int = 1
+    generation_key: str | None = None
     formula_id: str
     formula_version: str
     configuration_json: dict[str, Any]
@@ -68,6 +70,9 @@ class ReviewQueueResponse(BaseModel):
     created_at: datetime
     completed_at: datetime | None
     error_message: str | None
+    promoted_dataset_version_id: str | None = None
+    promoted_cycle_id: str | None = None
+    promoted_at: datetime | None = None
 
 
 class ReviewQueueItemResponse(BaseModel):
@@ -92,6 +97,10 @@ class ReviewQueueItemResponse(BaseModel):
     score_breakdown_json: list[ReviewScoreComponentResponse]
     input_checksum: str
     reason_summary: str | None
+    selection_reasons_json: list[str] = Field(default_factory=list)
+    manual_state: str = "automatic"
+    fragment_key: str | None = None
+    near_duplicate_key: str | None = None
     skip_reason: str | None
     created_at: datetime
     updated_at: datetime

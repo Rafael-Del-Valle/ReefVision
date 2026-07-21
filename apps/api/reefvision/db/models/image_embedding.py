@@ -18,8 +18,8 @@ class ImageEmbedding(Base):
     __table_args__ = (
         UniqueConstraint(
             "image_id",
-            "embedding_model_id",
-            name="uq_image_embeddings_image_model",
+            "embedding_key",
+            name="uq_image_embeddings_image_key",
         ),
         Index(
             "ix_image_embeddings_project_model",
@@ -48,6 +48,17 @@ class ImageEmbedding(Base):
     )
     embedding_model_id: Mapped[str] = mapped_column(String(300), nullable=False)
     embedding_model_checksum: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    embedding_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider_id: Mapped[str] = mapped_column(String(100), nullable=False, default="legacy")
+    model_version: Mapped[str] = mapped_column(String(100), nullable=False, default="unknown")
+    preprocessing_version: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="legacy"
+    )
+    source_image_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_kind: Mapped[str] = mapped_column(String(30), nullable=False, default="image")
+    crop_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    normalization: Mapped[str] = mapped_column(String(40), nullable=False, default="l2")
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="ready")
     dimension: Mapped[int] = mapped_column(Integer, nullable=False)
     vector_json: Mapped[list[float]] = mapped_column(JSON, nullable=False)
     vector_sha256: Mapped[str] = mapped_column(String(64), nullable=False)

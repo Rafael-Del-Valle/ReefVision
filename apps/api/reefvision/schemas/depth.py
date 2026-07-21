@@ -42,6 +42,11 @@ class DepthMapGenerateRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_provider_kind(self) -> DepthMapGenerateRequest:
+        if self.provider_id.startswith("depth_anything") and not self.local_files_only:
+            raise ValueError(
+                "Depth inference cannot download weights; explicitly install or register "
+                "a local checkpoint first"
+            )
         if self.provider_id == "depth_anything_v2_metric" and self.depth_kind != "metric":
             raise ValueError("The metric provider requires depth_kind='metric'")
         if (

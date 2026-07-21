@@ -2,7 +2,8 @@
 
 ## Status
 
-Implemented as a backend-and-desktop first release on top of ReefVision's existing explainable review queues.
+Implemented through the practical source-runtime Phase 7 cycle on top of ReefVision's existing
+explainable review queues.
 
 This implementation does not automatically accept model predictions or modify verified annotations. It creates a compact, reproducible list of images for human review.
 
@@ -20,6 +21,19 @@ This implementation does not automatically accept model predictions or modify ve
 - Compatibility with the existing Review Queue list, item viewer, state transitions, filters, and Regenerate button.
 - Desktop controls for switching between ordinary priority rankings and active-learning batches.
 - Desktop summary metrics for candidate count, reviewed-image exclusions, diversity, and final score.
+- Automatic image-level and optional crop-level embeddings from a verified local Ultralytics
+  backbone, with model/checkpoint/preprocessing/source versioning.
+- Restart-safe embedding jobs, cancellation, retry idempotency, duplicate prevention, and stale or
+  missing coverage reporting.
+- Confidence margin, entropy where probability vectors exist, cosine novelty, k-center diversity,
+  blended weighting, class balancing, group/fragment limits, and exact/near-duplicate suppression.
+- Manual includes/excludes and a persisted explanation for every queued item.
+- Transactional, retry-idempotent promotion of a completed review queue into one immutable dataset
+  version.
+- Active-learning cycle records linking source/embedding models, queue revision, reviewed images,
+  accepted/rejected records, dataset, training run, result model, and evaluation summaries.
+- A desktop workspace for embedding generation, selection, review navigation, promotion, training
+  handoff, training-run linkage, cycle history, and compatible before/after comparison.
 
 ## Desktop workflow
 
@@ -138,9 +152,6 @@ Each item records:
 
 ## Remaining Phase 7 work
 
-- Add optional embedding-based visual novelty once a stable feature provider is available.
 - Add model-ensemble disagreement when multiple compatible inference runs exist.
-- Add a retraining-cycle workflow that converts reviewed items into a new immutable dataset version and launches an explicitly approved training run.
-- Add before-and-after model evaluation that measures whether the reviewed batch improved performance.
 - Validate batch quality on a real coral dataset and tune the default diversity weight.
-- Complete full frontend and packaged-desktop acceptance once GitHub Actions can start jobs again.
+- Complete packaged-desktop acceptance; this patch validates the source browser/API runtime only.

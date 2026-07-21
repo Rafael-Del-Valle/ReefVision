@@ -9,11 +9,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import ImageAsset, ImageEmbedding, Project
-from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.schemas.image_embeddings import (
     EmbeddingDiversitySelectionItem,
     EmbeddingDiversitySelectionRequest,
     EmbeddingDiversitySelectionResponse,
+    ImageEmbeddingCoverageResponse,
     ImageEmbeddingResponse,
     ImageEmbeddingWriteRequest,
 )
@@ -25,6 +26,31 @@ def _normalized_vector(vector: list[float]) -> tuple[float, ...]:
     if magnitude <= 0:
         raise ValidationError("Embedding vectors cannot be all zero")
     return tuple(value / magnitude for value in vector)
+
+
+def embedding_identity_key(
+    *,
+    provider_id: str,
+    model_id: str,
+    model_checksum: str | None,
+    model_version: str,
+    preprocessing_version: str,
+    source_kind: str,
+    crop: dict[str, float] | None,
+) -> str:
+    """Identify one embedding configuration without folding in mutable source state."""
+
+    return canonical_json_sha256(
+        {
+            "provider_id": provider_id,
+            "model_id": model_id,
+            "model_checksum": model_checksum,
+            "model_version": model_version,
+            "preprocessing_version": preprocessing_version,
+            "source_kind": source_kind,
+            "crop": crop,
+        }
+    )
 
 
 def _cosine_novelty(
@@ -69,13 +95,24 @@ class ImageEmbeddingService:
         request: ImageEmbeddingWriteRequest,
     ) -> ImageEmbeddingResponse:
         image = self._image(image_id)
-        vector = [float(value) for value in request.vector]
-        _normalized_vector(vector)
+        vector = list(_normalized_vector([float(value) for value in request.vector]))
         checksum = canonical_json_sha256(vector)
+        source_checksum = request.source_image_sha256 or image.sha256
+        if source_checksum != image.sha256:
+            raise ValidationError("Embedding source checksum does not match the managed image")
+        key = embedding_identity_key(
+            provider_id=request.provider_id,
+            model_id=request.embedding_model_id,
+            model_checksum=request.embedding_model_checksum,
+            model_version=request.model_version,
+            preprocessing_version=request.preprocessing_version,
+            source_kind=request.source_kind,
+            crop=request.crop,
+        )
         embedding = self.session.scalar(
             select(ImageEmbedding).where(
                 ImageEmbedding.image_id == image.id,
-                ImageEmbedding.embedding_model_id == request.embedding_model_id,
+                ImageEmbedding.embedding_key == key,
             )
         )
         if embedding is None:
@@ -84,6 +121,15 @@ class ImageEmbeddingService:
                 image_id=image.id,
                 embedding_model_id=request.embedding_model_id,
                 embedding_model_checksum=request.embedding_model_checksum,
+                embedding_key=key,
+                provider_id=request.provider_id,
+                model_version=request.model_version,
+                preprocessing_version=request.preprocessing_version,
+                source_image_sha256=source_checksum,
+                source_kind=request.source_kind,
+                crop_json=request.crop,
+                normalization=request.normalization,
+                status="ready",
                 dimension=len(vector),
                 vector_json=vector,
                 vector_sha256=checksum,
@@ -91,7 +137,18 @@ class ImageEmbeddingService:
             )
             self.session.add(embedding)
         else:
+            if not request.replace_existing:
+                if (
+                    embedding.vector_sha256 == checksum
+                    and embedding.source_image_sha256 == source_checksum
+                ):
+                    return ImageEmbeddingResponse.model_validate(embedding)
+                raise ConflictError(
+                    "This embedding configuration already exists; explicitly request replacement"
+                )
             embedding.embedding_model_checksum = request.embedding_model_checksum
+            embedding.source_image_sha256 = source_checksum
+            embedding.status = "ready"
             embedding.dimension = len(vector)
             embedding.vector_json = vector
             embedding.vector_sha256 = checksum
@@ -120,6 +177,89 @@ class ImageEmbeddingService:
         )
         return [ImageEmbeddingResponse.model_validate(item) for item in rows]
 
+    def coverage(
+        self,
+        project_id: str,
+        *,
+        provider_id: str,
+        embedding_model_id: str,
+        embedding_model_checksum: str | None,
+        preprocessing_version: str,
+    ) -> ImageEmbeddingCoverageResponse:
+        self._project(project_id)
+        images = list(
+            self.session.scalars(
+                select(ImageAsset)
+                .where(ImageAsset.project_id == project_id)
+                .order_by(ImageAsset.created_at, ImageAsset.id)
+            )
+        )
+        embeddings = list(
+            self.session.scalars(
+                select(ImageEmbedding).where(
+                    ImageEmbedding.project_id == project_id,
+                    ImageEmbedding.provider_id == provider_id,
+                    ImageEmbedding.embedding_model_id == embedding_model_id,
+                    ImageEmbedding.source_kind == "image",
+                )
+            )
+        )
+        by_image: dict[str, list[ImageEmbedding]] = {}
+        for embedding in embeddings:
+            by_image.setdefault(embedding.image_id, []).append(embedding)
+
+        missing: list[str] = []
+        stale: list[str] = []
+        failed = 0
+        ready = 0
+        dimensions: set[int] = set()
+        for image in images:
+            candidates = by_image.get(image.id, [])
+            matching = [
+                item
+                for item in candidates
+                if item.embedding_model_checksum == embedding_model_checksum
+                and item.preprocessing_version == preprocessing_version
+            ]
+            if not matching:
+                if candidates:
+                    stale.append(image.id)
+                else:
+                    missing.append(image.id)
+                continue
+            current = max(matching, key=lambda item: (item.updated_at, item.id))
+            if current.status == "failed":
+                failed += 1
+            elif current.source_image_sha256 != image.sha256 or current.status != "ready":
+                stale.append(image.id)
+            else:
+                ready += 1
+                dimensions.add(current.dimension)
+        warnings: list[str] = []
+        if len(dimensions) > 1:
+            warnings.append("Ready embeddings have inconsistent dimensions.")
+        if stale:
+            warnings.append(
+                "Stale embeddings are preserved and must be regenerated explicitly; "
+                "they were not silently replaced."
+            )
+        return ImageEmbeddingCoverageResponse(
+            project_id=project_id,
+            provider_id=provider_id,
+            embedding_model_id=embedding_model_id,
+            embedding_model_checksum=embedding_model_checksum,
+            preprocessing_version=preprocessing_version,
+            total_image_count=len(images),
+            ready_image_count=ready,
+            missing_image_count=len(missing),
+            stale_image_count=len(stale),
+            failed_image_count=failed,
+            missing_image_ids=missing,
+            stale_image_ids=stale,
+            dimension=next(iter(dimensions)) if len(dimensions) == 1 else None,
+            warnings=warnings,
+        )
+
     def delete(self, embedding_id: str) -> None:
         embedding = self.session.get(ImageEmbedding, embedding_id)
         if embedding is None:
@@ -146,13 +286,20 @@ class ImageEmbeddingService:
             ImageEmbedding.project_id == project_id,
             ImageEmbedding.embedding_model_id == request.embedding_model_id,
             ImageEmbedding.image_id.in_(list(image_by_id)),
+            ImageEmbedding.source_kind == "image",
+            ImageEmbedding.status == "ready",
         )
         if request.embedding_model_checksum:
             embedding_query = embedding_query.where(
                 ImageEmbedding.embedding_model_checksum == request.embedding_model_checksum
             )
         embeddings = list(self.session.scalars(embedding_query))
-        embedding_by_image = {item.image_id: item for item in embeddings}
+        embedding_by_image = {
+            item.image_id: item
+            for item in embeddings
+            if item.source_image_sha256 == image_by_id[item.image_id].sha256
+        }
+        embeddings = list(embedding_by_image.values())
         missing_embedding_count = len(images) - len(embedding_by_image)
         if not embeddings:
             return EmbeddingDiversitySelectionResponse(

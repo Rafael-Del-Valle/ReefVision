@@ -75,6 +75,15 @@ class ActiveLearningCycle(Base):
         ForeignKey("review_queues.id", ondelete="SET NULL"),
         nullable=True,
     )
+    embedding_provider_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    embedding_model_id: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    embedding_model_checksum: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    queue_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    accepted_annotation_ids_json: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    rejected_item_ids_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    warnings_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     selection_config_json: Mapped[dict[str, Any]] = mapped_column(
         JSON,
         nullable=False,

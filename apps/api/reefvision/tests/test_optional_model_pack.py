@@ -37,7 +37,7 @@ def test_runtime_factories_use_expanded_adapters() -> None:
     assert provider_hub.SegmentAnythingAssistProvider is UnifiedSegmentAnythingAssistProvider
 
 
-def test_optional_pack_repair_marks_verified_model_available(
+def test_optional_pack_and_repair_keep_verified_model_available(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     installer = _load_script("install-remaining-models.py", "reefvision_optional_model_pack")
@@ -65,7 +65,7 @@ def test_optional_pack_repair_marks_verified_model_available(
     catalog_path = tmp_path / "config" / "model_catalog.json"
     before = json.loads(catalog_path.read_text())
     before_entry = next(item for item in before["models"] if item["catalog_id"] == model.catalog_id)
-    assert before_entry["availability"] == "unavailable"
+    assert before_entry["availability"] == "available"
 
     repaired, skipped = repair.repair_catalog(tmp_path)
 

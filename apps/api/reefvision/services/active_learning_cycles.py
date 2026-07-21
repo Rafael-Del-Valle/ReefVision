@@ -102,6 +102,13 @@ class ActiveLearningCycleService:
             dataset_version_id=cycle.dataset_version_id,
             training_run_id=cycle.training_run_id,
             review_queue_id=cycle.review_queue_id,
+            embedding_provider_id=cycle.embedding_provider_id,
+            embedding_model_id=cycle.embedding_model_id,
+            embedding_model_checksum=cycle.embedding_model_checksum,
+            queue_revision=cycle.queue_revision,
+            accepted_annotation_ids=list(cycle.accepted_annotation_ids_json or []),
+            rejected_item_ids=list(cycle.rejected_item_ids_json or []),
+            warnings=list(cycle.warnings_json or []),
             selection_config=dict(cycle.selection_config_json or {}),
             selection_result=dict(cycle.selection_result_json or {}),
             baseline_metrics=dict(cycle.baseline_metrics_json or {}),
@@ -295,6 +302,14 @@ class ActiveLearningCycleService:
             model = self.session.get(ModelRegistration, request.candidate_model_id)
             if model is None or model.project_id != cycle.project_id:
                 raise ValidationError("Candidate model must belong to the cycle project")
+            if model.id == cycle.source_model_id:
+                raise ValidationError(
+                    "The resulting model must remain distinct from the cycle source model"
+                )
+            if model.metadata_json.get("source_training_run_id") != run.id:
+                raise ValidationError(
+                    "Candidate model must be registered from the attached training run"
+                )
         cycle.training_run_id = run.id
         cycle.candidate_model_id = request.candidate_model_id
         cycle.status = "training" if run.status not in {"completed", "succeeded"} else "evaluation"
@@ -325,8 +340,60 @@ class ActiveLearningCycleService:
             model = self.session.get(ModelRegistration, candidate_model_id)
             if model is None or model.project_id != cycle.project_id:
                 raise ValidationError("Candidate model must belong to the cycle project")
+            if model.id == cycle.source_model_id:
+                raise ValidationError(
+                    "The resulting model must remain distinct from the cycle source model"
+                )
+            if (
+                cycle.training_run_id
+                and model.metadata_json.get("source_training_run_id") != cycle.training_run_id
+            ):
+                raise ValidationError(
+                    "Candidate model must be registered from the cycle training run"
+                )
         baseline = self._metric_map(request.baseline_metrics)
         candidate = self._metric_map(request.candidate_metrics)
+        compatibility_warnings: list[str] = []
+        comparison_compatible = True
+        if (
+            request.baseline_dataset_version_id
+            and request.candidate_dataset_version_id
+            and request.baseline_dataset_version_id != request.candidate_dataset_version_id
+        ):
+            comparison_compatible = False
+            compatibility_warnings.append(
+                "Baseline and candidate evaluations use different immutable dataset versions."
+            )
+        elif bool(request.baseline_dataset_version_id) != bool(
+            request.candidate_dataset_version_id
+        ):
+            compatibility_warnings.append(
+                "Dataset compatibility is not fully specified for both evaluations."
+            )
+        if (
+            request.baseline_metric_schema_id
+            and request.candidate_metric_schema_id
+            and request.baseline_metric_schema_id != request.candidate_metric_schema_id
+        ):
+            comparison_compatible = False
+            compatibility_warnings.append(
+                "Baseline and candidate evaluations use incompatible metric schemas."
+            )
+        elif bool(request.baseline_metric_schema_id) != bool(request.candidate_metric_schema_id):
+            compatibility_warnings.append(
+                "Metric-schema compatibility is not fully specified for both evaluations."
+            )
+        baseline_keys = set(baseline)
+        candidate_keys = set(candidate)
+        if baseline_keys and candidate_keys and not baseline_keys.intersection(candidate_keys):
+            comparison_compatible = False
+            compatibility_warnings.append(
+                "Baseline and candidate evaluations contain no shared metric names."
+            )
+        elif baseline_keys != candidate_keys:
+            compatibility_warnings.append(
+                "Metric sets differ; only shared, explicitly gated metrics are comparable."
+            )
         gates = [
             PromotionGate.model_validate(item)
             for item in dict(cycle.promotion_gates_json or {}).get("gates", [])
@@ -363,7 +430,9 @@ class ActiveLearningCycleService:
                     ),
                 )
             )
-        all_required_passed = all(item.passed for item in results if item.required)
+        all_required_passed = comparison_compatible and all(
+            item.passed for item in results if item.required
+        )
         promoted = all_required_passed and candidate_model_id is not None
         cycle.baseline_metrics_json = baseline
         cycle.candidate_metrics_json = candidate
@@ -371,7 +440,16 @@ class ActiveLearningCycleService:
             "results": [item.model_dump(mode="json") for item in results],
             "all_required_gates_passed": all_required_passed,
             "promoted": promoted,
+            "comparison_compatible": comparison_compatible,
+            "compatibility_warnings": compatibility_warnings,
+            "baseline_dataset_version_id": request.baseline_dataset_version_id,
+            "candidate_dataset_version_id": request.candidate_dataset_version_id,
+            "baseline_metric_schema_id": request.baseline_metric_schema_id,
+            "candidate_metric_schema_id": request.candidate_metric_schema_id,
         }
+        cycle.warnings_json = list(
+            dict.fromkeys([*list(cycle.warnings_json or []), *compatibility_warnings])
+        )
         cycle.candidate_model_id = candidate_model_id
         cycle.promoted_model_id = candidate_model_id if promoted else None
         cycle.status = "promoted" if promoted else "retained_baseline"
@@ -384,6 +462,8 @@ class ActiveLearningCycleService:
                 "candidate_evaluated",
                 promoted=promoted,
                 all_required_gates_passed=all_required_passed,
+                comparison_compatible=comparison_compatible,
+                compatibility_warnings=compatibility_warnings,
                 stop_reasons=stop_reasons,
             ),
         ]
@@ -395,6 +475,8 @@ class ActiveLearningCycleService:
             promoted=promoted,
             stopped=stopped,
             stop_reasons=stop_reasons,
+            comparison_compatible=comparison_compatible,
+            compatibility_warnings=compatibility_warnings,
         )
 
     def _stop_reasons(

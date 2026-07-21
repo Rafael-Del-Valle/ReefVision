@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from reefvision.api.routes.active_learning import router as active_learning_router
+from reefvision.api.routes.active_learning_cycles import router as active_learning_cycles_router
 from reefvision.api.routes.annotations import router as annotations_router
 from reefvision.api.routes.artifacts import router as artifacts_router
 from reefvision.api.routes.assist import router as assist_router
@@ -33,6 +34,7 @@ from reefvision.api.routes.projects import router as projects_router
 from reefvision.api.routes.provider_capabilities import (
     router as provider_capabilities_router,
 )
+from reefvision.api.routes.provider_lifecycle import router as provider_lifecycle_router
 from reefvision.api.routes.quality_control import router as quality_control_router
 from reefvision.api.routes.raster_edits import router as raster_edits_router
 from reefvision.api.routes.review_queues import router as review_queues_router
@@ -58,6 +60,8 @@ api_router.include_router(health_router)
 api_router.include_router(capabilities_router)
 api_router.include_router(system_router)
 api_router.include_router(provider_capabilities_router)
+api_router.include_router(provider_lifecycle_router)
+api_router.include_router(active_learning_cycles_router)
 api_router.include_router(training_router)
 api_router.include_router(training_reports_router)
 api_router.include_router(classification_router)

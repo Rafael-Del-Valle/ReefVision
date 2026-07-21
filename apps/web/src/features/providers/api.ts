@@ -7,10 +7,40 @@ async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
   if (!response.ok) {
     let message = `Request failed with HTTP ${response.status}`;
     try {
-      const payload = (await response.json()) as { detail?: string };
+      const payload = (await response.json()) as {
+        detail?: string | { message?: string; reason?: string };
+      };
       if (typeof payload.detail === "string") message = payload.detail;
+      if (payload.detail && typeof payload.detail === "object") {
+        message = payload.detail.message ?? payload.detail.reason ?? message;
+      }
     } catch {
       // Keep the status fallback when the response is not JSON.
+    }
+    throw new ProviderApiError(message);
+  }
+  return (await response.json()) as T;
+}
+
+async function mutate<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    method: "POST",
+    headers:
+      body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!response.ok) {
+    let message = `Request failed with HTTP ${response.status}`;
+    try {
+      const payload = (await response.json()) as {
+        detail?: string | { message?: string; reason?: string };
+      };
+      if (typeof payload.detail === "string") message = payload.detail;
+      if (payload.detail && typeof payload.detail === "object") {
+        message = payload.detail.message ?? payload.detail.reason ?? message;
+      }
+    } catch {
+      // Keep the HTTP fallback.
     }
     throw new ProviderApiError(message);
   }
@@ -130,5 +160,189 @@ export function compareProviderBenchmarks(
   return request<ProviderBenchmarkComparison>(
     `/provider-benchmarks/compare${suffix}`,
     signal,
+  );
+}
+
+export type ProviderLifecycleState =
+  | "ready"
+  | "unavailable"
+  | "degraded"
+  | "loading"
+  | "loaded"
+  | "failed"
+  | "unloaded";
+
+export interface ProviderModelAsset {
+  id: string;
+  provider_id: string;
+  provider_version: string;
+  model_id: string;
+  architecture: string;
+  task: string;
+  capabilities: Record<string, boolean>;
+  checkpoint_path: string;
+  checkpoint_path_kind: "managed" | "trusted_external";
+  checkpoint_sha256: string | null;
+  checkpoint_size_bytes: number | null;
+  checkpoint_format: string;
+  source: string;
+  revision: string | null;
+  required_packages: string[];
+  optional_packages: string[];
+  supported_devices: string[];
+  preferred_device: "auto" | "cpu" | "cuda";
+  estimated_vram_bytes: number | null;
+  input_types: string[];
+  output_types: string[];
+  prompt_types: string[];
+  supports_training: boolean;
+  supports_inference: boolean;
+  supports_video: boolean;
+  state: ProviderLifecycleState;
+  failure_reason: string | null;
+  verification: Record<string, unknown>;
+  last_health_check: Record<string, unknown>;
+  last_health_check_at: string | null;
+  last_successful_load_at: string | null;
+  last_successful_inference_at: string | null;
+  metadata: Record<string, unknown>;
+  latest_acceptance_status: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProviderModelAssetList {
+  items: ProviderModelAsset[];
+  total: number;
+  limit: number;
+  offset: number;
+  duplicate_checksum_groups: string[][];
+}
+
+export interface ProviderLifecycleAction {
+  asset: ProviderModelAsset;
+  action: string;
+  state: ProviderLifecycleState;
+  resolved_device: string | null;
+  details: Record<string, unknown>;
+  warnings: string[];
+}
+
+export interface ProviderAcceptanceRecord {
+  id: string;
+  run_id: string;
+  provider_asset_id: string | null;
+  provider_id: string;
+  model_id: string;
+  checkpoint_sha256: string | null;
+  device: string;
+  runtime_versions: Record<string, string>;
+  load_result: string;
+  inference_result: string;
+  unload_result: string;
+  peak_memory_bytes: number | null;
+  execution_time_ms: number;
+  warnings: string[];
+  failure_reason: string | null;
+  test_input_identifier: string;
+  validation_kind: "software_acceptance";
+  recorded_at: string;
+}
+
+export interface ProviderAcceptanceList {
+  items: ProviderAcceptanceRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ProviderInferenceResult {
+  request_id: string;
+  provider_id: string;
+  model_id: string;
+  task: string;
+  resolved_device: string;
+  outputs: Array<Record<string, unknown>>;
+  metadata: Record<string, unknown>;
+  warnings: string[];
+}
+
+export function discoverProviderModels() {
+  return mutate<{ discovered_count: number; warnings: string[] }>(
+    "/provider-models/discover",
+  );
+}
+
+export function listProviderModels(signal?: AbortSignal) {
+  return request<ProviderModelAssetList>("/provider-models?limit=200", signal);
+}
+
+export function verifyProviderModel(assetId: string) {
+  return mutate<ProviderLifecycleAction>(`/provider-models/${assetId}/verify`);
+}
+
+export function diagnoseProviderModel(
+  assetId: string,
+  device: "auto" | "cpu" | "cuda",
+) {
+  return mutate<ProviderLifecycleAction>(
+    `/provider-models/${assetId}/diagnose`,
+    { device },
+  );
+}
+
+export function loadProviderModel(
+  assetId: string,
+  device: "auto" | "cpu" | "cuda",
+) {
+  return mutate<ProviderLifecycleAction>(`/provider-models/${assetId}/load`, {
+    device,
+  });
+}
+
+export function healthCheckProviderModel(
+  assetId: string,
+  payload: {
+    device: "auto" | "cpu" | "cuda";
+    kind: "metadata" | "load";
+    keep_loaded: boolean;
+  },
+) {
+  return mutate<ProviderLifecycleAction>(
+    `/provider-models/${assetId}/health-check`,
+    payload,
+  );
+}
+
+export function unloadProviderModel(assetId: string) {
+  return mutate<ProviderLifecycleAction>(`/provider-models/${assetId}/unload`);
+}
+
+export function listProviderAcceptance(assetId: string, signal?: AbortSignal) {
+  const search = new URLSearchParams({ asset_id: assetId, limit: "50" });
+  return request<ProviderAcceptanceList>(
+    `/provider-acceptance-records?${search}`,
+    signal,
+  );
+}
+
+export function inferProviderModel(
+  assetId: string,
+  payload: {
+    request_id: string;
+    image_id: string;
+    device: "auto" | "cpu" | "cuda";
+    parameters: Record<string, unknown>;
+  },
+) {
+  return mutate<ProviderInferenceResult>(
+    `/provider-models/${assetId}/infer`,
+    payload,
+  );
+}
+
+export function cancelProviderRequest(requestId: string) {
+  return mutate<{ request_id: string; cancellation_requested: boolean }>(
+    `/provider-requests/${requestId}/cancel`,
   );
 }

@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from reefvision.ml import depth_runtime
+from reefvision.schemas.depth import DepthMapGenerateRequest
 
 
 def install_dependency_stubs(monkeypatch) -> None:
@@ -160,3 +163,13 @@ def test_uncached_remote_model_requires_explicit_network(monkeypatch) -> None:
     assert result["ready"] is True
     assert result["requires_network"] is True
     assert result["model_source"] == "remote"
+
+
+def test_depth_generation_never_downloads_weights_during_inference() -> None:
+    with pytest.raises(ValueError, match="cannot download weights"):
+        DepthMapGenerateRequest(
+            provider_id="depth_anything_v2_relative",
+            model_id="depth-anything/remote-model",
+            local_files_only=False,
+            depth_kind="relative",
+        )

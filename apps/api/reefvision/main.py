@@ -28,6 +28,13 @@ from reefvision.ml.assist_runtime import AssistRuntime
 from reefvision.ml.catalog_expansion import apply_catalog_expansion_runtime_patches
 from reefvision.ml.dependencies import configure_provider_runtime
 from reefvision.ml.fastsam_runtime_patch import apply_fastsam_runtime_patch
+from reefvision.ml.provider_contract import (
+    ProviderCancelledError,
+    ProviderLifecycleError,
+    ProviderOutOfMemoryError,
+    ProviderUnavailableError,
+)
+from reefvision.ml.provider_lifecycle import ProviderRuntimeManager
 from reefvision.ml.sam_runtime_patch import apply_sam_runtime_patch
 from reefvision.services.bundled_models import (
     install_bundled_catalog_models,
@@ -94,6 +101,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             stop_event.set()
             if worker_task is not None:
                 await worker_task
+            application.state.provider_runtime.unload()
             engine.dispose()
             LOGGER.info(
                 "ReefVision API stopped",
@@ -109,6 +117,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.engine = engine
     app.state.session_factory = session_factory
     app.state.assist_runtime = AssistRuntime(active_settings)
+    app.state.provider_runtime = ProviderRuntimeManager()
     app.state.catalog_startup_warnings = catalog_startup_warnings
     app.state.bundled_catalog_ids = bundled_catalog_ids
     app.add_middleware(
@@ -131,6 +140,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
         )
         return JSONResponse(status_code=410, content={"detail": str(exc)})
+
+    @app.exception_handler(ProviderLifecycleError)
+    async def handle_provider_failure(_: Request, exc: ProviderLifecycleError) -> JSONResponse:
+        if isinstance(exc, ProviderOutOfMemoryError):
+            status_code = 507
+        elif isinstance(exc, ProviderUnavailableError):
+            status_code = 503
+        elif isinstance(exc, ProviderCancelledError):
+            status_code = 409
+        else:
+            status_code = 422
+        LOGGER.warning(
+            "Provider lifecycle failure",
+            extra={
+                "event_id": "provider_lifecycle_failure",
+                "component": "provider",
+                "error_code": exc.code,
+            },
+        )
+        return JSONResponse(
+            status_code=status_code,
+            content={"detail": {"code": exc.code, "message": str(exc)}},
+        )
 
     @app.exception_handler(NotFoundError)
     async def handle_not_found(_: Request, exc: NotFoundError) -> JSONResponse:

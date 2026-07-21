@@ -470,6 +470,13 @@ export interface ModelCatalogEntry {
   checksum: string | null;
   size_bytes: number | null;
   installation_state: ModelCatalogInstallationState;
+  installation_reason: string | null;
+  metadata_verified: boolean;
+  provider_ready: boolean;
+  provider_state: string;
+  provider_failure_reason: string | null;
+  capabilities: Record<string, boolean>;
+  latest_acceptance_status: string | null;
   compatibility_reasons: string[];
   selection_kind: ModelCatalogSelectionKind;
   registration_id: string | null;
@@ -749,6 +756,8 @@ export interface QualityControlRunRecord {
   job_id: string | null;
   scope_type: string;
   status: string;
+  revision: number;
+  generation_key: string | null;
   rule_categories_json: string[];
   selected_rule_ids_json: string[];
   thresholds_json: Record<string, unknown>;
@@ -856,6 +865,8 @@ export interface ReviewQueueRecord {
   regenerated_from_queue_id: string | null;
   scope_type: string;
   status: string;
+  revision: number;
+  generation_key: string | null;
   formula_id: string;
   formula_version: string;
   configuration_json: Record<string, unknown>;
@@ -866,6 +877,9 @@ export interface ReviewQueueRecord {
   created_at: string;
   completed_at: string | null;
   error_message: string | null;
+  promoted_dataset_version_id: string | null;
+  promoted_cycle_id: string | null;
+  promoted_at: string | null;
 }
 
 export interface ReviewQueueItem {
@@ -888,6 +902,10 @@ export interface ReviewQueueItem {
   score_breakdown_json: ReviewScoreComponent[];
   input_checksum: string;
   reason_summary: string | null;
+  selection_reasons_json: string[];
+  manual_state: string;
+  fragment_key: string | null;
+  near_duplicate_key: string | null;
   skip_reason: string | null;
   created_at: string;
   updated_at: string;

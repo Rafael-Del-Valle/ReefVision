@@ -115,18 +115,14 @@ def depth_anything_v2(
             .squeeze(0)
         )
     values = resized.detach().float().cpu().numpy().astype(np.float32)
+    if values.shape != (image.height, image.width) or not np.isfinite(values).all():
+        raise ValidationError("Depth Anything returned misaligned, NaN, or infinite depth values")
     if metric:
         if maximum_metric_depth is not None:
             values = np.clip(values, 0, float(maximum_metric_depth))
         positive = values[np.isfinite(values) & (values > 0)]
         if positive.size == 0:
             raise ValidationError("The metric depth checkpoint produced no positive depths")
-    else:
-        finite = np.isfinite(values)
-        observed = values[finite]
-        low, high = float(np.min(observed)), float(np.max(observed))
-        if high > low:
-            values[finite] = (values[finite] - low) / (high - low)
     metadata = {
         "runtime": "transformers.AutoModelForDepthEstimation",
         "resolved_device": resolved_device,
@@ -136,6 +132,9 @@ def depth_anything_v2(
         "maximum_metric_depth": maximum_metric_depth,
         "checkpoint_depth_estimation_type": config_payload.get("depth_estimation_type"),
         "checkpoint_max_depth": checkpoint_max_depth,
+        "raw_model_output_preserved": True,
+        "raw_model_output_normalization": "none",
+        "display_normalization": "percentile_02_98_inverted_preview_only",
     }
     return values, metadata
 

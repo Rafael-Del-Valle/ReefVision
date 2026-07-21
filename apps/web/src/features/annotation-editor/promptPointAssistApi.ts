@@ -46,10 +46,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       if (
         payload.detail &&
         typeof payload.detail === "object" &&
-        "reason" in payload.detail &&
-        typeof payload.detail.reason === "string"
+        ("message" in payload.detail || "reason" in payload.detail)
       ) {
-        message = payload.detail.reason;
+        const detail = payload.detail as {
+          message?: unknown;
+          reason?: unknown;
+        };
+        if (typeof detail.message === "string") message = detail.message;
+        else if (typeof detail.reason === "string") message = detail.reason;
       }
     } catch {
       // Keep the HTTP fallback for non-JSON failures.
@@ -63,10 +67,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export function createPromptAssistSession(
   imageId: string,
   payload: { model_id: string; device: string },
+  signal?: AbortSignal,
 ) {
   return request<PromptAssistSession>(`/images/${imageId}/assist-sessions`, {
     method: "POST",
     body: JSON.stringify(payload),
+    signal,
   });
 }
 
@@ -77,10 +83,12 @@ export function applyPromptAssistPoints(
     negative_points: Array<{ x: number; y: number }>;
     context_box?: PromptAssistCandidateBox | null;
   },
+  signal?: AbortSignal,
 ) {
   return request<PromptAssistSession>(`/assist-sessions/${sessionId}/points`, {
     method: "POST",
     body: JSON.stringify(payload),
+    signal,
   });
 }
 

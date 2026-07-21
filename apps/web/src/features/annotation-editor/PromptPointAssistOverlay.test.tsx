@@ -114,6 +114,17 @@ function promptAssistModel(): ModelCatalogEntry {
     installed_asset_id: "registered-model:model-1",
     installed_path: "models/registered/model-1",
     installed_checksum: null,
+    metadata_verified: true,
+    provider_ready: true,
+    provider_state: "unloaded",
+    provider_failure_reason: null,
+    capabilities: {
+      point_prompt: true,
+      negative_point_prompt: true,
+      box_prompt: true,
+      mixed_point_box_prompt: true,
+    },
+    latest_acceptance_status: "passed",
     advanced_only: false,
     requires_confirmation: false,
     selection_kind: "registered_model",
@@ -344,11 +355,15 @@ describe("PromptPointAssistOverlay", () => {
     expect(previewButton).toBeEnabled();
     await user.click(previewButton);
     await waitFor(() =>
-      expect(applyPromptAssistPoints).toHaveBeenCalledWith("assist-1", {
-        positive_points: [{ x: 100, y: 120 }],
-        negative_points: [],
-        context_box: null,
-      }),
+      expect(applyPromptAssistPoints).toHaveBeenCalledWith(
+        "assist-1",
+        {
+          positive_points: [{ x: 100, y: 120 }],
+          negative_points: [],
+          context_box: null,
+        },
+        expect.anything(),
+      ),
     );
     expect(
       await screen.findByText(/candidate ready via segment_anything/i),
@@ -489,22 +504,131 @@ describe("PromptPointAssistOverlay", () => {
     await user.click(screen.getByRole("button", { name: /close/i }));
   });
 
+  it("supports a source-pixel box prompt without forcing a point", async () => {
+    const user = userEvent.setup();
+    renderOverlay();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Assist model")).toHaveValue("model-1"),
+    );
+
+    await user.click(screen.getByLabelText(/Use source-pixel context box/i));
+    await user.clear(screen.getByLabelText("x_min"));
+    await user.type(screen.getByLabelText("x_min"), "12");
+    await user.clear(screen.getByLabelText("y_min"));
+    await user.type(screen.getByLabelText("y_min"), "18");
+    await user.click(
+      screen.getByRole("button", { name: /generate mask preview/i }),
+    );
+
+    await waitFor(() =>
+      expect(applyPromptAssistPoints).toHaveBeenCalledWith(
+        "assist-1",
+        {
+          positive_points: [],
+          negative_points: [],
+          context_box: { x_min: 12, y_min: 18, x_max: 64, y_max: 64 },
+        },
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("preserves only compatible prompts when switching providers", async () => {
+    const user = userEvent.setup();
+    const fastSam = {
+      ...promptAssistModel(),
+      catalog_id: "fastsam",
+      display_name: "FastSAM",
+      resolved_model_id: "model-2",
+      installed_asset_id: "registered-model:model-2",
+      capabilities: {
+        point_prompt: true,
+        negative_point_prompt: false,
+        box_prompt: true,
+        mixed_point_box_prompt: false,
+      },
+    };
+    vi.mocked(getProjectModelCatalog).mockResolvedValue({
+      ...modelCatalog,
+      models: [promptAssistModel(), fastSam],
+    });
+    const { svg } = renderOverlay();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Assist model")).toHaveValue("model-1"),
+    );
+
+    fireEvent.pointerDown(svg, { button: 0, clientX: 100, clientY: 120 });
+    await user.click(screen.getByRole("button", { name: /Exclude point/i }));
+    fireEvent.pointerDown(svg, { button: 0, clientX: 130, clientY: 150 });
+    expect(await screen.findByText("1 exclude")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Assist model"), "model-2");
+    await waitFor(() =>
+      expect(screen.getByText("0 exclude")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("1 include")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Exclude point/i }),
+    ).toBeDisabled();
+    expect(
+      screen.getByLabelText(/Use source-pixel context box/i),
+    ).toBeEnabled();
+  });
+
+  it("aborts an obsolete preview request when the provider changes", async () => {
+    const user = userEvent.setup();
+    const fastSam = {
+      ...promptAssistModel(),
+      catalog_id: "fastsam",
+      display_name: "FastSAM",
+      resolved_model_id: "model-2",
+      installed_asset_id: "registered-model:model-2",
+      capabilities: {
+        point_prompt: true,
+        negative_point_prompt: false,
+        box_prompt: true,
+        mixed_point_box_prompt: false,
+      },
+    };
+    vi.mocked(getProjectModelCatalog).mockResolvedValue({
+      ...modelCatalog,
+      models: [promptAssistModel(), fastSam],
+    });
+    vi.mocked(applyPromptAssistPoints).mockImplementation(
+      () => new Promise(() => undefined),
+    );
+    const { svg } = renderOverlay();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Assist model")).toHaveValue("model-1"),
+    );
+    fireEvent.pointerDown(svg, { button: 0, clientX: 100, clientY: 120 });
+    await user.click(
+      screen.getByRole("button", { name: /generate mask preview/i }),
+    );
+    await waitFor(() => expect(applyPromptAssistPoints).toHaveBeenCalledOnce());
+    const signal = vi.mocked(applyPromptAssistPoints).mock.calls[0][2];
+
+    await user.selectOptions(screen.getByLabelText("Assist model"), "model-2");
+    expect(signal?.aborted).toBe(true);
+    expect(screen.queryByText(/Candidate ready via/i)).not.toBeInTheDocument();
+  });
+
   it("tracks the workspace default until the user chooses an output", async () => {
-  const user = userEvent.setup();
-  const { rerenderWorkspace } = renderOverlay({ activeWorkspace: "boxes" });
-  await waitFor(() =>
-    expect(screen.getByLabelText("Assist model")).toHaveValue("model-1"),
-  );
+    const user = userEvent.setup();
+    const { rerenderWorkspace } = renderOverlay({ activeWorkspace: "boxes" });
+    await waitFor(() =>
+      expect(screen.getByLabelText("Assist model")).toHaveValue("model-1"),
+    );
 
-  expect(screen.getByLabelText("Accept as raster mask")).toBeChecked();
-  rerenderWorkspace("masks");
-  await waitFor(() =>
-    expect(screen.getByLabelText("Accept as polygon")).toBeChecked(),
-  );
+    expect(screen.getByLabelText("Accept as raster mask")).toBeChecked();
+    rerenderWorkspace("masks");
+    await waitFor(() =>
+      expect(screen.getByLabelText("Accept as polygon")).toBeChecked(),
+    );
 
-  await user.click(screen.getByLabelText("Accept as raster mask"));
-  rerenderWorkspace("boxes");
-  rerenderWorkspace("masks");
-  expect(screen.getByLabelText("Accept as raster mask")).toBeChecked();
+    await user.click(screen.getByLabelText("Accept as raster mask"));
+    rerenderWorkspace("boxes");
+    rerenderWorkspace("masks");
+    expect(screen.getByLabelText("Accept as raster mask")).toBeChecked();
   });
 });

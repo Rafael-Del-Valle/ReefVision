@@ -163,7 +163,7 @@ class ModelInstallService:
             installation_reason=entry.installation_reason,
             provider_id=entry.provider_id,
             provider_version=installed_provider_version,
-            provider_ready=installed_provider_version is not None,
+            provider_ready=entry.provider_ready or installed_provider_version is not None,
             expected_files_valid=bool(entry.expected_files)
             and all(
                 item.size_bytes > 0 and len(item.sha256) == 64 for item in entry.expected_files

@@ -35,6 +35,9 @@ class SelectionCandidate:
     ensemble_probabilities: tuple[tuple[float, ...], ...] = ()
     base_score: float = 0.0
     group_id: str | None = None
+    fragment_id: str | None = None
+    class_ids: tuple[str, ...] = ()
+    manual_priority: bool = False
     metadata: Mapping[str, object] | None = None
 
 
@@ -47,8 +50,11 @@ class SelectionResult:
     diversity: float
     density: float
     disagreement: float
+    class_balance: float
     cluster_id: int | None
     group_id: str | None
+    fragment_id: str | None
+    manual_priority: bool
     explanation: tuple[str, ...]
 
 
@@ -190,16 +196,20 @@ def select_candidates(
     strategy: SelectionStrategy,
     seed: int = 0,
     group_limit: int | None = None,
+    fragment_limit: int | None = None,
     uncertainty_weight: float = 0.5,
     diversity_weight: float = 0.3,
     density_weight: float = 0.1,
     disagreement_weight: float = 0.1,
     base_score_weight: float = 0.1,
+    class_balance_weight: float = 0.1,
 ) -> list[SelectionResult]:
     if budget < 1:
         raise ValueError("Selection budget must be positive")
     if group_limit is not None and group_limit < 1:
         raise ValueError("Group limit must be positive")
+    if fragment_limit is not None and fragment_limit < 1:
+        raise ValueError("Fragment limit must be positive")
     if not candidates:
         return []
     matrix, embedding_indices = _embedding_matrix(candidates)
@@ -239,13 +249,34 @@ def select_candidates(
     pareto = _pareto_front(list(zip(uncertainty, density, strict=True)))
 
     selected: list[int] = []
-    selected_details: dict[int, tuple[float, float]] = {}
+    selected_details: dict[int, tuple[float, float, float]] = {}
     group_counts: dict[str, int] = defaultdict(int)
+    fragment_counts: dict[str, int] = defaultdict(int)
+    selected_classes: set[str] = set()
+    class_frequency: dict[str, int] = defaultdict(int)
+    for candidate in candidates:
+        for class_id in set(candidate.class_ids):
+            class_frequency[class_id] += 1
     remaining = set(range(len(candidates)))
 
     def allowed(index: int) -> bool:
+        if candidates[index].manual_priority:
+            return True
         group = candidates[index].group_id
-        return group_limit is None or group is None or group_counts[group] < group_limit
+        fragment = candidates[index].fragment_id
+        group_allowed = group_limit is None or group is None or group_counts[group] < group_limit
+        fragment_allowed = (
+            fragment_limit is None or fragment is None or fragment_counts[fragment] < fragment_limit
+        )
+        return group_allowed and fragment_allowed
+
+    def class_balance(index: int) -> float:
+        class_ids = set(candidates[index].class_ids)
+        if not class_ids:
+            return 1.0 if selected_classes else 0.5
+        rarity = sum(1.0 / class_frequency[item] for item in class_ids) / len(class_ids)
+        missing = sum(item not in selected_classes for item in class_ids) / len(class_ids)
+        return min(1.0, (rarity + missing) / 2.0)
 
     def current_diversity(index: int) -> float:
         embedding_index = candidate_to_embedding.get(index)
@@ -259,7 +290,7 @@ def select_candidates(
         return float(np.min(pairwise[embedding_index, selected_embeddings]))
 
     while remaining and len(selected) < min(budget, len(candidates)):
-        scored: list[tuple[float, str, int, float]] = []
+        scored: list[tuple[float, str, int, float, float]] = []
         for index in remaining:
             if not allowed(index):
                 continue
@@ -288,30 +319,38 @@ def select_candidates(
                 strategy_score = disagreement[index]
             else:
                 strategy_score = uncertainty[index]
+            balance = class_balance(index)
             combined = strategy_score + (
                 uncertainty_weight * uncertainty[index]
                 + diversity_weight * diversity
                 + density_weight * density[index]
                 + disagreement_weight * disagreement[index]
                 + base_score_weight * base_scores[index]
+                + class_balance_weight * balance
             )
-            scored.append((combined, candidates[index].candidate_id, index, diversity))
+            if candidates[index].manual_priority:
+                combined += 10.0
+            scored.append((combined, candidates[index].candidate_id, index, diversity, balance))
         if not scored:
             break
-        score, _candidate_id, index, diversity = max(
+        score, _candidate_id, index, diversity, balance = max(
             scored,
             key=lambda item: (item[0], item[1]),
         )
         selected.append(index)
-        selected_details[index] = (score, diversity)
+        selected_details[index] = (score, diversity, balance)
         remaining.remove(index)
         group_id = candidates[index].group_id
         if group_id is not None:
             group_counts[group_id] += 1
+        fragment_id = candidates[index].fragment_id
+        if fragment_id is not None:
+            fragment_counts[fragment_id] += 1
+        selected_classes.update(candidates[index].class_ids)
 
     results: list[SelectionResult] = []
     for rank, index in enumerate(selected, start=1):
-        score, diversity = selected_details[index]
+        score, diversity, balance = selected_details[index]
         explanations = [f"strategy={strategy}"]
         if candidates[index].probabilities:
             explanations.append(f"uncertainty={uncertainty[index]:.4f}")
@@ -321,6 +360,10 @@ def select_candidates(
             explanations.append(f"disagreement={disagreement[index]:.4f}")
         if cluster_ids[index] is not None:
             explanations.append(f"cluster={cluster_ids[index]}")
+        if candidates[index].class_ids:
+            explanations.append(f"class_balance={balance:.4f}")
+        if candidates[index].manual_priority:
+            explanations.append("manual_priority=true")
         results.append(
             SelectionResult(
                 candidate_id=candidates[index].candidate_id,
@@ -330,8 +373,11 @@ def select_candidates(
                 diversity=diversity,
                 density=density[index],
                 disagreement=disagreement[index],
+                class_balance=balance,
                 cluster_id=cluster_ids[index],
                 group_id=candidates[index].group_id,
+                fragment_id=candidates[index].fragment_id,
+                manual_priority=candidates[index].manual_priority,
                 explanation=tuple(explanations),
             )
         )

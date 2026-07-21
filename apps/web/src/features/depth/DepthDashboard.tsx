@@ -15,6 +15,7 @@ import {
   measureMaskDepth,
   queueDepthMap,
 } from "./api";
+import { listProviderModels, type ProviderModelAsset } from "../providers/api";
 
 interface MaskSummary {
   id: string;
@@ -35,7 +36,8 @@ export function DepthDashboard({ project }: { project: Project }) {
     "depth-anything/Depth-Anything-V2-Small-hf",
   );
   const [device, setDevice] = useState("auto");
-  const [localOnly, setLocalOnly] = useState(true);
+  const localOnly = true;
+  const [registeredDepthAssetId, setRegisteredDepthAssetId] = useState("");
   const [maximumDepth, setMaximumDepth] = useState(20);
   const [useIntrinsics, setUseIntrinsics] = useState(false);
   const [fx, setFx] = useState(1000);
@@ -51,6 +53,24 @@ export function DepthDashboard({ project }: { project: Project }) {
   >("idle");
 
   const usesFixture = providerId === "luminance_relative";
+  const providerModels = useQuery({
+    queryKey: ["provider-models"],
+    queryFn: ({ signal }) => listProviderModels(signal),
+  });
+  const registeredDepthAssets = useMemo(
+    () =>
+      (providerModels.data?.items ?? []).filter(
+        (asset: ProviderModelAsset) =>
+          asset.task === "depth" &&
+          ["ready", "loaded", "unloaded"].includes(asset.state) &&
+          asset.verification.verified === true,
+      ),
+    [providerModels.data?.items],
+  );
+  const registeredDepthAsset =
+    registeredDepthAssets.find(
+      (asset) => asset.id === registeredDepthAssetId,
+    ) ?? null;
   const providerReadiness = useQuery({
     queryKey: [
       "depth-provider-readiness",
@@ -115,6 +135,23 @@ export function DepthDashboard({ project }: { project: Project }) {
   const providerCheckFailed = providerReadiness.isError;
   const selectedDepthMap =
     depthMaps.data?.find((item) => item.id === selectedDepthMapId) ?? null;
+
+  useEffect(() => {
+    if (
+      registeredDepthAssetId === "manual" ||
+      registeredDepthAssets.some((asset) => asset.id === registeredDepthAssetId)
+    ) {
+      return;
+    }
+    const preferred =
+      registeredDepthAssets.find(
+        (asset) => asset.model_id === "external/depth-anything-v2/small",
+      ) ?? registeredDepthAssets[0];
+    if (!preferred) return;
+    setRegisteredDepthAssetId(preferred.id);
+    setProviderId("depth_anything_v2_relative");
+    setModelId(preferred.checkpoint_path);
+  }, [registeredDepthAssetId, registeredDepthAssets]);
   const depthMeasurement = useQuery({
     queryKey: ["depth_mask_measurement", selectedMaskId, selectedDepthMapId],
     queryFn: ({ signal }) =>
@@ -222,13 +259,21 @@ export function DepthDashboard({ project }: { project: Project }) {
                   const provider = event.target.value;
                   setProviderId(provider);
                   if (provider === "luminance_relative") {
+                    setRegisteredDepthAssetId("manual");
                     setModelId("reefvision-luminance-fixture");
                   } else if (provider === "depth_anything_v2_metric") {
+                    setRegisteredDepthAssetId("manual");
                     setModelId(
                       "depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf",
                     );
                   } else {
-                    setModelId("depth-anything/Depth-Anything-V2-Small-hf");
+                    const preferred =
+                      registeredDepthAsset ?? registeredDepthAssets[0];
+                    setRegisteredDepthAssetId(preferred?.id ?? "manual");
+                    setModelId(
+                      preferred?.checkpoint_path ??
+                        "depth-anything/Depth-Anything-V2-Small-hf",
+                    );
                   }
                 }}
               >
@@ -243,11 +288,41 @@ export function DepthDashboard({ project }: { project: Project }) {
                 </option>
               </select>
             </label>
+            {registeredDepthAssets.length > 0 && (
+              <label>
+                Verified registered checkpoint
+                <select
+                  value={registeredDepthAssetId}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setRegisteredDepthAssetId(value);
+                    const asset = registeredDepthAssets.find(
+                      (candidate) => candidate.id === value,
+                    );
+                    if (asset) {
+                      setProviderId("depth_anything_v2_relative");
+                      setModelId(asset.checkpoint_path);
+                    }
+                  }}
+                >
+                  <option value="manual">Manual local path</option>
+                  {registeredDepthAssets.map((asset) => (
+                    <option key={asset.id} value={asset.id}>
+                      {asset.model_id} ·{" "}
+                      {asset.latest_acceptance_status ?? asset.state}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label>
               Model ID or local path
               <input
                 value={modelId}
-                onChange={(event) => setModelId(event.target.value)}
+                onChange={(event) => {
+                  setRegisteredDepthAssetId("manual");
+                  setModelId(event.target.value);
+                }}
               />
             </label>
             <label>
@@ -262,13 +337,13 @@ export function DepthDashboard({ project }: { project: Project }) {
               </select>
             </label>
             <label className="toggle-row">
-              <input
-                type="checkbox"
-                checked={localOnly}
-                onChange={(event) => setLocalOnly(event.target.checked)}
-              />
+              <input type="checkbox" checked disabled readOnly />
               Use installed/local checkpoints only
             </label>
+            <p className="annotation-helper">
+              Depth inference never downloads weights. Install or register a
+              checkpoint explicitly, then verify it before generation.
+            </p>
             {providerId === "depth_anything_v2_metric" && (
               <label>
                 Maximum metric depth: {maximumDepth} m
@@ -320,11 +395,6 @@ export function DepthDashboard({ project }: { project: Project }) {
                   Retry provider check
                 </button>
               </div>
-            )}
-            {!usesFixture && !localOnly && (
-              <p className="form-warning">
-                Network downloads are enabled for this generation request.
-              </p>
             )}
             {usesFixture && (
               <p className="form-warning">
@@ -475,6 +545,17 @@ export function DepthDashboard({ project }: { project: Project }) {
                     Valid pixels: {selectedDepthMap.valid_pixel_count}
                   </span>
                 </div>
+                <p className="annotation-helper">
+                  The NumPy export preserves raw model-relative values. This
+                  preview is display-normalized independently and has no
+                  physical unit.
+                </p>
+                {selectedDepthMap.depth_kind === "relative" && (
+                  <p className="form-warning">
+                    Relative depth is not centimeters, meters, or physical coral
+                    height without independent calibration.
+                  </p>
+                )}
                 <a href={depthContentUrl(selectedDepthMap.id)}>
                   Download NumPy depth array
                 </a>

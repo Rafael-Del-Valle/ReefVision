@@ -3,11 +3,13 @@ from __future__ import annotations
 from io import BytesIO
 from typing import cast
 
+import numpy as np
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from reefvision.storage.depth_maps import validate_depth_array
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project
 
@@ -125,3 +127,17 @@ def test_relative_depth_refuses_to_claim_absolute_size(client: TestClient) -> No
     assert payload["metric_width"] is None
     assert payload["depth_weighted_area_index"] is not None
     assert any("cannot produce absolute" in warning for warning in payload["warnings"])
+
+
+@pytest.mark.parametrize("invalid", [np.nan, np.inf, -np.inf])
+def test_depth_storage_rejects_nonfinite_model_output(invalid: float) -> None:
+    values = np.ones((3, 4), dtype=np.float32)
+    values[1, 2] = invalid
+
+    with pytest.raises(ValueError, match="NaN or infinite"):
+        validate_depth_array(
+            values,
+            expected_width=4,
+            expected_height=3,
+            depth_kind="relative",
+        )
