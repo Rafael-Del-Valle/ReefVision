@@ -80,6 +80,7 @@ def test_video_behavior_reports_tortuosity_turning_and_school_polarization(
     payload = response.json()
     first_track = next(item for item in payload["tracks"] if item["tracker_id"] == 1)
     assert first_track["distance_pixels"] == pytest.approx(20)
+    assert first_track["total_path_length_pixels"] == pytest.approx(20)
     assert first_track["net_displacement_pixels"] == pytest.approx(math.sqrt(200))
     assert first_track["path_tortuosity"] == pytest.approx(math.sqrt(2))
     assert first_track["mean_speed_pixels_per_second"] == pytest.approx(100)
@@ -100,6 +101,10 @@ def test_video_behavior_reports_tortuosity_turning_and_school_polarization(
     assert frames[0]["mean_pairwise_distance_pixels"] == pytest.approx(20)
     assert frames[0]["mean_nearest_neighbor_pixels"] == pytest.approx(20)
     assert frames[0]["school_spread_pixels"] == pytest.approx(10)
+    assert frames[0]["school_centroid_x_pixels"] == pytest.approx(5)
+    assert frames[0]["school_centroid_y_pixels"] == pytest.approx(15)
+    assert frames[0]["school_centroid_x_physical"] == pytest.approx(0.5)
+    assert frames[0]["school_centroid_y_physical"] == pytest.approx(1.5)
     assert frames[0]["polarization"] is None
     assert frames[1]["polarization"] == pytest.approx(1)
     assert frames[2]["polarization"] == pytest.approx(1)

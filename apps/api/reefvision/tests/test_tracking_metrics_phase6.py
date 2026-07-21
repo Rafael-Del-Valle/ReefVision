@@ -59,3 +59,29 @@ def test_identity_switch_fragmentation_and_depth_gating_are_quantified() -> None
     assert gated.matched_detection_count == 0
     assert gated.false_positive_count == 8
     assert gated.false_negative_count == 8
+
+
+def test_false_positive_and_false_negative_tracks_are_reported() -> None:
+    references = [
+        *[_box(frame, "fish-a", frame) for frame in range(3)],
+        *[_box(frame, "fish-b", 50 + frame) for frame in range(3)],
+    ]
+    predictions = [
+        *[_box(frame, "pred-a", frame) for frame in range(3)],
+        *[_box(frame, "pred-extra", 80 + frame) for frame in range(3)],
+    ]
+
+    metrics = evaluate_tracking(references, predictions, minimum_iou=0.5)
+
+    assert metrics.false_positive_count == 3
+    assert metrics.false_negative_count == 3
+    assert metrics.false_positive_track_count == 1
+    assert metrics.false_negative_track_count == 1
+    assert metrics.detection_precision == pytest.approx(0.5)
+    assert metrics.detection_recall == pytest.approx(0.5)
+    assert metrics.mostly_tracked_count == 1
+    assert metrics.mostly_lost_count == 1
+    assert {item.reference_track_id: item.coverage for item in metrics.per_track} == {
+        "fish-a": pytest.approx(1),
+        "fish-b": pytest.approx(0),
+    }

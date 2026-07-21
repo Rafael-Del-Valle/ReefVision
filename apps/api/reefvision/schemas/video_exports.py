@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from reefvision.schemas.jobs import JobResponse
 
@@ -26,3 +26,39 @@ class VideoRenderExportRequest(BaseModel):
 
 class VideoRenderExportResponse(BaseModel):
     job: JobResponse
+
+
+VideoDataExportFormat = Literal["csv", "json", "mot", "npz"]
+
+
+def _default_data_export_formats() -> list[VideoDataExportFormat]:
+    return ["csv", "json", "mot"]
+
+
+class VideoDataExportRequest(BaseModel):
+    formats: list[VideoDataExportFormat] = Field(
+        default_factory=_default_data_export_formats,
+        min_length=1,
+        max_length=4,
+    )
+    include_interpolated: bool = True
+    include_archived_tracks: bool = False
+    include_analysis_runs: bool = True
+    include_evaluation_runs: bool = True
+
+    @model_validator(mode="after")
+    def unique_formats(self) -> VideoDataExportRequest:
+        if len(self.formats) != len(set(self.formats)):
+            raise ValueError("Video data export formats must be unique")
+        return self
+
+
+class VideoDataExportResponse(BaseModel):
+    artifact_id: str
+    video_id: str
+    archive_path: str
+    manifest_path: str
+    archive_sha256: str
+    archive_size_bytes: int = Field(ge=0)
+    manifest_sha256: str
+    formats: list[str]

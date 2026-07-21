@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import csv
 import io
-import itertools
-import os
 import re
 from collections import Counter, defaultdict
-from hashlib import sha256
-from math import hypot, sqrt
+from datetime import UTC, datetime
+from math import ceil, hypot, sqrt
 from pathlib import Path
 from typing import BinaryIO
 from uuid import uuid4
@@ -20,13 +18,12 @@ from sqlalchemy.orm import Session
 from reefvision.config import Settings
 from reefvision.db.models import (
     Job,
-    LabelClass,
     ModelRegistration,
     Project,
     VideoAsset,
     VideoTrack,
 )
-from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
+from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.videos import (
     VideoAnalyticsRequest,
@@ -39,12 +36,25 @@ from reefvision.schemas.videos import (
     VideoTrackAnalytics,
     VideoTrackCreateRequest,
     VideoTrackingJobRequest,
-    VideoTrackKeyframe,
     VideoTrackResponse,
     VideoTrackUpdateRequest,
 )
-from reefvision.storage.datasets import canonical_json_bytes
+from reefvision.services.video_tracks import (
+    VideoTrackCorrectionService,
+    interpolate_track,
+    observation_center,
+    track_response,
+)
+from reefvision.storage.datasets import canonical_json_bytes, canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.videos import (
+    cleanup_video_upload,
+    commit_video_upload,
+    probe_video,
+    read_video_frame_jpeg,
+    remove_managed_video,
+    stage_video_upload,
+)
 
 SUPPORTED_VIDEO_SUFFIXES = {".mp4", ".mov", ".avi", ".mkv", ".m4v"}
 
@@ -58,63 +68,6 @@ def _safe_filename(filename: str | None) -> str:
     if suffix not in SUPPORTED_VIDEO_SUFFIXES:
         raise ValidationError("Supported video containers are MP4, MOV, AVI, MKV, and M4V")
     return sanitized
-
-
-def _track_response(track: VideoTrack) -> VideoTrackResponse:
-    return VideoTrackResponse(
-        id=track.id,
-        video_id=track.video_id,
-        label_class_id=track.label_class_id,
-        track_number=track.track_number,
-        geometry_kind=track.geometry_kind,
-        keyframes=[VideoTrackKeyframe.model_validate(item) for item in track.keyframes_json],
-        interpolation=track.interpolation,
-        status=track.status,
-        metadata_json=dict(track.metadata_json or {}),
-    )
-
-
-def _center(keyframe: VideoTrackKeyframe) -> tuple[float, float]:
-    return (
-        (keyframe.x_min + keyframe.x_max) / 2.0,
-        (keyframe.y_min + keyframe.y_max) / 2.0,
-    )
-
-
-def interpolate_track(track: VideoTrack) -> list[VideoTrackKeyframe]:
-    keyframes = sorted(
-        [VideoTrackKeyframe.model_validate(item) for item in track.keyframes_json],
-        key=lambda item: item.frame_index,
-    )
-    if len(keyframes) <= 1:
-        return keyframes
-    interpolated: list[VideoTrackKeyframe] = []
-    for left, right in itertools.pairwise(keyframes):
-        frame_delta = right.frame_index - left.frame_index
-        if frame_delta <= 0:
-            continue
-        for frame_index in range(left.frame_index, right.frame_index):
-            ratio = (frame_index - left.frame_index) / frame_delta
-            if track.interpolation == "hold":
-                ratio = 0.0
-            confidence = (
-                left.confidence
-                if right.confidence is None or left.confidence is None
-                else left.confidence + (right.confidence - left.confidence) * ratio
-            )
-            interpolated.append(
-                VideoTrackKeyframe(
-                    frame_index=frame_index,
-                    x_min=left.x_min + (right.x_min - left.x_min) * ratio,
-                    y_min=left.y_min + (right.y_min - left.y_min) * ratio,
-                    x_max=left.x_max + (right.x_max - left.x_max) * ratio,
-                    y_max=left.y_max + (right.y_max - left.y_max) * ratio,
-                    confidence=confidence,
-                    source="interpolated" if frame_index != left.frame_index else left.source,
-                )
-            )
-    interpolated.append(keyframes[-1])
-    return interpolated
 
 
 class VideoService:
@@ -146,66 +99,52 @@ class VideoService:
         safe_name = _safe_filename(filename)
         video_id = str(uuid4())
         suffix = Path(safe_name).suffix.casefold()
-        managed_path = f"{project.storage_root}/videos/{video_id}{suffix}"
-        destination = resolve_managed_project_path(self.settings, managed_path)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        temporary = destination.with_name(f".{destination.name}.upload")
-        digest = sha256()
-        size = 0
+        if media_type and not (
+            media_type.startswith("video/") or media_type == "application/octet-stream"
+        ):
+            raise ValidationError("The uploaded file does not declare a supported video media type")
+        staged = stage_video_upload(
+            self.settings,
+            project_storage_root=project.storage_root,
+            video_id=video_id,
+            suffix=suffix,
+            stream=stream,
+            maximum_bytes=self.settings.model_max_upload_bytes,
+        )
+        destination_committed = False
         try:
-            with temporary.open("wb") as output:
-                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                    size += len(chunk)
-                    if size > self.settings.model_max_upload_bytes:
-                        raise ValidationError("Video exceeds the configured upload limit")
-                    digest.update(chunk)
-                    output.write(chunk)
-            checksum = digest.hexdigest()
             existing = self.session.scalar(
                 select(VideoAsset).where(
                     VideoAsset.project_id == project.id,
-                    VideoAsset.sha256 == checksum,
+                    VideoAsset.sha256 == staged.sha256,
                 )
             )
             if existing is not None:
-                temporary.unlink(missing_ok=True)
+                cleanup_video_upload(staged, include_destination=False)
                 return VideoImportResponse(
                     video=VideoAssetResponse.model_validate(existing),
                     duplicate=True,
                 )
-
-            try:
-                import cv2
-            except Exception as exc:
-                raise ValidationError("OpenCV is required to inspect imported videos") from exc
-            capture = cv2.VideoCapture(str(temporary))
-            if not capture.isOpened():
-                capture.release()
-                raise ValidationError("The uploaded video could not be opened")
-            width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
-            height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
-            frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-            fps = float(capture.get(cv2.CAP_PROP_FPS) or 0.0)
-            capture.release()
-            if width <= 0 or height <= 0 or frame_count <= 0 or fps <= 0:
-                raise ValidationError("The uploaded video metadata is incomplete")
-            duration = frame_count / fps
-            os.replace(temporary, destination)
+            probe = probe_video(staged.temporary)
+            commit_video_upload(staged)
+            destination_committed = True
             video = VideoAsset(
                 id=video_id,
                 project_id=project.id,
                 original_filename=safe_name,
-                managed_path=managed_path,
-                sha256=checksum,
+                managed_path=staged.managed_path,
+                sha256=staged.sha256,
                 media_type=media_type or "video/mp4",
-                width_px=width,
-                height_px=height,
-                frame_count=frame_count,
-                fps=fps,
-                duration_seconds=duration,
+                width_px=probe.width_px,
+                height_px=probe.height_px,
+                frame_count=probe.frame_count,
+                fps=probe.fps,
+                duration_seconds=probe.duration_seconds,
                 metadata_json={
-                    "file_size_bytes": size,
+                    "file_size_bytes": staged.size_bytes,
                     "source_modified": False,
+                    "timing_source": "container_fps",
+                    "codec": probe.codec,
                 },
             )
             self.session.add(video)
@@ -216,8 +155,7 @@ class VideoService:
                 duplicate=False,
             )
         except Exception:
-            temporary.unlink(missing_ok=True)
-            destination.unlink(missing_ok=True)
+            cleanup_video_upload(staged, include_destination=destination_committed)
             self.session.rollback()
             raise
 
@@ -242,12 +180,18 @@ class VideoService:
             raise NotFoundError("Managed video file is missing")
         return path
 
+    def frame_jpeg(self, video_id: str, frame_index: int) -> bytes:
+        video = self._video(video_id)
+        if frame_index < 0 or frame_index >= video.frame_count:
+            raise ValidationError("Video frame index is outside the managed video")
+        return read_video_frame_jpeg(self.video_path(video_id), frame_index)
+
     def delete_video(self, video_id: str) -> None:
         video = self._video(video_id)
-        path = resolve_managed_project_path(self.settings, video.managed_path)
+        managed_path = video.managed_path
         self.session.delete(video)
         self.session.commit()
-        path.unlink(missing_ok=True)
+        remove_managed_video(self.settings, managed_path)
 
     def update_calibration(
         self,
@@ -255,117 +199,52 @@ class VideoService:
         request: VideoCalibrationUpdate,
     ) -> VideoAssetResponse:
         video = self._video(video_id)
+        existing_calibration = dict(video.metadata_json).get("calibration", {})
+        calibration_revision = (
+            int(existing_calibration.get("revision", 0))
+            if isinstance(existing_calibration, dict)
+            else 0
+        )
         video.metadata_json = {
             **dict(video.metadata_json),
-            "calibration": request.model_dump(mode="json"),
+            "calibration": {
+                **request.model_dump(mode="json"),
+                "updated_at": datetime.now(UTC).isoformat(),
+                "revision": calibration_revision + 1,
+            },
         }
+        video.revision += 1
         self.session.commit()
         self.session.refresh(video)
         return VideoAssetResponse.model_validate(video)
 
-    def _validate_track(
+    def list_tracks(
         self,
-        video: VideoAsset,
+        video_id: str,
         *,
-        label_class_id: str | None,
-        keyframes: list[VideoTrackKeyframe],
-    ) -> None:
-        if label_class_id is not None:
-            label_class = self.session.get(LabelClass, label_class_id)
-            if label_class is None or label_class.project_id != video.project_id:
-                raise ValidationError("Track classes must belong to the video project")
-        for keyframe in keyframes:
-            if keyframe.frame_index >= video.frame_count:
-                raise ValidationError("Track keyframes must fall within the video")
-            if keyframe.x_max > video.width_px or keyframe.y_max > video.height_px:
-                raise ValidationError("Track boxes must remain inside the video frame")
-
-    def list_tracks(self, video_id: str) -> list[VideoTrackResponse]:
-        self._video(video_id)
-        tracks = list(
-            self.session.scalars(
-                select(VideoTrack)
-                .where(VideoTrack.video_id == video_id)
-                .order_by(VideoTrack.track_number, VideoTrack.id)
-            )
+        include_deleted: bool = False,
+    ) -> list[VideoTrackResponse]:
+        return VideoTrackCorrectionService(self.session).list_tracks(
+            video_id,
+            include_deleted=include_deleted,
         )
-        return [_track_response(item) for item in tracks]
 
     def create_track(
         self,
         video_id: str,
         request: VideoTrackCreateRequest,
     ) -> VideoTrackResponse:
-        video = self._video(video_id)
-        if request.video_id != video.id:
-            raise ValidationError("Track request video_id does not match the route")
-        self._validate_track(
-            video,
-            label_class_id=request.label_class_id,
-            keyframes=request.keyframes,
-        )
-        existing = self.session.scalar(
-            select(VideoTrack).where(
-                VideoTrack.video_id == video.id,
-                VideoTrack.track_number == request.track_number,
-            )
-        )
-        if existing is not None:
-            raise ConflictError("A track with this number already exists for the video")
-        track = VideoTrack(
-            video_id=video.id,
-            label_class_id=request.label_class_id,
-            track_number=request.track_number,
-            geometry_kind=request.geometry_kind,
-            keyframes_json=[item.model_dump(mode="json") for item in request.keyframes],
-            interpolation=request.interpolation,
-            status=request.status,
-            metadata_json={"source": "human"},
-        )
-        self.session.add(track)
-        self.session.commit()
-        self.session.refresh(track)
-        return _track_response(track)
+        return VideoTrackCorrectionService(self.session).create_track(video_id, request)
 
     def update_track(
         self,
         track_id: str,
         request: VideoTrackUpdateRequest,
     ) -> VideoTrackResponse:
-        track = self.session.get(VideoTrack, track_id)
-        if track is None:
-            raise NotFoundError("Video track not found")
-        video = self._video(track.video_id)
-        keyframes = request.keyframes or [
-            VideoTrackKeyframe.model_validate(item) for item in track.keyframes_json
-        ]
-        label_class_id = (
-            request.label_class_id
-            if "label_class_id" in request.model_fields_set
-            else track.label_class_id
-        )
-        self._validate_track(
-            video,
-            label_class_id=label_class_id,
-            keyframes=keyframes,
-        )
-        track.label_class_id = label_class_id
-        if request.keyframes is not None:
-            track.keyframes_json = [item.model_dump(mode="json") for item in keyframes]
-        if request.interpolation is not None:
-            track.interpolation = request.interpolation
-        if request.status is not None:
-            track.status = request.status
-        self.session.commit()
-        self.session.refresh(track)
-        return _track_response(track)
+        return VideoTrackCorrectionService(self.session).update_track(track_id, request)
 
     def delete_track(self, track_id: str) -> None:
-        track = self.session.get(VideoTrack, track_id)
-        if track is None:
-            raise NotFoundError("Video track not found")
-        self.session.delete(track)
-        self.session.commit()
+        VideoTrackCorrectionService(self.session).delete_track(track_id)
 
     def create_tracking_job(
         self,
@@ -381,14 +260,66 @@ class VideoService:
             or model.task != "detect"
         ):
             raise ValidationError("Video tracking requires a project detector model")
+        if model.provider_name != "ultralytics" or model.framework != "ultralytics":
+            raise ValidationError(
+                "Video tracking currently requires a compatible Ultralytics detector"
+            )
+        request_payload = request.model_dump(mode="json", exclude={"force_new_run"})
+        requested_device = str(request_payload.pop("device"))
+        fingerprint_payload = {
+            "video_id": video.id,
+            "video_sha256": video.sha256,
+            "model_id": model.id,
+            "model_sha256": model.sha256,
+            **{key: value for key, value in request_payload.items() if key != "request_id"},
+            "requested_device": requested_device,
+        }
+        idempotency_key = request.request_id or canonical_json_sha256(fingerprint_payload)
+        if request.force_new_run:
+            idempotency_key = str(uuid4())
+        prior_jobs = list(
+            self.session.scalars(
+                select(Job)
+                .where(
+                    Job.project_id == video.project_id,
+                    Job.job_type == "video_track",
+                )
+                .order_by(Job.created_at.desc(), Job.id.desc())
+            )
+        )
+        for prior in prior_jobs:
+            prior_request = dict(prior.request_json or {})
+            if prior_request.get("idempotency_key") == idempotency_key and prior.status in {
+                "queued",
+                "running",
+                "cancel_requested",
+                "succeeded",
+            }:
+                return JobResponse.model_validate(prior)
         job = Job(
             project_id=video.project_id,
             job_type="video_track",
             status="queued",
-            progress_total=max(1, video.frame_count // request.every_n_frames),
+            progress_total=max(1, ceil(video.frame_count / request.every_n_frames)),
+            max_retries=1,
+            resume_supported=False,
             request_json={
                 "video_id": video.id,
-                **request.model_dump(mode="json"),
+                **request_payload,
+                "requested_device": requested_device,
+                "idempotency_key": idempotency_key,
+                "source_video_sha256": video.sha256,
+                "model_sha256": model.sha256,
+                "provider_name": model.provider_name,
+                "provider_version": model.provider_version,
+            },
+            result_json={"stage": "queued"},
+            resource_requirements_json={
+                "device": requested_device,
+                "gpu_required": requested_device == "cuda",
+                "cpu_threads": 2,
+                "minimum_ram_bytes": 512 * 1024**2,
+                "disk_intensive": True,
             },
         )
         self.session.add(job)
@@ -405,7 +336,10 @@ class VideoService:
         tracks = list(
             self.session.scalars(
                 select(VideoTrack)
-                .where(VideoTrack.video_id == video.id)
+                .where(
+                    VideoTrack.video_id == video.id,
+                    VideoTrack.deleted_at.is_(None),
+                )
                 .order_by(VideoTrack.track_number)
             )
         )
@@ -430,10 +364,10 @@ class VideoService:
             )
 
         for track in tracks:
-            points = interpolate_track(track)
+            points = interpolate_track(track, video)
             if not points:
                 continue
-            centers = [_center(item) for item in points]
+            centers = [observation_center(item) for item in points]
             frame_distances: list[float] = []
             frame_speeds: list[float] = []
             interval_seconds: list[float] = []
@@ -584,7 +518,10 @@ class VideoService:
         tracks = list(
             self.session.scalars(
                 select(VideoTrack)
-                .where(VideoTrack.video_id == video.id)
+                .where(
+                    VideoTrack.video_id == video.id,
+                    VideoTrack.deleted_at.is_(None),
+                )
                 .order_by(VideoTrack.track_number)
             )
         )
@@ -594,9 +531,9 @@ class VideoService:
                 "video": VideoAssetResponse.model_validate(video).model_dump(mode="json"),
                 "tracks": [
                     {
-                        **_track_response(track).model_dump(mode="json"),
+                        **track_response(track, video).model_dump(mode="json"),
                         "interpolated_keyframes": [
-                            item.model_dump(mode="json") for item in interpolate_track(track)
+                            item.model_dump(mode="json") for item in interpolate_track(track, video)
                         ],
                     }
                     for track in tracks
@@ -616,6 +553,8 @@ class VideoService:
                     "frame",
                     "time_seconds",
                     "tracker_id",
+                    "track_id",
+                    "observation_id",
                     "label_class_id",
                     "x",
                     "y",
@@ -624,16 +563,29 @@ class VideoService:
                     "x_max",
                     "y_max",
                     "confidence",
+                    "source",
+                    "manual_edit",
+                    "track_revision",
+                    "observation_revision",
+                    "detector_model_id",
+                    "detector_model_checksum",
+                    "tracker",
+                    "origin_job_id",
                 ]
             )
             for track in tracks:
-                for point in interpolate_track(track):
-                    center_x, center_y = _center(point)
+                for point in interpolate_track(track, video):
+                    center_x, center_y = observation_center(point)
+                    metadata = dict(track.metadata_json or {})
                     writer.writerow(
                         [
                             point.frame_index,
-                            point.frame_index / video.fps,
+                            point.timestamp_seconds
+                            if point.timestamp_seconds is not None
+                            else point.frame_index / video.fps,
                             track.track_number,
+                            track.id,
+                            point.id or "",
                             track.label_class_id or "",
                             center_x,
                             center_y,
@@ -642,6 +594,14 @@ class VideoService:
                             point.x_max,
                             point.y_max,
                             point.confidence if point.confidence is not None else "",
+                            point.source,
+                            point.manual_edit,
+                            track.revision,
+                            point.revision,
+                            metadata.get("model_id", ""),
+                            metadata.get("model_sha256", metadata.get("model_checksum", "")),
+                            metadata.get("tracker", ""),
+                            track.origin_job_id or "",
                         ]
                     )
             return (
@@ -652,7 +612,7 @@ class VideoService:
         if export_format == "mot":
             writer = csv.writer(output, lineterminator="\n")
             for track in tracks:
-                for point in interpolate_track(track):
+                for point in interpolate_track(track, video):
                     writer.writerow(
                         [
                             point.frame_index + 1,

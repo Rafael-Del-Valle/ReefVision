@@ -10,6 +10,20 @@ from reefvision.api.dependencies import get_db_session
 from reefvision.db.models import Job
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.jobs import JobResponse
+from reefvision.schemas.track_operations import (
+    TrackDeleteRequest,
+    TrackIdentitySwapRequest,
+    TrackMergeRequest,
+    TrackObservationAddRequest,
+    TrackObservationDeleteRequest,
+    TrackObservationReassignRequest,
+    TrackObservationRestoreRequest,
+    TrackObservationUpdateRequest,
+    TrackOperationResponse,
+    TrackRestoreRequest,
+    TrackSplitRequest,
+    VideoTrackEventResponse,
+)
 from reefvision.schemas.videos import (
     VideoAnalyticsRequest,
     VideoAnalyticsResponse,
@@ -21,8 +35,13 @@ from reefvision.schemas.videos import (
     VideoTrackingJobRequest,
     VideoTrackResponse,
     VideoTrackUpdateRequest,
+    VideoZoneCreateRequest,
+    VideoZoneResponse,
+    VideoZoneUpdateRequest,
 )
 from reefvision.services.video_behavior import VideoBehaviorAnalysisService
+from reefvision.services.video_tracks import VideoTrackCorrectionService
+from reefvision.services.video_zones import VideoZoneService
 from reefvision.services.videos import VideoService
 
 router = APIRouter(tags=["videos"])
@@ -87,6 +106,27 @@ def get_video_content(
     )
 
 
+@router.get("/videos/{video_id}/frames/{frame_index}")
+def get_video_frame(
+    video_id: str,
+    frame_index: int,
+    request: Request,
+    session: DbSession,
+) -> Response:
+    video_service = service(request, session)
+    video = video_service.get_video(video_id)
+    content = video_service.frame_jpeg(video_id, frame_index)
+    return Response(
+        content=content,
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "private, max-age=3600",
+            "ETag": f'"{video.sha256}-frame-{frame_index}"',
+            "X-ReefVision-Frame-Index": str(frame_index),
+        },
+    )
+
+
 @router.delete("/videos/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_video(
     video_id: str,
@@ -138,8 +178,12 @@ def list_video_tracks(
     video_id: str,
     request: Request,
     session: DbSession,
+    include_deleted: bool = Query(default=False),
 ) -> list[VideoTrackResponse]:
-    return service(request, session).list_tracks(video_id)
+    return service(request, session).list_tracks(
+        video_id,
+        include_deleted=include_deleted,
+    )
 
 
 @router.post(
@@ -175,6 +219,131 @@ def delete_video_track(
     service(request, session).delete_track(track_id)
 
 
+@router.post("/video-tracks/{track_id}/delete", response_model=TrackOperationResponse)
+def soft_delete_video_track(
+    track_id: str,
+    payload: TrackDeleteRequest,
+    session: DbSession,
+) -> TrackOperationResponse:
+    return VideoTrackCorrectionService(session).delete_track(track_id, payload)
+
+
+@router.post("/video-tracks/{track_id}/restore", response_model=TrackOperationResponse)
+def restore_video_track(
+    track_id: str,
+    payload: TrackRestoreRequest,
+    session: DbSession,
+) -> TrackOperationResponse:
+    return VideoTrackCorrectionService(session).restore_track(track_id, payload)
+
+
+@router.post(
+    "/video-tracks/{track_id}/observations",
+    response_model=TrackOperationResponse,
+)
+def add_video_track_observation(
+    track_id: str,
+    payload: TrackObservationAddRequest,
+    session: DbSession,
+) -> TrackOperationResponse:
+    return VideoTrackCorrectionService(session).add_observation(track_id, payload)
+
+
+@router.patch(
+    "/video-tracks/{track_id}/observations/{observation_id}",
+    response_model=TrackOperationResponse,
+)
+def update_video_track_observation(
+    track_id: str,
+    observation_id: str,
+    payload: TrackObservationUpdateRequest,
+    session: DbSession,
+) -> TrackOperationResponse:
+    return VideoTrackCorrectionService(session).update_observation(
+        track_id,
+        observation_id,
+        payload,
+    )
+
+
+@router.post(
+    "/video-tracks/{track_id}/observations/{observation_id}/delete",
+    response_model=TrackOperationResponse,
+)
+def delete_video_track_observation(
+    track_id: str,
+    observation_id: str,
+    payload: TrackObservationDeleteRequest,
+    session: DbSession,
+) -> TrackOperationResponse:
+    return VideoTrackCorrectionService(session).delete_observation(
+        track_id,
+        observation_id,
+        payload,
+    )
+
+
+@router.post(
+    "/video-tracks/{track_id}/observations/{observation_id}/restore",
+    response_model=TrackOperationResponse,
+)
+def restore_video_track_observation(
+    track_id: str,
+    observation_id: str,
+    payload: TrackObservationRestoreRequest,
+    session: DbSession,
+) -> TrackOperationResponse:
+    return VideoTrackCorrectionService(session).restore_observation(
+        track_id,
+        observation_id,
+        payload,
+    )
+
+
+@router.post("/video-tracks/{track_id}/split", response_model=TrackOperationResponse)
+def split_video_track(
+    track_id: str,
+    payload: TrackSplitRequest,
+    session: DbSession,
+) -> TrackOperationResponse:
+    return VideoTrackCorrectionService(session).split_track(track_id, payload)
+
+
+@router.post("/video-tracks/merge", response_model=TrackOperationResponse)
+def merge_video_tracks(
+    payload: TrackMergeRequest,
+    session: DbSession,
+) -> TrackOperationResponse:
+    return VideoTrackCorrectionService(session).merge_tracks(payload)
+
+
+@router.post("/video-tracks/identity-switch", response_model=TrackOperationResponse)
+def correct_video_track_identity_switch(
+    payload: TrackIdentitySwapRequest,
+    session: DbSession,
+) -> TrackOperationResponse:
+    return VideoTrackCorrectionService(session).identity_swap(payload)
+
+
+@router.post("/video-tracks/reassign-observations", response_model=TrackOperationResponse)
+def reassign_video_track_observations(
+    payload: TrackObservationReassignRequest,
+    session: DbSession,
+) -> TrackOperationResponse:
+    return VideoTrackCorrectionService(session).reassign_observations(payload)
+
+
+@router.get(
+    "/video-tracks/{track_id}/events",
+    response_model=list[VideoTrackEventResponse],
+)
+def list_video_track_events(
+    track_id: str,
+    session: DbSession,
+) -> list[VideoTrackEventResponse]:
+    return VideoTrackCorrectionService(session).list_events(track_id)
+
+
 @router.post(
     "/videos/{video_id}/tracking-jobs",
     response_model=JobResponse,
@@ -200,6 +369,64 @@ def analyze_video_tracks(
         session,
         request.app.state.settings,
     ).analytics(video_id, payload)
+
+
+@router.get("/videos/{video_id}/analyses", response_model=list[VideoAnalyticsResponse])
+def list_video_analyses(
+    video_id: str,
+    request: Request,
+    session: DbSession,
+    limit: int = Query(default=100, ge=1, le=1000),
+) -> list[VideoAnalyticsResponse]:
+    return VideoBehaviorAnalysisService(session, request.app.state.settings).list(
+        video_id,
+        limit=limit,
+    )
+
+
+@router.get("/video-analyses/{analysis_id}", response_model=VideoAnalyticsResponse)
+def get_video_analysis(
+    analysis_id: str,
+    request: Request,
+    session: DbSession,
+) -> VideoAnalyticsResponse:
+    return VideoBehaviorAnalysisService(session, request.app.state.settings).get(analysis_id)
+
+
+@router.get("/videos/{video_id}/zones", response_model=list[VideoZoneResponse])
+def list_video_zones(video_id: str, session: DbSession) -> list[VideoZoneResponse]:
+    return VideoZoneService(session).list(video_id)
+
+
+@router.post(
+    "/videos/{video_id}/zones",
+    response_model=VideoZoneResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_video_zone(
+    video_id: str,
+    payload: VideoZoneCreateRequest,
+    session: DbSession,
+) -> VideoZoneResponse:
+    return VideoZoneService(session).create(video_id, payload)
+
+
+@router.put("/video-zones/{zone_id}", response_model=VideoZoneResponse)
+def update_video_zone(
+    zone_id: str,
+    payload: VideoZoneUpdateRequest,
+    session: DbSession,
+) -> VideoZoneResponse:
+    return VideoZoneService(session).update(zone_id, payload)
+
+
+@router.delete("/video-zones/{zone_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_video_zone(
+    zone_id: str,
+    session: DbSession,
+    expected_revision: int = Query(ge=1),
+) -> None:
+    VideoZoneService(session).delete(zone_id, expected_revision=expected_revision)
 
 
 @router.get("/videos/{video_id}/tracking-export")

@@ -112,14 +112,26 @@ Priorities after segmentation validation:
 
 ### Phase 6 — Video and fish tracking
 
-Status: video asset and track foundations exist; no production tracker integration in this branch.
+Status: core implementation complete in the current Phase 6 working tree, with deterministic
+software-acceptance coverage. Real fish-video quality validation, long-video performance,
+codec/container coverage, and packaged-Windows validation remain release gates.
 
-Priorities after segmentation and measurement stabilization:
+Implemented vertical slice:
 
-- frame extraction and annotation review
-- detector-plus-tracker association
-- editable track identities and interpolation
-- trajectory, speed, occupancy, and behavioral summaries
+- project-managed, checksum-addressed video import, playback, and exact frame access;
+- asynchronous detector plus ByteTrack or BoT-SORT jobs with cancellation, transactional persistence,
+  restart-safe terminal state, request idempotency, and complete provenance;
+- revisioned observation and identity correction with append-only audit events;
+- scalar calibration, saved rectangular zones, trajectories, heatmaps, individual movement metrics,
+  and school-level metrics with explicit pixel/physical units;
+- ground-truth-gated localization, detection, continuity, fragmentation, and identity-switch
+  evaluation with stored tracker/threshold comparisons;
+- atomic managed CSV, JSON, MOTChallenge, NumPy, and rendered-video artifacts with manifests and
+  checksums; and
+- an integrated Video dashboard with job, correction, analysis, evaluation, and export workflows.
+
+See `PHASE_6_VIDEO_TRACKING_IMPLEMENTATION.md` for implementation contracts, automated acceptance,
+scientific-validity boundaries, and remaining limitations.
 
 ### Phase 7 — Active learning
 

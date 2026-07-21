@@ -32,8 +32,12 @@ from reefvision.db.models.review_queue import ReviewQueue
 from reefvision.db.models.review_queue_item import ReviewQueueItem
 from reefvision.db.models.training_draft import TrainingDraft
 from reefvision.db.models.training_run import TrainingRun
+from reefvision.db.models.video_analysis_run import VideoAnalysisRun
 from reefvision.db.models.video_asset import VideoAsset
 from reefvision.db.models.video_track import VideoTrack
+from reefvision.db.models.video_track_event import VideoTrackEvent
+from reefvision.db.models.video_tracking_evaluation import VideoTrackingEvaluation
+from reefvision.db.models.video_zone import VideoZoneRecord
 from reefvision.db.models.workflow import (
     Workflow,
     WorkflowArtifact,
@@ -75,8 +79,12 @@ __all__ = [
     "ReviewQueueItem",
     "TrainingDraft",
     "TrainingRun",
+    "VideoAnalysisRun",
     "VideoAsset",
     "VideoTrack",
+    "VideoTrackEvent",
+    "VideoTrackingEvaluation",
+    "VideoZoneRecord",
     "Workflow",
     "WorkflowArtifact",
     "WorkflowRevision",

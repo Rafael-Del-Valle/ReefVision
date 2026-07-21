@@ -44,6 +44,7 @@ from reefvision.api.routes.segmentation_evaluation import (
     router as segmentation_evaluation_router,
 )
 from reefvision.api.routes.system import router as system_router
+from reefvision.api.routes.tracking_evaluation import router as tracking_evaluation_router
 from reefvision.api.routes.training import router as training_router
 from reefvision.api.routes.training_reports import router as training_reports_router
 from reefvision.api.routes.validation_dashboard import router as validation_dashboard_router
@@ -64,6 +65,7 @@ api_router.include_router(classification_evaluation_router)
 api_router.include_router(classification_qa_router)
 api_router.include_router(videos_router)
 api_router.include_router(video_exports_router)
+api_router.include_router(tracking_evaluation_router)
 api_router.include_router(sam2_video_router)
 api_router.include_router(backups_router)
 api_router.include_router(projects_router)

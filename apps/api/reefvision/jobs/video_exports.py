@@ -61,7 +61,9 @@ class TrackInterpolator:
             [
                 item
                 for item in track.keyframes_json
-                if isinstance(item, dict) and "frame_index" in item
+                if isinstance(item, dict)
+                and "frame_index" in item
+                and item.get("deleted_at") is None
             ],
             key=lambda item: int(item["frame_index"]),
         )
@@ -84,11 +86,12 @@ class TrackInterpolator:
         if right_frame <= left_frame:
             return self._from_keyframe(left)
         alpha = (frame_index - left_frame) / (right_frame - left_frame)
+        geometry_alpha = 0.0 if self.track.interpolation == "hold" else alpha
         confidence_left = left.get("confidence")
         confidence_right = right.get("confidence")
         confidence = None
         if confidence_left is not None and confidence_right is not None:
-            confidence = float(confidence_left) + alpha * (
+            confidence = float(confidence_left) + geometry_alpha * (
                 float(confidence_right) - float(confidence_left)
             )
         elif confidence_left is not None:
@@ -96,10 +99,14 @@ class TrackInterpolator:
         elif confidence_right is not None:
             confidence = float(confidence_right)
         return BoxState(
-            x_min=float(left["x_min"]) + alpha * (float(right["x_min"]) - float(left["x_min"])),
-            y_min=float(left["y_min"]) + alpha * (float(right["y_min"]) - float(left["y_min"])),
-            x_max=float(left["x_max"]) + alpha * (float(right["x_max"]) - float(left["x_max"])),
-            y_max=float(left["y_max"]) + alpha * (float(right["y_max"]) - float(left["y_max"])),
+            x_min=float(left["x_min"])
+            + geometry_alpha * (float(right["x_min"]) - float(left["x_min"])),
+            y_min=float(left["y_min"])
+            + geometry_alpha * (float(right["y_min"]) - float(left["y_min"])),
+            x_max=float(left["x_max"])
+            + geometry_alpha * (float(right["x_max"]) - float(left["x_max"])),
+            y_max=float(left["y_max"])
+            + geometry_alpha * (float(right["y_max"]) - float(left["y_max"])),
             confidence=confidence,
         )
 
@@ -197,10 +204,35 @@ def process_video_render_export_job(
         tracks = list(
             session.scalars(
                 select(VideoTrack).where(
-                    VideoTrack.id.in_([str(item) for item in request.get("resolved_track_ids", [])])
+                    VideoTrack.video_id == video.id,
+                    VideoTrack.id.in_(
+                        [str(item) for item in request.get("resolved_track_ids", [])]
+                    ),
                 )
             )
         )
+        resolved_track_ids = {str(item) for item in request.get("resolved_track_ids", [])}
+        expected_revisions = {
+            str(key): int(value)
+            for key, value in dict(request.get("resolved_track_revisions") or {}).items()
+        }
+        if request.get("source_video_sha256") not in {None, video.sha256}:
+            job.status = "failed"
+            job.error_message = "The source video changed after this export was queued"
+            job.completed_at = datetime.now(UTC)
+            session.commit()
+            return False
+        if {track.id for track in tracks} != resolved_track_ids or any(
+            expected_revisions.get(track.id) != track.revision for track in tracks
+        ):
+            job.status = "failed"
+            job.error_message = (
+                "One or more tracks changed after this rendered export was queued; "
+                "create a new export request"
+            )
+            job.completed_at = datetime.now(UTC)
+            session.commit()
+            return False
         class_names = {
             item.id: item.name
             for item in session.scalars(
@@ -233,6 +265,7 @@ def process_video_render_export_job(
 
     capture = None
     writer = None
+    published = False
     try:
         if not source_path.is_file():
             raise ValidationError("The managed source video is missing")
@@ -297,12 +330,16 @@ def process_video_render_export_job(
             with factory() as session:
                 current_job = session.get(Job, job_id)
                 if current_job is None:
-                    return False
+                    raise RuntimeError("Video export job disappeared during rendering")
                 if current_job.status == "cancel_requested":
                     current_job.status = "cancelled"
                     current_job.completed_at = datetime.now(UTC)
                     current_job.result_json = {"stage": "cancelled"}
                     session.commit()
+                    capture.release()
+                    capture = None
+                    writer.release()
+                    writer = None
                     shutil.rmtree(temporary_root, ignore_errors=True)
                     return True
 
@@ -375,6 +412,7 @@ def process_video_render_export_job(
         writer = None
         if rendered_frames == 0 or not output_path.is_file():
             raise ValidationError("The video renderer produced no output frames")
+        rendered_video_sha256 = _sha256(output_path)
         manifest = {
             "format": "reefvision-rendered-video",
             "format_version": "1.0",
@@ -384,12 +422,16 @@ def process_video_render_export_job(
             "video_sha256": video.sha256,
             "export_kind": export_kind,
             "track_ids": [track.id for track in tracks],
+            "track_revisions": {track.id: track.revision for track in tracks},
+            "track_provenance": {track.id: dict(track.metadata_json or {}) for track in tracks},
             "rendered_frames": rendered_frames,
             "source_fps": source_fps,
             "output_fps": output_fps,
             "width_px": width,
             "height_px": height,
             "codec": codec,
+            "rendered_video_sha256": rendered_video_sha256,
+            "calibration": dict(video.metadata_json or {}).get("calibration"),
             "parameters": request,
         }
         manifest_path = temporary_root / "manifest.json"
@@ -398,6 +440,7 @@ def process_video_render_export_job(
         if output_root.exists():
             shutil.rmtree(output_root)
         temporary_root.replace(output_root)
+        published = True
         final_video = output_root / f"{export_kind}.mp4"
         video_relative = f"{relative_root}/{export_kind}.mp4"
         manifest_relative = f"{relative_root}/manifest.json"
@@ -411,6 +454,7 @@ def process_video_render_export_job(
                 source_kind="video",
                 source_id=video.id,
                 source_checksum=video.sha256,
+                source_annotation_revision=max(track.revision for track in tracks),
                 parameters_json=request,
                 postprocessing_json={
                     "codec": codec,
@@ -456,6 +500,8 @@ def process_video_render_export_job(
         if writer is not None:
             writer.release()
         shutil.rmtree(temporary_root, ignore_errors=True)
+        if published:
+            shutil.rmtree(output_root, ignore_errors=True)
         with factory() as session:
             job = session.get(Job, job_id)
             if job is not None:

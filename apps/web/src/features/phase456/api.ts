@@ -139,33 +139,79 @@ export interface VideoAsset {
   fps: number;
   duration_seconds: number;
   metadata_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  revision: number;
 }
 
 export interface VideoTrackKeyframe {
+  id: string | null;
   frame_index: number;
+  timestamp_seconds: number | null;
   x_min: number;
   y_min: number;
   x_max: number;
   y_max: number;
+  centroid_x: number | null;
+  centroid_y: number | null;
   confidence?: number | null;
-  source?: string;
+  source: string;
+  manual_edit: boolean;
+  automated_provenance: Record<string, unknown> | null;
+  deleted_at: string | null;
+  revision: number;
 }
 
 export interface VideoTrack {
   id: string;
   video_id: string;
   label_class_id: string | null;
+  origin_job_id: string | null;
   track_number: number;
+  name: string | null;
   geometry_kind: string;
   keyframes: VideoTrackKeyframe[];
   interpolation: string;
   status: string;
+  source_type: string;
+  is_ground_truth: boolean;
   metadata_json: Record<string, unknown>;
+  created_by: string;
+  updated_by: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  revision: number;
+}
+
+export interface VideoTrackOperation {
+  operation: string;
+  operation_id: string | null;
+  tracks: VideoTrack[];
+  deleted_track_ids: string[];
+  warnings: string[];
+  replayed: boolean;
+}
+
+export interface VideoZone {
+  id: string;
+  video_id: string;
+  name: string;
+  x_min: number;
+  y_min: number;
+  x_max: number;
+  y_max: number;
+  revision: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface VideoAnalytics {
+  analysis_id: string | null;
   video_id: string;
   fps: number;
+  coordinate_unit: "pixels";
+  timing_source: "video_fps" | "observation_timestamps";
   distance_per_pixel: number | null;
   physical_unit: string | null;
   tracks: Array<{
@@ -174,21 +220,47 @@ export interface VideoAnalytics {
     label_class_id: string | null;
     duration_seconds: number;
     distance_pixels: number;
+    net_displacement_pixels: number;
+    total_path_length_pixels: number;
+    path_tortuosity: number | null;
     mean_speed_pixels_per_second: number;
     maximum_speed_pixels_per_second: number;
+    mean_acceleration_pixels_per_second_squared: number;
+    maximum_acceleration_pixels_per_second_squared: number;
+    mean_turning_angle_degrees: number | null;
+    cumulative_turning_angle_degrees: number;
+    mean_angular_velocity_degrees_per_second: number | null;
+    mean_distance_to_wall_pixels: number;
     active_time_seconds: number;
     inactive_time_seconds: number;
     distance_physical: number | null;
     mean_speed_physical_per_second: number | null;
+    mean_distance_to_wall_physical: number | null;
     physical_unit: string | null;
     zone_time_seconds: Record<string, number>;
+    trajectory: Array<{
+      observation_id: string | null;
+      frame_index: number;
+      timestamp_seconds: number;
+      center_x_pixels: number;
+      center_y_pixels: number;
+      center_x_physical: number | null;
+      center_y_physical: number | null;
+      interpolated: boolean;
+      manual_edit: boolean;
+    }>;
   }>;
   school_by_frame: Array<{
     frame_index: number;
     timestamp_seconds: number;
     active_track_count: number;
+    school_centroid_x_pixels: number | null;
+    school_centroid_y_pixels: number | null;
     mean_nearest_neighbor_pixels: number | null;
     school_spread_pixels: number | null;
+    polarization: number | null;
+    school_centroid_x_physical: number | null;
+    school_centroid_y_physical: number | null;
   }>;
   heatmap_bins_x: number;
   heatmap_bins_y: number;
@@ -198,7 +270,62 @@ export interface VideoAnalytics {
     observation_count: number;
     occupancy_seconds: number;
   }>;
+  zone_events: Array<{
+    track_id: string;
+    zone_name: string;
+    event_type: "entry" | "exit";
+    frame_index: number;
+    timestamp_seconds: number;
+  }>;
+  configuration: Record<string, unknown>;
+  source_track_revisions: Array<Record<string, unknown>>;
+  analysis_sha256: string | null;
   warnings: string[];
+}
+
+export interface TrackingMetricSummary {
+  candidate_name: string;
+  parameters: Record<string, unknown>;
+  localization_iou: number;
+  detection_precision: number;
+  detection_recall: number;
+  identity_switch_count: number;
+  fragmentation_count: number;
+  false_positive_track_count: number;
+  false_negative_track_count: number;
+  mostly_tracked_count: number;
+  mostly_lost_count: number;
+  mean_track_continuity: number | null;
+  mota: number;
+  motp: number;
+  idf1: number;
+  hota: number;
+  per_frame: Array<Record<string, unknown>>;
+  per_track: Array<Record<string, unknown>>;
+}
+
+export interface VideoTrackingEvaluation {
+  evaluation_id: string;
+  video_id: string;
+  ground_truth_available: boolean;
+  minimum_iou: number;
+  ranked_by_hota: TrackingMetricSummary[];
+  best_candidate_name: string | null;
+  configuration: Record<string, unknown>;
+  source_track_revisions: Array<Record<string, unknown>>;
+  evaluation_sha256: string;
+  warnings: string[];
+}
+
+export interface VideoDataExport {
+  artifact_id: string;
+  video_id: string;
+  archive_path: string;
+  manifest_path: string;
+  archive_sha256: string;
+  archive_size_bytes: number;
+  manifest_sha256: string;
+  formats: string[];
 }
 
 export class PhaseApiError extends Error {}
@@ -370,6 +497,20 @@ export function getVideoTracks(videoId: string, signal?: AbortSignal) {
   return request<VideoTrack[]>(`/videos/${videoId}/tracks`, { signal });
 }
 
+export function getVideoZones(videoId: string, signal?: AbortSignal) {
+  return request<VideoZone[]>(`/videos/${videoId}/zones`, { signal });
+}
+
+export function getVideoTrackingEvaluations(
+  videoId: string,
+  signal?: AbortSignal,
+) {
+  return request<VideoTrackingEvaluation[]>(
+    `/videos/${videoId}/tracking-evaluations`,
+    { signal },
+  );
+}
+
 export function createVideoTrack(
   videoId: string,
   payload: Record<string, unknown>,
@@ -394,6 +535,102 @@ export function deleteVideoTrack(trackId: string) {
   return request<void>(`/video-tracks/${trackId}`, { method: "DELETE" });
 }
 
+export function addVideoTrackObservation(
+  trackId: string,
+  payload: Record<string, unknown>,
+) {
+  return request<VideoTrackOperation>(`/video-tracks/${trackId}/observations`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateVideoTrackObservation(
+  trackId: string,
+  observationId: string,
+  payload: Record<string, unknown>,
+) {
+  return request<VideoTrackOperation>(
+    `/video-tracks/${trackId}/observations/${observationId}`,
+    { method: "PATCH", body: JSON.stringify(payload) },
+  );
+}
+
+export function deleteVideoTrackObservation(
+  trackId: string,
+  observationId: string,
+  payload: Record<string, unknown>,
+) {
+  return request<VideoTrackOperation>(
+    `/video-tracks/${trackId}/observations/${observationId}/delete`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export function restoreVideoTrackObservation(
+  trackId: string,
+  observationId: string,
+  payload: Record<string, unknown>,
+) {
+  return request<VideoTrackOperation>(
+    `/video-tracks/${trackId}/observations/${observationId}/restore`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export function archiveVideoTrack(
+  trackId: string,
+  payload: Record<string, unknown>,
+) {
+  return request<VideoTrackOperation>(`/video-tracks/${trackId}/delete`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function restoreVideoTrack(
+  trackId: string,
+  payload: Record<string, unknown>,
+) {
+  return request<VideoTrackOperation>(`/video-tracks/${trackId}/restore`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function splitVideoTrack(
+  trackId: string,
+  payload: Record<string, unknown>,
+) {
+  return request<VideoTrackOperation>(`/video-tracks/${trackId}/split`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function mergeVideoTracks(payload: Record<string, unknown>) {
+  return request<VideoTrackOperation>(`/video-tracks/merge`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function correctVideoTrackIdentity(payload: Record<string, unknown>) {
+  return request<VideoTrackOperation>(`/video-tracks/identity-switch`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function reassignVideoTrackObservations(
+  payload: Record<string, unknown>,
+) {
+  return request<VideoTrackOperation>(`/video-tracks/reassign-observations`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function calibrateVideo(
   videoId: string,
   payload: Record<string, unknown>,
@@ -414,11 +651,72 @@ export function createVideoTracking(
   });
 }
 
+export function cancelJob(jobId: string) {
+  return request<JobRecord>(`/jobs/${jobId}/cancel`, { method: "POST" });
+}
+
 export function analyzeVideo(
   videoId: string,
   payload: Record<string, unknown>,
 ) {
   return request<VideoAnalytics>(`/videos/${videoId}/analytics`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createVideoZone(
+  videoId: string,
+  payload: Record<string, unknown>,
+) {
+  return request<VideoZone>(`/videos/${videoId}/zones`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateVideoZone(
+  zoneId: string,
+  payload: Record<string, unknown>,
+) {
+  return request<VideoZone>(`/video-zones/${zoneId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteVideoZone(zoneId: string, expectedRevision: number) {
+  return request<void>(
+    `/video-zones/${zoneId}?expected_revision=${expectedRevision}`,
+    { method: "DELETE" },
+  );
+}
+
+export function evaluateVideoTracking(
+  videoId: string,
+  payload: Record<string, unknown>,
+) {
+  return request<VideoTrackingEvaluation>(
+    `/videos/${videoId}/tracking-evaluations`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export function createVideoDataExport(
+  videoId: string,
+  payload: Record<string, unknown>,
+) {
+  return request<VideoDataExport>(`/videos/${videoId}/data-exports`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createVideoRenderExport(
+  videoId: string,
+  payload: Record<string, unknown>,
+) {
+  return request<{ job: JobRecord }>(`/videos/${videoId}/render-exports`, {
     method: "POST",
     body: JSON.stringify(payload),
   });

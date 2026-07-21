@@ -31,18 +31,48 @@ class FrameMatch:
 
 
 @dataclass(frozen=True)
+class TrackingFrameSummary:
+    frame_index: int
+    reference_count: int
+    predicted_count: int
+    matched_count: int
+    false_positive_count: int
+    false_negative_count: int
+    identity_switch_count: int
+    mean_iou: float | None
+
+
+@dataclass(frozen=True)
+class TrackingTrackSummary:
+    reference_track_id: str
+    reference_observation_count: int
+    matched_observation_count: int
+    coverage: float
+    fragmentation_count: int
+    identity_switch_count: int
+    matched_prediction_track_ids: tuple[str, ...]
+    mostly_tracked: bool
+    mostly_lost: bool
+
+
+@dataclass(frozen=True)
 class TrackingMetrics:
     reference_detection_count: int
     predicted_detection_count: int
     matched_detection_count: int
     false_positive_count: int
     false_negative_count: int
+    false_positive_track_count: int
+    false_negative_track_count: int
     identity_switch_count: int
     fragmentation_count: int
     mostly_tracked_count: int
     mostly_lost_count: int
     mota: float
     motp: float
+    localization_iou: float
+    detection_precision: float
+    detection_recall: float
     id_precision: float
     id_recall: float
     idf1: float
@@ -54,6 +84,8 @@ class TrackingMetrics:
     mean_track_lifespan_frames: float | None
     mean_track_continuity: float | None
     matches: tuple[FrameMatch, ...]
+    per_frame: tuple[TrackingFrameSummary, ...]
+    per_track: tuple[TrackingTrackSummary, ...]
 
 
 def box_iou(first: TrackBox, second: TrackBox) -> float:
@@ -153,6 +185,7 @@ def evaluate_tracking(
     matches: list[FrameMatch] = []
     false_positives = 0
     false_negatives = 0
+    frame_summaries: list[TrackingFrameSummary] = []
     for frame_index in sorted(set(reference_by_frame) | set(prediction_by_frame)):
         frame_matches, used_references, used_predictions = _frame_matches(
             reference_by_frame[frame_index],
@@ -161,8 +194,26 @@ def evaluate_tracking(
             maximum_depth_gap=maximum_depth_gap,
         )
         matches.extend(frame_matches)
-        false_negatives += len(reference_by_frame[frame_index]) - len(used_references)
-        false_positives += len(prediction_by_frame[frame_index]) - len(used_predictions)
+        frame_false_negatives = len(reference_by_frame[frame_index]) - len(used_references)
+        frame_false_positives = len(prediction_by_frame[frame_index]) - len(used_predictions)
+        false_negatives += frame_false_negatives
+        false_positives += frame_false_positives
+        frame_summaries.append(
+            TrackingFrameSummary(
+                frame_index=frame_index,
+                reference_count=len(reference_by_frame[frame_index]),
+                predicted_count=len(prediction_by_frame[frame_index]),
+                matched_count=len(frame_matches),
+                false_positive_count=frame_false_positives,
+                false_negative_count=frame_false_negatives,
+                identity_switch_count=0,
+                mean_iou=(
+                    sum(match.iou for match in frame_matches) / len(frame_matches)
+                    if frame_matches
+                    else None
+                ),
+            )
+        )
 
     matches_by_reference: dict[str, list[FrameMatch]] = defaultdict(list)
     for match in matches:
@@ -177,6 +228,8 @@ def evaluate_tracking(
     lifespans: list[float] = []
     association_correct = 0
     association_total = 0
+    per_track: list[TrackingTrackSummary] = []
+    switch_counts_by_frame: defaultdict[int, int] = defaultdict(int)
     for track_id, frames in reference_frames.items():
         ordered_matches = sorted(
             matches_by_reference.get(track_id, []),
@@ -185,26 +238,66 @@ def evaluate_tracking(
         track_ratios[track_id] = len(ordered_matches) / len(frames) if frames else 0.0
         lifespans.append(float(max(frames) - min(frames) + 1))
         previous_prediction = None
-        previous_frame = None
+        matched_by_frame = {match.frame_index: match for match in ordered_matches}
         active_segments = 0
+        in_segment = False
+        track_switches = 0
         for match in ordered_matches:
-            if previous_frame is None or match.frame_index > previous_frame + 1:
-                active_segments += 1
             if previous_prediction is not None:
                 association_total += 1
                 if match.predicted_track_id == previous_prediction:
                     association_correct += 1
                 else:
                     identity_switches += 1
+                    track_switches += 1
+                    switch_counts_by_frame[match.frame_index] += 1
             previous_prediction = match.predicted_track_id
-            previous_frame = match.frame_index
+        segment_lengths: list[int] = []
+        segment_length = 0
+        for frame_index in sorted(frames):
+            if frame_index in matched_by_frame:
+                if not in_segment:
+                    active_segments += 1
+                    in_segment = True
+                segment_length += 1
+            elif in_segment:
+                segment_lengths.append(segment_length)
+                segment_length = 0
+                in_segment = False
+        if in_segment:
+            segment_lengths.append(segment_length)
         fragmentations += max(0, active_segments - 1)
-        continuity_scores.append(
-            max((len(segment) for segment in _contiguous_segments(ordered_matches)), default=0)
-            / len(frames)
-            if frames
-            else 0.0
+        continuity_scores.append(max(segment_lengths, default=0) / len(frames) if frames else 0.0)
+        coverage = track_ratios[track_id]
+        per_track.append(
+            TrackingTrackSummary(
+                reference_track_id=track_id,
+                reference_observation_count=len(frames),
+                matched_observation_count=len(ordered_matches),
+                coverage=coverage,
+                fragmentation_count=max(0, active_segments - 1),
+                identity_switch_count=track_switches,
+                matched_prediction_track_ids=tuple(
+                    sorted({match.predicted_track_id for match in ordered_matches})
+                ),
+                mostly_tracked=coverage >= mostly_tracked_threshold,
+                mostly_lost=coverage <= mostly_lost_threshold,
+            )
         )
+
+    frame_summaries = [
+        TrackingFrameSummary(
+            frame_index=item.frame_index,
+            reference_count=item.reference_count,
+            predicted_count=item.predicted_count,
+            matched_count=item.matched_count,
+            false_positive_count=item.false_positive_count,
+            false_negative_count=item.false_negative_count,
+            identity_switch_count=switch_counts_by_frame[item.frame_index],
+            mean_iou=item.mean_iou,
+        )
+        for item in frame_summaries
+    ]
 
     reference_count = len(references)
     predicted_count = len(predictions)
@@ -215,8 +308,10 @@ def evaluate_tracking(
         else 0.0
     )
     motp = sum(match.iou for match in matches) / matched_count if matched_count else 0.0
-    id_precision = matched_count / predicted_count if predicted_count else 0.0
-    id_recall = matched_count / reference_count if reference_count else 0.0
+    detection_precision = matched_count / predicted_count if predicted_count else 0.0
+    detection_recall = matched_count / reference_count if reference_count else 0.0
+    id_precision = detection_precision
+    id_recall = detection_recall
     idf1 = (
         2 * id_precision * id_recall / (id_precision + id_recall)
         if id_precision + id_recall
@@ -230,12 +325,17 @@ def evaluate_tracking(
     association_accuracy = association_correct / association_total if association_total else 1.0
     hota = math.sqrt(max(detection_accuracy * association_accuracy, 0.0))
     depth_errors = [match.depth_error for match in matches if match.depth_error is not None]
+    matched_reference_ids = {match.reference_track_id for match in matches}
+    matched_prediction_ids = {match.predicted_track_id for match in matches}
+    all_prediction_ids = {box.track_id for box in predictions}
     return TrackingMetrics(
         reference_detection_count=reference_count,
         predicted_detection_count=predicted_count,
         matched_detection_count=matched_count,
         false_positive_count=false_positives,
         false_negative_count=false_negatives,
+        false_positive_track_count=len(all_prediction_ids - matched_prediction_ids),
+        false_negative_track_count=len(set(reference_frames) - matched_reference_ids),
         identity_switch_count=identity_switches,
         fragmentation_count=fragmentations,
         mostly_tracked_count=sum(
@@ -244,6 +344,9 @@ def evaluate_tracking(
         mostly_lost_count=sum(ratio <= mostly_lost_threshold for ratio in track_ratios.values()),
         mota=mota,
         motp=motp,
+        localization_iou=motp,
+        detection_precision=detection_precision,
+        detection_recall=detection_recall,
         id_precision=id_precision,
         id_recall=id_recall,
         idf1=idf1,
@@ -261,14 +364,6 @@ def evaluate_tracking(
         matches=tuple(
             sorted(matches, key=lambda item: (item.frame_index, item.reference_track_id))
         ),
+        per_frame=tuple(frame_summaries),
+        per_track=tuple(sorted(per_track, key=lambda item: item.reference_track_id)),
     )
-
-
-def _contiguous_segments(matches: Sequence[FrameMatch]) -> list[list[FrameMatch]]:
-    segments: list[list[FrameMatch]] = []
-    for match in matches:
-        if not segments or match.frame_index > segments[-1][-1].frame_index + 1:
-            segments.append([match])
-        else:
-            segments[-1].append(match)
-    return segments

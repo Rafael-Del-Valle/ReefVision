@@ -30,7 +30,7 @@ class VideoRenderExportService:
         if payload.track_ids:
             query = query.where(VideoTrack.id.in_(payload.track_ids))
         if not payload.include_archived_tracks:
-            query = query.where(VideoTrack.status != "archived")
+            query = query.where(VideoTrack.deleted_at.is_(None))
         tracks = list(self.session.scalars(query))
         if payload.track_ids and len(tracks) != len(set(payload.track_ids)):
             raise ValidationError("One or more requested tracks are missing or archived")
@@ -49,7 +49,9 @@ class VideoRenderExportService:
             resume_supported=False,
             request_json={
                 "video_id": video_id,
+                "source_video_sha256": video.sha256,
                 "resolved_track_ids": [track.id for track in tracks],
+                "resolved_track_revisions": {track.id: track.revision for track in tracks},
                 **payload.model_dump(mode="json"),
             },
             result_json={"stage": "queued"},
