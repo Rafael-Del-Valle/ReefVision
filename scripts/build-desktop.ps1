@@ -20,6 +20,9 @@ if ($TauriConfig.bundle.resources.'binaries/' -ne 'backend/') {
 if ($TauriConfig.bundle.resources.'../../../.desktop/bundled-models/' -ne 'bundled-models/') {
     throw "Tauri must package the verified catalog checkpoints as bundled-models/."
 }
+if ($TauriConfig.bundle.resources.'../../../.desktop/bundled-transformers-models/' -ne 'bundled-transformers-models/') {
+    throw "Tauri must package the Transformers vision model pack."
+}
 
 if (-not (Test-Path ".venv" -PathType Container)) {
     throw "Run .\scripts\bootstrap.ps1 first."
@@ -28,11 +31,14 @@ if (-not (Test-Path ".venv" -PathType Container)) {
 $VenvPython = Join-Path $Root ".venv\Scripts\python.exe"
 $HydrateScript = Join-Path $PSScriptRoot "hydrate-desktop-model-catalog.py"
 $BundleScript = Join-Path $PSScriptRoot "stage-bundled-models.py"
+$TransformersBundleScript = Join-Path $PSScriptRoot "stage-transformers-provider-models.py"
 $SourceModelCatalog = Join-Path $Root "config\model_catalog.json"
 $BundlePolicy = Join-Path $Root "config\desktop_ready_models.json"
+$TransformersPolicy = Join-Path $Root "config\transformers_model_pack.json"
 $GeneratedConfig = Join-Path $Root ".desktop\generated-config"
 $ModelCatalog = Join-Path $GeneratedConfig "model_catalog.json"
 $BundledModels = Join-Path $Root ".desktop\bundled-models"
+$BundledTransformersModels = Join-Path $Root ".desktop\bundled-transformers-models"
 
 New-Item -ItemType Directory -Path $GeneratedConfig -Force | Out-Null
 
@@ -62,8 +68,6 @@ if ($LASTEXITCODE -ne 0) {
     throw "The model catalog contains an available entry without a complete delivery path."
 }
 
-# Verified files already present in .desktop\bundled-models are reused, so only
-# a changed catalog entry requires another network download on the build machine.
 Write-ReefVisionStep "Staging verified pretrained catalog checkpoints"
 & $VenvPython $BundleScript --catalog $ModelCatalog --output $BundledModels
 if ($LASTEXITCODE -ne 0) {
@@ -104,8 +108,26 @@ Write-Host (
     "$($BundleMetadata.builtin_architecture_count) offline scratch architectures."
 ) -ForegroundColor Green
 
-# build-desktop-backend.ps1 packages config\model_catalog.json. Replace it only
-# for the duration of the build, then restore the source-controlled catalog byte-for-byte.
+Write-ReefVisionStep "Staging Florence-2, Grounding DINO, and OWLv2 model snapshots"
+& $VenvPython $TransformersBundleScript `
+    --policy $TransformersPolicy `
+    --output $BundledTransformersModels
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to stage the Transformers vision provider model pack."
+}
+$TransformersManifest = Join-Path $BundledTransformersModels "manifest.json"
+if (-not (Test-Path $TransformersManifest -PathType Leaf)) {
+    throw "Transformers model-pack staging did not produce a manifest."
+}
+$TransformersMetadata = Get-Content -LiteralPath $TransformersManifest -Raw | ConvertFrom-Json
+if ($TransformersMetadata.model_count -ne 6) {
+    throw "The Transformers vision model pack must contain exactly six models."
+}
+Write-Host (
+    "Bundling $($TransformersMetadata.model_count) Transformers model snapshots " +
+    "($([math]::Round($TransformersMetadata.total_size_bytes / 1GB, 2)) GB)."
+) -ForegroundColor Green
+
 $OriginalCatalogBytes = [System.IO.File]::ReadAllBytes($SourceModelCatalog)
 try {
     Copy-Item -LiteralPath $ModelCatalog -Destination $SourceModelCatalog -Force
