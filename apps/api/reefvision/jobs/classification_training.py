@@ -31,7 +31,10 @@ from reefvision.jobs.training import (
     _read_results_csv,
     _relative_to_data_dir,
 )
-from reefvision.ml.classification import CLASSIFICATION_TASK
+from reefvision.ml.classification import (
+    CLASSIFICATION_TASK,
+    resolve_installed_classification_architecture,
+)
 from reefvision.ml.providers import resolve_torch_device
 from reefvision.storage.classification_exports import write_classification_export
 from reefvision.storage.projects import resolve_managed_project_path
@@ -46,7 +49,7 @@ def _model_source(settings: Settings, session: Session, run: TrainingRun) -> str
             raise RuntimeError("The initial model is not a registered classifier")
         return str(resolve_managed_project_path(settings, model.managed_path))
     if run.architecture:
-        return run.architecture
+        return str(resolve_installed_classification_architecture(run.architecture, settings))
     raise RuntimeError("Classification run is missing its architecture")
 
 
@@ -157,6 +160,9 @@ def process_classification_training_job(
                 "dataset_manifest_path": dataset_manifest,
                 "dataset_archive_path": dataset_archive,
                 "dataset_export_result": export_result,
+                "resolved_architecture_path": checkpoint_source
+                if run.initial_checkpoint_source == "scratch"
+                else None,
             }
             job.result_json = {
                 "stage": "training",
