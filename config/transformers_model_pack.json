@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "pack_id": "transformers-vision",
+  "models": [
+    {
+      "catalog_id": "transformers/florence2/base",
+      "repo_id": "microsoft/Florence-2-base",
+      "revision": "main",
+      "provider_id": "florence2"
+    },
+    {
+      "catalog_id": "transformers/florence2/large",
+      "repo_id": "microsoft/Florence-2-large",
+      "revision": "main",
+      "provider_id": "florence2"
+    },
+    {
+      "catalog_id": "transformers/grounding_dino/tiny",
+      "repo_id": "IDEA-Research/grounding-dino-tiny",
+      "revision": "main",
+      "provider_id": "grounding_dino"
+    },
+    {
+      "catalog_id": "transformers/grounding_dino/base",
+      "repo_id": "IDEA-Research/grounding-dino-base",
+      "revision": "main",
+      "provider_id": "grounding_dino"
+    },
+    {
+      "catalog_id": "transformers/owlv2/base",
+      "repo_id": "google/owlv2-base-patch16-ensemble",
+      "revision": "main",
+      "provider_id": "owlv2"
+    },
+    {
+      "catalog_id": "transformers/owlv2/large",
+      "repo_id": "google/owlv2-large-patch14-ensemble",
+      "revision": "main",
+      "provider_id": "owlv2"
+    }
+  ]
+}
