@@ -11,15 +11,37 @@ from reefvision.ml.transformers_provider import (
     reset_transformers_text_prompt,
     set_transformers_text_prompt,
 )
+from reefvision.schemas.jobs import JobResponse
 
 _APPLIED = False
 _TRANSFORMERS_PROVIDERS = {"grounding_dino", "owlv2", "florence2"}
 
 
-def apply_advanced_inference_runtime_patch() -> None:
-    global _APPLIED
-    if _APPLIED:
-        return
+def _patch_registered_model_job_creation() -> None:
+    from reefvision.services.semantic_models import SemanticModelService
+
+    original = SemanticModelService.create_inference_job
+
+    def create_with_prompt(self: Any, project_id: str, payload: Any) -> JobResponse:
+        response = original(self, project_id, payload)
+        prompt = getattr(payload, "text_prompt", None)
+        normalized = prompt.strip() if isinstance(prompt, str) and prompt.strip() else None
+        if normalized is None:
+            return response
+        job = self.session.get(Job, response.id)
+        if job is None:
+            return response
+        request = dict(job.request_json or {})
+        request["text_prompt"] = normalized
+        job.request_json = request
+        self.session.commit()
+        self.session.refresh(job)
+        return JobResponse.model_validate(job)
+
+    SemanticModelService.create_inference_job = create_with_prompt
+
+
+def _patch_worker_prompt_context() -> None:
     from reefvision.jobs import worker
 
     original = worker.process_inference_job
@@ -67,4 +89,12 @@ def apply_advanced_inference_runtime_patch() -> None:
         return result
 
     worker.process_inference_job = process_with_prompt
+
+
+def apply_advanced_inference_runtime_patch() -> None:
+    global _APPLIED
+    if _APPLIED:
+        return
+    _patch_registered_model_job_creation()
+    _patch_worker_prompt_context()
     _APPLIED = True
