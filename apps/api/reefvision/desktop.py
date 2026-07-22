@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import importlib
 import logging
 import os
 import sys
@@ -23,6 +24,24 @@ from reefvision.logging_utils import configure_rotating_json_logging
 
 LOGGER = logging.getLogger("reefvision.desktop")
 _WINDOWED_STREAMS: list[TextIO] = []
+_PROVIDER_SMOKE_MODULES = (
+    "transformers",
+    "transformers.models.florence2",
+    "transformers.models.grounding_dino",
+    "transformers.models.owlv2",
+    "accelerate",
+    "safetensors",
+    "huggingface_hub",
+    "tokenizers",
+    "sentencepiece",
+    "nnunetv2",
+    "nnunetv2.experiment_planning.plan_and_preprocess_entrypoints",
+    "nnunetv2.run.run_training",
+    "nnunetv2.inference.predict_from_raw_data",
+    "dynamic_network_architectures",
+    "batchgenerators",
+    "batchgeneratorsv2",
+)
 
 
 class SupportsShouldExit(Protocol):
@@ -38,6 +57,7 @@ class DesktopLaunchOptions:
     context_file: Path | None
     run_migrations: bool
     safe_mode: bool = False
+    provider_import_smoke: bool = False
 
 
 def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
@@ -53,6 +73,11 @@ def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
         action="store_true",
         help="Start without background job processing",
     )
+    parser.add_argument(
+        "--provider-import-smoke",
+        action="store_true",
+        help="Import every packaged advanced-provider module and exit.",
+    )
     namespace = parser.parse_args(argv)
     return DesktopLaunchOptions(
         host=namespace.host,
@@ -62,6 +87,7 @@ def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
         context_file=namespace.context_file,
         run_migrations=namespace.run_migrations,
         safe_mode=namespace.safe_mode,
+        provider_import_smoke=namespace.provider_import_smoke,
     )
 
 
@@ -249,10 +275,27 @@ async def run_api_server(settings: Settings, options: DesktopLaunchOptions) -> i
                 await port_publisher
 
 
+def run_provider_import_smoke() -> int:
+    failures: list[str] = []
+    for module_name in _PROVIDER_SMOKE_MODULES:
+        try:
+            importlib.import_module(module_name)
+        except Exception as exc:
+            failures.append(f"{module_name}: {type(exc).__name__}: {exc}")
+    if failures:
+        for failure in failures:
+            LOGGER.error("Provider import smoke failed: %s", failure)
+        return 2
+    LOGGER.info("Packaged provider import smoke passed for %d modules", len(_PROVIDER_SMOKE_MODULES))
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     options = parse_args(argv)
     ensure_standard_streams()
     configure_logging(options.log_file)
+    if options.provider_import_smoke:
+        return run_provider_import_smoke()
     try:
         settings = build_settings(options)
         settings.ensure_directories()
