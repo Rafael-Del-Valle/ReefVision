@@ -31,7 +31,8 @@
     "shortDescription": "Local-first scientific image annotation and computer vision platform.",
     "resources": {
       "binaries/": "backend/",
-      "../../../.desktop/bundled-models/": "bundled-models/"
+      "../../../.desktop/bundled-models/": "bundled-models/",
+      "../../../.desktop/bundled-transformers-models/": "bundled-transformers-models/"
     },
     "icon": [
       "icons/32x32.png",
