@@ -20,3 +20,13 @@ seaborn==0.13.2
 ultralytics-thop==2.0.18
 ultralytics==8.3.228
 segment-anything==1.0
+
+# Shared local-only Transformers vision provider pack.
+transformers==4.57.2
+accelerate==1.11.0
+safetensors==0.6.2
+huggingface-hub==0.36.0
+sentencepiece==0.2.1
+
+# Advanced external semantic-segmentation provider.
+nnunetv2==2.6.2
