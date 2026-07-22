@@ -69,6 +69,17 @@ def _snapshot_sha256(files: list[dict[str, Any]]) -> str:
     return digest.hexdigest()
 
 
+def _immutable_revision(value: object, *, repo_id: str) -> str:
+    revision = str(value or "").strip().casefold()
+    if len(revision) != 40 or any(
+        character not in "0123456789abcdef" for character in revision
+    ):
+        raise RuntimeError(
+            f"Hugging Face did not resolve {repo_id} to an immutable 40-character commit"
+        )
+    return revision
+
+
 def stage_model_pack(policy_path: Path, output_root: Path) -> dict[str, Any]:
     try:
         from huggingface_hub import model_info, snapshot_download
@@ -95,7 +106,7 @@ def stage_model_pack(policy_path: Path, output_root: Path) -> dict[str, Any]:
             raise RuntimeError("Transformers model pack entry is incomplete")
         destination = output_root.joinpath(*_safe_catalog_segments(catalog_id))
         info = model_info(repo_id, revision=revision)
-        resolved_revision = str(info.sha or revision)
+        resolved_revision = _immutable_revision(info.sha, repo_id=repo_id)
         print(f"Staging {catalog_id} from {repo_id}@{resolved_revision}")
         temporary = destination.with_name(destination.name + ".part")
         if temporary.exists():
@@ -112,6 +123,7 @@ def stage_model_pack(policy_path: Path, output_root: Path) -> dict[str, Any]:
         )
         if snapshot_path.resolve() != temporary.resolve():
             raise RuntimeError("Hugging Face staging escaped the managed temporary directory")
+        shutil.rmtree(snapshot_path / ".cache", ignore_errors=True)
         if not (snapshot_path / "config.json").is_file():
             shutil.rmtree(temporary, ignore_errors=True)
             raise RuntimeError(f"Snapshot {repo_id} does not contain config.json")
@@ -138,11 +150,16 @@ def stage_model_pack(policy_path: Path, output_root: Path) -> dict[str, Any]:
         "pack_id": str(policy.get("pack_id") or "transformers-vision"),
         "model_count": len(records),
         "models": records,
-        "total_size_bytes": sum(int(item["total_size_bytes"]) for item in records.values()),
+        "total_size_bytes": sum(
+            int(item["total_size_bytes"]) for item in records.values()
+        ),
     }
     manifest_path = output_root / "manifest.json"
     temporary_manifest = manifest_path.with_suffix(".json.part")
-    temporary_manifest.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    temporary_manifest.write_text(
+        json.dumps(manifest, indent=2) + "\n",
+        encoding="utf-8",
+    )
     os.replace(temporary_manifest, manifest_path)
     print(
         f"Staged {manifest['model_count']} Transformers models "
