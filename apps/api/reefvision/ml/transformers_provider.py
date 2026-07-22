@@ -51,7 +51,9 @@ def _safe_catalog_id(value: object) -> str:
     catalog_id = str(value or "").strip()
     segments = catalog_id.split("/")
     if not segments or any(
-        not segment or segment in {".", ".."} or Path(segment).name != segment
+        not segment
+        or segment in {".", ".."}
+        or Path(segment).name != segment
         for segment in segments
     ):
         raise ValidationError("The Transformers model pointer has an unsafe catalog id")
@@ -82,27 +84,51 @@ def _pointer_model_directory(pointer_path: Path) -> Path:
     ):
         raise ValidationError("The Transformers model pointer has no valid snapshot checksum")
     model_dir = Path(str(pointer.get("model_path") or "")).expanduser().resolve()
-    expected_tail = Path("models", "provider-packs", "transformers-vision", *catalog_id.split("/"))
-    actual_tail = tuple(part.casefold() for part in model_dir.parts[-len(expected_tail.parts) :])
+    expected_tail = Path(
+        "models",
+        "provider-packs",
+        "transformers-vision",
+        *catalog_id.split("/"),
+    )
+    actual_tail = tuple(
+        part.casefold() for part in model_dir.parts[-len(expected_tail.parts) :]
+    )
     required_tail = tuple(part.casefold() for part in expected_tail.parts)
     if actual_tail != required_tail:
-        raise ValidationError("The Transformers model pointer does not target managed provider-pack storage")
+        raise ValidationError(
+            "The Transformers model pointer does not target managed provider-pack storage"
+        )
     index_root = model_dir.parents[len(catalog_id.split("/")) - 1]
     index = index_root / "manifest.json"
     manifest = _read_json_object(index, label="managed Transformers model index")
-    record = manifest.get("models", {}).get(catalog_id)
+    models = manifest.get("models")
+    record = models.get(catalog_id) if isinstance(models, dict) else None
     if not isinstance(record, dict) or record.get("verified") is not True:
-        raise ValidationError("The Transformers model pointer is not present in the verified model index")
+        raise ValidationError(
+            "The Transformers model pointer is not present in the verified model index"
+        )
     if Path(str(record.get("path") or "")).resolve() != model_dir:
-        raise ValidationError("The Transformers model index path does not match the pointer")
+        raise ValidationError(
+            "The Transformers model index path does not match the pointer"
+        )
     if str(record.get("snapshot_sha256") or "").casefold() != snapshot_sha256:
-        raise ValidationError("The Transformers model pointer checksum does not match the verified index")
+        raise ValidationError(
+            "The Transformers model pointer checksum does not match the verified index"
+        )
     revision = str(pointer.get("resolved_revision") or "")
     if str(record.get("resolved_revision") or "") != revision:
-        raise ValidationError("The Transformers model pointer revision does not match the verified index")
+        raise ValidationError(
+            "The Transformers model pointer revision does not match the verified index"
+        )
     marker = model_dir / ".reefvision-revision"
-    if not marker.is_file() or marker.read_text(encoding="utf-8").strip() != revision:
-        raise ValidationError("The Transformers model revision marker is missing or invalid")
+    try:
+        marker_revision = marker.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise ValidationError(
+            "The Transformers model revision marker is missing or unreadable"
+        ) from exc
+    if marker_revision != revision:
+        raise ValidationError("The Transformers model revision marker is invalid")
     return model_dir
 
 
@@ -116,13 +142,17 @@ def _require_model_directory(model_path: Path) -> Path:
             "ReefVision model pointer. Automatic downloads are disabled during inference."
         )
     if not (resolved / "config.json").is_file():
-        raise ValidationError("The selected Transformers model directory has no config.json")
+        raise ValidationError(
+            "The selected Transformers model directory has no config.json"
+        )
     return resolved
 
 
 def _model_type(model_path: Path) -> str:
     try:
-        payload = json.loads((model_path / "config.json").read_text(encoding="utf-8"))
+        payload = json.loads(
+            (model_path / "config.json").read_text(encoding="utf-8")
+        )
     except (OSError, json.JSONDecodeError) as exc:
         raise ValidationError(f"Could not read Transformers config.json: {exc}") from exc
     model_type = str(payload.get("model_type") or "").casefold().replace("-", "_")
@@ -136,14 +166,22 @@ def _model_type(model_path: Path) -> str:
         return "owlv2"
     if "florence2" in lowered:
         return "florence2"
-    raise ValidationError(f"Unsupported Transformers vision architecture: {model_type or architectures}")
+    raise ValidationError(
+        f"Unsupported Transformers vision architecture: {model_type or architectures}"
+    )
 
 
 def inspect_transformers_model(model_path: Path) -> TransformersModelSpec:
     model_dir = _require_model_directory(model_path)
     provider = _model_type(model_dir)
-    task = "phrase_grounding" if provider == "florence2" else "open_vocabulary_detect"
-    return TransformersModelSpec(provider_name=provider, architecture=provider, task=task)
+    task = (
+        "phrase_grounding" if provider == "florence2" else "open_vocabulary_detect"
+    )
+    return TransformersModelSpec(
+        provider_name=provider,
+        architecture=provider,
+        task=task,
+    )
 
 
 class TransformersVisionDetectionProvider:
@@ -192,13 +230,16 @@ class TransformersVisionDetectionProvider:
             )
         try:
             import torch
-            from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
+            from transformers import (
+                AutoModelForCausalLM,
+                AutoModelForZeroShotObjectDetection,
+                AutoProcessor,
+            )
 
             try:
                 from transformers import AutoModelForImageTextToText
             except ImportError:
                 AutoModelForImageTextToText = None  # type: ignore[assignment,misc]
-            from transformers import AutoModelForCausalLM
         except Exception as exc:
             raise ValidationError(
                 "The Transformers provider pack is not installed. Install transformers, "
@@ -214,6 +255,7 @@ class TransformersVisionDetectionProvider:
                 local_files_only=True,
                 trust_remote_code=self.provider_name == "florence2",
             )
+            model_class: Any
             if self.provider_name == "florence2":
                 model_class = AutoModelForImageTextToText or AutoModelForCausalLM
             else:
@@ -227,7 +269,9 @@ class TransformersVisionDetectionProvider:
             self._model.eval()
         except Exception as exc:
             self.unload_model()
-            raise ValidationError(f"Could not load local {self.provider_name} model: {exc}") from exc
+            raise ValidationError(
+                f"Could not load local {self.provider_name} model: {exc}"
+            ) from exc
         self._device = torch_device
         self._model_dir = model_dir
 
@@ -241,7 +285,9 @@ class TransformersVisionDetectionProvider:
         if self._model is None or self._processor is None:
             raise ValidationError("The Transformers model is not loaded")
         if not image_path.is_file():
-            raise ValidationError("Transformers inference requires an existing local image")
+            raise ValidationError(
+                "Transformers inference requires an existing local image"
+            )
         prompt = (text_prompt or current_transformers_text_prompt() or "").strip()
         if not prompt:
             raise ValidationError(
@@ -250,7 +296,7 @@ class TransformersVisionDetectionProvider:
         with Image.open(image_path) as source:
             image = source.convert("RGB")
         if self.provider_name == "florence2":
-            return self._predict_florence(image, prompt, settings)
+            return self._predict_florence(image, prompt)
         return self._predict_zero_shot(image, prompt, settings)
 
     def _predict_zero_shot(
@@ -264,19 +310,24 @@ class TransformersVisionDetectionProvider:
         labels = [item.strip() for item in prompt.split(",") if item.strip()]
         if not labels:
             labels = [prompt]
-        text: Any = [labels] if self.provider_name == "owlv2" else labels
-        inputs = self._processor(images=image, text=text, return_tensors="pt")
+        text_labels = [labels]
+        inputs = self._processor(
+            images=image,
+            text=text_labels,
+            return_tensors="pt",
+        )
         inputs = {key: value.to(self._device) for key, value in inputs.items()}
         with torch.inference_mode():
             outputs = self._model(**inputs)
         target_sizes = torch.tensor([image.size[::-1]], device=self._device)
         if self.provider_name == "grounding_dino":
             processed = self._processor.post_process_grounded_object_detection(
-                outputs,
-                inputs.get("input_ids"),
-                box_threshold=settings.confidence_threshold,
+                outputs=outputs,
+                input_ids=inputs.get("input_ids"),
+                threshold=settings.confidence_threshold,
                 text_threshold=settings.confidence_threshold,
                 target_sizes=target_sizes,
+                text_labels=text_labels,
             )[0]
         else:
             post_process = getattr(
@@ -285,32 +336,43 @@ class TransformersVisionDetectionProvider:
                 None,
             ) or getattr(self._processor, "post_process_object_detection", None)
             if post_process is None:
-                raise ValidationError("OWLv2 processor has no supported detection postprocessor")
+                raise ValidationError(
+                    "OWLv2 processor has no supported detection postprocessor"
+                )
             try:
                 processed = post_process(
-                    outputs,
+                    outputs=outputs,
                     threshold=settings.confidence_threshold,
                     target_sizes=target_sizes,
-                    text_labels=[labels],
+                    text_labels=text_labels,
                 )[0]
             except TypeError:
                 processed = post_process(
-                    outputs,
+                    outputs=outputs,
                     threshold=settings.confidence_threshold,
                     target_sizes=target_sizes,
                 )[0]
         boxes = processed.get("boxes", [])
         scores = processed.get("scores", [])
-        result_labels = processed.get("text_labels", processed.get("labels", []))
+        result_labels = processed.get(
+            "text_labels",
+            processed.get("labels", []),
+        )
         predictions: list[DetectionPrediction] = []
         for index, (box, score) in enumerate(zip(boxes, scores, strict=False)):
             values = [float(value) for value in box.detach().cpu().tolist()]
             if len(values) != 4:
                 continue
-            label_value = result_labels[index] if index < len(result_labels) else "object"
+            label_value = (
+                result_labels[index] if index < len(result_labels) else "object"
+            )
             if hasattr(label_value, "item"):
                 class_index = int(label_value.item())
-                label = labels[class_index] if 0 <= class_index < len(labels) else str(class_index)
+                label = (
+                    labels[class_index]
+                    if 0 <= class_index < len(labels)
+                    else str(class_index)
+                )
             else:
                 label = str(label_value)
                 class_index = labels.index(label) if label in labels else None
@@ -328,12 +390,15 @@ class TransformersVisionDetectionProvider:
         self,
         image: Image.Image,
         prompt: str,
-        settings: DetectionSettings,
     ) -> list[DetectionPrediction]:
         import torch
 
         task_prompt = f"<OPEN_VOCABULARY_DETECTION>{prompt}"
-        inputs = self._processor(text=task_prompt, images=image, return_tensors="pt")
+        inputs = self._processor(
+            text=task_prompt,
+            images=image,
+            return_tensors="pt",
+        )
         inputs = {key: value.to(self._device) for key, value in inputs.items()}
         with torch.inference_mode():
             generated = self._model.generate(
@@ -342,7 +407,10 @@ class TransformersVisionDetectionProvider:
                 do_sample=False,
                 num_beams=3,
             )
-        generated_text = self._processor.batch_decode(generated, skip_special_tokens=False)[0]
+        generated_text = self._processor.batch_decode(
+            generated,
+            skip_special_tokens=False,
+        )[0]
         parsed = self._processor.post_process_generation(
             generated_text,
             task="<OPEN_VOCABULARY_DETECTION>",
