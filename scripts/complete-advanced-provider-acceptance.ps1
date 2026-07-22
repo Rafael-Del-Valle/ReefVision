@@ -23,7 +23,12 @@ $CleanSeedData = Join-Path $Root ".desktop\acceptance-clean-seed"
 $AcceptanceRoot = Join-Path $Root ".desktop\acceptance"
 $SmokeResults = Join-Path $AcceptanceRoot "transformers-model-smoke.json"
 $InstallerDirectory = Join-Path $Root "apps\web\src-tauri\target\$TargetTriple\release\bundle\msi"
+$AdminInstallRoot = Join-Path $AcceptanceRoot "msi-admin-image"
+$InstalledSeedData = Join-Path $AcceptanceRoot "msi-clean-data"
+$InstalledContextFile = Join-Path $AcceptanceRoot "msi-backend-port.txt"
+$InstalledBackendLog = Join-Path $AcceptanceRoot "msi-backend.jsonl"
 $PreviousPythonPath = $env:PYTHONPATH
+$PreviousBundledTransformers = $env:REEFVISION_BUNDLED_TRANSFORMERS_MODELS_DIR
 $env:PYTHONPATH = Join-Path $Root "apps\api"
 
 New-Item -ItemType Directory -Path $AcceptanceRoot -Force | Out-Null
@@ -35,7 +40,9 @@ try {
     & $Python -m pip install -r $ProviderRequirements
     if ($LASTEXITCODE -ne 0) { throw "Provider dependency installation failed." }
     & $Python -m pip check
-    if ($LASTEXITCODE -ne 0) { throw "The installed Python environment has dependency conflicts." }
+    if ($LASTEXITCODE -ne 0) {
+        throw "The installed Python environment has dependency conflicts."
+    }
 
     Write-ReefVisionStep "Running Ruff checks"
     & $Python -m ruff check apps/api/reefvision scripts
@@ -51,6 +58,8 @@ try {
     & $Python -m pytest `
         apps/api/reefvision/tests/test_advanced_vision_providers.py `
         apps/api/reefvision/tests/test_bundled_transformers_models.py `
+        apps/api/reefvision/tests/test_nnunet_frozen_runtime.py `
+        apps/api/reefvision/tests/test_desktop_runtime.py `
         apps/api/reefvision/tests/test_model_delivery_contract.py `
         apps/api/reefvision/tests/test_desktop_ready_model_catalog.py `
         apps/api/reefvision/tests/test_bundled_models.py `
@@ -60,9 +69,15 @@ try {
     Write-ReefVisionStep "Running frontend formatting, type, and component tests"
     $NodeTools = Ensure-ReefVisionNodeTools
     Assert-ReefVisionPublicLockfile -NodeTools $NodeTools
-    Invoke-ReefVisionNpm -NodeTools $NodeTools -Arguments @("--prefix", "apps/web", "run", "format:check")
-    Invoke-ReefVisionNpm -NodeTools $NodeTools -Arguments @("--prefix", "apps/web", "run", "typecheck")
-    Invoke-ReefVisionNpm -NodeTools $NodeTools -Arguments @("--prefix", "apps/web", "run", "test")
+    Invoke-ReefVisionNpm -NodeTools $NodeTools -Arguments @(
+        "--prefix", "apps/web", "run", "format:check"
+    )
+    Invoke-ReefVisionNpm -NodeTools $NodeTools -Arguments @(
+        "--prefix", "apps/web", "run", "typecheck"
+    )
+    Invoke-ReefVisionNpm -NodeTools $NodeTools -Arguments @(
+        "--prefix", "apps/web", "run", "test"
+    )
 
     Write-ReefVisionStep "Downloading and hashing all six Transformers snapshots"
     & $Python .\scripts\stage-transformers-provider-models.py `
@@ -81,7 +96,9 @@ try {
         $SmokeArguments += "--allow-missing-cuda"
     }
     & $Python @SmokeArguments
-    if ($LASTEXITCODE -ne 0) { throw "Real Transformers CPU/CUDA smoke testing failed." }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Real Transformers CPU/CUDA smoke testing failed."
+    }
 
     Write-ReefVisionStep "Testing clean application-data model seeding"
     $SeedArguments = @(
@@ -100,19 +117,136 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Desktop MSI build failed." }
 
     $Installers = @(
-        Get-ChildItem -LiteralPath $InstallerDirectory -Filter "*.msi" -File -ErrorAction SilentlyContinue
+        Get-ChildItem `
+            -LiteralPath $InstallerDirectory `
+            -Filter "*.msi" `
+            -File `
+            -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTimeUtc -Descending
     )
     if ($Installers.Count -eq 0) {
         throw "No MSI was produced in $InstallerDirectory"
     }
 
-    Write-Host "" 
+    Write-ReefVisionStep "Testing startup seeding from a clean MSI payload"
+    Remove-Item -LiteralPath $AdminInstallRoot -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $InstalledSeedData -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $InstalledContextFile -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $InstalledBackendLog -Force -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Path $AdminInstallRoot -Force | Out-Null
+
+    $Msi = $Installers[0]
+    $AdministrativeInstall = Start-Process `
+        -FilePath "msiexec.exe" `
+        -ArgumentList @(
+            "/a",
+            "`"$($Msi.FullName)`"",
+            "/qn",
+            "TARGETDIR=`"$AdminInstallRoot`""
+        ) `
+        -PassThru `
+        -Wait
+    if ($AdministrativeInstall.ExitCode -ne 0) {
+        throw (
+            "MSI administrative extraction failed with exit code " +
+            $AdministrativeInstall.ExitCode
+        )
+    }
+
+    $PackagedApi = Get-ChildItem `
+        -LiteralPath $AdminInstallRoot `
+        -Recurse `
+        -Filter "reefvision-api.exe" `
+        -File |
+        Select-Object -First 1
+    if ($null -eq $PackagedApi) {
+        throw "The MSI payload does not contain reefvision-api.exe."
+    }
+    $PackagedManifest = Get-ChildItem `
+        -LiteralPath $AdminInstallRoot `
+        -Recurse `
+        -Filter "manifest.json" `
+        -File |
+        Where-Object { $_.FullName -like "*bundled-transformers-models*" } |
+        Select-Object -First 1
+    if ($null -eq $PackagedManifest) {
+        throw "The MSI payload does not contain the Transformers model-pack manifest."
+    }
+
+    $env:REEFVISION_BUNDLED_TRANSFORMERS_MODELS_DIR = $PackagedManifest.Directory.FullName
+    $PackagedProcess = Start-Process `
+        -FilePath $PackagedApi.FullName `
+        -ArgumentList @(
+            "--host", "127.0.0.1",
+            "--port", "0",
+            "--data-dir", "`"$InstalledSeedData`"",
+            "--context-file", "`"$InstalledContextFile`"",
+            "--log-file", "`"$InstalledBackendLog`"",
+            "--safe-mode",
+            "--skip-migrations"
+        ) `
+        -PassThru
+    try {
+        $Deadline = [DateTime]::UtcNow.AddMinutes(5)
+        while (
+            -not (Test-Path $InstalledContextFile -PathType Leaf) -and
+            -not $PackagedProcess.HasExited -and
+            [DateTime]::UtcNow -lt $Deadline
+        ) {
+            Start-Sleep -Milliseconds 250
+            $PackagedProcess.Refresh()
+        }
+        if ($PackagedProcess.HasExited) {
+            $Details = if (Test-Path $InstalledBackendLog -PathType Leaf) {
+                Get-Content -LiteralPath $InstalledBackendLog -Raw
+            }
+            else {
+                "No packaged backend log was produced."
+            }
+            throw (
+                "The packaged backend exited before startup seeding completed. " +
+                $Details
+            )
+        }
+        if (-not (Test-Path $InstalledContextFile -PathType Leaf)) {
+            throw "The packaged backend did not report readiness during MSI startup testing."
+        }
+    }
+    finally {
+        if (-not $PackagedProcess.HasExited) {
+            Stop-Process -Id $PackagedProcess.Id -Force
+            $PackagedProcess.WaitForExit()
+        }
+    }
+
+    $InstalledManifestPath = Join-Path `
+        $InstalledSeedData `
+        "models\provider-packs\transformers-vision\manifest.json"
+    if (-not (Test-Path $InstalledManifestPath -PathType Leaf)) {
+        throw "The packaged backend did not seed a managed Transformers manifest."
+    }
+    $InstalledManifest = Get-Content -LiteralPath $InstalledManifestPath -Raw |
+        ConvertFrom-Json
+    $VerifiedInstalledModels = @(
+        $InstalledManifest.models.PSObject.Properties |
+            Where-Object { $_.Value.verified -eq $true }
+    )
+    if ($VerifiedInstalledModels.Count -ne 6) {
+        throw (
+            "The clean MSI startup verified $($VerifiedInstalledModels.Count) models; " +
+            "six were required."
+        )
+    }
+
+    Write-Host ""
     Write-Host "Advanced provider acceptance passed." -ForegroundColor Green
     Write-Host "Transformers smoke results: $SmokeResults" -ForegroundColor Green
+    Write-Host "Clean MSI startup data: $InstalledSeedData" -ForegroundColor Green
     foreach ($Installer in $Installers) {
         Write-Host "MSI: $($Installer.FullName)" -ForegroundColor Green
     }
 }
 finally {
     $env:PYTHONPATH = $PreviousPythonPath
+    $env:REEFVISION_BUNDLED_TRANSFORMERS_MODELS_DIR = $PreviousBundledTransformers
 }
