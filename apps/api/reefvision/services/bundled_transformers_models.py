@@ -36,7 +36,9 @@ def _bundle_roots() -> list[Path]:
             ]
         )
     candidates.append(
-        Path(__file__).resolve().parents[4] / ".desktop" / "bundled-transformers-models"
+        Path(__file__).resolve().parents[4]
+        / ".desktop"
+        / "bundled-transformers-models"
     )
     unique: list[Path] = []
     seen: set[str] = set()
@@ -75,7 +77,11 @@ def _sha256(path: Path) -> str:
 
 def _safe_relative_file(root: Path, relative_path: str) -> Path:
     relative = Path(relative_path)
-    if relative.is_absolute() or not relative.parts or any(part in {"", ".", ".."} for part in relative.parts):
+    if (
+        relative.is_absolute()
+        or not relative.parts
+        or any(part in {"", ".", ".."} for part in relative.parts)
+    ):
         raise ValueError(f"Unsafe snapshot path: {relative_path!r}")
     candidate = (root / relative).resolve()
     candidate.relative_to(root.resolve())
@@ -94,7 +100,9 @@ def _snapshot_digest(files: list[dict[str, Any]]) -> str:
     return digest.hexdigest()
 
 
-def _validate_file_records(raw_record: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:
+def _validate_file_records(
+    raw_record: dict[str, Any],
+) -> tuple[list[dict[str, Any]], str]:
     raw_files = raw_record.get("files")
     if not isinstance(raw_files, list) or not raw_files:
         raise ValueError("Bundled model manifest has no file records")
@@ -108,7 +116,11 @@ def _validate_file_records(raw_record: dict[str, Any]) -> tuple[list[dict[str, A
         sha256 = str(raw_file.get("sha256") or "").casefold()
         if relative_path in seen:
             raise ValueError(f"Duplicate bundled model file: {relative_path}")
-        if size_bytes < 0 or len(sha256) != 64 or any(character not in "0123456789abcdef" for character in sha256):
+        if (
+            size_bytes < 0
+            or len(sha256) != 64
+            or any(character not in "0123456789abcdef" for character in sha256)
+        ):
             raise ValueError(f"Invalid bundled model metadata: {relative_path}")
         seen.add(relative_path)
         files.append(
@@ -125,7 +137,12 @@ def _validate_file_records(raw_record: dict[str, Any]) -> tuple[list[dict[str, A
     return files, calculated_digest
 
 
-def _verify_snapshot(root: Path, raw_record: dict[str, Any], *, allow_marker: bool) -> tuple[bool, str, str]:
+def _verify_snapshot(
+    root: Path,
+    raw_record: dict[str, Any],
+    *,
+    allow_marker: bool,
+) -> tuple[bool, str, str]:
     try:
         files, snapshot_digest = _validate_file_records(raw_record)
         expected_paths = {str(item["relative_path"]) for item in files}
@@ -139,17 +156,24 @@ def _verify_snapshot(root: Path, raw_record: dict[str, Any], *, allow_marker: bo
         unexpected = actual_paths - expected_paths
         missing = expected_paths - actual_paths
         if unexpected:
-            return False, f"Unexpected bundled files: {', '.join(sorted(unexpected)[:5])}", snapshot_digest
+            details = ", ".join(sorted(unexpected)[:5])
+            return False, f"Unexpected bundled files: {details}", snapshot_digest
         if missing:
-            return False, f"Missing bundled files: {', '.join(sorted(missing)[:5])}", snapshot_digest
+            details = ", ".join(sorted(missing)[:5])
+            return False, f"Missing bundled files: {details}", snapshot_digest
         for item in files:
             path = _safe_relative_file(root, str(item["relative_path"]))
+            relative_path = str(item["relative_path"])
             if not path.is_file():
-                return False, f"Missing bundled file: {item['relative_path']}", snapshot_digest
+                return False, f"Missing bundled file: {relative_path}", snapshot_digest
             if path.stat().st_size != int(item["size_bytes"]):
-                return False, f"Bundled file size mismatch: {item['relative_path']}", snapshot_digest
+                return False, f"Bundled file size mismatch: {relative_path}", snapshot_digest
             if _sha256(path) != str(item["sha256"]):
-                return False, f"Bundled file checksum mismatch: {item['relative_path']}", snapshot_digest
+                return (
+                    False,
+                    f"Bundled file checksum mismatch: {relative_path}",
+                    snapshot_digest,
+                )
         if not (root / "config.json").is_file():
             return False, "Bundled model has no config.json", snapshot_digest
         return True, "verified", snapshot_digest
@@ -170,7 +194,12 @@ def install_bundled_transformers_models(
     if loaded is None:
         return {}, []
     bundle_root, manifest = loaded
-    destination_root = settings.resolved_data_dir / "models" / "provider-packs" / "transformers-vision"
+    destination_root = (
+        settings.resolved_data_dir
+        / "models"
+        / "provider-packs"
+        / "transformers-vision"
+    )
     destination_root.mkdir(parents=True, exist_ok=True)
     installed: dict[str, Path] = {}
     index_models: dict[str, Any] = {}
@@ -183,10 +212,14 @@ def install_bundled_transformers_models(
         try:
             source = _safe_relative_file(bundle_root, relative_path)
         except ValueError:
-            warnings.append(f"Bundled Transformers path escapes resource root: {catalog_id}")
+            warnings.append(
+                f"Bundled Transformers path escapes resource root: {catalog_id}"
+            )
             continue
         if not source.is_dir():
-            warnings.append(f"Bundled Transformers model directory is missing: {catalog_id}")
+            warnings.append(
+                f"Bundled Transformers model directory is missing: {catalog_id}"
+            )
             continue
         source_valid, source_reason, snapshot_digest = _verify_snapshot(
             source,
@@ -194,7 +227,10 @@ def install_bundled_transformers_models(
             allow_marker=False,
         )
         if not source_valid:
-            warnings.append(f"Bundled Transformers model failed verification ({catalog_id}): {source_reason}")
+            warnings.append(
+                "Bundled Transformers model failed verification "
+                f"({catalog_id}): {source_reason}"
+            )
             continue
 
         destination = destination_root.joinpath(*str(catalog_id).split("/"))
@@ -202,14 +238,19 @@ def install_bundled_transformers_models(
         revision = str(raw_record.get("resolved_revision") or "")
         destination_valid = False
         if destination.is_dir() and marker.is_file():
-            marker_matches = marker.read_text(encoding="utf-8").strip() == revision
+            try:
+                marker_matches = marker.read_text(encoding="utf-8").strip() == revision
+            except OSError:
+                marker_matches = False
             if marker_matches:
                 destination_valid, _, destination_digest = _verify_snapshot(
                     destination,
                     raw_record,
                     allow_marker=False,
                 )
-                destination_valid = destination_valid and destination_digest == snapshot_digest
+                destination_valid = (
+                    destination_valid and destination_digest == snapshot_digest
+                )
         if not destination_valid:
             temporary = destination.with_name(destination.name + ".bundled.part")
             if temporary.exists():
@@ -224,10 +265,14 @@ def install_bundled_transformers_models(
             if not copied_valid or copied_digest != snapshot_digest:
                 shutil.rmtree(temporary, ignore_errors=True)
                 warnings.append(
-                    f"Copied Transformers model failed verification ({catalog_id}): {copied_reason}"
+                    "Copied Transformers model failed verification "
+                    f"({catalog_id}): {copied_reason}"
                 )
                 continue
-            (temporary / _MARKER_FILENAME).write_text(revision + "\n", encoding="utf-8")
+            (temporary / _MARKER_FILENAME).write_text(
+                revision + "\n",
+                encoding="utf-8",
+            )
             if destination.exists():
                 shutil.rmtree(destination)
             os.replace(temporary, destination)
@@ -239,7 +284,9 @@ def install_bundled_transformers_models(
             "repo_id": raw_record.get("repo_id"),
             "resolved_revision": revision,
             "snapshot_sha256": snapshot_digest,
-            "file_count": int(raw_record.get("file_count") or len(raw_record.get("files") or [])),
+            "file_count": int(
+                raw_record.get("file_count") or len(raw_record.get("files") or [])
+            ),
             "total_size_bytes": int(raw_record.get("total_size_bytes") or 0),
             "verified": True,
         }
@@ -255,7 +302,10 @@ def install_bundled_transformers_models(
     return installed, warnings
 
 
-def bundled_transformers_model_record(settings: Settings, catalog_id: str) -> dict[str, Any] | None:
+def bundled_transformers_model_record(
+    settings: Settings,
+    catalog_id: str,
+) -> dict[str, Any] | None:
     index = (
         settings.resolved_data_dir
         / "models"
@@ -269,20 +319,28 @@ def bundled_transformers_model_record(settings: Settings, catalog_id: str) -> di
         payload = json.loads(index.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
-    record = payload.get("models", {}).get(catalog_id)
+    models = payload.get("models")
+    if not isinstance(models, dict):
+        return None
+    record = models.get(catalog_id)
     if not isinstance(record, dict) or record.get("verified") is not True:
         return None
     path = Path(str(record.get("path") or "")).resolve()
     if not path.is_dir() or not (path / "config.json").is_file():
         return None
     marker = path / _MARKER_FILENAME
-    if not marker.is_file() or marker.read_text(encoding="utf-8").strip() != str(
-        record.get("resolved_revision") or ""
-    ):
+    try:
+        marker_revision = marker.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if marker_revision != str(record.get("resolved_revision") or ""):
         return None
     return {**record, "path": path}
 
 
-def bundled_transformers_model_path(settings: Settings, catalog_id: str) -> Path | None:
+def bundled_transformers_model_path(
+    settings: Settings,
+    catalog_id: str,
+) -> Path | None:
     record = bundled_transformers_model_record(settings, catalog_id)
     return Path(record["path"]) if record is not None else None
