@@ -16,19 +16,24 @@ if (-not (Test-Path ".venv" -PathType Container)) {
 }
 
 $Python = Join-Path $Root ".venv\Scripts\python.exe"
-$ProviderRequirements = Join-Path $Root "requirements\providers-windows-cu121-py312.txt"
+$ProviderRequirements = Join-Path `
+    $Root `
+    "requirements\providers-windows-cu121-py312.txt"
 $TransformersPolicy = Join-Path $Root "config\transformers_model_pack.json"
 $TransformersBundle = Join-Path $Root ".desktop\bundled-transformers-models"
 $CleanSeedData = Join-Path $Root ".desktop\acceptance-clean-seed"
 $AcceptanceRoot = Join-Path $Root ".desktop\acceptance"
 $SmokeResults = Join-Path $AcceptanceRoot "transformers-model-smoke.json"
-$InstallerDirectory = Join-Path $Root "apps\web\src-tauri\target\$TargetTriple\release\bundle\msi"
+$InstallerDirectory = Join-Path `
+    $Root `
+    "apps\web\src-tauri\target\$TargetTriple\release\bundle\msi"
 $AdminInstallRoot = Join-Path $AcceptanceRoot "msi-admin-image"
 $InstalledSeedData = Join-Path $AcceptanceRoot "msi-clean-data"
 $InstalledContextFile = Join-Path $AcceptanceRoot "msi-backend-port.txt"
 $InstalledBackendLog = Join-Path $AcceptanceRoot "msi-backend.jsonl"
 $PreviousPythonPath = $env:PYTHONPATH
-$PreviousBundledTransformers = $env:REEFVISION_BUNDLED_TRANSFORMERS_MODELS_DIR
+$PreviousBundledTransformers = `
+    $env:REEFVISION_BUNDLED_TRANSFORMERS_MODELS_DIR
 $env:PYTHONPATH = Join-Path $Root "apps\api"
 
 New-Item -ItemType Directory -Path $AcceptanceRoot -Force | Out-Null
@@ -36,9 +41,13 @@ New-Item -ItemType Directory -Path $AcceptanceRoot -Force | Out-Null
 try {
     Write-ReefVisionStep "Installing the pinned advanced provider dependencies"
     & $Python -m pip install --upgrade pip
-    if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed." }
+    if ($LASTEXITCODE -ne 0) {
+        throw "pip upgrade failed."
+    }
     & $Python -m pip install -r $ProviderRequirements
-    if ($LASTEXITCODE -ne 0) { throw "Provider dependency installation failed." }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Provider dependency installation failed."
+    }
     & $Python -m pip check
     if ($LASTEXITCODE -ne 0) {
         throw "The installed Python environment has dependency conflicts."
@@ -46,13 +55,19 @@ try {
 
     Write-ReefVisionStep "Running Ruff checks"
     & $Python -m ruff check apps/api/reefvision scripts
-    if ($LASTEXITCODE -ne 0) { throw "Ruff check failed." }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Ruff check failed."
+    }
     & $Python -m ruff format --check apps/api/reefvision scripts
-    if ($LASTEXITCODE -ne 0) { throw "Ruff format check failed." }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Ruff format check failed."
+    }
 
     Write-ReefVisionStep "Running strict backend type checking"
     & $Python -m mypy apps/api/reefvision
-    if ($LASTEXITCODE -ne 0) { throw "Mypy failed." }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Mypy failed."
+    }
 
     Write-ReefVisionStep "Running focused advanced-provider backend tests"
     & $Python -m pytest `
@@ -64,7 +79,9 @@ try {
         apps/api/reefvision/tests/test_desktop_ready_model_catalog.py `
         apps/api/reefvision/tests/test_bundled_models.py `
         -q
-    if ($LASTEXITCODE -ne 0) { throw "Focused advanced-provider tests failed." }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Focused advanced-provider tests failed."
+    }
 
     Write-ReefVisionStep "Running frontend formatting, type, and component tests"
     $NodeTools = Ensure-ReefVisionNodeTools
@@ -83,7 +100,9 @@ try {
     & $Python .\scripts\stage-transformers-provider-models.py `
         --policy $TransformersPolicy `
         --output $TransformersBundle
-    if ($LASTEXITCODE -ne 0) { throw "Transformers model-pack staging failed." }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Transformers model-pack staging failed."
+    }
 
     Write-ReefVisionStep "Testing all six Transformers models on CPU and CUDA"
     $SmokeArguments = @(
@@ -110,11 +129,16 @@ try {
         $SeedArguments += "--keep-data"
     }
     & $Python @SeedArguments
-    if ($LASTEXITCODE -ne 0) { throw "Clean startup seeding failed." }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Clean startup seeding failed."
+    }
 
     Write-ReefVisionStep "Building and validating the enlarged MSI"
-    & (Join-Path $PSScriptRoot "build-desktop.ps1") -TargetTriple $TargetTriple
-    if ($LASTEXITCODE -ne 0) { throw "Desktop MSI build failed." }
+    & (Join-Path $PSScriptRoot "build-desktop.ps1") `
+        -TargetTriple $TargetTriple
+    if ($LASTEXITCODE -ne 0) {
+        throw "Desktop MSI build failed."
+    }
 
     $Installers = @(
         Get-ChildItem `
@@ -129,10 +153,24 @@ try {
     }
 
     Write-ReefVisionStep "Testing startup seeding from a clean MSI payload"
-    Remove-Item -LiteralPath $AdminInstallRoot -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $InstalledSeedData -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $InstalledContextFile -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $InstalledBackendLog -Force -ErrorAction SilentlyContinue
+    Remove-Item `
+        -LiteralPath $AdminInstallRoot `
+        -Recurse `
+        -Force `
+        -ErrorAction SilentlyContinue
+    Remove-Item `
+        -LiteralPath $InstalledSeedData `
+        -Recurse `
+        -Force `
+        -ErrorAction SilentlyContinue
+    Remove-Item `
+        -LiteralPath $InstalledContextFile `
+        -Force `
+        -ErrorAction SilentlyContinue
+    Remove-Item `
+        -LiteralPath $InstalledBackendLog `
+        -Force `
+        -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Path $AdminInstallRoot -Force | Out-Null
 
     $Msi = $Installers[0]
@@ -162,18 +200,44 @@ try {
     if ($null -eq $PackagedApi) {
         throw "The MSI payload does not contain reefvision-api.exe."
     }
-    $PackagedManifest = Get-ChildItem `
-        -LiteralPath $AdminInstallRoot `
-        -Recurse `
-        -Filter "manifest.json" `
-        -File |
-        Where-Object { $_.FullName -like "*bundled-transformers-models*" } |
-        Select-Object -First 1
+
+    $PackagedManifest = $null
+    $ManifestCandidates = @(
+        Get-ChildItem `
+            -LiteralPath $AdminInstallRoot `
+            -Recurse `
+            -Filter "manifest.json" `
+            -File |
+            Where-Object {
+                $_.Directory.Name -eq "bundled-transformers-models"
+            }
+    )
+    foreach ($Candidate in $ManifestCandidates) {
+        try {
+            $CandidatePayload = Get-Content -LiteralPath $Candidate.FullName -Raw |
+                ConvertFrom-Json
+        }
+        catch {
+            continue
+        }
+        if (
+            $CandidatePayload.manifest_version -eq 2 -and
+            $CandidatePayload.model_count -eq 6 -and
+            @($CandidatePayload.models.PSObject.Properties).Count -eq 6
+        ) {
+            $PackagedManifest = $Candidate
+            break
+        }
+    }
     if ($null -eq $PackagedManifest) {
-        throw "The MSI payload does not contain the Transformers model-pack manifest."
+        throw (
+            "The MSI payload does not contain a valid six-model " +
+            "Transformers model-pack manifest."
+        )
     }
 
-    $env:REEFVISION_BUNDLED_TRANSFORMERS_MODELS_DIR = $PackagedManifest.Directory.FullName
+    $env:REEFVISION_BUNDLED_TRANSFORMERS_MODELS_DIR = `
+        $PackagedManifest.Directory.FullName
     $PackagedProcess = Start-Process `
         -FilePath $PackagedApi.FullName `
         -ArgumentList @(
@@ -182,12 +246,11 @@ try {
             "--data-dir", "`"$InstalledSeedData`"",
             "--context-file", "`"$InstalledContextFile`"",
             "--log-file", "`"$InstalledBackendLog`"",
-            "--safe-mode",
-            "--skip-migrations"
+            "--safe-mode"
         ) `
         -PassThru
     try {
-        $Deadline = [DateTime]::UtcNow.AddMinutes(5)
+        $Deadline = [DateTime]::UtcNow.AddMinutes(15)
         while (
             -not (Test-Path $InstalledContextFile -PathType Leaf) -and
             -not $PackagedProcess.HasExited -and
@@ -209,7 +272,10 @@ try {
             )
         }
         if (-not (Test-Path $InstalledContextFile -PathType Leaf)) {
-            throw "The packaged backend did not report readiness during MSI startup testing."
+            throw (
+                "The packaged backend did not report readiness during " +
+                "MSI startup testing."
+            )
         }
     }
     finally {
@@ -248,5 +314,6 @@ try {
 }
 finally {
     $env:PYTHONPATH = $PreviousPythonPath
-    $env:REEFVISION_BUNDLED_TRANSFORMERS_MODELS_DIR = $PreviousBundledTransformers
+    $env:REEFVISION_BUNDLED_TRANSFORMERS_MODELS_DIR = `
+        $PreviousBundledTransformers
 }
