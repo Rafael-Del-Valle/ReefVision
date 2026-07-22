@@ -41,6 +41,9 @@ from reefvision.services.bundled_models import (
     install_bundled_catalog_models,
     reconcile_bundled_model_jobs,
 )
+from reefvision.services.bundled_transformers_models import (
+    install_bundled_transformers_models,
+)
 from reefvision.services.model_catalog import validate_catalog_startup
 
 LOGGER = logging.getLogger("reefvision.api")
@@ -66,14 +69,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     catalog_startup_warnings = validate_catalog_startup()
 
     bundled_catalog_ids: list[str]
+    bundled_transformers_models: dict[str, object]
     bundled_warnings: list[str]
+    transformer_warnings: list[str]
     if active_settings.env == "test":
         bundled_catalog_ids = []
+        bundled_transformers_models = {}
         bundled_warnings = []
+        transformer_warnings = []
     else:
         bundled_catalog_ids, bundled_warnings = install_bundled_catalog_models(active_settings)
+        bundled_transformers_models, transformer_warnings = install_bundled_transformers_models(
+            active_settings
+        )
 
     catalog_startup_warnings.extend(bundled_warnings)
+    catalog_startup_warnings.extend(transformer_warnings)
     engine = create_database_engine(active_settings)
     session_factory = create_session_factory(engine)
 
@@ -87,6 +98,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "component": "api",
                 "data_dir": str(active_settings.resolved_data_dir),
                 "bundled_catalog_model_count": len(bundled_catalog_ids),
+                "bundled_transformers_model_count": len(bundled_transformers_models),
             },
         )
         stop_event = asyncio.Event()
@@ -122,6 +134,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.provider_runtime = ProviderRuntimeManager()
     app.state.catalog_startup_warnings = catalog_startup_warnings
     app.state.bundled_catalog_ids = bundled_catalog_ids
+    app.state.bundled_transformers_models = bundled_transformers_models
     app.add_middleware(
         CORSMiddleware,
         allow_origins=active_settings.allowed_web_origins,
