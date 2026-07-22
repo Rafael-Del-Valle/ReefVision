@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib.resources import files
 from math import isfinite
 from pathlib import Path
 from typing import Any
 
+from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
 from reefvision.ml.dependencies import (
     configure_provider_runtime,
@@ -23,6 +25,42 @@ from reefvision.ml.providers import (
 CLASSIFICATION_TASK = "classify"
 CLASSIFIER_PURPOSE = "classifier"
 ULTRALYTICS_PROVIDER_ID = "ultralytics"
+
+
+def resolve_installed_classification_architecture(
+    architecture: str,
+    settings: Settings | None = None,
+) -> Path:
+    """Resolve a scratch classifier only from the installed Ultralytics package."""
+
+    normalized = architecture.strip()
+    if Path(normalized).name != normalized or not normalized.casefold().endswith(
+        "-cls.yaml"
+    ):
+        raise ValidationError(
+            "Scratch classification training requires a local *-cls.yaml architecture"
+        )
+    configure_provider_runtime(settings)
+    try:
+        models_root = Path(str(files("ultralytics.cfg").joinpath("models")))
+    except Exception as exc:
+        raise ValidationError(
+            "The installed Ultralytics package does not expose its architecture registry"
+        ) from exc
+    matches = sorted(
+        path.resolve() for path in models_root.rglob(normalized) if path.is_file()
+    )
+    if not matches:
+        raise ValidationError(
+            "The selected classification architecture is not available in the installed "
+            "pinned Ultralytics package"
+        )
+    if len(matches) > 1:
+        raise ValidationError(
+            "The selected classification architecture is ambiguous in the installed "
+            "Ultralytics package"
+        )
+    return matches[0]
 
 
 @dataclass(frozen=True)
