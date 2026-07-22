@@ -44,7 +44,8 @@
       "provider_id": "segment_anything",
       "provider_version": "1.0+reefvision-pack",
       "provider_pack_id": null,
-      "required_provider_pack": null
+      "required_provider_pack": null,
+      "catalog_id": "sam/original/vit_b"
     },
     {
       "display_name": "SAM 2 Image",
