@@ -31,6 +31,7 @@ from reefvision.ml.catalog_expansion import apply_catalog_expansion_runtime_patc
 from reefvision.ml.dependencies import configure_provider_runtime
 from reefvision.ml.fastsam_runtime_patch import apply_fastsam_runtime_patch
 from reefvision.ml.native_unet_registration_runtime import apply_native_unet_registration_patch
+from reefvision.ml.nnunet_frozen_runtime import apply_nnunet_frozen_runtime_patch
 from reefvision.ml.provider_contract import (
     ProviderCancelledError,
     ProviderLifecycleError,
@@ -62,6 +63,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     apply_sam_runtime_patch()
     apply_advanced_provider_runtime_patches()
     apply_native_unet_registration_patch()
+    apply_nnunet_frozen_runtime_patch()
     apply_advanced_inference_runtime_patch()
     configure_rotating_json_logging(
         default_api_log_path(active_settings),
@@ -187,7 +189,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def handle_not_found(_: Request, exc: NotFoundError) -> JSONResponse:
         LOGGER.warning(
             "Resource not found",
-            extra={"event_id": "api_not_found", "component": "api", "error_code": "not_found"},
+            extra={
+                "event_id": "api_not_found",
+                "component": "api",
+                "error_code": "not_found",
+            },
         )
         return JSONResponse(status_code=404, content={"detail": str(exc)})
 
@@ -195,7 +201,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def handle_conflict(_: Request, exc: ConflictError) -> JSONResponse:
         LOGGER.warning(
             "Request conflict",
-            extra={"event_id": "api_conflict", "component": "api", "error_code": "conflict"},
+            extra={
+                "event_id": "api_conflict",
+                "component": "api",
+                "error_code": "conflict",
+            },
         )
         return JSONResponse(status_code=409, content={"detail": str(exc)})
 
