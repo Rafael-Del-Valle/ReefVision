@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,7 @@ from reefvision.ml.providers import (
 )
 
 _SUPPORTED = {"grounding_dino", "owlv2", "florence2"}
+_POINTER_FORMAT = "reefvision_transformers_model_pointer_v1"
 _CURRENT_TEXT_PROMPT: ContextVar[str | None] = ContextVar(
     "reefvision_transformers_text_prompt",
     default=None,
@@ -45,12 +47,73 @@ def current_transformers_text_prompt() -> str | None:
     return _CURRENT_TEXT_PROMPT.get()
 
 
+def _safe_catalog_id(value: object) -> str:
+    catalog_id = str(value or "").strip()
+    segments = catalog_id.split("/")
+    if not segments or any(
+        not segment or segment in {".", ".."} or Path(segment).name != segment
+        for segment in segments
+    ):
+        raise ValidationError("The Transformers model pointer has an unsafe catalog id")
+    return catalog_id
+
+
+def _read_json_object(path: Path, *, label: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValidationError(f"Could not read {label}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValidationError(f"{label} must contain a JSON object")
+    return payload
+
+
+def _pointer_model_directory(pointer_path: Path) -> Path:
+    pointer = _read_json_object(pointer_path, label="Transformers model pointer")
+    if pointer.get("format") != _POINTER_FORMAT:
+        raise ValidationError("The selected JSON file is not a ReefVision model pointer")
+    catalog_id = _safe_catalog_id(pointer.get("catalog_id"))
+    provider_id = str(pointer.get("provider_id") or "").casefold().replace("-", "_")
+    if provider_id not in _SUPPORTED:
+        raise ValidationError("The Transformers model pointer provider is unsupported")
+    snapshot_sha256 = str(pointer.get("snapshot_sha256") or "").casefold()
+    if len(snapshot_sha256) != 64 or any(
+        character not in "0123456789abcdef" for character in snapshot_sha256
+    ):
+        raise ValidationError("The Transformers model pointer has no valid snapshot checksum")
+    model_dir = Path(str(pointer.get("model_path") or "")).expanduser().resolve()
+    expected_tail = Path("models", "provider-packs", "transformers-vision", *catalog_id.split("/"))
+    actual_tail = tuple(part.casefold() for part in model_dir.parts[-len(expected_tail.parts) :])
+    required_tail = tuple(part.casefold() for part in expected_tail.parts)
+    if actual_tail != required_tail:
+        raise ValidationError("The Transformers model pointer does not target managed provider-pack storage")
+    index_root = model_dir.parents[len(catalog_id.split("/")) - 1]
+    index = index_root / "manifest.json"
+    manifest = _read_json_object(index, label="managed Transformers model index")
+    record = manifest.get("models", {}).get(catalog_id)
+    if not isinstance(record, dict) or record.get("verified") is not True:
+        raise ValidationError("The Transformers model pointer is not present in the verified model index")
+    if Path(str(record.get("path") or "")).resolve() != model_dir:
+        raise ValidationError("The Transformers model index path does not match the pointer")
+    if str(record.get("snapshot_sha256") or "").casefold() != snapshot_sha256:
+        raise ValidationError("The Transformers model pointer checksum does not match the verified index")
+    revision = str(pointer.get("resolved_revision") or "")
+    if str(record.get("resolved_revision") or "") != revision:
+        raise ValidationError("The Transformers model pointer revision does not match the verified index")
+    marker = model_dir / ".reefvision-revision"
+    if not marker.is_file() or marker.read_text(encoding="utf-8").strip() != revision:
+        raise ValidationError("The Transformers model revision marker is missing or invalid")
+    return model_dir
+
+
 def _require_model_directory(model_path: Path) -> Path:
     resolved = model_path.expanduser().resolve()
+    if resolved.is_file() and resolved.suffix.casefold() == ".json":
+        resolved = _pointer_model_directory(resolved)
     if not resolved.is_dir():
         raise ValidationError(
-            "Transformers providers require an existing local model directory. "
-            "Automatic downloads are disabled during inference."
+            "Transformers providers require an existing local model directory or verified "
+            "ReefVision model pointer. Automatic downloads are disabled during inference."
         )
     if not (resolved / "config.json").is_file():
         raise ValidationError("The selected Transformers model directory has no config.json")
@@ -58,8 +121,6 @@ def _require_model_directory(model_path: Path) -> Path:
 
 
 def _model_type(model_path: Path) -> str:
-    import json
-
     try:
         payload = json.loads((model_path / "config.json").read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -101,7 +162,8 @@ class TransformersVisionDetectionProvider:
         self._model_dir: Path | None = None
 
     def inspect_model(self, model_path: Path) -> DetectionModelMetadata:
-        spec = inspect_transformers_model(model_path)
+        model_dir = _require_model_directory(model_path)
+        spec = inspect_transformers_model(model_dir)
         if spec.provider_name != self.provider_name:
             raise ValidationError(
                 f"The selected model is {spec.provider_name}, not {self.provider_name}"
@@ -115,7 +177,7 @@ class TransformersVisionDetectionProvider:
             input_size=None,
             metadata={
                 "local_files_only": True,
-                "model_directory": str(model_path.resolve()),
+                "model_directory": str(model_dir),
                 "prompt_required": True,
                 "architecture": spec.architecture,
             },
@@ -131,6 +193,7 @@ class TransformersVisionDetectionProvider:
         try:
             import torch
             from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
+
             try:
                 from transformers import AutoModelForImageTextToText
             except ImportError:
