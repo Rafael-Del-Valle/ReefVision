@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, TextIO, cast
+from typing import Any, Protocol, TextIO, cast
 
 import uvicorn
 from alembic import command
@@ -42,6 +42,20 @@ _PROVIDER_SMOKE_MODULES = (
     "batchgenerators",
     "batchgeneratorsv2",
 )
+_NNUNET_ENTRYPOINTS = {
+    "nnUNetv2_plan_and_preprocess": (
+        "nnunetv2.experiment_planning.plan_and_preprocess_entrypoints",
+        "plan_and_preprocess_entry",
+    ),
+    "nnUNetv2_train": (
+        "nnunetv2.run.run_training",
+        "run_training_entry",
+    ),
+    "nnUNetv2_predict": (
+        "nnunetv2.inference.predict_from_raw_data",
+        "predict_entry_point",
+    ),
+}
 
 
 class SupportsShouldExit(Protocol):
@@ -114,7 +128,9 @@ def configure_windows_event_loop_policy() -> None:
 
 def resolve_alembic_paths(resource_root: Path | None = None) -> tuple[Path, Path]:
     root = resource_root or (
-        Path(str(vars(sys)["_MEIPASS"])).resolve() if is_frozen_bundle() else project_root()
+        Path(str(vars(sys)["_MEIPASS"])).resolve()
+        if is_frozen_bundle()
+        else project_root()
     )
     if is_frozen_bundle():
         alembic_root = root / "alembic"
@@ -148,7 +164,9 @@ def apply_desktop_environment(options: DesktopLaunchOptions) -> None:
     os.environ["REEFVISION_API_PORT"] = str(options.port)
     os.environ["REEFVISION_DATA_DIR"] = str(options.data_dir)
     os.environ["REEFVISION_SAFE_MODE"] = "true" if options.safe_mode else "false"
-    os.environ["REEFVISION_BACKGROUND_WORKER_ENABLED"] = "false" if options.safe_mode else "true"
+    os.environ["REEFVISION_BACKGROUND_WORKER_ENABLED"] = (
+        "false" if options.safe_mode else "true"
+    )
     clear_settings_cache()
 
 
@@ -184,7 +202,10 @@ def watch_shutdown_stream(stream: TextIO, server: object) -> None:
             )
             return
         if line.strip().lower() == "shutdown":
-            request_server_shutdown(server, "ReefVision desktop requested backend shutdown")
+            request_server_shutdown(
+                server,
+                "ReefVision desktop requested backend shutdown",
+            )
             return
 
 
@@ -275,6 +296,33 @@ async def run_api_server(settings: Settings, options: DesktopLaunchOptions) -> i
                 await port_publisher
 
 
+def _nnunet_entrypoint(name: str) -> tuple[str, str]:
+    try:
+        return _NNUNET_ENTRYPOINTS[name]
+    except KeyError as exc:
+        raise RuntimeError(f"Unsupported packaged nnU-Net command: {name}") from exc
+
+
+def run_nnunet_entrypoint(name: str, arguments: Sequence[str]) -> int:
+    module_name, function_name = _nnunet_entrypoint(name)
+    module = importlib.import_module(module_name)
+    entrypoint = getattr(module, function_name, None)
+    if not callable(entrypoint):
+        raise RuntimeError(
+            f"Packaged nnU-Net entrypoint is missing: {module_name}:{function_name}"
+        )
+    previous_argv = sys.argv
+    sys.argv = [name, *arguments]
+    try:
+        result: Any = entrypoint()
+    except SystemExit as exc:
+        code = exc.code
+        return code if isinstance(code, int) else 0 if code is None else 1
+    finally:
+        sys.argv = previous_argv
+    return int(result) if isinstance(result, int) else 0
+
+
 def run_provider_import_smoke() -> int:
     failures: list[str] = []
     for module_name in _PROVIDER_SMOKE_MODULES:
@@ -282,24 +330,53 @@ def run_provider_import_smoke() -> int:
             importlib.import_module(module_name)
         except Exception as exc:
             failures.append(f"{module_name}: {type(exc).__name__}: {exc}")
+    for command_name, (module_name, function_name) in _NNUNET_ENTRYPOINTS.items():
+        try:
+            module = importlib.import_module(module_name)
+            if not callable(getattr(module, function_name, None)):
+                raise AttributeError(function_name)
+        except Exception as exc:
+            failures.append(
+                f"{command_name}: {module_name}:{function_name}: "
+                f"{type(exc).__name__}: {exc}"
+            )
     if failures:
         for failure in failures:
             LOGGER.error("Provider import smoke failed: %s", failure)
         return 2
-    LOGGER.info("Packaged provider import smoke passed for %d modules", len(_PROVIDER_SMOKE_MODULES))
+    LOGGER.info(
+        "Packaged provider import smoke passed for %d modules and %d nnU-Net commands",
+        len(_PROVIDER_SMOKE_MODULES),
+        len(_NNUNET_ENTRYPOINTS),
+    )
     return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    options = parse_args(argv)
+    arguments = list(argv) if argv is not None else list(sys.argv[1:])
     ensure_standard_streams()
+    if arguments[:1] == ["--nnunet-entrypoint"]:
+        if len(arguments) < 2:
+            LOGGER.error("Packaged nnU-Net dispatch requires a command name")
+            return 2
+        try:
+            return run_nnunet_entrypoint(arguments[1], arguments[2:])
+        except Exception:
+            LOGGER.exception("Packaged nnU-Net command failed")
+            return 1
+
+    options = parse_args(arguments)
     configure_logging(options.log_file)
     if options.provider_import_smoke:
         return run_provider_import_smoke()
     try:
         settings = build_settings(options)
         settings.ensure_directories()
-        LOGGER.info("Starting ReefVision desktop API on %s:%s", options.host, options.port)
+        LOGGER.info(
+            "Starting ReefVision desktop API on %s:%s",
+            options.host,
+            options.port,
+        )
         if options.run_migrations:
             LOGGER.info("Applying pending Alembic migrations")
             run_pending_migrations(settings)
