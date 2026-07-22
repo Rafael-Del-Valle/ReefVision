@@ -34,7 +34,7 @@ def _safe_catalog_segments(catalog_id: str) -> list[str]:
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
-        while chunk := handle.read(1024 * 1024):
+        while chunk := handle.read(4 * 1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest()
 
@@ -43,6 +43,8 @@ def _snapshot_files(root: Path) -> list[dict[str, Any]]:
     files: list[dict[str, Any]] = []
     for path in sorted(item for item in root.rglob("*") if item.is_file()):
         relative = path.relative_to(root).as_posix()
+        if relative.startswith("../") or relative in {"", ".", ".."}:
+            raise RuntimeError(f"Unsafe model snapshot path: {relative!r}")
         files.append(
             {
                 "relative_path": relative,
@@ -53,6 +55,18 @@ def _snapshot_files(root: Path) -> list[dict[str, Any]]:
     if not files:
         raise RuntimeError(f"Model snapshot is empty: {root}")
     return files
+
+
+def _snapshot_sha256(files: list[dict[str, Any]]) -> str:
+    digest = hashlib.sha256()
+    for record in files:
+        digest.update(str(record["relative_path"]).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(int(record["size_bytes"])).encode("ascii"))
+        digest.update(b"\0")
+        digest.update(str(record["sha256"]).encode("ascii"))
+        digest.update(b"\n")
+    return digest.hexdigest()
 
 
 def stage_model_pack(policy_path: Path, output_root: Path) -> dict[str, Any]:
@@ -69,7 +83,6 @@ def stage_model_pack(policy_path: Path, output_root: Path) -> dict[str, Any]:
         raise RuntimeError("Transformers model pack must declare exactly six models")
     output_root.mkdir(parents=True, exist_ok=True)
     records: dict[str, Any] = {}
-    declared_roots: set[Path] = set()
 
     for raw_model in raw_models:
         if not isinstance(raw_model, dict):
@@ -81,7 +94,6 @@ def stage_model_pack(policy_path: Path, output_root: Path) -> dict[str, Any]:
         if not catalog_id or not repo_id or not revision or not provider_id:
             raise RuntimeError("Transformers model pack entry is incomplete")
         destination = output_root.joinpath(*_safe_catalog_segments(catalog_id))
-        declared_roots.add(destination.resolve())
         info = model_info(repo_id, revision=revision)
         resolved_revision = str(info.sha or revision)
         print(f"Staging {catalog_id} from {repo_id}@{resolved_revision}")
@@ -98,13 +110,16 @@ def stage_model_pack(policy_path: Path, output_root: Path) -> dict[str, Any]:
                 ignore_patterns=("*.md", ".gitattributes"),
             )
         )
+        if snapshot_path.resolve() != temporary.resolve():
+            raise RuntimeError("Hugging Face staging escaped the managed temporary directory")
         if not (snapshot_path / "config.json").is_file():
             shutil.rmtree(temporary, ignore_errors=True)
             raise RuntimeError(f"Snapshot {repo_id} does not contain config.json")
+        files = _snapshot_files(temporary)
+        snapshot_digest = _snapshot_sha256(files)
         if destination.exists():
             shutil.rmtree(destination)
         os.replace(temporary, destination)
-        files = _snapshot_files(destination)
         records[catalog_id] = {
             "catalog_id": catalog_id,
             "repo_id": repo_id,
@@ -113,26 +128,22 @@ def stage_model_pack(policy_path: Path, output_root: Path) -> dict[str, Any]:
             "provider_id": provider_id,
             "relative_path": destination.relative_to(output_root).as_posix(),
             "file_count": len(files),
-            "total_size_bytes": sum(item["size_bytes"] for item in files),
+            "total_size_bytes": sum(int(item["size_bytes"]) for item in files),
+            "snapshot_sha256": snapshot_digest,
             "files": files,
         }
 
     manifest = {
-        "manifest_version": 1,
+        "manifest_version": 2,
         "pack_id": str(policy.get("pack_id") or "transformers-vision"),
         "model_count": len(records),
         "models": records,
-        "total_size_bytes": sum(item["total_size_bytes"] for item in records.values()),
+        "total_size_bytes": sum(int(item["total_size_bytes"]) for item in records.values()),
     }
     manifest_path = output_root / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-
-    for child in output_root.iterdir():
-        if child == manifest_path:
-            continue
-        if child.resolve() in declared_roots:
-            continue
-        # Top-level catalog roots are shared, so cleanup is intentionally conservative.
+    temporary_manifest = manifest_path.with_suffix(".json.part")
+    temporary_manifest.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary_manifest, manifest_path)
     print(
         f"Staged {manifest['model_count']} Transformers models "
         f"({manifest['total_size_bytes'] / (1024**3):.2f} GiB)."
