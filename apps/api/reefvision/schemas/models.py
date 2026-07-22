@@ -44,6 +44,12 @@ class InferenceJobCreateRequest(BaseModel):
     confidence_threshold: FiniteFloat | None = Field(default=None, ge=0, le=1)
     iou_threshold: FiniteFloat | None = Field(default=None, ge=0, le=1)
     device: str = Field(default="auto", min_length=1, max_length=20)
+    text_prompt: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("text_prompt", mode="before")
+    @classmethod
+    def strip_text_prompt(cls, value: object) -> object:
+        return _strip(value) if isinstance(value, str) or value is None else value
 
 
 class RegisterModelFromRunRequest(BaseModel):
