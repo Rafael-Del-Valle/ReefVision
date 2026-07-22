@@ -66,7 +66,7 @@ def test_classification_architecture_rejects_nonlocal_name(
 def test_classification_architecture_rejects_paths(
     client,
 ) -> None:
-    with pytest.raises(ValidationError, match="local \*-cls.yaml"):
+    with pytest.raises(ValidationError, match=r"local \*-cls.yaml"):
         resolve_installed_classification_architecture(
             "..\\outside-cls.yaml",
             client.app.state.settings,
