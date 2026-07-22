@@ -1,4 +1,4 @@
-"""Background nnU-Net semantic-segmentation training execution."""
+"""Background semantic-segmentation training execution."""
 
 from __future__ import annotations
 
@@ -53,6 +53,14 @@ def _classes(path: Path) -> tuple[SemanticClassDefinition, ...]:
     )
 
 
+def _workspace_name(provider_id: str) -> str:
+    normalized = "".join(
+        character if character.isalnum() or character in {"-", "_"} else "-"
+        for character in provider_id.casefold()
+    ).strip("-_")
+    return normalized or "semantic-provider"
+
+
 def process_semantic_training_job(
     settings: Settings,
     factory: sessionmaker[Session],
@@ -77,7 +85,11 @@ def process_semantic_training_job(
             run.started_at = datetime.now(UTC)
             job.status = "running"
             job.started_at = datetime.now(UTC)
-            job.result_json = {"stage": "preflight", "task": run.task}
+            job.result_json = {
+                "stage": "preflight",
+                "task": run.task,
+                "provider_id": run.provider_id,
+            }
             session.commit()
 
         with factory() as session:
@@ -92,11 +104,17 @@ def process_semantic_training_job(
             if dict(run.tuning_config_json).get("mode", "disabled") != "disabled":
                 raise RuntimeError("Semantic tuning execution is not implemented")
             if dict(run.tiling_config_json).get("mode", "none") != "none":
-                raise RuntimeError("ReefVision tiling must remain disabled for nnU-Net")
+                raise RuntimeError(
+                    "ReefVision tiling must remain disabled for semantic-segmentation providers"
+                )
 
             run.status = "preparing_dataset"
             run.stage = "preparing_dataset"
-            job.result_json = {"stage": "preparing_dataset", "task": run.task}
+            job.result_json = {
+                "stage": "preparing_dataset",
+                "task": run.task,
+                "provider_id": run.provider_id,
+            }
             session.commit()
 
             items = list(
@@ -112,7 +130,9 @@ def process_semantic_training_job(
             )
             images = list(
                 session.scalars(
-                    select(ImageAsset).where(ImageAsset.id.in_([item.image_id for item in items]))
+                    select(ImageAsset).where(
+                        ImageAsset.id.in_([item.image_id for item in items])
+                    )
                 )
             )
             image_paths = {
@@ -153,17 +173,19 @@ def process_semantic_training_job(
                 background_pixel_value=int(classes_payload.get("background_pixel_value", 0)),
                 overlap_policy=str(classes_payload.get("overlap_policy", "")),
             )
-            workspace_relative = f"{base}/nnunet"
+            provider_id = run.provider_id
+            workspace_relative = f"{base}/{_workspace_name(provider_id)}"
             workspace = resolve_managed_project_path(settings, workspace_relative)
             log_relative = f"{workspace_relative}/training.log"
             log_path = resolve_managed_project_path(settings, log_relative)
-            _append_log(log_path, "Semantic dataset prepared")
+            _append_log(log_path, f"Semantic dataset prepared for {provider_id}")
 
             run.status = "training"
             run.stage = "training"
             run.logs_path = log_relative
             run.artifact_manifest_json = {
                 "task": run.task,
+                "provider_id": provider_id,
                 "dataset_format": "semantic_masks",
                 "dataset_output_path": dataset_relative,
                 "dataset_manifest_path": manifest_relative,
@@ -174,6 +196,7 @@ def process_semantic_training_job(
             job.result_json = {
                 "stage": "training",
                 "task": run.task,
+                "provider_id": provider_id,
                 "dataset_output_path": dataset_relative,
             }
             request = SemanticTrainingRequest(
@@ -188,7 +211,6 @@ def process_semantic_training_job(
                 workspace_root=workspace,
                 log_path=log_path,
             )
-            provider_id = run.provider_id
             session.commit()
 
         result = semantic_provider_for_name(provider_id).train(request)
@@ -211,7 +233,7 @@ def process_semantic_training_job(
                     **dict(run.artifact_manifest_json),
                     **dict(result.artifact_manifest),
                     "provider_version": result.provider_version,
-                    "semantic_model_bundle": checkpoint,
+                    "semantic_model_checkpoint": checkpoint,
                 }
                 run.status = "completed"
                 run.stage = "completed"
@@ -220,11 +242,12 @@ def process_semantic_training_job(
                 job.result_json = {
                     "stage": "completed",
                     "task": run.task,
+                    "provider_id": run.provider_id,
                     "metrics": dict(result.metrics),
                     "result_checkpoint_path": checkpoint,
                 }
                 packages = _package_versions_snapshot()
-                packages["nnunetv2"] = result.provider_version
+                packages[run.provider_id] = result.provider_version
                 session.add(
                     ExperimentRecord(
                         project_id=run.project_id,
@@ -243,7 +266,7 @@ def process_semantic_training_job(
                 )
                 _append_log(
                     resolve_managed_project_path(settings, run.logs_path or ""),
-                    "Semantic training completed",
+                    f"Semantic training completed with {run.provider_id}",
                 )
             run.completed_at = datetime.now(UTC)
             job.completed_at = datetime.now(UTC)
@@ -259,6 +282,7 @@ def process_semantic_training_job(
                 job.result_json = {
                     "stage": "failed",
                     "task": SEMANTIC_SEGMENTATION_TASK,
+                    "provider_id": run.provider_id if run is not None else None,
                     "error_type": type(exc).__name__,
                     "error": str(exc),
                 }
