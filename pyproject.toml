@@ -113,3 +113,25 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = ["mobile_sam", "efficientvit.*", "sam2.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+  "transformers",
+  "transformers.*",
+  "accelerate",
+  "accelerate.*",
+  "safetensors",
+  "safetensors.*",
+  "huggingface_hub",
+  "huggingface_hub.*",
+  "sentencepiece",
+  "nnunetv2",
+  "nnunetv2.*",
+  "dynamic_network_architectures",
+  "dynamic_network_architectures.*",
+  "batchgenerators",
+  "batchgenerators.*",
+  "batchgeneratorsv2",
+  "batchgeneratorsv2.*",
+]
+ignore_missing_imports = true
