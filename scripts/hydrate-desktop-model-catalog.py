@@ -169,10 +169,16 @@ def hydrate_catalog(
         raise RuntimeError("Desktop model policy has no release_tags")
 
     models_by_name: dict[str, dict[str, Any]] = {}
+    models_by_id: dict[str, dict[str, Any]] = {}
     for raw_model in raw_models:
         if not isinstance(raw_model, dict):
             continue
+        catalog_id = str(raw_model.get("catalog_id") or "").strip()
         display_name = str(raw_model.get("display_name") or "").strip()
+        if catalog_id:
+            if catalog_id in models_by_id:
+                raise RuntimeError(f"Duplicate catalog id: {catalog_id}")
+            models_by_id[catalog_id] = raw_model
         if display_name:
             if display_name in models_by_name:
                 raise RuntimeError(f"Duplicate catalog display name: {display_name}")
@@ -199,10 +205,16 @@ def hydrate_catalog(
         seen_names.add(display_name)
         seen_files.add(filename)
 
-        entry = models_by_name.get(display_name)
+        requested_catalog_id = str(target.get("catalog_id") or "").strip()
+        entry = (
+            models_by_id.get(requested_catalog_id)
+            if requested_catalog_id
+            else models_by_name.get(display_name)
+        )
         if entry is None:
+            reference = requested_catalog_id or display_name
             raise RuntimeError(
-                f"Desktop model policy references missing catalog entry {display_name}"
+                f"Desktop model policy references missing catalog entry {reference}"
             )
         catalog_id = str(entry.get("catalog_id") or "").strip()
         if not catalog_id:
