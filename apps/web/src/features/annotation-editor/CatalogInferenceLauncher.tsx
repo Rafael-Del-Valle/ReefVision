@@ -149,7 +149,7 @@ export function CatalogInferenceLauncher() {
         );
         const nextProjectId = session.image.project_id;
         const catalog = await jsonRequest<CatalogResponse>(
-          `/projects/${encodeURIComponent(nextProjectId)}/model-catalog?workflow=prompt_assist&include_unavailable=false`,
+          `/projects/${encodeURIComponent(nextProjectId)}/model-catalog?workflow=prompt_assist`,
           { signal: controller.signal },
         );
         const ready = catalog.models.filter(
