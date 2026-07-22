@@ -26,7 +26,6 @@ from reefvision.jobs.worker import thumbnail_worker_loop
 from reefvision.logging_utils import configure_rotating_json_logging, default_api_log_path
 from reefvision.ml.advanced_inference_runtime import apply_advanced_inference_runtime_patch
 from reefvision.ml.advanced_provider_runtime import apply_advanced_provider_runtime_patches
-from reefvision.ml.advanced_training_catalog_runtime import apply_advanced_training_catalog_patch
 from reefvision.ml.assist_runtime import AssistRuntime
 from reefvision.ml.catalog_expansion import apply_catalog_expansion_runtime_patches
 from reefvision.ml.dependencies import configure_provider_runtime
@@ -62,7 +61,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     apply_fastsam_runtime_patch()
     apply_sam_runtime_patch()
     apply_advanced_provider_runtime_patches()
-    apply_advanced_training_catalog_patch()
     apply_native_unet_registration_patch()
     apply_advanced_inference_runtime_patch()
     configure_rotating_json_logging(
