@@ -12,6 +12,7 @@ from sqlalchemy import select
 
 from reefvision.db.models import ExperimentRecord, Job, ModelRegistration, TrainingRun
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
+from reefvision.ml.reefvision_unet import inspect_unet_checkpoint
 from reefvision.ml.semantic_segmentation import (
     NNUNET_PROVIDER_ID,
     SEMANTIC_SEGMENTATION_TASK,
@@ -28,10 +29,12 @@ from reefvision.storage.projects import resolve_managed_project_path
 
 SEMANTIC_MODEL_PURPOSE = "semantic_segmenter"
 SEMANTIC_BUNDLE_METADATA = "reefvision-semantic-model.json"
+REEFVISION_UNET_PROVIDER_ID = "reefvision_unet"
+_TRANSFORMERS_PROVIDERS = {"grounding_dino", "owlv2", "florence2"}
 
 
 class SemanticModelService(SegmentationModelService):
-    """Register nnU-Net bundles and queue semantic inference jobs."""
+    """Register semantic providers and queue detector/semantic inference jobs."""
 
     def _semantic_metadata(self, source_path: Path) -> dict[str, Any]:
         if not source_path.is_file() or source_path.suffix.casefold() != ".zip":
@@ -58,6 +61,101 @@ class SemanticModelService(SegmentationModelService):
             raise ValidationError("Semantic model bundle class metadata is invalid")
         return payload
 
+    def _register_native_unet(
+        self,
+        project_id: str,
+        run: TrainingRun,
+        source_path: Path,
+        payload: RegisterModelFromRunRequest,
+    ) -> ModelRegistrationResponse:
+        project = self._project(project_id)
+        metadata = inspect_unet_checkpoint(source_path)
+        checksum, size = hash_model_file(source_path)
+        existing = self.models.find_by_checksum(project_id, checksum)
+        if existing is not None:
+            return ModelRegistrationResponse.model_validate(existing)
+        display_name = (payload.display_name or f"{run.run_name} U-Net").strip()
+        if self.models.find_by_display_name(project_id, display_name) is not None:
+            raise ConflictError(
+                "A different model is already registered with that display name in this project"
+            )
+        labels_by_name = {
+            label_class.name.strip().casefold(): label_class.id
+            for label_class in project.label_classes
+            if label_class.is_active
+        }
+        foreground_labels = list(metadata.class_labels[1:])
+        class_map = {
+            "labels": foreground_labels,
+            "mapping": {
+                label: labels_by_name.get(label.strip().casefold()) for label in foreground_labels
+            },
+            "pixel_values": {
+                label: index for index, label in enumerate(metadata.class_labels) if index > 0
+            },
+        }
+        model_id = str(uuid4())
+        managed_path = f"{project.storage_root}/models/{model_id}.pt"
+        destination = resolve_managed_project_path(self.settings, managed_path)
+        copied_checksum, copied_size = copy_model_file(source_path, destination)
+        if copied_checksum != checksum or copied_size != size:
+            destination.unlink(missing_ok=True)
+            raise ValidationError("Managed ReefVision U-Net copy verification failed")
+        experiment = self.session.scalar(
+            select(ExperimentRecord).where(ExperimentRecord.training_run_id == run.id)
+        )
+        classes = [
+            {
+                "class_index": index - 1,
+                "pixel_value": index,
+                "class_name": label,
+            }
+            for index, label in enumerate(metadata.class_labels)
+            if index > 0
+        ]
+        model = ModelRegistration(
+            id=model_id,
+            project_id=project_id,
+            purpose=SEMANTIC_MODEL_PURPOSE,
+            display_name=display_name,
+            source_filename=source_path.name,
+            managed_path=managed_path,
+            sha256=checksum,
+            file_size_bytes=size,
+            framework="pytorch",
+            task=SEMANTIC_SEGMENTATION_TASK,
+            provider_name=REEFVISION_UNET_PROVIDER_ID,
+            provider_version="1.0",
+            class_map_json=class_map,
+            input_size_json={"width": metadata.image_size, "height": metadata.image_size},
+            metadata_json={
+                "format": "reefvision_unet_v1",
+                "provider_id": REEFVISION_UNET_PROVIDER_ID,
+                "provider_version": "1.0",
+                "preset": metadata.preset,
+                "classes": classes,
+                "registered_from": "training_run",
+                "source_training_run_id": run.id,
+                "source_dataset_version_id": run.dataset_version_id,
+                "source_dataset_manifest_sha256": run.dataset_manifest_sha256,
+                "source_split_manifest_sha256": run.split_manifest_sha256,
+                "source_result_checkpoint_path": run.result_checkpoint_path,
+                "source_metrics": dict(run.metrics_json),
+                "source_experiment_id": experiment.id if experiment is not None else None,
+                "proposal_geometry": "raster_mask",
+            },
+            notes=(payload.notes or run.notes),
+        )
+        try:
+            self.models.add(model)
+            self.session.commit()
+            self.session.refresh(model)
+            return ModelRegistrationResponse.model_validate(model)
+        except Exception:
+            self.session.rollback()
+            destination.unlink(missing_ok=True)
+            raise
+
     def register_model_from_run(
         self,
         project_id: str,
@@ -72,14 +170,14 @@ class SemanticModelService(SegmentationModelService):
             raise ValidationError("Training runs must belong to the selected project")
         if run.status != "completed" or not run.result_checkpoint_path:
             raise ValidationError(
-                "Only completed semantic runs with a finalized bundle can be registered"
+                "Only completed semantic runs with a finalized checkpoint can be registered"
             )
 
+        source_path = resolve_managed_project_path(self.settings, run.result_checkpoint_path)
+        if run.provider_id == REEFVISION_UNET_PROVIDER_ID:
+            return self._register_native_unet(project_id, run, source_path, payload)
+
         project = self._project(project_id)
-        source_path = resolve_managed_project_path(
-            self.settings,
-            run.result_checkpoint_path,
-        )
         bundle = self._semantic_metadata(source_path)
         checksum, size = hash_model_file(source_path)
         existing = self.models.find_by_checksum(project_id, checksum)
@@ -177,6 +275,10 @@ class SemanticModelService(SegmentationModelService):
                 "Inference jobs require a compatible detector, instance segmenter, or "
                 "semantic segmenter from the same project"
             )
+        if model.provider_name in _TRANSFORMERS_PROVIDERS and not payload.text_prompt:
+            raise ValidationError(
+                f"{model.provider_name} inference requires a text prompt such as coral polyp, fish"
+            )
         images = self.images.list_by_ids(payload.image_ids)
         if len(images) != len(payload.image_ids):
             raise ValidationError("One or more requested images do not exist")
@@ -192,6 +294,7 @@ class SemanticModelService(SegmentationModelService):
                 "model_task": model.task,
                 "image_ids": [image.id for image in images],
                 "device": payload.device,
+                "text_prompt": payload.text_prompt,
                 "confidence_threshold": (
                     payload.confidence_threshold
                     if payload.confidence_threshold is not None
