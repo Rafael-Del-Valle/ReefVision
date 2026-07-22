@@ -30,6 +30,12 @@ $BundleScript = Join-Path $PSScriptRoot "stage-bundled-models.py"
 $ModelCatalog = Join-Path $Root "config\model_catalog.json"
 $BundledModels = Join-Path $Root ".desktop\bundled-models"
 
+Write-ReefVisionStep "Auditing zero-input model delivery"
+& $VenvPython $BundleScript --catalog $ModelCatalog --audit-only
+if ($LASTEXITCODE -ne 0) {
+    throw "The model catalog contains an available entry without a complete delivery path."
+}
+
 # Verified files already present in .desktop\bundled-models are reused, so only
 # a changed catalog entry requires another network download on the build machine.
 Write-ReefVisionStep "Staging verified pretrained catalog checkpoints"
@@ -42,10 +48,20 @@ if (-not (Test-Path $BundledManifest -PathType Leaf)) {
     throw "Model bundle staging did not produce its manifest: $BundledManifest"
 }
 $BundleMetadata = Get-Content -LiteralPath $BundledManifest -Raw | ConvertFrom-Json
+if (-not $BundleMetadata.delivery_contract_complete) {
+    throw "The desktop model bundle did not pass its zero-input delivery contract."
+}
+if ($BundleMetadata.asset_count -ne $BundleMetadata.managed_catalog_model_count) {
+    throw "The desktop bundle omitted one or more available managed checkpoints."
+}
 if ($BundleMetadata.asset_count -le 0) {
     throw "The desktop installer model bundle contains no checkpoints."
 }
-Write-Host "Bundling $($BundleMetadata.asset_count) verified checkpoints ($([math]::Round($BundleMetadata.total_size_bytes / 1MB, 1)) MB)." -ForegroundColor Green
+Write-Host (
+    "Bundling $($BundleMetadata.asset_count) verified checkpoints " +
+    "($([math]::Round($BundleMetadata.total_size_bytes / 1MB, 1)) MB) and " +
+    "$($BundleMetadata.builtin_architecture_count) offline scratch architectures."
+) -ForegroundColor Green
 
 & (Join-Path $PSScriptRoot "build-desktop-backend.ps1") -TargetTriple $TargetTriple
 
