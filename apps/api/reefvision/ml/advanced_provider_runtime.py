@@ -7,10 +7,18 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 from reefvision.domain.errors import ValidationError
-from reefvision.ml.reefvision_unet import ReefVisionUNetProvider
+from reefvision.ml.reefvision_unet import PRESETS, ReefVisionUNetProvider
 from reefvision.ml.transformers_provider import TransformersVisionDetectionProvider
 
 _APPLIED = False
+_TRANSFORMERS_CATALOG_IDS = {
+    "transformers/florence2/base",
+    "transformers/florence2/large",
+    "transformers/grounding_dino/tiny",
+    "transformers/grounding_dino/base",
+    "transformers/owlv2/base",
+    "transformers/owlv2/large",
+}
 
 
 def _package_version(name: str) -> str | None:
@@ -206,10 +214,108 @@ def _patch_provider_factories() -> None:
     provider_hub.detection_provider_for_name = detection_provider
 
 
+def _patch_model_catalog_state() -> None:
+    from reefvision.services import model_catalog
+    from reefvision.services.bundled_transformers_models import (
+        bundled_transformers_model_path,
+    )
+
+    original = model_catalog.ModelCatalogService._compose_static_state
+
+    def compose_with_advanced(
+        self: Any,
+        entry: Any,
+        *,
+        job: Any,
+        manifest: dict[str, Any],
+    ) -> Any:
+        if entry.catalog_id in _TRANSFORMERS_CATALOG_IDS:
+            model_path = bundled_transformers_model_path(self.settings, entry.catalog_id)
+            ready, reason = _transformers_ready()
+            if model_path is not None and ready:
+                return entry.model_copy(
+                    update={
+                        "availability": "available",
+                        "installation_state": "Ready",
+                        "installation_reason": "Bundled model snapshot and provider runtime are ready offline.",
+                        "installed_asset_id": f"provider_pack:{entry.catalog_id}",
+                        "installed_path": str(model_path),
+                        "metadata_verified": True,
+                        "provider_ready": True,
+                        "provider_state": "ready",
+                        "provider_failure_reason": None,
+                        "selection_kind": "managed_catalog_model",
+                        "requires_confirmation": False,
+                        "deprecation_status": "active",
+                        "desktop_package_status": "bundled_installer",
+                        "clean_machine_verification_status": "acceptance_required",
+                        "capabilities": {
+                            "image_detection": True,
+                            "text_prompt_detection": True,
+                            "cpu_inference": True,
+                            "cuda_inference": True,
+                        },
+                    }
+                )
+            if model_path is not None and not ready:
+                return entry.model_copy(
+                    update={
+                        "availability": "available",
+                        "installation_state": "Provider Required",
+                        "installation_reason": reason or "Transformers provider runtime is unavailable.",
+                        "installed_asset_id": f"provider_pack:{entry.catalog_id}",
+                        "installed_path": str(model_path),
+                        "metadata_verified": True,
+                        "provider_ready": False,
+                        "provider_state": "unavailable",
+                    }
+                )
+        if entry.catalog_id.startswith("reefvision/unet/"):
+            preset = entry.catalog_id.rsplit("/", 1)[-1]
+            ready, reason = _torch_ready()
+            if preset in PRESETS:
+                return entry.model_copy(
+                    update={
+                        "availability": "available",
+                        "installation_state": "Ready" if ready else "Provider Required",
+                        "installation_reason": (
+                            "Bundled ReefVision U-Net architecture is ready for training."
+                            if ready
+                            else reason
+                        ),
+                        "installed_asset_id": f"builtin_architecture:reefvision_unet:{preset}",
+                        "metadata_verified": True,
+                        "provider_ready": ready,
+                        "provider_state": "ready" if ready else "unavailable",
+                        "selection_kind": "builtin_architecture",
+                        "architecture_reference": preset,
+                        "provider_version": "1.0",
+                        "trainable": True,
+                        "inference": True,
+                        "inference_supported": True,
+                        "tuning_compatibility": True,
+                        "deprecation_status": "active",
+                        "desktop_package_status": "base_sidecar_provider",
+                        "clean_machine_verification_status": "acceptance_required",
+                        "capabilities": {
+                            "image_semantic_segmentation": True,
+                            "training": True,
+                            "validation": True,
+                            "cpu_inference": True,
+                            "cuda_inference": True,
+                        },
+                    }
+                )
+        return original(self, entry, job=job, manifest=manifest)
+
+    model_catalog.ModelCatalogService._compose_static_state = compose_with_advanced
+
+
 def apply_advanced_provider_runtime_patches() -> None:
     global _APPLIED
     if _APPLIED:
         return
     _patch_provider_catalog()
     _patch_provider_factories()
+    _patch_model_catalog_state()
     _APPLIED = True
