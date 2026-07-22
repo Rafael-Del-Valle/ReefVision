@@ -40,6 +40,7 @@ def _image_mask_pairs(
     *,
     image_size: int,
 ) -> list[tuple[Path, Path]]:
+    del image_size
     image_root = dataset.images_root / split
     mask_root = dataset.masks_root / split
     if not image_root.is_dir() or not mask_root.is_dir():
@@ -92,8 +93,35 @@ def _batch_iterator(
         yield torch.stack(image_tensors), torch.stack(mask_tensors)
 
 
+class _RepeatableBatchIterable:
+    """Create a fresh lazy batch iterator every time an epoch starts."""
+
+    def __init__(
+        self,
+        pairs: list[tuple[Path, Path]],
+        *,
+        image_size: int,
+        batch_size: int,
+        shuffle: bool,
+        seed: int | None,
+    ) -> None:
+        self.pairs = pairs
+        self.image_size = image_size
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.seed = seed
+
+    def __iter__(self) -> Iterator[tuple[Any, Any]]:
+        return _batch_iterator(
+            self.pairs,
+            image_size=self.image_size,
+            batch_size=self.batch_size,
+            shuffle=self.shuffle,
+            seed=self.seed,
+        )
+
+
 def _dice_from_indexed_masks(predicted: Any, expected: Any, num_classes: int) -> float:
-    torch = _torch()
     scores: list[float] = []
     for class_index in range(1, num_classes):
         prediction = predicted == class_index
@@ -154,7 +182,8 @@ class NativeUNetSemanticProvider(SemanticSegmentationProvider):
         learning_rate = float(request.training_config.get("learning_rate", 1e-3))
         num_classes = len(request.dataset.classes) + 1
         labels = ("background",) + tuple(
-            item.class_name for item in sorted(request.dataset.classes, key=lambda item: item.pixel_value)
+            item.class_name
+            for item in sorted(request.dataset.classes, key=lambda item: item.pixel_value)
         )
         train_pairs = _image_mask_pairs(request.dataset, "train", image_size=image_size)
         validation_pairs = _image_mask_pairs(
@@ -170,14 +199,14 @@ class NativeUNetSemanticProvider(SemanticSegmentationProvider):
         model = build_unet(preset, input_channels=3, num_classes=num_classes)
         trained, history = train_unet(
             model,
-            _batch_iterator(
+            _RepeatableBatchIterable(
                 train_pairs,
                 image_size=image_size,
                 batch_size=batch_size,
                 shuffle=True,
                 seed=request.random_seed,
             ),
-            _batch_iterator(
+            _RepeatableBatchIterable(
                 validation_pairs,
                 image_size=image_size,
                 batch_size=batch_size,
@@ -207,7 +236,9 @@ class NativeUNetSemanticProvider(SemanticSegmentationProvider):
                 "validation_loss": history[-1]["validation_loss"],
             },
         )
-        device = torch.device("cuda:0" if request.device != "cpu" and torch.cuda.is_available() else "cpu")
+        device = torch.device(
+            "cuda:0" if request.device != "cpu" and torch.cuda.is_available() else "cpu"
+        )
         trained = trained.to(device).eval()
         dice_scores: list[float] = []
         with torch.inference_mode():
