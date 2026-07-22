@@ -21,6 +21,13 @@ from alembic.config import Config
 
 from reefvision.config import Settings, clear_settings_cache, get_settings
 from reefvision.logging_utils import configure_rotating_json_logging
+from reefvision.ml.nnunet_dependency_contract import (
+    NNUNET_ENTRYPOINTS as _NNUNET_ENTRYPOINTS,
+)
+from reefvision.ml.nnunet_dependency_contract import (
+    nnunet_import_packages,
+    validate_nnunet_dependency_contract,
+)
 
 LOGGER = logging.getLogger("reefvision.desktop")
 _WINDOWED_STREAMS: list[TextIO] = []
@@ -34,28 +41,8 @@ _PROVIDER_SMOKE_MODULES = (
     "huggingface_hub",
     "tokenizers",
     "sentencepiece",
-    "nnunetv2",
-    "nnunetv2.experiment_planning.plan_and_preprocess_entrypoints",
-    "nnunetv2.run.run_training",
-    "nnunetv2.inference.predict_from_raw_data",
-    "dynamic_network_architectures",
-    "batchgenerators",
-    "batchgeneratorsv2",
+    *nnunet_import_packages(),
 )
-_NNUNET_ENTRYPOINTS = {
-    "nnUNetv2_plan_and_preprocess": (
-        "nnunetv2.experiment_planning.plan_and_preprocess_entrypoints",
-        "plan_and_preprocess_entry",
-    ),
-    "nnUNetv2_train": (
-        "nnunetv2.run.run_training",
-        "run_training_entry",
-    ),
-    "nnUNetv2_predict": (
-        "nnunetv2.inference.predict_from_raw_data",
-        "predict_entry_point",
-    ),
-}
 
 
 class SupportsShouldExit(Protocol):
@@ -330,18 +317,9 @@ def run_provider_import_smoke() -> int:
             importlib.import_module(module_name)
         except Exception as exc:
             failures.append(f"{module_name}: {type(exc).__name__}: {exc}")
-    for command_name, (module_name, function_name) in _NNUNET_ENTRYPOINTS.items():
-        try:
-            module = importlib.import_module(module_name)
-            if not callable(getattr(module, function_name, None)):
-                raise AttributeError(function_name)
-        except Exception as exc:
-            failures.append(
-                f"{command_name}: {module_name}:{function_name}: "
-                f"{type(exc).__name__}: {exc}"
-            )
+    failures.extend(validate_nnunet_dependency_contract())
     if failures:
-        for failure in failures:
+        for failure in dict.fromkeys(failures):
             LOGGER.error("Provider import smoke failed: %s", failure)
         return 2
     LOGGER.info(
