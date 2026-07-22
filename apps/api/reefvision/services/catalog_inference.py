@@ -102,6 +102,20 @@ class CatalogInferenceService:
         os.replace(temporary, path)
         return path
 
+    def _catalog_registration(
+        self,
+        project_id: str,
+        catalog_id: str,
+    ) -> ModelRegistration | None:
+        for model in self.models.list_for_project(project_id, purpose="detector"):
+            metadata = dict(model.metadata_json or {})
+            if (
+                metadata.get("registered_from") == "bundled_catalog"
+                and metadata.get("source_catalog_model_id") == catalog_id
+            ):
+                return model
+        return None
+
     def _registered_model(
         self,
         *,
@@ -131,6 +145,35 @@ class CatalogInferenceService:
             provider_id=provider_id,
             record=record,
         )
+        catalog_registration = self._catalog_registration(project_id, catalog_id)
+        metadata = {
+            "registered_from": "bundled_catalog",
+            "source_catalog_model_id": catalog_id,
+            "provider_pack_id": "transformers-vision",
+            "prompt_required": True,
+            "proposal_geometry": "bounding_box",
+            "snapshot_sha256": checksum,
+            "resolved_revision": record.get("resolved_revision"),
+            "repo_id": record.get("repo_id"),
+            "pointer_format": _POINTER_FORMAT,
+        }
+        if catalog_registration is not None:
+            catalog_registration.source_filename = pointer.name
+            catalog_registration.managed_path = relative_path
+            catalog_registration.sha256 = checksum
+            catalog_registration.file_size_bytes = int(record.get("total_size_bytes") or 0)
+            catalog_registration.framework = "transformers"
+            catalog_registration.task = "detect"
+            catalog_registration.provider_name = provider_id
+            catalog_registration.provider_version = provider_version
+            catalog_registration.class_map_json = {"labels": [], "mapping": {}}
+            catalog_registration.input_size_json = None
+            catalog_registration.metadata_json = metadata
+            catalog_registration.notes = (
+                "Automatically refreshed from ReefVision's verified bundled model pack."
+            )
+            return catalog_registration
+
         model = ModelRegistration(
             id=str(uuid4()),
             project_id=project_id,
@@ -146,17 +189,7 @@ class CatalogInferenceService:
             provider_version=provider_version,
             class_map_json={"labels": [], "mapping": {}},
             input_size_json=None,
-            metadata_json={
-                "registered_from": "bundled_catalog",
-                "source_catalog_model_id": catalog_id,
-                "provider_pack_id": "transformers-vision",
-                "prompt_required": True,
-                "proposal_geometry": "bounding_box",
-                "snapshot_sha256": checksum,
-                "resolved_revision": record.get("resolved_revision"),
-                "repo_id": record.get("repo_id"),
-                "pointer_format": _POINTER_FORMAT,
-            },
+            metadata_json=metadata,
             notes="Automatically registered from ReefVision's verified bundled model pack.",
         )
         self.models.add(model)
@@ -176,14 +209,17 @@ class CatalogInferenceService:
         entry = self.catalog.get_project_catalog_item(project_id, payload.catalog_id)
         if entry.installation_state not in {"Ready", "Available"}:
             raise ValidationError(entry.installation_reason or "The selected catalog model is not ready")
-        provider_id = str(entry.provider_id or entry.provider).strip().casefold().replace("-", "_")
+        provider_id = (
+            str(entry.provider_id or entry.provider).strip().casefold().replace("-", "_")
+        )
         if provider_id not in {"florence2", "grounding_dino", "owlv2"}:
             raise ValidationError("The selected catalog model has an unsupported provider")
 
         record = bundled_transformers_model_record(self.settings, payload.catalog_id)
         if record is None:
             raise ValidationError(
-                "The bundled model snapshot is missing or failed startup verification; repair the installation"
+                "The bundled model snapshot is missing or failed startup verification; "
+                "repair the installation"
             )
 
         images = self.images.list_by_ids(payload.image_ids)
