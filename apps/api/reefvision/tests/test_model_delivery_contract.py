@@ -98,9 +98,7 @@ def test_stage_models_records_all_delivery_modes(tmp_path: Path) -> None:
     assert manifest["asset_count"] == manifest["managed_catalog_model_count"] == 1
     assert manifest["builtin_architecture_count"] == 1
     assert manifest["unavailable_entry_count"] == 1
-    assert manifest["builtin_architectures"] == [
-        "example/provider/detect/scratch-n"
-    ]
+    assert manifest["builtin_architectures"] == ["example/provider/detect/scratch-n"]
     assert manifest["catalog_sha256"] == hashlib.sha256(catalog.read_bytes()).hexdigest()
 
 

@@ -9,6 +9,7 @@ import json
 import os
 import sys
 import urllib.request
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -46,9 +47,7 @@ def _sha256(path: Path) -> str:
 
 def _is_verified(path: Path, expected_size: int, expected_sha256: str) -> bool:
     return (
-        path.is_file()
-        and path.stat().st_size == expected_size
-        and _sha256(path) == expected_sha256
+        path.is_file() and path.stat().st_size == expected_size and _sha256(path) == expected_sha256
     )
 
 
@@ -143,9 +142,7 @@ def audit_catalog(payload: dict[str, Any]) -> DeliveryAudit:
         if availability == "unavailable":
             unavailable.append(catalog_id)
             if selection_kind != "planned_unavailable":
-                warnings.append(
-                    f"Unavailable entry {catalog_id} is not marked planned_unavailable"
-                )
+                warnings.append(f"Unavailable entry {catalog_id} is not marked planned_unavailable")
             continue
         if availability != "available":
             errors.append(
@@ -234,8 +231,7 @@ def _download(
         print()
         if downloaded != expected_size:
             raise RuntimeError(
-                f"Size mismatch for {destination.name}: expected {expected_size}, "
-                f"got {downloaded}"
+                f"Size mismatch for {destination.name}: expected {expected_size}, got {downloaded}"
             )
         actual_sha256 = digest.hexdigest()
         if actual_sha256 != expected_sha256:
@@ -325,9 +321,7 @@ def stage_models(catalog_path: Path, output_root: Path) -> dict[str, Any]:
     )
     os.replace(temporary_manifest, manifest_path)
 
-    declared_paths = {
-        output_root / record["relative_path"] for record in assets.values()
-    }
+    declared_paths = {output_root / record["relative_path"] for record in assets.values()}
     declared_paths.add(manifest_path)
     for candidate in output_root.rglob("*"):
         if candidate.is_file() and candidate not in declared_paths:
@@ -337,10 +331,8 @@ def stage_models(catalog_path: Path, output_root: Path) -> dict[str, Any]:
         key=lambda path: len(path.parts),
         reverse=True,
     ):
-        try:
+        with suppress(OSError):
             directory.rmdir()
-        except OSError:
-            pass
 
     for warning in audit.warnings:
         print(f"Warning: {warning}", file=sys.stderr)

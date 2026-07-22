@@ -34,9 +34,7 @@ def resolve_installed_classification_architecture(
     """Resolve a scratch classifier only from the installed Ultralytics package."""
 
     normalized = architecture.strip()
-    if Path(normalized).name != normalized or not normalized.casefold().endswith(
-        "-cls.yaml"
-    ):
+    if Path(normalized).name != normalized or not normalized.casefold().endswith("-cls.yaml"):
         raise ValidationError(
             "Scratch classification training requires a local *-cls.yaml architecture"
         )
@@ -47,9 +45,7 @@ def resolve_installed_classification_architecture(
         raise ValidationError(
             "The installed Ultralytics package does not expose its architecture registry"
         ) from exc
-    matches = sorted(
-        path.resolve() for path in models_root.rglob(normalized) if path.is_file()
-    )
+    matches = sorted(path.resolve() for path in models_root.rglob(normalized) if path.is_file())
     if not matches:
         raise ValidationError(
             "The selected classification architecture is not available in the installed "
