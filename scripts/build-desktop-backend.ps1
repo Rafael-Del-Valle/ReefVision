@@ -53,6 +53,7 @@ $PackagedBackendPath = Join-Path $BinariesPath "reefvision-api"
 $ProviderRuntimePath = Join-Path $Root ".desktop\provider-runtime"
 $ApiRoot = Join-Path $Root "apps\api"
 $DesktopEntrypoint = Join-Path $ApiRoot "reefvision\desktop.py"
+$AdditionalHooksPath = Join-Path $Root "scripts\pyinstaller-hooks"
 $AlembicIni = Join-Path $ApiRoot "alembic.ini"
 $MigrationsDir = Join-Path $ApiRoot "migrations"
 $ConfigRoot = Join-Path $Root "config"
@@ -91,6 +92,7 @@ function Assert-ReefVisionModelCatalog {
         }
     }
 }
+
 $CollectedProviderPackages = @(
     "torch",
     "torchvision",
@@ -159,8 +161,17 @@ $OptionalBundledTorchPatterns = @(
     "*.lib"
 )
 
-foreach ($path in @($DistPath, $WorkPath, $SpecPath, $BinariesPath, $ProviderRuntimePath)) {
+foreach ($path in @(
+    $DistPath,
+    $WorkPath,
+    $SpecPath,
+    $BinariesPath,
+    $ProviderRuntimePath
+)) {
     New-Item -ItemType Directory -Path $path -Force | Out-Null
+}
+if (-not (Test-Path $AdditionalHooksPath -PathType Container)) {
+    throw "PyInstaller provider hooks are missing: $AdditionalHooksPath"
 }
 
 Assert-ReefVisionModelCatalog -Path $ModelCatalogFile
@@ -181,6 +192,8 @@ $Arguments = @(
     $SpecPath,
     "--paths",
     $ApiRoot,
+    "--additional-hooks-dir",
+    $AdditionalHooksPath,
     "--collect-submodules",
     "alembic",
     "--collect-submodules",
@@ -257,12 +270,23 @@ if (@($BundledRuntimeLibraries).Count -gt 0) {
 
 $PreviousPath = $env:Path
 $HadPreviousAutoinstall = Test-Path Env:YOLO_AUTOINSTALL
-$PreviousAutoinstall = if ($HadPreviousAutoinstall) { $env:YOLO_AUTOINSTALL } else { $null }
+$PreviousAutoinstall = if ($HadPreviousAutoinstall) {
+    $env:YOLO_AUTOINSTALL
+}
+else {
+    $null
+}
 $HadPreviousConfigDir = Test-Path Env:YOLO_CONFIG_DIR
-$PreviousConfigDir = if ($HadPreviousConfigDir) { $env:YOLO_CONFIG_DIR } else { $null }
+$PreviousConfigDir = if ($HadPreviousConfigDir) {
+    $env:YOLO_CONFIG_DIR
+}
+else {
+    $null
+}
 $PreviousTransformersOffline = $env:TRANSFORMERS_OFFLINE
 $PreviousHubOffline = $env:HF_HUB_OFFLINE
-$env:Path = (($DependencyPaths + @($env:Path)) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ";"
+$env:Path = (($DependencyPaths + @($env:Path)) |
+    Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ";"
 $env:YOLO_AUTOINSTALL = "false"
 $env:YOLO_CONFIG_DIR = $ResolvedProviderRuntimePath
 $env:TRANSFORMERS_OFFLINE = "1"
@@ -270,7 +294,7 @@ $env:HF_HUB_OFFLINE = "1"
 
 try {
     Write-ReefVisionStep "Checking pinned provider dependencies before packaging"
-    & $VenvPython -c "from pathlib import Path; from reefvision.ml.dependencies import configure_provider_runtime, require_all_implemented_providers_ready; configure_provider_runtime(data_dir=Path(r'$ResolvedProviderRuntimePath')); require_all_implemented_providers_ready(); import transformers, accelerate, safetensors, huggingface_hub, nnunetv2; import nnunetv2.experiment_planning.plan_and_preprocess_entrypoints, nnunetv2.run.run_training, nnunetv2.inference.predict_from_raw_data; import dynamic_network_architectures, batchgenerators, batchgeneratorsv2"
+    & $VenvPython -c "from pathlib import Path; from reefvision.ml.dependencies import configure_provider_runtime, require_all_implemented_providers_ready; from reefvision.ml.nnunet_dependency_contract import require_nnunet_dependency_contract; configure_provider_runtime(data_dir=Path(r'$ResolvedProviderRuntimePath')); require_all_implemented_providers_ready(); require_nnunet_dependency_contract(); import transformers.models.florence2, transformers.models.grounding_dino, transformers.models.owlv2"
     if ($LASTEXITCODE -ne 0) {
         throw "Pinned provider dependency preflight failed. Rerun .\scripts\bootstrap.ps1."
     }
@@ -322,14 +346,21 @@ if ($ProviderSmoke.ExitCode -ne 0) {
     else {
         "No packaged-provider smoke log was produced."
     }
-    throw "Packaged advanced-provider imports failed with exit code $($ProviderSmoke.ExitCode). $Details"
+    throw (
+        "Packaged advanced-provider imports failed with exit code " +
+        "$($ProviderSmoke.ExitCode). $Details"
+    )
 }
 
 Write-ReefVisionStep "Trimming packaged desktop runtime to the supported installed-app footprint"
 $TorchLibPath = Join-Path $SourceBundle "_internal\torch\lib"
 if (Test-Path $TorchLibPath -PathType Container) {
     foreach ($pattern in $OptionalBundledTorchPatterns) {
-        Get-ChildItem -Path $TorchLibPath -Filter $pattern -File -ErrorAction SilentlyContinue |
+        Get-ChildItem `
+            -Path $TorchLibPath `
+            -Filter $pattern `
+            -File `
+            -ErrorAction SilentlyContinue |
             Remove-Item -Force
     }
 }
