@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
 import { AppProviders } from "./app/providers";
+import { CatalogInferenceLauncher } from "./features/annotation-editor/CatalogInferenceLauncher";
 import { SegmentationInferenceLauncher } from "./features/annotation-editor/SegmentationInferenceLauncher";
 import { SegmentationExportLauncher } from "./features/dataset-versions/SegmentationExportLauncher";
 import { initializeRuntime } from "./runtime";
@@ -24,6 +25,7 @@ async function bootstrap() {
         <App />
         <SegmentationExportLauncher />
         <SegmentationInferenceLauncher />
+        <CatalogInferenceLauncher />
       </AppProviders>
     </StrictMode>,
   );
