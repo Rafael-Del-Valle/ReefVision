@@ -6,7 +6,7 @@ import shutil
 from datetime import UTC, datetime
 
 from PIL import Image
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
@@ -28,6 +28,22 @@ from reefvision.storage.projects import resolve_managed_project_path
 
 def _utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+def _delete_job_predictions(session: Session, job_id: str) -> None:
+    session.execute(
+        delete(ClassificationPrediction).where(ClassificationPrediction.inference_job_id == job_id)
+    )
+
+
+def _registered_probability_labels(model: ModelRegistration) -> tuple[str, ...]:
+    raw_labels = dict(model.class_map_json or {}).get("labels", [])
+    if not isinstance(raw_labels, list):
+        return ()
+    labels = tuple(str(label) for label in raw_labels)
+    if not labels or len(set(labels)) != len(labels):
+        return ()
+    return labels
 
 
 def _resolve_class_id(
@@ -85,9 +101,29 @@ def process_classification_inference_job(
             job.completed_at = _utc_now()
             session.commit()
             return False
+        existing_predictions = list(
+            session.scalars(
+                select(ClassificationPrediction).where(
+                    ClassificationPrediction.inference_job_id == job_id
+                )
+            )
+        )
+        if any(item.review_status != "pending" for item in existing_predictions):
+            job.status = "failed"
+            job.error_message = (
+                "A classification inference retry cannot replace already reviewed proposals"
+            )
+            job.completed_at = _utc_now()
+            session.commit()
+            return False
+        if existing_predictions:
+            _delete_job_predictions(session, job_id)
         job.status = "running"
         job.started_at = _utc_now()
+        job.completed_at = None
         job.error_message = None
+        job.progress_current = 0
+        job.result_json = {"stage": "running"}
         session.commit()
         model_path = resolve_managed_project_path(settings, model.managed_path)
         model_id = model.id
@@ -96,6 +132,7 @@ def process_classification_inference_job(
         model_provider = model.provider_name
         model_provider_version = model.provider_version
         classification_mode = str(model.class_map_json.get("classification_mode", "multiclass"))
+        registered_probability_labels = _registered_probability_labels(model)
         image_ids = [str(item) for item in request.get("image_ids", [])]
         device = str(request.get("device", "auto"))
         minimum_crop_size_px = int(request.get("minimum_crop_size_px", 10))
@@ -126,8 +163,14 @@ def process_classification_inference_job(
                 if job is None:
                     return False
                 if job.status == "cancel_requested":
+                    _delete_job_predictions(session, job_id)
                     job.status = "cancelled"
                     job.completed_at = _utc_now()
+                    job.progress_current = 0
+                    job.result_json = {
+                        "stage": "cancelled",
+                        "proposal_count": 0,
+                    }
                     session.commit()
                     return True
                 image = session.get(ImageAsset, image_id)
@@ -174,6 +217,14 @@ def process_classification_inference_job(
                             quality=95,
                         )
                         result = provider.predict(crop_path, device=device)
+                        if (
+                            registered_probability_labels
+                            and tuple(result.probabilities) != registered_probability_labels
+                        ):
+                            raise RuntimeError(
+                                "Classifier probability labels do not match the registered "
+                                "class mapping"
+                            )
                         resolved_class_id = _resolve_class_id(
                             model=model,
                             annotation=annotation,
@@ -237,11 +288,17 @@ def process_classification_inference_job(
         return True
     except Exception as exc:
         with factory() as session:
+            _delete_job_predictions(session, job_id)
             job = session.get(Job, job_id)
             if job is not None:
                 job.status = "failed"
                 job.error_message = str(exc)
                 job.completed_at = _utc_now()
+                job.progress_current = 0
+                job.result_json = {
+                    "stage": "failed",
+                    "proposal_count": 0,
+                }
                 session.commit()
         return False
     finally:

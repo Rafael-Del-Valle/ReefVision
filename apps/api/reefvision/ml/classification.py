@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 from pathlib import Path
 from typing import Any
 
@@ -118,23 +119,50 @@ class UltralyticsClassificationProvider:
         probabilities = getattr(result, "probs", None)
         if probabilities is None:
             raise ValidationError("The classifier did not return class probabilities")
+        raw_values = probabilities.data.tolist()
+        if not isinstance(raw_values, list) or not raw_values:
+            raise ValidationError("The classifier returned an empty probability vector")
+        if any(isinstance(value, (list, tuple, dict)) for value in raw_values):
+            raise ValidationError("The classifier returned an invalid probability-vector shape")
+        try:
+            values = [float(value) for value in raw_values]
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("The classifier returned non-numeric probabilities") from exc
+        if any(not isfinite(value) for value in values):
+            raise ValidationError("The classifier returned non-finite probabilities")
+        if any(value < -1e-6 or value > 1 + 1e-6 for value in values):
+            raise ValidationError("The classifier returned probabilities outside the range [0, 1]")
+        probability_sum = sum(values)
+        if not isfinite(probability_sum) or abs(probability_sum - 1.0) > 1e-3:
+            raise ValidationError("The classifier probability vector does not sum to one")
+
         top_index = int(probabilities.top1)
+        if top_index < 0 or top_index >= len(values):
+            raise ValidationError("The classifier returned an out-of-range top class index")
         top_confidence = float(probabilities.top1conf)
+        if not isfinite(top_confidence):
+            raise ValidationError("The classifier returned a non-finite top confidence")
+        if abs(top_confidence - values[top_index]) > 1e-4:
+            raise ValidationError(
+                "The classifier top confidence does not match its probability vector"
+            )
+        computed_top_index = max(range(len(values)), key=values.__getitem__)
+        if top_index != computed_top_index:
+            raise ValidationError("The classifier top class does not match its highest probability")
+
         names = getattr(result, "names", None) or getattr(self._model, "names", None) or {}
         if isinstance(names, dict):
-            label = str(names.get(top_index, top_index))
-            probability_map = {
-                str(names.get(index, index)): float(value)
-                for index, value in enumerate(probabilities.data.tolist())
-            }
+            labels = [str(names.get(index, index)) for index in range(len(values))]
         else:
-            label = str(names[top_index]) if top_index < len(names) else str(top_index)
-            probability_map = {
-                str(names[index]) if index < len(names) else str(index): float(value)
-                for index, value in enumerate(probabilities.data.tolist())
-            }
+            labels = [
+                str(names[index]) if index < len(names) else str(index)
+                for index in range(len(values))
+            ]
+        if len(set(labels)) != len(labels):
+            raise ValidationError("The classifier returned duplicate probability labels")
+        probability_map = dict(zip(labels, values, strict=True))
         return ClassificationResult(
-            label=label,
+            label=labels[top_index],
             class_index=top_index,
             confidence=top_confidence,
             probabilities=probability_map,

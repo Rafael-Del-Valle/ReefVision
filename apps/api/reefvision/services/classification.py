@@ -42,6 +42,7 @@ from reefvision.schemas.training import TrainingRunResponse
 from reefvision.services.semantic_training import SemanticTrainingService
 from reefvision.storage.classification_exports import preview_classification_dataset
 from reefvision.storage.datasets import canonical_json_sha256
+from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
 
 
@@ -96,6 +97,80 @@ class ClassificationService:
             warnings=[str(item) for item in preview["warnings"]],
         )
 
+    def _validate_initial_classifier(
+        self,
+        *,
+        project: Project,
+        model: ModelRegistration,
+        requested_mode: str,
+        checkpoint: Path,
+    ) -> None:
+        checksum, size = hash_model_file(checkpoint)
+        if checksum != model.sha256 or size != model.file_size_bytes:
+            raise ValidationError(
+                "The registered classifier checkpoint no longer matches its verified record"
+            )
+
+        class_map = dict(model.class_map_json or {})
+        registered_mode = str(class_map.get("classification_mode") or "")
+        if registered_mode != requested_mode:
+            raise ValidationError(
+                "The selected classifier mode does not match the requested training mode"
+            )
+
+        raw_labels = class_map.get("labels")
+        if not isinstance(raw_labels, list) or not raw_labels:
+            raise ValidationError("The selected classifier has no registered output labels")
+        labels = [str(label) for label in raw_labels]
+        if len(set(labels)) != len(labels):
+            raise ValidationError("The selected classifier has duplicate output labels")
+
+        if requested_mode == "multiclass":
+            raw_mapping = class_map.get("mapping")
+            if not isinstance(raw_mapping, dict):
+                raise ValidationError(
+                    "The selected multiclass classifier has no project-class mapping"
+                )
+            if set(str(key) for key in raw_mapping) != set(labels):
+                raise ValidationError(
+                    "The selected multiclass classifier mapping does not cover every output label"
+                )
+            active_class_ids = {
+                label_class.id for label_class in project.label_classes if label_class.is_active
+            }
+            mapped_class_ids = [str(raw_mapping[label]) for label in labels]
+            if any(class_id not in active_class_ids for class_id in mapped_class_ids):
+                raise ValidationError(
+                    "The selected multiclass classifier maps to a missing or inactive project class"
+                )
+            if len(set(mapped_class_ids)) != len(mapped_class_ids):
+                raise ValidationError(
+                    "The selected multiclass classifier maps multiple outputs to the same class"
+                )
+            return
+
+        raw_state_mapping = class_map.get("state_mapping")
+        if raw_state_mapping is None:
+            raw_state_mapping = {
+                label: label.strip().casefold()
+                for label in labels
+                if label.strip().casefold() in {"open", "closed"}
+            }
+        if not isinstance(raw_state_mapping, dict):
+            raise ValidationError("The selected binary classifier has no state mapping")
+        normalized_state_mapping = {
+            str(label): str(state).strip().casefold() for label, state in raw_state_mapping.items()
+        }
+        if set(normalized_state_mapping) != set(labels):
+            raise ValidationError(
+                "The selected binary classifier mapping does not cover every output label"
+            )
+        if set(normalized_state_mapping.values()) != {"open", "closed"}:
+            raise ValidationError(
+                "The selected binary classifier must map exactly one output to open "
+                "and one to closed"
+            )
+
     def create_training_run(
         self,
         project_id: str,
@@ -136,6 +211,12 @@ class ClassificationService:
             )
             if not managed_checkpoint.is_file():
                 raise ValidationError("The registered classifier checkpoint is missing")
+            self._validate_initial_classifier(
+                project=project,
+                model=initial_model,
+                requested_mode=request.mode,
+                checkpoint=managed_checkpoint,
+            )
             initial_source = "registered_model"
             resolved_model_asset_id = f"registered_model:{initial_model.id}"
             resolved_model_checksum = initial_model.sha256
@@ -310,7 +391,18 @@ class ClassificationService:
         if prediction is None:
             raise NotFoundError("Classification prediction not found")
         if prediction.review_status != "pending":
-            raise ConflictError("Only pending classification predictions may be reviewed")
+            requested_class_id = request.label_class_id or prediction.label_class_id
+            if (
+                prediction.review_status == "accepted"
+                and request.action == "accept"
+                and requested_class_id == prediction.accepted_label_class_id
+            ):
+                return ClassificationPredictionResponse.model_validate(prediction)
+            if prediction.review_status == "rejected" and request.action == "reject":
+                return ClassificationPredictionResponse.model_validate(prediction)
+            raise ConflictError(
+                "This classification prediction has already been reviewed with a different action"
+            )
         if request.action == "reject":
             prediction.review_status = "rejected"
             prediction.reviewed_at = datetime.now(UTC)
@@ -325,6 +417,23 @@ class ClassificationService:
         )
         if annotation is None or annotation.deleted_at is not None:
             raise ValidationError("Accepting this crop prediction requires its source annotation")
+        if annotation.image_id != prediction.image_id:
+            raise ValidationError(
+                "The classification prediction no longer matches its source annotation"
+            )
+        source_revision = dict(prediction.provenance_json or {}).get("source_annotation_revision")
+        if source_revision is not None:
+            try:
+                expected_revision = int(source_revision)
+            except (TypeError, ValueError) as exc:
+                raise ValidationError(
+                    "The classification prediction contains an invalid source revision"
+                ) from exc
+            if annotation.revision != expected_revision:
+                raise ConflictError(
+                    "The source annotation changed after classification inference; "
+                    "run inference again before accepting this proposal"
+                )
         target_class_id = request.label_class_id or prediction.label_class_id
         target_class = (
             self.session.get(LabelClass, target_class_id) if target_class_id is not None else None

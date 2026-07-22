@@ -190,7 +190,10 @@ def test_accepting_classification_prediction_changes_class_with_audit_event(
             probabilities_json={"c002_Muricea_Open": 0.92},
             review_status="pending",
             inference_settings_json={"minimum_crop_size_px": 10},
-            provenance_json={"model_checksum": model.sha256},
+            provenance_json={
+                "model_checksum": model.sha256,
+                "source_annotation_revision": 1,
+            },
         )
         session.add(prediction)
         session.commit()
@@ -203,6 +206,14 @@ def test_accepting_classification_prediction_changes_class_with_audit_event(
     assert response.status_code == 200, response.text
     assert response.json()["review_status"] == "accepted"
     assert response.json()["accepted_label_class_id"] == class_ids["open"]
+
+    repeated = client.post(
+        f"/api/v1/classification-predictions/{prediction_id}/review",
+        json={"action": "accept"},
+    )
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["review_status"] == "accepted"
+    assert repeated.json()["accepted_label_class_id"] == class_ids["open"]
 
     with app.state.session_factory() as session:
         annotation = session.get(
@@ -244,3 +255,176 @@ def test_image_level_classification_labels_are_reviewable_metadata(
     assert [item["id"] for item in listed.json()] == [label["id"]]
     deleted = client.delete(f"/api/v1/image-labels/{label['id']}")
     assert deleted.status_code == 204
+
+
+def test_stale_classification_prediction_cannot_overwrite_newer_annotation(
+    client: TestClient,
+) -> None:
+    project, image_id, class_ids = _seed_classification_project(client)
+    app = cast(FastAPI, client.app)
+    annotation_id = "e52cc1a2-321a-4c12-ad46-1b95a48600e1"
+
+    with app.state.session_factory() as session:
+        annotation = session.get(Annotation, annotation_id)
+        image = session.get(ImageAsset, image_id)
+        assert annotation is not None
+        assert image is not None
+        source_revision = annotation.revision
+
+        model = ModelRegistration(
+            project_id=str(project["id"]),
+            purpose="classifier",
+            display_name="Stale review classifier",
+            source_filename="stale-review.pt",
+            managed_path=f"projects/{project['id']}/models/stale-review.pt",
+            sha256="b" * 64,
+            file_size_bytes=1,
+            framework="ultralytics",
+            task="classify",
+            provider_name="ultralytics",
+            provider_version="test",
+            class_map_json={
+                "classification_mode": "multiclass",
+                "mapping": {"c002_Muricea_Open": class_ids["open"]},
+            },
+            metadata_json={},
+        )
+        session.add(model)
+        session.flush()
+        prediction = ClassificationPrediction(
+            project_id=str(project["id"]),
+            image_id=image_id,
+            annotation_id=annotation_id,
+            model_id=model.id,
+            label_set="default",
+            classification_mode="multiclass",
+            x_min=5,
+            y_min=5,
+            x_max=25,
+            y_max=25,
+            predicted_label="c002_Muricea_Open",
+            predicted_index=1,
+            label_class_id=class_ids["open"],
+            confidence=0.92,
+            probabilities_json={"c002_Muricea_Open": 0.92},
+            review_status="pending",
+            inference_settings_json={"minimum_crop_size_px": 10},
+            provenance_json={
+                "model_checksum": model.sha256,
+                "source_annotation_revision": source_revision,
+            },
+        )
+        session.add(prediction)
+        session.flush()
+        prediction_id = prediction.id
+
+        annotation.label_class_id = class_ids["small"]
+        annotation.revision += 1
+        image.annotation_revision += 1
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/classification-predictions/{prediction_id}/review",
+        json={"action": "accept"},
+    )
+
+    assert response.status_code == 409, response.text
+    assert "changed after classification inference" in response.json()["detail"]
+
+    with app.state.session_factory() as session:
+        annotation = session.get(Annotation, annotation_id)
+        prediction = session.get(ClassificationPrediction, prediction_id)
+        assert annotation is not None
+        assert prediction is not None
+        assert annotation.label_class_id == class_ids["small"]
+        assert annotation.revision == source_revision + 1
+        assert prediction.review_status == "pending"
+        events = (
+            session.query(AnnotationEvent)
+            .filter_by(annotation_id=annotation_id, event_type="class_changed")
+            .all()
+        )
+        assert events == []
+
+
+def test_rejecting_classification_prediction_is_retry_idempotent(
+    client: TestClient,
+) -> None:
+    project, image_id, class_ids = _seed_classification_project(client)
+    app = cast(FastAPI, client.app)
+    annotation_id = "e52cc1a2-321a-4c12-ad46-1b95a48600e1"
+
+    with app.state.session_factory() as session:
+        annotation = session.get(Annotation, annotation_id)
+        assert annotation is not None
+        model = ModelRegistration(
+            project_id=str(project["id"]),
+            purpose="classifier",
+            display_name="Reject review classifier",
+            source_filename="reject-review.pt",
+            managed_path=f"projects/{project['id']}/models/reject-review.pt",
+            sha256="c" * 64,
+            file_size_bytes=1,
+            framework="ultralytics",
+            task="classify",
+            provider_name="ultralytics",
+            provider_version="test",
+            class_map_json={
+                "classification_mode": "multiclass",
+                "mapping": {"c002_Muricea_Open": class_ids["open"]},
+            },
+            metadata_json={},
+        )
+        session.add(model)
+        session.flush()
+        prediction = ClassificationPrediction(
+            project_id=str(project["id"]),
+            image_id=image_id,
+            annotation_id=annotation_id,
+            model_id=model.id,
+            label_set="default",
+            classification_mode="multiclass",
+            x_min=5,
+            y_min=5,
+            x_max=25,
+            y_max=25,
+            predicted_label="c002_Muricea_Open",
+            predicted_index=1,
+            label_class_id=class_ids["open"],
+            confidence=0.92,
+            probabilities_json={"c002_Muricea_Open": 0.92},
+            review_status="pending",
+            inference_settings_json={"minimum_crop_size_px": 10},
+            provenance_json={
+                "model_checksum": model.sha256,
+                "source_annotation_revision": annotation.revision,
+            },
+        )
+        session.add(prediction)
+        session.commit()
+        prediction_id = prediction.id
+        source_revision = annotation.revision
+        source_class_id = annotation.label_class_id
+
+    first = client.post(
+        f"/api/v1/classification-predictions/{prediction_id}/review",
+        json={"action": "reject"},
+    )
+    repeated = client.post(
+        f"/api/v1/classification-predictions/{prediction_id}/review",
+        json={"action": "reject"},
+    )
+
+    assert first.status_code == 200, first.text
+    assert repeated.status_code == 200, repeated.text
+    assert first.json()["review_status"] == "rejected"
+    assert repeated.json()["review_status"] == "rejected"
+
+    with app.state.session_factory() as session:
+        annotation = session.get(Annotation, annotation_id)
+        prediction = session.get(ClassificationPrediction, prediction_id)
+        assert annotation is not None
+        assert prediction is not None
+        assert annotation.revision == source_revision
+        assert annotation.label_class_id == source_class_id
+        assert prediction.review_status == "rejected"
