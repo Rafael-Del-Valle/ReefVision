@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,10 @@ from reefvision.ml.providers import (
 )
 
 _SUPPORTED = {"grounding_dino", "owlv2", "florence2"}
+_CURRENT_TEXT_PROMPT: ContextVar[str | None] = ContextVar(
+    "reefvision_transformers_text_prompt",
+    default=None,
+)
 
 
 @dataclass(frozen=True)
@@ -25,6 +30,19 @@ class TransformersModelSpec:
     provider_name: str
     architecture: str
     task: str
+
+
+def set_transformers_text_prompt(prompt: str | None) -> Token[str | None]:
+    normalized = prompt.strip() if isinstance(prompt, str) else None
+    return _CURRENT_TEXT_PROMPT.set(normalized or None)
+
+
+def reset_transformers_text_prompt(token: Token[str | None]) -> None:
+    _CURRENT_TEXT_PROMPT.reset(token)
+
+
+def current_transformers_text_prompt() -> str | None:
+    return _CURRENT_TEXT_PROMPT.get()
 
 
 def _require_model_directory(model_path: Path) -> Path:
@@ -47,7 +65,7 @@ def _model_type(model_path: Path) -> str:
     except (OSError, json.JSONDecodeError) as exc:
         raise ValidationError(f"Could not read Transformers config.json: {exc}") from exc
     model_type = str(payload.get("model_type") or "").casefold().replace("-", "_")
-    if model_type in {"grounding_dino", "owlv2", "florence2"}:
+    if model_type in _SUPPORTED:
         return model_type
     architectures = " ".join(str(item) for item in payload.get("architectures", []))
     lowered = architectures.casefold()
@@ -112,11 +130,12 @@ class TransformersVisionDetectionProvider:
             )
         try:
             import torch
-            from transformers import (
-                AutoModelForCausalLM,
-                AutoModelForZeroShotObjectDetection,
-                AutoProcessor,
-            )
+            from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
+            try:
+                from transformers import AutoModelForImageTextToText
+            except ImportError:
+                AutoModelForImageTextToText = None  # type: ignore[assignment,misc]
+            from transformers import AutoModelForCausalLM
         except Exception as exc:
             raise ValidationError(
                 "The Transformers provider pack is not installed. Install transformers, "
@@ -132,11 +151,10 @@ class TransformersVisionDetectionProvider:
                 local_files_only=True,
                 trust_remote_code=self.provider_name == "florence2",
             )
-            model_class = (
-                AutoModelForCausalLM
-                if self.provider_name == "florence2"
-                else AutoModelForZeroShotObjectDetection
-            )
+            if self.provider_name == "florence2":
+                model_class = AutoModelForImageTextToText or AutoModelForCausalLM
+            else:
+                model_class = AutoModelForZeroShotObjectDetection
             self._model = model_class.from_pretrained(
                 model_dir,
                 local_files_only=True,
@@ -161,12 +179,13 @@ class TransformersVisionDetectionProvider:
             raise ValidationError("The Transformers model is not loaded")
         if not image_path.is_file():
             raise ValidationError("Transformers inference requires an existing local image")
-        prompt = (text_prompt or "").strip()
+        prompt = (text_prompt or current_transformers_text_prompt() or "").strip()
         if not prompt:
             raise ValidationError(
                 f"{self.provider_name} requires a text prompt for open-vocabulary detection"
             )
-        image = Image.open(image_path).convert("RGB")
+        with Image.open(image_path) as source:
+            image = source.convert("RGB")
         if self.provider_name == "florence2":
             return self._predict_florence(image, prompt, settings)
         return self._predict_zero_shot(image, prompt, settings)
@@ -188,25 +207,50 @@ class TransformersVisionDetectionProvider:
         with torch.inference_mode():
             outputs = self._model(**inputs)
         target_sizes = torch.tensor([image.size[::-1]], device=self._device)
-        processed = self._processor.post_process_grounded_object_detection(
-            outputs,
-            target_sizes=target_sizes,
-            threshold=settings.confidence_threshold,
-            text_threshold=settings.confidence_threshold,
-        )[0]
+        if self.provider_name == "grounding_dino":
+            processed = self._processor.post_process_grounded_object_detection(
+                outputs,
+                inputs.get("input_ids"),
+                box_threshold=settings.confidence_threshold,
+                text_threshold=settings.confidence_threshold,
+                target_sizes=target_sizes,
+            )[0]
+        else:
+            post_process = getattr(
+                self._processor,
+                "post_process_grounded_object_detection",
+                None,
+            ) or getattr(self._processor, "post_process_object_detection", None)
+            if post_process is None:
+                raise ValidationError("OWLv2 processor has no supported detection postprocessor")
+            try:
+                processed = post_process(
+                    outputs,
+                    threshold=settings.confidence_threshold,
+                    target_sizes=target_sizes,
+                    text_labels=[labels],
+                )[0]
+            except TypeError:
+                processed = post_process(
+                    outputs,
+                    threshold=settings.confidence_threshold,
+                    target_sizes=target_sizes,
+                )[0]
         boxes = processed.get("boxes", [])
         scores = processed.get("scores", [])
         result_labels = processed.get("text_labels", processed.get("labels", []))
         predictions: list[DetectionPrediction] = []
         for index, (box, score) in enumerate(zip(boxes, scores, strict=False)):
             values = [float(value) for value in box.detach().cpu().tolist()]
+            if len(values) != 4:
+                continue
             label_value = result_labels[index] if index < len(result_labels) else "object"
             if hasattr(label_value, "item"):
                 class_index = int(label_value.item())
                 label = labels[class_index] if 0 <= class_index < len(labels) else str(class_index)
             else:
-                class_index = labels.index(str(label_value)) if str(label_value) in labels else None
                 label = str(label_value)
+                class_index = labels.index(label) if label in labels else None
             predictions.append(
                 DetectionPrediction(
                     label=label,
@@ -254,7 +298,7 @@ class TransformersVisionDetectionProvider:
                 DetectionPrediction(
                     label=label,
                     class_index=None,
-                    confidence=max(settings.confidence_threshold, 1.0),
+                    confidence=1.0,
                     box=PixelBox(*values),
                 )
             )
