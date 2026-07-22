@@ -9,6 +9,7 @@ from reefvision.api.routes.artifacts import router as artifacts_router
 from reefvision.api.routes.assist import router as assist_router
 from reefvision.api.routes.backups import router as backups_router
 from reefvision.api.routes.capabilities import router as capabilities_router
+from reefvision.api.routes.catalog_inference import router as catalog_inference_router
 from reefvision.api.routes.class_operations import router as class_operations_router
 from reefvision.api.routes.class_visibility import router as class_visibility_router
 from reefvision.api.routes.classification import router as classification_router
@@ -92,6 +93,7 @@ api_router.include_router(interchange_router)
 api_router.include_router(jobs_router)
 api_router.include_router(model_catalog_router)
 api_router.include_router(models_router)
+api_router.include_router(catalog_inference_router)
 api_router.include_router(predictions_router)
 api_router.include_router(assist_router)
 api_router.include_router(segmentation_evaluation_router)
