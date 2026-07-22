@@ -142,7 +142,10 @@ $ProviderMetadataPackages = @(
     "huggingface-hub",
     "tokenizers",
     "sentencepiece",
-    "nnunetv2"
+    "nnunetv2",
+    "dynamic-network-architectures",
+    "batchgenerators",
+    "batchgeneratorsv2"
 )
 $OptionalBundledTorchPatterns = @(
     "cudnn_*.dll",
@@ -190,6 +193,14 @@ $Arguments = @(
     "python_multipart",
     "--collect-submodules",
     "transformers.models",
+    "--collect-submodules",
+    "nnunetv2",
+    "--collect-submodules",
+    "dynamic_network_architectures",
+    "--collect-submodules",
+    "batchgenerators",
+    "--collect-submodules",
+    "batchgeneratorsv2",
     "--hidden-import",
     "uvicorn.logging",
     "--hidden-import",
@@ -206,6 +217,12 @@ $Arguments = @(
     "transformers.models.grounding_dino",
     "--hidden-import",
     "transformers.models.owlv2",
+    "--hidden-import",
+    "nnunetv2.experiment_planning.plan_and_preprocess_entrypoints",
+    "--hidden-import",
+    "nnunetv2.run.run_training",
+    "--hidden-import",
+    "nnunetv2.inference.predict_from_raw_data",
     "--add-data",
     "${AlembicIni};alembic",
     "--add-data",
@@ -253,7 +270,7 @@ $env:HF_HUB_OFFLINE = "1"
 
 try {
     Write-ReefVisionStep "Checking pinned provider dependencies before packaging"
-    & $VenvPython -c "from pathlib import Path; from reefvision.ml.dependencies import configure_provider_runtime, require_all_implemented_providers_ready; configure_provider_runtime(data_dir=Path(r'$ResolvedProviderRuntimePath')); require_all_implemented_providers_ready(); import transformers, accelerate, safetensors, huggingface_hub, nnunetv2"
+    & $VenvPython -c "from pathlib import Path; from reefvision.ml.dependencies import configure_provider_runtime, require_all_implemented_providers_ready; configure_provider_runtime(data_dir=Path(r'$ResolvedProviderRuntimePath')); require_all_implemented_providers_ready(); import transformers, accelerate, safetensors, huggingface_hub, nnunetv2; import nnunetv2.experiment_planning.plan_and_preprocess_entrypoints, nnunetv2.run.run_training, nnunetv2.inference.predict_from_raw_data; import dynamic_network_architectures, batchgenerators, batchgeneratorsv2"
     if ($LASTEXITCODE -ne 0) {
         throw "Pinned provider dependency preflight failed. Rerun .\scripts\bootstrap.ps1."
     }
@@ -288,6 +305,25 @@ if (-not (Test-Path $SourceBundle -PathType Container)) {
 }
 $PyInstallerCatalog = Join-Path $SourceBundle "_internal\config\model_catalog.json"
 Assert-ReefVisionModelCatalog -Path $PyInstallerCatalog
+
+Write-ReefVisionStep "Testing advanced providers inside the frozen backend"
+$PackagedApi = Join-Path $SourceBundle "reefvision-api.exe"
+$ProviderSmokeLog = Join-Path $OutputRoot "provider-import-smoke.jsonl"
+Remove-Item -LiteralPath $ProviderSmokeLog -Force -ErrorAction SilentlyContinue
+$ProviderSmoke = Start-Process `
+    -FilePath $PackagedApi `
+    -ArgumentList @("--provider-import-smoke", "--log-file", $ProviderSmokeLog) `
+    -PassThru `
+    -Wait
+if ($ProviderSmoke.ExitCode -ne 0) {
+    $Details = if (Test-Path $ProviderSmokeLog -PathType Leaf) {
+        Get-Content -LiteralPath $ProviderSmokeLog -Raw
+    }
+    else {
+        "No packaged-provider smoke log was produced."
+    }
+    throw "Packaged advanced-provider imports failed with exit code $($ProviderSmoke.ExitCode). $Details"
+}
 
 Write-ReefVisionStep "Trimming packaged desktop runtime to the supported installed-app footprint"
 $TorchLibPath = Join-Path $SourceBundle "_internal\torch\lib"
