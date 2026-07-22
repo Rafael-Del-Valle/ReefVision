@@ -96,6 +96,16 @@ $CollectedProviderPackages = @(
     "torchvision",
     "ultralytics",
     "segment_anything",
+    "transformers",
+    "accelerate",
+    "safetensors",
+    "huggingface_hub",
+    "tokenizers",
+    "sentencepiece",
+    "nnunetv2",
+    "dynamic_network_architectures",
+    "batchgenerators",
+    "batchgeneratorsv2",
     "cv2",
     "numpy",
     "PIL",
@@ -125,7 +135,14 @@ $ProviderMetadataPackages = @(
     "seaborn",
     "ultralytics-thop",
     "ultralytics",
-    "segment-anything"
+    "segment-anything",
+    "transformers",
+    "accelerate",
+    "safetensors",
+    "huggingface-hub",
+    "tokenizers",
+    "sentencepiece",
+    "nnunetv2"
 )
 $OptionalBundledTorchPatterns = @(
     "cudnn_*.dll",
@@ -171,6 +188,8 @@ $Arguments = @(
     "multipart",
     "--collect-submodules",
     "python_multipart",
+    "--collect-submodules",
+    "transformers.models",
     "--hidden-import",
     "uvicorn.logging",
     "--hidden-import",
@@ -181,6 +200,12 @@ $Arguments = @(
     "uvicorn.protocols.websockets.auto",
     "--hidden-import",
     "uvicorn.lifespan.on",
+    "--hidden-import",
+    "transformers.models.florence2",
+    "--hidden-import",
+    "transformers.models.grounding_dino",
+    "--hidden-import",
+    "transformers.models.owlv2",
     "--add-data",
     "${AlembicIni};alembic",
     "--add-data",
@@ -218,13 +243,17 @@ $HadPreviousAutoinstall = Test-Path Env:YOLO_AUTOINSTALL
 $PreviousAutoinstall = if ($HadPreviousAutoinstall) { $env:YOLO_AUTOINSTALL } else { $null }
 $HadPreviousConfigDir = Test-Path Env:YOLO_CONFIG_DIR
 $PreviousConfigDir = if ($HadPreviousConfigDir) { $env:YOLO_CONFIG_DIR } else { $null }
+$PreviousTransformersOffline = $env:TRANSFORMERS_OFFLINE
+$PreviousHubOffline = $env:HF_HUB_OFFLINE
 $env:Path = (($DependencyPaths + @($env:Path)) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ";"
 $env:YOLO_AUTOINSTALL = "false"
 $env:YOLO_CONFIG_DIR = $ResolvedProviderRuntimePath
+$env:TRANSFORMERS_OFFLINE = "1"
+$env:HF_HUB_OFFLINE = "1"
 
 try {
     Write-ReefVisionStep "Checking pinned provider dependencies before packaging"
-    & $VenvPython -c "from pathlib import Path; from reefvision.ml.dependencies import configure_provider_runtime, require_all_implemented_providers_ready; configure_provider_runtime(data_dir=Path(r'$ResolvedProviderRuntimePath')); require_all_implemented_providers_ready()"
+    & $VenvPython -c "from pathlib import Path; from reefvision.ml.dependencies import configure_provider_runtime, require_all_implemented_providers_ready; configure_provider_runtime(data_dir=Path(r'$ResolvedProviderRuntimePath')); require_all_implemented_providers_ready(); import transformers, accelerate, safetensors, huggingface_hub, nnunetv2"
     if ($LASTEXITCODE -ne 0) {
         throw "Pinned provider dependency preflight failed. Rerun .\scripts\bootstrap.ps1."
     }
@@ -237,6 +266,8 @@ try {
 }
 finally {
     $env:Path = $PreviousPath
+    $env:TRANSFORMERS_OFFLINE = $PreviousTransformersOffline
+    $env:HF_HUB_OFFLINE = $PreviousHubOffline
     if ($HadPreviousAutoinstall) {
         $env:YOLO_AUTOINSTALL = $PreviousAutoinstall
     }
