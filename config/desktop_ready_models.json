@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "policy_version": "1.0.0",
+  "repository": "ultralytics/assets",
+  "release_tags": [
+    "v8.4.0",
+    "v8.3.0",
+    "v8.2.0",
+    "v0.0.0"
+  ],
+  "model_weight_license": "Official Ultralytics-distributed pretrained weights; AGPL-3.0 or an applicable Ultralytics enterprise license.",
+  "license_summary": "Official Ultralytics-distributed pretrained weights; AGPL-3.0 or an applicable Ultralytics enterprise license.",
+  "required_models": [
+    {
+      "display_name": "FastSAM",
+      "filename": "FastSAM-s.pt",
+      "provider": "segment_anything",
+      "provider_id": "segment_anything",
+      "provider_version": "1.0+reefvision-pack",
+      "provider_pack_id": null,
+      "required_provider_pack": null
+    },
+    {
+      "display_name": "MobileSAM",
+      "filename": "mobile_sam.pt",
+      "provider": "segment_anything",
+      "provider_id": "segment_anything",
+      "provider_version": "1.0+reefvision-pack",
+      "provider_pack_id": null,
+      "required_provider_pack": null
+    },
+    {
+      "display_name": "RT-DETR Large",
+      "filename": "rtdetr-l.pt"
+    },
+    {
+      "display_name": "RT-DETR XLarge",
+      "filename": "rtdetr-x.pt"
+    },
+    {
+      "display_name": "SAM ViT-B",
+      "filename": "sam_b.pt",
+      "provider": "segment_anything",
+      "provider_id": "segment_anything",
+      "provider_version": "1.0+reefvision-pack",
+      "provider_pack_id": null,
+      "required_provider_pack": null
+    },
+    {
+      "display_name": "SAM 2 Image",
+      "filename": "sam2_b.pt",
+      "provider": "segment_anything",
+      "provider_id": "segment_anything",
+      "provider_version": "1.0+reefvision-pack",
+      "provider_pack_id": null,
+      "required_provider_pack": null
+    },
+    {
+      "display_name": "YOLO-World",
+      "filename": "yolov8s-worldv2.pt"
+    },
+    {
+      "display_name": "YOLO11 Large",
+      "filename": "yolo11l.pt"
+    },
+    {
+      "display_name": "YOLO11 Large Segmentation",
+      "filename": "yolo11l-seg.pt"
+    },
+    {
+      "display_name": "YOLO11 Medium",
+      "filename": "yolo11m.pt"
+    },
+    {
+      "display_name": "YOLO11 Medium Segmentation",
+      "filename": "yolo11m-seg.pt"
+    },
+    {
+      "display_name": "YOLO11 Nano",
+      "filename": "yolo11n.pt"
+    },
+    {
+      "display_name": "YOLO11 Nano Segmentation",
+      "filename": "yolo11n-seg.pt"
+    },
+    {
+      "display_name": "YOLO11 Small",
+      "filename": "yolo11s.pt"
+    },
+    {
+      "display_name": "YOLO11 Small Segmentation",
+      "filename": "yolo11s-seg.pt"
+    },
+    {
+      "display_name": "YOLO11 X",
+      "filename": "yolo11x.pt"
+    },
+    {
+      "display_name": "YOLO11 X Segmentation",
+      "filename": "yolo11x-seg.pt"
+    },
+    {
+      "display_name": "YOLOE",
+      "filename": "yoloe-11s-seg-pf.pt"
+    },
+    {
+      "display_name": "YOLOv8 Large",
+      "filename": "yolov8l.pt"
+    },
+    {
+      "display_name": "YOLOv8 Large Segmentation",
+      "filename": "yolov8l-seg.pt"
+    },
+    {
+      "display_name": "YOLOv8 Medium",
+      "filename": "yolov8m.pt"
+    },
+    {
+      "display_name": "YOLOv8 Medium Segmentation",
+      "filename": "yolov8m-seg.pt"
+    },
+    {
+      "display_name": "YOLOv8 Nano",
+      "filename": "yolov8n.pt"
+    },
+    {
+      "display_name": "YOLOv8 Nano Segmentation",
+      "filename": "yolov8n-seg.pt"
+    },
+    {
+      "display_name": "YOLOv8 Small",
+      "filename": "yolov8s.pt"
+    },
+    {
+      "display_name": "YOLOv8 Small Segmentation",
+      "filename": "yolov8s-seg.pt"
+    },
+    {
+      "display_name": "YOLOv8 X",
+      "filename": "yolov8x.pt"
+    },
+    {
+      "display_name": "YOLOv8 X Segmentation",
+      "filename": "yolov8x-seg.pt"
+    }
+  ]
+}
