@@ -9,7 +9,9 @@ Set-Location $Root
 
 . (Join-Path $PSScriptRoot "lib\node-tools.ps1")
 $NodeTools = Ensure-ReefVisionNodeTools
-$RustTools = Ensure-ReefVisionRustTools -Purpose "build the ReefVision desktop installer" -TargetTriple $TargetTriple
+$RustTools = Ensure-ReefVisionRustTools `
+    -Purpose "build the ReefVision desktop installer" `
+    -TargetTriple $TargetTriple
 Assert-ReefVisionPublicLockfile -NodeTools $NodeTools
 
 $TauriConfigPath = Join-Path $Root "apps\web\src-tauri\tauri.conf.json"
@@ -17,10 +19,16 @@ $TauriConfig = Get-Content -LiteralPath $TauriConfigPath -Raw | ConvertFrom-Json
 if ($TauriConfig.bundle.resources.'binaries/' -ne 'backend/') {
     throw "Tauri must map the complete staged binaries directory to backend/."
 }
-if ($TauriConfig.bundle.resources.'../../../.desktop/bundled-models/' -ne 'bundled-models/') {
+if (
+    $TauriConfig.bundle.resources.'../../../.desktop/bundled-models/' -ne
+    'bundled-models/'
+) {
     throw "Tauri must package the verified catalog checkpoints as bundled-models/."
 }
-if ($TauriConfig.bundle.resources.'../../../.desktop/bundled-transformers-models/' -ne 'bundled-transformers-models/') {
+if (
+    $TauriConfig.bundle.resources.'../../../.desktop/bundled-transformers-models/' -ne
+    'bundled-transformers-models/'
+) {
     throw "Tauri must package the Transformers vision model pack."
 }
 
@@ -31,14 +39,18 @@ if (-not (Test-Path ".venv" -PathType Container)) {
 $VenvPython = Join-Path $Root ".venv\Scripts\python.exe"
 $HydrateScript = Join-Path $PSScriptRoot "hydrate-desktop-model-catalog.py"
 $BundleScript = Join-Path $PSScriptRoot "stage-bundled-models.py"
-$TransformersBundleScript = Join-Path $PSScriptRoot "stage-transformers-provider-models.py"
+$TransformersBundleScript = Join-Path `
+    $PSScriptRoot `
+    "stage-transformers-provider-models.py"
 $SourceModelCatalog = Join-Path $Root "config\model_catalog.json"
 $BundlePolicy = Join-Path $Root "config\desktop_ready_models.json"
 $TransformersPolicy = Join-Path $Root "config\transformers_model_pack.json"
 $GeneratedConfig = Join-Path $Root ".desktop\generated-config"
 $ModelCatalog = Join-Path $GeneratedConfig "model_catalog.json"
 $BundledModels = Join-Path $Root ".desktop\bundled-models"
-$BundledTransformersModels = Join-Path $Root ".desktop\bundled-transformers-models"
+$BundledTransformersModels = Join-Path `
+    $Root `
+    ".desktop\bundled-transformers-models"
 
 New-Item -ItemType Directory -Path $GeneratedConfig -Force | Out-Null
 
@@ -52,7 +64,8 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $HydratedCatalog = Get-Content -LiteralPath $ModelCatalog -Raw | ConvertFrom-Json
-$BundlePolicyMetadata = Get-Content -LiteralPath $BundlePolicy -Raw | ConvertFrom-Json
+$BundlePolicyMetadata = Get-Content -LiteralPath $BundlePolicy -Raw |
+    ConvertFrom-Json
 $RequiredCatalogIds = @($HydratedCatalog.desktop_bundle_required_ids)
 $RequiredPolicyCount = @($BundlePolicyMetadata.required_models).Count
 if ($RequiredCatalogIds.Count -ne $RequiredPolicyCount) {
@@ -77,7 +90,8 @@ $BundledManifest = Join-Path $BundledModels "manifest.json"
 if (-not (Test-Path $BundledManifest -PathType Leaf)) {
     throw "Model bundle staging did not produce its manifest: $BundledManifest"
 }
-$BundleMetadata = Get-Content -LiteralPath $BundledManifest -Raw | ConvertFrom-Json
+$BundleMetadata = Get-Content -LiteralPath $BundledManifest -Raw |
+    ConvertFrom-Json
 if (-not $BundleMetadata.delivery_contract_complete) {
     throw "The desktop model bundle did not pass its zero-input delivery contract."
 }
@@ -119,9 +133,23 @@ $TransformersManifest = Join-Path $BundledTransformersModels "manifest.json"
 if (-not (Test-Path $TransformersManifest -PathType Leaf)) {
     throw "Transformers model-pack staging did not produce a manifest."
 }
-$TransformersMetadata = Get-Content -LiteralPath $TransformersManifest -Raw | ConvertFrom-Json
-if ($TransformersMetadata.model_count -ne 6) {
-    throw "The Transformers vision model pack must contain exactly six models."
+$TransformersMetadata = Get-Content -LiteralPath $TransformersManifest -Raw |
+    ConvertFrom-Json
+if (
+    $TransformersMetadata.manifest_version -ne 2 -or
+    $TransformersMetadata.model_count -ne 6 -or
+    @($TransformersMetadata.models.PSObject.Properties).Count -ne 6
+) {
+    throw "The Transformers vision model pack must contain six verified manifest-v2 models."
+}
+foreach ($ModelRecord in $TransformersMetadata.models.PSObject.Properties) {
+    if (
+        $ModelRecord.Value.file_count -lt 1 -or
+        $ModelRecord.Value.resolved_revision -notmatch '^[0-9a-f]{40}$' -or
+        $ModelRecord.Value.snapshot_sha256 -notmatch '^[0-9a-f]{64}$'
+    ) {
+        throw "Transformers model-pack record is incomplete: $($ModelRecord.Name)"
+    }
 }
 Write-Host (
     "Bundling $($TransformersMetadata.model_count) Transformers model snapshots " +
@@ -129,15 +157,23 @@ Write-Host (
 ) -ForegroundColor Green
 
 $OriginalCatalogBytes = [System.IO.File]::ReadAllBytes($SourceModelCatalog)
+$PreviousWixMums = $env:WIX_MUMS
+$PreviousWixMcslfs = $env:WIX_MCSLFS
 try {
     Copy-Item -LiteralPath $ModelCatalog -Destination $SourceModelCatalog -Force
 
-    & (Join-Path $PSScriptRoot "build-desktop-backend.ps1") -TargetTriple $TargetTriple
+    & (Join-Path $PSScriptRoot "build-desktop-backend.ps1") `
+        -TargetTriple $TargetTriple
     if ($LASTEXITCODE -ne 0) {
         throw "The packaged desktop backend build failed."
     }
 
-    Write-ReefVisionStep "Building the Tauri MSI installer"
+    # Force WiX to create multiple moderate cabinets. This protects the large
+    # offline model payload from the 2 GB per-cabinet ceiling and also permits
+    # individual weight files to be split when required.
+    $env:WIX_MUMS = "512"
+    $env:WIX_MCSLFS = "512"
+    Write-ReefVisionStep "Building the Tauri MSI installer with split WiX cabinets"
     Invoke-ReefVisionNpm -NodeTools $NodeTools -Arguments @(
         "--prefix",
         "apps/web",
@@ -151,15 +187,22 @@ try {
     )
 }
 finally {
+    $env:WIX_MUMS = $PreviousWixMums
+    $env:WIX_MCSLFS = $PreviousWixMcslfs
     [System.IO.File]::WriteAllBytes($SourceModelCatalog, $OriginalCatalogBytes)
 }
 
-$InstallerDirectory = Join-Path $Root "apps\web\src-tauri\target\$TargetTriple\release\bundle\msi"
-$StagedCatalog = Join-Path $Root "apps\web\src-tauri\binaries\reefvision-api\_internal\config\model_catalog.json"
+$InstallerDirectory = Join-Path `
+    $Root `
+    "apps\web\src-tauri\target\$TargetTriple\release\bundle\msi"
+$StagedCatalog = Join-Path `
+    $Root `
+    "apps\web\src-tauri\binaries\reefvision-api\_internal\config\model_catalog.json"
 if (-not (Test-Path $StagedCatalog -PathType Leaf)) {
     throw "Desktop packaging lost the required Model Hub catalog: $StagedCatalog"
 }
-$PackagedCatalog = Get-Content -LiteralPath $StagedCatalog -Raw | ConvertFrom-Json
+$PackagedCatalog = Get-Content -LiteralPath $StagedCatalog -Raw |
+    ConvertFrom-Json
 $PackagedRequiredIds = @($PackagedCatalog.desktop_bundle_required_ids)
 if (
     $PackagedRequiredIds.Count -ne $RequiredCatalogIds.Count -or
@@ -167,7 +210,13 @@ if (
 ) {
     throw "The packaged backend catalog lost one or more required Ready models."
 }
-$Installers = @(Get-ChildItem -LiteralPath $InstallerDirectory -Filter '*.msi' -File -ErrorAction SilentlyContinue)
+$Installers = @(
+    Get-ChildItem `
+        -LiteralPath $InstallerDirectory `
+        -Filter '*.msi' `
+        -File `
+        -ErrorAction SilentlyContinue
+)
 if ($Installers.Count -eq 0) {
     throw "Tauri did not produce an MSI installer in $InstallerDirectory"
 }
