@@ -214,6 +214,24 @@ def _patch_provider_factories() -> None:
     provider_hub.detection_provider_for_name = detection_provider
 
 
+def _patch_semantic_provider() -> None:
+    from reefvision.jobs import inference, semantic_training
+    from reefvision.ml import semantic_segmentation
+    from reefvision.ml.reefvision_unet_semantic import NativeUNetSemanticProvider
+
+    original = semantic_segmentation.semantic_provider_for_name
+
+    def semantic_provider(provider_id: str) -> Any:
+        normalized = provider_id.strip().casefold().replace("-", "_")
+        if normalized == "reefvision_unet":
+            return NativeUNetSemanticProvider()
+        return original(provider_id)
+
+    semantic_segmentation.semantic_provider_for_name = semantic_provider
+    inference.semantic_provider_for_name = semantic_provider
+    semantic_training.semantic_provider_for_name = semantic_provider
+
+
 def _patch_model_catalog_state() -> None:
     from reefvision.services import model_catalog
     from reefvision.services.bundled_transformers_models import (
@@ -317,5 +335,6 @@ def apply_advanced_provider_runtime_patches() -> None:
         return
     _patch_provider_catalog()
     _patch_provider_factories()
+    _patch_semantic_provider()
     _patch_model_catalog_state()
     _APPLIED = True
