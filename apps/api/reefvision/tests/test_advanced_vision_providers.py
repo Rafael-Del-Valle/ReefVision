@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from reefvision.db.models import Project
 from reefvision.domain.errors import ValidationError
 from reefvision.ml.nnunet_provider import (
     NnUNetCase,
@@ -17,10 +18,12 @@ from reefvision.ml.nnunet_provider import (
     nnunet_command_environment,
 )
 from reefvision.ml.reefvision_unet import PRESETS, UNetCheckpointMetadata
+from reefvision.ml.reefvision_unet_semantic import _RepeatableBatchIterable
 from reefvision.ml.transformers_provider import (
     TransformersVisionDetectionProvider,
     inspect_transformers_model,
 )
+from reefvision.services.segmentation_catalog import SegmentationModelCatalogService
 
 
 @pytest.mark.parametrize(
@@ -79,6 +82,56 @@ def test_unet_presets_are_ordered_and_checkpoint_metadata_is_explicit() -> None:
     )
 
     assert metadata.class_labels[1] == "coral"
+
+
+def test_native_unet_batch_iterable_can_be_reused_across_epochs(tmp_path: Path) -> None:
+    source_image = tmp_path / "source.png"
+    source_mask = tmp_path / "mask.png"
+    Image.new("RGB", (16, 16), (10, 20, 30)).save(source_image)
+    Image.new("L", (16, 16), 1).save(source_mask)
+    batches = _RepeatableBatchIterable(
+        [(source_image, source_mask)],
+        image_size=16,
+        batch_size=1,
+        shuffle=False,
+        seed=7,
+    )
+
+    first_epoch = list(batches)
+    second_epoch = list(batches)
+
+    assert len(first_epoch) == len(second_epoch) == 1
+    assert first_epoch[0][0].shape == second_epoch[0][0].shape == (1, 3, 16, 16)
+    assert first_epoch[0][1].shape == second_epoch[0][1].shape == (1, 16, 16)
+
+
+def test_training_catalog_exposes_five_native_unets_and_one_nnunet(client) -> None:
+    project_id = "33333333-3333-3333-3333-333333333333"
+    with client.app.state.session_factory() as session:
+        session.add(
+            Project(
+                id=project_id,
+                name="Semantic providers",
+                slug="semantic-providers",
+                storage_root="projects/semantic-providers",
+            )
+        )
+        session.commit()
+        catalog = SegmentationModelCatalogService(
+            session,
+            client.app.state.settings,
+        ).list_project_catalog(project_id, workflow="training")
+
+    native = [
+        item for item in catalog.models if item.catalog_id.startswith("reefvision/unet/")
+    ]
+    nnunet = [item for item in catalog.models if item.provider_id == "nnunet"]
+
+    assert [item.variant for item in native] == ["large", "medium", "nano", "small", "xlarge"]
+    assert all(item.trainable for item in native)
+    assert len(nnunet) == 1
+    assert nnunet[0].catalog_id == "nnunet/v2/semantic/2d"
+    assert nnunet[0].trainable is True
 
 
 def test_nnunet_export_writes_expected_raw_dataset(tmp_path: Path) -> None:
