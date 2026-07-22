@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -37,7 +36,10 @@ def apply_native_unet_registration_patch() -> None:
         run = self.session.get(TrainingRun, payload.training_run_id)
         if run is None:
             raise NotFoundError("Training run not found")
-        if run.task != SEMANTIC_SEGMENTATION_TASK or run.provider_id != REEFVISION_UNET_PROVIDER_ID:
+        if (
+            run.task != SEMANTIC_SEGMENTATION_TASK
+            or run.provider_id != REEFVISION_UNET_PROVIDER_ID
+        ):
             return original(self, project_id, payload)
         if run.project_id != project_id:
             raise ValidationError("Training runs must belong to the selected project")
@@ -77,13 +79,21 @@ def apply_native_unet_registration_patch() -> None:
         class_map = {
             "labels": foreground_labels,
             "mapping": {
-                label: labels_by_name.get(label.strip().casefold()) for label in foreground_labels
+                label: labels_by_name.get(label.strip().casefold())
+                for label in foreground_labels
             },
-            "pixel_values": {label: index for index, label in enumerate(foreground_labels, start=1)},
+            "pixel_values": {
+                label: index
+                for index, label in enumerate(foreground_labels, start=1)
+            },
         }
 
         model_id = str(uuid4())
-        suffix = source_path.suffix.casefold() if source_path.suffix.casefold() in {".pt", ".pth"} else ".pt"
+        suffix = (
+            source_path.suffix.casefold()
+            if source_path.suffix.casefold() in {".pt", ".pth"}
+            else ".pt"
+        )
         managed_path = f"{project.storage_root}/models/{model_id}{suffix}"
         destination = resolve_managed_project_path(self.settings, managed_path)
         copied_checksum, copied_size = copy_model_file(source_path, destination)
