@@ -123,6 +123,8 @@ def test_desktop_policy_contains_all_ready_models() -> None:
     assert {"FastSAM", "MobileSAM", "SAM ViT-B", "SAM 2 Image"}.issubset(
         {item["display_name"] for item in targets}
     )
+    sam_target = next(item for item in targets if item["display_name"] == "SAM ViT-B")
+    assert sam_target["catalog_id"] == "sam/original/vit_b"
 
 
 def test_actual_catalog_contains_every_desktop_policy_target() -> None:
@@ -134,10 +136,13 @@ def test_actual_catalog_contains_every_desktop_policy_target() -> None:
         (root / "config" / "model_catalog.json").read_text(encoding="utf-8")
     )
     catalog_names = {item["display_name"] for item in catalog["models"]}
+    catalog_ids = {item["catalog_id"] for item in catalog["models"]}
 
-    assert {
-        item["display_name"] for item in policy["required_models"]
-    }.issubset(catalog_names)
+    for item in policy["required_models"]:
+        if item.get("catalog_id"):
+            assert item["catalog_id"] in catalog_ids
+        else:
+            assert item["display_name"] in catalog_names
 
 
 def test_hydration_promotes_verified_release_asset() -> None:
