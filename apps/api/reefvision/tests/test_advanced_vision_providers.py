@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from PIL import Image
@@ -17,6 +18,7 @@ from reefvision.ml.nnunet_provider import (
     export_nnunet_dataset,
     nnunet_command_environment,
 )
+from reefvision.ml.providers import DetectionSettings
 from reefvision.ml.reefvision_unet import PRESETS, UNetCheckpointMetadata
 from reefvision.ml.reefvision_unet_semantic import _RepeatableBatchIterable
 from reefvision.ml.transformers_provider import (
@@ -24,6 +26,89 @@ from reefvision.ml.transformers_provider import (
     inspect_transformers_model,
 )
 from reefvision.services.segmentation_catalog import SegmentationModelCatalogService
+
+
+class _FakeZeroShotModel:
+    def __call__(self, **_inputs: Any) -> object:
+        return object()
+
+
+class _FakeGroundingProcessor:
+    def __init__(self) -> None:
+        self.received: dict[str, Any] = {}
+
+    def __call__(self, **_inputs: Any) -> dict[str, Any]:
+        import torch
+
+        return {
+            "input_ids": torch.tensor([[1, 2]]),
+            "pixel_values": torch.zeros((1, 3, 8, 8)),
+        }
+
+    def post_process_grounded_object_detection(
+        self,
+        *,
+        outputs: object,
+        input_ids: Any,
+        threshold: float,
+        text_threshold: float,
+        target_sizes: Any,
+        text_labels: list[list[str]],
+    ) -> list[dict[str, Any]]:
+        import torch
+
+        self.received = {
+            "outputs": outputs,
+            "input_ids": input_ids,
+            "threshold": threshold,
+            "text_threshold": text_threshold,
+            "target_sizes": target_sizes,
+            "text_labels": text_labels,
+        }
+        return [
+            {
+                "boxes": torch.tensor([[1.0, 2.0, 6.0, 7.0]]),
+                "scores": torch.tensor([0.9]),
+                "text_labels": [text_labels[0][0]],
+            }
+        ]
+
+
+class _FakeOwlv2Processor:
+    def __init__(self) -> None:
+        self.received: dict[str, Any] = {}
+
+    def __call__(self, **_inputs: Any) -> dict[str, Any]:
+        import torch
+
+        return {
+            "input_ids": torch.tensor([[1, 2]]),
+            "pixel_values": torch.zeros((1, 3, 8, 8)),
+        }
+
+    def post_process_grounded_object_detection(
+        self,
+        *,
+        outputs: object,
+        threshold: float,
+        target_sizes: Any,
+        text_labels: list[list[str]],
+    ) -> list[dict[str, Any]]:
+        import torch
+
+        self.received = {
+            "outputs": outputs,
+            "threshold": threshold,
+            "target_sizes": target_sizes,
+            "text_labels": text_labels,
+        }
+        return [
+            {
+                "boxes": torch.tensor([[2.0, 3.0, 7.0, 8.0]]),
+                "scores": torch.tensor([0.8]),
+                "text_labels": [text_labels[0][1]],
+            }
+        ]
 
 
 @pytest.mark.parametrize(
@@ -67,6 +152,53 @@ def test_transformers_provider_rejects_wrong_architecture(tmp_path: Path) -> Non
         TransformersVisionDetectionProvider("grounding_dino").inspect_model(model_dir)
 
 
+def test_grounding_dino_uses_pinned_postprocessor_signature(tmp_path: Path) -> None:
+    import torch
+
+    image_path = tmp_path / "image.png"
+    Image.new("RGB", (8, 8), (10, 20, 30)).save(image_path)
+    processor = _FakeGroundingProcessor()
+    provider = TransformersVisionDetectionProvider("grounding_dino")
+    provider._processor = processor
+    provider._model = _FakeZeroShotModel()
+    provider._device = torch.device("cpu")
+
+    predictions = provider.predict(
+        image_path,
+        DetectionSettings(confidence_threshold=0.35, iou_threshold=0.45, device="cpu"),
+        text_prompt="coral polyp, fish",
+    )
+
+    assert len(predictions) == 1
+    assert predictions[0].label == "coral polyp"
+    assert processor.received["threshold"] == pytest.approx(0.35)
+    assert processor.received["text_threshold"] == pytest.approx(0.35)
+    assert processor.received["text_labels"] == [["coral polyp", "fish"]]
+
+
+def test_owlv2_uses_batched_text_labels(tmp_path: Path) -> None:
+    import torch
+
+    image_path = tmp_path / "image.png"
+    Image.new("RGB", (8, 8), (10, 20, 30)).save(image_path)
+    processor = _FakeOwlv2Processor()
+    provider = TransformersVisionDetectionProvider("owlv2")
+    provider._processor = processor
+    provider._model = _FakeZeroShotModel()
+    provider._device = torch.device("cpu")
+
+    predictions = provider.predict(
+        image_path,
+        DetectionSettings(confidence_threshold=0.25, iou_threshold=0.45, device="cpu"),
+        text_prompt="coral polyp, fish",
+    )
+
+    assert len(predictions) == 1
+    assert predictions[0].label == "fish"
+    assert processor.received["threshold"] == pytest.approx(0.25)
+    assert processor.received["text_labels"] == [["coral polyp", "fish"]]
+
+
 def test_unet_presets_are_ordered_and_checkpoint_metadata_is_explicit() -> None:
     assert list(PRESETS) == ["nano", "small", "medium", "large", "xlarge"]
     assert [len(PRESETS[name].channels) for name in PRESETS] == [4, 4, 4, 4, 4]
@@ -84,7 +216,9 @@ def test_unet_presets_are_ordered_and_checkpoint_metadata_is_explicit() -> None:
     assert metadata.class_labels[1] == "coral"
 
 
-def test_native_unet_batch_iterable_can_be_reused_across_epochs(tmp_path: Path) -> None:
+def test_native_unet_batch_iterable_can_be_reused_across_epochs(
+    tmp_path: Path,
+) -> None:
     source_image = tmp_path / "source.png"
     source_mask = tmp_path / "mask.png"
     Image.new("RGB", (16, 16), (10, 20, 30)).save(source_image)
@@ -123,11 +257,19 @@ def test_training_catalog_exposes_five_native_unets_and_one_nnunet(client) -> No
         ).list_project_catalog(project_id, workflow="training")
 
     native = [
-        item for item in catalog.models if item.catalog_id.startswith("reefvision/unet/")
+        item
+        for item in catalog.models
+        if item.catalog_id.startswith("reefvision/unet/")
     ]
     nnunet = [item for item in catalog.models if item.provider_id == "nnunet"]
 
-    assert [item.variant for item in native] == ["large", "medium", "nano", "small", "xlarge"]
+    assert [item.variant for item in native] == [
+        "large",
+        "medium",
+        "nano",
+        "small",
+        "xlarge",
+    ]
     assert all(item.trainable for item in native)
     assert len(nnunet) == 1
     assert nnunet[0].catalog_id == "nnunet/v2/semantic/2d"
