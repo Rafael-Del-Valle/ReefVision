@@ -19,8 +19,8 @@ from reefvision.jobs import inference as inference_runtime
 from reefvision.jobs import workflow_runs as workflow_runtime
 from reefvision.ml import segmentation as segmentation_runtime
 from reefvision.ml.sam3_sidecar import Sam3SidecarSegmentationProvider
-from reefvision.services.independent_segmentation_auto_labeling import (
-    run_independent_segmentation_auto_labeling,
+from reefvision.services.independent_segmentation_pipeline import (
+    run_independent_segmentation_pipeline,
 )
 from reefvision.services.mask_consensus import MaskAggregation
 from reefvision.services.multi_model_auto_labeling import (
@@ -163,14 +163,20 @@ def _independent_consensus(
         "best_confidence",
     }:
         raise RuntimeError("Independent consensus aggregation is unsupported")
+    image_ids = [
+        str(value)
+        for value in payload.get("image_ids", [])
+        if isinstance(value, str)
+    ]
     prediction_ids = [
         str(value)
         for value in payload.get("prediction_ids", [])
         if isinstance(value, str)
     ]
-    result = run_independent_segmentation_auto_labeling(
+    result = run_independent_segmentation_pipeline(
         settings,
         factory,
+        image_ids=image_ids,
         primary_prediction_ids=prediction_ids,
         primary_model_id=primary_model_id,
         primary_inference_job_id=primary_job_id,
@@ -187,6 +193,8 @@ def _independent_consensus(
             raw_consensus.get("minimum_vlm_confidence", 0.25)
         ),
         device=str(raw_consensus.get("sam2_device", "auto")),
+        openai_model=str(raw_consensus.get("openai_model", "gpt-5-mini")),
+        gemini_model=str(raw_consensus.get("gemini_model", "gemini-2.5-flash")),
         auto_accept=bool(raw_consensus.get("auto_accept", False)),
         fail_closed=bool(raw_consensus.get("fail_closed", True)),
     )
