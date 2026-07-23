@@ -113,17 +113,13 @@ if (Test-Path -LiteralPath $ExtractRoot) {
     Remove-Item -LiteralPath $ExtractRoot -Recurse -Force
 }
 New-Item -ItemType Directory -Path $ExtractRoot -Force | Out-Null
-$AdminArguments = @(
-    "/a",
-    $ResolvedMsi,
-    "/qn",
-    "TARGETDIR=$ExtractRoot",
-    "/l*v",
-    $InstallLog
+$AdminArgumentLine = (
+    "/a `"$ResolvedMsi`" /qn " +
+    "TARGETDIR=`"$ExtractRoot`" /l*v `"$InstallLog`""
 )
 $Process = Start-Process `
     -FilePath "msiexec.exe" `
-    -ArgumentList $AdminArguments `
+    -ArgumentList $AdminArgumentLine `
     -Wait `
     -PassThru
 Add-Check `
@@ -192,17 +188,16 @@ $CudaRuntimeFiles = @(
         } |
         Sort-Object -Property Name -Unique
 )
+$CudaRuntimeMessage = if ($MissingCudaRuntimePatterns.Count -eq 0) {
+    "Every required CUDA runtime family is present in the MSI payload."
+}
+else {
+    "Missing CUDA runtime families: $($MissingCudaRuntimePatterns -join ', ')."
+}
 Add-Check `
     "PyTorch CUDA runtime payload" `
     ($MissingCudaRuntimePatterns.Count -eq 0) `
-    (
-        if ($MissingCudaRuntimePatterns.Count -eq 0) {
-            "Every required CUDA runtime family is present in the MSI payload."
-        }
-        else {
-            "Missing CUDA runtime families: $($MissingCudaRuntimePatterns -join ', ')."
-        }
-    ) `
+    $CudaRuntimeMessage `
     @{
         file_count = $CudaRuntimeFiles.Count
         files = @($CudaRuntimeFiles | ForEach-Object Name)
@@ -232,9 +227,14 @@ if ($PerformMachineInstall) {
         throw "-PerformMachineInstall requires an elevated PowerShell session."
     }
     $MachineLog = Join-Path $OutputDirectory "msiexec-machine-install.log"
-    $Install = Start-Process -FilePath "msiexec.exe" -ArgumentList @(
-        "/i", $ResolvedMsi, "/qn", "/norestart", "/l*v", $MachineLog
-    ) -Wait -PassThru
+    $MachineArgumentLine = (
+        "/i `"$ResolvedMsi`" /qn /norestart /l*v `"$MachineLog`""
+    )
+    $Install = Start-Process `
+        -FilePath "msiexec.exe" `
+        -ArgumentList $MachineArgumentLine `
+        -Wait `
+        -PassThru
     Add-Check `
         "Machine install" `
         ($Install.ExitCode -in @(0, 3010)) `
@@ -314,9 +314,14 @@ if ($PerformMachineInstall) {
     }
     if (-not $KeepInstalled) {
         $UninstallLog = Join-Path $OutputDirectory "msiexec-uninstall.log"
-        $Uninstall = Start-Process -FilePath "msiexec.exe" -ArgumentList @(
-            "/x", $ProductCode, "/qn", "/norestart", "/l*v", $UninstallLog
-        ) -Wait -PassThru
+        $UninstallArgumentLine = (
+            "/x $ProductCode /qn /norestart /l*v `"$UninstallLog`""
+        )
+        $Uninstall = Start-Process `
+            -FilePath "msiexec.exe" `
+            -ArgumentList $UninstallArgumentLine `
+            -Wait `
+            -PassThru
         Add-Check `
             "Machine uninstall" `
             ($Uninstall.ExitCode -in @(0, 1605, 3010)) `
@@ -329,7 +334,7 @@ $RequiredFailures = @(
     $Results | Where-Object { $_.required -and -not $_.passed }
 )
 $Report = [pscustomobject]@{
-    schema = "reefvision-windows-msi-verification-v3"
+    schema = "reefvision-windows-msi-verification-v4"
     generated_at = (Get-Date).ToUniversalTime().ToString("o")
     msi = @{
         path = $ResolvedMsi
