@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 from sqlalchemy import func, select
@@ -15,7 +16,7 @@ from reefvision.db.models import (
     WorkflowRevision,
     WorkflowRun,
 )
-from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.workflows import (
     WorkflowArtifactResponse,
@@ -27,6 +28,7 @@ from reefvision.schemas.workflows import (
     WorkflowRunCreateRequest,
     WorkflowRunCreateResponse,
     WorkflowRunResponse,
+    WorkflowRunRetryRequest,
     WorkflowValidationResponse,
 )
 from reefvision.services.workflows import (
@@ -84,6 +86,12 @@ class PersistentWorkflowService:
             raise NotFoundError("Workflow revision not found")
         return revision
 
+    def _run(self, run_id: str) -> WorkflowRun:
+        run = self.session.get(WorkflowRun, run_id)
+        if run is None:
+            raise NotFoundError("Workflow run not found")
+        return run
+
     def _current_revision(self, workflow: Workflow) -> WorkflowRevision:
         revision = self.session.scalar(
             select(WorkflowRevision).where(
@@ -98,6 +106,54 @@ class PersistentWorkflowService:
     @staticmethod
     def _validation_payload(response: WorkflowValidationResponse) -> dict[str, Any]:
         return response.model_dump(mode="json")
+
+    def _queue_run_records(
+        self,
+        *,
+        workflow: Workflow,
+        revision: WorkflowRevision,
+        validation: WorkflowValidationResponse,
+        inputs: dict[str, Any],
+        use_cache: bool,
+        result_metadata: dict[str, Any] | None = None,
+        node_state: dict[str, Any] | None = None,
+    ) -> tuple[WorkflowRun, Job]:
+        run = WorkflowRun(
+            workflow_id=workflow.id,
+            workflow_revision_id=revision.id,
+            project_id=workflow.project_id,
+            status="queued",
+            stage="queued",
+            input_json=deepcopy(inputs),
+            result_json={"use_cache": use_cache, **(result_metadata or {})},
+            node_state_json=node_state
+            or {node_id: {"status": "queued"} for node_id in validation.topological_order},
+        )
+        self.session.add(run)
+        self.session.flush()
+        job = Job(
+            project_id=workflow.project_id,
+            job_type="workflow_run",
+            status="queued",
+            progress_total=max(len(validation.topological_order), 1),
+            request_json={
+                "workflow_run_id": run.id,
+                "workflow_revision_id": revision.id,
+                "use_cache": use_cache,
+                **(result_metadata or {}),
+            },
+        )
+        self.session.add(job)
+        self.session.flush()
+        run.job_id = job.id
+        return run, job
+
+    @staticmethod
+    def _create_response(run: WorkflowRun, job: Job) -> WorkflowRunCreateResponse:
+        return WorkflowRunCreateResponse(
+            run=WorkflowRunResponse.model_validate(run),
+            job=JobResponse.model_validate(job),
+        )
 
     def list_workflows(self, project_id: str) -> list[WorkflowResponse]:
         self._project(project_id)
@@ -224,41 +280,131 @@ class PersistentWorkflowService:
         validation = WorkflowValidationResponse.model_validate(revision.validation_json)
         if not validation.valid:
             raise ValidationError("Invalid workflow revisions cannot be executed")
-        run = WorkflowRun(
-            workflow_id=workflow.id,
-            workflow_revision_id=revision.id,
-            project_id=workflow.project_id,
-            status="queued",
-            stage="queued",
-            input_json=request.inputs,
-            result_json={"use_cache": request.use_cache},
-            node_state_json={
-                node_id: {"status": "queued"} for node_id in validation.topological_order
-            },
+        run, job = self._queue_run_records(
+            workflow=workflow,
+            revision=revision,
+            validation=validation,
+            inputs=request.inputs,
+            use_cache=request.use_cache,
         )
-        self.session.add(run)
-        self.session.flush()
-        job = Job(
-            project_id=workflow.project_id,
-            job_type="workflow_run",
-            status="queued",
-            progress_total=max(len(validation.topological_order), 1),
-            request_json={
-                "workflow_run_id": run.id,
-                "workflow_revision_id": revision.id,
-                "use_cache": request.use_cache,
-            },
-        )
-        self.session.add(job)
-        self.session.flush()
-        run.job_id = job.id
         self.session.commit()
         self.session.refresh(run)
         self.session.refresh(job)
-        return WorkflowRunCreateResponse(
-            run=WorkflowRunResponse.model_validate(run),
-            job=JobResponse.model_validate(job),
+        return self._create_response(run, job)
+
+    def retry_run(
+        self,
+        run_id: str,
+        request: WorkflowRunRetryRequest,
+    ) -> WorkflowRunCreateResponse:
+        source = self._run(run_id)
+        if source.status in {"queued", "running", "cancel_requested"}:
+            raise ConflictError("Active workflow runs cannot be retried")
+        workflow = self._workflow(source.workflow_id)
+        revision = self._revision(source.workflow_revision_id)
+        validation = WorkflowValidationResponse.model_validate(revision.validation_json)
+        order = list(validation.topological_order)
+        if not order:
+            raise ValidationError("Workflow run has no executable nodes")
+
+        source_state = dict(source.node_state_json or {})
+        if request.from_node_id is not None:
+            if request.from_node_id not in order:
+                raise ValidationError("The selected recovery node is not part of this workflow revision")
+            restart_index = order.index(request.from_node_id)
+        else:
+            restart_index = next(
+                (
+                    index
+                    for index, node_id in enumerate(order)
+                    if dict(source_state.get(node_id) or {}).get("status") != "succeeded"
+                ),
+                -1,
+            )
+            if restart_index < 0:
+                raise ValidationError(
+                    "This run completed successfully; choose a node for a partial rerun"
+                )
+
+        restart_node_id = order[restart_index]
+        reusable_nodes = order[:restart_index]
+        source_artifacts = list(
+            self.session.scalars(
+                select(WorkflowArtifact)
+                .where(
+                    WorkflowArtifact.workflow_run_id == source.id,
+                    WorkflowArtifact.node_id.in_(reusable_nodes),
+                )
+                .order_by(WorkflowArtifact.node_id, WorkflowArtifact.port_name)
+            )
         )
+        artifacts_by_node: dict[str, list[WorkflowArtifact]] = {}
+        for artifact in source_artifacts:
+            artifacts_by_node.setdefault(artifact.node_id, []).append(artifact)
+
+        copied_state: dict[str, Any] = {}
+        for node_id in reusable_nodes:
+            state = dict(source_state.get(node_id) or {})
+            if state.get("status") != "succeeded":
+                raise ValidationError(
+                    f"Cannot reuse node {node_id}; it was not successful in the source run"
+                )
+            if not artifacts_by_node.get(node_id):
+                raise ValidationError(
+                    f"Cannot reuse node {node_id}; its persisted artifacts are missing"
+                )
+            copied_state[node_id] = {
+                "status": "succeeded",
+                "reused_from_run_id": source.id,
+                "reused_from_node_id": node_id,
+            }
+        for node_id in order[restart_index:]:
+            copied_state[node_id] = {"status": "queued"}
+
+        use_cache = (
+            request.use_cache
+            if request.use_cache is not None
+            else bool(dict(source.result_json or {}).get("use_cache", True))
+        )
+        metadata = {
+            "retry_of_run_id": source.id,
+            "rerun_from_node_id": restart_node_id,
+        }
+        run, job = self._queue_run_records(
+            workflow=workflow,
+            revision=revision,
+            validation=validation,
+            inputs=deepcopy(source.input_json or {}),
+            use_cache=use_cache,
+            result_metadata=metadata,
+            node_state=copied_state,
+        )
+        for source_artifact in source_artifacts:
+            payload = deepcopy(source_artifact.payload_json or {})
+            payload["_reused_from_workflow_run_id"] = source.id
+            payload["_reused_from_workflow_artifact_id"] = source_artifact.id
+            copied = WorkflowArtifact(
+                workflow_run_id=run.id,
+                node_id=source_artifact.node_id,
+                port_name=source_artifact.port_name,
+                artifact_type=source_artifact.artifact_type,
+                checksum=source_artifact.checksum,
+                payload_json=payload,
+                managed_path=source_artifact.managed_path,
+                size_bytes=source_artifact.size_bytes,
+            )
+            self.session.add(copied)
+            self.session.flush()
+            node_state = dict(run.node_state_json or {})
+            state = dict(node_state.get(source_artifact.node_id) or {})
+            state.setdefault("artifact_ids", []).append(copied.id)
+            node_state[source_artifact.node_id] = state
+            run.node_state_json = node_state
+
+        self.session.commit()
+        self.session.refresh(run)
+        self.session.refresh(job)
+        return self._create_response(run, job)
 
     def list_runs(self, workflow_id: str) -> list[WorkflowRunResponse]:
         self._workflow(workflow_id)
@@ -272,14 +418,10 @@ class PersistentWorkflowService:
         return [WorkflowRunResponse.model_validate(item) for item in runs]
 
     def get_run(self, run_id: str) -> WorkflowRunResponse:
-        run = self.session.get(WorkflowRun, run_id)
-        if run is None:
-            raise NotFoundError("Workflow run not found")
-        return WorkflowRunResponse.model_validate(run)
+        return WorkflowRunResponse.model_validate(self._run(run_id))
 
     def artifacts(self, run_id: str) -> list[WorkflowArtifactResponse]:
-        if self.session.get(WorkflowRun, run_id) is None:
-            raise NotFoundError("Workflow run not found")
+        self._run(run_id)
         artifacts = list(
             self.session.scalars(
                 select(WorkflowArtifact)
