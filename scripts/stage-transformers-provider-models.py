@@ -47,7 +47,9 @@ def _safe_catalog_segments(catalog_id: str) -> list[str]:
 
 def _safe_relative_parts(value: str) -> tuple[str, ...]:
     path = PurePosixPath(value)
-    if path.is_absolute() or not path.parts or any(part in {"", ".", ".."} for part in path.parts):
+    if path.is_absolute() or not path.parts or any(
+        part in {"", ".", ".."} for part in path.parts
+    ):
         raise RuntimeError(f"Unsafe model repository path: {value!r}")
     return path.parts
 
@@ -145,7 +147,9 @@ def _remote_files(info: object, *, repo_id: str) -> list[dict[str, Any]]:
         raw_size = getattr(sibling, "size", None)
         size_bytes = int(raw_size) if raw_size is not None else None
         if size_bytes is not None and size_bytes < 0:
-            raise RuntimeError(f"Hugging Face returned an invalid size for {repo_id}/{relative_path}")
+            raise RuntimeError(
+                f"Hugging Face returned an invalid size for {repo_id}/{relative_path}"
+            )
         files.append({"relative_path": relative_path, "size_bytes": size_bytes})
     if not files:
         raise RuntimeError(f"No packageable files remain for {repo_id}")
@@ -163,14 +167,18 @@ def _known_remote_size(files: list[dict[str, Any]]) -> int:
 def _snapshot_matches_remote(destination: Path, remote_files: list[dict[str, Any]]) -> bool:
     if not destination.is_dir() or not (destination / "config.json").is_file():
         return False
+    try:
+        local_records = _snapshot_files(destination)
+    except (OSError, RuntimeError):
+        return False
     expected_paths = {str(record["relative_path"]) for record in remote_files}
-    local_paths = {
-        record["relative_path"] for record in _snapshot_files(destination)
-    }
+    local_paths = {str(record["relative_path"]) for record in local_records}
     if local_paths != expected_paths:
         return False
     for record in remote_files:
-        target = destination.joinpath(*_safe_relative_parts(str(record["relative_path"])))
+        target = destination.joinpath(
+            *_safe_relative_parts(str(record["relative_path"]))
+        )
         if not target.is_file():
             return False
         expected_size = record["size_bytes"]
@@ -387,7 +395,9 @@ def stage_model_pack(
         if not (snapshot_path / "config.json").is_file():
             raise RuntimeError(f"Snapshot {repo_id} does not contain config.json")
         if not _snapshot_matches_remote(snapshot_path, remote_files):
-            raise RuntimeError(f"Snapshot {repo_id} did not match the resolved repository files")
+            raise RuntimeError(
+                f"Snapshot {repo_id} did not match the resolved repository files"
+            )
         if destination.exists():
             shutil.rmtree(destination)
         os.replace(temporary, destination)
@@ -417,8 +427,11 @@ def main() -> int:
     parser.add_argument(
         "--reserve-free-gib",
         type=float,
-        default=2.0,
-        help="Free space to preserve after each remaining model download.",
+        default=30.0,
+        help=(
+            "Free space to preserve after each remaining model download for "
+            "PyInstaller, Tauri resources, WiX cabinets, and MSI output."
+        ),
     )
     args = parser.parse_args()
     stage_model_pack(
