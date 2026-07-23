@@ -45,6 +45,27 @@ def _terminal_run_with_file(
         return run.id, artifact.id, path, relative
 
 
+def _quarantine_artifact(
+    client: TestClient,
+    run_id: str,
+) -> dict[str, object]:
+    preview = client.post(
+        f"/api/v1/workflow-runs/{run_id}/artifact-cleanup/preview",
+        json={},
+    )
+    assert preview.status_code == 200, preview.text
+    action = preview.json()["actions"][0]
+    applied = client.post(
+        f"/api/v1/workflow-runs/{run_id}/artifact-cleanup/apply",
+        json={
+            "preview_checksum": preview.json()["preview_checksum"],
+            "action_ids": [action["action_id"]],
+        },
+    )
+    assert applied.status_code == 200, applied.text
+    return applied.json()
+
+
 def test_cleanup_preview_requires_terminal_run(client: TestClient) -> None:
     _workflow_id, run_id = _create_run(client)
     response = client.post(
@@ -98,8 +119,73 @@ def test_selected_workflow_file_is_quarantined_and_reference_is_cleared(
         assert artifact.size_bytes is None
         cleanup = dict(artifact.payload_json or {})["_cleanup"]
         assert cleanup["original_managed_path"] == original_relative
+        assert cleanup["original_artifact_checksum"] == "a" * 64
         assert cleanup["quarantine_path"] == result["quarantine_paths"][0]
         assert "_cache_key" not in artifact.payload_json
+
+
+def test_quarantined_workflow_artifact_can_be_restored(client: TestClient) -> None:
+    run_id, artifact_id, original_path, original_relative = _terminal_run_with_file(client)
+    original_bytes = original_path.read_bytes()
+    result = _quarantine_artifact(client, run_id)
+    quarantine_path = resolve_managed_project_path(
+        cast(FastAPI, client.app).state.settings,
+        str(result["quarantine_paths"][0]),
+    )
+    assert quarantine_path.is_file()
+    assert not original_path.exists()
+
+    listed = client.get(f"/api/v1/workflow-runs/{run_id}/artifact-quarantine")
+    assert listed.status_code == 200, listed.text
+    payload = listed.json()
+    assert payload["item_count"] == 1
+    assert payload["restorable_count"] == 1
+    item = payload["items"][0]
+    assert item["artifact_id"] == artifact_id
+    assert item["original_managed_path"] == original_relative
+    assert item["restorable"] is True
+
+    restored = client.post(
+        f"/api/v1/workflow-runs/{run_id}/artifact-quarantine/restore",
+        json={"artifact_ids": [artifact_id]},
+    )
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["restored_artifact_count"] == 1
+    assert restored.json()["restored_paths"] == [original_relative]
+    assert original_path.read_bytes() == original_bytes
+    assert not quarantine_path.exists()
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        artifact = session.get(WorkflowArtifact, artifact_id)
+        assert artifact is not None
+        assert artifact.managed_path == original_relative
+        assert artifact.size_bytes == len(original_bytes)
+        assert artifact.checksum == "a" * 64
+        payload_json = dict(artifact.payload_json or {})
+        assert "_cleanup" not in payload_json
+        assert payload_json["_cleanup_history"][-1]["restored_managed_path"] == original_relative
+
+
+def test_restore_is_blocked_when_original_destination_reappears(client: TestClient) -> None:
+    run_id, artifact_id, original_path, _relative = _terminal_run_with_file(client)
+    _quarantine_artifact(client, run_id)
+    original_path.parent.mkdir(parents=True, exist_ok=True)
+    original_path.write_text("new output", encoding="utf-8")
+
+    listed = client.get(f"/api/v1/workflow-runs/{run_id}/artifact-quarantine")
+    assert listed.status_code == 200
+    item = listed.json()["items"][0]
+    assert item["artifact_id"] == artifact_id
+    assert item["restorable"] is False
+    assert any("destination already exists" in value for value in item["blockers"])
+
+    restored = client.post(
+        f"/api/v1/workflow-runs/{run_id}/artifact-quarantine/restore",
+        json={"artifact_ids": [artifact_id]},
+    )
+    assert restored.status_code == 422
+    assert original_path.read_text(encoding="utf-8") == "new output"
 
 
 def test_cleanup_rejects_stale_preview_after_file_changes(client: TestClient) -> None:
