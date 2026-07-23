@@ -1,11 +1,17 @@
-"""Persisted workflow revision and execution routes."""
+"""Persisted workflow revision, execution, recovery, and cleanup routes."""
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
+from reefvision.schemas.workflow_cleanup import (
+    WorkflowArtifactCleanupApplyRequest,
+    WorkflowArtifactCleanupApplyResponse,
+    WorkflowArtifactCleanupPreviewRequest,
+    WorkflowArtifactCleanupPreviewResponse,
+)
 from reefvision.schemas.workflows import (
     WorkflowArtifactResponse,
     WorkflowCreateRequest,
@@ -19,6 +25,7 @@ from reefvision.schemas.workflows import (
     WorkflowRunRetryRequest,
 )
 from reefvision.services.persistent_workflows import PersistentWorkflowService
+from reefvision.services.workflow_artifact_cleanup import WorkflowArtifactCleanupService
 
 router = APIRouter(tags=["workflow-persistence"])
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -134,3 +141,35 @@ def list_workflow_run_artifacts(
     session: DbSession,
 ) -> list[WorkflowArtifactResponse]:
     return PersistentWorkflowService(session).artifacts(run_id)
+
+
+@router.post(
+    "/workflow-runs/{run_id}/artifact-cleanup/preview",
+    response_model=WorkflowArtifactCleanupPreviewResponse,
+)
+def preview_workflow_artifact_cleanup(
+    run_id: str,
+    payload: WorkflowArtifactCleanupPreviewRequest,
+    request: Request,
+    session: DbSession,
+) -> WorkflowArtifactCleanupPreviewResponse:
+    return WorkflowArtifactCleanupService(
+        session,
+        request.app.state.settings,
+    ).preview(run_id, payload)
+
+
+@router.post(
+    "/workflow-runs/{run_id}/artifact-cleanup/apply",
+    response_model=WorkflowArtifactCleanupApplyResponse,
+)
+def apply_workflow_artifact_cleanup(
+    run_id: str,
+    payload: WorkflowArtifactCleanupApplyRequest,
+    request: Request,
+    session: DbSession,
+) -> WorkflowArtifactCleanupApplyResponse:
+    return WorkflowArtifactCleanupService(
+        session,
+        request.app.state.settings,
+    ).apply(run_id, payload)
