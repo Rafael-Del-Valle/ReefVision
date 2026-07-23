@@ -18,7 +18,12 @@ function Get-ReefVisionPathBytes {
     if (Test-Path -LiteralPath $Path -PathType Leaf) {
         return [int64](Get-Item -LiteralPath $Path).Length
     }
-    $Measurement = Get-ChildItem -LiteralPath $Path -File -Recurse -Force -ErrorAction SilentlyContinue |
+    $Measurement = Get-ChildItem `
+        -LiteralPath $Path `
+        -File `
+        -Recurse `
+        -Force `
+        -ErrorAction SilentlyContinue |
         Measure-Object -Property Length -Sum
     if ($null -eq $Measurement.Sum) {
         return [int64]0
@@ -56,14 +61,26 @@ foreach ($RelativePath in @(
 
 $TransformerRoot = Join-Path $Root ".desktop\bundled-transformers-models"
 if (Test-Path -LiteralPath $TransformerRoot -PathType Container) {
-    Get-ChildItem -LiteralPath $TransformerRoot -Directory -Recurse -Force |
-        Where-Object { $_.Name.EndsWith(".part", [System.StringComparison]::OrdinalIgnoreCase) } |
-        ForEach-Object { [void]$Candidates.Add($_.FullName) }
-    Get-ChildItem -LiteralPath $TransformerRoot -File -Recurse -Force |
-        Where-Object { $_.Name.EndsWith(".part", [System.StringComparison]::OrdinalIgnoreCase) } |
-        ForEach-Object { [void]$Candidates.Add($_.FullName) }
     if ($RemoveCompletedTransformerSnapshots) {
         [void]$Candidates.Add($TransformerRoot)
+    }
+    else {
+        Get-ChildItem -LiteralPath $TransformerRoot -Directory -Recurse -Force |
+            Where-Object {
+                $_.Name.EndsWith(
+                    ".part",
+                    [System.StringComparison]::OrdinalIgnoreCase
+                )
+            } |
+            ForEach-Object { [void]$Candidates.Add($_.FullName) }
+        Get-ChildItem -LiteralPath $TransformerRoot -File -Recurse -Force |
+            Where-Object {
+                $_.Name.EndsWith(
+                    ".part",
+                    [System.StringComparison]::OrdinalIgnoreCase
+                )
+            } |
+            ForEach-Object { [void]$Candidates.Add($_.FullName) }
     }
 }
 
@@ -77,12 +94,16 @@ $BytesBefore = [int64]0
 foreach ($Path in $UniqueCandidates) {
     $Bytes = Get-ReefVisionPathBytes -Path $Path
     $BytesBefore += $Bytes
-    Write-Host "Removing $(Format-ReefVisionBytes -Bytes $Bytes): $Path" -ForegroundColor Yellow
+    Write-Host (
+        "Removing $(Format-ReefVisionBytes -Bytes $Bytes): $Path"
+    ) -ForegroundColor Yellow
     Remove-Item -LiteralPath $Path -Recurse -Force
 }
 
 $DriveRoot = [System.IO.Path]::GetPathRoot($Root)
-$FreeBytes = [int64](Get-PSDrive -Name $DriveRoot.TrimEnd("\").TrimEnd(":")) .Free
+$DriveName = $DriveRoot.TrimEnd("\").TrimEnd(":")
+$Drive = Get-PSDrive -Name $DriveName
+$FreeBytes = [int64]$Drive.Free
 Write-Host (
     "Packaging cleanup reclaimed approximately " +
     "$(Format-ReefVisionBytes -Bytes $BytesBefore). " +
