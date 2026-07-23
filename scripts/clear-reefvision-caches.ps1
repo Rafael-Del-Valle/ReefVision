@@ -135,31 +135,52 @@ if ($IncludeUserModelCaches) {
         Join-Path $HOME ".config\reefvision\storage.json"
     }
 
-    $ModelCacheRoot = $null
+    $ConfiguredDataRoot = $null
+    $ModelCacheRoot = if ($env:REEFVISION_MODEL_CACHE_DIR) {
+        [System.IO.Path]::GetFullPath($env:REEFVISION_MODEL_CACHE_DIR)
+    }
+    else {
+        $null
+    }
     if (Test-Path -LiteralPath $SettingsPath -PathType Leaf) {
         try {
             $StorageSettings = Get-Content -LiteralPath $SettingsPath -Raw |
                 ConvertFrom-Json
-            if ($StorageSettings.paths.model_cache_dir) {
+            if (-not $ModelCacheRoot -and $StorageSettings.paths.model_cache_dir) {
                 $ModelCacheRoot = [string]$StorageSettings.paths.model_cache_dir
+            }
+            if ($StorageSettings.paths.data_dir) {
+                $ConfiguredDataRoot = [string]$StorageSettings.paths.data_dir
             }
         }
         catch {
             Write-Warning "Could not parse the storage settings file: $SettingsPath"
         }
     }
-    if (-not $ModelCacheRoot) {
-        $ModelCacheRoot = Join-Path $Root ".reefvision\model-cache"
+    if (-not $ConfiguredDataRoot -and $env:REEFVISION_DATA_DIR) {
+        $ConfiguredDataRoot = [System.IO.Path]::GetFullPath($env:REEFVISION_DATA_DIR)
     }
-    Add-Candidate `
-        -Candidates $Candidates `
-        -Path (Join-Path $ModelCacheRoot "huggingface")
-    Add-Candidate `
-        -Candidates $Candidates `
-        -Path (Join-Path $ModelCacheRoot "torch")
-    Add-Candidate `
-        -Candidates $Candidates `
-        -Path (Join-Path $ModelCacheRoot "models\temporary-downloads")
+    if (-not $ModelCacheRoot) {
+        $DataRoot = if ($ConfiguredDataRoot) {
+            $ConfiguredDataRoot
+        }
+        else {
+            Join-Path $Root ".reefvision"
+        }
+        $ModelCacheRoot = Join-Path $DataRoot "model-cache"
+    }
+
+    foreach ($RelativeCachePath in @(
+        "huggingface",
+        "torch",
+        "models\catalog-models",
+        "models\provider-packs",
+        "models\temporary-downloads"
+    )) {
+        Add-Candidate `
+            -Candidates $Candidates `
+            -Path (Join-Path $ModelCacheRoot $RelativeCachePath)
+    }
 }
 
 $UniqueCandidates = @(
@@ -200,6 +221,7 @@ if (-not $IncludeCompletedTransformerSnapshots) {
 }
 if (-not $IncludeUserModelCaches) {
     Write-Host (
-        "User model caches were preserved. Use -IncludeUserModelCaches to remove them."
+        "Downloadable model caches were preserved. Use -IncludeUserModelCaches " +
+        "to remove them; they will need to be restored or downloaded again."
     ) -ForegroundColor DarkGray
 }
