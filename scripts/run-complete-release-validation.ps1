@@ -13,6 +13,16 @@ param(
     [string]$RoboflowDatasetDirectory,
     [string]$RoboflowWorkspace,
     [string]$RoboflowProject,
+    [ValidateSet(
+        "object-detection",
+        "single-label-classification",
+        "multi-label-classification",
+        "instance-segmentation",
+        "semantic-segmentation"
+    )]
+    [string]$RoboflowProjectType = "instance-segmentation",
+    [string]$RoboflowProjectLicense = "Private",
+    [string]$RoboflowBatchName = "ReefVision external validation",
     [switch]$AllowRoboflowUpload
 )
 
@@ -60,26 +70,27 @@ $ExternalRequested = [bool](
 $ExternalReport = $null
 if ($ExternalRequested) {
     $ExternalOutput = Join-Path $OutputRoot "external-interchange"
-    $ExternalArguments = @("-OutputDirectory", $ExternalOutput)
+    $ExternalParameters = @{
+        OutputDirectory = $ExternalOutput
+    }
     if ($CvatArchive) {
-        $ExternalArguments += @(
-            "-CvatArchive", $CvatArchive,
-            "-CvatTaskId", $CvatTaskId,
-            "-CvatCommonArguments", $CvatCommonArguments
-        )
+        $ExternalParameters.CvatArchive = $CvatArchive
+        $ExternalParameters.CvatTaskId = $CvatTaskId
+        $ExternalParameters.CvatCommonArguments = @($CvatCommonArguments)
     }
     if ($LabelMeDirectory) {
-        $ExternalArguments += @("-LabelMeDirectory", $LabelMeDirectory)
+        $ExternalParameters.LabelMeDirectory = $LabelMeDirectory
     }
     if ($RoboflowDatasetDirectory) {
-        $ExternalArguments += @(
-            "-RoboflowDatasetDirectory", $RoboflowDatasetDirectory,
-            "-RoboflowWorkspace", $RoboflowWorkspace,
-            "-RoboflowProject", $RoboflowProject
-        )
-        if ($AllowRoboflowUpload) { $ExternalArguments += "-AllowRoboflowUpload" }
+        $ExternalParameters.RoboflowDatasetDirectory = $RoboflowDatasetDirectory
+        $ExternalParameters.RoboflowWorkspace = $RoboflowWorkspace
+        $ExternalParameters.RoboflowProject = $RoboflowProject
+        $ExternalParameters.RoboflowProjectType = $RoboflowProjectType
+        $ExternalParameters.RoboflowProjectLicense = $RoboflowProjectLicense
+        $ExternalParameters.RoboflowBatchName = $RoboflowBatchName
+        $ExternalParameters.AllowRoboflowUpload = [bool]$AllowRoboflowUpload
     }
-    & (Join-Path $PSScriptRoot "validate-external-interchange.ps1") @ExternalArguments
+    & (Join-Path $PSScriptRoot "validate-external-interchange.ps1") @ExternalParameters
     if ($LASTEXITCODE -ne 0) {
         throw "External interchange validation failed."
     }
@@ -87,7 +98,7 @@ if ($ExternalRequested) {
 }
 
 $Summary = [pscustomobject]@{
-    schema = "reefvision-complete-release-validation-v1"
+    schema = "reefvision-complete-release-validation-v2"
     generated_at = (Get-Date).ToUniversalTime().ToString("o")
     target_triple = $TargetTriple
     packaging_skipped = [bool]$SkipPackaging
