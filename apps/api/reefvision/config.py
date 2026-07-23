@@ -87,6 +87,26 @@ def write_storage_overrides(
     return settings_path
 
 
+def storage_environment_locked(field_name: str) -> bool:
+    """Return whether an environment value must override persisted preferences.
+
+    The packaged desktop launcher always supplies REEFVISION_DATA_DIR as a safe
+    fallback for first launch and for its runtime control files. In desktop mode,
+    that internal fallback must not prevent a user-saved application data root
+    from taking effect on the next restart. Other environment overrides remain
+    authoritative deployment settings.
+    """
+
+    environment_name = f"REEFVISION_{field_name.upper()}"
+    if environment_name not in os.environ:
+        return False
+    is_desktop_data_fallback = (
+        field_name == "data_dir"
+        and os.environ.get("REEFVISION_ENV", "").strip().casefold() == "desktop"
+    )
+    return not is_desktop_data_fallback
+
+
 class Settings(BaseSettings):
     """Runtime settings populated from environment variables and user preferences."""
 
@@ -171,8 +191,7 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     overrides = load_storage_overrides()
     for field_name in STORAGE_SETTING_FIELDS:
-        environment_name = f"REEFVISION_{field_name.upper()}"
-        if environment_name in os.environ:
+        if storage_environment_locked(field_name):
             overrides.pop(field_name, None)
     settings_factory = cast(Any, Settings)
     return cast(Settings, settings_factory(**overrides))
