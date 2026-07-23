@@ -12,20 +12,22 @@ Each path must be absolute, creatable, and writable. ReefVision reports the avai
 
 Saved changes take effect after ReefVision restarts. The preferences file is stored at `%LOCALAPPDATA%\ReefVision\config\storage.json` on Windows unless `REEFVISION_STORAGE_SETTINGS_FILE` overrides it.
 
-Environment variables take precedence and lock the corresponding field in the interface:
+Deployment environment variables take precedence and lock the corresponding field in the interface:
 
 - `REEFVISION_DATA_DIR`
 - `REEFVISION_MODEL_CACHE_DIR`
 - `REEFVISION_TEMP_DIR`
 
+The packaged Tauri launcher also supplies a first-launch data directory so the local API always has a safe fallback. That internal desktop fallback is not treated as an administrator lock: after a user saves a different application data root, the persisted value takes effect on the next restart. Explicit environment overrides used outside the packaged desktop launcher remain authoritative.
+
 ## Moving existing application data
 
 Changing the application data root does not copy the current database or projects automatically. Before switching it:
 
-1. Close ReefVision.
-2. Create a backup or copy the complete active data root.
-3. Copy or restore that data into the new directory.
-4. Save the new application data root and restart ReefVision.
+1. Create a backup or copy the complete active data root while ReefVision is closed.
+2. Copy or restore that data into the new directory.
+3. Start ReefVision, open **Storage settings**, and save the new application data root.
+4. Restart ReefVision.
 5. Verify projects and managed files before deleting the old copy.
 
 Exports stay under the application data root so project records and generated outputs remain portable together.
