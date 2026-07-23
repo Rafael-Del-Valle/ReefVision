@@ -24,14 +24,23 @@ from reefvision.domain.errors import (
     ValidationError,
 )
 from reefvision.jobs.worker import thumbnail_worker_loop
-from reefvision.logging_utils import configure_rotating_json_logging, default_api_log_path
-from reefvision.ml.advanced_inference_runtime import apply_advanced_inference_runtime_patch
-from reefvision.ml.advanced_provider_runtime import apply_advanced_provider_runtime_patches
+from reefvision.logging_utils import (
+    configure_rotating_json_logging,
+    default_api_log_path,
+)
+from reefvision.ml.advanced_inference_runtime import (
+    apply_advanced_inference_runtime_patch,
+)
+from reefvision.ml.advanced_provider_runtime import (
+    apply_advanced_provider_runtime_patches,
+)
 from reefvision.ml.assist_runtime import AssistRuntime
 from reefvision.ml.catalog_expansion import apply_catalog_expansion_runtime_patches
 from reefvision.ml.dependencies import configure_provider_runtime
 from reefvision.ml.fastsam_runtime_patch import apply_fastsam_runtime_patch
-from reefvision.ml.native_unet_registration_runtime import apply_native_unet_registration_patch
+from reefvision.ml.native_unet_registration_runtime import (
+    apply_native_unet_registration_patch,
+)
 from reefvision.ml.nnunet_catalog_runtime import apply_nnunet_catalog_runtime_patch
 from reefvision.ml.nnunet_frozen_runtime import apply_nnunet_frozen_runtime_patch
 from reefvision.ml.provider_contract import (
@@ -81,7 +90,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         active_settings.background_worker_enabled = False
     active_settings.ensure_directories()
     _configure_process_storage(active_settings)
-    os.environ["REEFVISION_CONFIG_DIR"] = str(active_settings.resolved_data_dir / "config")
+    os.environ["REEFVISION_CONFIG_DIR"] = str(
+        active_settings.resolved_data_dir / "config"
+    )
     apply_catalog_expansion_runtime_patches()
     apply_fastsam_runtime_patch()
     apply_sam_runtime_patch()
@@ -109,9 +120,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         bundled_warnings = []
         transformer_warnings = []
     else:
-        bundled_catalog_ids, bundled_warnings = install_bundled_catalog_models(active_settings)
-        bundled_transformers_models, transformer_warnings = install_bundled_transformers_models(
+        bundled_catalog_ids, bundled_warnings = install_bundled_catalog_models(
             active_settings
+        )
+        bundled_transformers_models, transformer_warnings = (
+            install_bundled_transformers_models(active_settings)
         )
 
     catalog_startup_warnings.extend(bundled_warnings)
@@ -131,7 +144,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "model_cache_dir": str(active_settings.resolved_model_cache_dir),
                 "temp_dir": str(active_settings.resolved_temp_dir),
                 "bundled_catalog_model_count": len(bundled_catalog_ids),
-                "bundled_transformers_model_count": len(bundled_transformers_models),
+                "bundled_transformers_model_count": len(
+                    bundled_transformers_models
+                ),
             },
         )
         stop_event = asyncio.Event()
@@ -139,7 +154,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if active_settings.background_worker_enabled:
             worker_task = asyncio.create_task(
                 thumbnail_worker_loop(
-                    active_settings, application.state.session_factory, stop_event
+                    active_settings,
+                    application.state.session_factory,
+                    stop_event,
                 )
             )
         try:
@@ -178,7 +195,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     @app.exception_handler(ArtifactMissingError)
-    async def handle_missing_artifact(_: Request, exc: ArtifactMissingError) -> JSONResponse:
+    async def handle_missing_artifact(
+        _: Request,
+        exc: ArtifactMissingError,
+    ) -> JSONResponse:
         LOGGER.warning(
             "Managed artifact missing",
             extra={
@@ -190,7 +210,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse(status_code=410, content={"detail": str(exc)})
 
     @app.exception_handler(ProviderLifecycleError)
-    async def handle_provider_failure(_: Request, exc: ProviderLifecycleError) -> JSONResponse:
+    async def handle_provider_failure(
+        _: Request,
+        exc: ProviderLifecycleError,
+    ) -> JSONResponse:
         if isinstance(exc, ProviderOutOfMemoryError):
             status_code = 507
         elif isinstance(exc, ProviderUnavailableError):
