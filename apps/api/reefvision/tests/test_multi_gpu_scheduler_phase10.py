@@ -55,6 +55,70 @@ def test_scheduler_reserves_two_best_compatible_gpus(client: TestClient, monkeyp
     assert decision.assignment["scheduler"] == "reefvision-local-v2"
 
 
+def test_gpu_preferred_auto_job_reserves_best_gpu_without_requiring_cuda(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "reefvision.services.resource_scheduler.collect_resource_inventory",
+        inventory,
+    )
+    with client.app.state.session_factory() as session:
+        candidate = Job(
+            job_type="training",
+            status="queued",
+            request_json={},
+            result_json={},
+            resource_requirements_json={
+                "device": "auto",
+                "gpu_preferred": True,
+                "exclusive_gpu": True,
+            },
+        )
+        session.add(candidate)
+        session.commit()
+        decision = ResourceScheduler(session).evaluate(candidate)
+
+    assert decision.eligible is True
+    assert decision.assignment["gpu_indices"] == [1]
+    assert decision.assignment["device"] == "cuda:1"
+    assert decision.assignment["gpu_preferred"] is True
+
+
+def test_gpu_preferred_auto_job_falls_back_to_cpu_when_no_gpu_exists(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "reefvision.services.resource_scheduler.collect_resource_inventory",
+        lambda: ResourceInventory(
+            cpu_count=8,
+            available_ram_bytes=16 * GIB,
+            gpus=(),
+        ),
+    )
+    with client.app.state.session_factory() as session:
+        candidate = Job(
+            job_type="training",
+            status="queued",
+            request_json={},
+            result_json={},
+            resource_requirements_json={
+                "device": "auto",
+                "gpu_preferred": True,
+                "exclusive_gpu": True,
+            },
+        )
+        session.add(candidate)
+        session.commit()
+        decision = ResourceScheduler(session).evaluate(candidate)
+
+    assert decision.eligible is True
+    assert decision.assignment["gpu_count"] == 0
+    assert decision.assignment["device"] == "cpu"
+    assert decision.blockers == ()
+
+
 def test_multi_gpu_reservation_respects_active_exclusive_devices(
     client: TestClient,
     monkeypatch,
