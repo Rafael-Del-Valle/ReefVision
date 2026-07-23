@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from sqlalchemy import select
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from reefvision.db.models import (
     ClassificationAssignment,
