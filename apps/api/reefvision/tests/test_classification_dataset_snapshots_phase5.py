@@ -25,14 +25,24 @@ def test_whole_image_snapshot_freezes_group_safe_multilabel_targets(
 ) -> None:
     project = create_project(client, "Whole image dataset")
     project_id = str(project["id"])
-    first = import_one(client, project_id, filename="first.png", relative_path="a/first.png")
-    second = import_one(client, project_id, filename="second.png", relative_path="a/second.png")
+    first = import_one(
+        client,
+        project_id,
+        filename="first.png",
+        relative_path="a/first.png",
+    )
+    second = import_one(
+        client,
+        project_id,
+        filename="second.png",
+        relative_path="a/second.png",
+    )
     image_ids = [
         str(first["successful"][0]["image_id"]),
         str(second["successful"][0]["image_id"]),
     ]
     classes = _project_classes(client, project_id)
-    class_ids = [str(classes[0]["id"]), str(classes[1]["id"])]
+    class_ids = sorted([str(classes[0]["id"]), str(classes[1]["id"])])
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
         for image_id in image_ids:
@@ -80,7 +90,9 @@ def test_whole_image_snapshot_freezes_group_safe_multilabel_targets(
     assert payload["snapshot"]["cardinality"] == "multi"
     assert payload["snapshot"]["sample_count"] == 2
     assert len({item["split"] for item in payload["samples"]}) == 1
-    assert all(item["label_class_ids_json"] == class_ids for item in payload["samples"])
+    assert all(
+        item["label_class_ids_json"] == class_ids for item in payload["samples"]
+    )
     assert all(item["target_checksum"] for item in payload["samples"])
     assert payload["snapshot"]["manifest_sha256"]
 
