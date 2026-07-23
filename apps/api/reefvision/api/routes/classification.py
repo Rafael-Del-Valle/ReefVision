@@ -3,10 +3,15 @@
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
-from reefvision.db.models import ModelRegistration
+from reefvision.db.models import (
+    ClassificationLabelSet,
+    ClassificationPrediction,
+    ModelRegistration,
+)
 from reefvision.domain.errors import NotFoundError
 from reefvision.schemas.classification import (
     ClassificationAssignmentAcceptRequest,
@@ -184,6 +189,59 @@ def review_classification_prediction(
     request: Request,
     session: DbSession,
 ) -> ClassificationPredictionResponse:
+    prediction = session.get(ClassificationPrediction, prediction_id)
+    if (
+        prediction is not None
+        and payload.action == "accept"
+        and prediction.label_set.strip().casefold() != "default"
+    ):
+        assignments = assignment_service(session)
+        label_set_id: str | None = None
+        if prediction.label_set.strip().casefold() == "annotation-crop-state":
+            key = f"classifier-{prediction.model_id}"
+            label_set = session.scalar(
+                select(ClassificationLabelSet).where(
+                    ClassificationLabelSet.project_id == prediction.project_id,
+                    ClassificationLabelSet.key == key,
+                )
+            )
+            if label_set is None:
+                model = session.get(ModelRegistration, prediction.model_id)
+                created = assignments.create_label_set(
+                    prediction.project_id,
+                    ClassificationLabelSetCreateRequest(
+                        key=key,
+                        name=(
+                            f"{model.display_name[:185]} assignments"
+                            if model is not None
+                            else f"Classifier {prediction.model_id[:8]} assignments"
+                        ),
+                        description=(
+                            "Automatically separated so this classifier can coexist with "
+                            "other classifiers on the same annotation."
+                        ),
+                        target_kind=(
+                            "annotation" if prediction.annotation_id is not None else "image"
+                        ),
+                        cardinality="single",
+                        metadata={
+                            "source_model_id": prediction.model_id,
+                            "source_label_set": prediction.label_set,
+                        },
+                    ),
+                )
+                label_set_id = created.id
+            else:
+                label_set_id = label_set.id
+        assignments.accept_prediction_assignment(
+            prediction_id,
+            ClassificationAssignmentAcceptRequest(
+                label_set_id=label_set_id,
+                label_class_id=payload.label_class_id,
+            ),
+        )
+        session.refresh(prediction)
+        return ClassificationPredictionResponse.model_validate(prediction)
     return service(request, session).review_prediction(prediction_id, payload)
 
 
