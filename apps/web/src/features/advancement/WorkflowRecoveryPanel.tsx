@@ -3,9 +3,12 @@ import { useEffect, useState } from "react";
 
 import { Sam3WorkflowSetupPanel } from "./Sam3WorkflowSetupPanel";
 import {
+  applyWorkflowArtifactCleanup,
   listPersistedWorkflows,
   listWorkflowRuns,
+  previewWorkflowArtifactCleanup,
   retryWorkflowRun,
+  type WorkflowArtifactCleanupPreview,
   type WorkflowRunRecord,
 } from "./workflowPersistenceApi";
 
@@ -17,6 +20,17 @@ function canRecover(run: WorkflowRunRecord): boolean {
   return ["failed", "cancelled", "succeeded"].includes(run.status);
 }
 
+function isTerminal(run: WorkflowRunRecord): boolean {
+  return ["failed", "cancelled", "succeeded"].includes(run.status);
+}
+
+function formatBytes(value: number): string {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`;
+  if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} MB`;
+  return `${(value / 1024 ** 3).toFixed(2)} GB`;
+}
+
 export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
   const [workflowId, setWorkflowId] = useState("");
@@ -26,6 +40,12 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
   const [useCacheByRun, setUseCacheByRun] = useState<Record<string, boolean>>(
     {},
   );
+  const [cleanupPreviewByRun, setCleanupPreviewByRun] = useState<
+    Record<string, WorkflowArtifactCleanupPreview>
+  >({});
+  const [selectedCleanupActionsByRun, setSelectedCleanupActionsByRun] = useState<
+    Record<string, string[]>
+  >({});
   const [message, setMessage] = useState<string | null>(null);
 
   const workflows = useQuery({
@@ -62,6 +82,75 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
       });
     },
   });
+  const previewCleanup = useMutation({
+    mutationFn: (run: WorkflowRunRecord) =>
+      previewWorkflowArtifactCleanup(run.id),
+    onSuccess: (preview) => {
+      setCleanupPreviewByRun((current) => ({
+        ...current,
+        [preview.workflow_run_id]: preview,
+      }));
+      setSelectedCleanupActionsByRun((current) => ({
+        ...current,
+        [preview.workflow_run_id]: [],
+      }));
+      setMessage(
+        `Cleanup preview found ${preview.eligible_action_count} eligible actions reclaiming up to ${formatBytes(
+          preview.reclaimable_bytes,
+        )}. Nothing is selected automatically.`,
+      );
+    },
+  });
+  const applyCleanup = useMutation({
+    mutationFn: ({
+      runId,
+      preview,
+      actionIds,
+    }: {
+      runId: string;
+      preview: WorkflowArtifactCleanupPreview;
+      actionIds: string[];
+    }) =>
+      applyWorkflowArtifactCleanup(runId, {
+        preview_checksum: preview.preview_checksum,
+        action_ids: actionIds,
+      }),
+    onSuccess: (result) => {
+      setCleanupPreviewByRun((current) => {
+        const next = { ...current };
+        delete next[result.workflow_run_id];
+        return next;
+      });
+      setSelectedCleanupActionsByRun((current) => ({
+        ...current,
+        [result.workflow_run_id]: [],
+      }));
+      setMessage(
+        `Cleanup quarantined ${result.quarantined_file_count} files, cleared ${result.cleared_reference_count} missing references, and reclaimed ${formatBytes(
+          result.reclaimed_bytes,
+        )}.`,
+      );
+    },
+  });
+
+  function toggleCleanupAction(runId: string, actionId: string) {
+    setSelectedCleanupActionsByRun((current) => {
+      const selected = current[runId] ?? [];
+      return {
+        ...current,
+        [runId]: selected.includes(actionId)
+          ? selected.filter((item) => item !== actionId)
+          : [...selected, actionId],
+      };
+    });
+  }
+
+  const actionError =
+    workflows.error ??
+    runs.error ??
+    retry.error ??
+    previewCleanup.error ??
+    applyCleanup.error;
 
   return (
     <>
@@ -70,24 +159,18 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
         <div className="section-heading">
           <div>
             <p className="eyebrow">Workflow recovery</p>
-            <h3>Retry and partial reruns</h3>
+            <h3>Retry, partial reruns, and safe artifact cleanup</h3>
             <span>
               Create a new run that reuses immutable successful upstream
-              artifacts and reruns the failed or selected node plus everything
-              downstream.
+              artifacts, or preview terminal-run files before moving selected
+              outputs into project quarantine.
             </span>
           </div>
           <span>{runs.data?.length ?? 0} recorded runs</span>
         </div>
 
         {message && <p className="form-success">{message}</p>}
-        {(workflows.error || runs.error || retry.error) && (
-          <p className="form-error">
-            {workflows.error?.message ??
-              runs.error?.message ??
-              retry.error?.message}
-          </p>
-        )}
+        {actionError && <p className="form-error">{actionError.message}</p>}
 
         <article className="dashboard-card">
           <label>
@@ -97,6 +180,8 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
               onChange={(event) => {
                 setWorkflowId(event.target.value);
                 setMessage(null);
+                setCleanupPreviewByRun({});
+                setSelectedCleanupActionsByRun({});
               }}
             >
               <option value="">Choose a workflow</option>
@@ -130,6 +215,9 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
             const active = ["queued", "running", "cancel_requested"].includes(
               run.status,
             );
+            const cleanupPreview = cleanupPreviewByRun[run.id];
+            const selectedCleanupActions =
+              selectedCleanupActionsByRun[run.id] ?? [];
             return (
               <article key={run.id} className="dashboard-card">
                 <div className="section-heading">
@@ -211,6 +299,88 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
                     ? "Queuing recovery..."
                     : "Create recovery run"}
                 </button>
+
+                <hr />
+                <div className="section-heading">
+                  <div>
+                    <p className="eyebrow">Artifact cleanup</p>
+                    <h5>Quarantine terminal-run outputs</h5>
+                    <span>
+                      Shared files and files outside the managed workflow directory
+                      are blocked. Previewing never selects or moves anything.
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={!isTerminal(run) || previewCleanup.isPending}
+                  onClick={() => previewCleanup.mutate(run)}
+                >
+                  {previewCleanup.isPending
+                    ? "Inspecting artifacts..."
+                    : "Preview artifact cleanup"}
+                </button>
+
+                {cleanupPreview && (
+                  <div className="dashboard-list" data-testid={`cleanup-${run.id}`}>
+                    <p>
+                      {cleanupPreview.action_count} actions · {cleanupPreview.eligible_action_count}{" "}
+                      eligible · {formatBytes(cleanupPreview.reclaimable_bytes)} reclaimable
+                    </p>
+                    {cleanupPreview.actions.map((action) => (
+                      <label
+                        key={action.action_id}
+                        className="annotation-selection-row"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedCleanupActions.includes(
+                            action.action_id,
+                          )}
+                          disabled={!action.eligible}
+                          onChange={() =>
+                            toggleCleanupAction(run.id, action.action_id)
+                          }
+                        />
+                        <span>
+                          <strong>
+                            {action.action_kind === "quarantine_file"
+                              ? "Quarantine file"
+                              : "Clear missing reference"}
+                          </strong>
+                          <small>
+                            {action.node_id}.{action.port_name} · {action.managed_path}
+                          </small>
+                          {action.blockers.map((blocker) => (
+                            <small key={blocker} className="form-error">
+                              {blocker}
+                            </small>
+                          ))}
+                        </span>
+                        <small>{formatBytes(action.size_bytes)}</small>
+                      </label>
+                    ))}
+                    <button
+                      type="button"
+                      disabled={
+                        selectedCleanupActions.length === 0 ||
+                        applyCleanup.isPending
+                      }
+                      onClick={() =>
+                        applyCleanup.mutate({
+                          runId: run.id,
+                          preview: cleanupPreview,
+                          actionIds: selectedCleanupActions,
+                        })
+                      }
+                    >
+                      {applyCleanup.isPending
+                        ? "Applying selected cleanup..."
+                        : `Apply ${selectedCleanupActions.length} selected actions`}
+                    </button>
+                  </div>
+                )}
               </article>
             );
           })}
