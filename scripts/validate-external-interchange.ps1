@@ -8,6 +8,16 @@ param(
     [string]$RoboflowDatasetDirectory,
     [string]$RoboflowWorkspace,
     [string]$RoboflowProject,
+    [ValidateSet(
+        "object-detection",
+        "single-label-classification",
+        "multi-label-classification",
+        "instance-segmentation",
+        "semantic-segmentation"
+    )]
+    [string]$RoboflowProjectType = "instance-segmentation",
+    [string]$RoboflowProjectLicense = "Private",
+    [string]$RoboflowBatchName = "ReefVision external validation",
     [switch]$AllowRoboflowUpload,
     [string]$OutputDirectory
 )
@@ -54,6 +64,8 @@ function Get-FileEvidence {
     }
 }
 
+$Python = Join-Path $Root ".venv\Scripts\python.exe"
+
 # CVAT live import. The task must already contain the matching images and labels.
 if ($CvatArchive) {
     try {
@@ -66,13 +78,12 @@ if ($CvatArchive) {
         if (-not (Get-Command "cvat-cli" -ErrorAction SilentlyContinue)) {
             throw "cvat-cli is not installed. Install the official cvat-cli package first."
         }
-        $Arguments = @(
-            $CvatCommonArguments
-            "task"
-            "import-dataset"
-            "--format"
-            $CvatFormat
-            $CvatTaskId.ToString()
+        $Arguments = @($CvatCommonArguments) + @(
+            "task",
+            "import-dataset",
+            "--format",
+            $CvatFormat,
+            $CvatTaskId.ToString(),
             (Resolve-Path -LiteralPath $CvatArchive).Path
         )
         Invoke-Checked "cvat-cli" $Arguments
@@ -96,7 +107,6 @@ if ($LabelMeDirectory) {
         if (-not (Test-Path -LiteralPath $LabelMeDirectory -PathType Container)) {
             throw "LabelMe directory does not exist: $LabelMeDirectory"
         }
-        $Python = Join-Path $Root ".venv\Scripts\python.exe"
         if (-not (Test-Path -LiteralPath $Python -PathType Leaf)) {
             throw "ReefVision Python environment is missing: $Python"
         }
@@ -130,7 +140,9 @@ print(json.dumps(summary, indent=2))
             if (-not (Get-Command "labelme" -ErrorAction SilentlyContinue)) {
                 throw "The LabelMe GUI command is not installed."
             }
-            Start-Process "labelme" -ArgumentList @((Resolve-Path -LiteralPath $LabelMeDirectory).Path)
+            Start-Process "labelme" -ArgumentList @(
+                (Resolve-Path -LiteralPath $LabelMeDirectory).Path
+            )
         }
         Add-Result "LabelMe" "passed" "Every ReefVision LabelMe JSON loaded in LabelMe's parser." @{
             directory = (Resolve-Path -LiteralPath $LabelMeDirectory).Path
@@ -155,26 +167,63 @@ if ($RoboflowDatasetDirectory) {
         if (-not $RoboflowWorkspace -or -not $RoboflowProject) {
             throw "-RoboflowWorkspace and -RoboflowProject are required for upload validation."
         }
+        if (-not $env:ROBOFLOW_API_KEY) {
+            throw "ROBOFLOW_API_KEY is not configured in the environment."
+        }
         if (-not (Test-Path -LiteralPath $RoboflowDatasetDirectory -PathType Container)) {
             throw "Roboflow dataset directory does not exist: $RoboflowDatasetDirectory"
         }
-        if (-not (Get-Command "roboflow" -ErrorAction SilentlyContinue)) {
-            throw "The Roboflow CLI is not installed or authenticated."
+        if (-not (Test-Path -LiteralPath $Python -PathType Leaf)) {
+            throw "ReefVision Python environment is missing: $Python"
         }
         $ResolvedDataset = (Resolve-Path -LiteralPath $RoboflowDatasetDirectory).Path
-        Invoke-Checked "roboflow" @(
-            "import"
-            "-w"
-            $RoboflowWorkspace
-            "-p"
-            $RoboflowProject
-            $ResolvedDataset
-        )
-        Add-Result "Roboflow" "passed" "Roboflow CLI accepted the ReefVision dataset directory." @{
+        $Uploader = @'
+import json
+import os
+import pathlib
+import sys
+from roboflow import Roboflow
+
+dataset, workspace_id, project_id, project_type, project_license, batch_name = sys.argv[1:]
+root = pathlib.Path(dataset).resolve()
+if not root.is_dir():
+    raise SystemExit(f"Dataset directory is missing: {root}")
+rf = Roboflow(api_key=os.environ["ROBOFLOW_API_KEY"])
+workspace = rf.workspace(workspace_id)
+result = workspace.upload_dataset(
+    str(root),
+    project_id,
+    num_workers=4,
+    project_license=project_license,
+    project_type=project_type,
+    batch_name=batch_name,
+    num_retries=1,
+    is_prediction=True,
+)
+print(json.dumps({"accepted": True, "result_type": type(result).__name__}, indent=2))
+'@
+        $UploaderPath = Join-Path $OutputDirectory "upload-roboflow-dataset.py"
+        $UploadResultPath = Join-Path $OutputDirectory "roboflow-upload-result.json"
+        Set-Content -LiteralPath $UploaderPath -Value $Uploader -Encoding utf8
+        & $Python $UploaderPath @(
+            $ResolvedDataset,
+            $RoboflowWorkspace,
+            $RoboflowProject,
+            $RoboflowProjectType,
+            $RoboflowProjectLicense,
+            $RoboflowBatchName
+        ) | Set-Content -LiteralPath $UploadResultPath -Encoding utf8
+        if ($LASTEXITCODE -ne 0) {
+            throw "The Roboflow Python SDK rejected the ReefVision dataset."
+        }
+        Add-Result "Roboflow" "passed" "Roboflow accepted the ReefVision dataset as a reviewable prediction batch." @{
             workspace = $RoboflowWorkspace
             project = $RoboflowProject
+            project_type = $RoboflowProjectType
             dataset_directory = $ResolvedDataset
+            upload_result = $UploadResultPath
             remote_upload_authorized = $true
+            uploaded_as_prediction = $true
         }
     }
     catch {
@@ -187,14 +236,15 @@ else {
 
 $Failed = @($Results | Where-Object status -eq "failed")
 $Report = [pscustomobject]@{
-    schema = "reefvision-external-interchange-validation-v1"
+    schema = "reefvision-external-interchange-validation-v2"
     generated_at = (Get-Date).ToUniversalTime().ToString("o")
     passed = $Failed.Count -eq 0
     results = $Results
     safety = @{
         roboflow_upload_requires_explicit_switch = $true
+        roboflow_upload_is_marked_as_prediction = $true
         credentials_are_not_written_to_report = $true
-        cvat_import_replaces_or_merges_according_to_server_format_behavior = $true
+        cvat_task_import_can_replace_existing_annotations = $true
     }
 }
 $ReportPath = Join-Path $OutputDirectory "external-interchange-validation.json"
