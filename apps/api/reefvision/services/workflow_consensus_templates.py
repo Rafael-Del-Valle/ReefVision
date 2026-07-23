@@ -33,6 +33,7 @@ def multi_model_auto_labeling_template() -> WorkflowTemplate:
                         "iou_threshold": 0.45,
                         "multi_model_consensus": {
                             "enabled": True,
+                            "required_primary_provider": "sam3_sidecar",
                             "prompt": "octocoral colony or fragment",
                             "required_votes": 2,
                             "sam_vote_threshold": 0.35,
