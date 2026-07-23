@@ -115,6 +115,8 @@ def independent_mask_auto_labeling_template() -> WorkflowTemplate:
                         "iou_threshold": 0.30,
                         "aggregation": "pixel_majority",
                         "minimum_vlm_confidence": 0.25,
+                        "gemini_model": "gemini-2.5-flash",
+                        "openai_model": "gpt-5-mini",
                         "sam2_device": "auto",
                         "allow_remote_review": False,
                         "auto_accept": False,
