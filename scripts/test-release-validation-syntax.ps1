@@ -2,6 +2,7 @@ param(
     [string[]]$ScriptPaths = @(
         "scripts/bootstrap.ps1",
         "scripts/build-desktop.ps1",
+        "scripts/build-desktop-backend.ps1",
         "scripts/run-release-validation.ps1",
         "scripts/run-complete-release-validation.ps1",
         "scripts/validate-external-interchange.ps1",
@@ -52,7 +53,7 @@ foreach ($RelativePath in $ScriptPaths) {
 }
 
 $Report = [pscustomobject]@{
-    schema = "reefvision-release-script-syntax-v4"
+    schema = "reefvision-release-script-syntax-v5"
     passed = $Failures.Count -eq 0
     parsed = $Results
     failures = $Failures
