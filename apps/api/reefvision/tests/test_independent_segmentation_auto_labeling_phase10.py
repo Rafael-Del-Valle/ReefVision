@@ -7,8 +7,9 @@ import numpy as np
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
+from sqlalchemy import select
 
-from reefvision.db.models import PredictionProposal
+from reefvision.db.models import MaskAnnotation, MaskAnnotationEvent, PredictionProposal
 from reefvision.ml.providers import PixelBox
 from reefvision.services.independent_segmentation_auto_labeling import (
     VLMBoxDetection,
@@ -106,6 +107,36 @@ def _settings(client: TestClient):
     )
 
 
+def _run_without_primary(client: TestClient, *, auto_accept: bool):
+    fixture = _seed_review_proposals(client, geometry_kind="raster_mask")
+    app, settings = _settings(client)
+    result = run_independent_segmentation_pipeline(
+        settings,
+        app.state.session_factory,
+        image_ids=[fixture.image_id],
+        primary_prediction_ids=[],
+        primary_model_id=fixture.model_id,
+        primary_inference_job_id=fixture.job_id,
+        sam2_model_id=fixture.model_id,
+        label_class_id=fixture.label_class_id,
+        predicted_label="soft coral",
+        concept_prompt="soft coral",
+        workflow_run_id="workflow-run-no-primary",
+        workflow_node_id="independent-mask-consensus",
+        required_votes=2,
+        iou_threshold=0.1,
+        aggregation="pixel_majority",
+        minimum_vlm_confidence=0.2,
+        auto_accept=auto_accept,
+        detectors=[
+            _FakeDetector("gemini_sam2", "gemini-test", 0.00),
+            _FakeDetector("openai_sam2", "openai-test", 0.03),
+        ],
+        refiner=_FakeRefiner(),
+    )
+    return fixture, app, settings, result
+
+
 def test_independent_pipeline_creates_reviewable_consensus_proposal(
     client: TestClient,
 ) -> None:
@@ -170,32 +201,9 @@ def test_independent_pipeline_creates_reviewable_consensus_proposal(
 def test_two_vlm_sam2_branches_can_label_image_when_sam3_misses(
     client: TestClient,
 ) -> None:
-    fixture = _seed_review_proposals(client, geometry_kind="raster_mask")
-    app, settings = _settings(client)
-
-    result = run_independent_segmentation_pipeline(
-        settings,
-        app.state.session_factory,
-        image_ids=[fixture.image_id],
-        primary_prediction_ids=[],
-        primary_model_id=fixture.model_id,
-        primary_inference_job_id=fixture.job_id,
-        sam2_model_id=fixture.model_id,
-        label_class_id=fixture.label_class_id,
-        predicted_label="soft coral",
-        concept_prompt="soft coral",
-        workflow_run_id="workflow-run-no-primary",
-        workflow_node_id="independent-mask-consensus",
-        required_votes=2,
-        iou_threshold=0.1,
-        aggregation="pixel_majority",
-        minimum_vlm_confidence=0.2,
+    _fixture, app, _settings_value, result = _run_without_primary(
+        client,
         auto_accept=False,
-        detectors=[
-            _FakeDetector("gemini_sam2", "gemini-test", 0.00),
-            _FakeDetector("openai_sam2", "openai-test", 0.03),
-        ],
-        refiner=_FakeRefiner(),
     )
 
     assert result.failed_image_count == 0
@@ -208,6 +216,42 @@ def test_two_vlm_sam2_branches_can_label_image_when_sam3_misses(
         assert proposal is not None
         provenance = dict(proposal.provenance_json or {})
         assert set(provenance["branch_ids"]) == {"gemini_sam2", "openai_sam2"}
+
+
+def test_auto_accepted_exact_consensus_uses_independent_provenance(
+    client: TestClient,
+) -> None:
+    _fixture, app, _settings_value, result = _run_without_primary(
+        client,
+        auto_accept=True,
+    )
+
+    assert result.failed_image_count == 0
+    assert result.accepted_count == 1
+    annotation_id = result.images[0].accepted_mask_annotation_ids[0]
+    proposal_id = result.images[0].proposal_ids[0]
+    with app.state.session_factory() as session:
+        annotation = session.get(MaskAnnotation, annotation_id)
+        proposal = session.get(PredictionProposal, proposal_id)
+        assert annotation is not None
+        assert proposal is not None
+        assert annotation.source_type == "workflow_independent_consensus"
+        assert annotation.revision == 2
+        provenance = dict(annotation.provenance_json or {})
+        assert provenance["consensus_method"] == "independent_mask_generation"
+        assert provenance["aggregation"] == "pixel_majority"
+        assert set(provenance["branch_ids"]) == {"gemini_sam2", "openai_sam2"}
+        events = list(
+            session.scalars(
+                select(MaskAnnotationEvent)
+                .where(MaskAnnotationEvent.mask_annotation_id == annotation_id)
+                .order_by(MaskAnnotationEvent.created_at, MaskAnnotationEvent.id)
+            )
+        )
+        assert [event.event_type for event in events] == [
+            "created",
+            "provenance_updated",
+        ]
 
 
 def test_vlm_detection_parser_rejects_invalid_and_low_confidence_boxes() -> None:
