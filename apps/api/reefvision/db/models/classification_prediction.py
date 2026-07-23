@@ -51,7 +51,7 @@ class ClassificationPrediction(Base):
         index=True,
     )
     target_kind: Mapped[str] = mapped_column(String(30), nullable=False, default="annotation")
-    target_key: Mapped[str] = mapped_column(String(500), nullable=False)
+    target_key: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     fragment_key: Mapped[str | None] = mapped_column(String(300), nullable=True, index=True)
     model_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("model_registrations.id", ondelete="RESTRICT"), nullable=False
