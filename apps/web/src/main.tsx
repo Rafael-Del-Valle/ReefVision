@@ -6,6 +6,7 @@ import { AppProviders } from "./app/providers";
 import { CatalogInferenceLauncher } from "./features/annotation-editor/CatalogInferenceLauncher";
 import { SegmentationInferenceLauncher } from "./features/annotation-editor/SegmentationInferenceLauncher";
 import { SegmentationExportLauncher } from "./features/dataset-versions/SegmentationExportLauncher";
+import { StorageSettingsOverlay } from "./features/system/StorageSettingsOverlay";
 import { initializeRuntime } from "./runtime";
 import { renderStartupError } from "./startup";
 
@@ -23,6 +24,7 @@ async function bootstrap() {
     <StrictMode>
       <AppProviders>
         <App />
+        <StorageSettingsOverlay />
         <SegmentationExportLauncher />
         <SegmentationInferenceLauncher />
         <CatalogInferenceLauncher />
