@@ -6,6 +6,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
@@ -89,14 +90,33 @@ if (-not (Test-Path -LiteralPath $Python -PathType Leaf)) {
     throw "The ReefVision virtual environment is missing. Run without -SkipBootstrap first."
 }
 
+Invoke-ReleaseGate "Feature freeze policy" {
+    Invoke-External $Python @(
+        (Join-Path $PSScriptRoot "check-feature-freeze.py"),
+        "--json-output",
+        (Join-Path $ArtifactRoot "feature-freeze-report.json")
+    )
+}
+Invoke-ReleaseGate "Repository whitespace check" {
+    Invoke-External "git" @("diff", "--check")
+}
 Invoke-ReleaseGate "Backend Ruff lint" {
-    Invoke-External $Python @("-m", "ruff", "check", "apps/api")
+    Invoke-External $Python @("-m", "ruff", "check", "apps/api", "scripts")
 }
 Invoke-ReleaseGate "Backend Ruff formatting" {
-    Invoke-External $Python @("-m", "ruff", "format", "--check", "apps/api")
+    Invoke-External $Python @("-m", "ruff", "format", "--check", "apps/api", "scripts")
 }
 Invoke-ReleaseGate "Strict mypy" {
     Invoke-External $Python @("-m", "mypy", "apps/api/reefvision")
+}
+Invoke-ReleaseGate "Coral import-to-export journey" {
+    Invoke-External $Python @(
+        "-m",
+        "pytest",
+        "apps/api/reefvision/tests/test_stabilization_coral_journey.py",
+        "-q",
+        "--junitxml=$(Join-Path $ArtifactRoot 'coral-journey.xml')"
+    )
 }
 Invoke-ReleaseGate "Full pytest" {
     Invoke-External $Python @(
@@ -126,28 +146,28 @@ Invoke-ReleaseGate "Alembic upgrade downgrade round trip" {
 Push-Location (Join-Path $Root "apps\web")
 try {
     Invoke-ReleaseGate "Frontend lockfile" {
-        Invoke-External "npm" @("run", "lockfile:check")
+        Invoke-External "npm.cmd" @("run", "lockfile:check")
     }
     Invoke-ReleaseGate "Frontend npm clean install" {
-        Invoke-External "npm" @("ci")
+        Invoke-External "npm.cmd" @("ci")
     }
     Invoke-ReleaseGate "Frontend Prettier" {
-        Invoke-External "npm" @("run", "format:check")
+        Invoke-External "npm.cmd" @("run", "format:check")
     }
     Invoke-ReleaseGate "Frontend TypeScript" {
-        Invoke-External "npm" @("run", "typecheck")
+        Invoke-External "npm.cmd" @("run", "typecheck")
     }
     Invoke-ReleaseGate "Frontend Vitest" {
-        Invoke-External "npm" @("run", "test", "--", "--reporter=verbose")
+        Invoke-External "npm.cmd" @("run", "test", "--", "--reporter=verbose")
     }
     Invoke-ReleaseGate "Frontend production build" {
-        Invoke-External "npm" @("run", "build")
+        Invoke-External "npm.cmd" @("run", "build")
     }
     Invoke-ReleaseGate "Playwright Chromium install" {
-        Invoke-External "npx" @("--no-install", "playwright", "install", "chromium")
+        Invoke-External "npx.cmd" @("--no-install", "playwright", "install", "chromium")
     }
     Invoke-ReleaseGate "Playwright browser tests" {
-        Invoke-External "npm" @("run", "test:e2e")
+        Invoke-External "npm.cmd" @("run", "test:e2e")
     }
     Invoke-ReleaseGate "Rust format" {
         Invoke-External "cargo" @(
@@ -202,10 +222,22 @@ if (-not $SkipPackaging) {
     }
 }
 
+Invoke-ReleaseGate "Tracked working tree remains clean" {
+    $TrackedStatus = (& git status --short --untracked-files=no 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        throw "git status failed with code $LASTEXITCODE."
+    }
+    if ($TrackedStatus) {
+        throw "Validation modified tracked files:`n$TrackedStatus"
+    }
+}
+
 $Failed = @($Results | Where-Object status -eq "failed")
 $Summary = [pscustomobject]@{
+    schema = "reefvision-release-validation-v3"
     generated_at = (Get-Date).ToUniversalTime().ToString("o")
     repository_root = $Root
+    commit_sha = (& git rev-parse HEAD).Trim()
     target_triple = $TargetTriple
     artifact_root = $ArtifactRoot
     passed = $Failed.Count -eq 0
