@@ -30,13 +30,14 @@ def _seed_prediction(
 ) -> tuple[str, str]:
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
+        model_token = model_name.casefold().replace(" ", "-")
         model = ModelRegistration(
             project_id=project_id,
             purpose="classifier",
             display_name=model_name,
-            source_filename=f"{label_set}.pt",
-            managed_path=f"projects/{project_id}/models/{label_set}.pt",
-            sha256=(label_set.encode("utf-8").hex() + "0" * 64)[:64],
+            source_filename=f"{model_token}.pt",
+            managed_path=f"projects/{project_id}/models/{model_token}.pt",
+            sha256=(model_token.encode("utf-8").hex() + "0" * 64)[:64],
             file_size_bytes=1,
             framework="ultralytics",
             task="classify",
