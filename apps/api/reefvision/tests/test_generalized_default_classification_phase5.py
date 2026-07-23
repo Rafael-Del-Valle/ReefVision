@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -17,7 +18,7 @@ from reefvision.tests.test_classification_phase5 import _seed_classification_pro
 
 def test_default_whole_image_review_creates_non_destructive_assignment(
     client: TestClient,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project, image_id, class_ids = _seed_classification_project(client)
     project_id = str(project["id"])
