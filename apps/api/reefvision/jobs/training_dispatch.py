@@ -9,6 +9,9 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import Job, TrainingRun
+from reefvision.jobs import classification_training as classification_training_runtime
+from reefvision.jobs import segmentation_training as segmentation_training_runtime
+from reefvision.jobs import training as detection_training_runtime
 from reefvision.jobs.advanced_ultralytics_training import (
     _execute_tuning,
     _execute_validation,
@@ -19,8 +22,16 @@ from reefvision.jobs.semantic_training import process_semantic_training_job
 from reefvision.jobs.training import _append_log, process_training_job
 from reefvision.ml.classification import CLASSIFICATION_TASK
 from reefvision.ml.semantic_segmentation import SEMANTIC_SEGMENTATION_TASK
+from reefvision.ml.training_devices import resolve_training_device
 from reefvision.ml.ultralytics_tuning import normalize_tuning_config
 from reefvision.storage.projects import resolve_managed_project_path
+
+# The stable task workers resolve their device at launch time. Replace only their
+# module-local training resolver; inference and Prompt Assist retain stricter
+# single-device semantics.
+detection_training_runtime.resolve_torch_device = resolve_training_device
+segmentation_training_runtime.resolve_torch_device = resolve_training_device
+classification_training_runtime.resolve_torch_device = resolve_training_device
 
 
 def _restore_tuning_provenance(
