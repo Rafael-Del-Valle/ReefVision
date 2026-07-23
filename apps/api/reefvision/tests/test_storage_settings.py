@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -11,6 +12,13 @@ from reefvision.config import (
     get_settings,
     storage_settings_path,
     write_storage_overrides,
+)
+from reefvision.storage.catalog_models import catalog_model_directories
+
+_STORAGE_ENVIRONMENT_NAMES = (
+    "REEFVISION_DATA_DIR",
+    "REEFVISION_MODEL_CACHE_DIR",
+    "REEFVISION_TEMP_DIR",
 )
 
 
@@ -27,7 +35,7 @@ def test_storage_settings_report_active_paths(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local-app-data"))
-    for name in ("REEFVISION_DATA_DIR", "REEFVISION_MODEL_CACHE_DIR", "REEFVISION_TEMP_DIR"):
+    for name in _STORAGE_ENVIRONMENT_NAMES:
         monkeypatch.delenv(name, raising=False)
 
     response = client.get("/api/v1/system/storage-settings")
@@ -50,7 +58,7 @@ def test_storage_settings_require_restart_acknowledgement(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local-app-data"))
-    for name in ("REEFVISION_DATA_DIR", "REEFVISION_MODEL_CACHE_DIR", "REEFVISION_TEMP_DIR"):
+    for name in _STORAGE_ENVIRONMENT_NAMES:
         monkeypatch.delenv(name, raising=False)
     payload = {
         "data_dir": str((tmp_path / "external" / "data").resolve()),
@@ -72,7 +80,7 @@ def test_storage_settings_persist_writable_external_paths(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local-app-data"))
-    for name in ("REEFVISION_DATA_DIR", "REEFVISION_MODEL_CACHE_DIR", "REEFVISION_TEMP_DIR"):
+    for name in _STORAGE_ENVIRONMENT_NAMES:
         monkeypatch.delenv(name, raising=False)
     requested = {
         "data_dir": str((tmp_path / "external" / "data").resolve()),
@@ -127,7 +135,7 @@ def test_get_settings_loads_persisted_storage_roots(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local-app-data"))
-    for name in ("REEFVISION_DATA_DIR", "REEFVISION_MODEL_CACHE_DIR", "REEFVISION_TEMP_DIR"):
+    for name in _STORAGE_ENVIRONMENT_NAMES:
         monkeypatch.delenv(name, raising=False)
     requested = {
         "data_dir": str((tmp_path / "persisted" / "data").resolve()),
@@ -143,3 +151,50 @@ def test_get_settings_loads_persisted_storage_roots(
         assert settings.resolved_temp_dir == Path(requested["temp_dir"])
     finally:
         clear_settings_cache()
+
+
+def test_downloadable_models_use_cache_but_user_models_stay_with_data(
+    tmp_path: Path,
+) -> None:
+    settings = Settings(
+        env="test",
+        data_dir=tmp_path / "data",
+        model_cache_dir=tmp_path / "external-cache",
+        temp_dir=tmp_path / "external-temp",
+        database_url=f"sqlite:///{(tmp_path / 'test.db').as_posix()}",
+    )
+
+    directories = catalog_model_directories(settings)
+
+    assert directories["catalog_models"].is_relative_to(
+        settings.resolved_model_cache_dir
+    )
+    assert directories["provider_packs"].is_relative_to(
+        settings.resolved_model_cache_dir
+    )
+    assert directories["temporary_downloads"].is_relative_to(
+        settings.resolved_model_cache_dir
+    )
+    assert directories["trained_models"].is_relative_to(settings.resolved_data_dir)
+    assert directories["imported_models"].is_relative_to(settings.resolved_data_dir)
+
+
+def test_app_configures_external_model_and_temp_environments(
+    client: TestClient,
+    test_settings: Settings,
+) -> None:
+    expected_hugging_face = test_settings.resolved_model_cache_dir / "huggingface"
+
+    assert os.environ["HF_HOME"] == str(expected_hugging_face)
+    assert os.environ["HUGGINGFACE_HUB_CACHE"] == str(
+        expected_hugging_face / "hub"
+    )
+    assert os.environ["TRANSFORMERS_CACHE"] == str(
+        expected_hugging_face / "transformers"
+    )
+    assert os.environ["TORCH_HOME"] == str(
+        test_settings.resolved_model_cache_dir / "torch"
+    )
+    assert os.environ["TMP"] == str(test_settings.resolved_temp_dir)
+    assert os.environ["TEMP"] == str(test_settings.resolved_temp_dir)
+    assert os.environ["TMPDIR"] == str(test_settings.resolved_temp_dir)
