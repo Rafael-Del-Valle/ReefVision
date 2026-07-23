@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     assist_cache_max_items: int = Field(default=4, ge=1, le=64)
     smart_mask_sample_spacing: float = Field(default=14.0, gt=1, le=512)
     allow_unsafe_pickled_models: bool = True
+    allow_remote_vision: bool = False
+    openai_api_key: str | None = Field(default=None, repr=False)
+    gemini_api_key: str | None = Field(default=None, repr=False)
+    remote_vision_timeout_seconds: float = Field(default=60.0, gt=0, le=300)
     log_max_bytes: int = Field(default=1_048_576, ge=65_536)
     log_backup_count: int = Field(default=5, ge=1, le=50)
 
