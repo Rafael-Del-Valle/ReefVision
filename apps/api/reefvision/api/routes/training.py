@@ -27,6 +27,9 @@ from reefvision.schemas.training import (
 from reefvision.services.advanced_training import AdvancedTrainingService
 from reefvision.services.bootstrap import BootstrapService
 from reefvision.services.segmentation_catalog import SegmentationModelCatalogService
+from reefvision.services.training_resource_requirements import (
+    apply_training_scheduler_requirements,
+)
 
 router = APIRouter(tags=["training"])
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -178,7 +181,10 @@ def create_training_run(
     request: Request,
     session: DbSession,
 ) -> TrainingRunResponse:
-    return service(request, session).create_run(project_id, payload)
+    training = service(request, session)
+    run = training.create_run(project_id, payload)
+    apply_training_scheduler_requirements(session, run.id)
+    return training.get_run(run.id)
 
 
 @router.get(
