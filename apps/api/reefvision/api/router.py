@@ -27,6 +27,7 @@ from reefvision.api.routes.image_embeddings import router as image_embeddings_ro
 from reefvision.api.routes.images import router as images_router
 from reefvision.api.routes.interchange import router as interchange_router
 from reefvision.api.routes.jobs import router as jobs_router
+from reefvision.api.routes.mask_conversion import router as mask_conversion_router
 from reefvision.api.routes.measurements import router as measurements_router
 from reefvision.api.routes.model_catalog import router as model_catalog_router
 from reefvision.api.routes.models import router as models_router
@@ -90,6 +91,7 @@ api_router.include_router(image_embeddings_router)
 api_router.include_router(depth_router)
 api_router.include_router(annotations_router)
 api_router.include_router(raster_edits_router)
+api_router.include_router(mask_conversion_router)
 api_router.include_router(measurements_router)
 api_router.include_router(scientific_validation_router)
 api_router.include_router(dataset_versions_router)
