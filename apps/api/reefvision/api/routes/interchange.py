@@ -18,6 +18,7 @@ from reefvision.schemas.interchange import (
     InterchangePreviewResponse,
 )
 from reefvision.services.coco_rle import expand_compact_rle_document
+from reefvision.services.compressed_coco_export import compact_coco_export
 from reefvision.services.interchange import InterchangeService
 
 router = APIRouter(tags=["interchange"])
@@ -95,4 +96,11 @@ def export_interchange(
     request: Request,
     session: DbSession,
 ) -> InterchangeExportResponse:
-    return service(request, session).export(project_id, payload)
+    generated = service(request, session).export(
+        project_id,
+        payload.model_copy(update={"coco_rle_encoding": "uncompressed"}),
+    )
+    if payload.coco_rle_encoding != "compressed":
+        return generated
+    settings: Settings = request.app.state.settings
+    return compact_coco_export(settings, generated)
