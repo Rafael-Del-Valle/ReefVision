@@ -5,7 +5,9 @@ param(
     [switch]$SkipPackaging,
     [switch]$RequireMsiSignature,
     [switch]$PerformMachineInstall,
+    [switch]$ReleaseCandidate,
     [string]$ExpectedPublisher,
+    [string]$ConsensusEvaluationReport,
     [string]$CvatArchive,
     [int]$CvatTaskId = 0,
     [string[]]$CvatCommonArguments = @(),
@@ -27,11 +29,41 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 $Timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $OutputRoot = Join-Path $Root ".artifacts\complete-release-validation-$Timestamp"
 New-Item -ItemType Directory -Path $OutputRoot -Force | Out-Null
+
+if ($ReleaseCandidate) {
+    if ($SkipPackaging) {
+        throw "A release candidate cannot skip Windows packaging."
+    }
+    if (-not $PerformMachineInstall) {
+        throw "A release candidate requires -PerformMachineInstall."
+    }
+    if (-not $ConsensusEvaluationReport) {
+        throw "A release candidate requires -ConsensusEvaluationReport."
+    }
+    if (-not $CvatArchive -or $CvatTaskId -le 0) {
+        throw "A release candidate requires a CVAT archive and positive CVAT task ID."
+    }
+    if (-not $LabelMeDirectory) {
+        throw "A release candidate requires -LabelMeDirectory."
+    }
+    if (
+        -not $RoboflowDatasetDirectory -or
+        -not $RoboflowWorkspace -or
+        -not $RoboflowProject -or
+        -not $AllowRoboflowUpload
+    ) {
+        throw (
+            "A release candidate requires an explicitly authorized private Roboflow " +
+            "validation upload with dataset directory, workspace, and project."
+        )
+    }
+}
 
 $ReleaseArguments = @("-TargetTriple", $TargetTriple)
 if ($SkipBootstrap) { $ReleaseArguments += "-SkipBootstrap" }
@@ -60,6 +92,29 @@ if (-not $SkipPackaging) {
         throw "MSI verification failed."
     }
     $MsiReport = Join-Path $MsiOutput "msi-verification.json"
+}
+
+$ConsensusReport = $null
+$ConsensusPassed = $null
+if ($ConsensusEvaluationReport) {
+    if (-not (Test-Path -LiteralPath $ConsensusEvaluationReport -PathType Leaf)) {
+        throw "Consensus evaluation report does not exist: $ConsensusEvaluationReport"
+    }
+    try {
+        $ConsensusPayload = Get-Content -LiteralPath $ConsensusEvaluationReport -Raw |
+            ConvertFrom-Json
+    }
+    catch {
+        throw "Consensus evaluation report is not valid JSON: $ConsensusEvaluationReport"
+    }
+    if ($ConsensusPayload.schema -ne "reefvision-real-consensus-evaluation-v1") {
+        throw "Consensus evaluation report has an unsupported schema."
+    }
+    $ConsensusPassed = [bool]$ConsensusPayload.passed
+    if (-not $ConsensusPassed) {
+        throw "Real multi-model consensus evaluation did not meet its acceptance thresholds."
+    }
+    $ConsensusReport = (Resolve-Path -LiteralPath $ConsensusEvaluationReport).Path
 }
 
 $ExternalRequested = [bool](
@@ -98,11 +153,16 @@ if ($ExternalRequested) {
 }
 
 $Summary = [pscustomobject]@{
-    schema = "reefvision-complete-release-validation-v2"
+    schema = "reefvision-complete-release-validation-v3"
     generated_at = (Get-Date).ToUniversalTime().ToString("o")
+    commit_sha = (& git rev-parse HEAD).Trim()
     target_triple = $TargetTriple
+    release_candidate_requested = [bool]$ReleaseCandidate
     packaging_skipped = [bool]$SkipPackaging
+    machine_install_requested = [bool]$PerformMachineInstall
     msi_report = $MsiReport
+    consensus_evaluation_report = $ConsensusReport
+    consensus_evaluation_passed = $ConsensusPassed
     external_interchange_requested = $ExternalRequested
     external_interchange_report = $ExternalReport
     passed = $true
