@@ -73,7 +73,7 @@ def test_scientific_export_joins_box_to_one_containing_fragment_mask(
             y_max=50,
             area_pixels=2500,
             measurement_json={
-                "centerline_points": [[0, 25], [50, 25]],
+                "centerline_points": [{"x": 0, "y": 25}, {"x": 50, "y": 25}],
                 "surface_model": "none",
                 "depth_value": None,
                 "diameter_value": None,
