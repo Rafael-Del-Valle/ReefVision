@@ -1,12 +1,16 @@
 param(
     [string[]]$ScriptPaths = @(
+        "scripts/run-release-validation.ps1",
+        "scripts/run-complete-release-validation.ps1",
         "scripts/validate-external-interchange.ps1",
         "scripts/verify-windows-msi.ps1",
-        "scripts/run-complete-release-validation.ps1"
+        "scripts/all-phases-acceptance.ps1",
+        "scripts/run-all-phases-acceptance.ps1"
     )
 )
 
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
 $Root = Split-Path -Parent $PSScriptRoot
 $Failures = [System.Collections.Generic.List[object]]::new()
 $Results = [System.Collections.Generic.List[object]]::new()
@@ -46,7 +50,7 @@ foreach ($RelativePath in $ScriptPaths) {
 }
 
 $Report = [pscustomobject]@{
-    schema = "reefvision-release-script-syntax-v1"
+    schema = "reefvision-release-script-syntax-v2"
     passed = $Failures.Count -eq 0
     parsed = $Results
     failures = $Failures
