@@ -29,10 +29,15 @@ def _training_run_for_job(session: Session, job: Job) -> TrainingRun | None:
     return session.get(TrainingRun, run_id) if isinstance(run_id, str) and run_id else None
 
 
-def _should_bind_training_device(run: TrainingRun, requirements: dict[str, Any]) -> bool:
+def _should_bind_training_device(
+    run: TrainingRun,
+    requirements: dict[str, Any],
+    assignment: dict[str, Any],
+) -> bool:
     requested = str(run.device or "auto").strip().casefold()
     return (
-        bool(requirements.get("gpu_required"))
+        int(assignment.get("gpu_count", 0) or 0) > 0
+        or bool(requirements.get("gpu_required"))
         or int(requirements.get("gpu_count", 0) or 0) > 0
         or requested == "cpu"
         or requested.startswith("cuda")
@@ -99,23 +104,24 @@ class JobRepository:
             decision = scheduler.evaluate(candidate)
             if not decision.eligible:
                 continue
-            assignment_device = str(decision.assignment.get("device", "cpu"))
+            assignment = dict(decision.assignment)
+            assignment_device = str(assignment.get("device", "cpu"))
+            assigned_gpu_count = int(assignment.get("gpu_count", 0) or 0)
             request_json = dict(candidate.request_json or {})
             requirements = dict(candidate.resource_requirements_json or {})
             if (
                 "device" in request_json
                 or requirements.get("gpu_required")
                 or int(requirements.get("gpu_count", 0) or 0) > 0
+                or assigned_gpu_count > 0
             ):
                 request_json["device"] = assignment_device
             if "device_id" in request_json or candidate.job_type == "provider_benchmark":
                 request_json["device_id"] = assignment_device
-            if decision.assignment.get("gpu_indices"):
-                request_json["assigned_gpu_indices"] = list(
-                    decision.assignment["gpu_indices"]
-                )
+            if assignment.get("gpu_indices"):
+                request_json["assigned_gpu_indices"] = list(assignment["gpu_indices"])
                 request_json["cuda_visible_devices"] = str(
-                    decision.assignment.get("cuda_visible_devices", "")
+                    assignment.get("cuda_visible_devices", "")
                 )
             claimed = cast(
                 CursorResult[Any],
@@ -131,7 +137,7 @@ class JobRepository:
                         heartbeat_at=now,
                         request_json=request_json,
                         resource_requirements_json=requirements,
-                        resource_assignment_json=decision.assignment,
+                        resource_assignment_json=assignment,
                     )
                 ),
             )
@@ -139,11 +145,11 @@ class JobRepository:
                 self.session.rollback()
                 continue
             if training_run is not None:
-                if _should_bind_training_device(training_run, requirements):
+                if _should_bind_training_device(training_run, requirements, assignment):
                     training_run.device = assignment_device
                 training_run.resource_limits_json = {
                     **dict(training_run.resource_limits_json or {}),
-                    "scheduler_assignment": dict(decision.assignment),
+                    "scheduler_assignment": assignment,
                 }
             self.session.commit()
             refreshed = self.session.get(Job, candidate.id)
