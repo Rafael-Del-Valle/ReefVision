@@ -203,7 +203,10 @@ def review_classification_prediction(
     if (
         prediction is not None
         and payload.action == "accept"
-        and prediction.label_set.strip().casefold() != "default"
+        and (
+            prediction.label_set.strip().casefold() != "default"
+            or prediction.target_kind != "annotation"
+        )
     ):
         assignment_service(session).accept_prediction_assignment(
             prediction_id,
