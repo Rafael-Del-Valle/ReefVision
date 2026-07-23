@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -53,11 +54,32 @@ from reefvision.services.model_catalog import validate_catalog_startup
 LOGGER = logging.getLogger("reefvision.api")
 
 
+def _configure_process_storage(settings: Settings) -> None:
+    """Point third-party caches and temporary work at user-selected roots."""
+
+    model_cache = settings.resolved_model_cache_dir
+    temp_dir = settings.resolved_temp_dir
+    hugging_face_home = model_cache / "huggingface"
+    torch_home = model_cache / "torch"
+    for path in (hugging_face_home, torch_home, temp_dir):
+        path.mkdir(parents=True, exist_ok=True)
+
+    os.environ["HF_HOME"] = str(hugging_face_home)
+    os.environ["HUGGINGFACE_HUB_CACHE"] = str(hugging_face_home / "hub")
+    os.environ["TRANSFORMERS_CACHE"] = str(hugging_face_home / "transformers")
+    os.environ["TORCH_HOME"] = str(torch_home)
+    os.environ["TMP"] = str(temp_dir)
+    os.environ["TEMP"] = str(temp_dir)
+    os.environ["TMPDIR"] = str(temp_dir)
+    tempfile.tempdir = str(temp_dir)
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     active_settings = settings or get_settings()
     if active_settings.safe_mode:
         active_settings.background_worker_enabled = False
     active_settings.ensure_directories()
+    _configure_process_storage(active_settings)
     os.environ["REEFVISION_CONFIG_DIR"] = str(active_settings.resolved_data_dir / "config")
     apply_catalog_expansion_runtime_patches()
     apply_fastsam_runtime_patch()
@@ -105,6 +127,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "event_id": "api_startup",
                 "component": "api",
                 "data_dir": str(active_settings.resolved_data_dir),
+                "model_cache_dir": str(active_settings.resolved_model_cache_dir),
+                "temp_dir": str(active_settings.resolved_temp_dir),
                 "bundled_catalog_model_count": len(bundled_catalog_ids),
                 "bundled_transformers_model_count": len(bundled_transformers_models),
             },
