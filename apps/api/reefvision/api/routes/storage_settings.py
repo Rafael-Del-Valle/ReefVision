@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 from pathlib import Path
 from uuid import uuid4
@@ -14,6 +13,7 @@ from reefvision.config import (
     STORAGE_SETTING_FIELDS,
     Settings,
     load_storage_overrides,
+    storage_environment_locked,
     storage_settings_path,
     write_storage_overrides,
 )
@@ -139,7 +139,7 @@ def _response(settings: Settings) -> StorageSettingsResponse:
     ]
     for field_name in STORAGE_SETTING_FIELDS:
         environment_name = _environment_name(field_name)
-        environment_locked = environment_name in os.environ
+        environment_locked = storage_environment_locked(field_name)
         active_path = active[field_name]
         configured = overrides.get(field_name)
         pending_path = (
@@ -200,7 +200,7 @@ def update_storage_settings(
     for field_name, value in requested_values.items():
         environment_name = _environment_name(field_name)
         candidate = _normalize_path(value, field_name=field_name)
-        if environment_name in os.environ and candidate != active[field_name]:
+        if storage_environment_locked(field_name) and candidate != active[field_name]:
             raise HTTPException(
                 status_code=400,
                 detail=(
