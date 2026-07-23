@@ -81,6 +81,7 @@ def _metrics(counts: Counts) -> dict[str, float | int]:
     reference_area = counts.true_positive + counts.false_negative
     prediction_area = counts.true_positive + counts.false_positive
     union = counts.true_positive + counts.false_positive + counts.false_negative
+    area_ratio_empty = 1.0 if prediction_area == 0 else 0.0
     return {
         "true_positive_pixels": counts.true_positive,
         "false_positive_pixels": counts.false_positive,
@@ -89,16 +90,29 @@ def _metrics(counts: Counts) -> dict[str, float | int]:
         "reference_area_pixels": reference_area,
         "prediction_area_pixels": prediction_area,
         "iou": _ratio(counts.true_positive, union),
-        "dice": _ratio(2 * counts.true_positive, 2 * counts.true_positive + counts.false_positive + counts.false_negative),
-        "precision": _ratio(counts.true_positive, counts.true_positive + counts.false_positive),
-        "recall": _ratio(counts.true_positive, counts.true_positive + counts.false_negative),
-        "area_ratio": _ratio(prediction_area, reference_area, empty_value=math.nan),
+        "dice": _ratio(
+            2 * counts.true_positive,
+            2 * counts.true_positive + counts.false_positive + counts.false_negative,
+        ),
+        "precision": _ratio(
+            counts.true_positive,
+            counts.true_positive + counts.false_positive,
+        ),
+        "recall": _ratio(
+            counts.true_positive,
+            counts.true_positive + counts.false_negative,
+        ),
+        "area_ratio": _ratio(
+            prediction_area,
+            reference_area,
+            empty_value=area_ratio_empty,
+        ),
     }
 
 
 def _mean(values: list[float]) -> float:
     finite = [value for value in values if math.isfinite(value)]
-    return float(sum(finite) / len(finite)) if finite else math.nan
+    return float(sum(finite) / len(finite)) if finite else 0.0
 
 
 def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -143,7 +157,9 @@ def main() -> int:
     }
     try:
         ground_truth = _mask_files(args.ground_truth)
-        branch_files = {name: _mask_files(path) for name, path in branch_directories.items()}
+        branch_files = {
+            name: _mask_files(path) for name, path in branch_directories.items()
+        }
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
@@ -154,7 +170,9 @@ def main() -> int:
         missing = sorted(expected_keys - set(files))
         unexpected = sorted(set(files) - expected_keys)
         if missing:
-            completeness_errors.append(f"{name} missing {len(missing)} masks: {missing[:10]}")
+            completeness_errors.append(
+                f"{name} missing {len(missing)} masks: {missing[:10]}"
+            )
         if unexpected:
             completeness_errors.append(
                 f"{name} has {len(unexpected)} unexpected masks: {unexpected[:10]}"
@@ -165,7 +183,9 @@ def main() -> int:
         return 2
 
     per_image: list[dict[str, Any]] = []
-    by_branch: dict[str, list[dict[str, Any]]] = {name: [] for name in branch_files}
+    by_branch: dict[str, list[dict[str, Any]]] = {
+        name: [] for name in branch_files
+    }
     try:
         for key in sorted(expected_keys):
             reference = _read_mask(ground_truth[key])
@@ -180,7 +200,9 @@ def main() -> int:
         return 2
 
     aggregates = {branch: _aggregate(rows) for branch, rows in by_branch.items()}
-    majority_iou = float(aggregates["consensus_pixel_majority"]["macro"]["iou"])
+    majority_iou = float(
+        aggregates["consensus_pixel_majority"]["macro"]["iou"]
+    )
     sam3_iou = float(aggregates["sam3"]["macro"]["iou"])
     improvement = majority_iou - sam3_iou
     failures: list[str] = []
@@ -219,7 +241,9 @@ def main() -> int:
         encoding="utf-8",
     )
     with (args.output / "consensus-per-image.csv").open(
-        "w", newline="", encoding="utf-8"
+        "w",
+        newline="",
+        encoding="utf-8",
     ) as stream:
         writer = csv.DictWriter(stream, fieldnames=list(per_image[0]))
         writer.writeheader()
