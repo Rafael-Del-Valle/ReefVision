@@ -22,6 +22,16 @@ def _positive_int(value: object, *, default: int, name: str) -> int:
     return result
 
 
+def _gib_to_bytes(value: object, *, name: str) -> int:
+    try:
+        amount = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError(f"{name} must be a number") from exc
+    if amount < 0:
+        raise ValidationError(f"{name} cannot be negative")
+    return int(amount * _GIB)
+
+
 def training_scheduler_requirements(run: TrainingRun) -> dict[str, Any]:
     limits = dict(run.resource_limits_json or {})
     configured_devices = limits.get("allowed_devices")
@@ -32,15 +42,18 @@ def training_scheduler_requirements(run: TrainingRun) -> dict[str, Any]:
             requested_device = normalized[0]
 
     gpu_count = _positive_int(limits.get("gpu_count"), default=0, name="gpu_count")
+    normalized_device = requested_device.strip().casefold()
     if gpu_count == 0 and (
-        requested_device.strip().casefold().startswith("cuda")
-        or requested_device.strip().casefold() in {"gpu"}
+        normalized_device.startswith("cuda")
+        or normalized_device in {"gpu"}
+        or bool(normalized_device and normalized_device[0].isdigit())
     ):
         gpu_count = max(1, len([item for item in requested_device.split(",") if item.strip()]))
     minimum_vram_bytes_per_gpu = limits.get("minimum_vram_bytes_per_gpu")
     if minimum_vram_bytes_per_gpu is None and limits.get("minimum_vram_gb_per_gpu") is not None:
-        minimum_vram_bytes_per_gpu = int(
-            float(limits["minimum_vram_gb_per_gpu"]) * _GIB
+        minimum_vram_bytes_per_gpu = _gib_to_bytes(
+            limits["minimum_vram_gb_per_gpu"],
+            name="minimum_vram_gb_per_gpu",
         )
     minimum_vram_bytes_per_gpu = _positive_int(
         minimum_vram_bytes_per_gpu,
@@ -49,7 +62,10 @@ def training_scheduler_requirements(run: TrainingRun) -> dict[str, Any]:
     )
     minimum_ram_bytes = limits.get("minimum_ram_bytes")
     if minimum_ram_bytes is None and limits.get("minimum_ram_gb") is not None:
-        minimum_ram_bytes = int(float(limits["minimum_ram_gb"]) * _GIB)
+        minimum_ram_bytes = _gib_to_bytes(
+            limits["minimum_ram_gb"],
+            name="minimum_ram_gb",
+        )
     minimum_ram_bytes = _positive_int(
         minimum_ram_bytes,
         default=0,
