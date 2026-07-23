@@ -49,3 +49,35 @@ class WorkflowArtifactCleanupApplyResponse(BaseModel):
     cleared_reference_count: int = Field(ge=0)
     reclaimed_bytes: int = Field(ge=0)
     quarantine_paths: list[str]
+
+
+class WorkflowArtifactQuarantineItem(BaseModel):
+    artifact_id: str
+    node_id: str
+    port_name: str
+    original_managed_path: str
+    quarantine_path: str
+    file_sha256: str | None
+    size_bytes: int = Field(ge=0)
+    quarantined_at: str
+    restorable: bool
+    blockers: list[str] = Field(default_factory=list)
+
+
+class WorkflowArtifactQuarantineResponse(BaseModel):
+    workflow_run_id: str
+    item_count: int = Field(ge=0)
+    restorable_count: int = Field(ge=0)
+    total_bytes: int = Field(ge=0)
+    items: list[WorkflowArtifactQuarantineItem]
+
+
+class WorkflowArtifactRestoreRequest(BaseModel):
+    artifact_ids: list[str] = Field(min_length=1, max_length=10_000)
+
+
+class WorkflowArtifactRestoreResponse(BaseModel):
+    workflow_run_id: str
+    restored_artifact_count: int = Field(ge=0)
+    restored_bytes: int = Field(ge=0)
+    restored_paths: list[str]
