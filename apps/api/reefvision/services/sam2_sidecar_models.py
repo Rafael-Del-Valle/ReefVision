@@ -1,4 +1,4 @@
-"""Register localhost SAM 2 sidecars as managed Prompt Assist models."""
+"""Register and inspect localhost SAM 2 sidecars."""
 
 from __future__ import annotations
 
@@ -10,8 +10,13 @@ from sqlalchemy.orm import Session
 from reefvision.config import Settings
 from reefvision.db.models import ModelRegistration
 from reefvision.domain.errors import NotFoundError
+from reefvision.ml.sam2_sidecar import check_sam2_sidecar_health
 from reefvision.schemas.models import ModelRegistrationResponse
-from reefvision.schemas.sam2_sidecar import Sam2SidecarRegistrationRequest
+from reefvision.schemas.sam2_sidecar import (
+    Sam2SidecarHealthRequest,
+    Sam2SidecarHealthResponse,
+    Sam2SidecarRegistrationRequest,
+)
 from reefvision.services.models import ModelService
 
 
@@ -19,6 +24,18 @@ class Sam2SidecarModelService:
     def __init__(self, session: Session, settings: Settings) -> None:
         self.session = session
         self.settings = settings
+
+    def health(
+        self,
+        request: Sam2SidecarHealthRequest,
+    ) -> Sam2SidecarHealthResponse:
+        return Sam2SidecarHealthResponse.model_validate(
+            check_sam2_sidecar_health(
+                request.endpoint,
+                token_env=request.token_env,
+                timeout_seconds=request.timeout_seconds,
+            )
+        )
 
     def register(
         self,
