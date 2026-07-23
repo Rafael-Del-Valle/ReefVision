@@ -11,6 +11,9 @@ from reefvision.schemas.workflow_cleanup import (
     WorkflowArtifactCleanupApplyResponse,
     WorkflowArtifactCleanupPreviewRequest,
     WorkflowArtifactCleanupPreviewResponse,
+    WorkflowArtifactQuarantineResponse,
+    WorkflowArtifactRestoreRequest,
+    WorkflowArtifactRestoreResponse,
 )
 from reefvision.schemas.workflows import (
     WorkflowArtifactResponse,
@@ -173,3 +176,34 @@ def apply_workflow_artifact_cleanup(
         session,
         request.app.state.settings,
     ).apply(run_id, payload)
+
+
+@router.get(
+    "/workflow-runs/{run_id}/artifact-quarantine",
+    response_model=WorkflowArtifactQuarantineResponse,
+)
+def list_workflow_artifact_quarantine(
+    run_id: str,
+    request: Request,
+    session: DbSession,
+) -> WorkflowArtifactQuarantineResponse:
+    return WorkflowArtifactCleanupService(
+        session,
+        request.app.state.settings,
+    ).quarantine(run_id)
+
+
+@router.post(
+    "/workflow-runs/{run_id}/artifact-quarantine/restore",
+    response_model=WorkflowArtifactRestoreResponse,
+)
+def restore_workflow_artifact_quarantine(
+    run_id: str,
+    payload: WorkflowArtifactRestoreRequest,
+    request: Request,
+    session: DbSession,
+) -> WorkflowArtifactRestoreResponse:
+    return WorkflowArtifactCleanupService(
+        session,
+        request.app.state.settings,
+    ).restore(run_id, payload)
