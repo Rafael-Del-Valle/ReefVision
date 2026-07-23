@@ -36,6 +36,7 @@ from reefvision.jobs.video import process_video_extract_job
 from reefvision.jobs.video_exports import process_video_render_export_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.jobs.workflow_consensus import process_workflow_run_job
+from reefvision.jobs import workflow_sam2_refiners as _workflow_sam2_refiners  # noqa: F401
 from reefvision.repositories.jobs import JobRepository
 from reefvision.storage.images import create_thumbnail
 from reefvision.storage.projects import resolve_managed_project_path
@@ -181,7 +182,7 @@ def process_next_thumbnail_job(
             "Background job failed unexpectedly",
             extra={
                 "event_id": "background_job_unexpected_failure",
-                "component": "worker",
+                "component": "background_worker",
                 "job_id": job_id,
                 "job_type": job_type,
             },
