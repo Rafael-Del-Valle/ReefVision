@@ -115,6 +115,7 @@ def test_storage_settings_respect_environment_lock(
 ) -> None:
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local-app-data"))
     monkeypatch.setenv("REEFVISION_DATA_DIR", str(test_settings.resolved_data_dir))
+    monkeypatch.delenv("REEFVISION_ENV", raising=False)
 
     response = client.put(
         "/api/v1/system/storage-settings",
@@ -130,6 +131,33 @@ def test_storage_settings_respect_environment_lock(
     assert "REEFVISION_DATA_DIR" in response.json()["detail"]
 
 
+def test_desktop_launcher_data_dir_is_a_writable_fallback(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local-app-data"))
+    monkeypatch.setenv("REEFVISION_ENV", "desktop")
+    monkeypatch.setenv("REEFVISION_DATA_DIR", str(test_settings.resolved_data_dir))
+    requested_data = str((tmp_path / "external-desktop-data").resolve())
+
+    response = client.put(
+        "/api/v1/system/storage-settings",
+        json={
+            "data_dir": requested_data,
+            "model_cache_dir": str(test_settings.resolved_model_cache_dir),
+            "temp_dir": str(test_settings.resolved_temp_dir),
+            "acknowledge_restart": True,
+        },
+    )
+
+    assert response.status_code == 200
+    data_state = _paths(response.json())["data_dir"]
+    assert data_state["environment_locked"] is False
+    assert data_state["pending_path"] == requested_data
+
+
 def test_get_settings_loads_persisted_storage_roots(
     monkeypatch,
     tmp_path: Path,
@@ -141,6 +169,32 @@ def test_get_settings_loads_persisted_storage_roots(
         "data_dir": str((tmp_path / "persisted" / "data").resolve()),
         "model_cache_dir": str((tmp_path / "persisted" / "models").resolve()),
         "temp_dir": str((tmp_path / "persisted" / "temp").resolve()),
+    }
+    write_storage_overrides(requested)
+    clear_settings_cache()
+    try:
+        settings = get_settings()
+        assert settings.resolved_data_dir == Path(requested["data_dir"])
+        assert settings.resolved_model_cache_dir == Path(requested["model_cache_dir"])
+        assert settings.resolved_temp_dir == Path(requested["temp_dir"])
+    finally:
+        clear_settings_cache()
+
+
+def test_persisted_data_root_wins_over_packaged_desktop_fallback(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local-app-data"))
+    monkeypatch.setenv("REEFVISION_ENV", "desktop")
+    monkeypatch.setenv(
+        "REEFVISION_DATA_DIR",
+        str((tmp_path / "tauri-runtime-fallback").resolve()),
+    )
+    requested = {
+        "data_dir": str((tmp_path / "persisted-desktop-data").resolve()),
+        "model_cache_dir": str((tmp_path / "persisted-model-cache").resolve()),
+        "temp_dir": str((tmp_path / "persisted-temp").resolve()),
     }
     write_storage_overrides(requested)
     clear_settings_cache()
