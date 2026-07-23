@@ -54,15 +54,24 @@ def test_feature_freeze_blocks_new_production_modules_and_migrations() -> None:
     blocked = cast(Any, checker._blocked)
 
     production_reason = blocked(
-        change_type(status="A", path="apps/api/reefvision/services/new_feature.py"),
+        change_type(
+            status="A",
+            path="apps/api/reefvision/services/new_feature.py",
+        ),
         _policy(),
     )
     migration_reason = blocked(
-        change_type(status="A", path="apps/api/migrations/versions/0035_new_feature.py"),
+        change_type(
+            status="A",
+            path="apps/api/migrations/versions/0035_new_feature.py",
+        ),
         _policy(),
     )
 
-    assert production_reason == "new production module added during the feature freeze"
+    assert (
+        production_reason
+        == "new production module added during the feature freeze"
+    )
     assert migration_reason == "new database migration added during the feature freeze"
 
 
@@ -74,8 +83,14 @@ def test_feature_freeze_allows_fixes_tests_docs_scripts_and_ci() -> None:
 
     allowed = [
         change_type(status="M", path="apps/api/reefvision/services/existing.py"),
-        change_type(status="A", path="apps/api/reefvision/tests/test_regression.py"),
-        change_type(status="A", path="apps/web/src/features/a/Panel.test.tsx"),
+        change_type(
+            status="A",
+            path="apps/api/reefvision/tests/test_regression.py",
+        ),
+        change_type(
+            status="A",
+            path="apps/web/src/features/a/Panel.test.tsx",
+        ),
         change_type(status="A", path="docs/STABILIZATION.md"),
         change_type(status="A", path="scripts/check-release.py"),
         change_type(status="A", path=".github/workflows/stabilization.yml"),
@@ -99,4 +114,7 @@ def test_feature_freeze_blocks_production_renames_and_copies() -> None:
             ),
             _policy(),
         )
-        assert reason == "production module rename/copy added during the feature freeze"
+        assert (
+            reason
+            == "production module rename/copy added during the feature freeze"
+        )
