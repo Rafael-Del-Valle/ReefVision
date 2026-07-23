@@ -7,7 +7,14 @@ from typing import Any
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
-from reefvision.db.models import Job, ModelRegistration, WorkflowArtifact, WorkflowRun
+from reefvision.db.models import (
+    Job,
+    MaskAnnotation,
+    ModelRegistration,
+    PredictionProposal,
+    WorkflowArtifact,
+    WorkflowRun,
+)
 from reefvision.jobs import inference as inference_runtime
 from reefvision.jobs import workflow_runs as workflow_runtime
 from reefvision.ml import segmentation as segmentation_runtime
@@ -72,6 +79,47 @@ def _require_primary_provider(
             )
 
 
+def _synchronize_promoted_vote_counts(
+    factory: sessionmaker[Session],
+    result_payload: dict[str, Any],
+) -> None:
+    """Persist the same confidence-qualified vote count used for quorum."""
+
+    candidates = result_payload.get("candidates")
+    if not isinstance(candidates, list):
+        return
+    with factory() as session:
+        changed = False
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            annotation_id = candidate.get("mask_annotation_id")
+            proposal_id = candidate.get("proposal_id")
+            accepted_vote_count = candidate.get("accepted_vote_count")
+            if not isinstance(annotation_id, str) or not isinstance(accepted_vote_count, int):
+                continue
+            annotation = session.get(MaskAnnotation, annotation_id)
+            if annotation is not None:
+                annotation.provenance_json = {
+                    **dict(annotation.provenance_json or {}),
+                    "accepted_vote_count": accepted_vote_count,
+                }
+                changed = True
+            if isinstance(proposal_id, str):
+                proposal = session.get(PredictionProposal, proposal_id)
+                if proposal is not None:
+                    proposal_provenance = dict(proposal.provenance_json or {})
+                    consensus = dict(proposal_provenance.get("workflow_consensus") or {})
+                    consensus["accepted_vote_count"] = accepted_vote_count
+                    proposal.provenance_json = {
+                        **proposal_provenance,
+                        "workflow_consensus": consensus,
+                    }
+                    changed = True
+        if changed:
+            session.commit()
+
+
 def _consensus_aware_model_inference(
     settings: Settings,
     factory: sessionmaker[Session],
@@ -122,6 +170,7 @@ def _consensus_aware_model_inference(
         workflow_node_id=run.current_node_id or "segmenter",
     )
     result_payload = result.as_payload()
+    _synchronize_promoted_vote_counts(factory, result_payload)
     accepted_mask_ids = [
         str(candidate["mask_annotation_id"])
         for candidate in result_payload["candidates"]
