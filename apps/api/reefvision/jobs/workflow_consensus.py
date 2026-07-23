@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
-from reefvision.db.models import WorkflowArtifact, WorkflowRun
+from reefvision.db.models import Job, WorkflowArtifact, WorkflowRun
 from reefvision.jobs import workflow_runs as workflow_runtime
 from reefvision.services.multi_model_auto_labeling import (
     apply_multi_model_mask_consensus,
@@ -19,6 +19,38 @@ _ORIGINAL_MODEL_INFERENCE = getattr(
     workflow_runtime._model_inference,
 )
 workflow_runtime._reefvision_original_model_inference = _ORIGINAL_MODEL_INFERENCE
+_ORIGINAL_PROCESS_INFERENCE = getattr(
+    workflow_runtime,
+    "_reefvision_original_process_inference_job",
+    workflow_runtime.process_inference_job,
+)
+workflow_runtime._reefvision_original_process_inference_job = _ORIGINAL_PROCESS_INFERENCE
+
+
+def _workflow_inference_request_compatibility(
+    settings: Settings,
+    factory: sessionmaker[Session],
+    job_id: str,
+) -> bool:
+    """Normalize legacy Workflow inference keys before invoking the main worker."""
+
+    with factory() as session:
+        job = session.get(Job, job_id)
+        if job is not None and job.job_type == "inference" and job.status == "queued":
+            request = dict(job.request_json or {})
+            changed = False
+            if "confidence_threshold" not in request:
+                request["confidence_threshold"] = float(
+                    request.get("confidence", settings.inference_default_confidence)
+                )
+                changed = True
+            if "iou_threshold" not in request:
+                request["iou_threshold"] = settings.inference_default_iou
+                changed = True
+            if changed:
+                job.request_json = request
+                session.commit()
+    return _ORIGINAL_PROCESS_INFERENCE(settings, factory, job_id)
 
 
 def _consensus_aware_model_inference(
@@ -87,8 +119,10 @@ def _consensus_aware_model_inference(
 
 
 def install_consensus_workflow_runtime() -> None:
-    """Install one stable wrapper around the existing workflow segmenter handler."""
+    """Install stable wrappers around the existing Workflow inference handlers."""
 
+    if workflow_runtime.process_inference_job is not _workflow_inference_request_compatibility:
+        workflow_runtime.process_inference_job = _workflow_inference_request_compatibility
     if workflow_runtime._model_inference is not _consensus_aware_model_inference:
         workflow_runtime._model_inference = _consensus_aware_model_inference
 
