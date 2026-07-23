@@ -34,7 +34,7 @@ export interface Sam2SidecarModel {
   sha256: string;
 }
 
-async function request<T>(path: string, payload: Record<string, unknown>) {
+async function request<T>(path: string, payload: unknown): Promise<T> {
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
