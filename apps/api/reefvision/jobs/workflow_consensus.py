@@ -8,7 +8,10 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import Job, WorkflowArtifact, WorkflowRun
+from reefvision.jobs import inference as inference_runtime
 from reefvision.jobs import workflow_runs as workflow_runtime
+from reefvision.ml import segmentation as segmentation_runtime
+from reefvision.ml.sam3_sidecar import Sam3SidecarSegmentationProvider
 from reefvision.services.multi_model_auto_labeling import (
     apply_multi_model_mask_consensus,
 )
@@ -25,6 +28,22 @@ _ORIGINAL_PROCESS_INFERENCE = getattr(
     workflow_runtime.process_inference_job,
 )
 workflow_runtime._reefvision_original_process_inference_job = _ORIGINAL_PROCESS_INFERENCE
+_ORIGINAL_SEGMENTATION_PROVIDER_FACTORY = getattr(
+    segmentation_runtime,
+    "_reefvision_original_segmentation_provider_for_name",
+    segmentation_runtime.segmentation_provider_for_name,
+)
+segmentation_runtime._reefvision_original_segmentation_provider_for_name = (
+    _ORIGINAL_SEGMENTATION_PROVIDER_FACTORY
+)
+
+
+def _segmentation_provider_for_name(
+    provider_name: str,
+) -> segmentation_runtime.SegmentationProvider:
+    if provider_name.strip().casefold() == "sam3_sidecar":
+        return Sam3SidecarSegmentationProvider()
+    return _ORIGINAL_SEGMENTATION_PROVIDER_FACTORY(provider_name)
 
 
 def _workflow_inference_request_compatibility(
@@ -121,6 +140,8 @@ def _consensus_aware_model_inference(
 def install_consensus_workflow_runtime() -> None:
     """Install stable wrappers around the existing Workflow inference handlers."""
 
+    segmentation_runtime.segmentation_provider_for_name = _segmentation_provider_for_name
+    inference_runtime.segmentation_provider_for_name = _segmentation_provider_for_name
     if workflow_runtime.process_inference_job is not _workflow_inference_request_compatibility:
         workflow_runtime.process_inference_job = _workflow_inference_request_compatibility
     if workflow_runtime._model_inference is not _consensus_aware_model_inference:
