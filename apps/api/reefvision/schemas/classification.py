@@ -11,6 +11,7 @@ ClassificationMode = Literal["multiclass", "binary_state"]
 ClassificationReviewStatus = Literal["pending", "accepted", "rejected"]
 ClassificationTargetKind = Literal["annotation", "image", "mask", "fragment"]
 ClassificationCardinality = Literal["single", "multi"]
+ClassificationMaskBackground = Literal["keep", "black"]
 
 
 class ClassificationDatasetRequest(BaseModel):
@@ -54,9 +55,12 @@ class ClassificationTrainingRequest(ClassificationDatasetRequest):
 
 class ClassificationInferenceRequest(BaseModel):
     model_id: str = Field(min_length=1, max_length=36)
-    image_ids: list[str] = Field(min_length=1)
+    target_kind: ClassificationTargetKind = "annotation"
+    image_ids: list[str] = Field(default_factory=list, max_length=100000)
+    mask_annotation_ids: list[str] = Field(default_factory=list, max_length=100000)
     minimum_crop_size_px: int = Field(default=10, ge=1, le=4096)
     padding_fraction: float = Field(default=0.0, ge=0, le=1)
+    mask_background: ClassificationMaskBackground = "black"
     device: str = Field(default="auto", min_length=1, max_length=60)
     label_set: str = Field(
         default="default",
@@ -64,6 +68,28 @@ class ClassificationInferenceRequest(BaseModel):
         max_length=100,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$",
     )
+
+    @field_validator("image_ids", "mask_annotation_ids")
+    @classmethod
+    def unique_target_ids(cls, value: list[str]) -> list[str]:
+        cleaned = [item.strip() for item in value if item.strip()]
+        if len(cleaned) != len(set(cleaned)):
+            raise ValueError("Classification target IDs must be unique")
+        return cleaned
+
+    @model_validator(mode="after")
+    def require_targets(self) -> ClassificationInferenceRequest:
+        if self.target_kind in {"annotation", "image"} and not self.image_ids:
+            raise ValueError("Image or annotation classification requires image_ids")
+        if self.target_kind in {"mask", "fragment"} and not (
+            self.image_ids or self.mask_annotation_ids
+        ):
+            raise ValueError(
+                "Mask or fragment classification requires image_ids or mask_annotation_ids"
+            )
+        if self.target_kind in {"annotation", "image"} and self.mask_annotation_ids:
+            raise ValueError("mask_annotation_ids are only valid for mask or fragment targets")
+        return self
 
 
 class ClassificationPredictionResponse(BaseModel):
@@ -73,6 +99,10 @@ class ClassificationPredictionResponse(BaseModel):
     project_id: str
     image_id: str
     annotation_id: str | None
+    mask_annotation_id: str | None
+    target_kind: str
+    target_key: str
+    fragment_key: str | None
     model_id: str
     inference_job_id: str | None
     label_set: str
