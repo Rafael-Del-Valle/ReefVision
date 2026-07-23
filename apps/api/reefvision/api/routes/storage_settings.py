@@ -49,14 +49,14 @@ class StorageSettingsUpdateRequest(BaseModel):
     acknowledge_restart: bool = False
 
 
-_PATH_METADATA = {
+_PATH_METADATA: dict[str, tuple[str, str]] = {
     "data_dir": (
         "Application data root",
         "Database, projects, imported media, managed artifacts, exports, logs, and backups.",
     ),
     "model_cache_dir": (
         "Model and download cache",
-        "Hugging Face, Transformers, and Torch caches. An external SSD is recommended.",
+        "Downloadable model checkpoints, provider packs, Hugging Face, Transformers, and Torch caches.",
     ),
     "temp_dir": (
         "Temporary workspace",
@@ -95,15 +95,14 @@ def _probe_path(path: Path, *, create: bool) -> tuple[bool, bool, int | None]:
             return True, False, None
         if create:
             path.mkdir(parents=True, exist_ok=True)
-        exists = path.is_dir()
-        if not exists:
+        if not path.is_dir():
             return False, False, None
         probe = path / f".reefvision-write-test-{uuid4().hex}.tmp"
         probe.write_bytes(b"reefvision-storage-probe")
         probe.unlink()
         return True, True, shutil.disk_usage(path).free
     except OSError:
-        return path.exists(), False, None
+        return False, False, None
 
 
 def _environment_name(field_name: str) -> str:
@@ -116,8 +115,18 @@ def _response(settings: Settings) -> StorageSettingsResponse:
     states: list[StoragePathState] = []
     notes = [
         "Saved directory changes take effect after ReefVision restarts.",
-        "Changing the application data root does not copy existing projects automatically. Move or restore the existing data before switching roots.",
-        "Exports remain inside the application data root so project files and their generated outputs stay together.",
+        (
+            "Changing the application data root does not copy existing projects "
+            "automatically. Move or restore the existing data before switching roots."
+        ),
+        (
+            "Exports stay inside the application data root so project records and their "
+            "generated outputs remain portable together."
+        ),
+        (
+            "Changing the model cache may require downloadable model checkpoints and "
+            "provider packs to be installed again."
+        ),
     ]
     for field_name in STORAGE_SETTING_FIELDS:
         environment_name = _environment_name(field_name)
@@ -175,8 +184,9 @@ def update_storage_settings(
         "model_cache_dir": payload.model_cache_dir,
         "temp_dir": payload.temp_dir,
     }
-    normalized: dict[str, Path] = {}
     active = _active_paths(settings)
+    normalized: dict[str, Path] = {}
+
     for field_name, value in requested_values.items():
         environment_name = _environment_name(field_name)
         candidate = _normalize_path(value, field_name=field_name)
@@ -188,15 +198,12 @@ def update_storage_settings(
                     f"{environment_name}. Remove that environment override before changing it here."
                 ),
             )
-        exists, writable, _ = _probe_path(candidate, create=True)
-        if not exists or not writable:
-            raise HTTPException(
-                status_code=400,
-                detail=f"ReefVision cannot create or write to {candidate}.",
-            )
         normalized[field_name] = candidate
 
-    changed = any(normalized[key] != active[key] for key in STORAGE_SETTING_FIELDS)
+    changed = any(
+        normalized[field_name] != active[field_name]
+        for field_name in STORAGE_SETTING_FIELDS
+    )
     if changed and not payload.acknowledge_restart:
         raise HTTPException(
             status_code=400,
@@ -206,5 +213,15 @@ def update_storage_settings(
             ),
         )
 
-    write_storage_overrides({key: str(value) for key, value in normalized.items()})
+    for field_name, candidate in normalized.items():
+        exists, writable, _ = _probe_path(candidate, create=True)
+        if not exists or not writable:
+            raise HTTPException(
+                status_code=400,
+                detail=f"ReefVision cannot create or write to {candidate}.",
+            )
+
+    write_storage_overrides(
+        {field_name: str(path) for field_name, path in normalized.items()}
+    )
     return _response(settings)
