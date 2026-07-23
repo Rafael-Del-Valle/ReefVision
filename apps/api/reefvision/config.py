@@ -6,7 +6,7 @@ import json
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -29,7 +29,12 @@ def storage_settings_path() -> Path:
         return Path(configured).expanduser().resolve()
     local_app_data = os.environ.get("LOCALAPPDATA")
     if local_app_data:
-        return Path(local_app_data).expanduser().resolve() / "ReefVision" / "config" / "storage.json"
+        return (
+            Path(local_app_data).expanduser().resolve()
+            / "ReefVision"
+            / "config"
+            / "storage.json"
+        )
     return Path.home() / ".config" / "reefvision" / "storage.json"
 
 
@@ -74,13 +79,16 @@ def write_storage_overrides(
         },
     }
     temporary_path = settings_path.with_suffix(settings_path.suffix + ".tmp")
-    temporary_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    temporary_path.write_text(
+        json.dumps(payload, indent=2) + "\n",
+        encoding="utf-8",
+    )
     os.replace(temporary_path, settings_path)
     return settings_path
 
 
 class Settings(BaseSettings):
-    """Runtime settings populated from environment variables and user storage preferences."""
+    """Runtime settings populated from environment variables and user preferences."""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -166,7 +174,8 @@ def get_settings() -> Settings:
         environment_name = f"REEFVISION_{field_name.upper()}"
         if environment_name in os.environ:
             overrides.pop(field_name, None)
-    return Settings(**overrides)
+    settings_factory = cast(Any, Settings)
+    return cast(Settings, settings_factory(**overrides))
 
 
 def clear_settings_cache() -> None:
