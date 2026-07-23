@@ -160,6 +160,11 @@ class WorkflowRunCreateRequest(BaseModel):
     use_cache: bool = True
 
 
+class WorkflowRunRetryRequest(BaseModel):
+    from_node_id: str | None = Field(default=None, min_length=1, max_length=100)
+    use_cache: bool | None = None
+
+
 class WorkflowArtifactResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
