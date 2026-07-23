@@ -33,12 +33,8 @@ export function ProjectIntegrityDashboard({ project }: { project: Project }) {
   const repairPlan = useMutation({
     mutationFn: () =>
       previewProjectRepairs(project.id, minimumOrphanAgeMinutes * 60),
-    onSuccess: (plan) => {
-      setSelectedRepairIds(
-        plan.actions
-          .filter((action) => action.safe_automatic)
-          .map((action) => action.action_id),
-      );
+    onSuccess: () => {
+      setSelectedRepairIds([]);
     },
   });
   const applyRepairs = useMutation({
