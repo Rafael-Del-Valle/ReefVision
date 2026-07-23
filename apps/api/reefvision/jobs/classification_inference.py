@@ -132,7 +132,7 @@ def _masked_crop(
     *,
     background: str,
 ) -> Image.Image:
-    left, top, right, bottom = bounds
+    left, top, _right, _bottom = bounds
     crop = source_rgb.crop(bounds)
     if background == "keep":
         return crop
@@ -460,15 +460,13 @@ def process_classification_inference_job(
                     removed_count += removed
 
                     for target in targets:
-                        target_token = (
-                            target.annotation_id
-                            or target.mask_annotation_id
-                            or target.fragment_key
-                            or image.id
-                        )
+                        target_token = target.annotation_id or target.mask_annotation_id or image.id
                         crop_path = temporary_root / f"{target.target_kind}-{target_token}.jpg"
-                        target.crop.save(crop_path, format="JPEG", quality=95)
-                        result = provider.predict(crop_path, device=device)
+                        try:
+                            target.crop.save(crop_path, format="JPEG", quality=95)
+                            result = provider.predict(crop_path, device=device)
+                        finally:
+                            target.crop.close()
                         if (
                             registered_probability_labels
                             and tuple(result.probabilities) != registered_probability_labels
