@@ -49,6 +49,11 @@ def training_scheduler_requirements(run: TrainingRun) -> dict[str, Any]:
         or bool(normalized_device and normalized_device[0].isdigit())
     ):
         gpu_count = max(1, len([item for item in requested_device.split(",") if item.strip()]))
+    gpu_preferred = (
+        normalized_device == "auto"
+        and gpu_count == 0
+        and bool(limits.get("prefer_gpu", True))
+    )
     minimum_vram_bytes_per_gpu = limits.get("minimum_vram_bytes_per_gpu")
     if minimum_vram_bytes_per_gpu is None and limits.get("minimum_vram_gb_per_gpu") is not None:
         minimum_vram_bytes_per_gpu = _gib_to_bytes(
@@ -79,11 +84,14 @@ def training_scheduler_requirements(run: TrainingRun) -> dict[str, Any]:
     return {
         "device": requested_device,
         "gpu_required": gpu_count > 0,
+        "gpu_preferred": gpu_preferred,
         "gpu_count": gpu_count,
         "minimum_vram_bytes_per_gpu": minimum_vram_bytes_per_gpu,
         "minimum_ram_bytes": minimum_ram_bytes,
         "cpu_threads": max(1, cpu_threads),
-        "exclusive_gpu": bool(limits.get("exclusive_gpu", gpu_count > 0)),
+        "exclusive_gpu": bool(
+            limits.get("exclusive_gpu", gpu_count > 0 or gpu_preferred)
+        ),
         "disk_intensive": bool(limits.get("disk_intensive", True)),
     }
 
