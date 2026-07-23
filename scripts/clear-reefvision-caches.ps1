@@ -88,12 +88,34 @@ foreach ($RelativePath in @(
     Add-Candidate -Candidates $Candidates -Path (Join-Path $Root $RelativePath)
 }
 
-Get-ChildItem -LiteralPath $Root -Directory -Recurse -Force -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -eq "__pycache__" } |
-    ForEach-Object { Add-Candidate -Candidates $Candidates -Path $_.FullName }
-Get-ChildItem -LiteralPath $Root -File -Recurse -Force -ErrorAction SilentlyContinue |
-    Where-Object { $_.Extension -in @(".pyc", ".pyo") } |
-    ForEach-Object { Add-Candidate -Candidates $Candidates -Path $_.FullName }
+# Restrict bytecode discovery to source trees. Traversing .venv, node_modules,
+# downloaded model packs, or Rust targets can take longer than rebuilding them.
+foreach ($RelativeSourceRoot in @("apps\api", "scripts")) {
+    $SourceRoot = Join-Path $Root $RelativeSourceRoot
+    if (-not (Test-Path -LiteralPath $SourceRoot -PathType Container)) {
+        continue
+    }
+    Get-ChildItem `
+        -LiteralPath $SourceRoot `
+        -Directory `
+        -Recurse `
+        -Force `
+        -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -eq "__pycache__" } |
+        ForEach-Object {
+            Add-Candidate -Candidates $Candidates -Path $_.FullName
+        }
+    Get-ChildItem `
+        -LiteralPath $SourceRoot `
+        -File `
+        -Recurse `
+        -Force `
+        -ErrorAction SilentlyContinue |
+        Where-Object { $_.Extension -in @(".pyc", ".pyo") } |
+        ForEach-Object {
+            Add-Candidate -Candidates $Candidates -Path $_.FullName
+        }
+}
 
 if ($IncludeValidationArtifacts) {
     Add-Candidate -Candidates $Candidates -Path (Join-Path $Root ".artifacts")
@@ -116,7 +138,8 @@ if ($IncludeUserModelCaches) {
     $ModelCacheRoot = $null
     if (Test-Path -LiteralPath $SettingsPath -PathType Leaf) {
         try {
-            $StorageSettings = Get-Content -LiteralPath $SettingsPath -Raw | ConvertFrom-Json
+            $StorageSettings = Get-Content -LiteralPath $SettingsPath -Raw |
+                ConvertFrom-Json
             if ($StorageSettings.paths.model_cache_dir) {
                 $ModelCacheRoot = [string]$StorageSettings.paths.model_cache_dir
             }
@@ -128,8 +151,15 @@ if ($IncludeUserModelCaches) {
     if (-not $ModelCacheRoot) {
         $ModelCacheRoot = Join-Path $Root ".reefvision\model-cache"
     }
-    Add-Candidate -Candidates $Candidates -Path (Join-Path $ModelCacheRoot "huggingface")
-    Add-Candidate -Candidates $Candidates -Path (Join-Path $ModelCacheRoot "torch")
+    Add-Candidate `
+        -Candidates $Candidates `
+        -Path (Join-Path $ModelCacheRoot "huggingface")
+    Add-Candidate `
+        -Candidates $Candidates `
+        -Path (Join-Path $ModelCacheRoot "torch")
+    Add-Candidate `
+        -Candidates $Candidates `
+        -Path (Join-Path $ModelCacheRoot "models\temporary-downloads")
 }
 
 $UniqueCandidates = @(
@@ -143,7 +173,9 @@ foreach ($Path in $UniqueCandidates) {
     }
     $Bytes = Get-ReefVisionPathBytes -Path $Path
     $BytesRemoved += $Bytes
-    Write-Host "Removing $(Format-ReefVisionBytes -Bytes $Bytes): $Path" -ForegroundColor Yellow
+    Write-Host (
+        "Removing $(Format-ReefVisionBytes -Bytes $Bytes): $Path"
+    ) -ForegroundColor Yellow
     Remove-Item -LiteralPath $Path -Recurse -Force
 }
 
@@ -157,10 +189,17 @@ Write-Host (
     "Current free space: $(Format-ReefVisionBytes -Bytes $FreeBytes)."
 ) -ForegroundColor Green
 
-Write-Host "Project databases, managed project files, and backups were preserved." -ForegroundColor DarkGray
+Write-Host (
+    "Project databases, managed project files, trained models, imported models, " +
+    "exports, and backups were preserved."
+) -ForegroundColor DarkGray
 if (-not $IncludeCompletedTransformerSnapshots) {
-    Write-Host "Completed packaged Transformer snapshots were preserved." -ForegroundColor DarkGray
+    Write-Host (
+        "Completed packaged Transformer snapshots were preserved."
+    ) -ForegroundColor DarkGray
 }
 if (-not $IncludeUserModelCaches) {
-    Write-Host "User model caches were preserved. Use -IncludeUserModelCaches to remove them." -ForegroundColor DarkGray
+    Write-Host (
+        "User model caches were preserved. Use -IncludeUserModelCaches to remove them."
+    ) -ForegroundColor DarkGray
 }
