@@ -36,18 +36,24 @@ def _as_numpy(value: Any) -> np.ndarray:
     return np.asarray(array)
 
 
-def _mask_png_base64(mask: np.ndarray, *, width: int, height: int) -> str:
+def _mask_png_base64(
+    mask: np.ndarray,
+    *,
+    width: int,
+    height: int,
+) -> tuple[str, tuple[int, int, int, int]]:
     binary = np.squeeze(mask) > 0.5
     if binary.ndim != 2:
         raise ValueError("SAM 3 returned a mask with an unsupported shape")
     image = Image.fromarray(binary.astype(np.uint8) * 255, mode="L")
     if image.size != (width, height):
         image = image.resize((width, height), resample=Image.Resampling.NEAREST)
-    if image.getbbox() is None:
+    bounds = image.getbbox()
+    if bounds is None:
         raise ValueError("SAM 3 returned an empty mask")
     stream = BytesIO()
     image.save(stream, format="PNG", optimize=True)
-    return base64.b64encode(stream.getvalue()).decode("ascii")
+    return base64.b64encode(stream.getvalue()).decode("ascii"), bounds
 
 
 class Sam3Runtime:
@@ -68,7 +74,6 @@ class Sam3Runtime:
             state = self.processor.set_image(image)
             output = self.processor.set_text_prompt(state=state, prompt=prompt)
         masks = _as_numpy(output["masks"])
-        boxes = _as_numpy(output["boxes"])
         scores = _as_numpy(output["scores"]).reshape(-1)
         if masks.ndim == 2:
             masks = masks[None, ...]
@@ -76,29 +81,25 @@ class Sam3Runtime:
             masks = masks[:, 0, ...]
         if masks.ndim != 3:
             raise ValueError("SAM 3 returned masks with an unsupported shape")
-        if boxes.ndim == 1:
-            boxes = boxes[None, ...]
         instances: list[dict[str, Any]] = []
-        limit = min(len(masks), len(boxes), len(scores))
+        limit = min(len(masks), len(scores))
         for index in range(limit):
             score = float(scores[index])
             if not np.isfinite(score) or score < score_threshold:
                 continue
-            raw_box = np.asarray(boxes[index]).reshape(-1)
-            if len(raw_box) < 4 or not bool(np.isfinite(raw_box[:4]).all()):
-                continue
             try:
-                mask_payload = _mask_png_base64(
+                mask_payload, bounds = _mask_png_base64(
                     masks[index],
                     width=width,
                     height=height,
                 )
             except ValueError:
                 continue
+            left, top, right, bottom = bounds
             instances.append(
                 {
                     "score": score,
-                    "box": [float(value) for value in raw_box[:4]],
+                    "box": [float(left), float(top), float(right), float(bottom)],
                     "mask_png_base64": mask_payload,
                 }
             )
