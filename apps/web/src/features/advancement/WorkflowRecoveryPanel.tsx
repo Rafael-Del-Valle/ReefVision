@@ -5,10 +5,13 @@ import { Sam3WorkflowSetupPanel } from "./Sam3WorkflowSetupPanel";
 import {
   applyWorkflowArtifactCleanup,
   listPersistedWorkflows,
+  listWorkflowArtifactQuarantine,
   listWorkflowRuns,
   previewWorkflowArtifactCleanup,
+  restoreWorkflowArtifacts,
   retryWorkflowRun,
   type WorkflowArtifactCleanupPreview,
+  type WorkflowArtifactQuarantine,
   type WorkflowRunRecord,
 } from "./workflowPersistenceApi";
 
@@ -46,6 +49,11 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
   const [selectedCleanupActionsByRun, setSelectedCleanupActionsByRun] = useState<
     Record<string, string[]>
   >({});
+  const [quarantineByRun, setQuarantineByRun] = useState<
+    Record<string, WorkflowArtifactQuarantine>
+  >({});
+  const [selectedRestoreArtifactsByRun, setSelectedRestoreArtifactsByRun] =
+    useState<Record<string, string[]>>({});
   const [message, setMessage] = useState<string | null>(null);
 
   const workflows = useQuery({
@@ -125,10 +133,54 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
         ...current,
         [result.workflow_run_id]: [],
       }));
+      setQuarantineByRun((current) => {
+        const next = { ...current };
+        delete next[result.workflow_run_id];
+        return next;
+      });
       setMessage(
         `Cleanup quarantined ${result.quarantined_file_count} files, cleared ${result.cleared_reference_count} missing references, and reclaimed ${formatBytes(
           result.reclaimed_bytes,
         )}.`,
+      );
+    },
+  });
+  const inspectQuarantine = useMutation({
+    mutationFn: (run: WorkflowRunRecord) =>
+      listWorkflowArtifactQuarantine(run.id),
+    onSuccess: (quarantine) => {
+      setQuarantineByRun((current) => ({
+        ...current,
+        [quarantine.workflow_run_id]: quarantine,
+      }));
+      setSelectedRestoreArtifactsByRun((current) => ({
+        ...current,
+        [quarantine.workflow_run_id]: [],
+      }));
+      setMessage(
+        `Quarantine contains ${quarantine.item_count} files totaling ${formatBytes(
+          quarantine.total_bytes,
+        )}; ${quarantine.restorable_count} can currently be restored. Nothing is selected automatically.`,
+      );
+    },
+  });
+  const restoreArtifacts = useMutation({
+    mutationFn: ({ runId, artifactIds }: { runId: string; artifactIds: string[] }) =>
+      restoreWorkflowArtifacts(runId, artifactIds),
+    onSuccess: (result) => {
+      setQuarantineByRun((current) => {
+        const next = { ...current };
+        delete next[result.workflow_run_id];
+        return next;
+      });
+      setSelectedRestoreArtifactsByRun((current) => ({
+        ...current,
+        [result.workflow_run_id]: [],
+      }));
+      setMessage(
+        `Restored ${result.restored_artifact_count} workflow artifacts (${formatBytes(
+          result.restored_bytes,
+        )}) to their original managed paths.`,
       );
     },
   });
@@ -145,12 +197,26 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
     });
   }
 
+  function toggleRestoreArtifact(runId: string, artifactId: string) {
+    setSelectedRestoreArtifactsByRun((current) => {
+      const selected = current[runId] ?? [];
+      return {
+        ...current,
+        [runId]: selected.includes(artifactId)
+          ? selected.filter((item) => item !== artifactId)
+          : [...selected, artifactId],
+      };
+    });
+  }
+
   const actionError =
     workflows.error ??
     runs.error ??
     retry.error ??
     previewCleanup.error ??
-    applyCleanup.error;
+    applyCleanup.error ??
+    inspectQuarantine.error ??
+    restoreArtifacts.error;
 
   return (
     <>
@@ -163,7 +229,7 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
             <span>
               Create a new run that reuses immutable successful upstream
               artifacts, or preview terminal-run files before moving selected
-              outputs into project quarantine.
+              outputs into reversible project quarantine.
             </span>
           </div>
           <span>{runs.data?.length ?? 0} recorded runs</span>
@@ -182,6 +248,8 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
                 setMessage(null);
                 setCleanupPreviewByRun({});
                 setSelectedCleanupActionsByRun({});
+                setQuarantineByRun({});
+                setSelectedRestoreArtifactsByRun({});
               }}
             >
               <option value="">Choose a workflow</option>
@@ -218,6 +286,9 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
             const cleanupPreview = cleanupPreviewByRun[run.id];
             const selectedCleanupActions =
               selectedCleanupActionsByRun[run.id] ?? [];
+            const quarantine = quarantineByRun[run.id];
+            const selectedRestoreArtifacts =
+              selectedRestoreArtifactsByRun[run.id] ?? [];
             return (
               <article key={run.id} className="dashboard-card">
                 <div className="section-heading">
@@ -325,8 +396,9 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
                 {cleanupPreview && (
                   <div className="dashboard-list" data-testid={`cleanup-${run.id}`}>
                     <p>
-                      {cleanupPreview.action_count} actions · {cleanupPreview.eligible_action_count}{" "}
-                      eligible · {formatBytes(cleanupPreview.reclaimable_bytes)} reclaimable
+                      {cleanupPreview.action_count} actions ·{" "}
+                      {cleanupPreview.eligible_action_count} eligible ·{" "}
+                      {formatBytes(cleanupPreview.reclaimable_bytes)} reclaimable
                     </p>
                     {cleanupPreview.actions.map((action) => (
                       <label
@@ -350,7 +422,8 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
                               : "Clear missing reference"}
                           </strong>
                           <small>
-                            {action.node_id}.{action.port_name} · {action.managed_path}
+                            {action.node_id}.{action.port_name} ·{" "}
+                            {action.managed_path}
                           </small>
                           {action.blockers.map((blocker) => (
                             <small key={blocker} className="form-error">
@@ -378,6 +451,88 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
                       {applyCleanup.isPending
                         ? "Applying selected cleanup..."
                         : `Apply ${selectedCleanupActions.length} selected actions`}
+                    </button>
+                  </div>
+                )}
+
+                <hr />
+                <div className="section-heading">
+                  <div>
+                    <p className="eyebrow">Artifact restoration</p>
+                    <h5>Inspect and restore quarantined outputs</h5>
+                    <span>
+                      ReefVision rechecks the original destination and SHA-256
+                      before restoring. Nothing is selected automatically.
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={!isTerminal(run) || inspectQuarantine.isPending}
+                  onClick={() => inspectQuarantine.mutate(run)}
+                >
+                  {inspectQuarantine.isPending
+                    ? "Inspecting quarantine..."
+                    : "Inspect artifact quarantine"}
+                </button>
+
+                {quarantine && (
+                  <div
+                    className="dashboard-list"
+                    data-testid={`quarantine-${run.id}`}
+                  >
+                    <p>
+                      {quarantine.item_count} quarantined ·{" "}
+                      {quarantine.restorable_count} restorable ·{" "}
+                      {formatBytes(quarantine.total_bytes)} total
+                    </p>
+                    {quarantine.items.map((item) => (
+                      <label
+                        key={item.artifact_id}
+                        className="annotation-selection-row"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedRestoreArtifacts.includes(
+                            item.artifact_id,
+                          )}
+                          disabled={!item.restorable}
+                          onChange={() =>
+                            toggleRestoreArtifact(run.id, item.artifact_id)
+                          }
+                        />
+                        <span>
+                          <strong>Restore quarantined file</strong>
+                          <small>
+                            {item.node_id}.{item.port_name} ·{" "}
+                            {item.original_managed_path}
+                          </small>
+                          {item.blockers.map((blocker) => (
+                            <small key={blocker} className="form-error">
+                              {blocker}
+                            </small>
+                          ))}
+                        </span>
+                        <small>{formatBytes(item.size_bytes)}</small>
+                      </label>
+                    ))}
+                    <button
+                      type="button"
+                      disabled={
+                        selectedRestoreArtifacts.length === 0 ||
+                        restoreArtifacts.isPending
+                      }
+                      onClick={() =>
+                        restoreArtifacts.mutate({
+                          runId: run.id,
+                          artifactIds: selectedRestoreArtifacts,
+                        })
+                      }
+                    >
+                      {restoreArtifacts.isPending
+                        ? "Restoring selected artifacts..."
+                        : `Restore ${selectedRestoreArtifacts.length} selected artifacts`}
                     </button>
                   </div>
                 )}
