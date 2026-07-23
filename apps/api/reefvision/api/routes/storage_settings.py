@@ -52,15 +52,24 @@ class StorageSettingsUpdateRequest(BaseModel):
 _PATH_METADATA: dict[str, tuple[str, str]] = {
     "data_dir": (
         "Application data root",
-        "Database, projects, imported media, managed artifacts, exports, logs, and backups.",
+        (
+            "Database, projects, imported media, managed artifacts, exports, "
+            "logs, and backups."
+        ),
     ),
     "model_cache_dir": (
         "Model and download cache",
-        "Downloadable model checkpoints, provider packs, Hugging Face, Transformers, and Torch caches.",
+        (
+            "Downloadable model checkpoints, provider packs, Hugging Face, "
+            "Transformers, and Torch caches."
+        ),
     ),
     "temp_dir": (
         "Temporary workspace",
-        "Temporary files created during imports, exports, model work, and other processing.",
+        (
+            "Temporary files created during imports, exports, model work, and "
+            "other processing."
+        ),
     ),
 }
 
@@ -157,7 +166,8 @@ def _response(settings: Settings) -> StorageSettingsResponse:
         )
         if environment_locked:
             notes.append(
-                f"{label} is controlled by {environment_name}; the in-app field is read-only."
+                f"{label} is controlled by {environment_name}; "
+                "the in-app field is read-only."
             )
     return StorageSettingsResponse(
         settings_file=str(storage_settings_path()),
@@ -195,7 +205,8 @@ def update_storage_settings(
                 status_code=400,
                 detail=(
                     f"{_PATH_METADATA[field_name][0]} is controlled by "
-                    f"{environment_name}. Remove that environment override before changing it here."
+                    f"{environment_name}. Remove that environment override "
+                    "before changing it here."
                 ),
             )
         normalized[field_name] = candidate
@@ -208,12 +219,12 @@ def update_storage_settings(
         raise HTTPException(
             status_code=400,
             detail=(
-                "Confirm that ReefVision must restart before directory changes take effect. "
-                "Existing project data is not moved automatically."
+                "Confirm that ReefVision must restart before directory changes "
+                "take effect. Existing project data is not moved automatically."
             ),
         )
 
-    for field_name, candidate in normalized.items():
+    for candidate in normalized.values():
         exists, writable, _ = _probe_path(candidate, create=True)
         if not exists or not writable:
             raise HTTPException(
