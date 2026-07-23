@@ -64,12 +64,13 @@ $SignatureEvidence = @{
     signer_thumbprint = if ($Signature.SignerCertificate) { $Signature.SignerCertificate.Thumbprint } else { $null }
     timestamp_subject = if ($Signature.TimeStamperCertificate) { $Signature.TimeStamperCertificate.Subject } else { $null }
 }
-Add-Check \
-    "Authenticode signature" \
-    ($Signature.Status -eq "Valid") \
-    $(if ($Signature.Status -eq "Valid") { "Installer signature is valid." } else { "Signature is not required for this development build." }) \
-    $SignatureEvidence \
-    ([bool]$RequireSignature)
+$SignatureMessage = if ($Signature.Status -eq "Valid") {
+    "Installer signature is valid."
+}
+else {
+    "Signature is not required for this development build."
+}
+Add-Check "Authenticode signature" ($Signature.Status -eq "Valid") $SignatureMessage $SignatureEvidence ([bool]$RequireSignature)
 if ($ExpectedPublisher) {
     $ActualPublisher = if ($Signature.SignerCertificate) { $Signature.SignerCertificate.Subject } else { "" }
     Add-Check "Expected publisher" ($ActualPublisher -like "*$ExpectedPublisher*") "Signer must contain '$ExpectedPublisher'." @{
@@ -115,12 +116,13 @@ Add-Check "API sidecar payload" ($Sidecars.Count -gt 0) "The packaged ReefVision
     sidecars = @($Sidecars | ForEach-Object FullName)
 }
 $WebviewFiles = @($ExtractedFiles | Where-Object Name -match "WebView2|msedgewebview")
-Add-Check \
-    "WebView2 payload observation" \
-    $true \
-    $(if ($WebviewFiles.Count) { "WebView2-related payload files were found." } else { "No bundled WebView2 runtime was found; system runtime may be required." }) \
-    @{ file_count = $WebviewFiles.Count } \
-    $false
+$WebviewMessage = if ($WebviewFiles.Count) {
+    "WebView2-related payload files were found."
+}
+else {
+    "No bundled WebView2 runtime was found; system runtime may be required."
+}
+Add-Check "WebView2 payload observation" $true $WebviewMessage @{ file_count = $WebviewFiles.Count } $false
 
 $MachineInstallEvidence = $null
 if ($PerformMachineInstall) {
