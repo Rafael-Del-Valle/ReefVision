@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import os
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -14,10 +17,70 @@ DESKTOP_WEB_ORIGINS = (
     "https://tauri.localhost",
 )
 LOCAL_WEB_ORIGIN_REGEX = r"^https?://(?:localhost|127\.0\.0\.1)(?::\d+)?$"
+STORAGE_SETTINGS_SCHEMA = "reefvision-storage-settings-v1"
+STORAGE_SETTING_FIELDS = ("data_dir", "model_cache_dir", "temp_dir")
+
+
+def storage_settings_path() -> Path:
+    """Return the stable per-user storage-settings file path."""
+
+    configured = os.environ.get("REEFVISION_STORAGE_SETTINGS_FILE")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        return Path(local_app_data).expanduser().resolve() / "ReefVision" / "config" / "storage.json"
+    return Path.home() / ".config" / "reefvision" / "storage.json"
+
+
+def load_storage_overrides(path: Path | None = None) -> dict[str, str]:
+    """Load persisted path overrides without allowing arbitrary settings injection."""
+
+    settings_path = path or storage_settings_path()
+    if not settings_path.is_file():
+        return {}
+    try:
+        payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict) or payload.get("schema") != STORAGE_SETTINGS_SCHEMA:
+        return {}
+    raw_paths = payload.get("paths")
+    if not isinstance(raw_paths, dict):
+        return {}
+    overrides: dict[str, str] = {}
+    for field_name in STORAGE_SETTING_FIELDS:
+        value = raw_paths.get(field_name)
+        if isinstance(value, str) and value.strip():
+            overrides[field_name] = value.strip()
+    return overrides
+
+
+def write_storage_overrides(
+    paths: dict[str, str],
+    *,
+    destination: Path | None = None,
+) -> Path:
+    """Persist validated storage paths atomically."""
+
+    settings_path = destination or storage_settings_path()
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, Any] = {
+        "schema": STORAGE_SETTINGS_SCHEMA,
+        "paths": {
+            field_name: paths[field_name]
+            for field_name in STORAGE_SETTING_FIELDS
+            if field_name in paths and paths[field_name]
+        },
+    }
+    temporary_path = settings_path.with_suffix(settings_path.suffix + ".tmp")
+    temporary_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary_path, settings_path)
+    return settings_path
 
 
 class Settings(BaseSettings):
-    """Runtime settings populated from environment variables."""
+    """Runtime settings populated from environment variables and user storage preferences."""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -31,6 +94,8 @@ class Settings(BaseSettings):
     api_port: int = Field(default=8000, ge=0, le=65535)
     web_origin: str = "http://localhost:5173"
     data_dir: Path = Path(".reefvision")
+    model_cache_dir: Path | None = None
+    temp_dir: Path | None = None
     database_url: str | None = None
     safe_mode: bool = False
     background_worker_enabled: bool = True
@@ -52,14 +117,26 @@ class Settings(BaseSettings):
     log_max_bytes: int = Field(default=1_048_576, ge=65_536)
     log_backup_count: int = Field(default=5, ge=1, le=50)
 
-    @field_validator("data_dir", mode="before")
+    @field_validator("data_dir", "model_cache_dir", "temp_dir", mode="before")
     @classmethod
-    def expand_data_dir(cls, value: object) -> Path:
+    def expand_storage_path(cls, value: object) -> Path | None:
+        if value is None or str(value).strip() == "":
+            return None
         return Path(str(value)).expanduser()
 
     @property
     def resolved_data_dir(self) -> Path:
         return self.data_dir.resolve()
+
+    @property
+    def resolved_model_cache_dir(self) -> Path:
+        configured = self.model_cache_dir or (self.resolved_data_dir / "model-cache")
+        return configured.resolve()
+
+    @property
+    def resolved_temp_dir(self) -> Path:
+        configured = self.temp_dir or (self.resolved_data_dir / "tmp")
+        return configured.resolve()
 
     @property
     def resolved_database_url(self) -> str:
@@ -78,11 +155,18 @@ class Settings(BaseSettings):
 
     def ensure_directories(self) -> None:
         self.resolved_data_dir.mkdir(parents=True, exist_ok=True)
+        self.resolved_model_cache_dir.mkdir(parents=True, exist_ok=True)
+        self.resolved_temp_dir.mkdir(parents=True, exist_ok=True)
 
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    overrides = load_storage_overrides()
+    for field_name in STORAGE_SETTING_FIELDS:
+        environment_name = f"REEFVISION_{field_name.upper()}"
+        if environment_name in os.environ:
+            overrides.pop(field_name, None)
+    return Settings(**overrides)
 
 
 def clear_settings_cache() -> None:
