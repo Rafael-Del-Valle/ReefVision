@@ -25,6 +25,10 @@ def _policy() -> dict[str, Any]:
     return {
         "schema": "reefvision-feature-freeze-v1",
         "baseline_sha": "abc1234",
+        "allowed_new_paths": [
+            "apps/api/reefvision/api/routes/storage_settings.py",
+            "apps/web/src/features/system/StorageSettingsOverlay.tsx",
+        ],
         "allowed_new_prefixes": [
             ".github/",
             "docs/",
@@ -75,7 +79,7 @@ def test_feature_freeze_blocks_new_production_modules_and_migrations() -> None:
     assert migration_reason == "new database migration added during the feature freeze"
 
 
-def test_feature_freeze_allows_fixes_tests_docs_scripts_and_ci() -> None:
+def test_feature_freeze_allows_fixes_tests_docs_scripts_ci_and_exact_exceptions() -> None:
     checker = _load_checker()
     change_type = cast(Any, checker.Change)
     blocked = cast(Any, checker._blocked)
@@ -95,9 +99,33 @@ def test_feature_freeze_allows_fixes_tests_docs_scripts_and_ci() -> None:
         change_type(status="A", path="scripts/check-release.py"),
         change_type(status="A", path=".github/workflows/stabilization.yml"),
         change_type(status="A", path=".reefvision-feature-freeze.json"),
+        change_type(
+            status="A",
+            path="apps/api/reefvision/api/routes/storage_settings.py",
+        ),
+        change_type(
+            status="A",
+            path="apps/web/src/features/system/StorageSettingsOverlay.tsx",
+        ),
     ]
 
     assert [blocked(change, policy) for change in allowed] == [None] * len(allowed)
+
+
+def test_feature_freeze_exact_exception_does_not_allow_neighboring_modules() -> None:
+    checker = _load_checker()
+    change_type = cast(Any, checker.Change)
+    blocked = cast(Any, checker._blocked)
+
+    reason = blocked(
+        change_type(
+            status="A",
+            path="apps/api/reefvision/api/routes/storage_settings_extra.py",
+        ),
+        _policy(),
+    )
+
+    assert reason == "new production module added during the feature freeze"
 
 
 def test_feature_freeze_blocks_production_renames_and_copies() -> None:
