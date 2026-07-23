@@ -11,6 +11,7 @@ from PIL import Image, ImageDraw
 
 from reefvision.config import Settings
 from reefvision.jobs.export import process_export_job
+from reefvision.jobs.worker import process_thumbnail_job
 from reefvision.main import create_app
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_dataset_versions import create_version, update_image
@@ -66,7 +67,9 @@ def _import_coral_image(
     payload = cast(dict[str, Any], response.json())
     assert len(payload["successful"]) == 1
     assert payload["failed"] == []
-    return cast(dict[str, Any], payload["successful"][0])
+    item = cast(dict[str, Any], payload["successful"][0])
+    assert item["thumbnail_job_id"]
+    return item
 
 
 def _save_reviewed_coral_annotation(
@@ -149,7 +152,23 @@ def test_stabilization_coral_project_imports_snapshots_exports_and_restarts(
         ),
     ]
     image_ids = [str(item["image_id"]) for item in imported]
-    assert all(item.get("sha256") for item in imported)
+    app = cast(FastAPI, client.app)
+    for item, image_id in zip(imported, image_ids, strict=True):
+        assert process_thumbnail_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(item["thumbnail_job_id"]),
+        )
+        image_response = client.get(f"/api/v1/images/{image_id}")
+        assert image_response.status_code == 200, image_response.text
+        image_payload = image_response.json()
+        assert len(str(image_payload["sha256"])) == 64
+        assert image_payload["thumbnail_path"]
+        content_response = client.get(f"/api/v1/images/{image_id}/content")
+        thumbnail_response = client.get(f"/api/v1/images/{image_id}/thumbnail")
+        assert content_response.status_code == 200
+        assert thumbnail_response.status_code == 200
+        assert thumbnail_response.headers["content-type"].startswith("image/jpeg")
 
     for index, image_id in enumerate(image_ids):
         _save_reviewed_coral_annotation(
@@ -184,7 +203,6 @@ def test_stabilization_coral_project_imports_snapshots_exports_and_restarts(
     )
     assert export_response.status_code == 200, export_response.text
     export_payload = export_response.json()
-    app = cast(FastAPI, client.app)
     assert process_export_job(
         app.state.settings,
         app.state.session_factory,
@@ -227,3 +245,4 @@ def test_stabilization_coral_project_imports_snapshots_exports_and_restarts(
         assert annotation_response.status_code == 200, annotation_response.text
         assert len(annotation_response.json()["annotations"]) == 1
         assert len(annotation_response.json()["mask_annotations"]) == 1
+        assert restarted.get(f"/api/v1/images/{image_ids[0]}/thumbnail").status_code == 200
