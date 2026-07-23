@@ -296,26 +296,27 @@ $FailureReportPath = $null
 $FailureBundlePath = $null
 if ($Failed.Count -gt 0) {
     $FailureReportPath = Join-Path $ArtifactRoot "release-validation-failures.json"
-    $FailureDetails = foreach ($Result in $Failed) {
-        $Lines = if (Test-Path -LiteralPath $Result.log_path -PathType Leaf) {
-            @(Get-Content -LiteralPath $Result.log_path)
-        } else {
-            @()
+    $FailureDetails = @(
+        foreach ($Result in $Failed) {
+            $Lines = @()
+            if (Test-Path -LiteralPath $Result.log_path -PathType Leaf) {
+                $Lines = @(Get-Content -LiteralPath $Result.log_path)
+            }
+            [pscustomobject]@{
+                name = $Result.name
+                error = $Result.error
+                log_path = $Result.log_path
+                line_count = @($Lines).Count
+                first_lines = @($Lines | Select-Object -First 80)
+                last_lines = @($Lines | Select-Object -Last 160)
+            }
         }
-        [pscustomobject]@{
-            name = $Result.name
-            error = $Result.error
-            log_path = $Result.log_path
-            line_count = $Lines.Count
-            first_lines = @($Lines | Select-Object -First 80)
-            last_lines = @($Lines | Select-Object -Last 160)
-        }
-    }
+    )
     [pscustomobject]@{
-        schema = "reefvision-release-validation-failures-v1"
+        schema = "reefvision-release-validation-failures-v2"
         generated_at = (Get-Date).ToUniversalTime().ToString("o")
         commit_sha = (& git rev-parse HEAD).Trim()
-        failures = @($FailureDetails)
+        failures = $FailureDetails
     } |
         ConvertTo-Json -Depth 10 |
         Set-Content -LiteralPath $FailureReportPath -Encoding utf8
@@ -323,7 +324,7 @@ if ($Failed.Count -gt 0) {
 }
 
 $Summary = [pscustomobject]@{
-    schema = "reefvision-release-validation-v5"
+    schema = "reefvision-release-validation-v6"
     generated_at = (Get-Date).ToUniversalTime().ToString("o")
     repository_root = $Root
     commit_sha = (& git rev-parse HEAD).Trim()
