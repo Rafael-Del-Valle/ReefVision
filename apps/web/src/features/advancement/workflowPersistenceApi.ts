@@ -47,6 +47,38 @@ export interface WorkflowRetryResponse {
   };
 }
 
+export interface WorkflowArtifactCleanupAction {
+  action_id: string;
+  action_kind: "quarantine_file" | "clear_missing_reference";
+  artifact_id: string;
+  node_id: string;
+  port_name: string;
+  managed_path: string;
+  size_bytes: number;
+  file_sha256: string | null;
+  eligible: boolean;
+  blockers: string[];
+}
+
+export interface WorkflowArtifactCleanupPreview {
+  workflow_run_id: string;
+  run_status: string;
+  preview_checksum: string;
+  action_count: number;
+  eligible_action_count: number;
+  reclaimable_bytes: number;
+  actions: WorkflowArtifactCleanupAction[];
+}
+
+export interface WorkflowArtifactCleanupResult {
+  workflow_run_id: string;
+  applied_action_count: number;
+  quarantined_file_count: number;
+  cleared_reference_count: number;
+  reclaimed_bytes: number;
+  quarantine_paths: string[];
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (init?.body) headers.set("Content-Type", "application/json");
@@ -87,4 +119,34 @@ export function retryWorkflowRun(
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function previewWorkflowArtifactCleanup(
+  runId: string,
+  nodeIds: string[] = [],
+) {
+  return request<WorkflowArtifactCleanupPreview>(
+    `/workflow-runs/${runId}/artifact-cleanup/preview`,
+    {
+      method: "POST",
+      body: JSON.stringify({ node_ids: nodeIds }),
+    },
+  );
+}
+
+export function applyWorkflowArtifactCleanup(
+  runId: string,
+  payload: {
+    preview_checksum: string;
+    action_ids: string[];
+    node_ids?: string[];
+  },
+) {
+  return request<WorkflowArtifactCleanupResult>(
+    `/workflow-runs/${runId}/artifact-cleanup/apply`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
 }
