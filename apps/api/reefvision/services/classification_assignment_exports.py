@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from pathlib import Path
 from typing import Any
 
+from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -24,13 +26,43 @@ from reefvision.schemas.classification_assignment_exports import (
     ScientificClassificationExportResponse,
     ScientificClassificationExportRow,
 )
-from reefvision.services.mask_measurements import (
-    MaskMeasurementService,
-    _point_in_polygon,
-    _raster_measurements,
-    _raster_pixel_active,
-)
+from reefvision.services.mask_measurements import MaskMeasurementService
 from reefvision.storage.projects import resolve_managed_project_path
+
+Point = tuple[float, float]
+RasterMask = tuple[bytes, int, int]
+
+
+def _point_in_polygon(point: Point, polygon: list[Point]) -> bool:
+    x, y = point
+    inside = False
+    previous = polygon[-1]
+    for current in polygon:
+        current_x, current_y = current
+        previous_x, previous_y = previous
+        crosses = (current_y > y) != (previous_y > y)
+        if crosses:
+            intersection_x = (previous_x - current_x) * (y - current_y) / (
+                previous_y - current_y
+            ) + current_x
+            if x < intersection_x:
+                inside = not inside
+        previous = current
+    return inside
+
+
+def _read_raster(path: Path) -> RasterMask:
+    with Image.open(path) as image:
+        grayscale = image.convert("L")
+        width, height = grayscale.size
+        return grayscale.tobytes(), width, height
+
+
+def _raster_pixel_active(raster: RasterMask, x: int, y: int) -> bool:
+    data, width, height = raster
+    if x < 0 or y < 0 or x >= width or y >= height:
+        return False
+    return data[y * width + x] > 0
 
 
 class ScientificClassificationExportService:
@@ -40,7 +72,7 @@ class ScientificClassificationExportService:
         self.session = session
         self.settings = settings
         self.measurements = MaskMeasurementService(session, settings)
-        self._raster_cache: dict[str, tuple[bytes, int, int]] = {}
+        self._raster_cache: dict[str, RasterMask] = {}
         self._measurement_cache: dict[str, dict[str, Any]] = {}
 
     def _project(self, project_id: str) -> Project:
@@ -66,7 +98,7 @@ class ScientificClassificationExportService:
             raster = self._raster_cache.get(mask.id)
             if raster is None:
                 path = resolve_managed_project_path(self.settings, mask.mask_path)
-                _area, _perimeter, _center_x, _center_y, raster = _raster_measurements(path)
+                raster = _read_raster(path)
                 self._raster_cache[mask.id] = raster
             return _raster_pixel_active(raster, int(x), int(y))
         return False
@@ -172,11 +204,15 @@ class ScientificClassificationExportService:
                 ]
                 center_x = (annotation.x_min + annotation.x_max) / 2.0
                 center_y = (annotation.y_min + annotation.y_max) / 2.0
-                candidate_masks = [
-                    mask
-                    for mask in masks_by_image.get(image.id, [])
-                    if self._mask_contains(mask, center_x, center_y)
-                ]
+                for mask in masks_by_image.get(image.id, []):
+                    try:
+                        if self._mask_contains(mask, center_x, center_y):
+                            candidate_masks.append(mask)
+                    except Exception as exc:
+                        warnings.append(
+                            f"Mask {mask.id} could not be checked for assignment "
+                            f"{assignment.id}: {exc}"
+                        )
 
             measurement_join_status = "unmatched"
             measurement_mask_id: str | None = None
