@@ -44,11 +44,15 @@ class GeneralizedClassificationJobService:
             raise ValidationError("The registered classifier checkpoint is missing")
 
         requested_images = list(dict.fromkeys(request.image_ids))
-        images = list(
-            self.session.scalars(
-                select(ImageAsset).where(ImageAsset.id.in_(requested_images))
+        images = (
+            list(
+                self.session.scalars(
+                    select(ImageAsset).where(ImageAsset.id.in_(requested_images))
+                )
             )
-        ) if requested_images else []
+            if requested_images
+            else []
+        )
         if len(images) != len(requested_images):
             raise ValidationError("One or more requested images do not exist")
         if any(image.project_id != project.id for image in images):
@@ -72,12 +76,17 @@ class GeneralizedClassificationJobService:
                 query = query.where(MaskAnnotation.image_id.in_(requested_images))
             masks = list(
                 self.session.scalars(
-                    query.order_by(MaskAnnotation.image_id, MaskAnnotation.created_at, MaskAnnotation.id)
+                    query.order_by(
+                        MaskAnnotation.image_id,
+                        MaskAnnotation.created_at,
+                        MaskAnnotation.id,
+                    )
                 )
             )
             if requested_masks and len(masks) != len(requested_masks):
                 raise ValidationError(
-                    "One or more requested masks do not exist, are unverified, or belong to another project"
+                    "One or more requested masks do not exist, are unverified, "
+                    "or belong to another project"
                 )
             if requested_images and any(mask.image_id not in requested_images for mask in masks):
                 raise ValidationError("Requested masks must belong to the selected images")
