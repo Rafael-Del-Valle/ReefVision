@@ -1,4 +1,4 @@
-"""Install and verify bundled Transformers model snapshots in application data."""
+"""Install and verify bundled Transformers model snapshots in configurable cache storage."""
 
 from __future__ import annotations
 
@@ -187,6 +187,15 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
+def _destination_root(settings: Settings) -> Path:
+    return (
+        settings.resolved_model_cache_dir
+        / "models"
+        / "provider-packs"
+        / "transformers-vision"
+    )
+
+
 def install_bundled_transformers_models(
     settings: Settings,
 ) -> tuple[dict[str, Path], list[str]]:
@@ -194,12 +203,7 @@ def install_bundled_transformers_models(
     if loaded is None:
         return {}, []
     bundle_root, manifest = loaded
-    destination_root = (
-        settings.resolved_data_dir
-        / "models"
-        / "provider-packs"
-        / "transformers-vision"
-    )
+    destination_root = _destination_root(settings)
     destination_root.mkdir(parents=True, exist_ok=True)
     installed: dict[str, Path] = {}
     index_models: dict[str, Any] = {}
@@ -306,13 +310,7 @@ def bundled_transformers_model_record(
     settings: Settings,
     catalog_id: str,
 ) -> dict[str, Any] | None:
-    index = (
-        settings.resolved_data_dir
-        / "models"
-        / "provider-packs"
-        / "transformers-vision"
-        / "manifest.json"
-    )
+    index = _destination_root(settings) / "manifest.json"
     if not index.is_file():
         return None
     try:
