@@ -41,7 +41,13 @@ def _as_utc_timestamp(path: Path) -> datetime:
     return datetime.fromtimestamp(path.stat().st_mtime, UTC)
 
 
-def _action_id(kind: str, managed_path: str, *, size: int = 0, modified_ns: int = 0) -> str:
+def _action_id(
+    kind: str,
+    managed_path: str,
+    *,
+    size: int = 0,
+    modified_ns: int = 0,
+) -> str:
     payload = f"{kind}|{managed_path}|{size}|{modified_ns}".encode("utf-8")
     return hashlib.sha256(payload).hexdigest()[:24]
 
@@ -81,7 +87,10 @@ class ProjectRepairService:
         self,
         project: Project,
     ) -> tuple[set[Path], set[Path], list[str]]:
-        project_root = resolve_managed_project_path(self.settings, project.storage_root)
+        project_root = resolve_managed_project_path(
+            self.settings,
+            project.storage_root,
+        ).resolve()
         exact: set[Path] = set()
         prefixes: set[Path] = set()
         warnings: list[str] = []
@@ -90,10 +99,11 @@ class ProjectRepairService:
             if not managed_path:
                 return
             normalized = managed_path.replace("\\", "/").strip()
-            if not normalized.startswith(project.storage_root.rstrip("/") + "/"):
+            project_prefix = project.storage_root.rstrip("/") + "/"
+            if not normalized.startswith(project_prefix):
                 return
             try:
-                path = resolve_managed_project_path(self.settings, normalized)
+                path = resolve_managed_project_path(self.settings, normalized).resolve()
                 path.relative_to(project_root)
             except (ValidationError, ValueError):
                 warnings.append(f"Ignored unsafe referenced path: {managed_path}")
@@ -198,7 +208,10 @@ class ProjectRepairService:
         if minimum_orphan_age_seconds < 60:
             raise ValidationError("minimum_orphan_age_seconds must be at least 60")
         project = self._project(project_id)
-        project_root = resolve_managed_project_path(self.settings, project.storage_root)
+        project_root = resolve_managed_project_path(
+            self.settings,
+            project.storage_root,
+        ).resolve()
         now = datetime.now(UTC)
         actions: list[ProjectRepairAction] = []
         warnings: list[str] = []
@@ -240,14 +253,18 @@ class ProjectRepairService:
                 continue
             resolved = path.resolve()
             try:
-                resolved.relative_to(project_root.resolve())
+                resolved.relative_to(project_root)
             except ValueError:
-                warnings.append(f"Skipped path outside the resolved project root: {relative}")
+                warnings.append(
+                    f"Skipped path outside the resolved project root: {relative}"
+                )
                 continue
             if self._referenced(resolved, exact, prefixes):
                 continue
             stat = path.stat()
-            managed_path = path.relative_to(self.settings.resolved_data_dir).as_posix()
+            managed_path = path.relative_to(
+                self.settings.resolved_data_dir,
+            ).as_posix()
             orphan_bytes += stat.st_size
             actions.append(
                 ProjectRepairAction(
@@ -275,7 +292,9 @@ class ProjectRepairService:
             minimum_orphan_age_seconds=minimum_orphan_age_seconds,
             referenced_path_count=len(exact | prefixes),
             orphan_file_count=sum(
-                1 for action in actions if action.action_kind == "quarantine_orphan_file"
+                1
+                for action in actions
+                if action.action_kind == "quarantine_orphan_file"
             ),
             orphan_file_bytes=orphan_bytes,
             actions=actions,
@@ -301,7 +320,10 @@ class ProjectRepairService:
                 "The repair plan changed; regenerate the preview before applying actions"
             )
 
-        project_root = resolve_managed_project_path(self.settings, project.storage_root)
+        project_root = resolve_managed_project_path(
+            self.settings,
+            project.storage_root,
+        ).resolve()
         applied: list[str] = []
         skipped: list[str] = []
         quarantined: list[str] = []
@@ -318,7 +340,10 @@ class ProjectRepairService:
                 applied.append(action_id)
                 continue
 
-            source = resolve_managed_project_path(self.settings, action.managed_path)
+            source = resolve_managed_project_path(
+                self.settings,
+                action.managed_path,
+            ).resolve()
             if not source.is_file() or source.is_symlink():
                 skipped.append(action_id)
                 continue
@@ -332,14 +357,20 @@ class ProjectRepairService:
             if current_id != action_id:
                 skipped.append(action_id)
                 continue
-            relative = source.relative_to(project_root)
+            try:
+                relative = source.relative_to(project_root)
+            except ValueError:
+                skipped.append(action_id)
+                continue
             destination = project_root / ".quarantine" / "orphans" / stamp / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             if destination.exists():
                 destination = destination.with_name(f"{action_id}-{destination.name}")
             shutil.move(str(source), destination)
             quarantined.append(
-                destination.relative_to(self.settings.resolved_data_dir).as_posix()
+                destination.relative_to(
+                    self.settings.resolved_data_dir,
+                ).as_posix()
             )
             applied.append(action_id)
 
