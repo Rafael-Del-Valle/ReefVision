@@ -1,4 +1,4 @@
-"""Managed, application-data storage for catalog checkpoints and provider packs."""
+"""Managed storage for catalog checkpoints, provider packs, and user models."""
 
 from __future__ import annotations
 
@@ -19,14 +19,15 @@ _MANIFEST_LOCK = threading.Lock()
 
 
 def catalog_model_directories(settings: Settings) -> dict[str, Path]:
-    root = settings.resolved_data_dir / "models"
+    data_models_root = settings.resolved_data_dir / "models"
+    cache_models_root = settings.resolved_model_cache_dir / "models"
     directories = {
-        "root": root,
-        "catalog_models": root / "catalog-models",
-        "provider_packs": root / "provider-packs",
-        "trained_models": root / "trained-models",
-        "imported_models": root / "imported-models",
-        "temporary_downloads": root / "temporary-downloads",
+        "root": data_models_root,
+        "catalog_models": cache_models_root / "catalog-models",
+        "provider_packs": cache_models_root / "provider-packs",
+        "trained_models": data_models_root / "trained-models",
+        "imported_models": data_models_root / "imported-models",
+        "temporary_downloads": cache_models_root / "temporary-downloads",
     }
     for directory in directories.values():
         directory.mkdir(parents=True, exist_ok=True)
@@ -53,9 +54,9 @@ def catalog_asset_path(settings: Settings, catalog_id: str, filename: str) -> Pa
 
 def relative_catalog_asset_path(settings: Settings, path: Path) -> str:
     try:
-        return path.resolve().relative_to(settings.resolved_data_dir).as_posix()
+        return path.resolve().relative_to(settings.resolved_model_cache_dir).as_posix()
     except ValueError as exc:
-        raise ValidationError("Catalog asset is outside ReefVision application data") from exc
+        raise ValidationError("Catalog asset is outside ReefVision model-cache storage") from exc
 
 
 def manifest_path(settings: Settings) -> Path:
