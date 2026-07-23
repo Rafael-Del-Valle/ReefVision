@@ -1,117 +1,229 @@
 # Multi-model segmentation auto-labeling
 
-ReefVision can run SAM 3, Gemini, and GPT as one persisted Workflow. SAM 3 proposes source-aligned instance masks. Gemini and GPT independently review a source crop and a translucent mask overlay. A mask is promoted to a verified ReefVision raster annotation only when at least two of the three voters pass their configured confidence thresholds.
+ReefVision provides two multi-model segmentation workflows:
 
-## Why SAM 3 runs as a sidecar
+1. **Semantic review:** SAM 3 generates a mask while Gemini and OpenAI independently review that candidate.
+2. **Independent mask consensus:** SAM 3 generates one mask branch, Gemini detects boxes that SAM 2 refines into masks, and OpenAI independently detects boxes that SAM 2 refines into masks.
 
-The official SAM 3 repository currently requires Python 3.12 or newer, PyTorch 2.7 or newer, and a CUDA-compatible GPU with CUDA 12.6 or newer. ReefVision therefore keeps SAM 3 in a separate environment and communicates only over localhost HTTP. This prevents SAM 3 dependency upgrades from changing the pinned desktop backend.
+Both modes produce reviewable ReefVision predictions. Automatic acceptance is disabled by default.
 
-Official source: https://github.com/facebookresearch/sam3
+## Architecture
 
-## 1. Install SAM 3 in a separate environment
+### Semantic-review mode
 
-Follow the current official SAM 3 installation instructions. A representative setup is:
-
-```powershell
-conda create -n sam3 python=3.12
-conda activate sam3
-pip install torch==2.10.0 torchvision --index-url https://download.pytorch.org/whl/cu128
-git clone https://github.com/facebookresearch/sam3.git
-cd sam3
-pip install -e .
-hf auth login
+```text
+SAM 3 mask
+    ├─ SAM 3 confidence vote
+    ├─ Gemini crop-and-overlay review
+    └─ OpenAI crop-and-overlay review
+                 ↓
+          configured quorum
+                 ↓
+       review or optional promotion
 ```
 
-Checkpoint access must be approved on the official SAM 3 Hugging Face repository before the sidecar can build the model.
+This mode is less expensive because Gemini and OpenAI review an existing candidate instead of finding every object independently.
 
-The ReefVision sidecar script imports the official `build_sam3_image_model` and `Sam3Processor` APIs. Run it from the ReefVision repository while the `sam3` environment is active:
+### Independent-mask mode
+
+```text
+                    ┌─ SAM 3 text segmentation ───────── mask A
+Image + concept ────┼─ Gemini box detection ── SAM 2 ── mask B
+                    └─ OpenAI box detection ── SAM 2 ── mask C
+                                      ↓
+                     class-aware one-to-one instance matching
+                                      ↓
+                      configured 2-of-3 pixel aggregation
+                                      ↓
+                         reviewable consensus mask
+```
+
+Independent-mask mode can still propose an object when SAM 3 misses it, provided the Gemini/SAM 2 and OpenAI/SAM 2 branches match and satisfy the configured quorum.
+
+## Why SAM 3 and SAM 2 can run as sidecars
+
+SAM-family packages can require Python, PyTorch, CUDA, and compiled-extension versions that differ from ReefVision's pinned desktop backend. ReefVision therefore supports isolated localhost sidecars:
+
+- SAM 3 sidecar: concept-prompted instance segmentation
+- SAM 2 sidecar: box-prompted mask refinement
+
+The desktop stores small immutable JSON connection descriptors, not duplicate checkpoints or bearer tokens. Sidecar endpoints must resolve to localhost.
+
+## 1. Prepare the SAM 3 sidecar
+
+Follow the current official SAM 3 installation instructions in a separate environment. Start the ReefVision sidecar from the repository while that environment is active:
 
 ```powershell
 $env:REEFVISION_SAM3_SIDECAR_TOKEN = "replace-with-a-long-random-token"
 python scripts/sam3_sidecar_server.py --host 127.0.0.1 --port 8765
 ```
 
-The token is optional but recommended. The server refuses non-loopback binding unless `--allow-non-loopback` is passed explicitly.
+The token is optional but recommended. The server refuses a non-loopback bind unless that behavior is explicitly enabled.
 
-## 2. Register SAM 3 in ReefVision
+## 2. Prepare the SAM 2 sidecar
 
-Open **Workflows** and use **Connect SAM 3 to Workflows**.
+Install Meta SAM 2 and its dependencies in a separate environment. Supply the matching model configuration and checkpoint:
+
+```powershell
+$env:REEFVISION_SAM2_SIDECAR_TOKEN = "replace-with-a-different-long-random-token"
+python scripts/sam2_sidecar_server.py `
+  --config configs/sam2.1/sam2.1_hiera_l.yaml `
+  --checkpoint checkpoints/sam2.1_hiera_large.pt `
+  --device cuda:0 `
+  --host 127.0.0.1 `
+  --port 8766
+```
+
+The sidecar loads one checkpoint on one configured device. Start another sidecar on another port when a different checkpoint or GPU is needed.
+
+## 3. Connect the sidecars in ReefVision
+
+Open **Workflows** and use **Connect SAM 3 and SAM 2 to Workflows**.
+
+For SAM 3:
 
 1. Enter the localhost endpoint, normally `http://127.0.0.1:8765`.
-2. Enter a concept prompt such as `Swiftia exserta colony`.
-3. Map the prompt to one active ReefVision class.
-4. Register the sidecar segmenter.
-5. Copy the returned model ID into the Workflow segmenter node's `model_id` setting.
+2. Enter a concept such as `Swiftia exserta colony` or `octocoral fragment`.
+3. Map that concept to one active ReefVision class.
+4. Register the SAM 3 segmenter.
 
-The registration creates a small immutable JSON descriptor, not a duplicate checkpoint. The descriptor stores the endpoint, concept prompt, class mapping, score threshold, and token environment-variable name. It never stores the bearer token.
+For SAM 2:
 
-## 3. Enable Gemini and GPT deliberately
+1. Enter the localhost endpoint, normally `http://127.0.0.1:8766`.
+2. Enter the bearer-token environment-variable name.
+3. Test the connection. ReefVision verifies the provider identity, status, model version, configured device, and whether a token is available in its own process.
+4. Register the sidecar descriptor.
+5. Select either that isolated sidecar or an existing compatible in-process SAM 2 registration.
 
-Remote review is disabled by default. Set these variables in the ReefVision process environment:
+Registration stores the environment-variable name but never stores the token value.
+
+## 4. Enable remote model branches deliberately
+
+Remote processing is disabled by default. Set these variables in the ReefVision process environment:
 
 ```powershell
 $env:REEFVISION_ALLOW_REMOTE_VISION = "true"
 $env:REEFVISION_GEMINI_API_KEY = "your-google-api-key"
 $env:REEFVISION_OPENAI_API_KEY = "your-openai-api-key"
-$env:REEFVISION_SAM3_SIDECAR_TOKEN = "the-same-sidecar-token"
+$env:REEFVISION_SAM3_SIDECAR_TOKEN = "the-same-SAM-3-sidecar-token"
+$env:REEFVISION_SAM2_SIDECAR_TOKEN = "the-same-SAM-2-sidecar-token"
 ```
 
-Then load the **SAM 3 + Gemini + GPT auto-labeling** template and change:
+Then set `allow_remote_review` to `true` in the selected consensus configuration.
+
+## Semantic-review configuration
 
 ```json
 {
   "multi_model_consensus": {
     "enabled": true,
-    "allow_remote_review": true,
+    "mode": "semantic_voters",
+    "required_primary_provider": "sam3_sidecar",
+    "prompt": "octocoral colony or fragment",
     "required_votes": 2,
-    "auto_accept": true,
+    "sam_vote_threshold": 0.35,
+    "minimum_reviewer_confidence": 0.6,
+    "gemini_model": "gemini-2.5-flash",
+    "openai_model": "gpt-5-mini",
+    "allow_remote_review": true,
+    "auto_accept": false,
     "fail_closed": true
   }
 }
 ```
 
-The default reviewers are `gemini-2.5-flash` and `gpt-5-mini`. Both model IDs remain editable in the node configuration.
+Each SAM 3 proposal receives one primary confidence vote plus independent Gemini and OpenAI review decisions. A malformed or failed remote response becomes an abstention when `fail_closed` is true.
 
-## Voting behavior
+## Independent-mask configuration
 
-Each SAM 3 proposal receives three votes:
+```json
+{
+  "multi_model_consensus": {
+    "enabled": true,
+    "mode": "independent_masks",
+    "required_primary_provider": "sam3_sidecar",
+    "sam2_model_id": "<registered-SAM-2-model-id>",
+    "label_class_id": "<project-class-id>",
+    "predicted_label": "octocoral colony or fragment",
+    "prompt": "octocoral colony or fragment",
+    "required_votes": 2,
+    "iou_threshold": 0.3,
+    "aggregation": "pixel_majority",
+    "minimum_vlm_confidence": 0.25,
+    "gemini_model": "gemini-2.5-flash",
+    "openai_model": "gpt-5-mini",
+    "sam2_device": "auto",
+    "allow_remote_review": true,
+    "auto_accept": false,
+    "fail_closed": true
+  }
+}
+```
 
-- **Primary segmenter vote:** passes when the SAM 3 proposal confidence reaches `sam_vote_threshold`.
-- **Gemini vote:** reviews the source crop and red mask overlay, returning structured JSON with accept/reject, confidence, and reason.
-- **GPT vote:** independently performs the same review using the OpenAI Responses API.
+Gemini and OpenAI must return structured source-image boxes. ReefVision rejects malformed, non-finite, inverted, or out-of-bounds boxes before SAM 2 refinement.
 
-A remote accept vote counts only when it also reaches `minimum_reviewer_confidence`. With `required_votes: 2`, examples include:
+## Instance matching and aggregation
 
-- SAM 3 + Gemini accept: promote the mask.
-- SAM 3 + GPT accept: promote the mask.
-- Gemini + GPT accept while SAM confidence is low: promote the mask.
-- Only one accepted vote: leave the proposal pending.
+ReefVision groups only masks that:
 
-Failed or malformed remote responses are treated as abstentions when `fail_closed` is true. The Workflow fails instead when `fail_closed` is false.
+- belong to the same image and requested class,
+- meet the configured mask-IoU threshold, and
+- come from different branches.
 
-## Annotation and provenance behavior
+One branch cannot contribute multiple votes to the same consensus group. Matching is one-to-one so crowded detections cannot reuse the same confirmation mask repeatedly.
 
-Promoted masks are stored as full-resolution binary PNG annotations and remain editable in ReefVision. Each mask records:
+Available aggregation modes:
 
-- Workflow run and node IDs
-- SAM 3 proposal, model, checksum, and inference-job IDs
-- Concept prompt and quorum settings
-- All three decisions, confidences, reasons, and provider errors
-- Promotion timestamp and source geometry metadata
+- `pixel_majority`: retains a pixel when the configured number of branches include it; recommended starting point for thin coral structures.
+- `intersection`: retains only shared pixels; the most conservative mode and the closest to the referenced article workflow.
+- `union`: retains pixels from all agreeing masks; more inclusive but may expand false-positive boundaries.
+- `best_confidence`: keeps the highest-confidence agreeing candidate unchanged.
 
-The original proposal is linked to the accepted mask. Images that do not reach quorum remain reviewable rather than being silently discarded.
+## Review, provenance, and recovery
 
-## Privacy, cost, and scientific validation
+Consensus outputs are persisted as reviewable, source-aligned raster-mask proposals. Provenance includes:
 
-For every candidate mask, ReefVision sends two cropped images to Gemini and OpenAI: the source crop and the same crop with a translucent red overlay. Do not enable remote review for imagery that cannot be transferred to those providers under the project's data-use requirements.
+- workflow run and node IDs,
+- source image and model identifiers,
+- model and checkpoint checksums,
+- detector model names and confidence values,
+- source detection boxes,
+- SAM 2 refinement scores,
+- participating branch and candidate IDs,
+- pairwise mask IoU,
+- quorum and aggregation settings,
+- remote-provider warnings and failures.
 
-Remote review creates per-mask API usage. Large datasets may generate substantial request counts. Start with a representative validation subset, measure precision/recall and cost, and tune the prompt and thresholds before running the complete dataset.
+Keep `auto_accept` false until the workflow has been tested on representative images. Accepted masks remain editable in ReefVision.
 
-A 2-of-3 vote is a quality-control rule, not proof of biological ground truth. Scientific acceptance should still include a held-out manually reviewed subset, inter-annotator comparison, class-specific error analysis, and documented correction procedures.
+Workflow runs support retry and partial rerun. Terminal-run output files can be moved into reversible project quarantine. Restoration rechecks the original destination, shared references, file SHA-256, and quarantine location before moving a file back.
+
+## Privacy and cost
+
+The modes transmit different information:
+
+- Semantic review sends padded source crops and highlighted-mask overlays.
+- Independent-mask mode sends each selected full image to Gemini and OpenAI so both can find objects independently.
+
+Do not enable either mode when provider transfer conflicts with project data-use requirements. Independent-mask mode can also create substantially more remote inference and SAM 2 refinement work. Begin with a small validation set and record request counts, latency, failure rate, and cost.
+
+## Scientific validation
+
+Model agreement is not biological ground truth. Before using consensus labels for training or inference claims, compare them against a held-out manually reviewed set. At minimum, evaluate:
+
+- object-level precision and recall,
+- mask IoU and boundary accuracy,
+- class-specific false positives and false negatives,
+- performance on crowded or overlapping colonies,
+- thin-structure retention under each aggregation mode,
+- disagreement between human reviewers,
+- review time and correction burden,
+- API cost and end-to-end latency.
 
 ## Current limitations
 
-- Gemini and GPT review SAM 3 masks; they do not independently return source-aligned pixel masks in this implementation.
-- Review requests are currently processed sequentially per candidate for deterministic provenance and rate-limit safety.
-- The sidecar endpoint is registered but not health-checked during registration; unavailable sidecars fail safely at inference.
-- Real SAM 3, Gemini, and OpenAI acceptance tests must be run on the target workstation before production use.
+- Independent generation currently executes as one compound Workflow segmenter stage. The internal branches and final proposal preserve detailed provenance, but Gemini, OpenAI, and SAM 2 branch outputs are not yet separate persisted graph nodes that can each be rerun independently.
+- Remote requests are deliberately sequential in several paths for deterministic provenance and rate-limit safety.
+- A real SAM 3/SAM 2/Gemini/OpenAI acceptance run is still required on the target workstation.
+- Thresholds and aggregation behavior have not yet been scientifically calibrated for a particular coral dataset.
+- Full Windows packaging and clean-machine sidecar acceptance remain separate release gates.
