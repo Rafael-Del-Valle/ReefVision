@@ -17,6 +17,7 @@ InterchangeFormat = Literal[
 ]
 ClassConflictPolicy = Literal["error", "skip", "merge"]
 ExistingAnnotationPolicy = Literal["append", "skip_image", "replace_imported", "error"]
+CocoRleEncoding = Literal["uncompressed", "compressed"]
 
 
 class InterchangePreviewRequest(BaseModel):
@@ -92,11 +93,19 @@ class InterchangeExportRequest(BaseModel):
     include_boxes: bool = True
     include_masks: bool = True
     include_archived_classes: bool = False
+    coco_rle_encoding: CocoRleEncoding = "uncompressed"
 
     @model_validator(mode="after")
     def require_geometry(self) -> InterchangeExportRequest:
         if not self.include_boxes and not self.include_masks:
             raise ValueError("At least one geometry type must be exported")
+        if self.coco_rle_encoding == "compressed" and self.format not in {
+            "coco_instance",
+            "roboflow_coco",
+        }:
+            raise ValueError(
+                "Compressed COCO RLE output is only valid for COCO instance or Roboflow COCO exports"
+            )
         return self
 
 
