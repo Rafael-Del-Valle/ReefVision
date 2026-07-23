@@ -271,7 +271,8 @@ if (-not $SkipPackaging) {
                     -LiteralPath (Join-Path $ArtifactRoot "msi-files.json") `
                     -Encoding utf8
         }
-    } else {
+    }
+    else {
         Add-BlockedGate `
             -Name "Packaged API sidecar smoke" `
             -Reason "Tauri MSI packaging did not complete successfully."
@@ -292,6 +293,19 @@ Invoke-ReleaseGate "Tracked working tree remains clean" {
 }
 
 $Failed = @($Results | Where-Object status -eq "failed")
+$SerializableResults = @(
+    foreach ($Result in $Results) {
+        [pscustomobject]@{
+            name = [string]$Result.name
+            status = [string]$Result.status
+            started_at = [string]$Result.started_at
+            completed_at = [string]$Result.completed_at
+            duration_seconds = [double]$Result.duration_seconds
+            log_path = [string]$Result.log_path
+            error = if ($null -eq $Result.error) { $null } else { [string]$Result.error }
+        }
+    }
+)
 $FailureReportPath = $null
 $FailureBundlePath = $null
 if ($Failed.Count -gt 0) {
@@ -299,47 +313,51 @@ if ($Failed.Count -gt 0) {
     $FailureDetails = @(
         foreach ($Result in $Failed) {
             $Lines = @()
-            if (Test-Path -LiteralPath $Result.log_path -PathType Leaf) {
-                $Lines = @(Get-Content -LiteralPath $Result.log_path)
+            if (Test-Path -LiteralPath ([string]$Result.log_path) -PathType Leaf) {
+                $Lines = @(
+                    Get-Content -LiteralPath ([string]$Result.log_path) |
+                        ForEach-Object { [string]$_ }
+                )
             }
             [pscustomobject]@{
-                name = $Result.name
-                error = $Result.error
-                log_path = $Result.log_path
+                name = [string]$Result.name
+                error = if ($null -eq $Result.error) { $null } else { [string]$Result.error }
+                log_path = [string]$Result.log_path
                 line_count = @($Lines).Count
                 first_lines = @($Lines | Select-Object -First 80)
                 last_lines = @($Lines | Select-Object -Last 160)
             }
         }
     )
-    [pscustomobject]@{
-        schema = "reefvision-release-validation-failures-v2"
+    $FailureReport = [pscustomobject]@{
+        schema = "reefvision-release-validation-failures-v3"
         generated_at = (Get-Date).ToUniversalTime().ToString("o")
-        commit_sha = (& git rev-parse HEAD).Trim()
+        commit_sha = [string]((& git rev-parse HEAD).Trim())
         failures = $FailureDetails
-    } |
-        ConvertTo-Json -Depth 10 |
-        Set-Content -LiteralPath $FailureReportPath -Encoding utf8
+    }
+    $FailureReportJson = ConvertTo-Json -InputObject $FailureReport -Depth 10
+    Set-Content -LiteralPath $FailureReportPath -Value $FailureReportJson -Encoding utf8
     $FailureBundlePath = Join-Path $ArtifactRoot "release-validation-failure-bundle.zip"
 }
 
 $Summary = [pscustomobject]@{
-    schema = "reefvision-release-validation-v6"
+    schema = "reefvision-release-validation-v7"
     generated_at = (Get-Date).ToUniversalTime().ToString("o")
-    repository_root = $Root
-    commit_sha = (& git rev-parse HEAD).Trim()
-    feature_freeze_baseline = $BaselineSha
-    target_triple = $TargetTriple
-    artifact_root = $ArtifactRoot
+    repository_root = [string]$Root
+    commit_sha = [string]((& git rev-parse HEAD).Trim())
+    feature_freeze_baseline = [string]$BaselineSha
+    target_triple = [string]$TargetTriple
+    artifact_root = [string]$ArtifactRoot
     failure_report_path = $FailureReportPath
     failure_bundle_path = $FailureBundlePath
     passed = $Failed.Count -eq 0
     passed_count = @($Results | Where-Object status -eq "passed").Count
     failed_count = $Failed.Count
-    results = $Results
+    results = $SerializableResults
 }
 $SummaryPath = Join-Path $ArtifactRoot "release-validation-summary.json"
-$Summary | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $SummaryPath -Encoding utf8
+$SummaryJson = ConvertTo-Json -InputObject $Summary -Depth 8
+Set-Content -LiteralPath $SummaryPath -Value $SummaryJson -Encoding utf8
 
 if ($FailureBundlePath) {
     $BundleInputs = @(
