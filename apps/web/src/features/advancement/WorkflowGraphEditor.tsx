@@ -53,6 +53,16 @@ const NODE_HEADER_HEIGHT = 48;
 const PORT_ROW_HEIGHT = 28;
 const DEFAULT_CANVAS_WIDTH = 1200;
 const DEFAULT_CANVAS_HEIGHT = 720;
+const MAX_HISTORY = 100;
+const GRID_SIZE = 10;
+
+function cloneWorkflow(workflow: EditableWorkflow): EditableWorkflow {
+  return JSON.parse(JSON.stringify(workflow)) as EditableWorkflow;
+}
+
+function workflowChecksum(workflow: EditableWorkflow): string {
+  return JSON.stringify(workflow);
+}
 
 function positionOf(node: EditableWorkflowNode, index: number): Position {
   const value = node.configuration.__ui_position;
@@ -111,6 +121,75 @@ function edgeKey(edge: EditableWorkflowEdge): string {
   return `${edge.source_node_id}:${edge.source_port}->${edge.target_node_id}:${edge.target_port}`;
 }
 
+function compatiblePorts(sourceType: string, targetType: string): boolean {
+  return sourceType === targetType || targetType === "artifact";
+}
+
+function topologicalLayout(workflow: EditableWorkflow): EditableWorkflow {
+  const nodeIds = new Set(workflow.nodes.map((node) => node.id));
+  const indegree = new Map(workflow.nodes.map((node) => [node.id, 0]));
+  const outgoing = new Map<string, string[]>();
+  for (const edge of workflow.edges) {
+    if (!nodeIds.has(edge.source_node_id) || !nodeIds.has(edge.target_node_id)) {
+      continue;
+    }
+    indegree.set(edge.target_node_id, (indegree.get(edge.target_node_id) ?? 0) + 1);
+    outgoing.set(edge.source_node_id, [
+      ...(outgoing.get(edge.source_node_id) ?? []),
+      edge.target_node_id,
+    ]);
+  }
+  const queue = workflow.nodes
+    .map((node) => node.id)
+    .filter((id) => (indegree.get(id) ?? 0) === 0)
+    .sort();
+  const level = new Map(queue.map((id) => [id, 0]));
+  const visited = new Set<string>();
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current) break;
+    visited.add(current);
+    for (const target of (outgoing.get(current) ?? []).sort()) {
+      level.set(
+        target,
+        Math.max(level.get(target) ?? 0, (level.get(current) ?? 0) + 1),
+      );
+      indegree.set(target, (indegree.get(target) ?? 1) - 1);
+      if (indegree.get(target) === 0) queue.push(target);
+    }
+    queue.sort();
+  }
+  const maximumLevel = Math.max(0, ...level.values());
+  for (const node of workflow.nodes) {
+    if (!visited.has(node.id)) level.set(node.id, maximumLevel + 1);
+  }
+  const rowsByLevel = new Map<number, EditableWorkflowNode[]>();
+  for (const node of workflow.nodes) {
+    const nodeLevel = level.get(node.id) ?? 0;
+    rowsByLevel.set(nodeLevel, [...(rowsByLevel.get(nodeLevel) ?? []), node]);
+  }
+  const positioned = new Map<string, EditableWorkflowNode>();
+  for (const [nodeLevel, nodes] of [...rowsByLevel.entries()].sort(
+    ([first], [second]) => first - second,
+  )) {
+    nodes
+      .sort((first, second) => first.id.localeCompare(second.id))
+      .forEach((node, row) => {
+        positioned.set(
+          node.id,
+          withPosition(node, {
+            x: 40 + nodeLevel * 290,
+            y: 50 + row * 180,
+          }),
+        );
+      });
+  }
+  return {
+    ...workflow,
+    nodes: workflow.nodes.map((node) => positioned.get(node.id) ?? node),
+  };
+}
+
 export function WorkflowGraphEditor({
   workflow,
   definitions,
@@ -121,8 +200,14 @@ export function WorkflowGraphEditor({
   onChange: (workflow: EditableWorkflow) => void;
 }) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const workflowRef = useRef(workflow);
+  const undoRef = useRef<EditableWorkflow[]>([]);
+  const redoRef = useRef<EditableWorkflow[]>([]);
+  const dragSnapshotRef = useRef<EditableWorkflow | null>(null);
+  const [historyState, setHistoryState] = useState({ undo: 0, redo: 0 });
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [drag, setDrag] = useState<NodeDrag | null>(null);
+  const [snapToGrid, setSnapToGrid] = useState(true);
   const [pendingConnection, setPendingConnection] =
     useState<PendingConnection | null>(null);
   const [configurationText, setConfigurationText] = useState("{}");
@@ -133,6 +218,56 @@ export function WorkflowGraphEditor({
   const [edgeSourcePort, setEdgeSourcePort] = useState("");
   const [edgeTargetNode, setEdgeTargetNode] = useState("");
   const [edgeTargetPort, setEdgeTargetPort] = useState("");
+
+  useEffect(() => {
+    workflowRef.current = workflow;
+  }, [workflow]);
+
+  const syncHistoryState = useCallback(() => {
+    setHistoryState({ undo: undoRef.current.length, redo: redoRef.current.length });
+  }, []);
+
+  const applyWorkflow = useCallback(
+    (next: EditableWorkflow, recordHistory = true) => {
+      const current = workflowRef.current;
+      if (workflowChecksum(current) === workflowChecksum(next)) return;
+      if (recordHistory) {
+        undoRef.current = [...undoRef.current, cloneWorkflow(current)].slice(
+          -MAX_HISTORY,
+        );
+        redoRef.current = [];
+        syncHistoryState();
+      }
+      workflowRef.current = next;
+      onChange(next);
+    },
+    [onChange, syncHistoryState],
+  );
+
+  const undo = useCallback(() => {
+    const previous = undoRef.current.at(-1);
+    if (!previous) return;
+    undoRef.current = undoRef.current.slice(0, -1);
+    redoRef.current = [cloneWorkflow(workflowRef.current), ...redoRef.current].slice(
+      0,
+      MAX_HISTORY,
+    );
+    workflowRef.current = cloneWorkflow(previous);
+    onChange(cloneWorkflow(previous));
+    syncHistoryState();
+  }, [onChange, syncHistoryState]);
+
+  const redo = useCallback(() => {
+    const next = redoRef.current[0];
+    if (!next) return;
+    redoRef.current = redoRef.current.slice(1);
+    undoRef.current = [...undoRef.current, cloneWorkflow(workflowRef.current)].slice(
+      -MAX_HISTORY,
+    );
+    workflowRef.current = cloneWorkflow(next);
+    onChange(cloneWorkflow(next));
+    syncHistoryState();
+  }, [onChange, syncHistoryState]);
 
   const definitionByType = useMemo(
     () =>
@@ -167,33 +302,61 @@ export function WorkflowGraphEditor({
     (
       nodeId: string,
       updater: (node: EditableWorkflowNode) => EditableWorkflowNode,
+      recordHistory = true,
     ) => {
-      onChange({
-        ...workflow,
-        nodes: workflow.nodes.map((node) =>
-          node.id === nodeId ? updater(node) : node,
-        ),
-      });
+      const current = workflowRef.current;
+      applyWorkflow(
+        {
+          ...current,
+          nodes: current.nodes.map((node) =>
+            node.id === nodeId ? updater(node) : node,
+          ),
+        },
+        recordHistory,
+      );
     },
-    [onChange, workflow],
+    [applyWorkflow],
   );
 
   const removeNode = useCallback(
     (nodeId: string) => {
-      onChange({
-        ...workflow,
-        nodes: workflow.nodes.filter((node) => node.id !== nodeId),
-        edges: workflow.edges.filter(
+      const current = workflowRef.current;
+      applyWorkflow({
+        ...current,
+        nodes: current.nodes.filter((node) => node.id !== nodeId),
+        edges: current.edges.filter(
           (edge) =>
             edge.source_node_id !== nodeId && edge.target_node_id !== nodeId,
         ),
       });
-      setSelectedNodeId((current) => (current === nodeId ? null : current));
-      setPendingConnection((current) =>
-        current?.nodeId === nodeId ? null : current,
+      setSelectedNodeId((selected) => (selected === nodeId ? null : selected));
+      setPendingConnection((connection) =>
+        connection?.nodeId === nodeId ? null : connection,
       );
     },
-    [onChange, workflow],
+    [applyWorkflow],
+  );
+
+  const duplicateNode = useCallback(
+    (nodeId: string) => {
+      const current = workflowRef.current;
+      const source = current.nodes.find((node) => node.id === nodeId);
+      if (!source) return;
+      const sourceIndex = current.nodes.findIndex((node) => node.id === nodeId);
+      const sourcePosition = positionOf(source, sourceIndex);
+      const id = nextNodeId(source.node_type, current.nodes);
+      const copy = withPosition(
+        {
+          ...cloneWorkflow({ name: "", nodes: [source], edges: [] }).nodes[0],
+          id,
+          label: source.label ? `${source.label} copy` : source.label,
+        },
+        { x: sourcePosition.x + 30, y: sourcePosition.y + 30 },
+      );
+      applyWorkflow({ ...current, nodes: [...current.nodes, copy] });
+      setSelectedNodeId(id);
+    },
+    [applyWorkflow],
   );
 
   useEffect(() => {
@@ -202,42 +365,78 @@ export function WorkflowGraphEditor({
       const canvas = canvasRef.current;
       if (!canvas) return;
       const bounds = canvas.getBoundingClientRect();
-      const node = nodeById.get(drag.nodeId);
+      const node = workflowRef.current.nodes.find(
+        (candidate) => candidate.id === drag.nodeId,
+      );
       if (!node) return;
       const definition = definitionByType.get(node.node_type);
       const maximumX = Math.max(0, bounds.width - NODE_WIDTH);
       const maximumY = Math.max(0, bounds.height - nodeHeight(definition));
-      updateNode(drag.nodeId, (current) =>
-        withPosition(current, {
-          x: Math.max(
-            0,
-            Math.min(maximumX, event.clientX - bounds.left - drag.offsetX),
-          ),
-          y: Math.max(
-            0,
-            Math.min(maximumY, event.clientY - bounds.top - drag.offsetY),
-          ),
-        }),
+      const rawX = Math.max(
+        0,
+        Math.min(maximumX, event.clientX - bounds.left - drag.offsetX),
+      );
+      const rawY = Math.max(
+        0,
+        Math.min(maximumY, event.clientY - bounds.top - drag.offsetY),
+      );
+      updateNode(
+        drag.nodeId,
+        (current) =>
+          withPosition(current, {
+            x: snapToGrid ? Math.round(rawX / GRID_SIZE) * GRID_SIZE : rawX,
+            y: snapToGrid ? Math.round(rawY / GRID_SIZE) * GRID_SIZE : rawY,
+          }),
+        false,
       );
     };
-    const finish = () => setDrag(null);
+    const finish = () => {
+      const snapshot = dragSnapshotRef.current;
+      if (
+        snapshot &&
+        workflowChecksum(snapshot) !== workflowChecksum(workflowRef.current)
+      ) {
+        undoRef.current = [...undoRef.current, snapshot].slice(-MAX_HISTORY);
+        redoRef.current = [];
+        syncHistoryState();
+      }
+      dragSnapshotRef.current = null;
+      setDrag(null);
+    };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", finish, { once: true });
     return () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", finish);
     };
-  }, [definitionByType, drag, nodeById, updateNode]);
+  }, [definitionByType, drag, snapToGrid, syncHistoryState, updateNode]);
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
-      if (!selectedNodeId) return;
       const target = event.target;
       if (
         target instanceof HTMLElement &&
         (target.isContentEditable ||
           ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
       ) {
+        return;
+      }
+      const command = event.ctrlKey || event.metaKey;
+      if (command && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        if (event.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (command && event.key.toLowerCase() === "y") {
+        event.preventDefault();
+        redo();
+        return;
+      }
+      if (!selectedNodeId) return;
+      if (command && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        duplicateNode(selectedNodeId);
         return;
       }
       if (event.key === "Delete" || event.key === "Backspace") {
@@ -256,7 +455,9 @@ export function WorkflowGraphEditor({
       updateNode(selectedNodeId, (node) => {
         const current = positionOf(
           node,
-          workflow.nodes.findIndex((item) => item.id === selectedNodeId),
+          workflowRef.current.nodes.findIndex(
+            (item) => item.id === selectedNodeId,
+          ),
         );
         return withPosition(node, {
           x: Math.max(0, current.x + delta.x),
@@ -266,11 +467,12 @@ export function WorkflowGraphEditor({
     };
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
-  }, [removeNode, selectedNodeId, updateNode, workflow.nodes]);
+  }, [duplicateNode, redo, removeNode, selectedNodeId, undo, updateNode]);
 
   function addNode(nodeType: string, position?: Position) {
     const definition = definitionByType.get(nodeType);
-    const id = nextNodeId(nodeType, workflow.nodes);
+    const current = workflowRef.current;
+    const id = nextNodeId(nodeType, current.nodes);
     const node = withPosition(
       {
         id,
@@ -280,7 +482,7 @@ export function WorkflowGraphEditor({
       },
       position ?? { x: 50, y: 50 },
     );
-    onChange({ ...workflow, nodes: [...workflow.nodes, node] });
+    applyWorkflow({ ...current, nodes: [...current.nodes, node] });
     setSelectedNodeId(id);
   }
 
@@ -306,6 +508,7 @@ export function WorkflowGraphEditor({
     const canvas = canvasRef.current;
     if (!position || !canvas) return;
     const bounds = canvas.getBoundingClientRect();
+    dragSnapshotRef.current = cloneWorkflow(workflowRef.current);
     setSelectedNodeId(nodeId);
     setDrag({
       nodeId,
@@ -320,22 +523,21 @@ export function WorkflowGraphEditor({
       setPendingConnection(null);
       return;
     }
-    if (pendingConnection.dataType !== dataType) {
-      return;
-    }
+    if (!compatiblePorts(pendingConnection.dataType, dataType)) return;
     const edge: EditableWorkflowEdge = {
       source_node_id: pendingConnection.nodeId,
       source_port: pendingConnection.port,
       target_node_id: nodeId,
       target_port: port,
     };
-    const nextEdges = workflow.edges.filter(
+    const current = workflowRef.current;
+    const nextEdges = current.edges.filter(
       (item) => !(item.target_node_id === nodeId && item.target_port === port),
     );
     if (!nextEdges.some((item) => edgeKey(item) === edgeKey(edge))) {
       nextEdges.push(edge);
     }
-    onChange({ ...workflow, edges: nextEdges });
+    applyWorkflow({ ...current, edges: nextEdges });
     setPendingConnection(null);
   }
 
@@ -360,23 +562,25 @@ export function WorkflowGraphEditor({
     const target = targetDefinition?.inputs.find(
       (port) => port.name === edgeTargetPort,
     );
-    if (!source || !target || source.data_type !== target.data_type) return;
+    if (!source || !target || !compatiblePorts(source.data_type, target.data_type)) {
+      return;
+    }
     const edge: EditableWorkflowEdge = {
       source_node_id: edgeSourceNode,
       source_port: edgeSourcePort,
       target_node_id: edgeTargetNode,
       target_port: edgeTargetPort,
     };
-    const edges = workflow.edges.filter(
+    const current = workflowRef.current;
+    const edges = current.edges.filter(
       (item) =>
         !(
           item.target_node_id === edgeTargetNode &&
           item.target_port === edgeTargetPort
         ),
     );
-    if (!edges.some((item) => edgeKey(item) === edgeKey(edge)))
-      edges.push(edge);
-    onChange({ ...workflow, edges });
+    if (!edges.some((item) => edgeKey(item) === edgeKey(edge))) edges.push(edge);
+    applyWorkflow({ ...current, edges });
   }
 
   function saveConfiguration() {
@@ -449,13 +653,59 @@ export function WorkflowGraphEditor({
             <input
               value={workflow.name}
               onChange={(event) =>
-                onChange({ ...workflow, name: event.target.value })
+                applyWorkflow({
+                  ...workflowRef.current,
+                  name: event.target.value,
+                })
               }
             />
           </label>
           <span>
             {workflow.nodes.length} nodes · {workflow.edges.length} edges
           </span>
+          <button
+            type="button"
+            className="secondary"
+            disabled={!historyState.undo}
+            onClick={undo}
+            title="Undo (Ctrl/Cmd+Z)"
+          >
+            Undo
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={!historyState.redo}
+            onClick={redo}
+            title="Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y)"
+          >
+            Redo
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => applyWorkflow(topologicalLayout(workflowRef.current))}
+          >
+            Auto-layout
+          </button>
+          <label className="toggle-row">
+            <input
+              type="checkbox"
+              checked={snapToGrid}
+              onChange={(event) => setSnapToGrid(event.target.checked)}
+            />
+            Snap to grid
+          </label>
+          {selectedNodeId && (
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => duplicateNode(selectedNodeId)}
+              title="Duplicate selected node (Ctrl/Cmd+D)"
+            >
+              Duplicate
+            </button>
+          )}
           {pendingConnection && (
             <button
               type="button"
@@ -471,7 +721,7 @@ export function WorkflowGraphEditor({
           className="workflow-graph-canvas"
           tabIndex={0}
           role="application"
-          aria-label="Workflow graph canvas. Use the node palette to add nodes. Select a node and use arrow keys to move it."
+          aria-label="Workflow graph canvas. Use the node palette to add nodes. Select a node and use arrow keys to move it. Use control Z to undo and control D to duplicate."
           onDragOver={(event) => {
             event.preventDefault();
             event.dataTransfer.dropEffect = "copy";
@@ -579,7 +829,10 @@ export function WorkflowGraphEditor({
                         title={`${port.name}: ${port.data_type}`}
                         disabled={
                           Boolean(pendingConnection) &&
-                          pendingConnection?.dataType !== port.data_type
+                          !compatiblePorts(
+                            pendingConnection?.dataType ?? "",
+                            port.data_type,
+                          )
                         }
                         onClick={() =>
                           connectTo(node.id, port.name, port.data_type)
@@ -650,6 +903,13 @@ export function WorkflowGraphEditor({
             </label>
             <button type="button" onClick={saveConfiguration}>
               Apply configuration
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => duplicateNode(selectedNode.id)}
+            >
+              Duplicate node
             </button>
             {configurationError && (
               <p className="form-error">{configurationError}</p>
@@ -735,21 +995,22 @@ export function WorkflowGraphEditor({
           {workflow.edges.map((edge) => (
             <div key={edgeKey(edge)}>
               <small>
-                {edge.source_node_id}.{edge.source_port} → {edge.target_node_id}
-                .{edge.target_port}
+                {edge.source_node_id}.{edge.source_port} → {edge.target_node_id}.
+                {edge.target_port}
               </small>
               <button
                 type="button"
                 className="danger-ghost"
                 aria-label={`Remove edge ${edgeKey(edge)}`}
-                onClick={() =>
-                  onChange({
-                    ...workflow,
-                    edges: workflow.edges.filter(
+                onClick={() => {
+                  const current = workflowRef.current;
+                  applyWorkflow({
+                    ...current,
+                    edges: current.edges.filter(
                       (item) => edgeKey(item) !== edgeKey(edge),
                     ),
-                  })
-                }
+                  });
+                }}
               >
                 Remove
               </button>
