@@ -40,19 +40,27 @@ if (-not (Test-Path -LiteralPath $PackagedApi -PathType Leaf)) {
 }
 
 $RuntimeFiles = @(
+    @(
+        foreach ($Pattern in $RuntimePatterns) {
+            Get-ChildItem `
+                -LiteralPath $SourceTorchLib `
+                -Filter $Pattern `
+                -File `
+                -ErrorAction SilentlyContinue
+        }
+    ) | Sort-Object -Property Name -Unique
+)
+$MissingPatterns = @(
     foreach ($Pattern in $RuntimePatterns) {
-        Get-ChildItem `
-            -LiteralPath $SourceTorchLib `
-            -Filter $Pattern `
-            -File `
-            -ErrorAction SilentlyContinue
+        if (@($RuntimeFiles | Where-Object { $_.Name -like $Pattern }).Count -eq 0) {
+            $Pattern
+        }
     }
-) | Sort-Object -Property Name -Unique
-
-if ($RuntimeFiles.Count -eq 0) {
+)
+if ($MissingPatterns.Count -gt 0) {
     throw (
-        "No CUDA runtime DLLs were found in the pinned PyTorch installation. " +
-        "Reinstall the Windows CU121 provider environment before packaging."
+        "The pinned Windows CU121 provider environment is missing required CUDA " +
+        "runtime families: $($MissingPatterns -join ', '). Rerun .\scripts\bootstrap.ps1."
     )
 }
 
