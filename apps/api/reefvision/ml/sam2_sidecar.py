@@ -15,7 +15,6 @@ from urllib import parse as url_parse
 from urllib import request as url_request
 
 import numpy as np
-from numpy.typing import NDArray
 from PIL import Image, UnidentifiedImageError
 
 from reefvision.domain.errors import ValidationError
@@ -46,6 +45,39 @@ def _validated_endpoint(value: object) -> str:
     return endpoint
 
 
+def _read_json_response(raw: bytes) -> dict[str, Any]:
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValidationError("SAM 2 sidecar returned invalid JSON") from exc
+    if not isinstance(parsed, dict):
+        raise ValidationError("SAM 2 sidecar returned an unexpected response")
+    return parsed
+
+
+def _get_json(
+    url: str,
+    *,
+    token: str | None,
+    timeout_seconds: float,
+) -> dict[str, Any]:
+    headers: dict[str, str] = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = url_request.Request(url, headers=headers, method="GET")
+    try:
+        with url_request.urlopen(request, timeout=timeout_seconds) as response:
+            raw = response.read()
+    except url_error.HTTPError as exc:
+        body = exc.read(2048).decode("utf-8", errors="replace")
+        raise ValidationError(
+            f"SAM 2 sidecar returned HTTP {exc.code}: {body}"
+        ) from exc
+    except (url_error.URLError, TimeoutError, OSError) as exc:
+        raise ValidationError(f"SAM 2 sidecar request failed: {exc}") from exc
+    return _read_json_response(raw)
+
+
 def _post_json(
     url: str,
     *,
@@ -72,13 +104,52 @@ def _post_json(
         ) from exc
     except (url_error.URLError, TimeoutError, OSError) as exc:
         raise ValidationError(f"SAM 2 sidecar request failed: {exc}") from exc
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise ValidationError("SAM 2 sidecar returned invalid JSON") from exc
-    if not isinstance(parsed, dict):
-        raise ValidationError("SAM 2 sidecar returned an unexpected response")
-    return parsed
+    return _read_json_response(raw)
+
+
+def check_sam2_sidecar_health(
+    endpoint: str,
+    *,
+    token_env: str,
+    timeout_seconds: float,
+) -> dict[str, Any]:
+    """Validate and query a SAM 2 sidecar without exposing its bearer token."""
+
+    validated_endpoint = _validated_endpoint(endpoint)
+    normalized_token_env = token_env.strip()
+    if (
+        not normalized_token_env
+        or not normalized_token_env.replace("_", "").isalnum()
+        or not normalized_token_env[0].isalpha()
+    ):
+        raise ValidationError("SAM 2 sidecar token environment name is invalid")
+    if not 1 <= timeout_seconds <= 600:
+        raise ValidationError("SAM 2 sidecar timeout must be between 1 and 600 seconds")
+    token = os.environ.get(normalized_token_env)
+    payload = _get_json(
+        f"{validated_endpoint}/health",
+        token=token,
+        timeout_seconds=timeout_seconds,
+    )
+    status = str(payload.get("status", "")).strip().casefold()
+    provider = str(payload.get("provider", "")).strip().casefold()
+    device = str(payload.get("device", "")).strip()
+    model_version_raw = payload.get("model_version")
+    model_version = None if model_version_raw is None else str(model_version_raw).strip()
+    if status != "ok":
+        raise ValidationError("SAM 2 sidecar health response did not report status=ok")
+    if provider != _PROVIDER_NAME:
+        raise ValidationError("The endpoint is not a ReefVision SAM 2 sidecar")
+    if not device:
+        raise ValidationError("SAM 2 sidecar health response is missing its device")
+    return {
+        "status": status,
+        "provider": provider,
+        "model_version": model_version or None,
+        "device": device,
+        "endpoint": validated_endpoint,
+        "token_configured": token is not None,
+    }
 
 
 def _prepared_image(image_path: Path) -> PreparedSam2SidecarImage:
@@ -155,7 +226,11 @@ class SAM2SidecarAssistProvider:
         token_env = str(
             descriptor.get("token_env", "REEFVISION_SAM2_SIDECAR_TOKEN")
         ).strip()
-        if not token_env or not token_env.replace("_", "").isalnum():
+        if (
+            not token_env
+            or not token_env.replace("_", "").isalnum()
+            or not token_env[0].isalpha()
+        ):
             raise ValidationError("SAM 2 sidecar token environment name is invalid")
         try:
             timeout_seconds = float(descriptor.get("timeout_seconds", 120.0))
