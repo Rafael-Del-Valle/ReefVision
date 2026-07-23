@@ -1,0 +1,32 @@
+{
+  "schema": "reefvision-feature-freeze-v1",
+  "baseline_sha": "f52a90afeffda0f59df93c9dc5998f22a99b53c1",
+  "started_at": "2026-07-23",
+  "reason": "Stabilize PR #8 through complete validation, Windows packaging, coral journey, provider consensus, and external interchange acceptance before adding new production modules.",
+  "allowed_new_prefixes": [
+    ".github/",
+    "docs/",
+    "scripts/",
+    "apps/api/reefvision/tests/",
+    "apps/api/reefvision/testing/",
+    "apps/web/tests/"
+  ],
+  "allowed_new_suffixes": [
+    ".test.ts",
+    ".test.tsx",
+    ".spec.ts",
+    ".spec.tsx"
+  ],
+  "blocked_new_prefixes": [
+    "apps/api/migrations/versions/",
+    "apps/api/reefvision/",
+    "apps/web/src/",
+    "apps/web/src-tauri/src/"
+  ],
+  "notes": [
+    "Existing production files may be modified to fix validation, safety, packaging, interoperability, or usability defects.",
+    "New tests, documentation, validation scripts, and CI repairs remain allowed.",
+    "New migrations and new production modules are blocked until the release-candidate exit criteria pass.",
+    "The independent article branches remain compound until the freeze is explicitly lifted."
+  ]
+}
