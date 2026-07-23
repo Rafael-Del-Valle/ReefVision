@@ -36,12 +36,18 @@ def catalog_model_directories(settings: Settings) -> dict[str, Path]:
 
 def _safe_catalog_segments(catalog_id: str) -> list[str]:
     segments = catalog_id.split("/")
-    if not segments or any(not _SAFE_SEGMENT.fullmatch(segment) for segment in segments):
+    if not segments or any(
+        not _SAFE_SEGMENT.fullmatch(segment) for segment in segments
+    ):
         raise ValidationError("Catalog id cannot be mapped to managed storage")
     return segments
 
 
-def catalog_asset_path(settings: Settings, catalog_id: str, filename: str) -> Path:
+def catalog_asset_path(
+    settings: Settings,
+    catalog_id: str,
+    filename: str,
+) -> Path:
     if Path(filename).name != filename or not _SAFE_SEGMENT.fullmatch(filename):
         raise ValidationError("Catalog filename cannot be mapped to managed storage")
     root = catalog_model_directories(settings)["catalog_models"]
@@ -54,9 +60,15 @@ def catalog_asset_path(settings: Settings, catalog_id: str, filename: str) -> Pa
 
 def relative_catalog_asset_path(settings: Settings, path: Path) -> str:
     try:
-        return path.resolve().relative_to(settings.resolved_model_cache_dir).as_posix()
+        return (
+            path.resolve()
+            .relative_to(settings.resolved_model_cache_dir)
+            .as_posix()
+        )
     except ValueError as exc:
-        raise ValidationError("Catalog asset is outside ReefVision model-cache storage") from exc
+        raise ValidationError(
+            "Catalog asset is outside ReefVision model-cache storage"
+        ) from exc
 
 
 def manifest_path(settings: Settings) -> Path:
@@ -70,14 +82,27 @@ def load_catalog_manifest(settings: Settings) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {"manifest_version": MANIFEST_VERSION, "assets": {}, "corrupted": True}
+        return {
+            "manifest_version": MANIFEST_VERSION,
+            "assets": {},
+            "corrupted": True,
+        }
     assets = payload.get("assets")
-    if payload.get("manifest_version") != MANIFEST_VERSION or not isinstance(assets, dict):
-        return {"manifest_version": MANIFEST_VERSION, "assets": {}, "corrupted": True}
+    if payload.get("manifest_version") != MANIFEST_VERSION or not isinstance(
+        assets, dict
+    ):
+        return {
+            "manifest_version": MANIFEST_VERSION,
+            "assets": {},
+            "corrupted": True,
+        }
     return cast(dict[str, Any], payload)
 
 
-def catalog_manifest_record(settings: Settings, catalog_id: str) -> dict[str, Any] | None:
+def catalog_manifest_record(
+    settings: Settings,
+    catalog_id: str,
+) -> dict[str, Any] | None:
     value = load_catalog_manifest(settings).get("assets", {}).get(catalog_id)
     return dict(value) if isinstance(value, dict) else None
 
@@ -94,7 +119,9 @@ def write_catalog_manifest_record(
         assets[catalog_id] = {
             **record,
             "catalog_id": catalog_id,
-            "installed_at": record.get("installed_at") or datetime.now(UTC).isoformat(),
+            "installed_at": (
+                record.get("installed_at") or datetime.now(UTC).isoformat()
+            ),
         }
         finalized = {
             "manifest_version": MANIFEST_VERSION,
