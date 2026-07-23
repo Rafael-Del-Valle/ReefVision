@@ -93,6 +93,32 @@ function Assert-ReefVisionModelCatalog {
     }
 }
 
+function Invoke-ReefVisionNative {
+    param(
+        [Parameter(Mandatory = $true)][string]$Executable,
+        [Parameter(Mandatory = $false)][string[]]$Arguments = @(),
+        [Parameter(Mandatory = $true)][string]$FailureMessage
+    )
+
+    # Windows PowerShell wraps native stderr as ErrorRecord objects when the parent
+    # script uses ErrorActionPreference=Stop. PyInstaller and its dependency probes
+    # write warnings and progress to stderr on successful runs, so only the native
+    # process exit code is authoritative.
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    $ExitCode = 1
+    try {
+        $ErrorActionPreference = "Continue"
+        & $Executable @Arguments 2>&1 | ForEach-Object { Write-Host ([string]$_) }
+        $ExitCode = if ($null -eq $LASTEXITCODE) { 1 } else { $LASTEXITCODE }
+    }
+    finally {
+        $ErrorActionPreference = $PreviousErrorActionPreference
+    }
+    if ($ExitCode -ne 0) {
+        throw "$FailureMessage Native process exited with code $ExitCode."
+    }
+}
+
 $CollectedProviderPackages = @(
     "torch",
     "torchvision",
@@ -294,16 +320,19 @@ $env:HF_HUB_OFFLINE = "1"
 
 try {
     Write-ReefVisionStep "Checking pinned provider dependencies before packaging"
-    & $VenvPython -c "from pathlib import Path; from reefvision.ml.dependencies import configure_provider_runtime, require_all_implemented_providers_ready; from reefvision.ml.nnunet_dependency_contract import require_nnunet_dependency_contract; configure_provider_runtime(data_dir=Path(r'$ResolvedProviderRuntimePath')); require_all_implemented_providers_ready(); require_nnunet_dependency_contract(); import transformers.models.florence2, transformers.models.grounding_dino, transformers.models.owlv2"
-    if ($LASTEXITCODE -ne 0) {
-        throw "Pinned provider dependency preflight failed. Rerun .\scripts\bootstrap.ps1."
-    }
+    Invoke-ReefVisionNative `
+        -Executable $VenvPython `
+        -Arguments @(
+            "-c",
+            "from pathlib import Path; from reefvision.ml.dependencies import configure_provider_runtime, require_all_implemented_providers_ready; from reefvision.ml.nnunet_dependency_contract import require_nnunet_dependency_contract; configure_provider_runtime(data_dir=Path(r'$ResolvedProviderRuntimePath')); require_all_implemented_providers_ready(); require_nnunet_dependency_contract(); import transformers.models.florence2, transformers.models.grounding_dino, transformers.models.owlv2"
+        ) `
+        -FailureMessage "Pinned provider dependency preflight failed. Rerun .\scripts\bootstrap.ps1."
 
     Write-ReefVisionStep "Building the packaged FastAPI sidecar with PyInstaller"
-    & $PyInstaller @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "PyInstaller failed while building the ReefVision desktop sidecar."
-    }
+    Invoke-ReefVisionNative `
+        -Executable $PyInstaller `
+        -Arguments $Arguments `
+        -FailureMessage "PyInstaller failed while building the ReefVision desktop sidecar."
 }
 finally {
     $env:Path = $PreviousPath
