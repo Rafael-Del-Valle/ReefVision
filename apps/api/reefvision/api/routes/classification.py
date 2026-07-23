@@ -31,10 +31,16 @@ from reefvision.schemas.classification import (
     ImageLabelResponse,
     ImageLabelWriteRequest,
 )
+from reefvision.schemas.classification_assignment_exports import (
+    ScientificClassificationExportResponse,
+)
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.models import ModelRegistrationResponse, RegisterModelFromRunRequest
 from reefvision.schemas.training import TrainingRunResponse
 from reefvision.services.classification import ClassificationService
+from reefvision.services.classification_assignment_exports import (
+    ScientificClassificationExportService,
+)
 from reefvision.services.classification_assignments import ClassificationAssignmentService
 from reefvision.services.classification_models import ClassificationModelService
 
@@ -339,6 +345,22 @@ def export_classification_assignments(
         project_id,
         status=assignment_status,
     )
+
+
+@router.get(
+    "/projects/{project_id}/classification-assignments/scientific-export",
+    response_model=ScientificClassificationExportResponse,
+)
+def export_scientific_classification_assignments(
+    project_id: str,
+    request: Request,
+    session: DbSession,
+    assignment_status: str = "accepted",
+) -> ScientificClassificationExportResponse:
+    return ScientificClassificationExportService(
+        session,
+        request.app.state.settings,
+    ).export(project_id, assignment_status=assignment_status)
 
 
 @router.get("/images/{image_id}/labels", response_model=list[ImageLabelResponse])
