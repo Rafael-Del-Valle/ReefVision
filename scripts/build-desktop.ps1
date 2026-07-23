@@ -55,7 +55,7 @@ function Invoke-ReefVisionPython {
     $ExitCode = 1
     try {
         $ErrorActionPreference = "Continue"
-        & $VenvPython @Arguments 2>&1 | ForEach-Object { Write-Host $_ }
+        & $VenvPython @Arguments 2>&1 | ForEach-Object { Write-Host ([string]$_) }
         $ExitCode = if ($null -eq $LASTEXITCODE) { 1 } else { $LASTEXITCODE }
     }
     finally {
@@ -206,7 +206,7 @@ try {
 
     & (Join-Path $PSScriptRoot "build-desktop-backend.ps1") `
         -TargetTriple $TargetTriple
-    if ($LASTEXITCODE -ne 0) {
+    if (-not $?) {
         throw "The packaged desktop backend build failed."
     }
 
@@ -262,4 +262,22 @@ $Installers = @(
 if ($Installers.Count -eq 0) {
     throw "Tauri did not produce an MSI installer in $InstallerDirectory"
 }
+
+$VerificationScript = Join-Path $PSScriptRoot "verify-windows-msi.ps1"
+foreach ($Installer in $Installers) {
+    $SafeInstallerName = [IO.Path]::GetFileNameWithoutExtension($Installer.Name) -replace `
+        '[^A-Za-z0-9._-]+', `
+        '-'
+    $VerificationRoot = Join-Path `
+        $Root `
+        ".artifacts\msi-build-verification-$SafeInstallerName"
+    Write-ReefVisionStep "Verifying extracted MSI payload: $($Installer.Name)"
+    & $VerificationScript `
+        -MsiPath $Installer.FullName `
+        -OutputDirectory $VerificationRoot
+    if (-not $?) {
+        throw "MSI payload verification failed: $($Installer.FullName)"
+    }
+}
+
 Write-Host "Desktop installer output: $InstallerDirectory" -ForegroundColor Green
