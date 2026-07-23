@@ -8,6 +8,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
 if ($PSVersionTable.PSEdition -eq "Core" -and -not $IsWindows) {
     throw "MSI verification must run on Windows."
 }
@@ -20,7 +21,9 @@ if ([IO.Path]::GetExtension($ResolvedMsi).ToLowerInvariant() -ne ".msi") {
     throw "The supplied installer is not an MSI file."
 }
 if (-not $OutputDirectory) {
-    $OutputDirectory = Join-Path $Root ".artifacts\msi-verification-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+    $OutputDirectory = Join-Path `
+        $Root `
+        ".artifacts\msi-verification-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
 }
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $ExtractRoot = Join-Path $OutputDirectory "administrative-image"
@@ -60,9 +63,24 @@ $Signature = Get-AuthenticodeSignature -LiteralPath $ResolvedMsi
 $SignatureEvidence = @{
     status = $Signature.Status.ToString()
     status_message = $Signature.StatusMessage
-    signer_subject = if ($Signature.SignerCertificate) { $Signature.SignerCertificate.Subject } else { $null }
-    signer_thumbprint = if ($Signature.SignerCertificate) { $Signature.SignerCertificate.Thumbprint } else { $null }
-    timestamp_subject = if ($Signature.TimeStamperCertificate) { $Signature.TimeStamperCertificate.Subject } else { $null }
+    signer_subject = if ($Signature.SignerCertificate) {
+        $Signature.SignerCertificate.Subject
+    }
+    else {
+        $null
+    }
+    signer_thumbprint = if ($Signature.SignerCertificate) {
+        $Signature.SignerCertificate.Thumbprint
+    }
+    else {
+        $null
+    }
+    timestamp_subject = if ($Signature.TimeStamperCertificate) {
+        $Signature.TimeStamperCertificate.Subject
+    }
+    else {
+        $null
+    }
 }
 $SignatureMessage = if ($Signature.Status -eq "Valid") {
     "Installer signature is valid."
@@ -70,13 +88,24 @@ $SignatureMessage = if ($Signature.Status -eq "Valid") {
 else {
     "Signature is not required for this development build."
 }
-Add-Check "Authenticode signature" ($Signature.Status -eq "Valid") $SignatureMessage $SignatureEvidence ([bool]$RequireSignature)
+Add-Check `
+    "Authenticode signature" `
+    ($Signature.Status -eq "Valid") `
+    $SignatureMessage `
+    $SignatureEvidence `
+    ([bool]$RequireSignature)
 if ($ExpectedPublisher) {
-    $ActualPublisher = if ($Signature.SignerCertificate) { $Signature.SignerCertificate.Subject } else { "" }
-    Add-Check "Expected publisher" ($ActualPublisher -like "*$ExpectedPublisher*") "Signer must contain '$ExpectedPublisher'." @{
-        expected = $ExpectedPublisher
-        actual = $ActualPublisher
+    $ActualPublisher = if ($Signature.SignerCertificate) {
+        $Signature.SignerCertificate.Subject
     }
+    else {
+        ""
+    }
+    Add-Check `
+        "Expected publisher" `
+        ($ActualPublisher -like "*$ExpectedPublisher*") `
+        "Signer must contain '$ExpectedPublisher'." `
+        @{ expected = $ExpectedPublisher; actual = $ActualPublisher }
 }
 
 # Administrative extraction validates the Windows Installer database without changing machine state.
@@ -92,37 +121,109 @@ $AdminArguments = @(
     "/l*v",
     $InstallLog
 )
-$Process = Start-Process -FilePath "msiexec.exe" -ArgumentList $AdminArguments -Wait -PassThru
-Add-Check "MSI administrative extraction" ($Process.ExitCode -eq 0) "msiexec /a completed with exit code $($Process.ExitCode)." @{
-    exit_code = $Process.ExitCode
-    log_path = $InstallLog
-    extraction_root = $ExtractRoot
-}
+$Process = Start-Process `
+    -FilePath "msiexec.exe" `
+    -ArgumentList $AdminArguments `
+    -Wait `
+    -PassThru
+Add-Check `
+    "MSI administrative extraction" `
+    ($Process.ExitCode -eq 0) `
+    "msiexec /a completed with exit code $($Process.ExitCode)." `
+    @{
+        exit_code = $Process.ExitCode
+        log_path = $InstallLog
+        extraction_root = $ExtractRoot
+    }
 
-$ExtractedFiles = @(Get-ChildItem -LiteralPath $ExtractRoot -File -Recurse -ErrorAction Stop)
-Add-Check "Extracted payload" ($ExtractedFiles.Count -gt 0) "Administrative image contains files." @{
-    file_count = $ExtractedFiles.Count
-    total_bytes = ($ExtractedFiles | Measure-Object Length -Sum).Sum
-}
+$ExtractedFiles = @(
+    Get-ChildItem -LiteralPath $ExtractRoot -File -Recurse -ErrorAction Stop
+)
+Add-Check `
+    "Extracted payload" `
+    ($ExtractedFiles.Count -gt 0) `
+    "Administrative image contains files." `
+    @{
+        file_count = $ExtractedFiles.Count
+        total_bytes = ($ExtractedFiles | Measure-Object Length -Sum).Sum
+    }
 $Executables = @($ExtractedFiles | Where-Object Extension -eq ".exe")
-Add-Check "Executable payload" ($Executables.Count -gt 0) "At least one executable is packaged." @{
-    executables = @(
-        $Executables |
-            ForEach-Object { $_.FullName.Substring($ExtractRoot.Length).TrimStart('\') }
-    )
-}
+Add-Check `
+    "Executable payload" `
+    ($Executables.Count -gt 0) `
+    "At least one executable is packaged." `
+    @{
+        executables = @(
+            $Executables |
+                ForEach-Object {
+                    $_.FullName.Substring($ExtractRoot.Length).TrimStart('\')
+                }
+        )
+    }
 $Sidecars = @($Executables | Where-Object Name -match "reefvision-api")
-Add-Check "API sidecar payload" ($Sidecars.Count -gt 0) "The packaged ReefVision API sidecar is present." @{
-    sidecars = @($Sidecars | ForEach-Object FullName)
-}
-$WebviewFiles = @($ExtractedFiles | Where-Object Name -match "WebView2|msedgewebview")
+Add-Check `
+    "API sidecar payload" `
+    ($Sidecars.Count -gt 0) `
+    "The packaged ReefVision API sidecar is present." `
+    @{ sidecars = @($Sidecars | ForEach-Object FullName) }
+
+$CudaRuntimePatterns = @(
+    "cudnn_*.dll",
+    "cublas*.dll",
+    "cusparse*.dll",
+    "cusolver*.dll",
+    "cufft*.dll",
+    "curand*.dll",
+    "nvrtc*.dll",
+    "nvJitLink*.dll"
+)
+$MissingCudaRuntimePatterns = @(
+    foreach ($Pattern in $CudaRuntimePatterns) {
+        if (@($ExtractedFiles | Where-Object { $_.Name -like $Pattern }).Count -eq 0) {
+            $Pattern
+        }
+    }
+)
+$CudaRuntimeFiles = @(
+    $ExtractedFiles |
+        Where-Object {
+            $Name = $_.Name
+            @($CudaRuntimePatterns | Where-Object { $Name -like $_ }).Count -gt 0
+        } |
+        Sort-Object -Property Name -Unique
+)
+Add-Check `
+    "PyTorch CUDA runtime payload" `
+    ($MissingCudaRuntimePatterns.Count -eq 0) `
+    (
+        if ($MissingCudaRuntimePatterns.Count -eq 0) {
+            "Every required CUDA runtime family is present in the MSI payload."
+        }
+        else {
+            "Missing CUDA runtime families: $($MissingCudaRuntimePatterns -join ', ')."
+        }
+    ) `
+    @{
+        file_count = $CudaRuntimeFiles.Count
+        files = @($CudaRuntimeFiles | ForEach-Object Name)
+        missing_patterns = $MissingCudaRuntimePatterns
+    }
+
+$WebviewFiles = @(
+    $ExtractedFiles | Where-Object Name -match "WebView2|msedgewebview"
+)
 $WebviewMessage = if ($WebviewFiles.Count) {
     "WebView2-related payload files were found."
 }
 else {
     "No bundled WebView2 runtime was found; system runtime may be required."
 }
-Add-Check "WebView2 payload observation" $true $WebviewMessage @{ file_count = $WebviewFiles.Count } $false
+Add-Check `
+    "WebView2 payload observation" `
+    $true `
+    $WebviewMessage `
+    @{ file_count = $WebviewFiles.Count } `
+    $false
 
 $MachineInstallEvidence = $null
 if ($PerformMachineInstall) {
@@ -134,10 +235,11 @@ if ($PerformMachineInstall) {
     $Install = Start-Process -FilePath "msiexec.exe" -ArgumentList @(
         "/i", $ResolvedMsi, "/qn", "/norestart", "/l*v", $MachineLog
     ) -Wait -PassThru
-    Add-Check "Machine install" ($Install.ExitCode -in @(0, 3010)) "Silent installation completed." @{
-        exit_code = $Install.ExitCode
-        log_path = $MachineLog
-    }
+    Add-Check `
+        "Machine install" `
+        ($Install.ExitCode -in @(0, 3010)) `
+        "Silent installation completed." `
+        @{ exit_code = $Install.ExitCode; log_path = $MachineLog }
     $ProductCode = $null
     $Installer = $null
     $Database = $null
@@ -184,14 +286,28 @@ if ($PerformMachineInstall) {
         }
     }
     finally {
-        if ($Record) { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Record) | Out-Null }
-        if ($View) { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($View) | Out-Null }
-        if ($Database) { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Database) | Out-Null }
-        if ($Installer) { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Installer) | Out-Null }
+        if ($Record) {
+            [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Record) |
+                Out-Null
+        }
+        if ($View) {
+            [Runtime.InteropServices.Marshal]::FinalReleaseComObject($View) |
+                Out-Null
+        }
+        if ($Database) {
+            [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Database) |
+                Out-Null
+        }
+        if ($Installer) {
+            [Runtime.InteropServices.Marshal]::FinalReleaseComObject($Installer) |
+                Out-Null
+        }
     }
-    Add-Check "MSI ProductCode" ([bool]$ProductCode) "ProductCode was read from the installer database." @{
-        product_code = $ProductCode
-    }
+    Add-Check `
+        "MSI ProductCode" `
+        ([bool]$ProductCode) `
+        "ProductCode was read from the installer database." `
+        @{ product_code = $ProductCode }
     $MachineInstallEvidence = @{
         product_code = $ProductCode
         kept_installed = [bool]$KeepInstalled
@@ -201,16 +317,19 @@ if ($PerformMachineInstall) {
         $Uninstall = Start-Process -FilePath "msiexec.exe" -ArgumentList @(
             "/x", $ProductCode, "/qn", "/norestart", "/l*v", $UninstallLog
         ) -Wait -PassThru
-        Add-Check "Machine uninstall" ($Uninstall.ExitCode -in @(0, 1605, 3010)) "Silent uninstall completed." @{
-            exit_code = $Uninstall.ExitCode
-            log_path = $UninstallLog
-        }
+        Add-Check `
+            "Machine uninstall" `
+            ($Uninstall.ExitCode -in @(0, 1605, 3010)) `
+            "Silent uninstall completed." `
+            @{ exit_code = $Uninstall.ExitCode; log_path = $UninstallLog }
     }
 }
 
-$RequiredFailures = @($Results | Where-Object { $_.required -and -not $_.passed })
+$RequiredFailures = @(
+    $Results | Where-Object { $_.required -and -not $_.passed }
+)
 $Report = [pscustomobject]@{
-    schema = "reefvision-windows-msi-verification-v2"
+    schema = "reefvision-windows-msi-verification-v3"
     generated_at = (Get-Date).ToUniversalTime().ToString("o")
     msi = @{
         path = $ResolvedMsi
@@ -223,10 +342,14 @@ $Report = [pscustomobject]@{
     checks = $Results
 }
 $ReportPath = Join-Path $OutputDirectory "msi-verification.json"
-$Report | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $ReportPath -Encoding utf8
+$Report |
+    ConvertTo-Json -Depth 10 |
+    Set-Content -LiteralPath $ReportPath -Encoding utf8
 $ExtractedFiles |
     Select-Object FullName, Length, LastWriteTimeUtc |
     ConvertTo-Json -Depth 4 |
-    Set-Content -LiteralPath (Join-Path $OutputDirectory "msi-payload-inventory.json") -Encoding utf8
+    Set-Content `
+        -LiteralPath (Join-Path $OutputDirectory "msi-payload-inventory.json") `
+        -Encoding utf8
 Write-Host "MSI verification report: $ReportPath"
 $Results | Format-Table name, passed, required, message -AutoSize
