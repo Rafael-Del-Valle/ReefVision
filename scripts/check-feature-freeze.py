@@ -42,8 +42,13 @@ def _load_policy(path: Path) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f"Could not read feature-freeze policy {path}: {exc}") from exc
-    if not isinstance(payload, dict) or payload.get("schema") != "reefvision-feature-freeze-v1":
+        raise RuntimeError(
+            f"Could not read feature-freeze policy {path}: {exc}"
+        ) from exc
+    if (
+        not isinstance(payload, dict)
+        or payload.get("schema") != "reefvision-feature-freeze-v1"
+    ):
         raise RuntimeError("Unsupported ReefVision feature-freeze policy")
     baseline = payload.get("baseline_sha")
     if not isinstance(baseline, str) or len(baseline.strip()) < 7:
@@ -80,7 +85,14 @@ def _working_tree_changes() -> list[Change]:
             _git("diff", "--name-status", "--find-renames", "HEAD", "--")
         ),
         *_parse_name_status(
-            _git("diff", "--cached", "--name-status", "--find-renames", "HEAD", "--")
+            _git(
+                "diff",
+                "--cached",
+                "--name-status",
+                "--find-renames",
+                "HEAD",
+                "--",
+            )
         ),
     ]
     changes.extend(
@@ -115,13 +127,21 @@ def _blocked(change: Change, policy: dict[str, Any]) -> str | None:
         return None
 
     path = PurePosixPath(change.path).as_posix()
-    allowed_prefixes = [str(item) for item in policy.get("allowed_new_prefixes", [])]
-    allowed_suffixes = [str(item) for item in policy.get("allowed_new_suffixes", [])]
-    blocked_prefixes = [str(item) for item in policy.get("blocked_new_prefixes", [])]
+    allowed_prefixes = [
+        str(item) for item in policy.get("allowed_new_prefixes", [])
+    ]
+    allowed_suffixes = [
+        str(item) for item in policy.get("allowed_new_suffixes", [])
+    ]
+    blocked_prefixes = [
+        str(item) for item in policy.get("blocked_new_prefixes", [])
+    ]
 
     if path == ".reefvision-feature-freeze.json":
         return None
-    if _starts_with(path, allowed_prefixes) or _has_allowed_suffix(path, allowed_suffixes):
+    if _starts_with(path, allowed_prefixes) or _has_allowed_suffix(
+        path, allowed_suffixes
+    ):
         return None
     if _starts_with(path, blocked_prefixes):
         if path.startswith("apps/api/migrations/versions/"):
