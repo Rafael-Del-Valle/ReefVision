@@ -23,6 +23,7 @@ from reefvision.ml.classification import (
     CLASSIFIER_PURPOSE,
     UltralyticsClassificationProvider,
 )
+from reefvision.storage.models import resolve_verified_model_path
 from reefvision.storage.projects import resolve_managed_project_path
 
 
@@ -93,11 +94,21 @@ def process_classification_inference_job(
         model = session.get(ModelRegistration, str(request.get("model_id", "")))
         if (
             model is None
+            or model.project_id != job.project_id
             or model.purpose != CLASSIFIER_PURPOSE
             or model.task != CLASSIFICATION_TASK
         ):
             job.status = "failed"
-            job.error_message = "Classification inference requires a registered classifier"
+            job.error_message = "Classification inference requires a registered project classifier"
+            job.completed_at = _utc_now()
+            session.commit()
+            return False
+        queued_model_checksum = str(request.get("model_checksum") or "").casefold()
+        if not queued_model_checksum or queued_model_checksum != model.sha256.casefold():
+            job.status = "failed"
+            job.error_message = (
+                "The registered classifier changed after this inference job was queued"
+            )
             job.completed_at = _utc_now()
             session.commit()
             return False
@@ -125,10 +136,10 @@ def process_classification_inference_job(
         job.progress_current = 0
         job.result_json = {"stage": "running"}
         session.commit()
-        model_path = resolve_managed_project_path(settings, model.managed_path)
+        model_managed_path = model.managed_path
         model_id = model.id
         project_id = model.project_id
-        model_checksum = model.sha256
+        model_checksum = queued_model_checksum
         model_provider = model.provider_name
         model_provider_version = model.provider_version
         classification_mode = str(model.class_map_json.get("classification_mode", "multiclass"))
@@ -144,6 +155,11 @@ def process_classification_inference_job(
     shutil.rmtree(temporary_root, ignore_errors=True)
     temporary_root.mkdir(parents=True, exist_ok=True)
     try:
+        model_path = resolve_verified_model_path(
+            settings,
+            model_managed_path,
+            expected_sha256=model_checksum,
+        )
         provider.load_model(model_path, device)
         with factory() as session:
             project_classes = list(
