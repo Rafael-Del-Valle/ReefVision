@@ -1,9 +1,12 @@
 # ReefVision stabilization and release-candidate gate
 
-Status: **feature freeze active**  
-Branch: `feat/all-phases-advancement`  
-Draft PR: `#8`  
-Freeze baseline: `f52a90afeffda0f59df93c9dc5998f22a99b53c1`
+**Status:** feature freeze active
+
+**Branch:** `feat/all-phases-advancement`
+
+**Draft PR:** `#8`
+
+**Freeze baseline:** `f52a90afeffda0f59df93c9dc5998f22a99b53c1`
 
 ## Purpose
 
