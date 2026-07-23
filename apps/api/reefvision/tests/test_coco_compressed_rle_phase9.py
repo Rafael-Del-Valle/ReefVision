@@ -24,16 +24,16 @@ def test_interchange_preview_accepts_compact_coco_rle(client: TestClient) -> Non
     assert project_detail.status_code == 200, project_detail.text
     label_class = project_detail.json()["label_classes"][0]
 
-    # 10x10 Fortran-order raster: first column has five foreground pixels.
-    counts = [0, 5, 95]
+    # The managed test image is 80x60. Its first column has five foreground pixels.
+    counts = [0, 5, 4_795]
     compact = encode_compact_counts(counts)
     document = {
         "images": [
             {
                 "id": 1,
                 "file_name": filename,
-                "width": 10,
-                "height": 10,
+                "width": 80,
+                "height": 60,
                 "reefvision_image_id": image_id,
             }
         ],
@@ -43,7 +43,7 @@ def test_interchange_preview_accepts_compact_coco_rle(client: TestClient) -> Non
                 "id": 1,
                 "image_id": 1,
                 "category_id": 1,
-                "segmentation": {"size": [10, 10], "counts": compact},
+                "segmentation": {"size": [60, 80], "counts": compact},
                 "iscrowd": 1,
             }
         ],
