@@ -21,6 +21,7 @@ from reefvision.ml.classification import (
     ClassificationResult,
     UltralyticsClassificationProvider,
 )
+from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_classification_phase5 import _seed_classification_project
 
@@ -156,14 +157,15 @@ def _seed_classifier(
         checkpoint = resolve_managed_project_path(app.state.settings, managed_path)
         checkpoint.parent.mkdir(parents=True, exist_ok=True)
         checkpoint.write_bytes(b"classification-inference-safety")
+        checksum, file_size = hash_model_file(checkpoint)
         model = ModelRegistration(
             project_id=project_id,
             purpose="classifier",
             display_name="Inference safety classifier",
             source_filename="inference-safety.pt",
             managed_path=managed_path,
-            sha256="d" * 64,
-            file_size_bytes=checkpoint.stat().st_size,
+            sha256=checksum,
+            file_size_bytes=file_size,
             framework="ultralytics",
             task="classify",
             provider_name="ultralytics",
@@ -312,3 +314,109 @@ def test_classification_inference_retry_replaces_stale_pending_predictions(
         assert len(predictions) == 3
         assert all(not item.provenance_json.get("stale") for item in predictions)
         assert len({item.annotation_id for item in predictions}) == 3
+
+
+def test_classification_inference_rejects_changed_registered_checksum(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project, image_id, class_ids = _seed_classification_project(client)
+    project_id = str(project["id"])
+    model_id = _seed_classifier(client, project_id=project_id, class_ids=class_ids)
+    job_id = _queue_inference(
+        client,
+        project_id=project_id,
+        model_id=model_id,
+        image_id=image_id,
+    )
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        model = session.get(ModelRegistration, model_id)
+        assert model is not None
+        model.sha256 = "e" * 64
+        session.commit()
+
+    class _MustNotLoadProvider(_SuccessfulProvider):
+        def load_model(self, model_path: Path, device: str) -> None:
+            raise AssertionError("A changed classifier registration must not be loaded")
+
+    monkeypatch.setattr(
+        inference_module,
+        "UltralyticsClassificationProvider",
+        _MustNotLoadProvider,
+    )
+
+    assert not inference_module.process_classification_inference_job(
+        app.state.settings,
+        app.state.session_factory,
+        job_id,
+    )
+
+    with app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        predictions = list(
+            session.scalars(
+                select(ClassificationPrediction).where(
+                    ClassificationPrediction.inference_job_id == job_id
+                )
+            )
+        )
+        assert job is not None
+        assert job.status == "failed"
+        assert "changed after this inference job was queued" in str(job.error_message)
+        assert predictions == []
+
+
+def test_classification_inference_rejects_corrupted_checkpoint(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project, image_id, class_ids = _seed_classification_project(client)
+    project_id = str(project["id"])
+    model_id = _seed_classifier(client, project_id=project_id, class_ids=class_ids)
+    job_id = _queue_inference(
+        client,
+        project_id=project_id,
+        model_id=model_id,
+        image_id=image_id,
+    )
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        model = session.get(ModelRegistration, model_id)
+        assert model is not None
+        checkpoint = resolve_managed_project_path(app.state.settings, model.managed_path)
+    checkpoint.write_bytes(b"corrupted-after-queue")
+
+    class _MustNotLoadProvider(_SuccessfulProvider):
+        def load_model(self, model_path: Path, device: str) -> None:
+            raise AssertionError("A corrupted classifier checkpoint must not be loaded")
+
+    monkeypatch.setattr(
+        inference_module,
+        "UltralyticsClassificationProvider",
+        _MustNotLoadProvider,
+    )
+
+    assert not inference_module.process_classification_inference_job(
+        app.state.settings,
+        app.state.session_factory,
+        job_id,
+    )
+
+    with app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        predictions = list(
+            session.scalars(
+                select(ClassificationPrediction).where(
+                    ClassificationPrediction.inference_job_id == job_id
+                )
+            )
+        )
+        assert job is not None
+        assert job.status == "failed"
+        assert "checkpoint checksum is corrupted" in str(job.error_message)
+        assert job.progress_current == 0
+        assert job.result_json["proposal_count"] == 0
+        assert predictions == []
