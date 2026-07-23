@@ -13,6 +13,7 @@ from reefvision.schemas.workflows import (
     WorkflowValidationResponse,
 )
 from reefvision.services.workflow_consensus_templates import (
+    independent_mask_auto_labeling_template,
     multi_model_auto_labeling_template,
 )
 from reefvision.services.workflows import WorkflowService
@@ -34,7 +35,11 @@ def list_workflow_node_definitions() -> list[WorkflowNodeDefinition]:
     response_model=list[WorkflowTemplate],
 )
 def list_workflow_templates() -> list[WorkflowTemplate]:
-    return [*WorkflowService.templates(), multi_model_auto_labeling_template()]
+    return [
+        *WorkflowService.templates(),
+        multi_model_auto_labeling_template(),
+        independent_mask_auto_labeling_template(),
+    ]
 
 
 @router.post(
