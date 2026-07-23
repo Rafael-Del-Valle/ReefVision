@@ -6,31 +6,10 @@ import {
   getTrainingRuns,
   getTrainingWorkspaceBootstrap,
   type Project,
+  type TrainingDraft,
+  type TrainingRunSummary,
   updateTrainingDraft,
 } from "../../api/client";
-
-interface TuningDraftRecord {
-  id: string;
-  dataset_version_id: string | null;
-  provider_id: string | null;
-  task: string | null;
-  tuning_config: Record<string, unknown>;
-}
-
-interface TuningRunRecord {
-  id: string;
-  run_name: string;
-  status: string;
-  stage: string;
-  architecture: string;
-  tuning_config: Record<string, unknown>;
-  artifact_manifest: Record<string, unknown>;
-}
-
-const updateTrainingDraftCompat = updateTrainingDraft as unknown as (
-  draftId: string,
-  payload: { tuning_config: Record<string, unknown> },
-) => Promise<TuningDraftRecord>;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object"
@@ -81,16 +60,14 @@ export function TuningDashboard({ project }: { project: Project }) {
     queryKey: ["tuning_workspace_bootstrap", project.id],
     queryFn: ({ signal }) => getTrainingWorkspaceBootstrap(project.id, signal),
   });
-  const draft = useQuery<TuningDraftRecord>({
+  const draft = useQuery<TrainingDraft>({
     queryKey: ["training_draft", draftId],
-    queryFn: async ({ signal }) =>
-      (await getTrainingDraft(draftId, signal)) as unknown as TuningDraftRecord,
+    queryFn: ({ signal }) => getTrainingDraft(draftId, signal),
     enabled: draftId.length > 0,
   });
-  const runs = useQuery<TuningRunRecord[]>({
+  const runs = useQuery<TrainingRunSummary[]>({
     queryKey: ["tuning_runs", project.id],
-    queryFn: async ({ signal }) =>
-      (await getTrainingRuns(project.id, signal)) as unknown as TuningRunRecord[],
+    queryFn: ({ signal }) => getTrainingRuns(project.id, signal),
     refetchInterval: 3000,
   });
 
@@ -141,7 +118,7 @@ export function TuningDashboard({ project }: { project: Project }) {
           throw new Error(message);
         }
       }
-      return updateTrainingDraftCompat(draft.data.id, {
+      return updateTrainingDraft(draft.data.id, {
         tuning_config: {
           mode: enabled ? "ultralytics" : "disabled",
           iterations,
