@@ -161,6 +161,20 @@ def test_remote_consensus_requires_double_opt_in(client: TestClient) -> None:
         )
 
 
+def test_named_consensus_workflow_rejects_non_sam3_primary_model(
+    client: TestClient,
+) -> None:
+    fixture = _seed_review_proposals(client, geometry_kind="polygon_mask")
+    app = cast(FastAPI, client.app)
+
+    with pytest.raises(RuntimeError, match="sam3_sidecar"):
+        workflow_consensus._require_primary_provider(
+            app.state.session_factory,
+            model_id=fixture.model_id,
+            required_provider="sam3_sidecar",
+        )
+
+
 def test_workflow_inference_compatibility_normalizes_confidence_key(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -216,5 +230,6 @@ def test_workflow_templates_expose_multi_model_auto_labeling(
     )
     consensus = node["configuration"]["multi_model_consensus"]
     assert consensus["required_votes"] == 2
+    assert consensus["required_primary_provider"] == "sam3_sidecar"
     assert consensus["auto_accept"] is True
     assert consensus["allow_remote_review"] is False
