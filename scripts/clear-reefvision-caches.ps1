@@ -79,8 +79,10 @@ foreach ($RelativePath in @(
     "apps\api\.pytest_cache",
     "apps\api\.mypy_cache",
     "apps\api\.ruff_cache",
+    "apps\web\dist",
     "apps\web\node_modules\.vite",
     "apps\web\node_modules\.cache",
+    "apps\web\src-tauri\target",
     "apps\web\test-results",
     "apps\web\playwright-report",
     "apps\web\coverage"
