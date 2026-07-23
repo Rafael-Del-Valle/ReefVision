@@ -4,6 +4,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
@@ -37,6 +38,34 @@ if (-not (Test-Path ".venv" -PathType Container)) {
 }
 
 $VenvPython = Join-Path $Root ".venv\Scripts\python.exe"
+if (-not (Test-Path -LiteralPath $VenvPython -PathType Leaf)) {
+    throw "The ReefVision virtual environment is incomplete. Run .\scripts\bootstrap.ps1."
+}
+
+function Invoke-ReefVisionPython {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [Parameter(Mandatory = $true)][string]$FailureMessage
+    )
+
+    # Windows PowerShell converts native stderr into ErrorRecord objects. Python
+    # warnings and Hugging Face progress output may use stderr even when the process
+    # succeeds, so only the native exit code determines whether packaging failed.
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    $ExitCode = 1
+    try {
+        $ErrorActionPreference = "Continue"
+        & $VenvPython @Arguments 2>&1 | ForEach-Object { Write-Host $_ }
+        $ExitCode = if ($null -eq $LASTEXITCODE) { 1 } else { $LASTEXITCODE }
+    }
+    finally {
+        $ErrorActionPreference = $PreviousErrorActionPreference
+    }
+    if ($ExitCode -ne 0) {
+        throw "$FailureMessage Python exited with code $ExitCode."
+    }
+}
+
 $HydrateScript = Join-Path $PSScriptRoot "hydrate-desktop-model-catalog.py"
 $BundleScript = Join-Path $PSScriptRoot "stage-bundled-models.py"
 $TransformersBundleScript = Join-Path `
@@ -55,13 +84,17 @@ $BundledTransformersModels = Join-Path `
 New-Item -ItemType Directory -Path $GeneratedConfig -Force | Out-Null
 
 Write-ReefVisionStep "Resolving every required desktop model from pinned official releases"
-& $VenvPython $HydrateScript `
-    --catalog $SourceModelCatalog `
-    --policy $BundlePolicy `
-    --output $ModelCatalog
-if ($LASTEXITCODE -ne 0) {
-    throw "Failed to resolve the complete desktop model catalog."
-}
+Invoke-ReefVisionPython `
+    -Arguments @(
+        $HydrateScript,
+        "--catalog",
+        $SourceModelCatalog,
+        "--policy",
+        $BundlePolicy,
+        "--output",
+        $ModelCatalog
+    ) `
+    -FailureMessage "Failed to resolve the complete desktop model catalog."
 
 $HydratedCatalog = Get-Content -LiteralPath $ModelCatalog -Raw | ConvertFrom-Json
 $BundlePolicyMetadata = Get-Content -LiteralPath $BundlePolicy -Raw |
@@ -76,16 +109,22 @@ if ($RequiredCatalogIds.Count -ne $RequiredPolicyCount) {
 }
 
 Write-ReefVisionStep "Auditing zero-input model delivery"
-& $VenvPython $BundleScript --catalog $ModelCatalog --audit-only
-if ($LASTEXITCODE -ne 0) {
-    throw "The model catalog contains an available entry without a complete delivery path."
-}
+Invoke-ReefVisionPython `
+    -Arguments @($BundleScript, "--catalog", $ModelCatalog, "--audit-only") `
+    -FailureMessage (
+        "The model catalog contains an available entry without a complete delivery path."
+    )
 
 Write-ReefVisionStep "Staging verified pretrained catalog checkpoints"
-& $VenvPython $BundleScript --catalog $ModelCatalog --output $BundledModels
-if ($LASTEXITCODE -ne 0) {
-    throw "Failed to stage the pretrained catalog checkpoints."
-}
+Invoke-ReefVisionPython `
+    -Arguments @(
+        $BundleScript,
+        "--catalog",
+        $ModelCatalog,
+        "--output",
+        $BundledModels
+    ) `
+    -FailureMessage "Failed to stage the pretrained catalog checkpoints."
 $BundledManifest = Join-Path $BundledModels "manifest.json"
 if (-not (Test-Path $BundledManifest -PathType Leaf)) {
     throw "Model bundle staging did not produce its manifest: $BundledManifest"
@@ -123,12 +162,15 @@ Write-Host (
 ) -ForegroundColor Green
 
 Write-ReefVisionStep "Staging Florence-2, Grounding DINO, and OWLv2 model snapshots"
-& $VenvPython $TransformersBundleScript `
-    --policy $TransformersPolicy `
-    --output $BundledTransformersModels
-if ($LASTEXITCODE -ne 0) {
-    throw "Failed to stage the Transformers vision provider model pack."
-}
+Invoke-ReefVisionPython `
+    -Arguments @(
+        $TransformersBundleScript,
+        "--policy",
+        $TransformersPolicy,
+        "--output",
+        $BundledTransformersModels
+    ) `
+    -FailureMessage "Failed to stage the Transformers vision provider model pack."
 $TransformersManifest = Join-Path $BundledTransformersModels "manifest.json"
 if (-not (Test-Path $TransformersManifest -PathType Leaf)) {
     throw "Transformers model-pack staging did not produce a manifest."
