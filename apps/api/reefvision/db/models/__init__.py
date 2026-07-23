@@ -7,7 +7,9 @@ from reefvision.db.models.artifact_record import ArtifactRecord
 from reefvision.db.models.backup_record import BackupRecord
 from reefvision.db.models.class_operation import ClassOperation
 from reefvision.db.models.class_visibility_preference import ClassVisibilityPreference
+from reefvision.db.models.classification_assignment import ClassificationAssignment
 from reefvision.db.models.classification_crop import ClassificationCrop
+from reefvision.db.models.classification_label_set import ClassificationLabelSet
 from reefvision.db.models.classification_prediction import ClassificationPrediction
 from reefvision.db.models.dataset_version import DatasetVersion
 from reefvision.db.models.dataset_version_item import DatasetVersionItem
@@ -55,7 +57,9 @@ __all__ = [
     "BackupRecord",
     "ClassOperation",
     "ClassVisibilityPreference",
+    "ClassificationAssignment",
     "ClassificationCrop",
+    "ClassificationLabelSet",
     "ClassificationPrediction",
     "DatasetVersion",
     "DatasetVersionItem",
