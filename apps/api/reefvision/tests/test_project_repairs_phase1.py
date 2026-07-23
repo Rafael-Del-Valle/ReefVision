@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import cast
 
 from fastapi import FastAPI
@@ -13,7 +14,7 @@ from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project, import_one
 
 
-def _make_old(path, *, seconds: int = 180) -> None:
+def _make_old(path: Path, *, seconds: int = 180) -> None:
     timestamp = (datetime.now(UTC) - timedelta(seconds=seconds)).timestamp()
     os.utime(path, (timestamp, timestamp))
 
