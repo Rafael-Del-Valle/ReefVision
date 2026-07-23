@@ -16,7 +16,7 @@ from urllib import request as url_request
 from PIL import Image, UnidentifiedImageError
 
 from reefvision.domain.errors import ValidationError
-from reefvision.ml.providers import DetectionSettings, PixelBox, ensure_finite_box
+from reefvision.ml.providers import DetectionSettings, PixelBox
 from reefvision.ml.segmentation import SegmentationPrediction
 
 _PROVIDER_NAME = "sam3_sidecar"
@@ -203,35 +203,13 @@ class Sam3SidecarSegmentationProvider:
                 width=width,
                 height=height,
             )
-            raw_box = raw_instance.get("box")
-            if isinstance(raw_box, list) and len(raw_box) == 4:
-                try:
-                    box = PixelBox(
-                        x_min=float(raw_box[0]),
-                        y_min=float(raw_box[1]),
-                        x_max=float(raw_box[2]),
-                        y_max=float(raw_box[3]),
-                    )
-                    ensure_finite_box(box)
-                except (TypeError, ValueError, ValidationError):
-                    raw_box = None
-            if not isinstance(raw_box, list) or len(raw_box) != 4:
-                left, top, right, bottom = mask_bounds
-                box = PixelBox(
-                    x_min=float(left),
-                    y_min=float(top),
-                    x_max=float(right),
-                    y_max=float(bottom),
-                )
-            if (
-                box.x_min < 0
-                or box.y_min < 0
-                or box.x_max > width
-                or box.y_max > height
-                or box.x_max <= box.x_min
-                or box.y_max <= box.y_min
-            ):
-                continue
+            left, top, right, bottom = mask_bounds
+            box = PixelBox(
+                x_min=float(left),
+                y_min=float(top),
+                x_max=float(right),
+                y_max=float(bottom),
+            )
             predictions.append(
                 SegmentationPrediction(
                     label=self._output_label,
