@@ -11,7 +11,7 @@ from reefvision.tests.test_classification_assignments_phase5 import _seed_predic
 from reefvision.tests.test_classification_phase5 import _seed_classification_project
 
 
-def test_existing_review_endpoint_keeps_different_classifiers_independent(
+def test_existing_review_endpoint_keeps_different_tasks_independent(
     client: TestClient,
 ) -> None:
     project, image_id, class_ids = _seed_classification_project(client)
@@ -23,7 +23,7 @@ def test_existing_review_endpoint_keeps_different_classifiers_independent(
         project_id=project_id,
         image_id=image_id,
         annotation_id=annotation_id,
-        label_set="annotation-crop-state",
+        label_set="polyp-state",
         label_class_id=class_ids["open"],
         predicted_label="open",
         model_name="State classifier",
@@ -33,7 +33,7 @@ def test_existing_review_endpoint_keeps_different_classifiers_independent(
         project_id=project_id,
         image_id=image_id,
         annotation_id=annotation_id,
-        label_set="annotation-crop-state",
+        label_set="health-condition",
         label_class_id=class_ids["small"],
         predicted_label="healthy",
         model_name="Health classifier review route",
@@ -85,7 +85,7 @@ def test_existing_review_endpoint_keeps_different_classifiers_independent(
             )
         )
         assert {item.key for item in label_sets} == {
-            f"classifier-{first_model_id}",
-            f"classifier-{second_model_id}",
+            "polyp-state",
+            "health-condition",
         }
         assert all(not item.replaces_primary_class for item in label_sets)
