@@ -1,0 +1,97 @@
+"""Workflow integration for multi-model segmentation consensus."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy.orm import Session, sessionmaker
+
+from reefvision.config import Settings
+from reefvision.db.models import WorkflowArtifact, WorkflowRun
+from reefvision.jobs import workflow_runs as workflow_runtime
+from reefvision.services.multi_model_auto_labeling import (
+    apply_multi_model_mask_consensus,
+)
+
+_ORIGINAL_MODEL_INFERENCE = getattr(
+    workflow_runtime,
+    "_reefvision_original_model_inference",
+    workflow_runtime._model_inference,
+)
+workflow_runtime._reefvision_original_model_inference = _ORIGINAL_MODEL_INFERENCE
+
+
+def _consensus_aware_model_inference(
+    settings: Settings,
+    factory: sessionmaker[Session],
+    run: WorkflowRun,
+    node_type: str,
+    configuration: dict[str, Any],
+    inputs: list[WorkflowArtifact],
+) -> workflow_runtime.ArtifactOutputs:
+    outputs = _ORIGINAL_MODEL_INFERENCE(
+        settings,
+        factory,
+        run,
+        node_type,
+        configuration,
+        inputs,
+    )
+    raw_consensus = configuration.get("multi_model_consensus")
+    if (
+        node_type != "segmenter"
+        or not isinstance(raw_consensus, dict)
+        or not bool(raw_consensus.get("enabled", False))
+    ):
+        return outputs
+
+    mask_output = outputs.get("masks")
+    if mask_output is None:
+        raise RuntimeError("Consensus-enabled segmenter did not produce a masks artifact")
+    payload = dict(mask_output[1])
+    prediction_ids = [
+        str(value)
+        for value in payload.get("prediction_ids", [])
+        if isinstance(value, str)
+    ]
+    result = apply_multi_model_mask_consensus(
+        settings,
+        factory,
+        prediction_ids=prediction_ids,
+        consensus_configuration=dict(raw_consensus),
+        workflow_run_id=run.id,
+        workflow_node_id=run.current_node_id or "segmenter",
+    )
+    result_payload = result.as_payload()
+    accepted_mask_ids = [
+        str(candidate["mask_annotation_id"])
+        for candidate in result_payload["candidates"]
+        if candidate.get("mask_annotation_id")
+    ]
+    enhanced = {
+        **payload,
+        "mask_annotation_ids": accepted_mask_ids,
+        "consensus": result_payload,
+        "auto_labeling_mode": "multi_model_two_of_three",
+    }
+    if len(mask_output) == 4:
+        return {
+            "masks": (
+                mask_output[0],
+                enhanced,
+                mask_output[2],
+                mask_output[3],
+            )
+        }
+    return {"masks": (mask_output[0], enhanced)}
+
+
+def install_consensus_workflow_runtime() -> None:
+    """Install one stable wrapper around the existing workflow segmenter handler."""
+
+    if workflow_runtime._model_inference is not _consensus_aware_model_inference:
+        workflow_runtime._model_inference = _consensus_aware_model_inference
+
+
+install_consensus_workflow_runtime()
+process_workflow_run_job = workflow_runtime.process_workflow_run_job
