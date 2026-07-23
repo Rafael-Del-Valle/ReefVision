@@ -7,8 +7,10 @@ import { WorkflowRecoveryPanel } from "./WorkflowRecoveryPanel";
 import {
   applyWorkflowArtifactCleanup,
   listPersistedWorkflows,
+  listWorkflowArtifactQuarantine,
   listWorkflowRuns,
   previewWorkflowArtifactCleanup,
+  restoreWorkflowArtifacts,
 } from "./workflowPersistenceApi";
 
 vi.mock("./Sam3WorkflowSetupPanel", () => ({
@@ -21,6 +23,8 @@ vi.mock("./workflowPersistenceApi", () => ({
   retryWorkflowRun: vi.fn(),
   previewWorkflowArtifactCleanup: vi.fn(),
   applyWorkflowArtifactCleanup: vi.fn(),
+  listWorkflowArtifactQuarantine: vi.fn(),
+  restoreWorkflowArtifacts: vi.fn(),
 }));
 
 function renderPanel() {
@@ -98,10 +102,40 @@ beforeEach(() => {
     reclaimed_bytes: 1024,
     quarantine_paths: ["projects/project-1/workflow-quarantine/export.zip"],
   });
+  vi.mocked(listWorkflowArtifactQuarantine).mockResolvedValue({
+    workflow_run_id: run.id,
+    item_count: 1,
+    restorable_count: 1,
+    total_bytes: 1024,
+    items: [
+      {
+        artifact_id: "artifact-1",
+        node_id: "export",
+        port_name: "archive",
+        original_managed_path:
+          "projects/project-1/workflows/run-12345678/export.zip",
+        quarantine_path:
+          "projects/project-1/workflow-quarantine/run-12345678/export.zip",
+        file_sha256: "b".repeat(64),
+        size_bytes: 1024,
+        quarantined_at: "2026-07-23T12:10:00Z",
+        restorable: true,
+        blockers: [],
+      },
+    ],
+  });
+  vi.mocked(restoreWorkflowArtifacts).mockResolvedValue({
+    workflow_run_id: run.id,
+    restored_artifact_count: 1,
+    restored_bytes: 1024,
+    restored_paths: [
+      "projects/project-1/workflows/run-12345678/export.zip",
+    ],
+  });
 });
 
 describe("WorkflowRecoveryPanel cleanup", () => {
-  it("requires explicit selection after every preview", async () => {
+  it("requires explicit selection after every cleanup preview", async () => {
     const user = userEvent.setup();
     renderPanel();
 
@@ -132,6 +166,40 @@ describe("WorkflowRecoveryPanel cleanup", () => {
         preview_checksum: "a".repeat(64),
         action_ids: ["action-1"],
       }),
+    );
+  });
+
+  it("requires explicit selection before restoring quarantine", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    expect(await screen.findByText("Run run-1234")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Inspect artifact quarantine" }),
+    );
+    await waitFor(() =>
+      expect(listWorkflowArtifactQuarantine).toHaveBeenCalledWith(run.id),
+    );
+
+    const checkbox = await screen.findByRole("checkbox", {
+      name: /restore quarantined file/i,
+    });
+    expect(checkbox).not.toBeChecked();
+    expect(
+      screen.getByRole("button", { name: "Restore 0 selected artifacts" }),
+    ).toBeDisabled();
+
+    await user.click(checkbox);
+    const restoreButton = screen.getByRole("button", {
+      name: "Restore 1 selected artifacts",
+    });
+    expect(restoreButton).toBeEnabled();
+    await user.click(restoreButton);
+
+    await waitFor(() =>
+      expect(restoreWorkflowArtifacts).toHaveBeenCalledWith(run.id, [
+        "artifact-1",
+      ]),
     );
   });
 });
