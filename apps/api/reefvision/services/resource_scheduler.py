@@ -81,6 +81,35 @@ def collect_resource_inventory() -> ResourceInventory:
     )
 
 
+def _assigned_gpu_indices(job: Job) -> list[int]:
+    assignment = dict(job.resource_assignment_json or {})
+    raw = assignment.get("gpu_indices")
+    if isinstance(raw, list):
+        return [int(value) for value in raw if isinstance(value, int)]
+    single = assignment.get("gpu_index")
+    return [single] if isinstance(single, int) else []
+
+
+def _parse_requested_gpu_indices(value: str) -> list[int] | None:
+    normalized = value.strip().casefold()
+    if normalized in {"", "auto", "gpu", "cuda"}:
+        return None
+    tokens = [token.strip() for token in normalized.split(",") if token.strip()]
+    indices: list[int] = []
+    for token in tokens:
+        if token.startswith("cuda:"):
+            token = token.split(":", 1)[1]
+        if not token.isdigit():
+            raise ValueError("invalid CUDA device list")
+        index = int(token)
+        if index in indices:
+            raise ValueError("duplicate CUDA device")
+        indices.append(index)
+    if not indices:
+        raise ValueError("empty CUDA device list")
+    return indices
+
+
 class ResourceScheduler:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -144,84 +173,145 @@ class ResourceScheduler:
             blockers.append("Another disk-intensive job is currently running.")
 
         requested_device = str(requirements.get("device", "auto") or "auto").casefold()
+        requested_gpu_count_raw = int(requirements.get("gpu_count", 0) or 0)
         gpu_required = (
             bool(requirements.get("gpu_required", False))
+            or requested_gpu_count_raw > 0
             or requested_device.startswith("cuda")
             or requested_device in {"gpu"}
         )
-        minimum_vram = max(0, int(requirements.get("minimum_vram_bytes", 0) or 0))
+        requested_gpu_count = max(1, requested_gpu_count_raw or 1) if gpu_required else 0
+        minimum_vram_per_gpu = max(
+            0,
+            int(
+                requirements.get(
+                    "minimum_vram_bytes_per_gpu",
+                    requirements.get("minimum_vram_bytes", 0),
+                )
+                or 0
+            ),
+        )
         exclusive_gpu = bool(requirements.get("exclusive_gpu", False))
-        selected_gpu: GPUInventory | None = None
+        explicit_indices: list[int] | None = None
+        if gpu_required:
+            try:
+                explicit_indices = _parse_requested_gpu_indices(requested_device)
+            except ValueError:
+                blockers.append("The requested CUDA device list is invalid.")
+            if explicit_indices is not None:
+                if requested_gpu_count_raw and len(explicit_indices) != requested_gpu_count:
+                    blockers.append(
+                        "The explicit CUDA device list does not match the requested gpu_count."
+                    )
+                requested_gpu_count = len(explicit_indices)
+
+        selected_gpus: list[GPUInventory] = []
         if gpu_required:
             reserved_by_gpu: dict[int, int] = {}
             exclusive_gpus: set[int] = set()
+            assigned_gpus: set[int] = set()
             for active_job in active:
                 if active_job.id == job.id:
                     continue
-                active_assignment = dict(active_job.resource_assignment_json or {})
-                gpu_index = active_assignment.get("gpu_index")
-                if not isinstance(gpu_index, int):
-                    continue
                 active_requirements = dict(active_job.resource_requirements_json or {})
-                reserved_by_gpu[gpu_index] = reserved_by_gpu.get(gpu_index, 0) + max(
+                active_vram_per_gpu = max(
                     0,
-                    int(active_requirements.get("minimum_vram_bytes", 0) or 0),
+                    int(
+                        active_requirements.get(
+                            "minimum_vram_bytes_per_gpu",
+                            active_requirements.get("minimum_vram_bytes", 0),
+                        )
+                        or 0
+                    ),
                 )
-                if bool(active_requirements.get("exclusive_gpu", False)):
-                    exclusive_gpus.add(gpu_index)
+                for gpu_index in _assigned_gpu_indices(active_job):
+                    assigned_gpus.add(gpu_index)
+                    reserved_by_gpu[gpu_index] = (
+                        reserved_by_gpu.get(gpu_index, 0) + active_vram_per_gpu
+                    )
+                    if bool(active_requirements.get("exclusive_gpu", False)):
+                        exclusive_gpus.add(gpu_index)
+
             candidates = list(inventory.gpus)
-            if requested_device.startswith("cuda:"):
-                try:
-                    requested_index = int(requested_device.split(":", 1)[1])
-                    candidates = [item for item in candidates if item.index == requested_index]
-                except ValueError:
-                    blockers.append("The requested CUDA device identifier is invalid.")
-                    candidates = []
+            if explicit_indices is not None:
+                by_index = {item.index: item for item in candidates}
+                missing = [index for index in explicit_indices if index not in by_index]
+                if missing:
+                    blockers.append(
+                        "Requested CUDA devices are unavailable: "
+                        + ", ".join(str(index) for index in missing)
+                    )
+                candidates = [by_index[index] for index in explicit_indices if index in by_index]
+
             candidates = [
                 item
                 for item in candidates
                 if item.index not in exclusive_gpus
-                and (
-                    not exclusive_gpu
-                    or not any(
-                        (active_job.resource_assignment_json or {}).get("gpu_index") == item.index
-                        for active_job in active
-                        if active_job.id != job.id
+                and (not exclusive_gpu or item.index not in assigned_gpus)
+                and item.free_bytes - reserved_by_gpu.get(item.index, 0)
+                >= minimum_vram_per_gpu
+            ]
+            if explicit_indices is None:
+                candidates.sort(
+                    key=lambda item: (
+                        -(item.free_bytes - reserved_by_gpu.get(item.index, 0)),
+                        item.index,
                     )
                 )
-                and item.free_bytes - reserved_by_gpu.get(item.index, 0) >= minimum_vram
-            ]
-            if candidates:
-                selected_gpu = max(
-                    candidates,
-                    key=lambda item: (
-                        item.free_bytes - reserved_by_gpu.get(item.index, 0),
-                        -item.index,
-                    ),
-                )
+            else:
+                explicit_order = {index: position for position, index in enumerate(explicit_indices)}
+                candidates.sort(key=lambda item: explicit_order[item.index])
+
+            if len(candidates) >= requested_gpu_count:
+                selected_gpus = candidates[:requested_gpu_count]
             elif not blockers:
-                blockers.append("No compatible GPU has the requested free VRAM and exclusivity.")
+                blockers.append(
+                    f"Requires {requested_gpu_count} compatible GPUs; "
+                    f"only {len(candidates)} satisfy VRAM and exclusivity requirements."
+                )
 
         assignment: dict[str, Any] = {
             "assigned_at": datetime.now(UTC).isoformat(),
             "cpu_threads": requested_threads,
             "reserved_ram_bytes": requested_ram,
-            "scheduler": "reefvision-local-v1",
+            "scheduler": "reefvision-local-v2",
         }
-        if selected_gpu is not None:
+        if selected_gpus:
+            gpu_indices = [item.index for item in selected_gpus]
+            assignment_device = (
+                selected_gpus[0].device_id
+                if len(selected_gpus) == 1
+                else ",".join(str(index) for index in gpu_indices)
+            )
             assignment.update(
                 {
-                    "device": selected_gpu.device_id,
-                    "gpu_index": selected_gpu.index,
-                    "gpu_name": selected_gpu.name,
-                    "gpu_total_bytes": selected_gpu.total_bytes,
-                    "gpu_free_bytes_at_assignment": selected_gpu.free_bytes,
-                    "reserved_vram_bytes": minimum_vram,
+                    "device": assignment_device,
+                    "gpu_index": gpu_indices[0],
+                    "gpu_indices": gpu_indices,
+                    "gpu_count": len(selected_gpus),
+                    "gpu_name": selected_gpus[0].name,
+                    "gpu_names": [item.name for item in selected_gpus],
+                    "gpu_total_bytes": selected_gpus[0].total_bytes,
+                    "gpu_total_bytes_by_device": [item.total_bytes for item in selected_gpus],
+                    "gpu_free_bytes_at_assignment": selected_gpus[0].free_bytes,
+                    "gpu_free_bytes_by_device_at_assignment": [
+                        item.free_bytes for item in selected_gpus
+                    ],
+                    "reserved_vram_bytes": minimum_vram_per_gpu,
+                    "reserved_vram_bytes_per_gpu": minimum_vram_per_gpu,
                     "exclusive_gpu": exclusive_gpu,
+                    "cuda_visible_devices": ",".join(str(index) for index in gpu_indices),
                 }
             )
         else:
-            assignment.update({"device": "cpu", "gpu_index": None})
+            assignment.update(
+                {
+                    "device": "cpu",
+                    "gpu_index": None,
+                    "gpu_indices": [],
+                    "gpu_count": 0,
+                }
+            )
         return ResourceDecision(
             eligible=not blockers,
             assignment=assignment,
