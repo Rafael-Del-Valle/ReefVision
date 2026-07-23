@@ -81,6 +81,29 @@ function Invoke-ReleaseGate {
     )
 }
 
+function Add-BlockedGate {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$Reason
+    )
+
+    $SafeName = ($Name -replace "[^A-Za-z0-9._-]+", "-").Trim("-").ToLowerInvariant()
+    $LogPath = Join-Path $ArtifactRoot "$SafeName.log"
+    "BLOCKED: $Reason" | Set-Content -LiteralPath $LogPath -Encoding utf8
+    [void]$Results.Add(
+        [pscustomobject]@{
+            name = $Name
+            status = "failed"
+            started_at = (Get-Date).ToUniversalTime().ToString("o")
+            completed_at = (Get-Date).ToUniversalTime().ToString("o")
+            duration_seconds = 0.0
+            log_path = $LogPath
+            error = "Blocked: $Reason"
+        }
+    )
+    Write-Host "BLOCKED: $Name - $Reason" -ForegroundColor Yellow
+}
+
 if (-not $SkipBootstrap) {
     Invoke-ReleaseGate "Bootstrap build environment" {
         & (Join-Path $PSScriptRoot "bootstrap.ps1") -NonInteractive -SkipPlaywrightBrowser
@@ -207,33 +230,54 @@ finally {
     Pop-Location
 }
 
+$PackagingSucceeded = $false
 if (-not $SkipPackaging) {
+    $InstallerRoot = Join-Path $Root "apps\web\src-tauri\target\$TargetTriple\release\bundle\msi"
     Invoke-ReleaseGate "Tauri MSI packaging" {
+        if (Test-Path -LiteralPath $InstallerRoot) {
+            Get-ChildItem -LiteralPath $InstallerRoot -Filter "*.msi" -File |
+                Remove-Item -Force
+        }
         & (Join-Path $PSScriptRoot "build-desktop.ps1") -TargetTriple $TargetTriple
         if (-not $?) {
             throw "build-desktop.ps1 failed."
         }
+        $script:PackagingSucceeded = $true
     }
-    Invoke-ReleaseGate "Packaged API sidecar smoke" {
-        Invoke-External $Python @(
-            (Join-Path $PSScriptRoot "smoke-desktop-sidecar.py"),
-            (Join-Path $Root "apps\web\src-tauri\binaries\reefvision-api\reefvision-api.exe"),
-            "--timeout",
-            "90"
-        )
-    }
-    Invoke-ReleaseGate "MSI inventory" {
-        $InstallerRoot = Join-Path $Root "apps\web\src-tauri\target\$TargetTriple\release\bundle\msi"
-        $Installers = @(
-            Get-ChildItem -LiteralPath $InstallerRoot -Filter "*.msi" -File -ErrorAction SilentlyContinue
-        )
-        if ($Installers.Count -eq 0) {
-            throw "No MSI installer was produced in $InstallerRoot."
+    if ($PackagingSucceeded) {
+        Invoke-ReleaseGate "Packaged API sidecar smoke" {
+            Invoke-External $Python @(
+                (Join-Path $PSScriptRoot "smoke-desktop-sidecar.py"),
+                (Join-Path $Root "apps\web\src-tauri\binaries\reefvision-api\reefvision-api.exe"),
+                "--timeout",
+                "90"
+            )
         }
-        $Installers |
-            Select-Object Name, Length, LastWriteTimeUtc, FullName |
-            ConvertTo-Json -Depth 4 |
-            Set-Content -LiteralPath (Join-Path $ArtifactRoot "msi-files.json") -Encoding utf8
+        Invoke-ReleaseGate "MSI inventory" {
+            $Installers = @(
+                Get-ChildItem `
+                    -LiteralPath $InstallerRoot `
+                    -Filter "*.msi" `
+                    -File `
+                    -ErrorAction SilentlyContinue
+            )
+            if ($Installers.Count -eq 0) {
+                throw "No MSI installer was produced in $InstallerRoot."
+            }
+            $Installers |
+                Select-Object Name, Length, LastWriteTimeUtc, FullName |
+                ConvertTo-Json -Depth 4 |
+                Set-Content `
+                    -LiteralPath (Join-Path $ArtifactRoot "msi-files.json") `
+                    -Encoding utf8
+        }
+    } else {
+        Add-BlockedGate `
+            -Name "Packaged API sidecar smoke" `
+            -Reason "Tauri MSI packaging did not complete successfully."
+        Add-BlockedGate `
+            -Name "MSI inventory" `
+            -Reason "Tauri MSI packaging did not complete successfully."
     }
 }
 
@@ -248,14 +292,46 @@ Invoke-ReleaseGate "Tracked working tree remains clean" {
 }
 
 $Failed = @($Results | Where-Object status -eq "failed")
+$FailureReportPath = $null
+$FailureBundlePath = $null
+if ($Failed.Count -gt 0) {
+    $FailureReportPath = Join-Path $ArtifactRoot "release-validation-failures.json"
+    $FailureDetails = foreach ($Result in $Failed) {
+        $Lines = if (Test-Path -LiteralPath $Result.log_path -PathType Leaf) {
+            @(Get-Content -LiteralPath $Result.log_path)
+        } else {
+            @()
+        }
+        [pscustomobject]@{
+            name = $Result.name
+            error = $Result.error
+            log_path = $Result.log_path
+            line_count = $Lines.Count
+            first_lines = @($Lines | Select-Object -First 80)
+            last_lines = @($Lines | Select-Object -Last 160)
+        }
+    }
+    [pscustomobject]@{
+        schema = "reefvision-release-validation-failures-v1"
+        generated_at = (Get-Date).ToUniversalTime().ToString("o")
+        commit_sha = (& git rev-parse HEAD).Trim()
+        failures = @($FailureDetails)
+    } |
+        ConvertTo-Json -Depth 10 |
+        Set-Content -LiteralPath $FailureReportPath -Encoding utf8
+    $FailureBundlePath = Join-Path $ArtifactRoot "release-validation-failure-bundle.zip"
+}
+
 $Summary = [pscustomobject]@{
-    schema = "reefvision-release-validation-v4"
+    schema = "reefvision-release-validation-v5"
     generated_at = (Get-Date).ToUniversalTime().ToString("o")
     repository_root = $Root
     commit_sha = (& git rev-parse HEAD).Trim()
     feature_freeze_baseline = $BaselineSha
     target_triple = $TargetTriple
     artifact_root = $ArtifactRoot
+    failure_report_path = $FailureReportPath
+    failure_bundle_path = $FailureBundlePath
     passed = $Failed.Count -eq 0
     passed_count = @($Results | Where-Object status -eq "passed").Count
     failed_count = $Failed.Count
@@ -264,7 +340,24 @@ $Summary = [pscustomobject]@{
 $SummaryPath = Join-Path $ArtifactRoot "release-validation-summary.json"
 $Summary | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $SummaryPath -Encoding utf8
 
+if ($FailureBundlePath) {
+    $BundleInputs = @(
+        Get-ChildItem -LiteralPath $ArtifactRoot -File |
+            Where-Object {
+                $_.FullName -ne $FailureBundlePath -and
+                $_.Extension -in @(".json", ".log", ".xml")
+            } |
+            Select-Object -ExpandProperty FullName
+    )
+    if ($BundleInputs.Count -gt 0) {
+        Compress-Archive -LiteralPath $BundleInputs -DestinationPath $FailureBundlePath -Force
+    }
+}
+
 Write-Host "`nRelease validation summary: $SummaryPath" -ForegroundColor Cyan
+if ($FailureBundlePath) {
+    Write-Host "Failure bundle: $FailureBundlePath" -ForegroundColor Yellow
+}
 $Results | Format-Table name, status, duration_seconds, error -AutoSize
 if ($Failed.Count -gt 0) {
     exit 1
