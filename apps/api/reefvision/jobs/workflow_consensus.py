@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
-from reefvision.db.models import Job, WorkflowArtifact, WorkflowRun
+from reefvision.db.models import Job, ModelRegistration, WorkflowArtifact, WorkflowRun
 from reefvision.jobs import inference as inference_runtime
 from reefvision.jobs import workflow_runs as workflow_runtime
 from reefvision.ml import segmentation as segmentation_runtime
@@ -55,6 +55,23 @@ def _workflow_inference_request_compatibility(
     return _ORIGINAL_PROCESS_INFERENCE(settings, factory, job_id)
 
 
+def _require_primary_provider(
+    factory: sessionmaker[Session],
+    *,
+    model_id: str,
+    required_provider: str,
+) -> None:
+    with factory() as session:
+        model = session.get(ModelRegistration, model_id)
+        if model is None:
+            raise RuntimeError("Consensus segmenter model disappeared before voting")
+        if model.provider_name.strip().casefold() != required_provider.strip().casefold():
+            raise RuntimeError(
+                "This consensus Workflow requires primary provider "
+                f"{required_provider!r}, but the selected model uses {model.provider_name!r}"
+            )
+
+
 def _consensus_aware_model_inference(
     settings: Settings,
     factory: sessionmaker[Session],
@@ -83,6 +100,14 @@ def _consensus_aware_model_inference(
     if mask_output is None:
         raise RuntimeError("Consensus-enabled segmenter did not produce a masks artifact")
     payload = dict(mask_output[1])
+    model_id = str(payload.get("model_id", ""))
+    required_provider = str(raw_consensus.get("required_primary_provider", "")).strip()
+    if required_provider:
+        _require_primary_provider(
+            factory,
+            model_id=model_id,
+            required_provider=required_provider,
+        )
     prediction_ids = [
         str(value)
         for value in payload.get("prediction_ids", [])
