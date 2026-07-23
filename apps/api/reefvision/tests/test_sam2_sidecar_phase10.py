@@ -46,6 +46,79 @@ def test_register_sam2_sidecar_descriptor(client: TestClient) -> None:
     assert "token" not in descriptor
 
 
+def test_sam2_sidecar_health_endpoint_is_mounted(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, object] = {}
+
+    def fake_get_json(
+        url: str,
+        *,
+        token: str | None,
+        timeout_seconds: float,
+    ) -> dict[str, object]:
+        observed.update(
+            {
+                "url": url,
+                "token": token,
+                "timeout_seconds": timeout_seconds,
+            }
+        )
+        return {
+            "status": "ok",
+            "provider": "sam2_sidecar",
+            "model_version": "sam2.1_hiera_large.pt",
+            "device": "cuda:1",
+        }
+
+    monkeypatch.setenv("REEFVISION_TEST_SAM2_TOKEN", "secret")
+    monkeypatch.setattr("reefvision.ml.sam2_sidecar._get_json", fake_get_json)
+    response = client.post(
+        "/api/v1/sam2-sidecar/health",
+        json={
+            "endpoint": "http://localhost:8766/",
+            "token_env": "REEFVISION_TEST_SAM2_TOKEN",
+            "timeout_seconds": 15,
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload == {
+        "status": "ok",
+        "provider": "sam2_sidecar",
+        "model_version": "sam2.1_hiera_large.pt",
+        "device": "cuda:1",
+        "endpoint": "http://localhost:8766",
+        "token_configured": True,
+    }
+    assert observed == {
+        "url": "http://localhost:8766/health",
+        "token": "secret",
+        "timeout_seconds": 15.0,
+    }
+
+
+def test_sam2_sidecar_health_rejects_non_sidecar_response(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "reefvision.ml.sam2_sidecar._get_json",
+        lambda *_args, **_kwargs: {
+            "status": "ok",
+            "provider": "different-service",
+            "device": "cpu",
+        },
+    )
+    response = client.post(
+        "/api/v1/sam2-sidecar/health",
+        json={"endpoint": "http://127.0.0.1:8766"},
+    )
+    assert response.status_code == 422
+    assert "not a ReefVision SAM 2 sidecar" in response.text
+
+
 def test_sam2_sidecar_descriptor_must_use_loopback(tmp_path) -> None:
     descriptor = tmp_path / "sam2.json"
     descriptor.write_text(
