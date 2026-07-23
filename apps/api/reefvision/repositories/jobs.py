@@ -11,7 +11,7 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
-from reefvision.db.models import Job, JobDependency
+from reefvision.db.models import Job, JobDependency, TrainingRun
 from reefvision.services.resource_scheduler import ResourceScheduler
 
 
@@ -105,6 +105,16 @@ class JobRepository:
             if (claimed.rowcount or 0) != 1:
                 self.session.rollback()
                 continue
+            if candidate.job_type == "training":
+                training_run_id = request_json.get("training_run_id")
+                if isinstance(training_run_id, str) and training_run_id:
+                    training_run = self.session.get(TrainingRun, training_run_id)
+                    if training_run is not None:
+                        training_run.device = assignment_device
+                        training_run.resource_limits_json = {
+                            **dict(training_run.resource_limits_json or {}),
+                            "scheduler_assignment": dict(decision.assignment),
+                        }
             self.session.commit()
             refreshed = self.session.get(Job, candidate.id)
             if refreshed is not None:
