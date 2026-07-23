@@ -5,11 +5,19 @@ from __future__ import annotations
 from typing import cast
 
 import numpy as np
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 from reefvision.config import Settings
-from reefvision.db.models import ImageAsset, ModelRegistration, PredictionProposal, Project
+from reefvision.db.models import (
+    ImageAsset,
+    MaskAnnotation,
+    MaskAnnotationEvent,
+    ModelRegistration,
+    PredictionProposal,
+    Project,
+)
 from reefvision.domain.errors import ValidationError
+from reefvision.services.annotations import mask_annotation_snapshot
 from reefvision.services.independent_segmentation_auto_labeling import (
     BoxMaskRefiner,
     GeminiBoxDetector,
@@ -27,12 +35,59 @@ from reefvision.services.mask_consensus import (
     build_mask_consensus,
 )
 from reefvision.services.multi_model_auto_labeling import MaskVote, _promote, _proposal_mask
+from reefvision.storage.masks import remove_prediction_mask_png
 from reefvision.storage.projects import resolve_managed_project_path
+
+
+def _record_independent_promotion(
+    factory: sessionmaker,
+    *,
+    annotation_id: str,
+    proposal_id: str,
+    aggregation: MaskAggregation,
+    required_votes: int,
+) -> None:
+    """Correct the generic promotion label and append an auditable provenance event."""
+
+    with factory() as session:
+        annotation = session.get(MaskAnnotation, annotation_id)
+        proposal = session.get(PredictionProposal, proposal_id)
+        if annotation is None or proposal is None:
+            raise ValidationError("Independent consensus promotion records are missing")
+        before = mask_annotation_snapshot(annotation)
+        proposal_provenance = dict(proposal.provenance_json or {})
+        annotation.source_type = "workflow_independent_consensus"
+        annotation.provenance_json = {
+            **dict(annotation.provenance_json or {}),
+            "consensus_method": "independent_mask_generation",
+            "aggregation": aggregation,
+            "required_votes": required_votes,
+            "candidate_ids": list(proposal_provenance.get("candidate_ids") or []),
+            "branch_ids": list(proposal_provenance.get("branch_ids") or []),
+            "pairwise_mask_iou": dict(
+                proposal_provenance.get("pairwise_mask_iou") or {}
+            ),
+            "candidate_provenance": dict(
+                proposal_provenance.get("candidate_provenance") or {}
+            ),
+        }
+        annotation.revision += 1
+        session.add(
+            MaskAnnotationEvent(
+                mask_annotation_id=annotation.id,
+                image_id=annotation.image_id,
+                event_type="provenance_updated",
+                before_json=before,
+                after_json=mask_annotation_snapshot(annotation),
+                actor="workflow_independent_consensus",
+            )
+        )
+        session.commit()
 
 
 def run_independent_segmentation_pipeline(
     settings: Settings,
-    factory: sessionmaker[Session],
+    factory: sessionmaker,
     *,
     image_ids: list[str],
     primary_prediction_ids: list[str],
@@ -181,33 +236,54 @@ def run_independent_segmentation_pipeline(
                 )
                 warnings.extend(consensus.warnings)
                 candidate_by_id = {item.candidate_id: item for item in all_candidates}
-                with factory() as session:
-                    image = session.get(ImageAsset, image_id)
-                    project = (
-                        session.get(Project, image.project_id) if image is not None else None
-                    )
-                    model = session.get(ModelRegistration, primary_model_id)
-                    if image is None or project is None or model is None:
-                        raise ValidationError(
-                            "Independent consensus persistence context is missing"
+                staged_proposals: list[tuple[str, str]] = []
+                project_storage_root = ""
+                try:
+                    with factory() as session:
+                        image = session.get(ImageAsset, image_id)
+                        project = (
+                            session.get(Project, image.project_id)
+                            if image is not None
+                            else None
                         )
-                    for group in consensus.groups:
-                        proposal = _group_proposal(
-                            settings,
-                            session,
-                            project=project,
-                            image=image,
-                            group=group,
-                            source_model=model,
-                            inference_job_id=primary_inference_job_id,
-                            label_class_id=label_class_id,
-                            predicted_label=predicted_label,
-                            workflow_run_id=workflow_run_id,
-                            workflow_node_id=workflow_node_id,
-                            source_candidates=candidate_by_id,
-                        )
-                        created_proposal_ids.append(proposal.id)
-                    session.commit()
+                        model = session.get(ModelRegistration, primary_model_id)
+                        if image is None or project is None or model is None:
+                            raise ValidationError(
+                                "Independent consensus persistence context is missing"
+                            )
+                        project_storage_root = project.storage_root
+                        for group in consensus.groups:
+                            proposal = _group_proposal(
+                                settings,
+                                session,
+                                project=project,
+                                image=image,
+                                group=group,
+                                source_model=model,
+                                inference_job_id=primary_inference_job_id,
+                                label_class_id=label_class_id,
+                                predicted_label=predicted_label,
+                                workflow_run_id=workflow_run_id,
+                                workflow_node_id=workflow_node_id,
+                                source_candidates=candidate_by_id,
+                            )
+                            if proposal.mask_path is None:
+                                raise ValidationError(
+                                    "Independent consensus proposal is missing its mask path"
+                                )
+                            staged_proposals.append((proposal.id, proposal.mask_path))
+                            created_proposal_ids.append(proposal.id)
+                        session.commit()
+                except Exception:
+                    if project_storage_root:
+                        for proposal_id, relative_path in staged_proposals:
+                            remove_prediction_mask_png(
+                                settings,
+                                project_storage_root=project_storage_root,
+                                proposal_id=proposal_id,
+                                relative_path=relative_path,
+                            )
+                    raise
                 if auto_accept:
                     for proposal_id, group in zip(
                         created_proposal_ids,
@@ -227,18 +303,24 @@ def run_independent_segmentation_pipeline(
                             )
                             for branch_id in group.branch_ids
                         ]
-                        accepted_ids.append(
-                            _promote(
-                                settings,
-                                factory,
-                                proposal_id=proposal_id,
-                                votes=votes,
-                                required_votes=required_votes,
-                                concept_prompt=concept_prompt,
-                                workflow_run_id=workflow_run_id,
-                                workflow_node_id=workflow_node_id,
-                            )
+                        annotation_id = _promote(
+                            settings,
+                            factory,
+                            proposal_id=proposal_id,
+                            votes=votes,
+                            required_votes=required_votes,
+                            concept_prompt=concept_prompt,
+                            workflow_run_id=workflow_run_id,
+                            workflow_node_id=workflow_node_id,
                         )
+                        _record_independent_promotion(
+                            factory,
+                            annotation_id=annotation_id,
+                            proposal_id=proposal_id,
+                            aggregation=aggregation,
+                            required_votes=required_votes,
+                        )
+                        accepted_ids.append(annotation_id)
                 image_results.append(
                     IndependentAutoLabelImageResult(
                         image_id=image_id,
