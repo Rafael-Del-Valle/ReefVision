@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -19,6 +19,10 @@ from reefvision.jobs import inference as inference_runtime
 from reefvision.jobs import workflow_runs as workflow_runtime
 from reefvision.ml import segmentation as segmentation_runtime
 from reefvision.ml.sam3_sidecar import Sam3SidecarSegmentationProvider
+from reefvision.services.independent_segmentation_auto_labeling import (
+    run_independent_segmentation_auto_labeling,
+)
+from reefvision.services.mask_consensus import MaskAggregation
 from reefvision.services.multi_model_auto_labeling import (
     apply_multi_model_mask_consensus,
 )
@@ -120,6 +124,93 @@ def _synchronize_promoted_vote_counts(
             session.commit()
 
 
+def _independent_consensus(
+    settings: Settings,
+    factory: sessionmaker[Session],
+    run: WorkflowRun,
+    payload: dict[str, Any],
+    raw_consensus: dict[str, Any],
+) -> dict[str, Any]:
+    if not bool(raw_consensus.get("allow_remote_review", False)):
+        raise RuntimeError(
+            "Independent mask generation requires allow_remote_review=true in the node"
+        )
+    sam2_model_id = str(raw_consensus.get("sam2_model_id", "")).strip()
+    label_class_id = str(raw_consensus.get("label_class_id", "")).strip()
+    prompt = str(raw_consensus.get("prompt", "")).strip()
+    predicted_label = str(raw_consensus.get("predicted_label", prompt)).strip()
+    primary_model_id = str(payload.get("model_id", "")).strip()
+    primary_job_id = str(payload.get("child_job_id", "")).strip()
+    if not all(
+        (
+            sam2_model_id,
+            label_class_id,
+            prompt,
+            predicted_label,
+            primary_model_id,
+            primary_job_id,
+        )
+    ):
+        raise RuntimeError(
+            "Independent consensus requires sam2_model_id, label_class_id, prompt, "
+            "predicted_label, and primary inference provenance"
+        )
+    aggregation_value = str(raw_consensus.get("aggregation", "pixel_majority"))
+    if aggregation_value not in {
+        "intersection",
+        "pixel_majority",
+        "union",
+        "best_confidence",
+    }:
+        raise RuntimeError("Independent consensus aggregation is unsupported")
+    prediction_ids = [
+        str(value)
+        for value in payload.get("prediction_ids", [])
+        if isinstance(value, str)
+    ]
+    result = run_independent_segmentation_auto_labeling(
+        settings,
+        factory,
+        primary_prediction_ids=prediction_ids,
+        primary_model_id=primary_model_id,
+        primary_inference_job_id=primary_job_id,
+        sam2_model_id=sam2_model_id,
+        label_class_id=label_class_id,
+        predicted_label=predicted_label,
+        concept_prompt=prompt,
+        workflow_run_id=run.id,
+        workflow_node_id=run.current_node_id or "segmenter",
+        required_votes=int(raw_consensus.get("required_votes", 2)),
+        iou_threshold=float(raw_consensus.get("iou_threshold", 0.3)),
+        aggregation=cast(MaskAggregation, aggregation_value),
+        minimum_vlm_confidence=float(
+            raw_consensus.get("minimum_vlm_confidence", 0.25)
+        ),
+        device=str(raw_consensus.get("sam2_device", "auto")),
+        auto_accept=bool(raw_consensus.get("auto_accept", False)),
+        fail_closed=bool(raw_consensus.get("fail_closed", True)),
+    )
+    result_payload = result.as_payload()
+    consensus_prediction_ids = [
+        str(proposal_id)
+        for image in result.images
+        for proposal_id in image.proposal_ids
+    ]
+    accepted_mask_ids = [
+        str(annotation_id)
+        for image in result.images
+        for annotation_id in image.accepted_mask_annotation_ids
+    ]
+    return {
+        **payload,
+        "source_prediction_ids": prediction_ids,
+        "prediction_ids": consensus_prediction_ids,
+        "mask_annotation_ids": accepted_mask_ids,
+        "consensus": result_payload,
+        "auto_labeling_mode": "independent_masks_two_of_three",
+    }
+
+
 def _consensus_aware_model_inference(
     settings: Settings,
     factory: sessionmaker[Session],
@@ -156,32 +247,46 @@ def _consensus_aware_model_inference(
             model_id=model_id,
             required_provider=required_provider,
         )
-    prediction_ids = [
-        str(value)
-        for value in payload.get("prediction_ids", [])
-        if isinstance(value, str)
-    ]
-    result = apply_multi_model_mask_consensus(
-        settings,
-        factory,
-        prediction_ids=prediction_ids,
-        consensus_configuration=dict(raw_consensus),
-        workflow_run_id=run.id,
-        workflow_node_id=run.current_node_id or "segmenter",
-    )
-    result_payload = result.as_payload()
-    _synchronize_promoted_vote_counts(factory, result_payload)
-    accepted_mask_ids = [
-        str(candidate["mask_annotation_id"])
-        for candidate in result_payload["candidates"]
-        if candidate.get("mask_annotation_id")
-    ]
-    enhanced = {
-        **payload,
-        "mask_annotation_ids": accepted_mask_ids,
-        "consensus": result_payload,
-        "auto_labeling_mode": "multi_model_two_of_three",
-    }
+
+    mode = str(raw_consensus.get("mode", "semantic_voters")).strip().casefold()
+    if mode == "independent_masks":
+        enhanced = _independent_consensus(
+            settings,
+            factory,
+            run,
+            payload,
+            dict(raw_consensus),
+        )
+    elif mode == "semantic_voters":
+        prediction_ids = [
+            str(value)
+            for value in payload.get("prediction_ids", [])
+            if isinstance(value, str)
+        ]
+        result = apply_multi_model_mask_consensus(
+            settings,
+            factory,
+            prediction_ids=prediction_ids,
+            consensus_configuration=dict(raw_consensus),
+            workflow_run_id=run.id,
+            workflow_node_id=run.current_node_id or "segmenter",
+        )
+        result_payload = result.as_payload()
+        _synchronize_promoted_vote_counts(factory, result_payload)
+        accepted_mask_ids = [
+            str(candidate["mask_annotation_id"])
+            for candidate in result_payload["candidates"]
+            if candidate.get("mask_annotation_id")
+        ]
+        enhanced = {
+            **payload,
+            "mask_annotation_ids": accepted_mask_ids,
+            "consensus": result_payload,
+            "auto_labeling_mode": "semantic_review_two_of_three",
+        }
+    else:
+        raise RuntimeError(f"Unsupported multi-model consensus mode: {mode}")
+
     if len(mask_output) == 4:
         return {
             "masks": (
