@@ -6,9 +6,31 @@ import {
   getTrainingRuns,
   getTrainingWorkspaceBootstrap,
   type Project,
-  type TrainingDraft,
   updateTrainingDraft,
 } from "../../api/client";
+
+interface TuningDraftRecord {
+  id: string;
+  dataset_version_id: string | null;
+  provider_id: string | null;
+  task: string | null;
+  tuning_config: Record<string, unknown>;
+}
+
+interface TuningRunRecord {
+  id: string;
+  run_name: string;
+  status: string;
+  stage: string;
+  architecture: string;
+  tuning_config: Record<string, unknown>;
+  artifact_manifest: Record<string, unknown>;
+}
+
+const updateTrainingDraftCompat = updateTrainingDraft as unknown as (
+  draftId: string,
+  payload: { tuning_config: Record<string, unknown> },
+) => Promise<TuningDraftRecord>;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object"
@@ -59,14 +81,16 @@ export function TuningDashboard({ project }: { project: Project }) {
     queryKey: ["tuning_workspace_bootstrap", project.id],
     queryFn: ({ signal }) => getTrainingWorkspaceBootstrap(project.id, signal),
   });
-  const draft = useQuery({
+  const draft = useQuery<TuningDraftRecord>({
     queryKey: ["training_draft", draftId],
-    queryFn: ({ signal }) => getTrainingDraft(draftId, signal),
+    queryFn: async ({ signal }) =>
+      (await getTrainingDraft(draftId, signal)) as unknown as TuningDraftRecord,
     enabled: draftId.length > 0,
   });
-  const runs = useQuery({
+  const runs = useQuery<TuningRunRecord[]>({
     queryKey: ["tuning_runs", project.id],
-    queryFn: ({ signal }) => getTrainingRuns(project.id, signal),
+    queryFn: async ({ signal }) =>
+      (await getTrainingRuns(project.id, signal)) as unknown as TuningRunRecord[],
     refetchInterval: 3000,
   });
 
@@ -117,7 +141,7 @@ export function TuningDashboard({ project }: { project: Project }) {
           throw new Error(message);
         }
       }
-      return updateTrainingDraft(draft.data.id, {
+      return updateTrainingDraftCompat(draft.data.id, {
         tuning_config: {
           mode: enabled ? "ultralytics" : "disabled",
           iterations,
@@ -128,7 +152,7 @@ export function TuningDashboard({ project }: { project: Project }) {
         },
       });
     },
-    onSuccess: (saved: TrainingDraft) => {
+    onSuccess: (saved) => {
       queryClient.setQueryData(["training_draft", saved.id], saved);
       void queryClient.invalidateQueries({
         queryKey: ["training_workspace_bootstrap", project.id],
@@ -139,10 +163,10 @@ export function TuningDashboard({ project }: { project: Project }) {
   const tuningRuns = useMemo(
     () =>
       (runs.data ?? []).filter((run) => {
-        const config = asRecord(run.tuning_config_json);
+        const config = asRecord(run.tuning_config);
         return (
           config.mode === "ultralytics" ||
-          asRecord(run.artifact_manifest_json).tuning
+          Boolean(asRecord(run.artifact_manifest).tuning)
         );
       }),
     [runs.data],
@@ -311,7 +335,7 @@ export function TuningDashboard({ project }: { project: Project }) {
               <div className="dashboard-list">
                 {tuningRuns.map((run) => {
                   const tuning = asRecord(
-                    asRecord(run.artifact_manifest_json).tuning,
+                    asRecord(run.artifact_manifest).tuning,
                   );
                   return (
                     <div key={run.id} className="dashboard-row">
