@@ -1,4 +1,4 @@
-"""Project-managed storage and record-integrity response schemas."""
+"""Project-managed storage, integrity, and safe-repair schemas."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ IntegrityResourceKind = Literal[
     "video",
     "job",
 ]
+ProjectRepairActionKind = Literal["create_project_root", "quarantine_orphan_file"]
 
 
 class ProjectIntegrityIssue(BaseModel):
@@ -60,3 +61,38 @@ class ProjectIntegrityResponse(BaseModel):
     total_existing_bytes: int = Field(ge=0)
     categories: list[ProjectIntegrityCategorySummary]
     issues: list[ProjectIntegrityIssue]
+
+
+class ProjectRepairAction(BaseModel):
+    action_id: str
+    action_kind: ProjectRepairActionKind
+    managed_path: str
+    reason: str
+    safe_automatic: bool = True
+    size_bytes: int | None = Field(default=None, ge=0)
+    modified_at: datetime | None = None
+
+
+class ProjectRepairPlanResponse(BaseModel):
+    project_id: str
+    generated_at: datetime
+    minimum_orphan_age_seconds: int = Field(ge=60)
+    referenced_path_count: int = Field(ge=0)
+    orphan_file_count: int = Field(ge=0)
+    orphan_file_bytes: int = Field(ge=0)
+    actions: list[ProjectRepairAction]
+    warnings: list[str]
+
+
+class ProjectRepairApplyRequest(BaseModel):
+    action_ids: list[str] = Field(min_length=1, max_length=10000)
+    minimum_orphan_age_seconds: int = Field(default=3600, ge=60, le=31_536_000)
+
+
+class ProjectRepairApplyResponse(BaseModel):
+    project_id: str
+    applied_at: datetime
+    applied_action_ids: list[str]
+    skipped_action_ids: list[str]
+    quarantined_paths: list[str]
+    created_paths: list[str]
