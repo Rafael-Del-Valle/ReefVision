@@ -16,6 +16,7 @@ from reefvision.schemas.workflows import (
     WorkflowRunCreateRequest,
     WorkflowRunCreateResponse,
     WorkflowRunResponse,
+    WorkflowRunRetryRequest,
 )
 from reefvision.services.persistent_workflows import PersistentWorkflowService
 
@@ -109,6 +110,19 @@ def get_workflow_run(
     session: DbSession,
 ) -> WorkflowRunResponse:
     return PersistentWorkflowService(session).get_run(run_id)
+
+
+@router.post(
+    "/workflow-runs/{run_id}/retry",
+    response_model=WorkflowRunCreateResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def retry_workflow_run(
+    run_id: str,
+    payload: WorkflowRunRetryRequest,
+    session: DbSession,
+) -> WorkflowRunCreateResponse:
+    return PersistentWorkflowService(session).retry_run(run_id, payload)
 
 
 @router.get(
