@@ -58,6 +58,7 @@ from reefvision.api.routes.scientific_validation import (
 from reefvision.api.routes.segmentation_evaluation import (
     router as segmentation_evaluation_router,
 )
+from reefvision.api.routes.storage_settings import router as storage_settings_router
 from reefvision.api.routes.system import router as system_router
 from reefvision.api.routes.tracking_evaluation import router as tracking_evaluation_router
 from reefvision.api.routes.training import router as training_router
@@ -72,6 +73,7 @@ api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health_router)
 api_router.include_router(capabilities_router)
 api_router.include_router(system_router)
+api_router.include_router(storage_settings_router)
 api_router.include_router(provider_capabilities_router)
 api_router.include_router(provider_lifecycle_router)
 api_router.include_router(active_learning_cycles_router)
