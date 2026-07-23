@@ -13,10 +13,32 @@ from sqlalchemy.orm import Session
 
 from reefvision.db.models import Job, JobDependency, TrainingRun
 from reefvision.services.resource_scheduler import ResourceScheduler
+from reefvision.services.training_resource_requirements import (
+    training_scheduler_requirements,
+)
 
 
 def _as_utc(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+def _training_run_for_job(session: Session, job: Job) -> TrainingRun | None:
+    if job.job_type != "training":
+        return None
+    run_id = dict(job.request_json or {}).get("training_run_id")
+    return session.get(TrainingRun, run_id) if isinstance(run_id, str) and run_id else None
+
+
+def _should_bind_training_device(run: TrainingRun, requirements: dict[str, Any]) -> bool:
+    requested = str(run.device or "auto").strip().casefold()
+    return (
+        bool(requirements.get("gpu_required"))
+        or int(requirements.get("gpu_count", 0) or 0) > 0
+        or requested == "cpu"
+        or requested.startswith("cuda")
+        or requested in {"gpu"}
+        or bool(requested and requested != "auto" and requested[0].isdigit())
+    )
 
 
 class JobRepository:
@@ -64,6 +86,16 @@ class JobRepository:
                 for dependency, upstream in dependencies
             ):
                 continue
+
+            training_run = _training_run_for_job(self.session, candidate)
+            if training_run is not None and not dict(
+                candidate.resource_requirements_json or {}
+            ):
+                candidate.resource_requirements_json = training_scheduler_requirements(
+                    training_run
+                )
+                self.session.flush()
+
             decision = scheduler.evaluate(candidate)
             if not decision.eligible:
                 continue
@@ -98,6 +130,7 @@ class JobRepository:
                         worker_id=resolved_worker_id,
                         heartbeat_at=now,
                         request_json=request_json,
+                        resource_requirements_json=requirements,
                         resource_assignment_json=decision.assignment,
                     )
                 ),
@@ -105,16 +138,13 @@ class JobRepository:
             if (claimed.rowcount or 0) != 1:
                 self.session.rollback()
                 continue
-            if candidate.job_type == "training":
-                training_run_id = request_json.get("training_run_id")
-                if isinstance(training_run_id, str) and training_run_id:
-                    training_run = self.session.get(TrainingRun, training_run_id)
-                    if training_run is not None:
-                        training_run.device = assignment_device
-                        training_run.resource_limits_json = {
-                            **dict(training_run.resource_limits_json or {}),
-                            "scheduler_assignment": dict(decision.assignment),
-                        }
+            if training_run is not None:
+                if _should_bind_training_device(training_run, requirements):
+                    training_run.device = assignment_device
+                training_run.resource_limits_json = {
+                    **dict(training_run.resource_limits_json or {}),
+                    "scheduler_assignment": dict(decision.assignment),
+                }
             self.session.commit()
             refreshed = self.session.get(Job, candidate.id)
             if refreshed is not None:
