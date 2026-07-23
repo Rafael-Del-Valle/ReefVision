@@ -35,7 +35,7 @@ from reefvision.jobs.training_dispatch import process_task_aware_training_job
 from reefvision.jobs.video import process_video_extract_job
 from reefvision.jobs.video_exports import process_video_render_export_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
-from reefvision.jobs.workflow_runs import process_workflow_run_job
+from reefvision.jobs.workflow_consensus import process_workflow_run_job
 from reefvision.repositories.jobs import JobRepository
 from reefvision.storage.images import create_thumbnail
 from reefvision.storage.projects import resolve_managed_project_path
@@ -209,7 +209,7 @@ async def _worker_slot(
                 "Background worker iteration failed",
                 extra={
                     "event_id": "background_worker_iteration_failure",
-                    "component": "worker",
+                    "component": "background_worker",
                     "worker_id": worker_id,
                 },
             )
