@@ -1,4 +1,4 @@
-"""Reviewable image-crop classification prediction."""
+"""Reviewable classification prediction for an image, box, mask, or fragment."""
 
 from __future__ import annotations
 
@@ -26,6 +26,12 @@ class ClassificationPrediction(Base):
             "model_id",
             "created_at",
         ),
+        Index(
+            "ix_classification_predictions_target_status",
+            "target_kind",
+            "target_key",
+            "review_status",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -38,6 +44,15 @@ class ClassificationPrediction(Base):
     annotation_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("annotations.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    mask_annotation_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("mask_annotations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    target_kind: Mapped[str] = mapped_column(String(30), nullable=False, default="annotation")
+    target_key: Mapped[str] = mapped_column(String(500), nullable=False)
+    fragment_key: Mapped[str | None] = mapped_column(String(300), nullable=True, index=True)
     model_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("model_registrations.id", ondelete="RESTRICT"), nullable=False
     )
