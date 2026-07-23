@@ -187,7 +187,7 @@ if ($IncludeUserModelCaches) {
 
 $UniqueCandidates = @(
     $Candidates |
-        Sort-Object { $_.Length } -Descending -Unique
+        Sort-Object -Property Length -Descending -Unique
 )
 $BytesRemoved = [int64]0
 foreach ($Path in $UniqueCandidates) {
