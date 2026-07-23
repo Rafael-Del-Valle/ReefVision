@@ -4,15 +4,17 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from reefvision.db.models import (
     Annotation,
     ClassificationAssignment,
+    ClassificationLabelSet,
     ClassificationPrediction,
     ImageAsset,
     LabelClass,
     MaskAnnotation,
+    ModelRegistration,
 )
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.schemas.classification import (
@@ -24,6 +26,50 @@ from reefvision.services.classification_assignments import ClassificationAssignm
 
 class GeneralizedClassificationAssignmentService(ClassificationAssignmentService):
     """Store reviewed classifier outputs without replacing unrelated target metadata."""
+
+    def _automatic_label_set(
+        self,
+        prediction: ClassificationPrediction,
+        *,
+        target_kind: str,
+    ) -> ClassificationLabelSet:
+        source_key = prediction.label_set.strip().casefold()
+        if source_key != "default" or target_kind == "annotation":
+            return super()._automatic_label_set(prediction, target_kind=target_kind)
+
+        key = f"default-{target_kind}"
+        existing = self.session.scalar(
+            select(ClassificationLabelSet).where(
+                ClassificationLabelSet.project_id == prediction.project_id,
+                func.lower(ClassificationLabelSet.key) == key,
+            )
+        )
+        if existing is not None:
+            return existing
+        model = self.session.get(ModelRegistration, prediction.model_id)
+        label_set = ClassificationLabelSet(
+            project_id=prediction.project_id,
+            key=key,
+            name=f"Default {target_kind} classification",
+            description=(
+                "Automatically created for a generalized classifier target. "
+                "It never replaces the target's primary detection or mask class."
+            ),
+            target_kind=target_kind,
+            cardinality="single",
+            allowed_class_ids_json=[],
+            replaces_primary_class=False,
+            is_active=True,
+            metadata_json={
+                "created_from_prediction_id": prediction.id,
+                "created_from_model_id": prediction.model_id,
+                "created_from_model_name": model.display_name if model else None,
+                "source_label_set": prediction.label_set,
+            },
+        )
+        self.session.add(label_set)
+        self.session.flush()
+        return label_set
 
     def _resolved_target(
         self,
