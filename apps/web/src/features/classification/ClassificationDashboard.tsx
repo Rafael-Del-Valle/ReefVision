@@ -32,6 +32,9 @@ export function ClassificationDashboard({ project }: { project: Project }) {
   const [batch, setBatch] = useState(16);
   const [imgsz, setImgsz] = useState(224);
   const [classifierId, setClassifierId] = useState("");
+  const [classificationTaskKey, setClassificationTaskKey] = useState(
+    "annotation-crop-state",
+  );
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [reviewClassByPrediction, setReviewClassByPrediction] = useState<
     Record<string, string>
@@ -162,10 +165,12 @@ export function ClassificationDashboard({ project }: { project: Project }) {
         minimum_crop_size_px: minimumCropSize,
         padding_fraction: paddingFraction,
         device: "auto",
-        label_set: "annotation-crop-state",
+        label_set: classificationTaskKey.trim(),
       }),
     onSuccess: (job) =>
-      setLastMessage(`Classification inference queued as job ${job.id}.`),
+      setLastMessage(
+        `Classification task ${classificationTaskKey.trim()} queued as job ${job.id}.`,
+      ),
   });
   const review = useMutation({
     mutationFn: ({
@@ -200,6 +205,10 @@ export function ClassificationDashboard({ project }: { project: Project }) {
     minimumCropSize > 4096 ||
     paddingFraction < 0 ||
     paddingFraction > 1;
+  const classificationTaskKeyValid =
+    classificationTaskKey.length > 0 &&
+    classificationTaskKey.length <= 100 &&
+    /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(classificationTaskKey);
 
   function toggleImage(imageId: string) {
     setSelectedImageIds((current) =>
@@ -223,7 +232,9 @@ export function ClassificationDashboard({ project }: { project: Project }) {
         <div>
           <p className="eyebrow">Phase 5</p>
           <h3>Classification</h3>
-          <span>Immutable crops → train → register → infer → human review</span>
+          <span>
+            Immutable crops → train → register → infer → independent assignments
+          </span>
         </div>
         <span>{classifiers.length} registered classifiers</span>
       </div>
@@ -471,6 +482,28 @@ export function ClassificationDashboard({ project }: { project: Project }) {
                 ))}
               </select>
             </label>
+            <label>
+              Classification task key
+              <input
+                value={classificationTaskKey}
+                aria-invalid={!classificationTaskKeyValid}
+                onChange={(event) =>
+                  setClassificationTaskKey(event.target.value.trimStart())
+                }
+                placeholder="species, health, condition"
+              />
+            </label>
+            <p>
+              Results with the same task key replace only that task&apos;s prior
+              assignment. Different task keys and classifiers can coexist on the
+              same box without changing its detection class.
+            </p>
+            {!classificationTaskKeyValid && (
+              <p className="form-warning">
+                Use letters, numbers, periods, underscores, or hyphens, beginning
+                with a letter or number.
+              </p>
+            )}
             <div className="version-actions">
               <button
                 type="button"
@@ -493,7 +526,10 @@ export function ClassificationDashboard({ project }: { project: Project }) {
               <button
                 type="button"
                 disabled={
-                  !classifierId || !selectedImageIds.length || infer.isPending
+                  !classifierId ||
+                  !classificationTaskKeyValid ||
+                  !selectedImageIds.length ||
+                  infer.isPending
                 }
                 onClick={() => infer.mutate()}
               >
@@ -524,6 +560,10 @@ export function ClassificationDashboard({ project }: { project: Project }) {
                 <h4>{predictions.data?.total ?? 0} crop predictions</h4>
               </div>
             </div>
+            <p>
+              Accepted classifier results are stored as independent assignments.
+              They do not replace the box&apos;s primary detection class.
+            </p>
             <div className="dashboard-list">
               {predictions.data?.items.map((prediction) => (
                 <article key={prediction.id} className="dashboard-row">
@@ -539,7 +579,7 @@ export function ClassificationDashboard({ project }: { project: Project }) {
                     </small>
                     {prediction.review_status === "pending" && (
                       <label>
-                        Accept as project class
+                        Accept as assignment class
                         <select
                           value={
                             reviewClassByPrediction[prediction.id] ??
