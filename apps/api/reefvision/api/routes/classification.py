@@ -38,6 +38,9 @@ from reefvision.services.classification_assignment_exports import (
 )
 from reefvision.services.classification_assignments import ClassificationAssignmentService
 from reefvision.services.classification_models import ClassificationModelService
+from reefvision.services.generalized_classification_assignments import (
+    GeneralizedClassificationAssignmentService,
+)
 from reefvision.services.generalized_classification_jobs import (
     GeneralizedClassificationJobService,
 )
@@ -51,7 +54,7 @@ def service(request: Request, session: Session) -> ClassificationService:
 
 
 def assignment_service(session: Session) -> ClassificationAssignmentService:
-    return ClassificationAssignmentService(session)
+    return GeneralizedClassificationAssignmentService(session)
 
 
 def model_service(request: Request, session: Session) -> ClassificationModelService:
