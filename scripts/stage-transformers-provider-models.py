@@ -117,7 +117,6 @@ def stage_model_pack(policy_path: Path, output_root: Path) -> dict[str, Any]:
                 repo_id=repo_id,
                 revision=resolved_revision,
                 local_dir=temporary,
-                local_dir_use_symlinks=False,
                 ignore_patterns=("*.md", ".gitattributes"),
             )
         )
