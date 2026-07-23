@@ -1,4 +1,4 @@
-"""Install and verify bundled Transformers model snapshots in configurable cache storage."""
+"""Install and verify bundled Transformers snapshots in configurable cache storage."""
 
 from __future__ import annotations
 
@@ -23,7 +23,9 @@ def _bundle_roots() -> list[Path]:
         candidates.append(Path(configured).expanduser())
     bundle_root = vars(sys).get("_MEIPASS")
     if bundle_root:
-        candidates.append(Path(str(bundle_root)).resolve() / "bundled-transformers-models")
+        candidates.append(
+            Path(str(bundle_root)).resolve() / "bundled-transformers-models"
+        )
     executable = getattr(sys, "executable", None)
     if executable:
         root = Path(executable).resolve().parent
@@ -110,7 +112,9 @@ def _validate_file_records(
     seen: set[str] = set()
     for raw_file in raw_files:
         if not isinstance(raw_file, dict):
-            raise ValueError("Bundled model manifest contains a non-object file record")
+            raise ValueError(
+                "Bundled model manifest contains a non-object file record"
+            )
         relative_path = str(raw_file.get("relative_path") or "")
         size_bytes = int(raw_file.get("size_bytes") or -1)
         sha256 = str(raw_file.get("sha256") or "").casefold()
@@ -133,7 +137,9 @@ def _validate_file_records(
     expected_digest = str(raw_record.get("snapshot_sha256") or "").casefold()
     calculated_digest = _snapshot_digest(files)
     if expected_digest and expected_digest != calculated_digest:
-        raise ValueError("Bundled model snapshot digest does not match its file manifest")
+        raise ValueError(
+            "Bundled model snapshot digest does not match its file manifest"
+        )
     return files, calculated_digest
 
 
@@ -165,9 +171,17 @@ def _verify_snapshot(
             path = _safe_relative_file(root, str(item["relative_path"]))
             relative_path = str(item["relative_path"])
             if not path.is_file():
-                return False, f"Missing bundled file: {relative_path}", snapshot_digest
+                return (
+                    False,
+                    f"Missing bundled file: {relative_path}",
+                    snapshot_digest,
+                )
             if path.stat().st_size != int(item["size_bytes"]):
-                return False, f"Bundled file size mismatch: {relative_path}", snapshot_digest
+                return (
+                    False,
+                    f"Bundled file size mismatch: {relative_path}",
+                    snapshot_digest,
+                )
             if _sha256(path) != str(item["sha256"]):
                 return (
                     False,
@@ -183,7 +197,10 @@ def _verify_snapshot(
 
 def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     temporary = path.with_suffix(path.suffix + ".part")
-    temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    temporary.write_text(
+        json.dumps(payload, indent=2) + "\n",
+        encoding="utf-8",
+    )
     os.replace(temporary, path)
 
 
@@ -243,7 +260,9 @@ def install_bundled_transformers_models(
         destination_valid = False
         if destination.is_dir() and marker.is_file():
             try:
-                marker_matches = marker.read_text(encoding="utf-8").strip() == revision
+                marker_matches = (
+                    marker.read_text(encoding="utf-8").strip() == revision
+                )
             except OSError:
                 marker_matches = False
             if marker_matches:
@@ -289,7 +308,8 @@ def install_bundled_transformers_models(
             "resolved_revision": revision,
             "snapshot_sha256": snapshot_digest,
             "file_count": int(
-                raw_record.get("file_count") or len(raw_record.get("files") or [])
+                raw_record.get("file_count")
+                or len(raw_record.get("files") or [])
             ),
             "total_size_bytes": int(raw_record.get("total_size_bytes") or 0),
             "verified": True,
