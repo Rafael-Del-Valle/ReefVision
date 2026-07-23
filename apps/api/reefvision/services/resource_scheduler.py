@@ -179,8 +179,11 @@ class ResourceScheduler:
             or requested_gpu_count_raw > 0
             or requested_device.startswith("cuda")
             or requested_device in {"gpu"}
+            or bool(requested_device and requested_device[0].isdigit())
         )
-        requested_gpu_count = max(1, requested_gpu_count_raw or 1) if gpu_required else 0
+        gpu_preferred = bool(requirements.get("gpu_preferred", False)) and not gpu_required
+        attempt_gpu = gpu_required or gpu_preferred
+        requested_gpu_count = max(1, requested_gpu_count_raw or 1) if attempt_gpu else 0
         minimum_vram_per_gpu = max(
             0,
             int(
@@ -193,7 +196,7 @@ class ResourceScheduler:
         )
         exclusive_gpu = bool(requirements.get("exclusive_gpu", False))
         explicit_indices: list[int] | None = None
-        if gpu_required:
+        if attempt_gpu:
             try:
                 explicit_indices = _parse_requested_gpu_indices(requested_device)
             except ValueError:
@@ -206,7 +209,7 @@ class ResourceScheduler:
                 requested_gpu_count = len(explicit_indices)
 
         selected_gpus: list[GPUInventory] = []
-        if gpu_required:
+        if attempt_gpu:
             reserved_by_gpu: dict[int, int] = {}
             exclusive_gpus: set[int] = set()
             assigned_gpus: set[int] = set()
@@ -264,7 +267,7 @@ class ResourceScheduler:
 
             if len(candidates) >= requested_gpu_count:
                 selected_gpus = candidates[:requested_gpu_count]
-            elif not blockers:
+            elif gpu_required and not blockers:
                 blockers.append(
                     f"Requires {requested_gpu_count} compatible GPUs; "
                     f"only {len(candidates)} satisfy VRAM and exclusivity requirements."
@@ -300,6 +303,7 @@ class ResourceScheduler:
                     "reserved_vram_bytes": minimum_vram_per_gpu,
                     "reserved_vram_bytes_per_gpu": minimum_vram_per_gpu,
                     "exclusive_gpu": exclusive_gpu,
+                    "gpu_preferred": gpu_preferred,
                     "cuda_visible_devices": ",".join(str(index) for index in gpu_indices),
                 }
             )
@@ -310,6 +314,7 @@ class ResourceScheduler:
                     "gpu_index": None,
                     "gpu_indices": [],
                     "gpu_count": 0,
+                    "gpu_preferred": gpu_preferred,
                 }
             )
         return ResourceDecision(
