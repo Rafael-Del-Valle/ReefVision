@@ -38,6 +38,9 @@ from reefvision.services.classification_assignment_exports import (
 )
 from reefvision.services.classification_assignments import ClassificationAssignmentService
 from reefvision.services.classification_models import ClassificationModelService
+from reefvision.services.generalized_classification_jobs import (
+    GeneralizedClassificationJobService,
+)
 
 router = APIRouter(tags=["classification"])
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -153,7 +156,10 @@ def create_classification_inference_job(
     request: Request,
     session: DbSession,
 ) -> JobResponse:
-    return service(request, session).create_inference_job(project_id, payload)
+    return GeneralizedClassificationJobService(
+        session,
+        request.app.state.settings,
+    ).create(project_id, payload)
 
 
 @router.get(
