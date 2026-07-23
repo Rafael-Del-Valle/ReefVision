@@ -16,7 +16,12 @@ from reefvision.services.workflow_consensus_templates import (
     independent_mask_auto_labeling_template,
     multi_model_auto_labeling_template,
 )
+from reefvision.services.workflow_definition_extensions import (
+    install_workflow_definition_extensions,
+)
 from reefvision.services.workflows import WorkflowService
+
+install_workflow_definition_extensions()
 
 router = APIRouter(tags=["workflows"])
 DbSession = Annotated[Session, Depends(get_db_session)]
