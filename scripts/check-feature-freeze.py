@@ -1,8 +1,9 @@
-"""Fail when post-freeze commits add new ReefVision production modules.
+"""Fail when stabilization work adds new ReefVision production modules.
 
 Existing production files may still be modified for stabilization fixes. New tests,
 documentation, scripts, and CI files remain allowed. The baseline and policy live in
-.reefvision-feature-freeze.json.
+.reefvision-feature-freeze.json. Both committed changes and the local working tree are
+checked so untracked production files cannot bypass the freeze.
 """
 
 from __future__ import annotations
@@ -50,9 +51,7 @@ def _load_policy(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _changes(baseline: str, head: str) -> list[Change]:
-    _git("merge-base", "--is-ancestor", baseline, head)
-    output = _git("diff", "--name-status", "--find-renames", f"{baseline}...{head}")
+def _parse_name_status(output: str) -> list[Change]:
     changes: list[Change] = []
     for raw_line in output.splitlines():
         fields = raw_line.split("\t")
@@ -60,10 +59,46 @@ def _changes(baseline: str, head: str) -> list[Change]:
             continue
         status = fields[0]
         if status.startswith(("R", "C")) and len(fields) >= 3:
-            changes.append(Change(status=status, previous_path=fields[1], path=fields[2]))
+            changes.append(
+                Change(status=status, previous_path=fields[1], path=fields[2])
+            )
         else:
             changes.append(Change(status=status, path=fields[1]))
     return changes
+
+
+def _committed_changes(baseline: str, head: str) -> list[Change]:
+    _git("merge-base", "--is-ancestor", baseline, head)
+    return _parse_name_status(
+        _git("diff", "--name-status", "--find-renames", f"{baseline}...{head}")
+    )
+
+
+def _working_tree_changes() -> list[Change]:
+    changes = [
+        *_parse_name_status(
+            _git("diff", "--name-status", "--find-renames", "HEAD", "--")
+        ),
+        *_parse_name_status(
+            _git("diff", "--cached", "--name-status", "--find-renames", "HEAD", "--")
+        ),
+    ]
+    changes.extend(
+        Change(status="A", path=path)
+        for path in _git("ls-files", "--others", "--exclude-standard").splitlines()
+        if path.strip()
+    )
+    return changes
+
+
+def _deduplicate(changes: list[Change]) -> list[Change]:
+    unique: dict[tuple[str, str, str | None], Change] = {}
+    for change in changes:
+        unique[(change.status, change.path, change.previous_path)] = change
+    return sorted(
+        unique.values(),
+        key=lambda item: (item.path, item.status, item.previous_path or ""),
+    )
 
 
 def _starts_with(path: str, prefixes: list[str]) -> bool:
@@ -99,7 +134,11 @@ def _blocked(change: Change, policy: dict[str, Any]) -> str | None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--policy", type=Path, default=Path(".reefvision-feature-freeze.json"))
+    parser.add_argument(
+        "--policy",
+        type=Path,
+        default=Path(".reefvision-feature-freeze.json"),
+    )
     parser.add_argument("--head", default="HEAD")
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
@@ -107,7 +146,9 @@ def main() -> int:
     try:
         policy = _load_policy(args.policy)
         baseline = str(policy["baseline_sha"])
-        changes = _changes(baseline, args.head)
+        committed = _committed_changes(baseline, args.head)
+        working_tree = _working_tree_changes()
+        changes = _deduplicate([*committed, *working_tree])
     except RuntimeError as exc:
         print(f"Feature-freeze check could not run: {exc}", file=sys.stderr)
         return 2
@@ -118,9 +159,11 @@ def main() -> int:
         if (reason := _blocked(change, policy)) is not None
     ]
     report = {
-        "schema": "reefvision-feature-freeze-report-v1",
+        "schema": "reefvision-feature-freeze-report-v2",
         "baseline_sha": baseline,
         "head": _git("rev-parse", args.head).strip(),
+        "committed_change_count": len(committed),
+        "working_tree_change_count": len(working_tree),
         "change_count": len(changes),
         "violation_count": len(violations),
         "violations": violations,
@@ -148,8 +191,8 @@ def main() -> int:
         return 1
 
     print(
-        f"ReefVision feature freeze passed: {len(changes)} post-baseline changes, "
-        "no new production modules or migrations."
+        f"ReefVision feature freeze passed: {len(changes)} committed or local "
+        "post-baseline changes, no new production modules or migrations."
     )
     return 0
 
