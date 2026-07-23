@@ -70,8 +70,6 @@ def compact_coco_export(
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["coco_rle_encoding"] = "compressed"
     manifest["compressed_rle_mask_count"] = converted
-    annotations_bytes = canonical_json_bytes(document)
-    manifest_bytes = canonical_json_bytes(manifest)
     temporary_annotations = annotations_path.with_name(
         f".{annotations_path.name}.{uuid4().hex[:8]}.tmp"
     )
@@ -82,18 +80,34 @@ def compact_coco_export(
         f".{archive_path.name}.{uuid4().hex[:8]}.tmp"
     )
     try:
-        temporary_annotations.write_bytes(annotations_bytes)
-        temporary_manifest.write_bytes(manifest_bytes)
-        temporary_annotations.replace(annotations_path)
-        temporary_manifest.replace(manifest_path)
+        temporary_annotations.write_bytes(canonical_json_bytes(document))
+        temporary_manifest.write_bytes(canonical_json_bytes(manifest))
         with zipfile.ZipFile(
             temporary_archive,
             "w",
             compression=zipfile.ZIP_DEFLATED,
         ) as archive:
+            archive.write(
+                temporary_annotations,
+                annotations_path.relative_to(root).as_posix(),
+            )
+            archive.write(
+                temporary_manifest,
+                manifest_path.relative_to(root).as_posix(),
+            )
+            excluded = {
+                archive_path,
+                temporary_archive,
+                annotations_path,
+                manifest_path,
+                temporary_annotations,
+                temporary_manifest,
+            }
             for path in sorted(root.rglob("*")):
-                if path.is_file() and path not in {archive_path, temporary_archive}:
+                if path.is_file() and path not in excluded:
                     archive.write(path, path.relative_to(root).as_posix())
+        temporary_annotations.replace(annotations_path)
+        temporary_manifest.replace(manifest_path)
         temporary_archive.replace(archive_path)
     finally:
         temporary_annotations.unlink(missing_ok=True)
