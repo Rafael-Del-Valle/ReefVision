@@ -60,10 +60,14 @@ def _read_mask(path: Path) -> NDArray[np.bool_]:
     return mask
 
 
-def _counts(reference: NDArray[np.bool_], prediction: NDArray[np.bool_]) -> Counts:
+def _counts(
+    reference: NDArray[np.bool_],
+    prediction: NDArray[np.bool_],
+) -> Counts:
     if reference.shape != prediction.shape:
         raise ValueError(
-            f"Mask dimensions differ: reference {reference.shape}, prediction {prediction.shape}"
+            f"Mask dimensions differ: reference {reference.shape}, "
+            f"prediction {prediction.shape}"
         )
     return Counts(
         true_positive=int(np.logical_and(reference, prediction).sum()),
@@ -73,7 +77,12 @@ def _counts(reference: NDArray[np.bool_], prediction: NDArray[np.bool_]) -> Coun
     )
 
 
-def _ratio(numerator: int, denominator: int, *, empty_value: float = 1.0) -> float:
+def _ratio(
+    numerator: int,
+    denominator: int,
+    *,
+    empty_value: float = 1.0,
+) -> float:
     return float(numerator / denominator) if denominator else empty_value
 
 
@@ -92,7 +101,9 @@ def _metrics(counts: Counts) -> dict[str, float | int]:
         "iou": _ratio(counts.true_positive, union),
         "dice": _ratio(
             2 * counts.true_positive,
-            2 * counts.true_positive + counts.false_positive + counts.false_negative,
+            2 * counts.true_positive
+            + counts.false_positive
+            + counts.false_negative,
         ),
         "precision": _ratio(
             counts.true_positive,
@@ -139,14 +150,24 @@ def main() -> int:
     parser.add_argument("--consensus-majority", type=Path, required=True)
     parser.add_argument("--consensus-intersection", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--minimum-majority-macro-iou", type=float, default=0.0)
-    parser.add_argument("--minimum-majority-improvement-over-sam3", type=float, default=0.0)
+    parser.add_argument(
+        "--minimum-majority-macro-iou",
+        type=float,
+        default=0.0,
+    )
+    parser.add_argument(
+        "--minimum-majority-improvement-over-sam3",
+        type=float,
+        default=0.0,
+    )
     args = parser.parse_args()
 
     if not 0 <= args.minimum_majority_macro_iou <= 1:
         parser.error("--minimum-majority-macro-iou must be between 0 and 1")
     if not -1 <= args.minimum_majority_improvement_over_sam3 <= 1:
-        parser.error("--minimum-majority-improvement-over-sam3 must be between -1 and 1")
+        parser.error(
+            "--minimum-majority-improvement-over-sam3 must be between -1 and 1"
+        )
 
     branch_directories = {
         "sam3": args.sam3,
@@ -199,7 +220,9 @@ def main() -> int:
         print(str(exc), file=sys.stderr)
         return 2
 
-    aggregates = {branch: _aggregate(rows) for branch, rows in by_branch.items()}
+    aggregates = {
+        branch: _aggregate(rows) for branch, rows in by_branch.items()
+    }
     majority_iou = float(
         aggregates["consensus_pixel_majority"]["macro"]["iou"]
     )
@@ -221,7 +244,8 @@ def main() -> int:
         "schema": "reefvision-real-consensus-evaluation-v1",
         "ground_truth_directory": str(args.ground_truth.resolve()),
         "branch_directories": {
-            name: str(path.resolve()) for name, path in branch_directories.items()
+            name: str(path.resolve())
+            for name, path in branch_directories.items()
         },
         "image_count": len(expected_keys),
         "aggregates": aggregates,
@@ -230,7 +254,9 @@ def main() -> int:
         "consensus_majority_improvement_over_sam3": improvement,
         "thresholds": {
             "minimum_majority_macro_iou": args.minimum_majority_macro_iou,
-            "minimum_majority_improvement_over_sam3": args.minimum_majority_improvement_over_sam3,
+            "minimum_majority_improvement_over_sam3": (
+                args.minimum_majority_improvement_over_sam3
+            ),
         },
         "failures": failures,
         "passed": not failures,
