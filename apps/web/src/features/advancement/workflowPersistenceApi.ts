@@ -79,6 +79,34 @@ export interface WorkflowArtifactCleanupResult {
   quarantine_paths: string[];
 }
 
+export interface WorkflowArtifactQuarantineItem {
+  artifact_id: string;
+  node_id: string;
+  port_name: string;
+  original_managed_path: string;
+  quarantine_path: string;
+  file_sha256: string | null;
+  size_bytes: number;
+  quarantined_at: string;
+  restorable: boolean;
+  blockers: string[];
+}
+
+export interface WorkflowArtifactQuarantine {
+  workflow_run_id: string;
+  item_count: number;
+  restorable_count: number;
+  total_bytes: number;
+  items: WorkflowArtifactQuarantineItem[];
+}
+
+export interface WorkflowArtifactRestoreResult {
+  workflow_run_id: string;
+  restored_artifact_count: number;
+  restored_bytes: number;
+  restored_paths: string[];
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (init?.body) headers.set("Content-Type", "application/json");
@@ -147,6 +175,29 @@ export function applyWorkflowArtifactCleanup(
     {
       method: "POST",
       body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function listWorkflowArtifactQuarantine(
+  runId: string,
+  signal?: AbortSignal,
+) {
+  return request<WorkflowArtifactQuarantine>(
+    `/workflow-runs/${runId}/artifact-quarantine`,
+    { signal },
+  );
+}
+
+export function restoreWorkflowArtifacts(
+  runId: string,
+  artifactIds: string[],
+) {
+  return request<WorkflowArtifactRestoreResult>(
+    `/workflow-runs/${runId}/artifact-quarantine/restore`,
+    {
+      method: "POST",
+      body: JSON.stringify({ artifact_ids: artifactIds }),
     },
   );
 }
