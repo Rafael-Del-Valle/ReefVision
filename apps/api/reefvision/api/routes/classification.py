@@ -1,4 +1,4 @@
-"""Classification dataset, training, inference, label, and review endpoints."""
+"""Classification dataset, training, inference, label, assignment, and review endpoints."""
 
 from typing import Annotated, Literal
 
@@ -9,9 +9,16 @@ from reefvision.api.dependencies import get_db_session
 from reefvision.db.models import ModelRegistration
 from reefvision.domain.errors import NotFoundError
 from reefvision.schemas.classification import (
+    ClassificationAssignmentAcceptRequest,
+    ClassificationAssignmentExportResponse,
+    ClassificationAssignmentPage,
+    ClassificationAssignmentResponse,
     ClassificationDatasetPreviewResponse,
     ClassificationDatasetRequest,
     ClassificationInferenceRequest,
+    ClassificationLabelSetCreateRequest,
+    ClassificationLabelSetResponse,
+    ClassificationLabelSetUpdateRequest,
     ClassificationPredictionPage,
     ClassificationPredictionResponse,
     ClassificationReviewRequest,
@@ -23,6 +30,7 @@ from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.models import ModelRegistrationResponse, RegisterModelFromRunRequest
 from reefvision.schemas.training import TrainingRunResponse
 from reefvision.services.classification import ClassificationService
+from reefvision.services.classification_assignments import ClassificationAssignmentService
 from reefvision.services.classification_models import ClassificationModelService
 
 router = APIRouter(tags=["classification"])
@@ -31,6 +39,10 @@ DbSession = Annotated[Session, Depends(get_db_session)]
 
 def service(request: Request, session: Session) -> ClassificationService:
     return ClassificationService(session, request.app.state.settings)
+
+
+def assignment_service(session: Session) -> ClassificationAssignmentService:
+    return ClassificationAssignmentService(session)
 
 
 def model_service(request: Request, session: Session) -> ClassificationModelService:
@@ -173,6 +185,102 @@ def review_classification_prediction(
     session: DbSession,
 ) -> ClassificationPredictionResponse:
     return service(request, session).review_prediction(prediction_id, payload)
+
+
+@router.post(
+    "/projects/{project_id}/classification-label-sets",
+    response_model=ClassificationLabelSetResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_classification_label_set(
+    project_id: str,
+    payload: ClassificationLabelSetCreateRequest,
+    session: DbSession,
+) -> ClassificationLabelSetResponse:
+    return assignment_service(session).create_label_set(project_id, payload)
+
+
+@router.get(
+    "/projects/{project_id}/classification-label-sets",
+    response_model=list[ClassificationLabelSetResponse],
+)
+def list_classification_label_sets(
+    project_id: str,
+    session: DbSession,
+    target_kind: str | None = None,
+    active_only: bool = True,
+) -> list[ClassificationLabelSetResponse]:
+    return assignment_service(session).list_label_sets(
+        project_id,
+        target_kind=target_kind,
+        active_only=active_only,
+    )
+
+
+@router.patch(
+    "/classification-label-sets/{label_set_id}",
+    response_model=ClassificationLabelSetResponse,
+)
+def update_classification_label_set(
+    label_set_id: str,
+    payload: ClassificationLabelSetUpdateRequest,
+    session: DbSession,
+) -> ClassificationLabelSetResponse:
+    return assignment_service(session).update_label_set(label_set_id, payload)
+
+
+@router.post(
+    "/classification-predictions/{prediction_id}/accept-assignment",
+    response_model=ClassificationAssignmentResponse,
+)
+def accept_classification_prediction_as_assignment(
+    prediction_id: str,
+    payload: ClassificationAssignmentAcceptRequest,
+    session: DbSession,
+) -> ClassificationAssignmentResponse:
+    return assignment_service(session).accept_prediction_assignment(prediction_id, payload)
+
+
+@router.get(
+    "/projects/{project_id}/classification-assignments",
+    response_model=ClassificationAssignmentPage,
+)
+def list_classification_assignments(
+    project_id: str,
+    session: DbSession,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=500)] = 100,
+    image_id: str | None = None,
+    annotation_id: str | None = None,
+    label_set_id: str | None = None,
+    model_id: str | None = None,
+    assignment_status: str | None = "accepted",
+) -> ClassificationAssignmentPage:
+    return assignment_service(session).list_assignments(
+        project_id,
+        page=page,
+        page_size=page_size,
+        image_id=image_id,
+        annotation_id=annotation_id,
+        label_set_id=label_set_id,
+        model_id=model_id,
+        status=assignment_status,
+    )
+
+
+@router.get(
+    "/projects/{project_id}/classification-assignments/export",
+    response_model=ClassificationAssignmentExportResponse,
+)
+def export_classification_assignments(
+    project_id: str,
+    session: DbSession,
+    assignment_status: str | None = "accepted",
+) -> ClassificationAssignmentExportResponse:
+    return assignment_service(session).export_assignments(
+        project_id,
+        status=assignment_status,
+    )
 
 
 @router.get("/images/{image_id}/labels", response_model=list[ImageLabelResponse])
