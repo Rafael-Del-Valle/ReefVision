@@ -6,6 +6,7 @@ from typing import cast
 import numpy as np
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from reefvision.db.models import PredictionProposal
 from reefvision.ml.providers import PixelBox
@@ -25,7 +26,7 @@ from reefvision.tests.test_segmentation_prediction_review_safety import (
 class _FakeDetector:
     branch_id: str
     model_name: str
-    box: PixelBox
+    x_offset_fraction: float
 
     def detect(
         self,
@@ -40,13 +41,17 @@ class _FakeDetector:
         assert width > 0 and height > 0
         assert concept_prompt == "soft coral"
         assert minimum_confidence == 0.2
+        left = max(0.0, width * (0.10 + self.x_offset_fraction))
+        top = height * 0.10
+        right = min(float(width), width * (0.65 + self.x_offset_fraction))
+        bottom = height * 0.65
         return [
             VLMBoxDetection(
                 detection_id=f"{self.branch_id}-0",
                 branch_id=self.branch_id,
                 model_name=self.model_name,
                 confidence=0.9,
-                box=self.box,
+                box=PixelBox(x_min=left, y_min=top, x_max=right, y_max=bottom),
             )
         ]
 
@@ -64,11 +69,16 @@ class _FakeRefiner:
         detections: list[VLMBoxDetection],
     ) -> list[IndependentMaskCandidate]:
         assert image_path.is_file()
+        with Image.open(image_path) as source:
+            width, height = source.size
         result: list[IndependentMaskCandidate] = []
         for detection in detections:
-            mask = np.zeros((64, 64), dtype=bool)
+            mask = np.zeros((height, width), dtype=bool)
             box = detection.box
-            mask[int(box.y_min) : int(box.y_max), int(box.x_min) : int(box.x_max)] = True
+            mask[
+                max(0, int(box.y_min)) : min(height, int(box.y_max)),
+                max(0, int(box.x_min)) : min(width, int(box.x_max)),
+            ] = True
             result.append(
                 IndependentMaskCandidate(
                     candidate_id=detection.detection_id,
@@ -119,16 +129,8 @@ def test_independent_pipeline_creates_reviewable_consensus_proposal(
         minimum_vlm_confidence=0.2,
         auto_accept=False,
         detectors=[
-            _FakeDetector(
-                "gemini_sam2",
-                "gemini-test",
-                PixelBox(x_min=8, y_min=8, x_max=36, y_max=36),
-            ),
-            _FakeDetector(
-                "openai_sam2",
-                "openai-test",
-                PixelBox(x_min=10, y_min=8, x_max=38, y_max=36),
-            ),
+            _FakeDetector("gemini_sam2", "gemini-test", 0.00),
+            _FakeDetector("openai_sam2", "openai-test", 0.03),
         ],
         refiner=_FakeRefiner(),
     )
