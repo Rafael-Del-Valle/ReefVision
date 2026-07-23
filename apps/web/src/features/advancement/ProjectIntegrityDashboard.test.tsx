@@ -6,9 +6,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Project } from "../../api/client";
 import { inspectProjectIntegrity } from "./api";
 import { ProjectIntegrityDashboard } from "./ProjectIntegrityDashboard";
+import {
+  applyProjectRepairs,
+  previewProjectRepairs,
+} from "./projectRepairApi";
 
 vi.mock("./api", () => ({
   inspectProjectIntegrity: vi.fn(),
+}));
+
+vi.mock("./projectRepairApi", () => ({
+  previewProjectRepairs: vi.fn(),
+  applyProjectRepairs: vi.fn(),
 }));
 
 const project: Project = {
@@ -84,6 +93,36 @@ describe("ProjectIntegrityDashboard", () => {
         },
       ],
     });
+    vi.mocked(previewProjectRepairs).mockResolvedValue({
+      project_id: project.id,
+      generated_at: "2026-07-18T12:00:00Z",
+      minimum_orphan_age_seconds: 3600,
+      referenced_path_count: 3,
+      orphan_file_count: 1,
+      orphan_file_bytes: 12,
+      actions: [
+        {
+          action_id: "repair-1",
+          action_kind: "quarantine_orphan_file",
+          managed_path: "projects/integrity-project/misc/orphan.bin",
+          reason: "The file is old and unreferenced.",
+          safe_automatic: true,
+          size_bytes: 12,
+          modified_at: "2026-07-18T10:00:00Z",
+        },
+      ],
+      warnings: [],
+    });
+    vi.mocked(applyProjectRepairs).mockResolvedValue({
+      project_id: project.id,
+      applied_at: "2026-07-18T12:01:00Z",
+      applied_action_ids: ["repair-1"],
+      skipped_action_ids: [],
+      quarantined_paths: [
+        "projects/integrity-project/.quarantine/orphans/test/misc/orphan.bin",
+      ],
+      created_paths: [],
+    });
   });
 
   it("runs a checksum-aware inspection and renders findings", async () => {
@@ -106,5 +145,37 @@ describe("ProjectIntegrityDashboard", () => {
     expect(screen.getByText(/managed path missing/i)).toBeInTheDocument();
     expect(screen.getByText(/stale active job/i)).toBeInTheDocument();
     expect(screen.getByText("1 missing")).toBeInTheDocument();
+  });
+
+  it("requires explicit repair selection after preview", async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+
+    await user.click(
+      screen.getByRole("button", { name: /preview safe repairs/i }),
+    );
+
+    await waitFor(() =>
+      expect(previewProjectRepairs).toHaveBeenCalledWith(project.id, 3600),
+    );
+    const applyButton = await screen.findByRole("button", {
+      name: /quarantine\/apply 0 selected/i,
+    });
+    expect(applyButton).toBeDisabled();
+
+    await user.click(screen.getByRole("checkbox", { name: /orphan\.bin/i }));
+    const selectedApplyButton = screen.getByRole("button", {
+      name: /quarantine\/apply 1 selected/i,
+    });
+    expect(selectedApplyButton).toBeEnabled();
+
+    await user.click(selectedApplyButton);
+    await waitFor(() =>
+      expect(applyProjectRepairs).toHaveBeenCalledWith(
+        project.id,
+        ["repair-1"],
+        3600,
+      ),
+    );
   });
 });
