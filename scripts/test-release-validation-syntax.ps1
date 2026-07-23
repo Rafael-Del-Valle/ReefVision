@@ -1,6 +1,7 @@
 param(
     [string[]]$ScriptPaths = @(
         "scripts/bootstrap.ps1",
+        "scripts/build-desktop.ps1",
         "scripts/run-release-validation.ps1",
         "scripts/run-complete-release-validation.ps1",
         "scripts/validate-external-interchange.ps1",
@@ -32,7 +33,7 @@ foreach ($RelativePath in $ScriptPaths) {
         [ref]$Tokens,
         [ref]$Errors
     )
-    if ($Errors.Count -gt 0) {
+    if (@($Errors).Count -gt 0) {
         foreach ($ParseError in $Errors) {
             [void]$Failures.Add([pscustomobject]@{
                 path = $RelativePath
@@ -45,13 +46,13 @@ foreach ($RelativePath in $ScriptPaths) {
     }
     [void]$Results.Add([pscustomobject]@{
         path = $RelativePath
-        token_count = $Tokens.Count
+        token_count = @($Tokens).Count
         parsed = $true
     })
 }
 
 $Report = [pscustomobject]@{
-    schema = "reefvision-release-script-syntax-v3"
+    schema = "reefvision-release-script-syntax-v4"
     passed = $Failures.Count -eq 0
     parsed = $Results
     failures = $Failures
