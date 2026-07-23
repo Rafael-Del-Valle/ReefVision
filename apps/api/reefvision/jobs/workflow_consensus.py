@@ -16,26 +16,9 @@ from reefvision.services.multi_model_auto_labeling import (
     apply_multi_model_mask_consensus,
 )
 
-_ORIGINAL_MODEL_INFERENCE = getattr(
-    workflow_runtime,
-    "_reefvision_original_model_inference",
-    workflow_runtime._model_inference,
-)
-workflow_runtime._reefvision_original_model_inference = _ORIGINAL_MODEL_INFERENCE
-_ORIGINAL_PROCESS_INFERENCE = getattr(
-    workflow_runtime,
-    "_reefvision_original_process_inference_job",
-    workflow_runtime.process_inference_job,
-)
-workflow_runtime._reefvision_original_process_inference_job = _ORIGINAL_PROCESS_INFERENCE
-_ORIGINAL_SEGMENTATION_PROVIDER_FACTORY = getattr(
-    segmentation_runtime,
-    "_reefvision_original_segmentation_provider_for_name",
-    segmentation_runtime.segmentation_provider_for_name,
-)
-segmentation_runtime._reefvision_original_segmentation_provider_for_name = (
-    _ORIGINAL_SEGMENTATION_PROVIDER_FACTORY
-)
+_ORIGINAL_MODEL_INFERENCE = workflow_runtime._model_inference
+_ORIGINAL_PROCESS_INFERENCE = workflow_runtime.process_inference_job
+_ORIGINAL_SEGMENTATION_PROVIDER_FACTORY = segmentation_runtime.segmentation_provider_for_name
 
 
 def _segmentation_provider_for_name(
