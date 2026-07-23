@@ -21,15 +21,20 @@ function Invoke-External {
         [Parameter(Mandatory = $false)][string[]]$Arguments = @()
     )
 
+    $Command = Get-Command $Executable -ErrorAction SilentlyContinue
+    if ($null -eq $Command) {
+        throw "Required command or executable was not found: $Executable"
+    }
+
     # Windows PowerShell surfaces a native program's stderr as ErrorRecord objects.
-    # Tools such as npm, Alembic, Cargo, and Rustup routinely write warnings or
-    # informational messages to stderr even when they exit successfully. Temporarily
-    # use Continue and decide success exclusively from the native process exit code.
+    # Native tools routinely write warnings to stderr even on success, so determine
+    # success from the process exit code rather than PowerShell's error stream.
     $PreviousErrorActionPreference = $ErrorActionPreference
+    $ExitCode = 1
     try {
         $ErrorActionPreference = "Continue"
-        & $Executable @Arguments 2>&1
-        $ExitCode = $LASTEXITCODE
+        & $Command.Source @Arguments 2>&1
+        $ExitCode = if ($null -eq $LASTEXITCODE) { 1 } else { $LASTEXITCODE }
     }
     finally {
         $ErrorActionPreference = $PreviousErrorActionPreference
@@ -89,6 +94,12 @@ $Python = Join-Path $Root ".venv\Scripts\python.exe"
 if (-not (Test-Path -LiteralPath $Python -PathType Leaf)) {
     throw "The ReefVision virtual environment is missing. Run without -SkipBootstrap first."
 }
+$FreezePolicyPath = Join-Path $Root ".reefvision-feature-freeze.json"
+$FreezePolicy = Get-Content -LiteralPath $FreezePolicyPath -Raw | ConvertFrom-Json
+$BaselineSha = [string]$FreezePolicy.baseline_sha
+if (-not $BaselineSha) {
+    throw "Feature-freeze policy does not define baseline_sha."
+}
 
 Invoke-ReleaseGate "Feature freeze policy" {
     Invoke-External $Python @(
@@ -98,7 +109,9 @@ Invoke-ReleaseGate "Feature freeze policy" {
     )
 }
 Invoke-ReleaseGate "Repository whitespace check" {
+    Invoke-External "git" @("diff", "--check", "$BaselineSha...HEAD")
     Invoke-External "git" @("diff", "--check")
+    Invoke-External "git" @("diff", "--cached", "--check")
 }
 Invoke-ReleaseGate "Backend Ruff lint" {
     Invoke-External $Python @("-m", "ruff", "check", "apps/api", "scripts")
@@ -211,7 +224,9 @@ if (-not $SkipPackaging) {
     }
     Invoke-ReleaseGate "MSI inventory" {
         $InstallerRoot = Join-Path $Root "apps\web\src-tauri\target\$TargetTriple\release\bundle\msi"
-        $Installers = @(Get-ChildItem -LiteralPath $InstallerRoot -Filter "*.msi" -File -ErrorAction SilentlyContinue)
+        $Installers = @(
+            Get-ChildItem -LiteralPath $InstallerRoot -Filter "*.msi" -File -ErrorAction SilentlyContinue
+        )
         if ($Installers.Count -eq 0) {
             throw "No MSI installer was produced in $InstallerRoot."
         }
@@ -234,10 +249,11 @@ Invoke-ReleaseGate "Tracked working tree remains clean" {
 
 $Failed = @($Results | Where-Object status -eq "failed")
 $Summary = [pscustomobject]@{
-    schema = "reefvision-release-validation-v3"
+    schema = "reefvision-release-validation-v4"
     generated_at = (Get-Date).ToUniversalTime().ToString("o")
     repository_root = $Root
     commit_sha = (& git rev-parse HEAD).Trim()
+    feature_freeze_baseline = $BaselineSha
     target_triple = $TargetTriple
     artifact_root = $ArtifactRoot
     passed = $Failed.Count -eq 0
