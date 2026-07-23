@@ -11,10 +11,12 @@ from PIL import Image
 
 def _write_mask(path: Path, array: np.ndarray) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    Image.fromarray(np.asarray(array, dtype=np.uint8) * 255, mode="L").save(path)
+    Image.fromarray(np.asarray(array, dtype=np.uint8) * 255).save(path)
 
 
-def test_consensus_evaluation_records_improvement_and_thresholds(tmp_path: Path) -> None:
+def test_consensus_evaluation_records_improvement_and_thresholds(
+    tmp_path: Path,
+) -> None:
     directories = {
         name: tmp_path / name
         for name in (
@@ -45,7 +47,11 @@ def test_consensus_evaluation_records_improvement_and_thresholds(tmp_path: Path)
         _write_mask(directories["intersection"] / f"{key}.png", intersection)
 
     output = tmp_path / "evaluation"
-    script = Path(__file__).parents[4] / "scripts" / "evaluate-consensus-masks.py"
+    script = (
+        Path(__file__).parents[4]
+        / "scripts"
+        / "evaluate-consensus-masks.py"
+    )
     completed = subprocess.run(
         [
             sys.executable,
@@ -75,7 +81,8 @@ def test_consensus_evaluation_records_improvement_and_thresholds(tmp_path: Path)
         encoding="utf-8",
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
-    report = json.loads((output / "consensus-evaluation.json").read_text(encoding="utf-8"))
+    report_path = output / "consensus-evaluation.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["passed"] is True
     assert report["image_count"] == 2
     assert report["consensus_majority_macro_iou"] == 1.0
@@ -104,7 +111,11 @@ def test_consensus_evaluation_fails_incomplete_branch(tmp_path: Path) -> None:
             directory.mkdir(parents=True, exist_ok=True)
             _write_mask(directory / "different-image.png", mask)
 
-    script = Path(__file__).parents[4] / "scripts" / "evaluate-consensus-masks.py"
+    script = (
+        Path(__file__).parents[4]
+        / "scripts"
+        / "evaluate-consensus-masks.py"
+    )
     completed = subprocess.run(
         [
             sys.executable,
