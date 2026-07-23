@@ -9,6 +9,10 @@ from reefvision.db.models.class_operation import ClassOperation
 from reefvision.db.models.class_visibility_preference import ClassVisibilityPreference
 from reefvision.db.models.classification_assignment import ClassificationAssignment
 from reefvision.db.models.classification_crop import ClassificationCrop
+from reefvision.db.models.classification_dataset_snapshot import (
+    ClassificationDatasetSample,
+    ClassificationDatasetSnapshot,
+)
 from reefvision.db.models.classification_label_set import ClassificationLabelSet
 from reefvision.db.models.classification_prediction import ClassificationPrediction
 from reefvision.db.models.dataset_version import DatasetVersion
@@ -59,6 +63,8 @@ __all__ = [
     "ClassVisibilityPreference",
     "ClassificationAssignment",
     "ClassificationCrop",
+    "ClassificationDatasetSample",
+    "ClassificationDatasetSnapshot",
     "ClassificationLabelSet",
     "ClassificationPrediction",
     "DatasetVersion",
