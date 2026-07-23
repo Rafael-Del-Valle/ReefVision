@@ -15,8 +15,10 @@ import { EnhancedAnnotationEditor } from "./features/annotation-editor/EnhancedA
 import { ModelEvaluationDashboard } from "./features/advancement/ModelEvaluationDashboard";
 import { ProjectIntegrityDashboard } from "./features/advancement/ProjectIntegrityDashboard";
 import { WorkflowDashboard } from "./features/advancement/WorkflowDashboard";
+import { WorkflowRecoveryPanel } from "./features/advancement/WorkflowRecoveryPanel";
 import { ClassManagerPanel } from "./features/classes/ClassManagerPanel";
 import { ClassificationDashboard } from "./features/classification/ClassificationDashboard";
+import { ClassificationManagementPanel } from "./features/classification/ClassificationManagementPanel";
 import { DatasetVersionsPanel } from "./features/dataset-versions/DatasetVersionsPanel";
 import { DepthDashboard } from "./features/depth/DepthDashboard";
 import { EmbeddingDashboard } from "./features/embeddings/EmbeddingDashboard";
@@ -384,7 +386,10 @@ export function App() {
                 <DepthDashboard project={selectedProject} />
               )}
               {activeView === "classification" && (
-                <ClassificationDashboard project={selectedProject} />
+                <>
+                  <ClassificationDashboard project={selectedProject} />
+                  <ClassificationManagementPanel project={selectedProject} />
+                </>
               )}
               {activeView === "videos" && (
                 <VideoDashboard project={selectedProject} />
@@ -446,7 +451,10 @@ export function App() {
                 <ProjectIntegrityDashboard project={selectedProject} />
               )}
               {activeView === "workflows" && (
-                <WorkflowDashboard project={selectedProject} />
+                <>
+                  <WorkflowDashboard project={selectedProject} />
+                  <WorkflowRecoveryPanel projectId={selectedProject.id} />
+                </>
               )}
               {activeView === "classes" && (
                 <ClassManagerPanel project={selectedProject} />
