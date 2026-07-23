@@ -127,6 +127,10 @@ def _blocked(change: Change, policy: dict[str, Any]) -> str | None:
         return None
 
     path = PurePosixPath(change.path).as_posix()
+    allowed_paths = {
+        PurePosixPath(str(item)).as_posix()
+        for item in policy.get("allowed_new_paths", [])
+    }
     allowed_prefixes = [
         str(item) for item in policy.get("allowed_new_prefixes", [])
     ]
@@ -138,6 +142,8 @@ def _blocked(change: Change, policy: dict[str, Any]) -> str | None:
     ]
 
     if path == ".reefvision-feature-freeze.json":
+        return None
+    if path in allowed_paths:
         return None
     if _starts_with(path, allowed_prefixes) or _has_allowed_suffix(
         path, allowed_suffixes
@@ -179,7 +185,7 @@ def main() -> int:
         if (reason := _blocked(change, policy)) is not None
     ]
     report = {
-        "schema": "reefvision-feature-freeze-report-v2",
+        "schema": "reefvision-feature-freeze-report-v3",
         "baseline_sha": baseline,
         "head": _git("rev-parse", args.head).strip(),
         "committed_change_count": len(committed),
@@ -212,7 +218,7 @@ def main() -> int:
 
     print(
         f"ReefVision feature freeze passed: {len(changes)} committed or local "
-        "post-baseline changes, no new production modules or migrations."
+        "post-baseline changes, no unapproved production modules or migrations."
     )
     return 0
 
