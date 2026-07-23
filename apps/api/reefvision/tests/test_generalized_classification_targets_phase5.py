@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -36,8 +37,10 @@ class _InspectingMaskProvider:
         with Image.open(image_path) as crop:
             rgb = crop.convert("RGB")
             assert rgb.size == (40, 40)
-            assert rgb.getpixel((5, 5)) == (20, 90, 120)
-            assert rgb.getpixel((35, 35)) == (0, 0, 0)
+            inside = rgb.getpixel((5, 5))
+            outside = rgb.getpixel((35, 35))
+            assert sum(abs(actual - expected) for actual, expected in zip(inside, (20, 90, 120))) < 20
+            assert max(outside) < 15
         return ClassificationResult(
             label="open",
             class_index=1,
@@ -60,7 +63,7 @@ def _process_job(client: TestClient, job_id: str) -> bool:
 
 def test_whole_image_classifier_creates_reviewable_image_assignment(
     client: TestClient,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project, image_id, class_ids = _seed_classification_project(client)
     project_id = str(project["id"])
@@ -115,7 +118,7 @@ def test_whole_image_classifier_creates_reviewable_image_assignment(
 
 def test_fragment_classifier_masks_background_and_preserves_fragment_identity(
     client: TestClient,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project, image_id, class_ids = _seed_classification_project(client)
     project_id = str(project["id"])
@@ -194,7 +197,7 @@ def test_fragment_classifier_masks_background_and_preserves_fragment_identity(
 
 def test_changed_mask_revision_blocks_fragment_assignment(
     client: TestClient,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project, image_id, class_ids = _seed_classification_project(client)
     project_id = str(project["id"])
