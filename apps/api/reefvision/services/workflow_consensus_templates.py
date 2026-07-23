@@ -37,7 +37,7 @@ def multi_model_auto_labeling_template() -> WorkflowTemplate:
                             "required_votes": 2,
                             "sam_vote_threshold": 0.35,
                             "minimum_reviewer_confidence": 0.60,
-                            "gemini_model": "gemini-3.6-flash",
+                            "gemini_model": "gemini-2.5-flash",
                             "openai_model": "gpt-5-mini",
                             "crop_padding_fraction": 0.10,
                             "allow_remote_review": False,
