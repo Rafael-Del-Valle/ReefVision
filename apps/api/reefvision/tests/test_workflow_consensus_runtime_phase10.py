@@ -113,6 +113,7 @@ def test_consensus_wrapper_enriches_masks_artifact(
             "model_id": model_id,
             "multi_model_consensus": {
                 "enabled": True,
+                "mode": "semantic_voters",
                 "required_primary_provider": "sam3_sidecar",
             },
         },
@@ -121,5 +122,5 @@ def test_consensus_wrapper_enriches_masks_artifact(
 
     payload = outputs["masks"][1]
     assert payload["mask_annotation_ids"] == ["mask-1"]
-    assert payload["auto_labeling_mode"] == "multi_model_two_of_three"
+    assert payload["auto_labeling_mode"] == "semantic_review_two_of_three"
     assert payload["consensus"]["promoted_count"] == 1
