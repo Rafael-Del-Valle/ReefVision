@@ -49,6 +49,7 @@ from reefvision.api.routes.provider_lifecycle import router as provider_lifecycl
 from reefvision.api.routes.quality_control import router as quality_control_router
 from reefvision.api.routes.raster_edits import router as raster_edits_router
 from reefvision.api.routes.review_queues import router as review_queues_router
+from reefvision.api.routes.sam2_sidecar import router as sam2_sidecar_router
 from reefvision.api.routes.sam2_video import router as sam2_video_router
 from reefvision.api.routes.sam3_sidecar import router as sam3_sidecar_router
 from reefvision.api.routes.scientific_validation import (
@@ -86,6 +87,7 @@ api_router.include_router(videos_router)
 api_router.include_router(video_exports_router)
 api_router.include_router(tracking_evaluation_router)
 api_router.include_router(sam2_video_router)
+api_router.include_router(sam2_sidecar_router)
 api_router.include_router(sam3_sidecar_router)
 api_router.include_router(backups_router)
 api_router.include_router(projects_router)
