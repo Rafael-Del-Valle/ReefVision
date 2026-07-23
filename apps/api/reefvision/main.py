@@ -71,7 +71,8 @@ def _configure_process_storage(settings: Settings) -> None:
     os.environ["TMP"] = str(temp_dir)
     os.environ["TEMP"] = str(temp_dir)
     os.environ["TMPDIR"] = str(temp_dir)
-    tempfile.tempdir = str(temp_dir)
+    if settings.env != "test":
+        tempfile.tempdir = str(temp_dir)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
