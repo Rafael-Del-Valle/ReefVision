@@ -18,6 +18,7 @@ import {
 } from "../phase456/api";
 
 type ClassificationMode = "multiclass" | "binary_state";
+type ClassificationTargetKind = "annotation" | "image" | "mask" | "fragment";
 
 export function ClassificationDashboard({ project }: { project: Project }) {
   const queryClient = useQueryClient();
@@ -32,6 +33,11 @@ export function ClassificationDashboard({ project }: { project: Project }) {
   const [batch, setBatch] = useState(16);
   const [imgsz, setImgsz] = useState(224);
   const [classifierId, setClassifierId] = useState("");
+  const [inferenceTargetKind, setInferenceTargetKind] =
+    useState<ClassificationTargetKind>("annotation");
+  const [maskBackground, setMaskBackground] = useState<"black" | "keep">(
+    "black",
+  );
   const [classificationTaskKey, setClassificationTaskKey] = useState(
     "annotation-crop-state",
   );
@@ -161,9 +167,11 @@ export function ClassificationDashboard({ project }: { project: Project }) {
     mutationFn: () =>
       createClassificationInference(project.id, {
         model_id: classifierId,
+        target_kind: inferenceTargetKind,
         image_ids: selectedImageIds,
         minimum_crop_size_px: minimumCropSize,
         padding_fraction: paddingFraction,
+        mask_background: maskBackground,
         device: "auto",
         label_set: classificationTaskKey.trim(),
       }),
@@ -467,7 +475,7 @@ export function ClassificationDashboard({ project }: { project: Project }) {
 
           <div className="dashboard-card">
             <p className="eyebrow">Inference</p>
-            <h4>Classify current annotation crops</h4>
+            <h4>Classify project targets</h4>
             <label>
               Classifier
               <select
@@ -483,6 +491,37 @@ export function ClassificationDashboard({ project }: { project: Project }) {
               </select>
             </label>
             <label>
+              Target scope
+              <select
+                value={inferenceTargetKind}
+                onChange={(event) =>
+                  setInferenceTargetKind(
+                    event.target.value as ClassificationTargetKind,
+                  )
+                }
+              >
+                <option value="annotation">Bounding boxes</option>
+                <option value="image">Whole images</option>
+                <option value="mask">Verified polygon/raster masks</option>
+                <option value="fragment">Verified fragment masks</option>
+              </select>
+            </label>
+            {(inferenceTargetKind === "mask" ||
+              inferenceTargetKind === "fragment") && (
+              <label>
+                Pixels outside mask
+                <select
+                  value={maskBackground}
+                  onChange={(event) =>
+                    setMaskBackground(event.target.value as "black" | "keep")
+                  }
+                >
+                  <option value="black">Replace with black</option>
+                  <option value="keep">Keep surrounding crop</option>
+                </select>
+              </label>
+            )}
+            <label>
               Classification task key
               <input
                 value={classificationTaskKey}
@@ -496,7 +535,7 @@ export function ClassificationDashboard({ project }: { project: Project }) {
             <p>
               Results with the same task key replace only that task&apos;s prior
               assignment. Different task keys and classifiers can coexist on the
-              same box without changing its detection class.
+              same target without changing its detection or mask class.
             </p>
             {!classificationTaskKeyValid && (
               <p className="form-warning">
@@ -557,12 +596,12 @@ export function ClassificationDashboard({ project }: { project: Project }) {
             <div className="section-heading">
               <div>
                 <p className="eyebrow">Prediction review</p>
-                <h4>{predictions.data?.total ?? 0} crop predictions</h4>
+                <h4>{predictions.data?.total ?? 0} predictions</h4>
               </div>
             </div>
             <p>
               Accepted classifier results are stored as independent assignments.
-              They do not replace the box&apos;s primary detection class.
+              They do not replace the target&apos;s primary detection or mask class.
             </p>
             <div className="dashboard-list">
               {predictions.data?.items.map((prediction) => (
@@ -574,8 +613,8 @@ export function ClassificationDashboard({ project }: { project: Project }) {
                       {prediction.review_status}
                     </p>
                     <small>
-                      Image {prediction.image_id} · annotation{" "}
-                      {prediction.annotation_id ?? "unlinked"}
+                      Image {prediction.image_id} · {prediction.target_kind} target{" "}
+                      {prediction.target_key}
                     </small>
                     {prediction.review_status === "pending" && (
                       <label>
