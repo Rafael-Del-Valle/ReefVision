@@ -8,7 +8,6 @@ from fastapi.testclient import TestClient
 
 import reefvision.jobs.workflow_consensus as workflow_consensus
 from reefvision.db.models import ModelRegistration, WorkflowRun
-from reefvision.services.multi_model_auto_labeling import ConsensusBatchResult
 from reefvision.tests.test_annotations import create_project
 
 
@@ -53,12 +52,12 @@ def test_consensus_wrapper_enriches_masks_artifact(
     )
 
     def fake_original(
-        settings,
-        factory,
-        current_run,
+        _settings,
+        _factory,
+        _current_run,
         node_type: str,
-        configuration: dict[str, Any],
-        inputs,
+        _configuration: dict[str, Any],
+        _inputs,
     ):
         assert node_type == "segmenter"
         return {
@@ -96,11 +95,14 @@ def test_consensus_wrapper_enriches_masks_artifact(
                 ],
             }
 
+    def fake_consensus(*_args, **_kwargs) -> _Result:
+        return _Result()
+
     monkeypatch.setattr(workflow_consensus, "_ORIGINAL_MODEL_INFERENCE", fake_original)
     monkeypatch.setattr(
         workflow_consensus,
         "apply_multi_model_mask_consensus",
-        lambda *args, **kwargs: _Result(),
+        fake_consensus,
     )
     outputs = workflow_consensus._consensus_aware_model_inference(
         app.state.settings,
