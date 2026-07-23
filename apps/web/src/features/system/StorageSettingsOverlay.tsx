@@ -165,7 +165,11 @@ export function StorageSettingsOverlay() {
       </button>
 
       {open && (
-        <div className="modal-backdrop" role="presentation">
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          style={{ zIndex: 40 }}
+        >
           <section
             className="modal"
             role="dialog"
