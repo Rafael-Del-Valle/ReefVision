@@ -15,6 +15,9 @@ from reefvision.services.independent_segmentation_auto_labeling import (
     _parse_detections,
     run_independent_segmentation_auto_labeling,
 )
+from reefvision.services.independent_segmentation_pipeline import (
+    run_independent_segmentation_pipeline,
+)
 from reefvision.services.mask_consensus import IndependentMaskCandidate
 from reefvision.storage.masks import resolve_prediction_mask_png
 from reefvision.tests.test_segmentation_prediction_review_safety import (
@@ -96,14 +99,18 @@ class _FakeRefiner:
         raise AssertionError("Injected refiners must not be closed by the service")
 
 
+def _settings(client: TestClient):
+    app = cast(FastAPI, client.app)
+    return app, app.state.settings.model_copy(
+        update={"allow_remote_vision": True, "safe_mode": False}
+    )
+
+
 def test_independent_pipeline_creates_reviewable_consensus_proposal(
     client: TestClient,
 ) -> None:
     fixture = _seed_review_proposals(client, geometry_kind="raster_mask")
-    app = cast(FastAPI, client.app)
-    settings = app.state.settings.model_copy(
-        update={"allow_remote_vision": True, "safe_mode": False}
-    )
+    app, settings = _settings(client)
     with app.state.session_factory() as session:
         source = session.get(PredictionProposal, fixture.proposal_ids[0])
         assert source is not None
@@ -158,6 +165,49 @@ def test_independent_pipeline_creates_reviewable_consensus_proposal(
             relative_path=proposal.mask_path,
         )
         assert path.is_file()
+
+
+def test_two_vlm_sam2_branches_can_label_image_when_sam3_misses(
+    client: TestClient,
+) -> None:
+    fixture = _seed_review_proposals(client, geometry_kind="raster_mask")
+    app, settings = _settings(client)
+
+    result = run_independent_segmentation_pipeline(
+        settings,
+        app.state.session_factory,
+        image_ids=[fixture.image_id],
+        primary_prediction_ids=[],
+        primary_model_id=fixture.model_id,
+        primary_inference_job_id=fixture.job_id,
+        sam2_model_id=fixture.model_id,
+        label_class_id=fixture.label_class_id,
+        predicted_label="soft coral",
+        concept_prompt="soft coral",
+        workflow_run_id="workflow-run-no-primary",
+        workflow_node_id="independent-mask-consensus",
+        required_votes=2,
+        iou_threshold=0.1,
+        aggregation="pixel_majority",
+        minimum_vlm_confidence=0.2,
+        auto_accept=False,
+        detectors=[
+            _FakeDetector("gemini_sam2", "gemini-test", 0.00),
+            _FakeDetector("openai_sam2", "openai-test", 0.03),
+        ],
+        refiner=_FakeRefiner(),
+    )
+
+    assert result.failed_image_count == 0
+    assert result.consensus_count == 1
+    assert result.images[0].primary_candidate_count == 0
+    assert result.images[0].refined_mask_count == 2
+    assert len(result.images[0].proposal_ids) == 1
+    with app.state.session_factory() as session:
+        proposal = session.get(PredictionProposal, result.images[0].proposal_ids[0])
+        assert proposal is not None
+        provenance = dict(proposal.provenance_json or {})
+        assert set(provenance["branch_ids"]) == {"gemini_sam2", "openai_sam2"}
 
 
 def test_vlm_detection_parser_rejects_invalid_and_low_confidence_boxes() -> None:
