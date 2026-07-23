@@ -27,9 +27,15 @@ type StorageForm = Record<StoragePathState["key"], string>;
 
 function bytesLabel(bytes: number | null): string {
   if (bytes === null) return "Unavailable";
-  if (bytes >= 1_099_511_627_776) return `${(bytes / 1_099_511_627_776).toFixed(2)} TiB`;
-  if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(2)} GiB`;
-  if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MiB`;
+  if (bytes >= 1_099_511_627_776) {
+    return `${(bytes / 1_099_511_627_776).toFixed(2)} TiB`;
+  }
+  if (bytes >= 1_073_741_824) {
+    return `${(bytes / 1_073_741_824).toFixed(2)} GiB`;
+  }
+  if (bytes >= 1_048_576) {
+    return `${(bytes / 1_048_576).toFixed(1)} MiB`;
+  }
   return `${Math.round(bytes / 1024)} KiB`;
 }
 
@@ -104,7 +110,11 @@ export function StorageSettingsOverlay() {
       })
       .catch((caught: unknown) => {
         if (!active) return;
-        setError(caught instanceof Error ? caught.message : "Storage settings could not be loaded.");
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Storage settings could not be loaded.",
+        );
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -116,7 +126,9 @@ export function StorageSettingsOverlay() {
 
   const changed = useMemo(
     () =>
-      settings?.paths.some((path) => values[path.key] !== path.active_path) ?? false,
+      settings?.paths.some(
+        (path) => values[path.key] !== path.active_path,
+      ) ?? false,
     [settings, values],
   );
 
@@ -131,7 +143,11 @@ export function StorageSettingsOverlay() {
       setValues(formFromResponse(response));
       setSaved(true);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Storage settings could not be saved.");
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Storage settings could not be saved.",
+      );
     } finally {
       setSaving(false);
     }
@@ -162,7 +178,11 @@ export function StorageSettingsOverlay() {
                 <p className="eyebrow">External drives and disk usage</p>
                 <h2 id="storage-settings-title">Storage settings</h2>
               </div>
-              <button type="button" className="icon-button" onClick={() => setOpen(false)}>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => setOpen(false)}
+              >
                 Close
               </button>
             </div>
@@ -180,7 +200,9 @@ export function StorageSettingsOverlay() {
                         <p>{path.description}</p>
                       </div>
                       <span className="status-chip">
-                        {path.writable ? `${bytesLabel(path.free_bytes)} free` : "Unavailable"}
+                        {path.writable
+                          ? `${bytesLabel(path.free_bytes)} free`
+                          : "Unavailable"}
                       </span>
                     </div>
                     <label>
@@ -194,7 +216,11 @@ export function StorageSettingsOverlay() {
                             [path.key]: event.target.value,
                           }))
                         }
-                        placeholder={path.key === "data_dir" ? "E:\\ReefVision\\data" : "E:\\ReefVision\\cache"}
+                        placeholder={
+                          path.key === "data_dir"
+                            ? "E:\\ReefVision\\data"
+                            : "E:\\ReefVision\\cache"
+                        }
                       />
                     </label>
                     <small>
@@ -202,8 +228,9 @@ export function StorageSettingsOverlay() {
                     </small>
                     {path.environment_locked && (
                       <p>
-                        Controlled by <code>{path.environment_variable}</code>. Remove that
-                        environment variable before editing this field.
+                        Controlled by <code>{path.environment_variable}</code>.
+                        Remove that environment variable before editing this
+                        field.
                       </p>
                     )}
                   </section>
@@ -220,10 +247,12 @@ export function StorageSettingsOverlay() {
                     <input
                       type="checkbox"
                       checked={acknowledgeRestart}
-                      onChange={(event) => setAcknowledgeRestart(event.target.checked)}
+                      onChange={(event) =>
+                        setAcknowledgeRestart(event.target.checked)
+                      }
                     />
-                    I understand ReefVision must restart and existing project data is not moved
-                    automatically.
+                    I understand ReefVision must restart and existing project
+                    data is not moved automatically.
                   </label>
                   <p>
                     Preferences file: <code>{settings.settings_file}</code>
@@ -231,7 +260,11 @@ export function StorageSettingsOverlay() {
                 </section>
 
                 <div className="modal-actions">
-                  <button type="button" className="secondary" onClick={() => setOpen(false)}>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setOpen(false)}
+                  >
                     Cancel
                   </button>
                   <button
@@ -243,7 +276,8 @@ export function StorageSettingsOverlay() {
                 </div>
                 {saved && (
                   <p>
-                    Storage settings saved. Restart ReefVision to activate the pending paths.
+                    Storage settings saved. Restart ReefVision to activate the
+                    pending paths.
                   </p>
                 )}
               </form>
