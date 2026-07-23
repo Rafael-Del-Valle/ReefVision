@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
 import { getProject } from "../../api/client";
+import { getModels } from "../phase456/api";
 import { registerSam3SidecarModel } from "./sam3SidecarApi";
 
 export function Sam3WorkflowSetupPanel({ projectId }: { projectId: string }) {
@@ -12,6 +13,7 @@ export function Sam3WorkflowSetupPanel({ projectId }: { projectId: string }) {
     "octocoral colony or fragment",
   );
   const [labelClassId, setLabelClassId] = useState("");
+  const [sam2ModelId, setSam2ModelId] = useState("");
   const [scoreThreshold, setScoreThreshold] = useState(0.35);
   const [tokenEnv, setTokenEnv] = useState(
     "REEFVISION_SAM3_SIDECAR_TOKEN",
@@ -21,15 +23,34 @@ export function Sam3WorkflowSetupPanel({ projectId }: { projectId: string }) {
     queryKey: ["project", projectId],
     queryFn: ({ signal }) => getProject(projectId, signal),
   });
+  const models = useQuery({
+    queryKey: ["models", projectId],
+    queryFn: ({ signal }) => getModels(projectId, signal),
+  });
   const activeClasses = useMemo(
     () => project.data?.label_classes.filter((item) => item.is_active) ?? [],
     [project.data],
+  );
+  const sam2Models = useMemo(
+    () =>
+      models.data?.filter(
+        (item) =>
+          item.provider_name.toLowerCase() === "sam2" &&
+          item.purpose === "assist" &&
+          item.task === "assist_segmentation",
+      ) ?? [],
+    [models.data],
   );
   useEffect(() => {
     if (!labelClassId && activeClasses.length) {
       setLabelClassId(activeClasses[0].id);
     }
   }, [activeClasses, labelClassId]);
+  useEffect(() => {
+    if (!sam2ModelId && sam2Models.length) {
+      setSam2ModelId(sam2Models[0].id);
+    }
+  }, [sam2ModelId, sam2Models]);
 
   const register = useMutation({
     mutationFn: () =>
@@ -60,18 +81,38 @@ export function Sam3WorkflowSetupPanel({ projectId }: { projectId: string }) {
     scoreThreshold > 1 ||
     !/^[A-Z][A-Z0-9_]*$/.test(tokenEnv);
 
+  const exactConfiguration = {
+    enabled: true,
+    mode: "independent_masks",
+    required_primary_provider: "sam3_sidecar",
+    sam2_model_id: sam2ModelId || "<select-registered-sam2-assist-model>",
+    label_class_id: labelClassId || "<select-project-class>",
+    predicted_label: conceptPrompt,
+    prompt: conceptPrompt,
+    required_votes: 2,
+    iou_threshold: 0.3,
+    aggregation: "pixel_majority",
+    minimum_vlm_confidence: 0.25,
+    gemini_model: "gemini-2.5-flash",
+    openai_model: "gpt-5-mini",
+    sam2_device: "auto",
+    allow_remote_review: false,
+    auto_accept: false,
+    fail_closed: true,
+  };
+
   return (
     <section className="dashboard-panel" data-testid="sam3-workflow-setup">
       <div className="section-heading">
         <div>
           <p className="eyebrow">Multi-model auto-labeling</p>
-          <h3>Connect SAM 3 to Workflows</h3>
+          <h3>Connect SAM 3 and SAM 2 to Workflows</h3>
           <span>
-            Register a localhost SAM 3 concept segmenter, then use the SAM 3 +
-            Gemini + GPT template to require two accepted votes per mask.
+            Choose the lower-cost semantic-review workflow or the independent
+            three-mask workflow that matches instances and aggregates pixels.
           </span>
         </div>
-        <span>Local sidecar · remote reviewers opt-in</span>
+        <span>Local segmenters · remote branches opt-in</span>
       </div>
 
       <div className="dashboard-layout">
@@ -103,7 +144,7 @@ export function Sam3WorkflowSetupPanel({ projectId }: { projectId: string }) {
         </article>
 
         <article className="dashboard-card">
-          <h4>2. Register the concept segmenter</h4>
+          <h4>2. Register the SAM 3 concept segmenter</h4>
           <label>
             Model name
             <input
@@ -152,9 +193,11 @@ export function Sam3WorkflowSetupPanel({ projectId }: { projectId: string }) {
           >
             {register.isPending ? "Registering..." : "Register SAM 3 segmenter"}
           </button>
-          {(project.error || register.error) && (
+          {(project.error || models.error || register.error) && (
             <p className="form-error">
-              {project.error?.message ?? register.error?.message}
+              {project.error?.message ??
+                models.error?.message ??
+                register.error?.message}
             </p>
           )}
           {register.data && (
@@ -169,18 +212,61 @@ export function Sam3WorkflowSetupPanel({ projectId }: { projectId: string }) {
         </article>
 
         <article className="dashboard-card">
-          <h4>3. Enable the reviewers deliberately</h4>
+          <h4>3. Select SAM 2 for independent refinement</h4>
           <p>
-            Before running the template, set{" "}
-            <code>REEFVISION_ALLOW_REMOTE_VISION=true</code>,{" "}
+            The exact three-branch workflow turns Gemini and OpenAI boxes into
+            masks with a trusted local SAM 2 Prompt Assist checkpoint.
+          </p>
+          <label>
+            Registered SAM 2 assist model
+            <select
+              value={sam2ModelId}
+              onChange={(event) => setSam2ModelId(event.target.value)}
+            >
+              <option value="">Choose a SAM 2 model</option>
+              {sam2Models.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.display_name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!sam2Models.length && (
+            <p className="form-error">
+              No registered SAM 2 Prompt Assist model is available. Import one
+              before running independent-mask consensus.
+            </p>
+          )}
+          <p>
+            The default aggregation is <code>pixel_majority</code>: a pixel is
+            retained when at least two independent branches include it. Switch to
+            <code>intersection</code> for the article&apos;s most conservative output.
+          </p>
+        </article>
+
+        <article className="dashboard-card">
+          <h4>4. Review the exact-mode node configuration</h4>
+          <pre>{JSON.stringify(exactConfiguration, null, 2)}</pre>
+          <small>
+            Apply this object as <code>multi_model_consensus</code> on the SAM 3
+            segmenter node. Keep <code>auto_accept</code> false until the workflow
+            has been validated on representative images.
+          </small>
+        </article>
+
+        <article className="dashboard-card">
+          <h4>5. Enable remote branches deliberately</h4>
+          <p>
+            Set <code>REEFVISION_ALLOW_REMOTE_VISION=true</code>,{" "}
             <code>REEFVISION_GEMINI_API_KEY</code>, and{" "}
             <code>REEFVISION_OPENAI_API_KEY</code>. Then change the node&apos;s{" "}
             <code>allow_remote_review</code> value to <code>true</code>.
           </p>
           <p>
-            Source crops and highlighted-mask overlays are sent to Gemini and
-            OpenAI. The default remains disabled to prevent accidental data
-            transfer or API charges.
+            Semantic-review mode sends source crops and highlighted-mask overlays.
+            Independent-mask mode sends each selected full image to Gemini and
+            OpenAI so both can detect objects independently. The default remains
+            disabled to prevent accidental data transfer or API charges.
           </p>
         </article>
       </div>
