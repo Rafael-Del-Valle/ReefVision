@@ -144,7 +144,6 @@ def build_mask_consensus(
             )
         )
 
-    by_id = {item.candidate_id: item for item in normalized}
     parent = {item.candidate_id: item.candidate_id for item in normalized}
     component_branches = {item.candidate_id: {item.branch_id} for item in normalized}
 
