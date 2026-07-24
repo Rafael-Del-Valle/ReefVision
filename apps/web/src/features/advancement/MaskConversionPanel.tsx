@@ -92,7 +92,10 @@ export function MaskConversionPanel() {
     mutationFn: async () => {
       if (mode === "polygon_to_raster") {
         return polygonsToRaster({
-          polygons: parseJson<PolygonGeometry[]>(polygonsText, "Polygon geometry"),
+          polygons: parseJson<PolygonGeometry[]>(
+            polygonsText,
+            "Polygon geometry",
+          ),
           image_width: imageWidth,
           image_height: imageHeight,
           rle_order: "row_major",
@@ -107,7 +110,10 @@ export function MaskConversionPanel() {
         });
       }
       return repairPolygons({
-        polygons: parseJson<PolygonGeometry[]>(polygonsText, "Polygon geometry"),
+        polygons: parseJson<PolygonGeometry[]>(
+          polygonsText,
+          "Polygon geometry",
+        ),
         image_width: imageWidth,
         image_height: imageHeight,
         simplify_tolerance: simplifyTolerance,
@@ -135,8 +141,8 @@ export function MaskConversionPanel() {
         </div>
       </div>
       <p>
-        Convert polygons to uncompressed RLE, recover polygons from raster masks,
-        or repair polygon geometry through a rasterized round trip.
+        Convert polygons to uncompressed RLE, recover polygons from raster
+        masks, or repair polygon geometry through a rasterized round trip.
       </p>
 
       <form className="stacked-form" onSubmit={submit}>
