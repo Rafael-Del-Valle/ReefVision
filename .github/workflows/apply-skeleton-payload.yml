@@ -1,9 +1,9 @@
 name: Apply coral skeleton payload
 
 on:
-  push:
-    branches:
-      - feat/all-phases-advancement
+  pull_request:
+    types:
+      - synchronize
     paths:
       - ".github/workflows/apply-skeleton-payload.yml"
       - ".skeleton-payload/**"
