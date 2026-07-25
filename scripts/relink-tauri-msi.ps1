@@ -1,6 +1,7 @@
 param(
     [ValidateSet("x86_64-pc-windows-msvc", "i686-pc-windows-msvc", "aarch64-pc-windows-msvc")]
-    [string]$TargetTriple = "x86_64-pc-windows-msvc"
+    [string]$TargetTriple = "x86_64-pc-windows-msvc",
+    [switch]$TryEmbeddedFirst
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,8 +30,8 @@ function Invoke-ReefVisionNativeTool {
     Push-Location $WorkingDirectory
     try {
         # Windows PowerShell promotes native stderr to ErrorRecord instances.
-        # WiX writes ordinary progress and warnings there, so the native exit
-        # code is authoritative while every line is retained in the log.
+        # WiX writes ordinary progress and warnings there, so only the native
+        # exit code determines success while every line is retained in the log.
         $ErrorActionPreference = "Continue"
         & $FilePath @Arguments 2>&1 |
             Tee-Object -FilePath $LogPath |
@@ -76,17 +77,24 @@ foreach ($RequiredPath in @(
     }
 }
 
-$WixObjects = @(
+$OriginalWixObjects = @(
     Get-ChildItem -LiteralPath $WixWorkingDirectory -Filter "*.wixobj" -File |
         Where-Object { $_.Name -ne "main-external.wixobj" } |
         Sort-Object -Property Name
 )
-if ($WixObjects.Count -eq 0) {
+if ($OriginalWixObjects.Count -eq 0) {
     throw "No generated WiX object files were found in $WixWorkingDirectory"
 }
+$AdditionalWixObjects = @(
+    $OriginalWixObjects | Where-Object { $_.Name -ne "main.wixobj" }
+)
 
 $TauriConfig = Get-Content -LiteralPath $TauriConfigPath -Raw | ConvertFrom-Json
-$SafeProductName = [regex]::Replace([string]$TauriConfig.productName, "[^A-Za-z0-9._-]+", "")
+$SafeProductName = [regex]::Replace(
+    [string]$TauriConfig.productName,
+    "[^A-Za-z0-9._-]+",
+    ""
+)
 if (-not $SafeProductName) {
     throw "The Tauri product name cannot be converted to a safe MSI filename."
 }
@@ -119,54 +127,56 @@ $PreviousWixMums = $env:WIX_MUMS
 $PreviousWixMcslfs = $env:WIX_MCSLFS
 $PreviousWixTemp = $env:WIX_TEMP
 try {
-    # WiX's CAB API is not internally multithreaded. A high core count can add
-    # I/O pressure without accelerating a single embedded cabinet, so the first
-    # recovery attempt is deliberately serialized and uses a repository-local
-    # temporary directory with ample free space.
+    # Keep cabinets below the 2 GB CAB limit, permit a single large file to be
+    # split, serialize cabinet creation, and use a known local temporary path.
     $env:WIX_MUMS = "512"
     $env:WIX_MCSLFS = "512"
     $env:WIX_TEMP = $WixTempDirectory
 
-    $EmbeddedArguments = @(
-        "-v",
-        "-sval",
-        "-ct", "1",
-        "-notidy",
-        "-ext", $WixUtilExtension,
-        "-ext", $WixUiExtension,
-        "-o", $EmbeddedOutput,
-        "-cultures:en-us",
-        "-loc", $LocalePath
-    ) + @($WixObjects | ForEach-Object { $_.FullName })
+    if ($TryEmbeddedFirst) {
+        $EmbeddedArguments = @(
+            "-v",
+            "-sval",
+            "-ct", "1",
+            "-notidy",
+            "-ext", $WixUtilExtension,
+            "-ext", $WixUiExtension,
+            "-o", $EmbeddedOutput,
+            "-cultures:en-us",
+            "-loc", $LocalePath
+        ) + @($OriginalWixObjects | ForEach-Object { $_.FullName })
 
-    Write-Host "Trying a serialized embedded-cabinet relink..." -ForegroundColor Cyan
-    Write-Host "Verbose linker log: $EmbeddedLog" -ForegroundColor DarkGray
-    $EmbeddedExitCode = Invoke-ReefVisionNativeTool `
-        -FilePath $LightPath `
-        -Arguments $EmbeddedArguments `
-        -WorkingDirectory $WixWorkingDirectory `
-        -LogPath $EmbeddedLog
+        Write-Host "Trying a serialized embedded-cabinet relink..." -ForegroundColor Cyan
+        Write-Host "Verbose linker log: $EmbeddedLog" -ForegroundColor DarkGray
+        $EmbeddedExitCode = Invoke-ReefVisionNativeTool `
+            -FilePath $LightPath `
+            -Arguments $EmbeddedArguments `
+            -WorkingDirectory $WixWorkingDirectory `
+            -LogPath $EmbeddedLog
 
-    if (
-        $EmbeddedExitCode -eq 0 -and
-        (Test-Path -LiteralPath $EmbeddedOutput -PathType Leaf)
-    ) {
-        Copy-Item -LiteralPath $EmbeddedOutput -Destination $FinalInstaller -Force
-        Write-Host "Serialized embedded MSI created: $FinalInstaller" -ForegroundColor Green
-        & $VerificationScript -MsiPath $FinalInstaller -OutputDirectory $VerificationDirectory
-        if (-not $?) {
-            throw "The serialized embedded MSI failed ReefVision payload verification."
+        if (
+            $EmbeddedExitCode -eq 0 -and
+            (Test-Path -LiteralPath $EmbeddedOutput -PathType Leaf)
+        ) {
+            Copy-Item -LiteralPath $EmbeddedOutput -Destination $FinalInstaller -Force
+            Write-Host "Serialized embedded MSI created: $FinalInstaller" -ForegroundColor Green
+            & $VerificationScript `
+                -MsiPath $FinalInstaller `
+                -OutputDirectory $VerificationDirectory
+            if (-not $?) {
+                throw "The serialized embedded MSI failed ReefVision payload verification."
+            }
+            Write-Host "MSI relink and extracted-payload verification passed." -ForegroundColor Green
+            Write-Host "Installer: $FinalInstaller" -ForegroundColor Green
+            Write-Host "Evidence: $ArtifactDirectory" -ForegroundColor Green
+            return
         }
-        Write-Host "MSI relink and extracted-payload verification passed." -ForegroundColor Green
-        Write-Host "Installer: $FinalInstaller" -ForegroundColor Green
-        Write-Host "Evidence: $ArtifactDirectory" -ForegroundColor Green
-        return
-    }
 
-    Write-Warning (
-        "The embedded cabinet could not be finalized. Rebuilding the generated " +
-        "WiX source as a multi-cab external offline bundle."
-    )
+        Write-Warning (
+            "The embedded cabinet could not be finalized. Continuing with a " +
+            "multi-cab external offline bundle."
+        )
+    }
 
     $SourceText = Get-Content -LiteralPath $MainWixSource -Raw
     $ExternalMedia = (
@@ -174,12 +184,15 @@ try {
         'CompressionLevel="mszip" MaximumUncompressedMediaSize="512" ' +
         'MaximumCabinetSizeForLargeFileSplitting="512" />'
     )
-    $RegexOptions = [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
-    $MediaTemplateRegex = New-Object System.Text.RegularExpressions.Regex(
+    $RegexOptions = (
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor
+        [System.Text.RegularExpressions.RegexOptions]::Singleline
+    )
+    $MediaTemplateRegex = [System.Text.RegularExpressions.Regex]::new(
         '<MediaTemplate\b[^>]*/>',
         $RegexOptions
     )
-    $MediaRegex = New-Object System.Text.RegularExpressions.Regex(
+    $MediaRegex = [System.Text.RegularExpressions.Regex]::new(
         '<Media\b[^>]*\bCabinet\s*=\s*"[^"]+"[^>]*/>',
         $RegexOptions
     )
@@ -199,10 +212,13 @@ try {
         )
     }
     else {
-        throw "The generated Tauri WiX source does not contain a replaceable Media or MediaTemplate element."
+        throw (
+            "The generated Tauri WiX source does not contain a replaceable " +
+            "Media or MediaTemplate element."
+        )
     }
 
-    $Utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
+    $Utf8WithoutBom = [System.Text.UTF8Encoding]::new($false)
     [System.IO.File]::WriteAllText(
         $ExternalWixSource,
         $ExternalSourceText,
@@ -230,7 +246,10 @@ try {
         $CandleExitCode -ne 0 -or
         -not (Test-Path -LiteralPath $ExternalWixObject -PathType Leaf)
     ) {
-        throw "WiX external-cabinet compilation failed with exit code $CandleExitCode. Inspect $CandleLog."
+        throw (
+            "WiX external-cabinet compilation failed with exit code " +
+            "$CandleExitCode. Inspect $CandleLog."
+        )
     }
 
     $ExternalArguments = @(
@@ -244,7 +263,8 @@ try {
         "-cultures:en-us",
         "-loc", $LocalePath,
         $ExternalWixObject
-    )
+    ) + @($AdditionalWixObjects | ForEach-Object { $_.FullName })
+
     Write-Host "Linking the external multi-cab offline bundle..." -ForegroundColor Cyan
     Write-Host "Verbose linker log: $ExternalLog" -ForegroundColor DarkGray
     $ExternalExitCode = Invoke-ReefVisionNativeTool `
@@ -256,7 +276,10 @@ try {
         $ExternalExitCode -ne 0 -or
         -not (Test-Path -LiteralPath $ExternalOutput -PathType Leaf)
     ) {
-        throw "WiX external-cabinet linking failed with exit code $ExternalExitCode. Inspect $ExternalLog."
+        throw (
+            "WiX external-cabinet linking failed with exit code " +
+            "$ExternalExitCode. Inspect $ExternalLog."
+        )
     }
 
     $ExternalCabinets = @(
@@ -268,19 +291,27 @@ try {
     }
 
     Remove-Item -LiteralPath $FinalInstaller -Force -ErrorAction SilentlyContinue
-    Get-ChildItem -LiteralPath $InstallerDirectory -Filter "rv*.cab" -File -ErrorAction SilentlyContinue |
+    Get-ChildItem `
+        -LiteralPath $InstallerDirectory `
+        -Filter "rv*.cab" `
+        -File `
+        -ErrorAction SilentlyContinue |
         Remove-Item -Force
     Copy-Item -LiteralPath $ExternalOutput -Destination $FinalInstaller -Force
     foreach ($Cabinet in $ExternalCabinets) {
-        Copy-Item -LiteralPath $Cabinet.FullName -Destination $InstallerDirectory -Force
+        Copy-Item `
+            -LiteralPath $Cabinet.FullName `
+            -Destination $InstallerDirectory `
+            -Force
     }
 
-    $BundleNotice = Join-Path $InstallerDirectory "ReefVision_1.7.0_OFFLINE_BUNDLE.txt"
+    $BundleNoticeName = "{0}_{1}_OFFLINE_BUNDLE.txt" -f $SafeProductName, $Version
+    $BundleNotice = Join-Path $InstallerDirectory $BundleNoticeName
     @(
-        "ReefVision offline Windows installer bundle",
+        "$SafeProductName offline Windows installer bundle",
         "",
         "Keep the MSI and every rv*.cab file together in this directory.",
-        "Run $InstallerName to install ReefVision.",
+        "Run $InstallerName to install $SafeProductName.",
         "Copying or distributing the MSI without its CAB files will not work."
     ) | Set-Content -LiteralPath $BundleNotice -Encoding UTF8
 
@@ -288,7 +319,9 @@ try {
         "External cabinet bundle created with $($ExternalCabinets.Count) CAB files: " +
         $InstallerDirectory
     ) -ForegroundColor Green
-    & $VerificationScript -MsiPath $FinalInstaller -OutputDirectory $VerificationDirectory
+    & $VerificationScript `
+        -MsiPath $FinalInstaller `
+        -OutputDirectory $VerificationDirectory
     if (-not $?) {
         throw "The external-cabinet MSI failed ReefVision payload verification."
     }
