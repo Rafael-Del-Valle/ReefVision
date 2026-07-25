@@ -5,6 +5,7 @@ param(
         "scripts/build-desktop-backend.ps1",
         "scripts/clean-packaging-workspace.ps1",
         "scripts/clear-reefvision-caches.ps1",
+        "scripts/relink-tauri-msi.ps1",
         "scripts/restore-packaged-torch-runtime.ps1",
         "scripts/run-release-validation.ps1",
         "scripts/run-complete-release-validation.ps1",
@@ -56,7 +57,7 @@ foreach ($RelativePath in $ScriptPaths) {
 }
 
 $Report = [pscustomobject]@{
-    schema = "reefvision-release-script-syntax-v8"
+    schema = "reefvision-release-script-syntax-v9"
     passed = $Failures.Count -eq 0
     parsed = $Results
     failures = $Failures
