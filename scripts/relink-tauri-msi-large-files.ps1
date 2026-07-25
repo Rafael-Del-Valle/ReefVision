@@ -8,17 +8,39 @@ Set-StrictMode -Version Latest
 
 $Root = Split-Path -Parent $PSScriptRoot
 $SourceScript = Join-Path $PSScriptRoot "relink-tauri-msi.ps1"
+$BundleVerificationScript = Join-Path `
+    $PSScriptRoot `
+    "verify-windows-msi-bundle-short-path.ps1"
 $GeneratedScript = Join-Path $PSScriptRoot ".relink-tauri-msi-large-files.generated.ps1"
 
-if (-not (Test-Path -LiteralPath $SourceScript -PathType Leaf)) {
-    throw "The base MSI relink script is missing: $SourceScript"
+foreach ($RequiredScript in @($SourceScript, $BundleVerificationScript)) {
+    if (-not (Test-Path -LiteralPath $RequiredScript -PathType Leaf)) {
+        throw "The required MSI recovery script is missing: $RequiredScript"
+    }
 }
 
-$SourceText = Get-Content -LiteralPath $SourceScript -Raw
+$SourceText = (Get-Content -LiteralPath $SourceScript -Raw) -replace "`r`n", "`n"
 $EnvironmentNeedle = '$env:WIX_MCSLFS = "512"'
 $EnvironmentReplacement = '$env:WIX_MCSLFS = "2048"'
 $MediaNeedle = 'MaximumCabinetSizeForLargeFileSplitting="512"'
 $MediaReplacement = 'MaximumCabinetSizeForLargeFileSplitting="2048"'
+$ExternalVerificationNeedle = @'
+    & $VerificationScript `
+        -MsiPath $FinalInstaller `
+        -OutputDirectory $VerificationDirectory
+    if (-not $?) {
+        throw "The external-cabinet MSI failed ReefVision payload verification."
+    }
+'@
+$ExternalVerificationReplacement = @'
+    $BundleVerificationScript = Join-Path `
+        $PSScriptRoot `
+        "verify-windows-msi-bundle-short-path.ps1"
+    & $BundleVerificationScript -MsiPath $FinalInstaller
+    if (-not $?) {
+        throw "The external-cabinet MSI failed short-path bundle verification."
+    }
+'@
 
 $EnvironmentMatchCount = [regex]::Matches(
     $SourceText,
@@ -28,11 +50,19 @@ $MediaMatchCount = [regex]::Matches(
     $SourceText,
     [regex]::Escape($MediaNeedle)
 ).Count
-if ($EnvironmentMatchCount -ne 1 -or $MediaMatchCount -ne 1) {
+$VerificationMatchCount = [regex]::Matches(
+    $SourceText,
+    [regex]::Escape($ExternalVerificationNeedle)
+).Count
+if (
+    $EnvironmentMatchCount -ne 1 -or
+    $MediaMatchCount -ne 1 -or
+    $VerificationMatchCount -ne 1
+) {
     throw (
-        "The base relink script no longer has the expected 512 MB large-file " +
-        "settings. Environment matches: $EnvironmentMatchCount; media matches: " +
-        "$MediaMatchCount."
+        "The base relink script no longer has the expected recovery settings. " +
+        "Environment matches: $EnvironmentMatchCount; media matches: " +
+        "$MediaMatchCount; external verification matches: $VerificationMatchCount."
     )
 }
 
@@ -42,6 +72,9 @@ $PatchedText = $SourceText.Replace(
 ).Replace(
     $MediaNeedle,
     $MediaReplacement
+).Replace(
+    $ExternalVerificationNeedle,
+    $ExternalVerificationReplacement
 )
 $Utf8WithoutBom = [System.Text.UTF8Encoding]::new($false)
 [System.IO.File]::WriteAllText(
@@ -81,7 +114,7 @@ if ($LargestFile) {
 
 Write-Host (
     "Relinking with 512 MB ordinary cabinets and a 2048 MB individual-file " +
-    "ceiling..."
+    "ceiling, followed by short-path bundle verification..."
 ) -ForegroundColor Cyan
 try {
     & $GeneratedScript -TargetTriple $TargetTriple
