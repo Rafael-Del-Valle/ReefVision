@@ -4,12 +4,16 @@ on:
   push:
     branches:
       - "feat/all-phases-advancement"
+      - "agent/stabilize-reviewable-release"
   pull_request:
     paths:
       - ".reefvision-feature-freeze.json"
       - ".github/workflows/stabilization.yml"
       - "apps/**"
       - "config/**"
+      - "docs/DEMONSTRATED_USER_JOURNEYS.md"
+      - "docs/RELEASE_REVIEW_DOMAINS.md"
+      - "docs/STABILIZATION_RELEASE_GATE.md"
       - "scripts/**"
       - "pyproject.toml"
   workflow_dispatch:
@@ -64,9 +68,23 @@ jobs:
             "scripts/run-complete-release-validation.ps1",
             "scripts/verify-windows-msi.ps1",
             "scripts/validate-external-interchange.ps1",
-            "docs/STABILIZATION_RELEASE_GATE.md"
+            "docs/STABILIZATION_RELEASE_GATE.md",
+            "docs/RELEASE_REVIEW_DOMAINS.md",
+            "docs/DEMONSTRATED_USER_JOURNEYS.md"
           )
           $missing = @($required | Where-Object { -not (Test-Path -LiteralPath $_) })
           if ($missing.Count -gt 0) {
             throw "Missing stabilization assets: $($missing -join ', ')"
+          }
+      - name: Reject encoded source-delivery scaffolding
+        shell: pwsh
+        run: |
+          $forbidden = @(
+            ".skeleton-payload",
+            ".github/workflows/apply-skeleton-payload.yml",
+            "scripts/apply-coral-skeleton-implementation.ps1"
+          )
+          $present = @($forbidden | Where-Object { Test-Path -LiteralPath $_ })
+          if ($present.Count -gt 0) {
+            throw "Forbidden encoded source-delivery scaffolding is present: $($present -join ', ')"
           }
