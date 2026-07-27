@@ -34,7 +34,7 @@ Never record credentials, API keys, private image contents, or secrets in this f
 |---|---|---|---|---|
 | J01 | Clean Windows installation and launch | Installed MSI, packaged sidecar health, relaunch | not-run | — |
 | J02 | Octocoral project creation and image import | Representative PNG/TIFF set, checksums, thumbnails | passed-synthetic | `test_stabilization_coral_journey.py`; real installed-app run still required |
-| J03 | Box, polygon, and raster annotation lifecycle | Manual edits, revisions, reload, restart | not-run | — |
+| J03 | Box, polygon, and raster annotation lifecycle | Manual edits, revisions, reload, restart | not-run | Cross-image box-ID ownership guard and `test_annotation_ownership_stabilization.py` added at `82f2fd5`; test execution and full box/polygon/raster journey still required |
 | J04 | Immutable dataset creation and group-aware splitting | Manifest, frozen annotations, restart comparison | passed-synthetic | Covered by stabilization coral journey; representative project still required |
 | J05 | Detection dataset export and real YOLO training | Real dataset, checkpoint, metrics, report | not-run | — |
 | J06 | Segmentation dataset export and real YOLO training | Real masks, checkpoint, class-wise mask metrics | not-run | — |
