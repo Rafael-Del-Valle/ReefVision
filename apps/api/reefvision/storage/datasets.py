@@ -45,24 +45,38 @@ def canonical_json_sha256(payload: Any) -> str:
     return sha256(canonical_json_bytes(payload)).hexdigest()
 
 
+def _filesystem_token(value: str) -> str:
+    """Return a compact, deterministic token for generated filesystem names.
+
+    Database rows and manifests retain the complete identifiers. Generated export
+    directories and copied image names use a 64-bit SHA-256 prefix so nested Windows
+    paths remain below legacy path limits without depending on long-path policy.
+    """
+
+    return sha256(value.encode("utf-8")).hexdigest()[:16]
+
+
 def dataset_export_relative_paths(
     *,
     project_storage_root: str,
     version_number: int,
     export_id: str,
 ) -> tuple[str, str, str]:
-    relative_output = f"{project_storage_root}/exports/v{version_number:04d}-{export_id}"
+    export_token = _filesystem_token(export_id)
+    relative_output = f"{project_storage_root}/exports/v{version_number:04d}-{export_token}"
     manifest_path = f"{relative_output}/export-manifest.json"
     archive_path = f"{relative_output}.zip"
     return relative_output, manifest_path, archive_path
 
 
 def safe_export_filename(image_id: str, original_filename: str) -> str:
-    base = Path(original_filename).name
-    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "_", base).strip("._")
-    if not sanitized:
-        sanitized = "image"
-    return f"{image_id}_{sanitized}"
+    """Create a compact deterministic copied-image name while preserving its suffix."""
+
+    base = Path(original_filename.replace("\\", "/")).name
+    suffix = Path(base).suffix.casefold()
+    if not re.fullmatch(r"\.[a-z0-9]{1,9}", suffix):
+        suffix = ".image"
+    return f"i-{_filesystem_token(image_id)}{suffix}"
 
 
 def remove_export_artifacts(
