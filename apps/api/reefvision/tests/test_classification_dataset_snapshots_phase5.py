@@ -36,6 +36,7 @@ def test_whole_image_snapshot_freezes_group_safe_multilabel_targets(
         project_id,
         filename="second.png",
         relative_path="a/second.png",
+        size=(81, 60),
     )
     image_ids = [
         str(first["successful"][0]["image_id"]),
