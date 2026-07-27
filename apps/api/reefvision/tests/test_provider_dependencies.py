@@ -162,9 +162,10 @@ def test_model_provider_hub_reports_explicit_capabilities_and_blockers(
     assert ultralytics.registerable is True
 
     grounding_dino = get_model_provider("grounding_dino")
-    assert grounding_dino.availability_status == "not_implemented"
+    assert grounding_dino.availability_status == "ready"
     assert grounding_dino.capabilities.text_prompt_detection is True
-    assert grounding_dino.registerable is False
+    assert grounding_dino.capabilities.packaged_desktop_operation is True
+    assert grounding_dino.registerable is True
 
 
 def test_runtime_provider_status_route_serializes_runtime_backends(
@@ -191,7 +192,6 @@ def test_runtime_provider_status_route_serializes_runtime_backends(
     )
 
     response = client.get("/api/v1/runtime-providers/status")
-
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload[0]["runtime_id"] == "pytorch"
