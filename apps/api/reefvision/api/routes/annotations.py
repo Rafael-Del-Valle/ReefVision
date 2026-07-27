@@ -6,11 +6,12 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
-from reefvision.db.models import MaskAnnotation, Project
+from reefvision.db.models import Annotation, MaskAnnotation, Project
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.annotations import (
     AnnotationBatchSaveRequest,
@@ -46,6 +47,31 @@ def _stable_validation_error(exc: ValidationError) -> ValidationError:
         ),
     }
     return ValidationError(aliases.get(detail, detail))
+
+
+def _validate_box_annotation_ownership(
+    session: Session,
+    image_id: str,
+    payload: AnnotationBatchSaveRequest,
+) -> None:
+    """Reject a box UUID that is already owned by another image.
+
+    Mask saves already enforce this ownership rule in the annotation service. This
+    preflight keeps bounding boxes consistent and prevents a database primary-key
+    failure from surfacing as an internal server error.
+    """
+
+    annotation_ids = {draft.id for draft in payload.annotations}
+    if not annotation_ids:
+        return
+    statement = select(Annotation.id, Annotation.image_id).where(
+        Annotation.id.in_(annotation_ids)
+    )
+    for _annotation_id, owner_image_id in session.execute(statement):
+        if owner_image_id != image_id:
+            raise ValidationError(
+                "Annotations may only be saved back to their source image"
+            )
 
 
 def _ordered_counts(
@@ -129,6 +155,7 @@ def save_annotations(
     session: DbSession,
 ) -> AnnotationBatchSaveResponse:
     try:
+        _validate_box_annotation_ownership(session, image_id, payload)
         response = service(request, session).save_annotations(image_id, payload)
     except ValidationError as exc:
         raise _stable_validation_error(exc) from exc
