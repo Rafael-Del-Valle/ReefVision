@@ -114,7 +114,7 @@ def test_changed_orphan_requires_a_new_preview(client: TestClient) -> None:
             "minimum_orphan_age_seconds": 60,
         },
     )
-    assert applied.status_code == 422, applied.text
+    assert applied.status_code == 400, applied.text
     assert "repair plan changed" in applied.text.lower()
     assert orphan_path.read_bytes() == b"changed after preview"
 
