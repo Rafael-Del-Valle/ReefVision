@@ -72,10 +72,8 @@ def _validate_annotation_ownership(
                     "Annotations may only be saved back to their source image"
                 )
 
-    mask_ids = {
-        *(draft.id for draft in payload.mask_annotations),
-        *payload.deleted_mask_annotation_ids,
-    }
+    mask_ids = {draft.id for draft in payload.mask_annotations}
+    mask_ids.update(payload.deleted_mask_annotation_ids)
     if mask_ids:
         statement = select(MaskAnnotation.id, MaskAnnotation.image_id).where(
             MaskAnnotation.id.in_(mask_ids)
