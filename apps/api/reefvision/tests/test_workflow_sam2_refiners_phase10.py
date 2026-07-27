@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import reefvision.jobs.workflow_sam2_refiners as workflow_sam2_refiners
+from reefvision.db.models import ModelRegistration
 from reefvision.tests.test_annotations import create_project
 
 
@@ -49,17 +50,27 @@ def test_non_sidecar_sam2_preserves_original_pipeline_path(
     monkeypatch,
 ) -> None:
     project = create_project(client, "In-process SAM 2 workflow")
-    model = client.post(
-        f"/api/v1/projects/{project['id']}/models/upload",
-        data={
-            "purpose": "assist",
-            "provider_name": "sam2",
-            "display_name": "In-process SAM 2",
-        },
-        files={"model_file": ("sam2.pt", b"checkpoint", "application/octet-stream")},
-    )
-    assert model.status_code == 201, model.text
     app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        model = ModelRegistration(
+            project_id=str(project["id"]),
+            purpose="assist",
+            display_name="In-process SAM 2",
+            source_filename="sam2.pt",
+            managed_path=f"projects/{project['id']}/models/sam2.pt",
+            sha256="a" * 64,
+            file_size_bytes=len(b"checkpoint"),
+            framework="sam2",
+            task="assist_segmentation",
+            provider_name="sam2",
+            provider_version="test",
+            class_map_json={},
+            metadata_json={},
+        )
+        session.add(model)
+        session.commit()
+        model_id = model.id
+
     observed: dict[str, Any] = {}
 
     def fake_pipeline(settings, factory, **kwargs):
@@ -70,7 +81,7 @@ def test_non_sidecar_sam2_preserves_original_pipeline_path(
     result = workflow_sam2_refiners.run_pipeline_with_registered_sam2(
         app.state.settings,
         app.state.session_factory,
-        sam2_model_id=model.json()["id"],
+        sam2_model_id=model_id,
         device="cuda:0",
     )
 
