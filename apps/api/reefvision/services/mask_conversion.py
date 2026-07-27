@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import io
+import math
 from typing import Any
 
 import numpy as np
@@ -16,7 +17,6 @@ from reefvision.ml.mask_tools import (
     mask_iou,
     mask_to_rings,
     normalize_ring,
-    polygon_to_mask,
     raster_quality,
     remove_small_components,
     self_intersections,
@@ -46,7 +46,7 @@ def _check_dimensions(width: int, height: int) -> None:
 
 def decode_uncompressed_rle(rle: UncompressedMaskRle) -> NDArray[np.bool_]:
     _check_dimensions(rle.width, rle.height)
-    flat = np.zeros(rle.width * rle.height, dtype=bool)
+    flat = np.zeros(rle.width * rle.height, dtype=np.bool_)
     cursor = 0
     foreground = False
     for count in rle.counts:
@@ -56,7 +56,7 @@ def decode_uncompressed_rle(rle: UncompressedMaskRle) -> NDArray[np.bool_]:
         cursor = end
         foreground = not foreground
     order = "C" if rle.order == "row_major" else "F"
-    return np.asarray(flat.reshape((rle.height, rle.width), order=order), dtype=bool)
+    return flat.reshape(rle.height, rle.width, order=order)
 
 
 def encode_uncompressed_rle(
@@ -64,7 +64,7 @@ def encode_uncompressed_rle(
     *,
     order: str,
 ) -> UncompressedMaskRle:
-    mask = np.asarray(values, dtype=bool)
+    mask = np.asarray(values, dtype=np.bool_)
     if mask.ndim != 2:
         raise ValidationError("RLE encoding requires a two-dimensional mask")
     height, width = mask.shape
@@ -98,6 +98,41 @@ def _schema_ring(points: list[tuple[float, float]]) -> list[GeometryPoint]:
     return [GeometryPoint(x=x, y=y) for x, y in points]
 
 
+def _fill_ring(
+    mask: NDArray[np.bool_],
+    points: list[tuple[float, float]],
+    *,
+    value: bool,
+) -> None:
+    """Fill one ring using even-odd scanlines sampled at pixel centers.
+
+    Raster-derived contours describe pixel edges. Sampling each pixel at its center
+    avoids the inclusive endpoint expansion produced by ``ImageDraw.polygon`` and
+    also permits self-crossing, zero-net-area rings to reach the repair workflow.
+    """
+
+    ring = normalize_ring(points, allow_zero_area=True)
+    edges = list(zip(ring, (*ring[1:], ring[0]), strict=True))
+    height, width = mask.shape
+    for y in range(height):
+        scan_y = y + 0.5
+        intersections: list[float] = []
+        for (x1, y1), (x2, y2) in edges:
+            if (y1 > scan_y) == (y2 > scan_y):
+                continue
+            intersections.append(x1 + (scan_y - y1) * (x2 - x1) / (y2 - y1))
+        intersections.sort()
+        for left, right in zip(
+            intersections[::2],
+            intersections[1::2],
+            strict=False,
+        ):
+            start = max(0, math.ceil(min(left, right) - 0.5))
+            stop = min(width, math.ceil(max(left, right) - 0.5))
+            if stop > start:
+                mask[y, start:stop] = value
+
+
 def _polygon_mask(
     polygons: list[PolygonGeometry],
     *,
@@ -105,15 +140,14 @@ def _polygon_mask(
     height: int,
 ) -> NDArray[np.bool_]:
     _check_dimensions(width, height)
-    result = np.zeros((height, width), dtype=bool)
+    result = np.zeros((height, width), dtype=np.bool_)
     for polygon in polygons:
-        result |= polygon_to_mask(
-            _ring(polygon.outer),
-            width=width,
-            height=height,
-            holes=[_ring(hole) for hole in polygon.holes],
-        )
-    return np.asarray(result, dtype=bool)
+        current = np.zeros((height, width), dtype=np.bool_)
+        _fill_ring(current, _ring(polygon.outer), value=True)
+        for hole in polygon.holes:
+            _fill_ring(current, _ring(hole), value=False)
+        result |= current
+    return result
 
 
 def _simplified(
@@ -140,7 +174,7 @@ def _vectorize(
 ) -> tuple[list[PolygonGeometry], NDArray[np.bool_], list[str]]:
     warnings: list[str] = []
     cleaned = remove_small_components(
-        np.asarray(mask, dtype=bool),
+        np.asarray(mask, dtype=np.bool_),
         minimum_area=minimum_component_area,
         connectivity=8,
     )
@@ -182,7 +216,7 @@ def _vectorize(
             min(point.y for point in polygon.outer),
         )
     )
-    return polygons, np.asarray(cleaned, dtype=bool), warnings
+    return polygons, np.asarray(cleaned, dtype=np.bool_), warnings
 
 
 def _quality(values: NDArray[Any]) -> MaskConversionQuality:
