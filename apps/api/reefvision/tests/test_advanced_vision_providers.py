@@ -275,7 +275,9 @@ def test_training_catalog_exposes_native_unets_and_nnunet_configurations(client)
         "nnunet/automatic/default",
         "nnunet/v2/semantic/2d",
     }
-    assert all(item.trainable for item in nnunet)
+    assert {item.catalog_id for item in nnunet if item.trainable} == {
+        "nnunet/v2/semantic/2d"
+    }
 
 
 def test_nnunet_export_writes_expected_raw_dataset(tmp_path: Path) -> None:
