@@ -82,12 +82,13 @@ class ScientificClassificationExportService:
         return project
 
     def _mask_contains(self, mask: MaskAnnotation, x: float, y: float) -> bool:
-        if None in {mask.x_min, mask.y_min, mask.x_max, mask.y_max}:
+        x_min = mask.x_min
+        y_min = mask.y_min
+        x_max = mask.x_max
+        y_max = mask.y_max
+        if x_min is None or y_min is None or x_max is None or y_max is None:
             return False
-        if not (
-            float(mask.x_min) <= x <= float(mask.x_max)
-            and float(mask.y_min) <= y <= float(mask.y_max)
-        ):
+        if not (float(x_min) <= x <= float(x_max) and float(y_min) <= y <= float(y_max)):
             return False
         if mask.geometry_kind == "polygon":
             if not mask.polygon_json or len(mask.polygon_json) < 3:
@@ -183,17 +184,21 @@ class ScientificClassificationExportService:
             )
             if direct_mask is not None and direct_mask.deleted_at is None:
                 candidate_masks = [direct_mask]
-                if None not in {
-                    direct_mask.x_min,
-                    direct_mask.y_min,
-                    direct_mask.x_max,
-                    direct_mask.y_max,
-                }:
+                x_min = direct_mask.x_min
+                y_min = direct_mask.y_min
+                x_max = direct_mask.x_max
+                y_max = direct_mask.y_max
+                if (
+                    x_min is not None
+                    and y_min is not None
+                    and x_max is not None
+                    and y_max is not None
+                ):
                     bounding_box = [
-                        float(direct_mask.x_min),
-                        float(direct_mask.y_min),
-                        float(direct_mask.x_max),
-                        float(direct_mask.y_max),
+                        float(x_min),
+                        float(y_min),
+                        float(x_max),
+                        float(y_max),
                     ]
             elif annotation is not None and annotation.deleted_at is None:
                 bounding_box = [

@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import io
 import math
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 from numpy.typing import NDArray
@@ -55,8 +55,9 @@ def decode_uncompressed_rle(rle: UncompressedMaskRle) -> NDArray[np.bool_]:
             flat[cursor:end] = True
         cursor = end
         foreground = not foreground
-    order = "C" if rle.order == "row_major" else "F"
-    return flat.reshape(rle.height, rle.width, order=order)
+    order: Literal["C", "F"] = "C" if rle.order == "row_major" else "F"
+    reshaped = flat.reshape((rle.height, rle.width), order=order)
+    return np.asarray(reshaped, dtype=np.bool_)
 
 
 def encode_uncompressed_rle(

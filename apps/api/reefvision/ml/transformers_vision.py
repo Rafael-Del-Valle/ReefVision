@@ -229,7 +229,8 @@ class TransformersVisionProvider:
 
         self._device = _torch_device(device)
         try:
-            self._processor = AutoProcessor.from_pretrained(
+            auto_processor: Any = AutoProcessor
+            self._processor = auto_processor.from_pretrained(
                 snapshot,
                 local_files_only=True,
                 trust_remote_code=False,
@@ -290,6 +291,10 @@ class TransformersVisionProvider:
         prompts: list[str],
         settings: DetectionSettings,
     ) -> list[DetectionPrediction]:
+        processor = self._processor
+        model = self._model
+        if processor is None or model is None:
+            raise ValidationError("The Transformers vision model is not loaded")
         try:
             import torch
 
@@ -298,15 +303,15 @@ class TransformersVisionProvider:
                 text = ". ".join(prompt.rstrip(".") for prompt in prompts) + "."
             else:
                 text = [prompts]
-            inputs = self._processor(images=image, text=text, return_tensors="pt")
+            inputs = processor(images=image, text=text, return_tensors="pt")
             inputs = {
                 key: value.to(self._device) if hasattr(value, "to") else value
                 for key, value in inputs.items()
             }
             with torch.inference_mode():
-                outputs = self._model(**inputs)
+                outputs = model(**inputs)
             postprocess = getattr(
-                self._processor,
+                processor,
                 "post_process_grounded_object_detection",
                 None,
             )
@@ -352,28 +357,32 @@ class TransformersVisionProvider:
         prompts: list[str],
         settings: DetectionSettings,
     ) -> list[DetectionPrediction]:
+        processor = self._processor
+        model = self._model
+        if processor is None or model is None:
+            raise ValidationError("The Transformers vision model is not loaded")
         task = "<OPEN_VOCABULARY_DETECTION>"
         prompt = task + ", ".join(prompts)
         try:
             import torch
 
-            inputs = self._processor(text=prompt, images=image, return_tensors="pt")
+            inputs = processor(text=prompt, images=image, return_tensors="pt")
             inputs = {
                 key: value.to(self._device) if hasattr(value, "to") else value
                 for key, value in inputs.items()
             }
             with torch.inference_mode():
-                generated_ids = self._model.generate(
+                generated_ids = model.generate(
                     **inputs,
                     max_new_tokens=1024,
                     num_beams=3,
                     do_sample=False,
                 )
-            generated_text = self._processor.batch_decode(
+            generated_text = processor.batch_decode(
                 generated_ids,
                 skip_special_tokens=False,
             )[0]
-            decoded = self._processor.post_process_generation(
+            decoded = processor.post_process_generation(
                 generated_text,
                 task=task,
                 image_size=(image.width, image.height),

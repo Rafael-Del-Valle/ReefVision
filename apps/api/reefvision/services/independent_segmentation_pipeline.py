@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import cast
 
 import numpy as np
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import (
@@ -40,7 +40,7 @@ from reefvision.storage.projects import resolve_managed_project_path
 
 
 def _record_independent_promotion(
-    factory: sessionmaker,
+    factory: sessionmaker[Session],
     *,
     annotation_id: str,
     proposal_id: str,
@@ -83,7 +83,7 @@ def _record_independent_promotion(
 
 def run_independent_segmentation_pipeline(
     settings: Settings,
-    factory: sessionmaker,
+    factory: sessionmaker[Session],
     *,
     image_ids: list[str],
     primary_prediction_ids: list[str],

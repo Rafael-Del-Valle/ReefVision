@@ -38,13 +38,13 @@ def _patch_registered_model_job_creation() -> None:
         self.session.refresh(job)
         return JobResponse.model_validate(job)
 
-    SemanticModelService.create_inference_job = create_with_prompt
+    SemanticModelService.create_inference_job = create_with_prompt  # type: ignore[method-assign]
 
 
 def _patch_worker_prompt_context() -> None:
     from reefvision.jobs import worker
 
-    original = worker.process_inference_job
+    original = worker.process_inference_job  # type: ignore[attr-defined]
 
     def process_with_prompt(settings: Any, factory: Any, job_id: str) -> bool:
         prompt: str | None = None
@@ -88,7 +88,7 @@ def _patch_worker_prompt_context() -> None:
                     session.commit()
         return result
 
-    worker.process_inference_job = process_with_prompt
+    worker.process_inference_job = process_with_prompt  # type: ignore[attr-defined]
 
 
 def apply_advanced_inference_runtime_patch() -> None:

@@ -9,6 +9,7 @@ import subprocess
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import cast
 
 from PIL import Image
 
@@ -132,7 +133,7 @@ def _export_case_mask(source: Path, destination: Path, labels: dict[str, int]) -
         raise ValidationError(f"nnU-Net source mask does not exist: {source}")
     maximum_label = max(labels.values(), default=0)
     mask = Image.open(source).convert("L")
-    extrema = mask.getextrema()
+    extrema = cast(tuple[int, int] | None, mask.getextrema())
     if extrema is not None and int(extrema[1]) > maximum_label:
         raise ValidationError(
             f"Mask {source.name} contains label {extrema[1]}, "

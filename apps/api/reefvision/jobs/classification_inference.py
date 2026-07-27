@@ -236,19 +236,23 @@ def _mask_targets(
     targets: list[_TargetCrop] = []
     removed = 0
     for mask in masks:
-        if None in {mask.x_min, mask.y_min, mask.x_max, mask.y_max}:
+        x_min = mask.x_min
+        y_min = mask.y_min
+        x_max = mask.x_max
+        y_max = mask.y_max
+        if x_min is None or y_min is None or x_max is None or y_max is None:
             removed += 1
             continue
-        width = float(mask.x_max) - float(mask.x_min)
-        height = float(mask.y_max) - float(mask.y_min)
+        width = float(x_max) - float(x_min)
+        height = float(y_max) - float(y_min)
         if width < minimum_crop_size_px or height < minimum_crop_size_px:
             removed += 1
             continue
         bounds = _padded_bounds(
-            x_min=float(mask.x_min),
-            y_min=float(mask.y_min),
-            x_max=float(mask.x_max),
-            y_max=float(mask.y_max),
+            x_min=float(x_min),
+            y_min=float(y_min),
+            x_max=float(x_max),
+            y_max=float(y_max),
             image_width=image.width_px,
             image_height=image.height_px,
             padding_fraction=padding_fraction,

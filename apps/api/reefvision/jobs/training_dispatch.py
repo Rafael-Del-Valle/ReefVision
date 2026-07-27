@@ -29,9 +29,9 @@ from reefvision.storage.projects import resolve_managed_project_path
 # The stable task workers resolve their device at launch time. Replace only their
 # module-local training resolver; inference and Prompt Assist retain stricter
 # single-device semantics.
-detection_training_runtime.resolve_torch_device = resolve_training_device
-segmentation_training_runtime.resolve_torch_device = resolve_training_device
-classification_training_runtime.resolve_torch_device = resolve_training_device
+detection_training_runtime.resolve_torch_device = resolve_training_device  # type: ignore[attr-defined]
+segmentation_training_runtime.resolve_torch_device = resolve_training_device  # type: ignore[attr-defined]
+classification_training_runtime.resolve_torch_device = resolve_training_device  # type: ignore[attr-defined]
 
 
 def _restore_tuning_provenance(

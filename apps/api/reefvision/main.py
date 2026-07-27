@@ -8,6 +8,7 @@ import os
 import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -109,7 +110,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     catalog_startup_warnings = validate_catalog_startup()
 
     bundled_catalog_ids: list[str]
-    bundled_transformers_models: dict[str, object]
+    bundled_transformers_models: dict[str, Path]
     bundled_warnings: list[str]
     transformer_warnings: list[str]
     if active_settings.env == "test":

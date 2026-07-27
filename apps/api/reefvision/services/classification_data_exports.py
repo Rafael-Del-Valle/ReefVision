@@ -15,6 +15,7 @@ from typing import Any
 from uuid import uuid4
 
 import numpy as np
+from numpy.typing import NDArray
 from sqlalchemy.orm import Session
 
 from reefvision import __version__
@@ -32,7 +33,7 @@ from reefvision.storage.datasets import canonical_json_bytes
 from reefvision.storage.projects import resolve_managed_project_path
 
 
-def _text_array(values: list[str]) -> np.ndarray:
+def _text_array(values: list[str]) -> NDArray[np.str_]:
     maximum = max((len(value) for value in values), default=1)
     return np.asarray(values, dtype=f"U{maximum}")
 

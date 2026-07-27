@@ -28,7 +28,7 @@ from reefvision.services.multi_model_auto_labeling import (
 )
 
 _ORIGINAL_MODEL_INFERENCE = workflow_runtime._model_inference
-_ORIGINAL_PROCESS_INFERENCE = workflow_runtime.process_inference_job
+_ORIGINAL_PROCESS_INFERENCE = workflow_runtime.process_inference_job  # type: ignore[attr-defined]
 _ORIGINAL_SEGMENTATION_PROVIDER_FACTORY = segmentation_runtime.segmentation_provider_for_name
 
 
@@ -299,9 +299,14 @@ def install_consensus_workflow_runtime() -> None:
     """Install stable wrappers around the existing Workflow inference handlers."""
 
     segmentation_runtime.segmentation_provider_for_name = _segmentation_provider_for_name
-    inference_runtime.segmentation_provider_for_name = _segmentation_provider_for_name
-    if workflow_runtime.process_inference_job is not _workflow_inference_request_compatibility:
-        workflow_runtime.process_inference_job = _workflow_inference_request_compatibility
+    inference_runtime.segmentation_provider_for_name = (  # type: ignore[attr-defined]
+        _segmentation_provider_for_name
+    )
+    current_process_inference = workflow_runtime.process_inference_job  # type: ignore[attr-defined]
+    if current_process_inference is not _workflow_inference_request_compatibility:
+        workflow_runtime.process_inference_job = (  # type: ignore[attr-defined]
+            _workflow_inference_request_compatibility
+        )
     if workflow_runtime._model_inference is not _consensus_aware_model_inference:
         workflow_runtime._model_inference = _consensus_aware_model_inference
 

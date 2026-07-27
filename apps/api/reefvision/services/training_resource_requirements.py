@@ -13,8 +13,15 @@ _GIB = 1024**3
 
 
 def _positive_int(value: object, *, default: int, name: str) -> int:
+    candidate: str | bytes | bytearray | int | float
+    if value is None:
+        candidate = default
+    elif isinstance(value, (str, bytes, bytearray, int, float)):
+        candidate = value
+    else:
+        raise ValidationError(f"{name} must be an integer")
     try:
-        result = int(value if value is not None else default)
+        result = int(candidate)
     except (TypeError, ValueError) as exc:
         raise ValidationError(f"{name} must be an integer") from exc
     if result < 0:
@@ -23,6 +30,8 @@ def _positive_int(value: object, *, default: int, name: str) -> int:
 
 
 def _gib_to_bytes(value: object, *, name: str) -> int:
+    if not isinstance(value, (str, bytes, bytearray, int, float)):
+        raise ValidationError(f"{name} must be a number")
     try:
         amount = float(value)
     except (TypeError, ValueError) as exc:

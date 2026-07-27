@@ -88,11 +88,14 @@ def _aggregate(
 ) -> MaskArray:
     stack = np.stack([np.asarray(item.mask, dtype=bool) for item in candidates], axis=0)
     if aggregation == "intersection":
-        return np.all(stack, axis=0)
+        return np.asarray(np.all(stack, axis=0), dtype=np.bool_)
     if aggregation == "pixel_majority":
-        return np.count_nonzero(stack, axis=0) >= required_votes
+        return np.asarray(
+            np.count_nonzero(stack, axis=0) >= required_votes,
+            dtype=np.bool_,
+        )
     if aggregation == "union":
-        return np.any(stack, axis=0)
+        return np.asarray(np.any(stack, axis=0), dtype=np.bool_)
     if aggregation == "best_confidence":
         selected = max(candidates, key=lambda item: (item.confidence, item.candidate_id))
         return np.asarray(selected.mask, dtype=bool).copy()
@@ -129,8 +132,9 @@ def build_mask_consensus(
             raise ValidationError("Independent consensus candidate IDs must be unique")
         seen_ids.add(item.candidate_id)
         mask = _validated_mask(item)
-        existing_shape = shape_by_image.setdefault(item.image_id, mask.shape)
-        if existing_shape != mask.shape:
+        mask_shape = (int(mask.shape[0]), int(mask.shape[1]))
+        existing_shape = shape_by_image.setdefault(item.image_id, mask_shape)
+        if existing_shape != mask_shape:
             raise ValidationError("All masks for one image must share dimensions")
         normalized.append(
             IndependentMaskCandidate(

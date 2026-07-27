@@ -13,7 +13,7 @@ from contextlib import suppress
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from io import BytesIO
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 from urllib import error as url_error
 from urllib import parse as url_parse
 from urllib import request as url_request
@@ -253,6 +253,8 @@ def _parse_vote(text: str, *, voter: str, model: str) -> MaskVote:
     reason = value.get("reason")
     if not isinstance(accepted, bool):
         raise RuntimeError(f"{voter} vote is missing a boolean accept field")
+    if isinstance(confidence, bool) or not isinstance(confidence, (int, float, str)):
+        raise RuntimeError(f"{voter} vote is missing a numeric confidence")
     try:
         confidence_value = float(confidence)
     except (TypeError, ValueError) as exc:
@@ -442,7 +444,10 @@ def _proposal_mask(
         )
         with Image.open(path) as source:
             source.load()
-            mask = source.convert("L").point(lambda value: 255 if value else 0)
+            mask = cast(
+                Image.Image,
+                source.convert("L").point(lambda value: 255 if value else 0),
+            )
         if mask.size != (image.width_px, image.height_px):
             raise ValidationError("Consensus candidate mask dimensions do not match its image")
         return mask

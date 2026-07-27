@@ -224,10 +224,13 @@ class TransformersVisionDetectionProvider:
                 AutoProcessor,
             )
 
+            image_text_model_class: Any | None = None
             try:
                 from transformers import AutoModelForImageTextToText
+
+                image_text_model_class = AutoModelForImageTextToText
             except ImportError:
-                AutoModelForImageTextToText = None  # type: ignore[assignment,misc]
+                pass
         except Exception as exc:
             raise ValidationError(
                 "The Transformers provider pack is not installed. Install transformers, "
@@ -238,14 +241,15 @@ class TransformersVisionDetectionProvider:
         torch_device = torch.device("cuda:0" if resolved_device == 0 else "cpu")
         dtype = torch.float16 if torch_device.type == "cuda" else torch.float32
         try:
-            self._processor = AutoProcessor.from_pretrained(
+            auto_processor: Any = AutoProcessor
+            self._processor = auto_processor.from_pretrained(
                 model_dir,
                 local_files_only=True,
                 trust_remote_code=self.provider_name == "florence2",
             )
             model_class: Any
             if self.provider_name == "florence2":
-                model_class = AutoModelForImageTextToText or AutoModelForCausalLM
+                model_class = image_text_model_class or AutoModelForCausalLM
             else:
                 model_class = AutoModelForZeroShotObjectDetection
             self._model = model_class.from_pretrained(
@@ -293,21 +297,25 @@ class TransformersVisionDetectionProvider:
     ) -> list[DetectionPrediction]:
         import torch
 
+        processor = self._processor
+        model = self._model
+        if processor is None or model is None:
+            raise ValidationError("The Transformers model is not loaded")
         labels = [item.strip() for item in prompt.split(",") if item.strip()]
         if not labels:
             labels = [prompt]
         text_labels = [labels]
-        inputs = self._processor(
+        inputs = processor(
             images=image,
             text=text_labels,
             return_tensors="pt",
         )
         inputs = {key: value.to(self._device) for key, value in inputs.items()}
         with torch.inference_mode():
-            outputs = self._model(**inputs)
+            outputs = model(**inputs)
         target_sizes = torch.tensor([image.size[::-1]], device=self._device)
         if self.provider_name == "grounding_dino":
-            processed = self._processor.post_process_grounded_object_detection(
+            processed = processor.post_process_grounded_object_detection(
                 outputs=outputs,
                 input_ids=inputs.get("input_ids"),
                 threshold=settings.confidence_threshold,
@@ -317,10 +325,10 @@ class TransformersVisionDetectionProvider:
             )[0]
         else:
             post_process = getattr(
-                self._processor,
+                processor,
                 "post_process_grounded_object_detection",
                 None,
-            ) or getattr(self._processor, "post_process_object_detection", None)
+            ) or getattr(processor, "post_process_object_detection", None)
             if post_process is None:
                 raise ValidationError("OWLv2 processor has no supported detection postprocessor")
             try:
@@ -348,6 +356,7 @@ class TransformersVisionDetectionProvider:
             if len(values) != 4:
                 continue
             label_value = result_labels[index] if index < len(result_labels) else "object"
+            class_index: int | None
             if hasattr(label_value, "item"):
                 class_index = int(label_value.item())
                 label = labels[class_index] if 0 <= class_index < len(labels) else str(class_index)
@@ -371,25 +380,29 @@ class TransformersVisionDetectionProvider:
     ) -> list[DetectionPrediction]:
         import torch
 
+        processor = self._processor
+        model = self._model
+        if processor is None or model is None:
+            raise ValidationError("The Transformers model is not loaded")
         task_prompt = f"<OPEN_VOCABULARY_DETECTION>{prompt}"
-        inputs = self._processor(
+        inputs = processor(
             text=task_prompt,
             images=image,
             return_tensors="pt",
         )
         inputs = {key: value.to(self._device) for key, value in inputs.items()}
         with torch.inference_mode():
-            generated = self._model.generate(
+            generated = model.generate(
                 **inputs,
                 max_new_tokens=1024,
                 do_sample=False,
                 num_beams=3,
             )
-        generated_text = self._processor.batch_decode(
+        generated_text = processor.batch_decode(
             generated,
             skip_special_tokens=False,
         )[0]
-        parsed = self._processor.post_process_generation(
+        parsed = processor.post_process_generation(
             generated_text,
             task="<OPEN_VOCABULARY_DETECTION>",
             image_size=image.size,

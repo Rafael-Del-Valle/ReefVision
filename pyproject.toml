@@ -107,7 +107,16 @@ module = "alembic.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["cv2", "numpy", "psutil", "segment_anything", "torch", "ultralytics"]
+module = [
+  "cv2",
+  "networkx",
+  "networkx.*",
+  "numpy",
+  "psutil",
+  "segment_anything",
+  "torch",
+  "ultralytics",
+]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

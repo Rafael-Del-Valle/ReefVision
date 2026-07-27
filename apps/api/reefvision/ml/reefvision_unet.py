@@ -60,7 +60,7 @@ def build_unet(
         raise ValidationError(f"Unknown ReefVision U-Net preset: {preset}")
     spec = PRESETS[normalized]
 
-    class ConvBlock(nn.Module):
+    class ConvBlock(nn.Module):  # type: ignore[name-defined,misc]
         def __init__(self, in_channels: int, out_channels: int, dropout: float) -> None:
             super().__init__()
             layers: list[Any] = [
@@ -78,7 +78,7 @@ def build_unet(
         def forward(self, value: Any) -> Any:
             return self.block(value)
 
-    class ReefVisionUNet(nn.Module):
+    class ReefVisionUNet(nn.Module):  # type: ignore[name-defined,misc]
         def __init__(self) -> None:
             super().__init__()
             channels = spec.channels

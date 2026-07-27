@@ -486,18 +486,23 @@ class ClassificationAssignmentService:
                     annotation.x_max,
                     annotation.y_max,
                 ]
-            elif mask is not None and None not in {
-                mask.x_min,
-                mask.y_min,
-                mask.x_max,
-                mask.y_max,
-            }:
-                bounding_box = [
-                    float(mask.x_min),
-                    float(mask.y_min),
-                    float(mask.x_max),
-                    float(mask.y_max),
-                ]
+            elif mask is not None:
+                x_min = mask.x_min
+                y_min = mask.y_min
+                x_max = mask.x_max
+                y_max = mask.y_max
+                if (
+                    x_min is not None
+                    and y_min is not None
+                    and x_max is not None
+                    and y_max is not None
+                ):
+                    bounding_box = [
+                        float(x_min),
+                        float(y_min),
+                        float(x_max),
+                        float(y_max),
+                    ]
             rows.append(
                 ClassificationAssignmentExportRow(
                     assignment_id=assignment.id,

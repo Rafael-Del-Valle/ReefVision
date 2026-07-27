@@ -143,5 +143,7 @@ def apply_native_unet_registration_patch() -> None:
             destination.unlink(missing_ok=True)
             raise
 
-    SemanticModelService.register_model_from_run = register_model_from_run
+    SemanticModelService.register_model_from_run = (  # type: ignore[method-assign]
+        register_model_from_run
+    )
     _APPLIED = True

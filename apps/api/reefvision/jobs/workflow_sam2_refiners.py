@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from numpy.typing import NDArray
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
@@ -17,10 +18,10 @@ from reefvision.services.independent_segmentation_auto_labeling import VLMBoxDet
 from reefvision.services.mask_consensus import IndependentMaskCandidate
 from reefvision.storage.models import resolve_verified_model_path
 
-_ORIGINAL_PIPELINE = workflow_consensus.run_independent_segmentation_pipeline
+_ORIGINAL_PIPELINE = workflow_consensus.run_independent_segmentation_pipeline  # type: ignore[attr-defined]
 
 
-def _mask_bounds(mask: np.ndarray) -> tuple[float, float, float, float]:
+def _mask_bounds(mask: NDArray[np.bool_]) -> tuple[float, float, float, float]:
     rows, columns = np.where(mask)
     if rows.size == 0 or columns.size == 0:
         raise ValidationError("SAM 2 sidecar produced an empty refinement mask")
@@ -105,7 +106,7 @@ def run_pipeline_with_registered_sam2(
     settings: Settings,
     factory: sessionmaker[Session],
     **kwargs: Any,
-):
+) -> Any:
     """Inject a sidecar refiner only when the selected registration requires it."""
 
     sam2_model_id = str(kwargs.get("sam2_model_id", ""))
@@ -132,4 +133,6 @@ def run_pipeline_with_registered_sam2(
         refiner.close()
 
 
-workflow_consensus.run_independent_segmentation_pipeline = run_pipeline_with_registered_sam2
+workflow_consensus.run_independent_segmentation_pipeline = (  # type: ignore[attr-defined]
+    run_pipeline_with_registered_sam2
+)

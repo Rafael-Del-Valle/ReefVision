@@ -289,8 +289,8 @@ def _patch_semantic_provider() -> None:
         return original(provider_id)
 
     semantic_segmentation.semantic_provider_for_name = semantic_provider
-    inference.semantic_provider_for_name = semantic_provider
-    semantic_training.semantic_provider_for_name = semantic_provider
+    inference.semantic_provider_for_name = semantic_provider  # type: ignore[attr-defined]
+    semantic_training.semantic_provider_for_name = semantic_provider  # type: ignore[attr-defined]
 
 
 def _patch_model_catalog_state() -> None:
@@ -395,7 +395,9 @@ def _patch_model_catalog_state() -> None:
                 )
         return original(self, entry, job=job, manifest=manifest)
 
-    model_catalog.ModelCatalogService._compose_static_state = compose_with_advanced
+    model_catalog.ModelCatalogService._compose_static_state = (  # type: ignore[method-assign]
+        compose_with_advanced
+    )
 
 
 def apply_advanced_provider_runtime_patches() -> None:

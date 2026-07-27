@@ -184,8 +184,11 @@ class Sam3SidecarSegmentationProvider:
         for raw_instance in instances:
             if not isinstance(raw_instance, dict):
                 continue
+            raw_score = raw_instance.get("score")
+            if isinstance(raw_score, bool) or not isinstance(raw_score, (int, float, str)):
+                continue
             try:
-                score = float(raw_instance.get("score"))
+                score = float(raw_score)
             except (TypeError, ValueError):
                 continue
             if not 0 <= score <= 1 or score < threshold:
