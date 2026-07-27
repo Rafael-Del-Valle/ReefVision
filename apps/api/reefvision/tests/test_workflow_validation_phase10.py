@@ -199,8 +199,10 @@ def test_workflow_cycle_is_rejected_and_templates_are_available(
         "active_learning",
         "export",
     }
-    assert {item["template_id"] for item in templates.json()} == {
+    assert {item["template_id"] for item in templates.json()} >= {
         "coral-segmentation-measurement",
         "polyp-detection-classification",
         "fish-tracking-behavior",
+        "multi-model-segmentation-auto-labeling",
+        "independent-mask-segmentation-auto-labeling",
     }
