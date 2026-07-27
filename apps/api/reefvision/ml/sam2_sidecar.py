@@ -18,8 +18,7 @@ import numpy as np
 from PIL import Image, UnidentifiedImageError
 
 from reefvision.domain.errors import ValidationError
-from reefvision.ml.providers import PixelBox
-from reefvision.ml.sam_adapters import AssistMaskPrediction
+from reefvision.ml.providers import AssistPrediction, PixelBox, mask_to_box
 
 _PROVIDER_NAME = "sam2_sidecar"
 _DESCRIPTOR_SCHEMA = "reefvision-sam2-sidecar-v1"
@@ -173,7 +172,7 @@ def _mask_prediction(
     *,
     width: int,
     height: int,
-) -> AssistMaskPrediction:
+) -> AssistPrediction:
     encoded = payload.get("mask_png_base64")
     if not isinstance(encoded, str) or not encoded:
         raise ValidationError("SAM 2 sidecar response is missing a mask")
@@ -199,7 +198,7 @@ def _mask_prediction(
         raise ValidationError("SAM 2 sidecar returned an invalid score") from exc
     if not 0 <= score <= 1:
         raise ValidationError("SAM 2 sidecar score is outside 0 to 1")
-    return AssistMaskPrediction(mask=mask, score=score)
+    return AssistPrediction(mask=mask, box=mask_to_box(mask), score=score)
 
 
 class SAM2SidecarAssistProvider:
@@ -253,7 +252,7 @@ class SAM2SidecarAssistProvider:
         self,
         prepared: PreparedSam2SidecarImage,
         box: PixelBox,
-    ) -> AssistMaskPrediction:
+    ) -> AssistPrediction:
         if self._endpoint is None:
             raise ValidationError("SAM 2 sidecar provider is not loaded")
         if not (
