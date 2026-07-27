@@ -142,7 +142,10 @@ def test_corrupt_bundled_source_is_not_installed(
     )
 
     assert installed == {}
-    assert any("checksum mismatch" in warning for warning in warnings)
+    assert any(
+        "failed verification" in warning and "mismatch" in warning
+        for warning in warnings
+    )
 
 
 def test_verified_pointer_resolves_to_managed_snapshot(
@@ -256,7 +259,9 @@ def test_catalog_inference_creates_project_pointer_registration_and_job(
                 device="cpu",
             ),
         )
-        model = session.scalar(select(ModelRegistration).where(ModelRegistration.project_id == project_id))
+        model = session.scalar(
+            select(ModelRegistration).where(ModelRegistration.project_id == project_id)
+        )
         job = session.get(Job, response.id)
 
         assert model is not None
