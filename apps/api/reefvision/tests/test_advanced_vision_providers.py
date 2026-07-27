@@ -239,7 +239,7 @@ def test_native_unet_batch_iterable_can_be_reused_across_epochs(
     assert first_epoch[0][1].shape == second_epoch[0][1].shape == (1, 16, 16)
 
 
-def test_training_catalog_exposes_five_native_unets_and_one_nnunet(client) -> None:
+def test_training_catalog_exposes_native_unets_and_nnunet_configurations(client) -> None:
     project_id = "33333333-3333-3333-3333-333333333333"
     with client.app.state.session_factory() as session:
         session.add(
@@ -271,9 +271,11 @@ def test_training_catalog_exposes_five_native_unets_and_one_nnunet(client) -> No
         "xlarge",
     ]
     assert all(item.trainable for item in native)
-    assert len(nnunet) == 1
-    assert nnunet[0].catalog_id == "nnunet/v2/semantic/2d"
-    assert nnunet[0].trainable is True
+    assert {item.catalog_id for item in nnunet} == {
+        "nnunet/automatic/default",
+        "nnunet/v2/semantic/2d",
+    }
+    assert all(item.trainable for item in nnunet)
 
 
 def test_nnunet_export_writes_expected_raw_dataset(tmp_path: Path) -> None:
