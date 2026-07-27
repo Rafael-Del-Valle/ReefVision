@@ -115,7 +115,7 @@ def test_sam2_sidecar_health_rejects_non_sidecar_response(
         "/api/v1/sam2-sidecar/health",
         json={"endpoint": "http://127.0.0.1:8766"},
     )
-    assert response.status_code == 422
+    assert response.status_code == 400
     assert "not a ReefVision SAM 2 sidecar" in response.text
 
 
