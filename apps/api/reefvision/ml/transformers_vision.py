@@ -183,10 +183,7 @@ def _finite_prediction(
 
 
 def _result_values(result: Any, key: str) -> list[Any]:
-    if isinstance(result, dict):
-        value = result.get(key, [])
-    else:
-        value = getattr(result, key, [])
+    value = result.get(key, []) if isinstance(result, dict) else getattr(result, key, [])
     if hasattr(value, "detach"):
         value = value.detach().cpu().tolist()
     elif hasattr(value, "tolist"):

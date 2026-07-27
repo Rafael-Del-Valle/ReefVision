@@ -19,7 +19,8 @@ def wait_for_port(context_file: Path, process: subprocess.Popen[str], timeout: f
         if process.poll() is not None:
             stdout, stderr = process.communicate(timeout=5)
             raise RuntimeError(
-                f"Sidecar exited before publishing a port ({process.returncode})\n{stdout}\n{stderr}"
+                f"Sidecar exited before publishing a port ({process.returncode})\n"
+                f"{stdout}\n{stderr}"
             )
         if context_file.is_file():
             value = context_file.read_text(encoding="utf-8").strip()

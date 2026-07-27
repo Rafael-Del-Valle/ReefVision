@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import json
+from contextlib import suppress
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from io import BytesIO
@@ -616,7 +617,7 @@ def _promote(
         except Exception:
             session.rollback()
             if stored_path is not None:
-                try:
+                with suppress(Exception):
                     remove_mask_annotation_png(
                         settings,
                         project_storage_root=project.storage_root,
@@ -624,8 +625,6 @@ def _promote(
                         mask_annotation_id=mask_annotation_id,
                         relative_path=stored_path,
                     )
-                except Exception:
-                    pass
             raise
 
 

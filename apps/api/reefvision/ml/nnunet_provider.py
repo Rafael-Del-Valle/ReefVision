@@ -135,7 +135,8 @@ def _export_case_mask(source: Path, destination: Path, labels: dict[str, int]) -
     extrema = mask.getextrema()
     if extrema is not None and int(extrema[1]) > maximum_label:
         raise ValidationError(
-            f"Mask {source.name} contains label {extrema[1]}, above declared maximum {maximum_label}"
+            f"Mask {source.name} contains label {extrema[1]}, "
+            f"above declared maximum {maximum_label}"
         )
     destination.parent.mkdir(parents=True, exist_ok=True)
     mask.save(destination, format="PNG")

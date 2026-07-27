@@ -49,7 +49,8 @@ class ClassificationDatasetService:
             raise NotFoundError("Classification label set not found in this project")
         if label_set.target_kind not in _SUPPORTED_TARGETS:
             raise ValidationError(
-                "Dedicated classification datasets currently support image, mask, and fragment targets"
+                "Dedicated classification datasets currently support image, mask, "
+                "and fragment targets"
             )
         return label_set
 
@@ -245,7 +246,8 @@ class ClassificationDatasetService:
         for split in _SPLITS:
             if ratios[split] > 0 and split_counts[split] == 0:
                 warnings.append(
-                    f"The {split} split is empty because the available group-safe targets are limited."
+                    f"The {split} split is empty because the available group-safe "
+                    "targets are limited."
                 )
 
         class_map = [

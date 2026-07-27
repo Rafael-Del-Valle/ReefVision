@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
+from typing import ClassVar, cast
 
 import pytest
 from fastapi import FastAPI
@@ -35,7 +35,7 @@ class _ProbabilityData:
 
 
 class _FakeModel:
-    names = {0: "closed", 1: "open"}
+    names: ClassVar[dict[int, str]] = {0: "closed", 1: "open"}
 
     def __init__(self, values: list[float], *, top_index: int, top_confidence: float) -> None:
         self.values = values

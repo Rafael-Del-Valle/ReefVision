@@ -366,9 +366,12 @@ class WorkflowArtifactCleanupService:
             if not quarantine_path.is_file():
                 blockers.append("The quarantined file is missing.")
             expected_sha = _valid_sha256(cleanup.get("file_sha256"))
-            if quarantine_path.is_file() and expected_sha is not None:
-                if _file_sha256(quarantine_path) != expected_sha:
-                    blockers.append("The quarantined file checksum has changed.")
+            if (
+                quarantine_path.is_file()
+                and expected_sha is not None
+                and _file_sha256(quarantine_path) != expected_sha
+            ):
+                blockers.append("The quarantined file checksum has changed.")
             size_bytes = max(0, int(cleanup.get("size_bytes") or 0))
             items.append(
                 WorkflowArtifactQuarantineItem(

@@ -182,9 +182,15 @@ class NativeUNetSemanticProvider(SemanticSegmentationProvider):
         batch_size = max(1, int(request.training_config.get("batch_size", 2)))
         learning_rate = float(request.training_config.get("learning_rate", 1e-3))
         num_classes = len(request.dataset.classes) + 1
-        labels = ("background",) + tuple(
-            item.class_name
-            for item in sorted(request.dataset.classes, key=lambda item: item.pixel_value)
+        labels = (
+            "background",
+            *(
+                item.class_name
+                for item in sorted(
+                    request.dataset.classes,
+                    key=lambda item: item.pixel_value,
+                )
+            ),
         )
         train_pairs = _image_mask_pairs(request.dataset, "train", image_size=image_size)
         validation_pairs = _image_mask_pairs(
@@ -306,12 +312,11 @@ class NativeUNetSemanticProvider(SemanticSegmentationProvider):
             indexed = provider.predict_mask(image_path)
         finally:
             provider.unload_model()
-        temporary = tempfile.NamedTemporaryFile(
+        with tempfile.NamedTemporaryFile(
             prefix="reefvision-unet-prediction-",
             suffix=".png",
             delete=False,
-        )
-        temporary.close()
-        output = Path(temporary.name)
+        ) as temporary:
+            output = Path(temporary.name)
         Image.fromarray(indexed.astype("uint8"), mode="L").save(output, format="PNG")
         return output

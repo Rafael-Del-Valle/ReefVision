@@ -32,7 +32,8 @@ def resolve_training_device(requested: str) -> str | int:
             token = token.split(":", 1)[1]
         if not token.isdigit():
             raise ValidationError(
-                "Training devices must be auto, cpu, cuda, cuda:N, N, or a comma-separated CUDA list"
+                "Training devices must be auto, cpu, cuda, cuda:N, N, "
+                "or a comma-separated CUDA list"
             )
         index = int(token)
         if index in indices:

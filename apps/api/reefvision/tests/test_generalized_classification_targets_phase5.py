@@ -40,7 +40,11 @@ class _InspectingMaskProvider:
             inside = rgb.getpixel((5, 5))
             outside = rgb.getpixel((35, 35))
             assert (
-                sum(abs(actual - expected) for actual, expected in zip(inside, (20, 90, 120))) < 20
+                sum(
+                    abs(actual - expected)
+                    for actual, expected in zip(inside, (20, 90, 120), strict=True)
+                )
+                < 20
             )
             assert max(outside) < 15
         return ClassificationResult(

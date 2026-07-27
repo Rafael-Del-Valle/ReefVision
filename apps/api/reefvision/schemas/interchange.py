@@ -104,7 +104,8 @@ class InterchangeExportRequest(BaseModel):
             "roboflow_coco",
         }:
             raise ValueError(
-                "Compressed COCO RLE output is only valid for COCO instance or Roboflow COCO exports"
+                "Compressed COCO RLE output is only valid for COCO instance "
+                "or Roboflow COCO exports"
             )
         return self
 
