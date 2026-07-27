@@ -31,13 +31,24 @@ _INTEGRATION_HINTS = (
 _PHASE_PATTERN = re.compile(r"phase(?:_|-)?(10|[1-9])", re.IGNORECASE)
 
 
+def _short_pytest_root() -> Path:
+    """Choose a short real system-temp root even when TEMP is redirected."""
+
+    configured = os.environ.get("REEFVISION_PYTEST_TEMP_ROOT")
+    if configured and not configured.isspace():
+        return Path(configured).expanduser()
+    if os.name == "nt":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data and not local_app_data.isspace():
+            return Path(local_app_data) / "Temp"
+    return Path(tempfile.gettempdir())
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Keep generated test artifacts below legacy Windows path limits."""
 
     if getattr(config.option, "basetemp", None) is None:
-        config.option.basetemp = str(
-            Path(tempfile.gettempdir()) / f"rv-pytest-{os.getpid()}"
-        )
+        config.option.basetemp = str(_short_pytest_root() / f"rv-pytest-{os.getpid()}")
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
@@ -70,7 +81,7 @@ def test_settings(tmp_path: Path) -> Settings:
     return Settings(
         env="test",
         data_dir=tmp_path / "d",
-        database_url=f"sqlite:///{(tmp_path / 't.db').as_posix()}",
+        database_url=f"sqlite:///{(tmp_path / 'test.db').as_posix()}",
         web_origin="http://testserver",
         background_worker_enabled=False,
     )
