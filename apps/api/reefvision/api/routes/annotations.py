@@ -49,29 +49,42 @@ def _stable_validation_error(exc: ValidationError) -> ValidationError:
     return ValidationError(aliases.get(detail, detail))
 
 
-def _validate_box_annotation_ownership(
+def _validate_annotation_ownership(
     session: Session,
     image_id: str,
     payload: AnnotationBatchSaveRequest,
 ) -> None:
-    """Reject a box UUID that is already owned by another image.
+    """Reject annotation UUIDs that are already owned by another image.
 
-    Mask saves already enforce this ownership rule in the annotation service. This
-    preflight keeps bounding boxes consistent and prevents a database primary-key
-    failure from surfacing as an internal server error.
+    This preflight applies the same ownership rule to box edits, polygon edits,
+    and explicit mask deletions. It prevents database-key failures and avoids
+    silently ignoring a deletion request that targets another image.
     """
 
-    annotation_ids = {draft.id for draft in payload.annotations}
-    if not annotation_ids:
-        return
-    statement = select(Annotation.id, Annotation.image_id).where(
-        Annotation.id.in_(annotation_ids)
-    )
-    for _annotation_id, owner_image_id in session.execute(statement):
-        if owner_image_id != image_id:
-            raise ValidationError(
-                "Annotations may only be saved back to their source image"
-            )
+    box_ids = {draft.id for draft in payload.annotations}
+    if box_ids:
+        statement = select(Annotation.id, Annotation.image_id).where(
+            Annotation.id.in_(box_ids)
+        )
+        for _annotation_id, owner_image_id in session.execute(statement):
+            if owner_image_id != image_id:
+                raise ValidationError(
+                    "Annotations may only be saved back to their source image"
+                )
+
+    mask_ids = {
+        *(draft.id for draft in payload.mask_annotations),
+        *payload.deleted_mask_annotation_ids,
+    }
+    if mask_ids:
+        statement = select(MaskAnnotation.id, MaskAnnotation.image_id).where(
+            MaskAnnotation.id.in_(mask_ids)
+        )
+        for _mask_id, owner_image_id in session.execute(statement):
+            if owner_image_id != image_id:
+                raise ValidationError(
+                    "Mask annotations may only be saved to their source image"
+                )
 
 
 def _ordered_counts(
@@ -155,7 +168,7 @@ def save_annotations(
     session: DbSession,
 ) -> AnnotationBatchSaveResponse:
     try:
-        _validate_box_annotation_ownership(session, image_id, payload)
+        _validate_annotation_ownership(session, image_id, payload)
         response = service(request, session).save_annotations(image_id, payload)
     except ValidationError as exc:
         raise _stable_validation_error(exc) from exc
