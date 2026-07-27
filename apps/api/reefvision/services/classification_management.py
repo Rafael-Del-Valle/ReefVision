@@ -16,6 +16,9 @@ from reefvision.config import Settings
 from reefvision.db.models import ClassificationPrediction, ModelRegistration, Project
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.schemas.classification import ClassificationAssignmentAcceptRequest
+from reefvision.schemas.classification_assignment_exports import (
+    ScientificClassificationExportResponse,
+)
 from reefvision.schemas.classification_management import (
     BulkClassificationReviewItem,
     BulkClassificationReviewRequest,
@@ -104,7 +107,8 @@ class ClassificationManagementService:
                     continue
                 if prediction.review_status == "accepted":
                     raise ConflictError(
-                        "Accepted predictions cannot be bulk-rejected; supersede their assignment instead"
+                        "Accepted predictions cannot be bulk-rejected; "
+                        "supersede their assignment instead"
                     )
                 prediction.review_status = "rejected"
                 prediction.reviewed_at = datetime.now(UTC)
@@ -150,7 +154,10 @@ class ClassificationManagementService:
             raise ValidationError("minimum_models must be between 1 and 50")
         query = (
             select(ClassificationPrediction, ModelRegistration)
-            .join(ModelRegistration, ModelRegistration.id == ClassificationPrediction.model_id)
+            .join(
+                ModelRegistration,
+                ModelRegistration.id == ClassificationPrediction.model_id,
+            )
             .where(ClassificationPrediction.project_id == project_id)
         )
         if label_set:
@@ -192,7 +199,10 @@ class ClassificationManagementService:
             predictions: list[ClassificationModelPredictionComparison] = []
             compared_values: list[str] = []
             for prediction, model in per_model.values():
-                value = prediction.label_class_id or prediction.predicted_label.strip().casefold()
+                value = (
+                    prediction.label_class_id
+                    or prediction.predicted_label.strip().casefold()
+                )
                 compared_values.append(value)
                 predictions.append(
                     ClassificationModelPredictionComparison(
@@ -205,7 +215,9 @@ class ClassificationManagementService:
                         review_status=prediction.review_status,
                         probabilities={
                             str(key): float(value)
-                            for key, value in dict(prediction.probabilities_json or {}).items()
+                            for key, value in dict(
+                                prediction.probabilities_json or {}
+                            ).items()
                         },
                     )
                 )
@@ -219,7 +231,10 @@ class ClassificationManagementService:
                     model_count=len(predictions),
                     agreement=len(unique_values) == 1,
                     compared_values=unique_values,
-                    predictions=sorted(predictions, key=lambda item: (item.model_name, item.model_id)),
+                    predictions=sorted(
+                        predictions,
+                        key=lambda item: (item.model_name, item.model_id),
+                    ),
                 )
             )
         targets.sort(key=lambda item: (item.label_set, item.image_id, item.target_key))
@@ -238,12 +253,16 @@ class ScientificClassificationFileService:
     def __init__(self, session: Session, settings: Settings) -> None:
         self.exporter = ScientificClassificationExportService(session, settings)
 
-    def _document(self, project_id: str, assignment_status: str):
+    def _document(
+        self,
+        project_id: str,
+        assignment_status: str,
+    ) -> ScientificClassificationExportResponse:
         return self.exporter.export(project_id, assignment_status=assignment_status)
 
     def csv_bytes(self, project_id: str, *, assignment_status: str = "accepted") -> bytes:
         document = self._document(project_id, assignment_status)
-        fieldnames = list(document.rows[0].model_fields) if document.rows else [
+        fieldnames = list(type(document.rows[0]).model_fields) if document.rows else [
             "assignment_id",
             "target_kind",
             "target_key",
@@ -286,7 +305,10 @@ class ScientificClassificationFileService:
             )
 
         def json_strings(key: str) -> np.ndarray[Any, Any]:
-            return np.asarray([_json_text(row.get(key)) for row in rows], dtype=np.str_)
+            return np.asarray(
+                [_json_text(row.get(key)) for row in rows],
+                dtype=np.str_,
+            )
 
         bounding_boxes = np.full((len(rows), 4), np.nan, dtype=np.float64)
         for index, row in enumerate(rows):
@@ -323,7 +345,9 @@ class ScientificClassificationFileService:
             "source_prediction_id": strings("source_prediction_id"),
             "confidence": np.asarray(
                 [
-                    np.nan if row.get("confidence") is None else float(row["confidence"])
+                    np.nan
+                    if row.get("confidence") is None
+                    else float(row["confidence"])
                     for row in rows
                 ],
                 dtype=np.float64,
