@@ -131,7 +131,7 @@ describe("Sam3WorkflowSetupPanel", () => {
       }),
     );
     expect(await screen.findByText("SAM 2 sidecar is ready.")).toBeInTheDocument();
-    expect(screen.getByText(/sam2\.1_hiera_large\.pt/)).toBeInTheDocument();
+    expect(screen.getAllByText(/sam2\.1_hiera_large\.pt/)).not.toHaveLength(0);
 
     await user.click(
       screen.getByRole("button", { name: "Register SAM 2 sidecar" }),
