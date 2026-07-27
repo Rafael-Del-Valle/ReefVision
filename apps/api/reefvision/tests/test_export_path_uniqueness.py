@@ -4,7 +4,7 @@ from reefvision.storage.datasets import (
 )
 
 
-def test_export_paths_use_the_complete_export_identifier() -> None:
+def test_export_paths_use_distinct_compact_identifiers() -> None:
     first_id = "12345678-0000-4000-8000-000000000001"
     second_id = "12345678-0000-4000-8000-000000000002"
 
@@ -20,11 +20,15 @@ def test_export_paths_use_the_complete_export_identifier() -> None:
     )
 
     assert first != second
-    assert first_id in first[0]
-    assert second_id in second[0]
+    assert first_id not in first[0]
+    assert second_id not in second[0]
+    assert first[0].startswith("projects/project-1/exports/v0007-")
+    assert second[0].startswith("projects/project-1/exports/v0007-")
+    assert len(first[0].rsplit("-", 1)[-1]) == 16
+    assert len(second[0].rsplit("-", 1)[-1]) == 16
 
 
-def test_exported_image_names_use_the_complete_image_identifier() -> None:
+def test_exported_image_names_use_distinct_compact_identifiers() -> None:
     first_id = "abcdef12-0000-4000-8000-000000000001"
     second_id = "abcdef12-0000-4000-8000-000000000002"
 
@@ -32,5 +36,11 @@ def test_exported_image_names_use_the_complete_image_identifier() -> None:
     second = safe_export_filename(second_id, "coral image.png")
 
     assert first != second
-    assert first == f"{first_id}_coral_image.png"
-    assert second == f"{second_id}_coral_image.png"
+    assert first_id not in first
+    assert second_id not in second
+    assert first.startswith("i-")
+    assert second.startswith("i-")
+    assert first.endswith(".png")
+    assert second.endswith(".png")
+    assert len(first) == len("i-") + 16 + len(".png")
+    assert len(second) == len("i-") + 16 + len(".png")
