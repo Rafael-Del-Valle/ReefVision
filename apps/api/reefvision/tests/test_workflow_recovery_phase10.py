@@ -148,7 +148,8 @@ def test_successful_run_requires_an_explicit_partial_rerun_node(
         f"/api/v1/workflow-runs/{source_run_id}/retry",
         json={},
     )
-    assert missing_node.status_code == 422, missing_node.text
+    assert missing_node.status_code == 400, missing_node.text
+    assert "choose a node" in missing_node.text.lower()
 
     partial = client.post(
         f"/api/v1/workflow-runs/{source_run_id}/retry",
