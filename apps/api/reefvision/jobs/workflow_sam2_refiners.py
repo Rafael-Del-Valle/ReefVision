@@ -15,7 +15,7 @@ from reefvision.jobs import workflow_consensus
 from reefvision.ml.sam2_sidecar import SAM2SidecarAssistProvider
 from reefvision.services.independent_segmentation_auto_labeling import VLMBoxDetection
 from reefvision.services.mask_consensus import IndependentMaskCandidate
-from reefvision.storage.models import resolve_registered_model_path
+from reefvision.storage.models import resolve_verified_model_path
 
 _ORIGINAL_PIPELINE = workflow_consensus.run_independent_segmentation_pipeline
 
@@ -47,7 +47,11 @@ class SidecarSAM2BoxRefiner:
         self.model_checksum = model.sha256
         self.provider = SAM2SidecarAssistProvider()
         self.provider.load_model(
-            resolve_registered_model_path(settings, model),
+            resolve_verified_model_path(
+                settings,
+                model.managed_path,
+                expected_sha256=model.sha256,
+            ),
             device,
         )
 
