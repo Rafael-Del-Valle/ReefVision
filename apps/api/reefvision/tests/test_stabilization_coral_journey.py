@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw
 
 from reefvision.config import Settings
+from reefvision.db.models import Job
 from reefvision.jobs.export import process_export_job
 from reefvision.jobs.worker import process_thumbnail_job
 from reefvision.main import create_app
@@ -231,11 +232,21 @@ def test_stabilization_coral_project_imports_snapshots_exports_and_restarts(
     )
     assert export_response.status_code == 200, export_response.text
     export_payload = export_response.json()
-    assert process_export_job(
+    export_job_id = str(export_payload["job"]["id"])
+    export_succeeded = process_export_job(
         app.state.settings,
         app.state.session_factory,
-        str(export_payload["job"]["id"]),
+        export_job_id,
     )
+    if not export_succeeded:
+        with app.state.session_factory() as session:
+            failed_job = session.get(Job, export_job_id)
+            error_message = (
+                failed_job.error_message
+                if failed_job is not None and failed_job.error_message
+                else "export job failed without a stored error message"
+            )
+        raise AssertionError(f"COCO export job failed: {error_message}")
 
     archive_path = (
         app.state.settings.resolved_data_dir
