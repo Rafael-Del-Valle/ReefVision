@@ -6,7 +6,12 @@ from io import BytesIO
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from reefvision.jobs import workflow_sam2_refiners
 from reefvision.ml.sam2_sidecar import _mask_prediction
+
+
+def test_sam2_worker_extension_imports_supported_storage_contract() -> None:
+    assert workflow_sam2_refiners.SidecarSAM2BoxRefiner is not None
 
 
 def test_sam2_sidecar_prediction_uses_shared_assist_contract(
