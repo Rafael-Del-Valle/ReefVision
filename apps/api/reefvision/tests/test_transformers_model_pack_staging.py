@@ -27,20 +27,25 @@ def test_snapshot_matching_reuses_only_complete_exact_files(tmp_path: Path) -> N
     stager = _load_stager()
     snapshot = tmp_path / "snapshot"
     snapshot.mkdir()
-    (snapshot / "config.json").write_text("{}\n", encoding="utf-8")
-    (snapshot / "model.safetensors").write_bytes(b"weights")
+    config = snapshot / "config.json"
+    weights = snapshot / "model.safetensors"
+    config.write_text("{}\n", encoding="utf-8")
+    weights.write_bytes(b"weights")
     remote_files = [
-        {"relative_path": "config.json", "size_bytes": 3},
-        {"relative_path": "model.safetensors", "size_bytes": 7},
+        {"relative_path": "config.json", "size_bytes": config.stat().st_size},
+        {
+            "relative_path": "model.safetensors",
+            "size_bytes": weights.stat().st_size,
+        },
     ]
 
     matches = cast(Any, stager._snapshot_matches_remote)
     assert matches(snapshot, remote_files) is True
 
-    (snapshot / "model.safetensors").write_bytes(b"truncated")
+    weights.write_bytes(b"truncated")
     assert matches(snapshot, remote_files) is False
 
-    (snapshot / "model.safetensors").unlink()
+    weights.unlink()
     assert matches(snapshot, remote_files) is False
 
 
@@ -72,7 +77,7 @@ def test_disk_preflight_reports_required_additional_space(
         lambda _path: SimpleNamespace(total=100, used=75, free=25),
     )
 
-    with pytest.raises(RuntimeError, match="Free at least 15.00 B more"):
+    with pytest.raises(RuntimeError, match=r"Free at least 15\.00 B more"):
         cast(Any, stager._assert_download_space)(
             output_root=tmp_path,
             temporary=temporary,
