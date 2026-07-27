@@ -95,7 +95,7 @@ catch {
             $FocusIndex = $FailureIndexes[-1]
             $StartIndex = [math]::Max(0, $FocusIndex - 35)
             $EndIndex = [math]::Min($LogLines.Count - 1, $FocusIndex + 15)
-            Write-Host "" 
+            Write-Host ""
             Write-Host "Windows Installer failure context:" -ForegroundColor Yellow
             $LogLines[$StartIndex..$EndIndex] |
                 ForEach-Object { Write-Host $_ }
