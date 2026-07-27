@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
@@ -14,33 +14,13 @@ from reefvision.schemas.sam2_sidecar import (
     Sam2SidecarHealthResponse,
     Sam2SidecarRegistrationRequest,
 )
-
-if TYPE_CHECKING:
-    from reefvision.services.sam2_sidecar_models import Sam2SidecarModelService
+from reefvision.services.sam2_sidecar_models import Sam2SidecarModelService
 
 router = APIRouter(tags=["sam2-sidecar"])
 DbSession = Annotated[Session, Depends(get_db_session)]
 
 
 def service(request: Request, session: Session) -> Sam2SidecarModelService:
-    """Load the experimental sidecar service without blocking API startup.
-
-    The sidecar provider currently depends on a stale prediction type. Keeping the
-    import inside this boundary allows the supported ReefVision workflows to start
-    while the sidecar remains explicitly unavailable rather than crashing the whole
-    application during router import.
-    """
-
-    try:
-        from reefvision.services.sam2_sidecar_models import Sam2SidecarModelService
-    except ImportError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "SAM 2 sidecar is temporarily unavailable because its provider "
-                "contract is incomplete."
-            ),
-        ) from exc
     return Sam2SidecarModelService(session, request.app.state.settings)
 
 
