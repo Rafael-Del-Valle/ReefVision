@@ -177,28 +177,18 @@ def test_stabilization_coral_project_imports_snapshots_exports_and_restarts(
         assert len(str(image_payload["sha256"])) == 64
         assert image_payload["thumbnail_path"]
         content_response = client.get(f"/api/v1/images/{image_id}/content")
-        thumbnail_response = client.get(
-            f"/api/v1/images/{image_id}/thumbnail"
-        )
+        thumbnail_response = client.get(f"/api/v1/images/{image_id}/thumbnail")
         assert content_response.status_code == 200
         assert thumbnail_response.status_code == 200
-        assert thumbnail_response.headers["content-type"].startswith(
-            "image/jpeg"
-        )
+        assert thumbnail_response.headers["content-type"].startswith("image/jpeg")
 
     for index, image_id in enumerate(image_ids):
-        mask_id = (
-            "00000000-0000-4000-8000-000000000200"
-            if index == 0
-            else None
-        )
+        mask_id = "00000000-0000-4000-8000-000000000200" if index == 0 else None
         _save_reviewed_coral_annotation(
             client,
             image_id=image_id,
             label_class_id=label_class_id,
-            annotation_id=(
-                f"00000000-0000-4000-8000-0000000001{index:02d}"
-            ),
+            annotation_id=(f"00000000-0000-4000-8000-0000000001{index:02d}"),
             mask_id=mask_id,
         )
         update_image(
@@ -214,9 +204,7 @@ def test_stabilization_coral_project_imports_snapshots_exports_and_restarts(
         name="Stabilization reviewed snapshot",
     )
     version_id = str(version["id"])
-    items_response = client.get(
-        f"/api/v1/dataset-versions/{version_id}/items"
-    )
+    items_response = client.get(f"/api/v1/dataset-versions/{version_id}/items")
     assert items_response.status_code == 200, items_response.text
     items = items_response.json()
     assert len(items) == 3
@@ -248,34 +236,24 @@ def test_stabilization_coral_project_imports_snapshots_exports_and_restarts(
             )
         raise AssertionError(f"COCO export job failed: {error_message}")
 
-    archive_path = (
-        app.state.settings.resolved_data_dir
-        / export_payload["export"]["archive_path"]
-    )
+    archive_path = app.state.settings.resolved_data_dir / export_payload["export"]["archive_path"]
     assert archive_path.is_file()
     with zipfile.ZipFile(archive_path) as archive:
         manifest = json.loads(archive.read("export-manifest.json"))
         annotation_files = sorted(
             name
             for name in archive.namelist()
-            if name.startswith("annotations/instances_")
-            and name.endswith(".json")
+            if name.startswith("annotations/instances_") and name.endswith(".json")
         )
-        coco_documents = [
-            json.loads(archive.read(name)) for name in annotation_files
-        ]
+        coco_documents = [json.loads(archive.read(name)) for name in annotation_files]
 
     assert manifest["format"] == "coco_instances"
     assert manifest["box_annotation_count"] == 3
     assert manifest["mask_annotation_count"] == 1
     assert sum(len(document["images"]) for document in coco_documents) == 3
-    assert (
-        sum(len(document["annotations"]) for document in coco_documents) == 4
-    )
+    assert sum(len(document["annotations"]) for document in coco_documents) == 4
     assert {
-        image["reefvision_image_id"]
-        for document in coco_documents
-        for image in document["images"]
+        image["reefvision_image_id"] for document in coco_documents for image in document["images"]
     } == set(image_ids)
 
     restarted_app = create_app(test_settings)
@@ -283,18 +261,12 @@ def test_stabilization_coral_project_imports_snapshots_exports_and_restarts(
         project_response = restarted.get(f"/api/v1/projects/{project_id}")
         assert project_response.status_code == 200, project_response.text
         assert project_response.json()["name"] == "Stabilization coral journey"
-        reloaded_items = restarted.get(
-            f"/api/v1/dataset-versions/{version_id}/items"
-        )
+        reloaded_items = restarted.get(f"/api/v1/dataset-versions/{version_id}/items")
         assert reloaded_items.status_code == 200, reloaded_items.text
         assert len(reloaded_items.json()) == 3
-        annotation_response = restarted.get(
-            f"/api/v1/images/{image_ids[0]}/annotations"
-        )
+        annotation_response = restarted.get(f"/api/v1/images/{image_ids[0]}/annotations")
         assert annotation_response.status_code == 200, annotation_response.text
         assert len(annotation_response.json()["annotations"]) == 1
         assert len(annotation_response.json()["mask_annotations"]) == 1
-        thumbnail_response = restarted.get(
-            f"/api/v1/images/{image_ids[0]}/thumbnail"
-        )
+        thumbnail_response = restarted.get(f"/api/v1/images/{image_ids[0]}/thumbnail")
         assert thumbnail_response.status_code == 200

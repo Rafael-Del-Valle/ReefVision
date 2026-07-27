@@ -50,9 +50,7 @@ def test_classification_training_explicit_multi_gpu_device_is_reserved_and_bound
     )
     with client.app.state.session_factory() as session:
         session.execute(
-            update(Job)
-            .where(Job.status == "queued", Job.id != job_id)
-            .values(status="succeeded")
+            update(Job).where(Job.status == "queued", Job.id != job_id).values(status="succeeded")
         )
         session.commit()
         claimed = JobRepository(session).next_queued("classification-multi-gpu")

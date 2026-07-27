@@ -46,9 +46,8 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
   const [cleanupPreviewByRun, setCleanupPreviewByRun] = useState<
     Record<string, WorkflowArtifactCleanupPreview>
   >({});
-  const [selectedCleanupActionsByRun, setSelectedCleanupActionsByRun] = useState<
-    Record<string, string[]>
-  >({});
+  const [selectedCleanupActionsByRun, setSelectedCleanupActionsByRun] =
+    useState<Record<string, string[]>>({});
   const [quarantineByRun, setQuarantineByRun] = useState<
     Record<string, WorkflowArtifactQuarantine>
   >({});
@@ -82,7 +81,8 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
     onSuccess: (result) => {
       setMessage(
         `Recovery run ${result.run.id.slice(0, 8)} queued from ${String(
-          result.run.result_json.rerun_from_node_id ?? "the first incomplete node",
+          result.run.result_json.rerun_from_node_id ??
+            "the first incomplete node",
         )}.`,
       );
       void queryClient.invalidateQueries({
@@ -165,8 +165,13 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
     },
   });
   const restoreArtifacts = useMutation({
-    mutationFn: ({ runId, artifactIds }: { runId: string; artifactIds: string[] }) =>
-      restoreWorkflowArtifacts(runId, artifactIds),
+    mutationFn: ({
+      runId,
+      artifactIds,
+    }: {
+      runId: string;
+      artifactIds: string[];
+    }) => restoreWorkflowArtifacts(runId, artifactIds),
     onSuccess: (result) => {
       setQuarantineByRun((current) => {
         const next = { ...current };
@@ -293,9 +298,7 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
               <article key={run.id} className="dashboard-card">
                 <div className="section-heading">
                   <div>
-                    <p className="eyebrow">
-                      {run.status.replaceAll("_", " ")}
-                    </p>
+                    <p className="eyebrow">{run.status.replaceAll("_", " ")}</p>
                     <h4>Run {run.id.slice(0, 8)}</h4>
                     <span>
                       {new Date(run.created_at).toLocaleString()} · {run.stage}
@@ -377,8 +380,9 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
                     <p className="eyebrow">Artifact cleanup</p>
                     <h5>Quarantine terminal-run outputs</h5>
                     <span>
-                      Shared files and files outside the managed workflow directory
-                      are blocked. Previewing never selects or moves anything.
+                      Shared files and files outside the managed workflow
+                      directory are blocked. Previewing never selects or moves
+                      anything.
                     </span>
                   </div>
                 </div>
@@ -394,11 +398,15 @@ export function WorkflowRecoveryPanel({ projectId }: { projectId: string }) {
                 </button>
 
                 {cleanupPreview && (
-                  <div className="dashboard-list" data-testid={`cleanup-${run.id}`}>
+                  <div
+                    className="dashboard-list"
+                    data-testid={`cleanup-${run.id}`}
+                  >
                     <p>
                       {cleanupPreview.action_count} actions ·{" "}
                       {cleanupPreview.eligible_action_count} eligible ·{" "}
-                      {formatBytes(cleanupPreview.reclaimable_bytes)} reclaimable
+                      {formatBytes(cleanupPreview.reclaimable_bytes)}{" "}
+                      reclaimable
                     </p>
                     {cleanupPreview.actions.map((action) => (
                       <label

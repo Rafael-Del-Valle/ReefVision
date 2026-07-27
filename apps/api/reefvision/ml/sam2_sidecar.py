@@ -69,9 +69,7 @@ def _get_json(
             raw = response.read()
     except url_error.HTTPError as exc:
         body = exc.read(2048).decode("utf-8", errors="replace")
-        raise ValidationError(
-            f"SAM 2 sidecar returned HTTP {exc.code}: {body}"
-        ) from exc
+        raise ValidationError(f"SAM 2 sidecar returned HTTP {exc.code}: {body}") from exc
     except (url_error.URLError, TimeoutError, OSError) as exc:
         raise ValidationError(f"SAM 2 sidecar request failed: {exc}") from exc
     return _read_json_response(raw)
@@ -98,9 +96,7 @@ def _post_json(
             raw = response.read()
     except url_error.HTTPError as exc:
         body = exc.read(2048).decode("utf-8", errors="replace")
-        raise ValidationError(
-            f"SAM 2 sidecar returned HTTP {exc.code}: {body}"
-        ) from exc
+        raise ValidationError(f"SAM 2 sidecar returned HTTP {exc.code}: {body}") from exc
     except (url_error.URLError, TimeoutError, OSError) as exc:
         raise ValidationError(f"SAM 2 sidecar request failed: {exc}") from exc
     return _read_json_response(raw)
@@ -184,9 +180,7 @@ def _mask_prediction(
         with Image.open(BytesIO(raw)) as source:
             source.load()
             if source.size != (width, height):
-                raise ValidationError(
-                    "SAM 2 sidecar mask dimensions do not match the source image"
-                )
+                raise ValidationError("SAM 2 sidecar mask dimensions do not match the source image")
             mask = np.asarray(source.convert("L"), dtype=np.uint8) > 0
     except (OSError, UnidentifiedImageError) as exc:
         raise ValidationError("SAM 2 sidecar mask is not a readable PNG") from exc
@@ -222,14 +216,8 @@ class SAM2SidecarAssistProvider:
             raise ValidationError("SAM 2 sidecar descriptor is not valid JSON") from exc
         if not isinstance(descriptor, dict) or descriptor.get("schema") != _DESCRIPTOR_SCHEMA:
             raise ValidationError("SAM 2 sidecar descriptor schema is unsupported")
-        token_env = str(
-            descriptor.get("token_env", "REEFVISION_SAM2_SIDECAR_TOKEN")
-        ).strip()
-        if (
-            not token_env
-            or not token_env.replace("_", "").isalnum()
-            or not token_env[0].isalpha()
-        ):
+        token_env = str(descriptor.get("token_env", "REEFVISION_SAM2_SIDECAR_TOKEN")).strip()
+        if not token_env or not token_env.replace("_", "").isalnum() or not token_env[0].isalpha():
             raise ValidationError("SAM 2 sidecar token environment name is invalid")
         try:
             timeout_seconds = float(descriptor.get("timeout_seconds", 120.0))
@@ -270,9 +258,7 @@ class SAM2SidecarAssistProvider:
             },
             timeout_seconds=self._timeout_seconds,
         )
-        self.provider_version = str(
-            response.get("model_version", self.provider_version)
-        )
+        self.provider_version = str(response.get("model_version", self.provider_version))
         return _mask_prediction(
             response,
             width=prepared.width,

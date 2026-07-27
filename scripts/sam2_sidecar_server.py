@@ -22,8 +22,8 @@ from typing import Any
 
 import numpy as np
 from fastapi import Depends, FastAPI, Header, HTTPException
-from pydantic import BaseModel, Field
 from PIL import Image, UnidentifiedImageError
+from pydantic import BaseModel, Field
 
 
 class SegmentBoxRequest(BaseModel):
@@ -92,9 +92,7 @@ def build_app(
             from sam2.build_sam import build_sam2
             from sam2.sam2_image_predictor import SAM2ImagePredictor
         except Exception as exc:
-            raise RuntimeError(
-                "Meta SAM 2 is not installed in this sidecar environment"
-            ) from exc
+            raise RuntimeError("Meta SAM 2 is not installed in this sidecar environment") from exc
         if not config_path.is_file():
             raise RuntimeError(f"SAM 2 config is missing: {config_path}")
         if not checkpoint_path.is_file():

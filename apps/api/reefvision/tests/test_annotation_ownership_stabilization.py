@@ -68,12 +68,8 @@ def test_box_annotation_id_cannot_be_reused_across_images(
     assert reused.status_code == 400, reused.text
     assert "source image" in reused.json()["detail"]
 
-    first_session = client.get(
-        f"/api/v1/images/{first_image_id}/annotations"
-    ).json()
-    second_session = client.get(
-        f"/api/v1/images/{second_image_id}/annotations"
-    ).json()
+    first_session = client.get(f"/api/v1/images/{first_image_id}/annotations").json()
+    second_session = client.get(f"/api/v1/images/{second_image_id}/annotations").json()
     assert first_session["image"]["annotation_revision"] == 1
     assert first_session["annotations"][0]["id"] == annotation_id
     assert second_session["image"]["annotation_revision"] == 0
@@ -138,12 +134,8 @@ def test_mask_deletion_cannot_target_another_image(
     assert cross_image_delete.status_code == 400, cross_image_delete.text
     assert "source image" in cross_image_delete.json()["detail"]
 
-    first_session = client.get(
-        f"/api/v1/images/{first_image_id}/annotations"
-    ).json()
-    second_session = client.get(
-        f"/api/v1/images/{second_image_id}/annotations"
-    ).json()
+    first_session = client.get(f"/api/v1/images/{first_image_id}/annotations").json()
+    second_session = client.get(f"/api/v1/images/{second_image_id}/annotations").json()
     assert first_session["image"]["annotation_revision"] == 1
     assert first_session["mask_annotations"][0]["id"] == mask_id
     assert second_session["image"]["annotation_revision"] == 0
@@ -154,9 +146,7 @@ def test_annotation_session_compatibility_alias_is_deprecated(
     client: TestClient,
 ) -> None:
     schema = client.get("/openapi.json").json()
-    alias = schema["paths"][
-        "/api/v1/images/{image_id}/annotation-session"
-    ]["get"]
+    alias = schema["paths"]["/api/v1/images/{image_id}/annotation-session"]["get"]
     canonical = schema["paths"]["/api/v1/images/{image_id}/annotations"]["get"]
 
     assert alias["deprecated"] is True

@@ -23,9 +23,7 @@ def _bundle_roots() -> list[Path]:
         candidates.append(Path(configured).expanduser())
     bundle_root = vars(sys).get("_MEIPASS")
     if bundle_root:
-        candidates.append(
-            Path(str(bundle_root)).resolve() / "bundled-transformers-models"
-        )
+        candidates.append(Path(str(bundle_root)).resolve() / "bundled-transformers-models")
     executable = getattr(sys, "executable", None)
     if executable:
         root = Path(executable).resolve().parent
@@ -38,9 +36,7 @@ def _bundle_roots() -> list[Path]:
             ]
         )
     candidates.append(
-        Path(__file__).resolve().parents[4]
-        / ".desktop"
-        / "bundled-transformers-models"
+        Path(__file__).resolve().parents[4] / ".desktop" / "bundled-transformers-models"
     )
     unique: list[Path] = []
     seen: set[str] = set()
@@ -61,9 +57,8 @@ def _load_manifest() -> tuple[Path, dict[str, Any]] | None:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        if (
-            payload.get("manifest_version") in _SUPPORTED_MANIFEST_VERSIONS
-            and isinstance(payload.get("models"), dict)
+        if payload.get("manifest_version") in _SUPPORTED_MANIFEST_VERSIONS and isinstance(
+            payload.get("models"), dict
         ):
             return root.resolve(), payload
     return None
@@ -112,9 +107,7 @@ def _validate_file_records(
     seen: set[str] = set()
     for raw_file in raw_files:
         if not isinstance(raw_file, dict):
-            raise ValueError(
-                "Bundled model manifest contains a non-object file record"
-            )
+            raise ValueError("Bundled model manifest contains a non-object file record")
         relative_path = str(raw_file.get("relative_path") or "")
         size_bytes = int(raw_file.get("size_bytes") or -1)
         sha256 = str(raw_file.get("sha256") or "").casefold()
@@ -137,9 +130,7 @@ def _validate_file_records(
     expected_digest = str(raw_record.get("snapshot_sha256") or "").casefold()
     calculated_digest = _snapshot_digest(files)
     if expected_digest and expected_digest != calculated_digest:
-        raise ValueError(
-            "Bundled model snapshot digest does not match its file manifest"
-        )
+        raise ValueError("Bundled model snapshot digest does not match its file manifest")
     return files, calculated_digest
 
 
@@ -205,12 +196,7 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _destination_root(settings: Settings) -> Path:
-    return (
-        settings.resolved_model_cache_dir
-        / "models"
-        / "provider-packs"
-        / "transformers-vision"
-    )
+    return settings.resolved_model_cache_dir / "models" / "provider-packs" / "transformers-vision"
 
 
 def install_bundled_transformers_models(
@@ -233,14 +219,10 @@ def install_bundled_transformers_models(
         try:
             source = _safe_relative_file(bundle_root, relative_path)
         except ValueError:
-            warnings.append(
-                f"Bundled Transformers path escapes resource root: {catalog_id}"
-            )
+            warnings.append(f"Bundled Transformers path escapes resource root: {catalog_id}")
             continue
         if not source.is_dir():
-            warnings.append(
-                f"Bundled Transformers model directory is missing: {catalog_id}"
-            )
+            warnings.append(f"Bundled Transformers model directory is missing: {catalog_id}")
             continue
         source_valid, source_reason, snapshot_digest = _verify_snapshot(
             source,
@@ -249,8 +231,7 @@ def install_bundled_transformers_models(
         )
         if not source_valid:
             warnings.append(
-                "Bundled Transformers model failed verification "
-                f"({catalog_id}): {source_reason}"
+                f"Bundled Transformers model failed verification ({catalog_id}): {source_reason}"
             )
             continue
 
@@ -260,9 +241,7 @@ def install_bundled_transformers_models(
         destination_valid = False
         if destination.is_dir() and marker.is_file():
             try:
-                marker_matches = (
-                    marker.read_text(encoding="utf-8").strip() == revision
-                )
+                marker_matches = marker.read_text(encoding="utf-8").strip() == revision
             except OSError:
                 marker_matches = False
             if marker_matches:
@@ -271,9 +250,7 @@ def install_bundled_transformers_models(
                     raw_record,
                     allow_marker=False,
                 )
-                destination_valid = (
-                    destination_valid and destination_digest == snapshot_digest
-                )
+                destination_valid = destination_valid and destination_digest == snapshot_digest
         if not destination_valid:
             temporary = destination.with_name(destination.name + ".bundled.part")
             if temporary.exists():
@@ -288,8 +265,7 @@ def install_bundled_transformers_models(
             if not copied_valid or copied_digest != snapshot_digest:
                 shutil.rmtree(temporary, ignore_errors=True)
                 warnings.append(
-                    "Copied Transformers model failed verification "
-                    f"({catalog_id}): {copied_reason}"
+                    f"Copied Transformers model failed verification ({catalog_id}): {copied_reason}"
                 )
                 continue
             (temporary / _MARKER_FILENAME).write_text(
@@ -307,10 +283,7 @@ def install_bundled_transformers_models(
             "repo_id": raw_record.get("repo_id"),
             "resolved_revision": revision,
             "snapshot_sha256": snapshot_digest,
-            "file_count": int(
-                raw_record.get("file_count")
-                or len(raw_record.get("files") or [])
-            ),
+            "file_count": int(raw_record.get("file_count") or len(raw_record.get("files") or [])),
             "total_size_bytes": int(raw_record.get("total_size_bytes") or 0),
             "verified": True,
         }

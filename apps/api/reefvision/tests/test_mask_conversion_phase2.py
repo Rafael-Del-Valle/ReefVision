@@ -10,9 +10,7 @@ from PIL import Image
 def _polygon(outer, holes=None):
     return {
         "outer": [{"x": x, "y": y} for x, y in outer],
-        "holes": [
-            [{"x": x, "y": y} for x, y in ring] for ring in (holes or [])
-        ],
+        "holes": [[{"x": x, "y": y} for x, y in ring] for ring in (holes or [])],
     }
 
 

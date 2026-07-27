@@ -115,9 +115,7 @@ def configure_windows_event_loop_policy() -> None:
 
 def resolve_alembic_paths(resource_root: Path | None = None) -> tuple[Path, Path]:
     root = resource_root or (
-        Path(str(vars(sys)["_MEIPASS"])).resolve()
-        if is_frozen_bundle()
-        else project_root()
+        Path(str(vars(sys)["_MEIPASS"])).resolve() if is_frozen_bundle() else project_root()
     )
     if is_frozen_bundle():
         alembic_root = root / "alembic"
@@ -151,9 +149,7 @@ def apply_desktop_environment(options: DesktopLaunchOptions) -> None:
     os.environ["REEFVISION_API_PORT"] = str(options.port)
     os.environ["REEFVISION_DATA_DIR"] = str(options.data_dir)
     os.environ["REEFVISION_SAFE_MODE"] = "true" if options.safe_mode else "false"
-    os.environ["REEFVISION_BACKGROUND_WORKER_ENABLED"] = (
-        "false" if options.safe_mode else "true"
-    )
+    os.environ["REEFVISION_BACKGROUND_WORKER_ENABLED"] = "false" if options.safe_mode else "true"
     clear_settings_cache()
 
 
@@ -295,9 +291,7 @@ def run_nnunet_entrypoint(name: str, arguments: Sequence[str]) -> int:
     module = importlib.import_module(module_name)
     entrypoint = getattr(module, function_name, None)
     if not callable(entrypoint):
-        raise RuntimeError(
-            f"Packaged nnU-Net entrypoint is missing: {module_name}:{function_name}"
-        )
+        raise RuntimeError(f"Packaged nnU-Net entrypoint is missing: {module_name}:{function_name}")
     previous_argv = sys.argv
     sys.argv = [name, *arguments]
     try:

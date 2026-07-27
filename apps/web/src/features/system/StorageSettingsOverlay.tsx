@@ -83,7 +83,9 @@ async function saveStorageSettings(
 
 export function StorageSettingsOverlay() {
   const [open, setOpen] = useState(false);
-  const [settings, setSettings] = useState<StorageSettingsResponse | null>(null);
+  const [settings, setSettings] = useState<StorageSettingsResponse | null>(
+    null,
+  );
   const [values, setValues] = useState<StorageForm>({
     data_dir: "",
     model_cache_dir: "",
@@ -126,9 +128,8 @@ export function StorageSettingsOverlay() {
 
   const changed = useMemo(
     () =>
-      settings?.paths.some(
-        (path) => values[path.key] !== path.active_path,
-      ) ?? false,
+      settings?.paths.some((path) => values[path.key] !== path.active_path) ??
+      false,
     [settings, values],
   );
 

@@ -128,9 +128,7 @@ beforeEach(() => {
     workflow_run_id: run.id,
     restored_artifact_count: 1,
     restored_bytes: 1024,
-    restored_paths: [
-      "projects/project-1/workflows/run-12345678/export.zip",
-    ],
+    restored_paths: ["projects/project-1/workflows/run-12345678/export.zip"],
   });
 });
 

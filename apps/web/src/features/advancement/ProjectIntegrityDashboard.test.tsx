@@ -6,10 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Project } from "../../api/client";
 import { inspectProjectIntegrity } from "./api";
 import { ProjectIntegrityDashboard } from "./ProjectIntegrityDashboard";
-import {
-  applyProjectRepairs,
-  previewProjectRepairs,
-} from "./projectRepairApi";
+import { applyProjectRepairs, previewProjectRepairs } from "./projectRepairApi";
 
 vi.mock("./api", () => ({
   inspectProjectIntegrity: vi.fn(),

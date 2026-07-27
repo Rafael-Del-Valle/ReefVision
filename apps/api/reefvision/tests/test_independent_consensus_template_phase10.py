@@ -9,9 +9,7 @@ def test_independent_mask_workflow_template_exposes_exact_article_mode(
     templates = {item["template_id"]: item for item in response.json()}
     template = templates["independent-mask-segmentation-auto-labeling"]
     node = next(
-        item
-        for item in template["workflow"]["nodes"]
-        if item["id"] == "independent-mask-consensus"
+        item for item in template["workflow"]["nodes"] if item["id"] == "independent-mask-consensus"
     )
     consensus = node["configuration"]["multi_model_consensus"]
     assert consensus["mode"] == "independent_masks"

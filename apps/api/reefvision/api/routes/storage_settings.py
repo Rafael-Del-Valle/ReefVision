@@ -52,10 +52,7 @@ class StorageSettingsUpdateRequest(BaseModel):
 _PATH_METADATA: dict[str, tuple[str, str]] = {
     "data_dir": (
         "Application data root",
-        (
-            "Database, projects, imported media, managed artifacts, exports, "
-            "logs, and backups."
-        ),
+        ("Database, projects, imported media, managed artifacts, exports, logs, and backups."),
     ),
     "model_cache_dir": (
         "Model and download cache",
@@ -66,10 +63,7 @@ _PATH_METADATA: dict[str, tuple[str, str]] = {
     ),
     "temp_dir": (
         "Temporary workspace",
-        (
-            "Temporary files created during imports, exports, model work, and "
-            "other processing."
-        ),
+        ("Temporary files created during imports, exports, model work, and other processing."),
     ),
 }
 
@@ -166,8 +160,7 @@ def _response(settings: Settings) -> StorageSettingsResponse:
         )
         if environment_locked:
             notes.append(
-                f"{label} is controlled by {environment_name}; "
-                "the in-app field is read-only."
+                f"{label} is controlled by {environment_name}; the in-app field is read-only."
             )
     return StorageSettingsResponse(
         settings_file=str(storage_settings_path()),
@@ -212,8 +205,7 @@ def update_storage_settings(
         normalized[field_name] = candidate
 
     changed = any(
-        normalized[field_name] != active[field_name]
-        for field_name in STORAGE_SETTING_FIELDS
+        normalized[field_name] != active[field_name] for field_name in STORAGE_SETTING_FIELDS
     )
     if changed and not payload.acknowledge_restart:
         raise HTTPException(
@@ -232,7 +224,5 @@ def update_storage_settings(
                 detail=f"ReefVision cannot create or write to {candidate}.",
             )
 
-    write_storage_overrides(
-        {field_name: str(path) for field_name, path in normalized.items()}
-    )
+    write_storage_overrides({field_name: str(path) for field_name, path in normalized.items()})
     return _response(settings)

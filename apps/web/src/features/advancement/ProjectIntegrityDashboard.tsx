@@ -4,10 +4,7 @@ import { useState } from "react";
 import type { Project } from "../../api/client";
 import { inspectProjectIntegrity } from "./api";
 import { ProjectLifecyclePanel } from "./ProjectLifecyclePanel";
-import {
-  applyProjectRepairs,
-  previewProjectRepairs,
-} from "./projectRepairApi";
+import { applyProjectRepairs, previewProjectRepairs } from "./projectRepairApi";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -143,16 +140,14 @@ export function ProjectIntegrityDashboard({ project }: { project: Project }) {
               </label>
               <button
                 type="button"
-                disabled={
-                  repairPlan.isPending || minimumOrphanAgeMinutes < 1
-                }
+                disabled={repairPlan.isPending || minimumOrphanAgeMinutes < 1}
                 onClick={() => repairPlan.mutate()}
               >
                 {repairPlan.isPending ? "Scanning..." : "Preview safe repairs"}
               </button>
               <p>
-                Unreferenced files are moved to the project quarantine. ReefVision
-                does not permanently delete them.
+                Unreferenced files are moved to the project quarantine.
+                ReefVision does not permanently delete them.
               </p>
               {repairPlan.error && (
                 <p className="form-error">{repairPlan.error.message}</p>
@@ -176,7 +171,9 @@ export function ProjectIntegrityDashboard({ project }: { project: Project }) {
                 <div className="section-heading">
                   <div>
                     <p className="eyebrow">Repair preview</p>
-                    <h4>{repairPlan.data.actions.length} safe actions available</h4>
+                    <h4>
+                      {repairPlan.data.actions.length} safe actions available
+                    </h4>
                   </div>
                   <span>
                     {repairPlan.data.orphan_file_count} orphan files ·{" "}
@@ -224,7 +221,9 @@ export function ProjectIntegrityDashboard({ project }: { project: Project }) {
                     disabled={!repairPlan.data.actions.length}
                     onClick={() =>
                       setSelectedRepairIds(
-                        repairPlan.data.actions.map((action) => action.action_id),
+                        repairPlan.data.actions.map(
+                          (action) => action.action_id,
+                        ),
                       )
                     }
                   >

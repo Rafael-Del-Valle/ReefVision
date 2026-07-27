@@ -44,9 +44,7 @@ def test_storage_settings_report_active_paths(
     payload = response.json()
     paths = _paths(payload)
     assert paths["data_dir"]["active_path"] == str(test_settings.resolved_data_dir)
-    assert paths["model_cache_dir"]["active_path"] == str(
-        test_settings.resolved_model_cache_dir
-    )
+    assert paths["model_cache_dir"]["active_path"] == str(test_settings.resolved_model_cache_dir)
     assert paths["temp_dir"]["active_path"] == str(test_settings.resolved_temp_dir)
     assert payload["restart_required"] is False
     assert payload["settings_file"] == str(storage_settings_path())
@@ -220,15 +218,9 @@ def test_downloadable_models_use_cache_but_user_models_stay_with_data(
 
     directories = catalog_model_directories(settings)
 
-    assert directories["catalog_models"].is_relative_to(
-        settings.resolved_model_cache_dir
-    )
-    assert directories["provider_packs"].is_relative_to(
-        settings.resolved_model_cache_dir
-    )
-    assert directories["temporary_downloads"].is_relative_to(
-        settings.resolved_model_cache_dir
-    )
+    assert directories["catalog_models"].is_relative_to(settings.resolved_model_cache_dir)
+    assert directories["provider_packs"].is_relative_to(settings.resolved_model_cache_dir)
+    assert directories["temporary_downloads"].is_relative_to(settings.resolved_model_cache_dir)
     assert directories["trained_models"].is_relative_to(settings.resolved_data_dir)
     assert directories["imported_models"].is_relative_to(settings.resolved_data_dir)
 
@@ -240,15 +232,9 @@ def test_app_configures_external_model_and_temp_environments(
     expected_hugging_face = test_settings.resolved_model_cache_dir / "huggingface"
 
     assert os.environ["HF_HOME"] == str(expected_hugging_face)
-    assert os.environ["HUGGINGFACE_HUB_CACHE"] == str(
-        expected_hugging_face / "hub"
-    )
-    assert os.environ["TRANSFORMERS_CACHE"] == str(
-        expected_hugging_face / "transformers"
-    )
-    assert os.environ["TORCH_HOME"] == str(
-        test_settings.resolved_model_cache_dir / "torch"
-    )
+    assert os.environ["HUGGINGFACE_HUB_CACHE"] == str(expected_hugging_face / "hub")
+    assert os.environ["TRANSFORMERS_CACHE"] == str(expected_hugging_face / "transformers")
+    assert os.environ["TORCH_HOME"] == str(test_settings.resolved_model_cache_dir / "torch")
     assert os.environ["TMP"] == str(test_settings.resolved_temp_dir)
     assert os.environ["TEMP"] == str(test_settings.resolved_temp_dir)
     assert os.environ["TMPDIR"] == str(test_settings.resolved_temp_dir)

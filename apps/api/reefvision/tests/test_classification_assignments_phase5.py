@@ -181,9 +181,7 @@ def test_multiple_classifiers_can_assign_independent_labels_to_one_box(
             is None
         )
 
-    exported = client.get(
-        f"/api/v1/projects/{project_id}/classification-assignments/export"
-    )
+    exported = client.get(f"/api/v1/projects/{project_id}/classification-assignments/export")
     assert exported.status_code == 200, exported.text
     payload = exported.json()
     assert payload["row_count"] == 2

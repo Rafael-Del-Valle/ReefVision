@@ -72,10 +72,7 @@ def test_feature_freeze_blocks_new_production_modules_and_migrations() -> None:
         _policy(),
     )
 
-    assert (
-        production_reason
-        == "new production module added during the feature freeze"
-    )
+    assert production_reason == "new production module added during the feature freeze"
     assert migration_reason == "new database migration added during the feature freeze"
 
 
@@ -142,7 +139,4 @@ def test_feature_freeze_blocks_production_renames_and_copies() -> None:
             ),
             _policy(),
         )
-        assert (
-            reason
-            == "production module rename/copy added during the feature freeze"
-        )
+        assert reason == "production module rename/copy added during the feature freeze"

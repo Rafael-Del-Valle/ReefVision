@@ -6,8 +6,7 @@ export interface Sam2SidecarConnectionPayload {
   timeout_seconds: number;
 }
 
-export interface Sam2SidecarRegistration
-  extends Sam2SidecarConnectionPayload {
+export interface Sam2SidecarRegistration extends Sam2SidecarConnectionPayload {
   display_name: string;
   notes?: string | null;
 }

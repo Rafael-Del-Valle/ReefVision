@@ -30,10 +30,7 @@ def storage_settings_path() -> Path:
     local_app_data = os.environ.get("LOCALAPPDATA")
     if local_app_data:
         return (
-            Path(local_app_data).expanduser().resolve()
-            / "ReefVision"
-            / "config"
-            / "storage.json"
+            Path(local_app_data).expanduser().resolve() / "ReefVision" / "config" / "storage.json"
         )
     return Path.home() / ".config" / "reefvision" / "storage.json"
 
@@ -75,7 +72,7 @@ def write_storage_overrides(
         "paths": {
             field_name: paths[field_name]
             for field_name in STORAGE_SETTING_FIELDS
-            if field_name in paths and paths[field_name]
+            if paths.get(field_name)
         },
     }
     temporary_path = settings_path.with_suffix(settings_path.suffix + ".tmp")

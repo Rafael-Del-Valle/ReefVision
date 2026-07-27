@@ -48,7 +48,7 @@ def _action_id(
     size: int = 0,
     modified_ns: int = 0,
 ) -> str:
-    payload = f"{kind}|{managed_path}|{size}|{modified_ns}".encode("utf-8")
+    payload = f"{kind}|{managed_path}|{size}|{modified_ns}".encode()
     return hashlib.sha256(payload).hexdigest()[:24]
 
 
@@ -255,9 +255,7 @@ class ProjectRepairService:
             try:
                 resolved.relative_to(project_root)
             except ValueError:
-                warnings.append(
-                    f"Skipped path outside the resolved project root: {relative}"
-                )
+                warnings.append(f"Skipped path outside the resolved project root: {relative}")
                 continue
             if self._referenced(resolved, exact, prefixes):
                 continue
@@ -292,9 +290,7 @@ class ProjectRepairService:
             minimum_orphan_age_seconds=minimum_orphan_age_seconds,
             referenced_path_count=len(exact | prefixes),
             orphan_file_count=sum(
-                1
-                for action in actions
-                if action.action_kind == "quarantine_orphan_file"
+                1 for action in actions if action.action_kind == "quarantine_orphan_file"
             ),
             orphan_file_bytes=orphan_bytes,
             actions=actions,

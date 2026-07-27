@@ -47,7 +47,8 @@ interface EditorTarget {
 
 function currentEditorTarget(): EditorTarget | null {
   const canvas = document.querySelector<SVGSVGElement>("svg.annotation-canvas");
-  const sourceImage = canvas?.querySelector<SVGImageElement>(":scope > g > image");
+  const sourceImage =
+    canvas?.querySelector<SVGImageElement>(":scope > g > image");
   const href =
     sourceImage?.getAttribute("href") ??
     sourceImage?.getAttribute("xlink:href") ??
@@ -116,7 +117,8 @@ export function CatalogInferenceLauncher() {
     const refreshTarget = () => {
       const next = currentEditorTarget();
       setTarget((current) =>
-        current?.imageId === next?.imageId && current?.container === next?.container
+        current?.imageId === next?.imageId &&
+        current?.container === next?.container
           ? current
           : next,
       );
@@ -188,7 +190,9 @@ export function CatalogInferenceLauncher() {
     let stopped = false;
     const poll = async () => {
       try {
-        const job = await jsonRequest<JobResponse>(`/jobs/${encodeURIComponent(jobId)}`);
+        const job = await jsonRequest<JobResponse>(
+          `/jobs/${encodeURIComponent(jobId)}`,
+        );
         if (stopped) return;
         if (job.status === "succeeded") {
           const proposalCount = Number(job.result_json?.proposal_count ?? 0);
@@ -216,7 +220,11 @@ export function CatalogInferenceLauncher() {
         );
       } catch (error) {
         if (!stopped) {
-          setStatus(error instanceof Error ? error.message : "Could not read detection status.");
+          setStatus(
+            error instanceof Error
+              ? error.message
+              : "Could not read detection status.",
+          );
           setJobId(null);
         }
       }
@@ -253,7 +261,9 @@ export function CatalogInferenceLauncher() {
         },
       );
       setJobId(job.id);
-      setStatus(`${selectedModel?.display_name ?? "Text-prompt detection"} queued.`);
+      setStatus(
+        `${selectedModel?.display_name ?? "Text-prompt detection"} queued.`,
+      );
     } catch (error) {
       setStatus(
         error instanceof Error
@@ -277,7 +287,11 @@ export function CatalogInferenceLauncher() {
         Text detect
       </button>
       {expanded && (
-        <div className="catalog-inference-popover" role="dialog" aria-label="Text-prompt detection">
+        <div
+          className="catalog-inference-popover"
+          role="dialog"
+          aria-label="Text-prompt detection"
+        >
           <strong>Text-prompt detection</strong>
           <label>
             Model
@@ -340,10 +354,16 @@ export function CatalogInferenceLauncher() {
           </div>
           <button
             type="button"
-            disabled={!catalogId || !prompt.trim() || launching || Boolean(jobId)}
+            disabled={
+              !catalogId || !prompt.trim() || launching || Boolean(jobId)
+            }
             onClick={() => void launch()}
           >
-            {launching ? "Queueing..." : jobId ? "Detection running..." : "Find objects"}
+            {launching
+              ? "Queueing..."
+              : jobId
+                ? "Detection running..."
+                : "Find objects"}
           </button>
           {selectedModel?.recommended_vram != null && (
             <small>Recommended VRAM: {selectedModel.recommended_vram} GB</small>

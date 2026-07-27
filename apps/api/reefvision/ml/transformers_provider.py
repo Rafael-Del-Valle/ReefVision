@@ -51,9 +51,7 @@ def _safe_catalog_id(value: object) -> str:
     catalog_id = str(value or "").strip()
     segments = catalog_id.split("/")
     if not segments or any(
-        not segment
-        or segment in {".", ".."}
-        or Path(segment).name != segment
+        not segment or segment in {".", ".."} or Path(segment).name != segment
         for segment in segments
     ):
         raise ValidationError("The Transformers model pointer has an unsafe catalog id")
@@ -90,9 +88,7 @@ def _pointer_model_directory(pointer_path: Path) -> Path:
         "transformers-vision",
         *catalog_id.split("/"),
     )
-    actual_tail = tuple(
-        part.casefold() for part in model_dir.parts[-len(expected_tail.parts) :]
-    )
+    actual_tail = tuple(part.casefold() for part in model_dir.parts[-len(expected_tail.parts) :])
     required_tail = tuple(part.casefold() for part in expected_tail.parts)
     if actual_tail != required_tail:
         raise ValidationError(
@@ -108,9 +104,7 @@ def _pointer_model_directory(pointer_path: Path) -> Path:
             "The Transformers model pointer is not present in the verified model index"
         )
     if Path(str(record.get("path") or "")).resolve() != model_dir:
-        raise ValidationError(
-            "The Transformers model index path does not match the pointer"
-        )
+        raise ValidationError("The Transformers model index path does not match the pointer")
     if str(record.get("snapshot_sha256") or "").casefold() != snapshot_sha256:
         raise ValidationError(
             "The Transformers model pointer checksum does not match the verified index"
@@ -142,17 +136,13 @@ def _require_model_directory(model_path: Path) -> Path:
             "ReefVision model pointer. Automatic downloads are disabled during inference."
         )
     if not (resolved / "config.json").is_file():
-        raise ValidationError(
-            "The selected Transformers model directory has no config.json"
-        )
+        raise ValidationError("The selected Transformers model directory has no config.json")
     return resolved
 
 
 def _model_type(model_path: Path) -> str:
     try:
-        payload = json.loads(
-            (model_path / "config.json").read_text(encoding="utf-8")
-        )
+        payload = json.loads((model_path / "config.json").read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValidationError(f"Could not read Transformers config.json: {exc}") from exc
     model_type = str(payload.get("model_type") or "").casefold().replace("-", "_")
@@ -174,9 +164,7 @@ def _model_type(model_path: Path) -> str:
 def inspect_transformers_model(model_path: Path) -> TransformersModelSpec:
     model_dir = _require_model_directory(model_path)
     provider = _model_type(model_dir)
-    task = (
-        "phrase_grounding" if provider == "florence2" else "open_vocabulary_detect"
-    )
+    task = "phrase_grounding" if provider == "florence2" else "open_vocabulary_detect"
     return TransformersModelSpec(
         provider_name=provider,
         architecture=provider,
@@ -285,9 +273,7 @@ class TransformersVisionDetectionProvider:
         if self._model is None or self._processor is None:
             raise ValidationError("The Transformers model is not loaded")
         if not image_path.is_file():
-            raise ValidationError(
-                "Transformers inference requires an existing local image"
-            )
+            raise ValidationError("Transformers inference requires an existing local image")
         prompt = (text_prompt or current_transformers_text_prompt() or "").strip()
         if not prompt:
             raise ValidationError(
@@ -336,9 +322,7 @@ class TransformersVisionDetectionProvider:
                 None,
             ) or getattr(self._processor, "post_process_object_detection", None)
             if post_process is None:
-                raise ValidationError(
-                    "OWLv2 processor has no supported detection postprocessor"
-                )
+                raise ValidationError("OWLv2 processor has no supported detection postprocessor")
             try:
                 processed = post_process(
                     outputs=outputs,
@@ -363,16 +347,10 @@ class TransformersVisionDetectionProvider:
             values = [float(value) for value in box.detach().cpu().tolist()]
             if len(values) != 4:
                 continue
-            label_value = (
-                result_labels[index] if index < len(result_labels) else "object"
-            )
+            label_value = result_labels[index] if index < len(result_labels) else "object"
             if hasattr(label_value, "item"):
                 class_index = int(label_value.item())
-                label = (
-                    labels[class_index]
-                    if 0 <= class_index < len(labels)
-                    else str(class_index)
-                )
+                label = labels[class_index] if 0 <= class_index < len(labels) else str(class_index)
             else:
                 label = str(label_value)
                 class_index = labels.index(label) if label in labels else None

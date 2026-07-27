@@ -130,10 +130,16 @@ function topologicalLayout(workflow: EditableWorkflow): EditableWorkflow {
   const indegree = new Map(workflow.nodes.map((node) => [node.id, 0]));
   const outgoing = new Map<string, string[]>();
   for (const edge of workflow.edges) {
-    if (!nodeIds.has(edge.source_node_id) || !nodeIds.has(edge.target_node_id)) {
+    if (
+      !nodeIds.has(edge.source_node_id) ||
+      !nodeIds.has(edge.target_node_id)
+    ) {
       continue;
     }
-    indegree.set(edge.target_node_id, (indegree.get(edge.target_node_id) ?? 0) + 1);
+    indegree.set(
+      edge.target_node_id,
+      (indegree.get(edge.target_node_id) ?? 0) + 1,
+    );
     outgoing.set(edge.source_node_id, [
       ...(outgoing.get(edge.source_node_id) ?? []),
       edge.target_node_id,
@@ -224,7 +230,10 @@ export function WorkflowGraphEditor({
   }, [workflow]);
 
   const syncHistoryState = useCallback(() => {
-    setHistoryState({ undo: undoRef.current.length, redo: redoRef.current.length });
+    setHistoryState({
+      undo: undoRef.current.length,
+      redo: redoRef.current.length,
+    });
   }, []);
 
   const applyWorkflow = useCallback(
@@ -248,10 +257,10 @@ export function WorkflowGraphEditor({
     const previous = undoRef.current.at(-1);
     if (!previous) return;
     undoRef.current = undoRef.current.slice(0, -1);
-    redoRef.current = [cloneWorkflow(workflowRef.current), ...redoRef.current].slice(
-      0,
-      MAX_HISTORY,
-    );
+    redoRef.current = [
+      cloneWorkflow(workflowRef.current),
+      ...redoRef.current,
+    ].slice(0, MAX_HISTORY);
     workflowRef.current = cloneWorkflow(previous);
     onChange(cloneWorkflow(previous));
     syncHistoryState();
@@ -261,9 +270,10 @@ export function WorkflowGraphEditor({
     const next = redoRef.current[0];
     if (!next) return;
     redoRef.current = redoRef.current.slice(1);
-    undoRef.current = [...undoRef.current, cloneWorkflow(workflowRef.current)].slice(
-      -MAX_HISTORY,
-    );
+    undoRef.current = [
+      ...undoRef.current,
+      cloneWorkflow(workflowRef.current),
+    ].slice(-MAX_HISTORY);
     workflowRef.current = cloneWorkflow(next);
     onChange(cloneWorkflow(next));
     syncHistoryState();
@@ -562,7 +572,11 @@ export function WorkflowGraphEditor({
     const target = targetDefinition?.inputs.find(
       (port) => port.name === edgeTargetPort,
     );
-    if (!source || !target || !compatiblePorts(source.data_type, target.data_type)) {
+    if (
+      !source ||
+      !target ||
+      !compatiblePorts(source.data_type, target.data_type)
+    ) {
       return;
     }
     const edge: EditableWorkflowEdge = {
@@ -579,7 +593,8 @@ export function WorkflowGraphEditor({
           item.target_port === edgeTargetPort
         ),
     );
-    if (!edges.some((item) => edgeKey(item) === edgeKey(edge))) edges.push(edge);
+    if (!edges.some((item) => edgeKey(item) === edgeKey(edge)))
+      edges.push(edge);
     applyWorkflow({ ...current, edges });
   }
 
@@ -684,7 +699,9 @@ export function WorkflowGraphEditor({
           <button
             type="button"
             className="secondary"
-            onClick={() => applyWorkflow(topologicalLayout(workflowRef.current))}
+            onClick={() =>
+              applyWorkflow(topologicalLayout(workflowRef.current))
+            }
           >
             Auto-layout
           </button>
@@ -995,8 +1012,8 @@ export function WorkflowGraphEditor({
           {workflow.edges.map((edge) => (
             <div key={edgeKey(edge)}>
               <small>
-                {edge.source_node_id}.{edge.source_port} → {edge.target_node_id}.
-                {edge.target_port}
+                {edge.source_node_id}.{edge.source_port} → {edge.target_node_id}
+                .{edge.target_port}
               </small>
               <button
                 type="button"

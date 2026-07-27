@@ -36,9 +36,7 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
 def _safe_catalog_segments(catalog_id: str) -> list[str]:
     segments = catalog_id.split("/")
     if not segments or any(
-        not segment
-        or segment in {".", ".."}
-        or Path(segment).name != segment
+        not segment or segment in {".", ".."} or Path(segment).name != segment
         for segment in segments
     ):
         raise RuntimeError(f"Unsafe catalog id: {catalog_id!r}")
@@ -47,9 +45,7 @@ def _safe_catalog_segments(catalog_id: str) -> list[str]:
 
 def _safe_relative_parts(value: str) -> tuple[str, ...]:
     path = PurePosixPath(value)
-    if path.is_absolute() or not path.parts or any(
-        part in {"", ".", ".."} for part in path.parts
-    ):
+    if path.is_absolute() or not path.parts or any(part in {"", ".", ".."} for part in path.parts):
         raise RuntimeError(f"Unsafe model repository path: {value!r}")
     return path.parts
 
@@ -103,9 +99,7 @@ def _snapshot_sha256(files: list[dict[str, Any]]) -> str:
 
 def _immutable_revision(value: object, *, repo_id: str) -> str:
     revision = str(value or "").strip().casefold()
-    if len(revision) != 40 or any(
-        character not in "0123456789abcdef" for character in revision
-    ):
+    if len(revision) != 40 or any(character not in "0123456789abcdef" for character in revision):
         raise RuntimeError(
             f"Hugging Face did not resolve {repo_id} to an immutable 40-character commit"
         )
@@ -157,11 +151,7 @@ def _remote_files(info: object, *, repo_id: str) -> list[dict[str, Any]]:
 
 
 def _known_remote_size(files: list[dict[str, Any]]) -> int:
-    return sum(
-        int(record["size_bytes"])
-        for record in files
-        if record["size_bytes"] is not None
-    )
+    return sum(int(record["size_bytes"]) for record in files if record["size_bytes"] is not None)
 
 
 def _snapshot_matches_remote(destination: Path, remote_files: list[dict[str, Any]]) -> bool:
@@ -176,9 +166,7 @@ def _snapshot_matches_remote(destination: Path, remote_files: list[dict[str, Any
     if local_paths != expected_paths:
         return False
     for record in remote_files:
-        target = destination.joinpath(
-            *_safe_relative_parts(str(record["relative_path"]))
-        )
+        target = destination.joinpath(*_safe_relative_parts(str(record["relative_path"])))
         if not target.is_file():
             return False
         expected_size = record["size_bytes"]
@@ -246,9 +234,7 @@ def _write_manifest(
         "pack_id": pack_id,
         "model_count": len(records),
         "models": records,
-        "total_size_bytes": sum(
-            int(item["total_size_bytes"]) for item in records.values()
-        ),
+        "total_size_bytes": sum(int(item["total_size_bytes"]) for item in records.values()),
     }
     _write_json_atomic(output_root / "manifest.json", manifest)
     return manifest
@@ -322,10 +308,7 @@ def stage_model_pack(
         remote_files = _remote_files(info, repo_id=repo_id)
 
         if _snapshot_matches_remote(destination, remote_files):
-            print(
-                f"Reusing verified snapshot {catalog_id} from "
-                f"{repo_id}@{resolved_revision}"
-            )
+            print(f"Reusing verified snapshot {catalog_id} from {repo_id}@{resolved_revision}")
             records[catalog_id] = _record_for_snapshot(
                 catalog_id=catalog_id,
                 repo_id=repo_id,
@@ -395,9 +378,7 @@ def stage_model_pack(
         if not (snapshot_path / "config.json").is_file():
             raise RuntimeError(f"Snapshot {repo_id} does not contain config.json")
         if not _snapshot_matches_remote(snapshot_path, remote_files):
-            raise RuntimeError(
-                f"Snapshot {repo_id} did not match the resolved repository files"
-            )
+            raise RuntimeError(f"Snapshot {repo_id} did not match the resolved repository files")
         if destination.exists():
             shutil.rmtree(destination)
         os.replace(temporary, destination)

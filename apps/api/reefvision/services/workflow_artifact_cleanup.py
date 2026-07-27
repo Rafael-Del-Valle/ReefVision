@@ -228,9 +228,7 @@ class WorkflowArtifactCleanupService:
         for action_id in selected_ids:
             action = action_by_id.get(action_id)
             if action is None:
-                raise ValidationError(
-                    "A selected workflow cleanup action is not in the preview"
-                )
+                raise ValidationError("A selected workflow cleanup action is not in the preview")
             if not action.eligible:
                 raise ValidationError("Blocked workflow cleanup actions cannot be applied")
             selected.append(action)
@@ -240,10 +238,7 @@ class WorkflowArtifactCleanupService:
         workflow_root = (project_root / "workflows").resolve()
         timestamp = datetime.now(UTC)
         quarantine_root = (
-            project_root
-            / "workflow-quarantine"
-            / run.id
-            / timestamp.strftime("%Y%m%dT%H%M%S%fZ")
+            project_root / "workflow-quarantine" / run.id / timestamp.strftime("%Y%m%dT%H%M%S%fZ")
         ).resolve()
         if not quarantine_root.is_relative_to(project_root):
             raise ValidationError("Workflow quarantine path escaped the project")
@@ -273,14 +268,10 @@ class WorkflowArtifactCleanupService:
                     relative = source.relative_to(workflow_root)
                     destination = (quarantine_root / relative).resolve()
                     if not destination.is_relative_to(quarantine_root):
-                        raise ValidationError(
-                            "Workflow quarantine destination escaped its root"
-                        )
+                        raise ValidationError("Workflow quarantine destination escaped its root")
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     if destination.exists():
-                        raise ConflictError(
-                            "Workflow quarantine destination already exists"
-                        )
+                        raise ConflictError("Workflow quarantine destination already exists")
                     os.replace(source, destination)
                     moved.append((source, destination))
                     quarantine_relative = destination.relative_to(
@@ -436,10 +427,8 @@ class WorkflowArtifactCleanupService:
                     raise ConflictError("Workflow artifact cleanup metadata is missing")
                 cleanup = dict(cleanup_raw)
                 if (
-                    str(cleanup.get("original_managed_path") or "")
-                    != item.original_managed_path
-                    or str(cleanup.get("quarantine_path") or "")
-                    != item.quarantine_path
+                    str(cleanup.get("original_managed_path") or "") != item.original_managed_path
+                    or str(cleanup.get("quarantine_path") or "") != item.quarantine_path
                 ):
                     raise ConflictError("Workflow artifact cleanup metadata changed")
                 source = resolve_managed_project_path(

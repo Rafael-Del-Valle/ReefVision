@@ -48,9 +48,7 @@ def _requirement_status(
         if installed is None:
             problems.append(f"{distribution_name} {required_version} is missing")
         elif installed != required_version:
-            problems.append(
-                f"{distribution_name} must be {required_version}; found {installed}"
-            )
+            problems.append(f"{distribution_name} must be {required_version}; found {installed}")
     return not problems, "; ".join(problems) if problems else None
 
 
@@ -146,9 +144,7 @@ def _patch_provider_catalog() -> None:
                         provider_version="1.0",
                         package_version=_package_version("torch"),
                         training_support=True,
-                        availability_status=(
-                            "ready" if torch_ready else "dependency_missing"
-                        ),
+                        availability_status=("ready" if torch_ready else "dependency_missing"),
                         availability_reason=torch_reason,
                         default_registration_purpose="semantic_segment",
                         registerable=True,
@@ -174,9 +170,7 @@ def _patch_provider_catalog() -> None:
                 output.append(descriptor)
 
         if not any(item.provider_id == "nnunet" for item in output):
-            template = next(
-                item for item in output if item.provider_id == "reefvision_unet"
-            )
+            template = next(item for item in output if item.provider_id == "reefvision_unet")
             nnunet_ready, nnunet_reason = _nnunet_ready()
             output.append(
                 replace(
@@ -185,9 +179,7 @@ def _patch_provider_catalog() -> None:
                     display_name="nnU-Net v2",
                     provider_version=_package_version("nnunetv2") or "not-installed",
                     package_version=_package_version("nnunetv2"),
-                    supported_model_families=(
-                        "nnU-Net v2 2D semantic segmentation experiments",
-                    ),
+                    supported_model_families=("nnU-Net v2 2D semantic segmentation experiments",),
                     supported_tasks=("semantic_segment",),
                     supported_input_types=(
                         "image",
@@ -206,15 +198,11 @@ def _patch_provider_catalog() -> None:
                     ),
                     default_registration_purpose=None,
                     registerable=False,
-                    availability_status=(
-                        "ready" if nnunet_ready else "dependency_incompatible"
-                    ),
+                    availability_status=("ready" if nnunet_ready else "dependency_incompatible"),
                     availability_reason=nnunet_reason,
                     desktop_packaging_state="base_sidecar_provider",
                     clean_machine_verification_state="acceptance_required",
-                    code_license=(
-                        "Apache-2.0; see the installed nnU-Net package metadata."
-                    ),
+                    code_license=("Apache-2.0; see the installed nnU-Net package metadata."),
                     weight_license=(
                         "User-trained checkpoints inherit dataset and experiment terms."
                     ),
@@ -261,9 +249,7 @@ def _patch_provider_factories() -> None:
         }:
             ready, reason = _transformers_ready()
             if not ready:
-                raise ValidationError(
-                    reason or "Transformers provider pack is unavailable"
-                )
+                raise ValidationError(reason or "Transformers provider pack is unavailable")
             return TransformersVisionDetectionProvider(normalized)
         if purpose == "semantic_segment" and normalized in {"", "reefvision_unet"}:
             ready, reason = _torch_ready()
@@ -281,9 +267,7 @@ def _patch_provider_factories() -> None:
         if normalized in {"grounding_dino", "owlv2", "florence2"}:
             ready, reason = _transformers_ready()
             if not ready:
-                raise ValidationError(
-                    reason or "Transformers provider pack is unavailable"
-                )
+                raise ValidationError(reason or "Transformers provider pack is unavailable")
             return TransformersVisionDetectionProvider(normalized)
         return original_detection(provider_name)
 
@@ -380,17 +364,13 @@ def _patch_model_catalog_state() -> None:
                 return entry.model_copy(
                     update={
                         "availability": "available",
-                        "installation_state": (
-                            "Ready" if ready else "Provider Required"
-                        ),
+                        "installation_state": ("Ready" if ready else "Provider Required"),
                         "installation_reason": (
                             "Bundled ReefVision U-Net architecture is ready for training."
                             if ready
                             else reason
                         ),
-                        "installed_asset_id": (
-                            f"builtin_architecture:reefvision_unet:{preset}"
-                        ),
+                        "installed_asset_id": (f"builtin_architecture:reefvision_unet:{preset}"),
                         "metadata_verified": True,
                         "provider_ready": ready,
                         "provider_state": "ready" if ready else "unavailable",

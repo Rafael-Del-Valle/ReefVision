@@ -17,18 +17,19 @@ import {
 
 const TARGETS = ["annotation", "image", "mask", "fragment"] as const;
 
-export function ClassificationManagementPanel({ project }: { project: Project }) {
+export function ClassificationManagementPanel({
+  project,
+}: {
+  project: Project;
+}) {
   const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [key, setKey] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [targetKind, setTargetKind] = useState<(typeof TARGETS)[number]>(
-    "annotation",
-  );
-  const [cardinality, setCardinality] = useState<"single" | "multi">(
-    "single",
-  );
+  const [targetKind, setTargetKind] =
+    useState<(typeof TARGETS)[number]>("annotation");
+  const [cardinality, setCardinality] = useState<"single" | "multi">("single");
   const [allowedClassIds, setAllowedClassIds] = useState<string[]>([]);
   const [isActive, setIsActive] = useState(true);
   const [selectedPredictionIds, setSelectedPredictionIds] = useState<string[]>(
@@ -178,7 +179,8 @@ export function ClassificationManagementPanel({ project }: { project: Project })
           <h3>Tasks, review, comparison, and immutable datasets</h3>
           <span>
             Keep independent biological questions separate, support multiple
-            labels when appropriate, and freeze reviewed targets before training.
+            labels when appropriate, and freeze reviewed targets before
+            training.
           </span>
         </div>
       </div>
@@ -188,14 +190,22 @@ export function ClassificationManagementPanel({ project }: { project: Project })
       <div className="dashboard-grid">
         <article className="dashboard-card">
           <p className="eyebrow">Label-set editor</p>
-          <h4>{editingId ? "Edit classification task" : "New classification task"}</h4>
+          <h4>
+            {editingId ? "Edit classification task" : "New classification task"}
+          </h4>
           <label>
             Stable task key
-            <input value={key} onChange={(event) => setKey(event.target.value)} />
+            <input
+              value={key}
+              onChange={(event) => setKey(event.target.value)}
+            />
           </label>
           <label>
             Display name
-            <input value={name} onChange={(event) => setName(event.target.value)} />
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
           </label>
           <label>
             Description
@@ -273,10 +283,15 @@ export function ClassificationManagementPanel({ project }: { project: Project })
                     {item.key} · {item.target_kind} · {item.cardinality}
                   </p>
                   <small>
-                    {item.allowed_class_ids_json.length} allowed classes · {item.is_active ? "active" : "inactive"}
+                    {item.allowed_class_ids_json.length} allowed classes ·{" "}
+                    {item.is_active ? "active" : "inactive"}
                   </small>
                 </div>
-                <button type="button" className="secondary" onClick={() => editLabelSet(item)}>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => editLabelSet(item)}
+                >
                   Edit
                 </button>
               </div>
@@ -361,7 +376,9 @@ export function ClassificationManagementPanel({ project }: { project: Project })
           </button>
           {comparison.data && (
             <p>
-              {comparison.data.target_count} targets · {comparison.data.agreement_count} agreements · {comparison.data.disagreement_count} disagreements
+              {comparison.data.target_count} targets ·{" "}
+              {comparison.data.agreement_count} agreements ·{" "}
+              {comparison.data.disagreement_count} disagreements
             </p>
           )}
           <div className="dashboard-list">
@@ -373,7 +390,8 @@ export function ClassificationManagementPanel({ project }: { project: Project })
                 <div>
                   <strong>{target.target_key}</strong>
                   <p>
-                    {target.label_set} · {target.model_count} models · {target.agreement ? "agreement" : "disagreement"}
+                    {target.label_set} · {target.model_count} models ·{" "}
+                    {target.agreement ? "agreement" : "disagreement"}
                   </p>
                   <small>
                     {target.predictions
@@ -424,7 +442,9 @@ export function ClassificationManagementPanel({ project }: { project: Project })
             }
             onClick={() => createSnapshot.mutate()}
           >
-            {createSnapshot.isPending ? "Freezing..." : "Create immutable snapshot"}
+            {createSnapshot.isPending
+              ? "Freezing..."
+              : "Create immutable snapshot"}
           </button>
           <div className="dashboard-list">
             {snapshots.data?.map((item) => (
@@ -432,7 +452,8 @@ export function ClassificationManagementPanel({ project }: { project: Project })
                 <div>
                   <strong>{item.name}</strong>
                   <p>
-                    {item.target_kind} · {item.cardinality} · {item.sample_count} samples
+                    {item.target_kind} · {item.cardinality} ·{" "}
+                    {item.sample_count} samples
                   </p>
                   <small>{item.manifest_sha256.slice(0, 16)}…</small>
                 </div>

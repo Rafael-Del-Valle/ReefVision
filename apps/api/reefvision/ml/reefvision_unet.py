@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from PIL import Image
 
@@ -272,7 +273,9 @@ def train_unet(
     if epochs < 1:
         raise ValidationError("U-Net training requires at least one epoch")
     resolved = torch.device(
-        "cuda:0" if device in {"auto", "cuda", "cuda:0", "gpu"} and torch.cuda.is_available() else "cpu"
+        "cuda:0"
+        if device in {"auto", "cuda", "cuda:0", "gpu"} and torch.cuda.is_available()
+        else "cpu"
     )
     model = model.to(resolved)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)

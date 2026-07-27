@@ -14,11 +14,7 @@ import pytest
 
 
 def _load_hydrator() -> ModuleType:
-    script = (
-        Path(__file__).resolve().parents[4]
-        / "scripts"
-        / "hydrate-desktop-model-catalog.py"
-    )
+    script = Path(__file__).resolve().parents[4] / "scripts" / "hydrate-desktop-model-catalog.py"
     spec = importlib.util.spec_from_file_location(
         "reefvision_hydrate_desktop_model_catalog",
         script,
@@ -59,9 +55,7 @@ def _catalog_entry(
         "installation_state": "Unavailable",
         "installation_reason": "Not installed",
         "selection_kind": (
-            "managed_catalog_model"
-            if availability == "available"
-            else "planned_unavailable"
+            "managed_catalog_model" if availability == "available" else "planned_unavailable"
         ),
         "requires_confirmation": True,
         "availability": availability,
@@ -98,8 +92,7 @@ def _release(
             {
                 "name": filename,
                 "browser_download_url": (
-                    "https://github.com/ultralytics/assets/releases/download/"
-                    f"v-test/{filename}"
+                    f"https://github.com/ultralytics/assets/releases/download/v-test/{filename}"
                 ),
                 "digest": f"sha256:{checksum}",
                 "size": len(payload),
@@ -109,11 +102,7 @@ def _release(
 
 
 def test_desktop_policy_contains_all_ready_models() -> None:
-    policy_path = (
-        Path(__file__).resolve().parents[4]
-        / "config"
-        / "desktop_ready_models.json"
-    )
+    policy_path = Path(__file__).resolve().parents[4] / "config" / "desktop_ready_models.json"
     policy = json.loads(policy_path.read_text(encoding="utf-8"))
     targets = policy["required_models"]
 
@@ -129,12 +118,8 @@ def test_desktop_policy_contains_all_ready_models() -> None:
 
 def test_actual_catalog_contains_every_desktop_policy_target() -> None:
     root = Path(__file__).resolve().parents[4]
-    policy = json.loads(
-        (root / "config" / "desktop_ready_models.json").read_text(encoding="utf-8")
-    )
-    catalog = json.loads(
-        (root / "config" / "model_catalog.json").read_text(encoding="utf-8")
-    )
+    policy = json.loads((root / "config" / "desktop_ready_models.json").read_text(encoding="utf-8"))
+    catalog = json.loads((root / "config" / "model_catalog.json").read_text(encoding="utf-8"))
     catalog_names = {item["display_name"] for item in catalog["models"]}
     catalog_ids = {item["catalog_id"] for item in catalog["models"]}
 
@@ -195,8 +180,7 @@ def test_complete_existing_asset_does_not_require_release_lookup() -> None:
                 {
                     "filename": "example.pt",
                     "source_url": (
-                        "https://github.com/ultralytics/assets/releases/download/"
-                        "v8.3.0/example.pt"
+                        "https://github.com/ultralytics/assets/releases/download/v8.3.0/example.pt"
                     ),
                     "revision": "ultralytics-assets-v8.3.0",
                     "sha256": checksum,

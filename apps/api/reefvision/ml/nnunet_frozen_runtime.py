@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any
 
 _SUPPORTED_COMMANDS = {
     "nnUNetv2_plan_and_preprocess",

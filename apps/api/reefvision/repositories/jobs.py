@@ -93,12 +93,8 @@ class JobRepository:
                 continue
 
             training_run = _training_run_for_job(self.session, candidate)
-            if training_run is not None and not dict(
-                candidate.resource_requirements_json or {}
-            ):
-                candidate.resource_requirements_json = training_scheduler_requirements(
-                    training_run
-                )
+            if training_run is not None and not dict(candidate.resource_requirements_json or {}):
+                candidate.resource_requirements_json = training_scheduler_requirements(training_run)
                 self.session.flush()
 
             decision = scheduler.evaluate(candidate)

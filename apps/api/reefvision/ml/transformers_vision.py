@@ -82,7 +82,10 @@ def inspect_transformers_bundle(bundle_path: Path) -> TransformersBundleMetadata
                 raise ValidationError("Transformers model bundle metadata is invalid") from exc
     except zipfile.BadZipFile as exc:
         raise ValidationError("Transformers model bundle is not a valid ZIP archive") from exc
-    if not isinstance(payload, dict) or payload.get("format") != "reefvision_transformers_snapshot_v1":
+    if (
+        not isinstance(payload, dict)
+        or payload.get("format") != "reefvision_transformers_snapshot_v1"
+    ):
         raise ValidationError("The selected ZIP is not a ReefVision Transformers model bundle")
     provider_id = str(payload.get("provider_id") or "").strip().casefold()
     if provider_id not in SUPPORTED_TRANSFORMERS_PROVIDERS:
@@ -119,7 +122,9 @@ def _extract_bundle(bundle_path: Path, cache_root: Path) -> tuple[Path, Transfor
                 target = temporary.joinpath(*member.parts)
                 resolved = target.resolve(strict=False)
                 if temporary.resolve() not in resolved.parents and resolved != temporary.resolve():
-                    raise ValidationError("Transformers model extraction escaped its cache directory")
+                    raise ValidationError(
+                        "Transformers model extraction escaped its cache directory"
+                    )
                 if info.is_dir():
                     target.mkdir(parents=True, exist_ok=True)
                     continue
@@ -221,7 +226,9 @@ class TransformersVisionProvider:
             import torch
             from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
         except Exception as exc:  # pragma: no cover - depends on packaged provider stack
-            raise ValidationError(f"Transformers vision dependencies are unavailable: {exc}") from exc
+            raise ValidationError(
+                f"Transformers vision dependencies are unavailable: {exc}"
+            ) from exc
 
         self._device = _torch_device(device)
         try:
@@ -237,21 +244,27 @@ class TransformersVisionProvider:
                     snapshot,
                     local_files_only=True,
                     trust_remote_code=False,
-                    torch_dtype=torch.float16 if str(self._device).startswith("cuda") else torch.float32,
+                    torch_dtype=torch.float16
+                    if str(self._device).startswith("cuda")
+                    else torch.float32,
                 )
             else:
                 self._model = AutoModelForZeroShotObjectDetection.from_pretrained(
                     snapshot,
                     local_files_only=True,
                     trust_remote_code=False,
-                    torch_dtype=torch.float16 if str(self._device).startswith("cuda") else torch.float32,
+                    torch_dtype=torch.float16
+                    if str(self._device).startswith("cuda")
+                    else torch.float32,
                 )
             self._model.to(self._device)
             self._model.eval()
             self._metadata = metadata
         except Exception as exc:  # pragma: no cover - depends on third-party model files
             self.unload_model()
-            raise ValidationError(f"{self.provider_id} could not load the local snapshot: {exc}") from exc
+            raise ValidationError(
+                f"{self.provider_id} could not load the local snapshot: {exc}"
+            ) from exc
 
     def predict(
         self,

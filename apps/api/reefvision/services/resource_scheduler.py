@@ -251,8 +251,7 @@ class ResourceScheduler:
                 for item in candidates
                 if item.index not in exclusive_gpus
                 and (not exclusive_gpu or item.index not in assigned_gpus)
-                and item.free_bytes - reserved_by_gpu.get(item.index, 0)
-                >= minimum_vram_per_gpu
+                and item.free_bytes - reserved_by_gpu.get(item.index, 0) >= minimum_vram_per_gpu
             ]
             if explicit_indices is None:
                 candidates.sort(
@@ -262,7 +261,9 @@ class ResourceScheduler:
                     )
                 )
             else:
-                explicit_order = {index: position for position, index in enumerate(explicit_indices)}
+                explicit_order = {
+                    index: position for position, index in enumerate(explicit_indices)
+                }
                 candidates.sort(key=lambda item: explicit_order[item.index])
 
             if len(candidates) >= requested_gpu_count:

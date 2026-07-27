@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import BackupRecord, ImageAsset, Job, QualityControlRun
+from reefvision.jobs import workflow_sam2_refiners as _workflow_sam2_refiners  # noqa: F401
 from reefvision.jobs.backups import process_backup_job
 from reefvision.jobs.classification_inference import process_classification_inference_job
 from reefvision.jobs.depth import process_depth_map_job
@@ -36,7 +37,6 @@ from reefvision.jobs.video import process_video_extract_job
 from reefvision.jobs.video_exports import process_video_render_export_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.jobs.workflow_consensus import process_workflow_run_job
-from reefvision.jobs import workflow_sam2_refiners as _workflow_sam2_refiners  # noqa: F401
 from reefvision.repositories.jobs import JobRepository
 from reefvision.storage.images import create_thumbnail
 from reefvision.storage.projects import resolve_managed_project_path

@@ -6,8 +6,9 @@ The string codec follows the reference COCO mask API's ``rleToString`` and
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from copy import deepcopy
-from typing import Any, Sequence
+from typing import Any
 
 from reefvision.domain.errors import ValidationError
 

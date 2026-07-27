@@ -133,9 +133,7 @@ class CatalogInferenceService:
     ) -> ModelRegistration:
         checksum = str(record.get("snapshot_sha256") or "")
         if len(checksum) != 64:
-            raise ValidationError(
-                "Bundled catalog model is missing its verified snapshot checksum"
-            )
+            raise ValidationError("Bundled catalog model is missing its verified snapshot checksum")
         existing = self.models.find_by_checksum(project_id, checksum)
         if existing is not None:
             if existing.provider_name != provider_id or existing.task != "detect":
@@ -167,9 +165,7 @@ class CatalogInferenceService:
             catalog_registration.source_filename = pointer.name
             catalog_registration.managed_path = relative_path
             catalog_registration.sha256 = checksum
-            catalog_registration.file_size_bytes = int(
-                record.get("total_size_bytes") or 0
-            )
+            catalog_registration.file_size_bytes = int(record.get("total_size_bytes") or 0)
             catalog_registration.framework = "transformers"
             catalog_registration.task = "detect"
             catalog_registration.provider_name = provider_id
@@ -198,9 +194,7 @@ class CatalogInferenceService:
             class_map_json={"labels": [], "mapping": {}},
             input_size_json=None,
             metadata_json=metadata,
-            notes=(
-                "Automatically registered from ReefVision's verified bundled model pack."
-            ),
+            notes=("Automatically registered from ReefVision's verified bundled model pack."),
         )
         self.models.add(model)
         return model
@@ -223,16 +217,9 @@ class CatalogInferenceService:
             raise ValidationError(
                 entry.installation_reason or "The selected catalog model is not ready"
             )
-        provider_id = (
-            str(entry.provider_id or entry.provider)
-            .strip()
-            .casefold()
-            .replace("-", "_")
-        )
+        provider_id = str(entry.provider_id or entry.provider).strip().casefold().replace("-", "_")
         if provider_id not in {"florence2", "grounding_dino", "owlv2"}:
-            raise ValidationError(
-                "The selected catalog model has an unsupported provider"
-            )
+            raise ValidationError("The selected catalog model has an unsupported provider")
 
         record = bundled_transformers_model_record(self.settings, payload.catalog_id)
         if record is None:

@@ -35,7 +35,7 @@ def wait_for_health(port: int, timeout: float) -> dict[str, object]:
     last_error: Exception | None = None
     while time.monotonic() < deadline:
         try:
-            with urllib.request.urlopen(url, timeout=2) as response:  # noqa: S310
+            with urllib.request.urlopen(url, timeout=2) as response:
                 payload = json.loads(response.read().decode("utf-8"))
                 if response.status == 200 and payload.get("status") == "ok":
                     return payload

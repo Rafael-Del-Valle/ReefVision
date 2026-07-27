@@ -40,7 +40,9 @@ def upgrade() -> None:
         sa.Column("created_by", sa.String(length=100), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["label_set_id"], ["classification_label_sets.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(
+            ["label_set_id"], ["classification_label_sets.id"], ondelete="RESTRICT"
+        ),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -95,8 +97,12 @@ def upgrade() -> None:
         sa.Column("sample_sha256", sa.String(length=64), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["image_id"], ["images.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["mask_annotation_id"], ["mask_annotations.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["snapshot_id"], ["classification_dataset_snapshots.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["mask_annotation_id"], ["mask_annotations.id"], ondelete="RESTRICT"
+        ),
+        sa.ForeignKeyConstraint(
+            ["snapshot_id"], ["classification_dataset_snapshots.id"], ondelete="CASCADE"
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
             "snapshot_id",

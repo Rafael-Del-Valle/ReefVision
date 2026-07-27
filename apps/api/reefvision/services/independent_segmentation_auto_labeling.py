@@ -674,7 +674,9 @@ def run_independent_segmentation_auto_labeling(
                     project = session.get(Project, image.project_id) if image is not None else None
                     model = session.get(ModelRegistration, primary_model_id)
                     if image is None or project is None or model is None:
-                        raise ValidationError("Independent consensus persistence context is missing")
+                        raise ValidationError(
+                            "Independent consensus persistence context is missing"
+                        )
                     for group in consensus.groups:
                         proposal = _group_proposal(
                             settings,

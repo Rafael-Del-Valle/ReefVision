@@ -134,7 +134,9 @@ def main() -> int:
         if args.allow_missing_cuda:
             devices.remove("cuda")
         else:
-            raise RuntimeError("CUDA smoke testing was requested but torch.cuda.is_available() is false")
+            raise RuntimeError(
+                "CUDA smoke testing was requested but torch.cuda.is_available() is false"
+            )
 
     results = run_smoke(args.root.resolve(), devices, args.prompt.strip())
     if args.output is not None:

@@ -199,10 +199,7 @@ class ClassificationManagementService:
             predictions: list[ClassificationModelPredictionComparison] = []
             compared_values: list[str] = []
             for prediction, model in per_model.values():
-                value = (
-                    prediction.label_class_id
-                    or prediction.predicted_label.strip().casefold()
-                )
+                value = prediction.label_class_id or prediction.predicted_label.strip().casefold()
                 compared_values.append(value)
                 predictions.append(
                     ClassificationModelPredictionComparison(
@@ -215,9 +212,7 @@ class ClassificationManagementService:
                         review_status=prediction.review_status,
                         probabilities={
                             str(key): float(value)
-                            for key, value in dict(
-                                prediction.probabilities_json or {}
-                            ).items()
+                            for key, value in dict(prediction.probabilities_json or {}).items()
                         },
                     )
                 )
@@ -262,26 +257,27 @@ class ScientificClassificationFileService:
 
     def csv_bytes(self, project_id: str, *, assignment_status: str = "accepted") -> bytes:
         document = self._document(project_id, assignment_status)
-        fieldnames = list(type(document.rows[0]).model_fields) if document.rows else [
-            "assignment_id",
-            "target_kind",
-            "target_key",
-            "image_id",
-            "label_set_key",
-            "label_class_id",
-            "label_class_name",
-            "confidence",
-            "measurements",
-        ]
+        fieldnames = (
+            list(type(document.rows[0]).model_fields)
+            if document.rows
+            else [
+                "assignment_id",
+                "target_kind",
+                "target_key",
+                "image_id",
+                "label_set_key",
+                "label_class_id",
+                "label_class_name",
+                "confidence",
+                "measurements",
+            ]
+        )
         stream = io.StringIO(newline="")
         writer = csv.DictWriter(stream, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         for row in document.rows:
             writer.writerow(
-                {
-                    key: _csv_value(value)
-                    for key, value in row.model_dump(mode="python").items()
-                }
+                {key: _csv_value(value) for key, value in row.model_dump(mode="python").items()}
             )
         return stream.getvalue().encode("utf-8-sig")
 
@@ -345,9 +341,7 @@ class ScientificClassificationFileService:
             "source_prediction_id": strings("source_prediction_id"),
             "confidence": np.asarray(
                 [
-                    np.nan
-                    if row.get("confidence") is None
-                    else float(row["confidence"])
+                    np.nan if row.get("confidence") is None else float(row["confidence"])
                     for row in rows
                 ],
                 dtype=np.float64,
@@ -358,9 +352,7 @@ class ScientificClassificationFileService:
             "image_metadata_json": json_strings("image_metadata"),
             "probabilities_json": json_strings("probabilities"),
             "provenance_json": json_strings("provenance"),
-            "measurement_candidate_mask_ids_json": json_strings(
-                "measurement_candidate_mask_ids"
-            ),
+            "measurement_candidate_mask_ids_json": json_strings("measurement_candidate_mask_ids"),
             "measurements_json": json_strings("measurements"),
             "manifest_json": np.asarray(
                 _json_text(

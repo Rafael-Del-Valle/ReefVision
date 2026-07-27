@@ -19,9 +19,7 @@ def test_dataset_export_paths_are_compact_and_deterministic() -> None:
     )
 
     assert repeated == (output_path, manifest_path, archive_path)
-    assert output_path.startswith(
-        "projects/645b6818-8876-431c-ab3f-cee8f14d8a55/exports/v0001-"
-    )
+    assert output_path.startswith("projects/645b6818-8876-431c-ab3f-cee8f14d8a55/exports/v0001-")
     assert len(output_path.rsplit("/", 1)[-1]) == len("v0001-") + 16
     assert manifest_path == f"{output_path}/export-manifest.json"
     assert archive_path == f"{output_path}.zip"

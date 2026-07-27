@@ -36,10 +36,7 @@ def apply_native_unet_registration_patch() -> None:
         run = self.session.get(TrainingRun, payload.training_run_id)
         if run is None:
             raise NotFoundError("Training run not found")
-        if (
-            run.task != SEMANTIC_SEGMENTATION_TASK
-            or run.provider_id != REEFVISION_UNET_PROVIDER_ID
-        ):
+        if run.task != SEMANTIC_SEGMENTATION_TASK or run.provider_id != REEFVISION_UNET_PROVIDER_ID:
             return original(self, project_id, payload)
         if run.project_id != project_id:
             raise ValidationError("Training runs must belong to the selected project")
@@ -79,12 +76,10 @@ def apply_native_unet_registration_patch() -> None:
         class_map = {
             "labels": foreground_labels,
             "mapping": {
-                label: labels_by_name.get(label.strip().casefold())
-                for label in foreground_labels
+                label: labels_by_name.get(label.strip().casefold()) for label in foreground_labels
             },
             "pixel_values": {
-                label: index
-                for index, label in enumerate(foreground_labels, start=1)
+                label: index for index, label in enumerate(foreground_labels, start=1)
             },
         }
 

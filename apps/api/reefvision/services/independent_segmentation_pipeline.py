@@ -64,12 +64,8 @@ def _record_independent_promotion(
             "required_votes": required_votes,
             "candidate_ids": list(proposal_provenance.get("candidate_ids") or []),
             "branch_ids": list(proposal_provenance.get("branch_ids") or []),
-            "pairwise_mask_iou": dict(
-                proposal_provenance.get("pairwise_mask_iou") or {}
-            ),
-            "candidate_provenance": dict(
-                proposal_provenance.get("candidate_provenance") or {}
-            ),
+            "pairwise_mask_iou": dict(proposal_provenance.get("pairwise_mask_iou") or {}),
+            "candidate_provenance": dict(proposal_provenance.get("candidate_provenance") or {}),
         }
         annotation.revision += 1
         session.add(
@@ -166,17 +162,13 @@ def run_independent_segmentation_pipeline(
             try:
                 with factory() as session:
                     image = session.get(ImageAsset, image_id)
-                    project = (
-                        session.get(Project, image.project_id) if image is not None else None
-                    )
+                    project = session.get(Project, image.project_id) if image is not None else None
                     if image is None or project is None:
                         raise ValidationError(
                             "Independent auto-labeling persistence context is missing"
                         )
                     image_path = resolve_managed_project_path(settings, image.managed_path)
-                    primary_for_image = [
-                        item for item in proposals if item.image_id == image_id
-                    ]
+                    primary_for_image = [item for item in proposals if item.image_id == image_id]
                     primary_candidates = [
                         IndependentMaskCandidate(
                             candidate_id=item.id,
@@ -242,9 +234,7 @@ def run_independent_segmentation_pipeline(
                     with factory() as session:
                         image = session.get(ImageAsset, image_id)
                         project = (
-                            session.get(Project, image.project_id)
-                            if image is not None
-                            else None
+                            session.get(Project, image.project_id) if image is not None else None
                         )
                         model = session.get(ModelRegistration, primary_model_id)
                         if image is None or project is None or model is None:
@@ -357,9 +347,7 @@ def run_independent_segmentation_pipeline(
         image_count=len(image_results),
         consensus_count=sum(item.consensus_count for item in image_results),
         proposal_count=sum(len(item.proposal_ids) for item in image_results),
-        accepted_count=sum(
-            len(item.accepted_mask_annotation_ids) for item in image_results
-        ),
+        accepted_count=sum(len(item.accepted_mask_annotation_ids) for item in image_results),
         failed_image_count=failed_images,
         images=tuple(image_results),
     )

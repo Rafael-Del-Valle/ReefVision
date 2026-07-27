@@ -127,7 +127,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function listPersistedWorkflows(projectId: string, signal?: AbortSignal) {
+export function listPersistedWorkflows(
+  projectId: string,
+  signal?: AbortSignal,
+) {
   return request<PersistedWorkflow[]>(`/projects/${projectId}/workflows`, {
     signal,
   });
@@ -189,10 +192,7 @@ export function listWorkflowArtifactQuarantine(
   );
 }
 
-export function restoreWorkflowArtifacts(
-  runId: string,
-  artifactIds: string[],
-) {
+export function restoreWorkflowArtifacts(runId: string, artifactIds: string[]) {
   return request<WorkflowArtifactRestoreResult>(
     `/workflow-runs/${runId}/artifact-quarantine/restore`,
     {

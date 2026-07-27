@@ -10,8 +10,8 @@ from sqlalchemy import select
 import reefvision.jobs.classification_inference as inference_module
 from reefvision.db.models import ClassificationAssignment, ClassificationLabelSet
 from reefvision.tests.test_classification_inference_safety_phase5 import (
-    _SuccessfulProvider,
     _seed_classifier,
+    _SuccessfulProvider,
 )
 from reefvision.tests.test_classification_phase5 import _seed_classification_project
 

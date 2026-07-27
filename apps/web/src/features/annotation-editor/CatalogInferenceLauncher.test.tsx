@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CatalogInferenceLauncher } from "./CatalogInferenceLauncher";
@@ -52,7 +58,9 @@ describe("CatalogInferenceLauncher", () => {
         const url = String(input);
         requests.push({ url, init });
         if (url.endsWith("/images/image-1/annotations")) {
-          return response({ image: { id: "image-1", project_id: "project-1" } });
+          return response({
+            image: { id: "image-1", project_id: "project-1" },
+          });
         }
         if (url.includes("/projects/project-1/model-catalog")) {
           return response({
@@ -110,7 +118,9 @@ describe("CatalogInferenceLauncher", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Find objects" }));
 
-    await screen.findByText("Detection complete: 2 proposals added for review.");
+    await screen.findByText(
+      "Detection complete: 2 proposals added for review.",
+    );
     const createRequest = requests.find((item) =>
       item.url.endsWith("/projects/project-1/catalog-inference-jobs"),
     );
@@ -122,7 +132,9 @@ describe("CatalogInferenceLauncher", () => {
       device: "auto",
     });
     await waitFor(() => {
-      expect(requests.some((item) => item.url.endsWith("/jobs/job-1"))).toBe(true);
+      expect(requests.some((item) => item.url.endsWith("/jobs/job-1"))).toBe(
+        true,
+      );
     });
   });
 });

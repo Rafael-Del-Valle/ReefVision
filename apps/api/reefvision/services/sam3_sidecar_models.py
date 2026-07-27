@@ -69,9 +69,7 @@ class Sam3SidecarModelService:
             raise ConflictError("A model with this display name already exists")
 
         model_id = str(uuid4())
-        relative_path = (
-            f"{project.storage_root}/models/sam3-sidecar/{model_id}.sam3.json"
-        )
+        relative_path = f"{project.storage_root}/models/sam3-sidecar/{model_id}.sam3.json"
         destination = resolve_managed_project_path(self.settings, relative_path)
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_name(f".{destination.name}.{uuid4().hex[:8]}.tmp")

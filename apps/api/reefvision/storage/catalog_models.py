@@ -36,9 +36,7 @@ def catalog_model_directories(settings: Settings) -> dict[str, Path]:
 
 def _safe_catalog_segments(catalog_id: str) -> list[str]:
     segments = catalog_id.split("/")
-    if not segments or any(
-        not _SAFE_SEGMENT.fullmatch(segment) for segment in segments
-    ):
+    if not segments or any(not _SAFE_SEGMENT.fullmatch(segment) for segment in segments):
         raise ValidationError("Catalog id cannot be mapped to managed storage")
     return segments
 
@@ -60,15 +58,9 @@ def catalog_asset_path(
 
 def relative_catalog_asset_path(settings: Settings, path: Path) -> str:
     try:
-        return (
-            path.resolve()
-            .relative_to(settings.resolved_model_cache_dir)
-            .as_posix()
-        )
+        return path.resolve().relative_to(settings.resolved_model_cache_dir).as_posix()
     except ValueError as exc:
-        raise ValidationError(
-            "Catalog asset is outside ReefVision model-cache storage"
-        ) from exc
+        raise ValidationError("Catalog asset is outside ReefVision model-cache storage") from exc
 
 
 def manifest_path(settings: Settings) -> Path:
@@ -88,9 +80,7 @@ def load_catalog_manifest(settings: Settings) -> dict[str, Any]:
             "corrupted": True,
         }
     assets = payload.get("assets")
-    if payload.get("manifest_version") != MANIFEST_VERSION or not isinstance(
-        assets, dict
-    ):
+    if payload.get("manifest_version") != MANIFEST_VERSION or not isinstance(assets, dict):
         return {
             "manifest_version": MANIFEST_VERSION,
             "assets": {},
@@ -119,9 +109,7 @@ def write_catalog_manifest_record(
         assets[catalog_id] = {
             **record,
             "catalog_id": catalog_id,
-            "installed_at": (
-                record.get("installed_at") or datetime.now(UTC).isoformat()
-            ),
+            "installed_at": (record.get("installed_at") or datetime.now(UTC).isoformat()),
         }
         finalized = {
             "manifest_version": MANIFEST_VERSION,

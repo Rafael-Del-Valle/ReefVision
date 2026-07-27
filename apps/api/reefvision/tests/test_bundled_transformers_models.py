@@ -122,9 +122,10 @@ def test_startup_seeding_verifies_and_repairs_every_file(
         client.app.state.settings
     )
     assert repair_warnings == []
-    assert repaired[CATALOG_ID].joinpath("model.safetensors").read_bytes() == (
-        source_root / "model.safetensors"
-    ).read_bytes()
+    assert (
+        repaired[CATALOG_ID].joinpath("model.safetensors").read_bytes()
+        == (source_root / "model.safetensors").read_bytes()
+    )
 
 
 def test_corrupt_bundled_source_is_not_installed(
@@ -142,10 +143,7 @@ def test_corrupt_bundled_source_is_not_installed(
     )
 
     assert installed == {}
-    assert any(
-        "failed verification" in warning and "mismatch" in warning
-        for warning in warnings
-    )
+    assert any("failed verification" in warning and "mismatch" in warning for warning in warnings)
 
 
 def test_verified_pointer_resolves_to_managed_snapshot(

@@ -57,9 +57,7 @@ def _post_json(
             raw = response.read()
     except url_error.HTTPError as exc:
         body = exc.read(2048).decode("utf-8", errors="replace")
-        raise ValidationError(
-            f"SAM 3 sidecar returned HTTP {exc.code}: {body}"
-        ) from exc
+        raise ValidationError(f"SAM 3 sidecar returned HTTP {exc.code}: {body}") from exc
     except (url_error.URLError, TimeoutError, OSError) as exc:
         raise ValidationError(f"SAM 3 sidecar request failed: {exc}") from exc
     try:
@@ -99,9 +97,7 @@ def _normalized_mask(
         with Image.open(BytesIO(raw)) as source:
             source.load()
             if source.size != (width, height):
-                raise ValidationError(
-                    "SAM 3 sidecar mask dimensions do not match the source image"
-                )
+                raise ValidationError("SAM 3 sidecar mask dimensions do not match the source image")
             binary = source.convert("L").point(lambda value: 255 if value else 0)
             bounds = binary.getbbox()
             if bounds is None:
@@ -140,9 +136,7 @@ class Sam3SidecarSegmentationProvider:
         output_label = str(descriptor.get("output_label", prompt)).strip()
         if not prompt or not output_label:
             raise ValidationError("SAM 3 sidecar descriptor is missing its concept prompt")
-        token_env = str(
-            descriptor.get("token_env", "REEFVISION_SAM3_SIDECAR_TOKEN")
-        ).strip()
+        token_env = str(descriptor.get("token_env", "REEFVISION_SAM3_SIDECAR_TOKEN")).strip()
         if not token_env or not token_env.replace("_", "").isalnum():
             raise ValidationError("SAM 3 sidecar token environment name is invalid")
         try:
@@ -185,9 +179,7 @@ class Sam3SidecarSegmentationProvider:
         instances = response.get("instances")
         if not isinstance(instances, list):
             raise ValidationError("SAM 3 sidecar response has no instance list")
-        self.provider_version = str(
-            response.get("model_version", self.provider_version)
-        )
+        self.provider_version = str(response.get("model_version", self.provider_version))
         predictions: list[SegmentationPrediction] = []
         for raw_instance in instances:
             if not isinstance(raw_instance, dict):

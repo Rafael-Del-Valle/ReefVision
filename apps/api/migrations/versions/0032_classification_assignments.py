@@ -134,15 +134,11 @@ def upgrade() -> None:
             ["label_set_id"], ["classification_label_sets.id"], ondelete="CASCADE"
         ),
         sa.ForeignKeyConstraint(["image_id"], ["images.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(
-            ["annotation_id"], ["annotations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["annotation_id"], ["annotations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
             ["mask_annotation_id"], ["mask_annotations.id"], ondelete="CASCADE"
         ),
-        sa.ForeignKeyConstraint(
-            ["label_class_id"], ["label_classes.id"], ondelete="RESTRICT"
-        ),
+        sa.ForeignKeyConstraint(["label_class_id"], ["label_classes.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
             ["source_model_id"], ["model_registrations.id"], ondelete="SET NULL"
         ),

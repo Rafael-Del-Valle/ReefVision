@@ -66,9 +66,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             and item.get_closest_marker("integration") is None
         ):
             marker = (
-                "integration"
-                if any(token in filename for token in _INTEGRATION_HINTS)
-                else "unit"
+                "integration" if any(token in filename for token in _INTEGRATION_HINTS) else "unit"
             )
             item.add_marker(getattr(pytest.mark, marker))
         match = _PHASE_PATTERN.search(filename)

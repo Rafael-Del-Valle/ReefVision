@@ -130,9 +130,7 @@ def process_semantic_training_job(
             )
             images = list(
                 session.scalars(
-                    select(ImageAsset).where(
-                        ImageAsset.id.in_([item.image_id for item in items])
-                    )
+                    select(ImageAsset).where(ImageAsset.id.in_([item.image_id for item in items]))
                 )
             )
             image_paths = {

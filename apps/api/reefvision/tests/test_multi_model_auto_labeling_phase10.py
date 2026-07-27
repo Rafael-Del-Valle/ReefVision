@@ -223,11 +223,7 @@ def test_workflow_templates_expose_multi_model_auto_labeling(
     assert response.status_code == 200, response.text
     templates = {item["template_id"]: item for item in response.json()}
     template = templates["multi-model-segmentation-auto-labeling"]
-    node = next(
-        item
-        for item in template["workflow"]["nodes"]
-        if item["id"] == "segment-and-vote"
-    )
+    node = next(item for item in template["workflow"]["nodes"] if item["id"] == "segment-and-vote")
     consensus = node["configuration"]["multi_model_consensus"]
     assert consensus["required_votes"] == 2
     assert consensus["required_primary_provider"] == "sam3_sidecar"

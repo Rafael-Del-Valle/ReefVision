@@ -7,10 +7,11 @@ import io
 import os
 import shutil
 import zipfile
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 from uuid import uuid4
 
 import numpy as np
@@ -209,9 +210,7 @@ class ClassificationDataExportService:
                     bbox[index] = np.asarray(value, dtype=np.float64)
             confidence = np.asarray(
                 [
-                    float(row["confidence"])
-                    if row.get("confidence") is not None
-                    else np.nan
+                    float(row["confidence"]) if row.get("confidence") is not None else np.nan
                     for row in rows
                 ],
                 dtype=np.float64,
@@ -228,21 +227,15 @@ class ClassificationDataExportService:
                 target_key=_text_array([str(row["target_key"]) for row in rows]),
                 image_id=_text_array([str(row["image_id"]) for row in rows]),
                 image_filename=_text_array([str(row["image_filename"]) for row in rows]),
-                annotation_id=_text_array(
-                    [str(row.get("annotation_id") or "") for row in rows]
-                ),
+                annotation_id=_text_array([str(row.get("annotation_id") or "") for row in rows]),
                 mask_annotation_id=_text_array(
                     [str(row.get("mask_annotation_id") or "") for row in rows]
                 ),
-                fragment_key=_text_array(
-                    [str(row.get("fragment_key") or "") for row in rows]
-                ),
+                fragment_key=_text_array([str(row.get("fragment_key") or "") for row in rows]),
                 bbox=bbox,
                 label_set_key=_text_array([str(row["label_set_key"]) for row in rows]),
                 label_class_id=_text_array([str(row["label_class_id"]) for row in rows]),
-                label_class_name=_text_array(
-                    [str(row["label_class_name"]) for row in rows]
-                ),
+                label_class_name=_text_array([str(row["label_class_name"]) for row in rows]),
                 source_model_id=_text_array(
                     [str(row.get("source_model_id") or "") for row in rows]
                 ),
@@ -269,9 +262,7 @@ class ClassificationDataExportService:
             files["classification-assignments.npz"] = npz_output.getvalue()
 
         artifact_id = str(uuid4())
-        relative_root = (
-            f"{project.storage_root}/classification-exports/scientific-{artifact_id}"
-        )
+        relative_root = f"{project.storage_root}/classification-exports/scientific-{artifact_id}"
         row_checksum = sha256(canonical_json_bytes(rows)).hexdigest()
         manifest = {
             "format": "reefvision-scientific-classification-export",
@@ -316,9 +307,7 @@ class ClassificationDataExportService:
                 source_kind="project",
                 source_id=project.id,
                 source_checksum=row_checksum,
-                source_annotation_revision=max(
-                    int(row["assignment_revision"]) for row in rows
-                ),
+                source_annotation_revision=max(int(row["assignment_revision"]) for row in rows),
                 parameters_json=request.model_dump(mode="json"),
                 postprocessing_json={
                     "formats": list(request.formats),

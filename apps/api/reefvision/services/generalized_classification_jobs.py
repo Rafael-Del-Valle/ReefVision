@@ -46,9 +46,7 @@ class GeneralizedClassificationJobService:
         requested_images = list(dict.fromkeys(request.image_ids))
         images = (
             list(
-                self.session.scalars(
-                    select(ImageAsset).where(ImageAsset.id.in_(requested_images))
-                )
+                self.session.scalars(select(ImageAsset).where(ImageAsset.id.in_(requested_images)))
             )
             if requested_images
             else []

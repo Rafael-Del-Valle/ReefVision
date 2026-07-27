@@ -47,11 +47,7 @@ def test_consensus_evaluation_records_improvement_and_thresholds(
         _write_mask(directories["intersection"] / f"{key}.png", intersection)
 
     output = tmp_path / "evaluation"
-    script = (
-        Path(__file__).parents[4]
-        / "scripts"
-        / "evaluate-consensus-masks.py"
-    )
+    script = Path(__file__).parents[4] / "scripts" / "evaluate-consensus-masks.py"
     completed = subprocess.run(
         [
             sys.executable,
@@ -111,11 +107,7 @@ def test_consensus_evaluation_fails_incomplete_branch(tmp_path: Path) -> None:
             directory.mkdir(parents=True, exist_ok=True)
             _write_mask(directory / "different-image.png", mask)
 
-    script = (
-        Path(__file__).parents[4]
-        / "scripts"
-        / "evaluate-consensus-masks.py"
-    )
+    script = Path(__file__).parents[4] / "scripts" / "evaluate-consensus-masks.py"
     completed = subprocess.run(
         [
             sys.executable,

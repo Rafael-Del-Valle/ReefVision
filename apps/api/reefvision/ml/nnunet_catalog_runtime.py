@@ -37,9 +37,7 @@ def apply_nnunet_catalog_runtime_patch() -> None:
             update={
                 "availability": "available" if ready else "experimental",
                 "provider_version": _installed_version() or "not-installed",
-                "required_package_versions": [
-                    f"nnunetv2=={PINNED_NNUNET_VERSION}"
-                ],
+                "required_package_versions": [f"nnunetv2=={PINNED_NNUNET_VERSION}"],
                 "desktop_support": "base_sidecar_provider",
                 "desktop_package_status": "base_sidecar_provider",
                 "clean_machine_verification_status": "acceptance_required",
@@ -55,9 +53,7 @@ def apply_nnunet_catalog_runtime_patch() -> None:
                     if ready
                     else "; ".join(issues)
                 ),
-                "installed_asset_id": (
-                    "builtin_architecture:nnunet-2d" if ready else None
-                ),
+                "installed_asset_id": ("builtin_architecture:nnunet-2d" if ready else None),
                 "metadata_verified": ready,
                 "provider_ready": ready,
                 "provider_state": "ready" if ready else "unavailable",
@@ -65,7 +61,5 @@ def apply_nnunet_catalog_runtime_patch() -> None:
             }
         )
 
-    segmentation_catalog._semantic_architecture_entry = (
-        packaged_semantic_architecture_entry
-    )
+    segmentation_catalog._semantic_architecture_entry = packaged_semantic_architecture_entry
     _APPLIED = True

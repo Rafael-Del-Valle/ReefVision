@@ -138,10 +138,7 @@ def _masked_crop(
         return crop
     local_mask = Image.new("L", crop.size, 0)
     if mask.polygon_json and len(mask.polygon_json) >= 3:
-        points = [
-            (float(point[0]) - left, float(point[1]) - top)
-            for point in mask.polygon_json
-        ]
+        points = [(float(point[0]) - left, float(point[1]) - top) for point in mask.polygon_json]
         ImageDraw.Draw(local_mask).polygon(points, fill=255)
     elif mask.mask_path:
         mask_path = resolve_managed_project_path(settings, mask.mask_path)

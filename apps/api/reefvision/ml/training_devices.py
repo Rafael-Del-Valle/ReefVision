@@ -45,8 +45,7 @@ def resolve_training_device(requested: str) -> str | int:
     missing = [index for index in indices if index < 0 or index >= available]
     if missing:
         raise ValidationError(
-            "Requested CUDA devices are unavailable: "
-            + ", ".join(str(index) for index in missing)
+            "Requested CUDA devices are unavailable: " + ", ".join(str(index) for index in missing)
         )
     if len(indices) == 1:
         return indices[0]

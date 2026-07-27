@@ -6,9 +6,9 @@ import json
 import os
 import shutil
 import subprocess
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Iterable
 
 from PIL import Image
 
@@ -57,7 +57,10 @@ def ensure_nnunet_paths(paths: NnUNetPaths) -> None:
 
 def _validate_case_id(case_id: str) -> str:
     normalized = case_id.strip()
-    if not normalized or any(character not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-" for character in normalized):
+    if not normalized or any(
+        character not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
+        for character in normalized
+    ):
         raise ValidationError(f"Invalid nnU-Net case id: {case_id!r}")
     return normalized
 

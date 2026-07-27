@@ -14,9 +14,10 @@ import { registerSam3SidecarModel } from "./sam3SidecarApi";
 import { Sam3WorkflowSetupPanel } from "./Sam3WorkflowSetupPanel";
 
 vi.mock("../../api/client", async () => {
-  const actual = await vi.importActual<typeof import("../../api/client")>(
-    "../../api/client",
-  );
+  const actual =
+    await vi.importActual<typeof import("../../api/client")>(
+      "../../api/client",
+    );
   return { ...actual, getProject: vi.fn() };
 });
 vi.mock("../phase456/api", () => ({ getModels: vi.fn() }));
@@ -130,7 +131,9 @@ describe("Sam3WorkflowSetupPanel", () => {
         timeout_seconds: 120,
       }),
     );
-    expect(await screen.findByText("SAM 2 sidecar is ready.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("SAM 2 sidecar is ready."),
+    ).toBeInTheDocument();
     expect(screen.getAllByText(/sam2\.1_hiera_large\.pt/)).not.toHaveLength(0);
 
     await user.click(

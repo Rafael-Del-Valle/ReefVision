@@ -211,15 +211,11 @@ def build_mask_consensus(
         )
         if not bool(consensus_mask.any()):
             rejected += 1
-            warnings.append(
-                f"Consensus group {root} became empty under {aggregation} aggregation."
-            )
+            warnings.append(f"Consensus group {root} became empty under {aggregation} aggregation.")
             continue
         member_ids = {item.candidate_id for item in members}
         group_pairs = {
-            key: value
-            for key, value in pairwise.items()
-            if set(key.split("|")) <= member_ids
+            key: value for key, value in pairwise.items() if set(key.split("|")) <= member_ids
         }
         groups.append(
             MaskConsensusGroup(

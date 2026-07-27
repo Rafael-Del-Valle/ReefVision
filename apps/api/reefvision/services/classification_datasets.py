@@ -241,9 +241,7 @@ class ClassificationDatasetService:
         split_counts = dict.fromkeys(_SPLITS, 0)
         for item in prepared:
             split_counts[group_splits[item["group_key"]]] += 1
-        achieved = {
-            split: split_counts[split] / len(prepared) for split in _SPLITS
-        }
+        achieved = {split: split_counts[split] / len(prepared) for split in _SPLITS}
         for split in _SPLITS:
             if ratios[split] > 0 and split_counts[split] == 0:
                 warnings.append(

@@ -22,9 +22,7 @@ const definitions: WorkflowNodeDefinition[] = [
     node_type: "export",
     display_name: "Export",
     inputs: [{ name: "artifact", data_type: "artifact", required: true }],
-    outputs: [
-      { name: "archive", data_type: "export_archive", required: true },
-    ],
+    outputs: [{ name: "archive", data_type: "export_archive", required: true }],
     requires_model: false,
     supported_model_tasks: [],
   },
@@ -87,13 +85,15 @@ describe("WorkflowGraphEditor advanced editing", () => {
     const imageNode = screen.getByTestId("workflow-node-images");
     const exportNode = screen.getByTestId("workflow-node-export");
     await user.click(within(imageNode).getByRole("button", { name: "images" }));
-    await user.click(within(exportNode).getByRole("button", { name: "artifact" }));
+    await user.click(
+      within(exportNode).getByRole("button", { name: "artifact" }),
+    );
     expect(screen.getByTestId("edge-count")).toHaveTextContent("1");
 
     const before = imageNode.getAttribute("style");
     await user.click(screen.getByRole("button", { name: /auto-layout/i }));
-    expect(screen.getByTestId("workflow-node-images").getAttribute("style")).not.toBe(
-      before,
-    );
+    expect(
+      screen.getByTestId("workflow-node-images").getAttribute("style"),
+    ).not.toBe(before);
   });
 });

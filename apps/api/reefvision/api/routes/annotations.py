@@ -63,14 +63,10 @@ def _validate_annotation_ownership(
 
     box_ids = {draft.id for draft in payload.annotations}
     if box_ids:
-        statement = select(Annotation.id, Annotation.image_id).where(
-            Annotation.id.in_(box_ids)
-        )
+        statement = select(Annotation.id, Annotation.image_id).where(Annotation.id.in_(box_ids))
         for _annotation_id, owner_image_id in session.execute(statement):
             if owner_image_id != image_id:
-                raise ValidationError(
-                    "Annotations may only be saved back to their source image"
-                )
+                raise ValidationError("Annotations may only be saved back to their source image")
 
     mask_ids = {draft.id for draft in payload.mask_annotations}
     mask_ids.update(payload.deleted_mask_annotation_ids)
@@ -80,9 +76,7 @@ def _validate_annotation_ownership(
         )
         for _mask_id, owner_image_id in session.execute(statement):
             if owner_image_id != image_id:
-                raise ValidationError(
-                    "Mask annotations may only be saved to their source image"
-                )
+                raise ValidationError("Mask annotations may only be saved to their source image")
 
 
 def _ordered_counts(

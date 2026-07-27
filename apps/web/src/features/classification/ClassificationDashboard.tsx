@@ -539,8 +539,8 @@ export function ClassificationDashboard({ project }: { project: Project }) {
             </p>
             {!classificationTaskKeyValid && (
               <p className="form-warning">
-                Use letters, numbers, periods, underscores, or hyphens, beginning
-                with a letter or number.
+                Use letters, numbers, periods, underscores, or hyphens,
+                beginning with a letter or number.
               </p>
             )}
             <div className="version-actions">
@@ -601,7 +601,8 @@ export function ClassificationDashboard({ project }: { project: Project }) {
             </div>
             <p>
               Accepted classifier results are stored as independent assignments.
-              They do not replace the target&apos;s primary detection or mask class.
+              They do not replace the target&apos;s primary detection or mask
+              class.
             </p>
             <div className="dashboard-list">
               {predictions.data?.items.map((prediction) => (
@@ -613,8 +614,8 @@ export function ClassificationDashboard({ project }: { project: Project }) {
                       {prediction.review_status}
                     </p>
                     <small>
-                      Image {prediction.image_id} · {prediction.target_kind} target{" "}
-                      {prediction.target_key}
+                      Image {prediction.image_id} · {prediction.target_kind}{" "}
+                      target {prediction.target_key}
                     </small>
                     {prediction.review_status === "pending" && (
                       <label>

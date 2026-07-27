@@ -20,16 +20,12 @@ export function Sam3WorkflowSetupPanel({ projectId }: { projectId: string }) {
   );
   const [labelClassId, setLabelClassId] = useState("");
   const [scoreThreshold, setScoreThreshold] = useState(0.35);
-  const [tokenEnv, setTokenEnv] = useState(
-    "REEFVISION_SAM3_SIDECAR_TOKEN",
-  );
+  const [tokenEnv, setTokenEnv] = useState("REEFVISION_SAM3_SIDECAR_TOKEN");
   const [sam2ModelId, setSam2ModelId] = useState("");
   const [sam2DisplayName, setSam2DisplayName] = useState(
     "SAM 2 Hiera Large sidecar",
   );
-  const [sam2Endpoint, setSam2Endpoint] = useState(
-    "http://127.0.0.1:8766",
-  );
+  const [sam2Endpoint, setSam2Endpoint] = useState("http://127.0.0.1:8766");
   const [sam2TokenEnv, setSam2TokenEnv] = useState(
     "REEFVISION_SAM2_SIDECAR_TOKEN",
   );
@@ -51,9 +47,7 @@ export function Sam3WorkflowSetupPanel({ projectId }: { projectId: string }) {
     () =>
       models.data?.filter(
         (item) =>
-          ["sam2", "sam2_sidecar"].includes(
-            item.provider_name.toLowerCase(),
-          ) &&
+          ["sam2", "sam2_sidecar"].includes(item.provider_name.toLowerCase()) &&
           item.purpose === "assist" &&
           item.task === "assist_segmentation",
       ) ?? [],
@@ -310,7 +304,10 @@ export function Sam3WorkflowSetupPanel({ projectId }: { projectId: string }) {
               <p>
                 {checkSam2.data.model_version ?? "Unknown model"} on{" "}
                 <code>{checkSam2.data.device}</code>. Token{" "}
-                {checkSam2.data.token_configured ? "configured" : "not configured"}.
+                {checkSam2.data.token_configured
+                  ? "configured"
+                  : "not configured"}
+                .
               </p>
             </div>
           )}
@@ -319,8 +316,9 @@ export function Sam3WorkflowSetupPanel({ projectId }: { projectId: string }) {
         <article className="dashboard-card">
           <h4>4. Register or select SAM 2 refinement</h4>
           <p>
-            Sidecar registrations keep Meta SAM 2 outside ReefVision&apos;s pinned
-            desktop runtime. Existing in-process SAM 2 registrations remain valid.
+            Sidecar registrations keep Meta SAM 2 outside ReefVision&apos;s
+            pinned desktop runtime. Existing in-process SAM 2 registrations
+            remain valid.
           </p>
           <label>
             Sidecar registration name
@@ -373,8 +371,10 @@ export function Sam3WorkflowSetupPanel({ projectId }: { projectId: string }) {
           )}
           <p>
             The default aggregation is <code>pixel_majority</code>: a pixel is
-            retained when at least two independent branches include it. Switch to
-            <code>intersection</code> for the article&apos;s most conservative output.
+            retained when at least two independent branches include it. Switch
+            to
+            <code>intersection</code> for the article&apos;s most conservative
+            output.
           </p>
         </article>
 
@@ -383,8 +383,8 @@ export function Sam3WorkflowSetupPanel({ projectId }: { projectId: string }) {
           <pre>{JSON.stringify(exactConfiguration, null, 2)}</pre>
           <small>
             Apply this object as <code>multi_model_consensus</code> on the SAM 3
-            segmenter node. Keep <code>auto_accept</code> false until the workflow
-            has been validated on representative images.
+            segmenter node. Keep <code>auto_accept</code> false until the
+            workflow has been validated on representative images.
           </small>
         </article>
 
@@ -397,10 +397,11 @@ export function Sam3WorkflowSetupPanel({ projectId }: { projectId: string }) {
             <code>allow_remote_review</code> value to <code>true</code>.
           </p>
           <p>
-            Semantic-review mode sends source crops and highlighted-mask overlays.
-            Independent-mask mode sends each selected full image to Gemini and
-            OpenAI so both can detect objects independently. The default remains
-            disabled to prevent accidental data transfer or API charges.
+            Semantic-review mode sends source crops and highlighted-mask
+            overlays. Independent-mask mode sends each selected full image to
+            Gemini and OpenAI so both can detect objects independently. The
+            default remains disabled to prevent accidental data transfer or API
+            charges.
           </p>
         </article>
       </div>

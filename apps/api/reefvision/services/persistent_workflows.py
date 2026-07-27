@@ -310,7 +310,9 @@ class PersistentWorkflowService:
         source_state = dict(source.node_state_json or {})
         if request.from_node_id is not None:
             if request.from_node_id not in order:
-                raise ValidationError("The selected recovery node is not part of this workflow revision")
+                raise ValidationError(
+                    "The selected recovery node is not part of this workflow revision"
+                )
             restart_index = order.index(request.from_node_id)
         else:
             restart_index = next(

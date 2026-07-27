@@ -75,8 +75,7 @@ def validate_nnunet_dependency_contract() -> list[str]:
         installed_nnunet = None
     if installed_nnunet != PINNED_NNUNET_VERSION:
         issues.append(
-            "nnunetv2 must be "
-            f"{PINNED_NNUNET_VERSION}; found {installed_nnunet or 'not installed'}"
+            f"nnunetv2 must be {PINNED_NNUNET_VERSION}; found {installed_nnunet or 'not installed'}"
         )
 
     for dependency in NNUNET_DEPENDENCIES:
@@ -95,8 +94,7 @@ def validate_nnunet_dependency_contract() -> list[str]:
                 raise AttributeError(function_name)
         except Exception as exc:
             issues.append(
-                f"{command_name} ({module_name}:{function_name}): "
-                f"{type(exc).__name__}: {exc}"
+                f"{command_name} ({module_name}:{function_name}): {type(exc).__name__}: {exc}"
             )
     return issues
 

@@ -377,7 +377,8 @@ export interface VideoRenderExportResponse {
   job: JobRecord;
 }
 
-export type VideoExportResponse = VideoDataExportResponse | VideoRenderExportResponse;
+export type VideoExportResponse =
+  VideoDataExportResponse | VideoRenderExportResponse;
 
 export interface VideoZoneRequest {
   name: string;
@@ -430,10 +431,7 @@ export interface VideoRevisionRequest {
   operation_id?: string;
 }
 
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     headers: {
       ...(options.body instanceof FormData
@@ -489,9 +487,12 @@ export function validateMeasurements(
 export const validateProjectMeasurements = validateMeasurements;
 
 export function getDatasetVersions(projectId: string, signal?: AbortSignal) {
-  return request<DatasetVersionOption[]>(`/projects/${projectId}/dataset-versions`, {
-    signal,
-  });
+  return request<DatasetVersionOption[]>(
+    `/projects/${projectId}/dataset-versions`,
+    {
+      signal,
+    },
+  );
 }
 
 export function previewClassification(
@@ -683,7 +684,10 @@ export function deleteVideoZone(
   );
 }
 
-export function calibrateVideo(videoId: string, payload: VideoCalibrationRequest) {
+export function calibrateVideo(
+  videoId: string,
+  payload: VideoCalibrationRequest,
+) {
   return request<VideoAsset>(`/videos/${videoId}/calibration`, {
     method: "PUT",
     body: JSON.stringify({ source: "manual", ...payload }),
@@ -789,7 +793,10 @@ export function deleteVideoObservation(
   });
 }
 
-export function archiveVideoTrack(trackId: string, payload: VideoRevisionRequest) {
+export function archiveVideoTrack(
+  trackId: string,
+  payload: VideoRevisionRequest,
+) {
   return request<VideoTrackOperation>(`/video-tracks/${trackId}/delete`, {
     method: "POST",
     body: JSON.stringify(payload),
@@ -873,10 +880,13 @@ export function createVideoRenderExport(
   videoId: string,
   payload: Record<string, unknown>,
 ) {
-  return request<VideoRenderExportResponse>(`/videos/${videoId}/render-exports`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  return request<VideoRenderExportResponse>(
+    `/videos/${videoId}/render-exports`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export const createRenderedVideoExport = createVideoRenderExport;

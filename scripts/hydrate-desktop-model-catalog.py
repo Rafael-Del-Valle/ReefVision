@@ -11,9 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-APPROVED_DOWNLOAD_PREFIX = (
-    "https://github.com/ultralytics/assets/releases/download/"
-)
+APPROVED_DOWNLOAD_PREFIX = "https://github.com/ultralytics/assets/releases/download/"
 SHA256_PREFIX = "sha256:"
 
 
@@ -67,18 +65,12 @@ def _validated_asset(asset: dict[str, Any], filename: str, tag: str) -> dict[str
     source_url = str(asset.get("browser_download_url") or "")
     expected_url = f"{APPROVED_DOWNLOAD_PREFIX}{tag}/{filename}"
     if source_url != expected_url:
-        raise RuntimeError(
-            f"Release {tag} returned an unapproved download URL for {filename}"
-        )
+        raise RuntimeError(f"Release {tag} returned an unapproved download URL for {filename}")
     digest = str(asset.get("digest") or "").lower()
     if not digest.startswith(SHA256_PREFIX):
-        raise RuntimeError(
-            f"Release {tag} does not expose a SHA-256 digest for {filename}"
-        )
+        raise RuntimeError(f"Release {tag} does not expose a SHA-256 digest for {filename}")
     sha256 = digest.removeprefix(SHA256_PREFIX)
-    if len(sha256) != 64 or any(
-        character not in "0123456789abcdef" for character in sha256
-    ):
+    if len(sha256) != 64 or any(character not in "0123456789abcdef" for character in sha256):
         raise RuntimeError(f"Release {tag} returned an invalid SHA-256 for {filename}")
     size_bytes = int(asset.get("size") or 0)
     if size_bytes <= 0:
@@ -92,9 +84,7 @@ def _validated_asset(asset: dict[str, Any], filename: str, tag: str) -> dict[str
     }
 
 
-def _complete_expected_file(
-    entry: dict[str, Any], expected_filename: str
-) -> dict[str, Any] | None:
+def _complete_expected_file(entry: dict[str, Any], expected_filename: str) -> dict[str, Any] | None:
     if (
         entry.get("availability") != "available"
         or entry.get("selection_kind") != "managed_catalog_model"
@@ -213,9 +203,7 @@ def hydrate_catalog(
         )
         if entry is None:
             reference = requested_catalog_id or display_name
-            raise RuntimeError(
-                f"Desktop model policy references missing catalog entry {reference}"
-            )
+            raise RuntimeError(f"Desktop model policy references missing catalog entry {reference}")
         catalog_id = str(entry.get("catalog_id") or "").strip()
         if not catalog_id:
             raise RuntimeError(f"Catalog entry {display_name} has no catalog_id")
@@ -293,9 +281,7 @@ def hydrate_catalog(
 
     hydrated = dict(catalog)
     hydrated["models"] = raw_models
-    hydrated["desktop_bundle_policy_version"] = str(
-        policy.get("policy_version") or "1"
-    )
+    hydrated["desktop_bundle_policy_version"] = str(policy.get("policy_version") or "1")
     hydrated["desktop_bundle_required_ids"] = sorted(required_ids)
     hydrated["desktop_bundle_required_files"] = sorted(required_files)
     return hydrated

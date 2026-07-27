@@ -33,8 +33,7 @@ def test_scientific_classification_bundle_contains_safe_csv_json_and_npz(
     )
 
     response = client.post(
-        f"/api/v1/projects/{project_id}/classification-assignments/"
-        "scientific-data-exports",
+        f"/api/v1/projects/{project_id}/classification-assignments/scientific-data-exports",
         json={"formats": ["csv", "json", "npz"]},
     )
     assert response.status_code == 201, response.text
@@ -68,9 +67,7 @@ def test_scientific_classification_bundle_contains_safe_csv_json_and_npz(
 
         csv_rows = list(
             csv.DictReader(
-                io.StringIO(
-                    archive.read("classification-assignments.csv").decode("utf-8")
-                )
+                io.StringIO(archive.read("classification-assignments.csv").decode("utf-8"))
             )
         )
         assert len(csv_rows) == 1
@@ -107,8 +104,7 @@ def test_scientific_classification_bundle_rejects_duplicate_formats(
 ) -> None:
     project, _image_id, _class_ids = _seed_classification_project(client)
     response = client.post(
-        f"/api/v1/projects/{project['id']}/classification-assignments/"
-        "scientific-data-exports",
+        f"/api/v1/projects/{project['id']}/classification-assignments/scientific-data-exports",
         json={"formats": ["csv", "csv"]},
     )
     assert response.status_code == 422, response.text

@@ -66,8 +66,7 @@ def _counts(
 ) -> Counts:
     if reference.shape != prediction.shape:
         raise ValueError(
-            f"Mask dimensions differ: reference {reference.shape}, "
-            f"prediction {prediction.shape}"
+            f"Mask dimensions differ: reference {reference.shape}, prediction {prediction.shape}"
         )
     return Counts(
         true_positive=int(np.logical_and(reference, prediction).sum()),
@@ -101,9 +100,7 @@ def _metrics(counts: Counts) -> dict[str, float | int]:
         "iou": _ratio(counts.true_positive, union),
         "dice": _ratio(
             2 * counts.true_positive,
-            2 * counts.true_positive
-            + counts.false_positive
-            + counts.false_negative,
+            2 * counts.true_positive + counts.false_positive + counts.false_negative,
         ),
         "precision": _ratio(
             counts.true_positive,
@@ -165,9 +162,7 @@ def main() -> int:
     if not 0 <= args.minimum_majority_macro_iou <= 1:
         parser.error("--minimum-majority-macro-iou must be between 0 and 1")
     if not -1 <= args.minimum_majority_improvement_over_sam3 <= 1:
-        parser.error(
-            "--minimum-majority-improvement-over-sam3 must be between -1 and 1"
-        )
+        parser.error("--minimum-majority-improvement-over-sam3 must be between -1 and 1")
 
     branch_directories = {
         "sam3": args.sam3,
@@ -178,9 +173,7 @@ def main() -> int:
     }
     try:
         ground_truth = _mask_files(args.ground_truth)
-        branch_files = {
-            name: _mask_files(path) for name, path in branch_directories.items()
-        }
+        branch_files = {name: _mask_files(path) for name, path in branch_directories.items()}
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
@@ -191,9 +184,7 @@ def main() -> int:
         missing = sorted(expected_keys - set(files))
         unexpected = sorted(set(files) - expected_keys)
         if missing:
-            completeness_errors.append(
-                f"{name} missing {len(missing)} masks: {missing[:10]}"
-            )
+            completeness_errors.append(f"{name} missing {len(missing)} masks: {missing[:10]}")
         if unexpected:
             completeness_errors.append(
                 f"{name} has {len(unexpected)} unexpected masks: {unexpected[:10]}"
@@ -204,9 +195,7 @@ def main() -> int:
         return 2
 
     per_image: list[dict[str, Any]] = []
-    by_branch: dict[str, list[dict[str, Any]]] = {
-        name: [] for name in branch_files
-    }
+    by_branch: dict[str, list[dict[str, Any]]] = {name: [] for name in branch_files}
     try:
         for key in sorted(expected_keys):
             reference = _read_mask(ground_truth[key])
@@ -220,12 +209,8 @@ def main() -> int:
         print(str(exc), file=sys.stderr)
         return 2
 
-    aggregates = {
-        branch: _aggregate(rows) for branch, rows in by_branch.items()
-    }
-    majority_iou = float(
-        aggregates["consensus_pixel_majority"]["macro"]["iou"]
-    )
+    aggregates = {branch: _aggregate(rows) for branch, rows in by_branch.items()}
+    majority_iou = float(aggregates["consensus_pixel_majority"]["macro"]["iou"])
     sam3_iou = float(aggregates["sam3"]["macro"]["iou"])
     improvement = majority_iou - sam3_iou
     failures: list[str] = []
@@ -244,8 +229,7 @@ def main() -> int:
         "schema": "reefvision-real-consensus-evaluation-v1",
         "ground_truth_directory": str(args.ground_truth.resolve()),
         "branch_directories": {
-            name: str(path.resolve())
-            for name, path in branch_directories.items()
+            name: str(path.resolve()) for name, path in branch_directories.items()
         },
         "image_count": len(expected_keys),
         "aggregates": aggregates,
@@ -254,9 +238,7 @@ def main() -> int:
         "consensus_majority_improvement_over_sam3": improvement,
         "thresholds": {
             "minimum_majority_macro_iou": args.minimum_majority_macro_iou,
-            "minimum_majority_improvement_over_sam3": (
-                args.minimum_majority_improvement_over_sam3
-            ),
+            "minimum_majority_improvement_over_sam3": (args.minimum_majority_improvement_over_sam3),
         },
         "failures": failures,
         "passed": not failures,

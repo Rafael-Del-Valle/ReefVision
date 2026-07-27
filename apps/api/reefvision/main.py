@@ -90,9 +90,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         active_settings.background_worker_enabled = False
     active_settings.ensure_directories()
     _configure_process_storage(active_settings)
-    os.environ["REEFVISION_CONFIG_DIR"] = str(
-        active_settings.resolved_data_dir / "config"
-    )
+    os.environ["REEFVISION_CONFIG_DIR"] = str(active_settings.resolved_data_dir / "config")
     apply_catalog_expansion_runtime_patches()
     apply_fastsam_runtime_patch()
     apply_sam_runtime_patch()
@@ -120,11 +118,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         bundled_warnings = []
         transformer_warnings = []
     else:
-        bundled_catalog_ids, bundled_warnings = install_bundled_catalog_models(
+        bundled_catalog_ids, bundled_warnings = install_bundled_catalog_models(active_settings)
+        bundled_transformers_models, transformer_warnings = install_bundled_transformers_models(
             active_settings
-        )
-        bundled_transformers_models, transformer_warnings = (
-            install_bundled_transformers_models(active_settings)
         )
 
     catalog_startup_warnings.extend(bundled_warnings)
@@ -144,9 +140,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "model_cache_dir": str(active_settings.resolved_model_cache_dir),
                 "temp_dir": str(active_settings.resolved_temp_dir),
                 "bundled_catalog_model_count": len(bundled_catalog_ids),
-                "bundled_transformers_model_count": len(
-                    bundled_transformers_models
-                ),
+                "bundled_transformers_model_count": len(bundled_transformers_models),
             },
         )
         stop_event = asyncio.Event()

@@ -18,8 +18,8 @@ from reefvision.db.models import (
 )
 from reefvision.ml.classification import ClassificationResult
 from reefvision.tests.test_classification_inference_safety_phase5 import (
-    _SuccessfulProvider,
     _seed_classifier,
+    _SuccessfulProvider,
 )
 from reefvision.tests.test_classification_phase5 import _seed_classification_project
 
@@ -39,7 +39,9 @@ class _InspectingMaskProvider:
             assert rgb.size == (40, 40)
             inside = rgb.getpixel((5, 5))
             outside = rgb.getpixel((35, 35))
-            assert sum(abs(actual - expected) for actual, expected in zip(inside, (20, 90, 120))) < 20
+            assert (
+                sum(abs(actual - expected) for actual, expected in zip(inside, (20, 90, 120))) < 20
+            )
             assert max(outside) < 15
         return ClassificationResult(
             label="open",

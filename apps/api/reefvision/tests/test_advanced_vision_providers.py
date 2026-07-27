@@ -256,11 +256,7 @@ def test_training_catalog_exposes_native_unets_and_nnunet_configurations(client)
             client.app.state.settings,
         ).list_project_catalog(project_id, workflow="training")
 
-    native = [
-        item
-        for item in catalog.models
-        if item.catalog_id.startswith("reefvision/unet/")
-    ]
+    native = [item for item in catalog.models if item.catalog_id.startswith("reefvision/unet/")]
     nnunet = [item for item in catalog.models if item.provider_id == "nnunet"]
 
     assert [item.variant for item in native] == [
@@ -275,9 +271,7 @@ def test_training_catalog_exposes_native_unets_and_nnunet_configurations(client)
         "nnunet/automatic/default",
         "nnunet/v2/semantic/2d",
     }
-    assert {item.catalog_id for item in nnunet if item.trainable} == {
-        "nnunet/v2/semantic/2d"
-    }
+    assert {item.catalog_id for item in nnunet if item.trainable} == {"nnunet/v2/semantic/2d"}
 
 
 def test_nnunet_export_writes_expected_raw_dataset(tmp_path: Path) -> None:

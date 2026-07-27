@@ -73,12 +73,8 @@ def compact_coco_export(
     temporary_annotations = annotations_path.with_name(
         f".{annotations_path.name}.{uuid4().hex[:8]}.tmp"
     )
-    temporary_manifest = manifest_path.with_name(
-        f".{manifest_path.name}.{uuid4().hex[:8]}.tmp"
-    )
-    temporary_archive = archive_path.with_name(
-        f".{archive_path.name}.{uuid4().hex[:8]}.tmp"
-    )
+    temporary_manifest = manifest_path.with_name(f".{manifest_path.name}.{uuid4().hex[:8]}.tmp")
+    temporary_archive = archive_path.with_name(f".{archive_path.name}.{uuid4().hex[:8]}.tmp")
     try:
         temporary_annotations.write_bytes(canonical_json_bytes(document))
         temporary_manifest.write_bytes(canonical_json_bytes(manifest))

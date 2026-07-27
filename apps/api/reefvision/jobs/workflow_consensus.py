@@ -163,15 +163,9 @@ def _independent_consensus(
         "best_confidence",
     }:
         raise RuntimeError("Independent consensus aggregation is unsupported")
-    image_ids = [
-        str(value)
-        for value in payload.get("image_ids", [])
-        if isinstance(value, str)
-    ]
+    image_ids = [str(value) for value in payload.get("image_ids", []) if isinstance(value, str)]
     prediction_ids = [
-        str(value)
-        for value in payload.get("prediction_ids", [])
-        if isinstance(value, str)
+        str(value) for value in payload.get("prediction_ids", []) if isinstance(value, str)
     ]
     result = run_independent_segmentation_pipeline(
         settings,
@@ -189,9 +183,7 @@ def _independent_consensus(
         required_votes=int(raw_consensus.get("required_votes", 2)),
         iou_threshold=float(raw_consensus.get("iou_threshold", 0.3)),
         aggregation=cast(MaskAggregation, aggregation_value),
-        minimum_vlm_confidence=float(
-            raw_consensus.get("minimum_vlm_confidence", 0.25)
-        ),
+        minimum_vlm_confidence=float(raw_consensus.get("minimum_vlm_confidence", 0.25)),
         device=str(raw_consensus.get("sam2_device", "auto")),
         openai_model=str(raw_consensus.get("openai_model", "gpt-5-mini")),
         gemini_model=str(raw_consensus.get("gemini_model", "gemini-2.5-flash")),
@@ -200,9 +192,7 @@ def _independent_consensus(
     )
     result_payload = result.as_payload()
     consensus_prediction_ids = [
-        str(proposal_id)
-        for image in result.images
-        for proposal_id in image.proposal_ids
+        str(proposal_id) for image in result.images for proposal_id in image.proposal_ids
     ]
     accepted_mask_ids = [
         str(annotation_id)
@@ -267,9 +257,7 @@ def _consensus_aware_model_inference(
         )
     elif mode == "semantic_voters":
         prediction_ids = [
-            str(value)
-            for value in payload.get("prediction_ids", [])
-            if isinstance(value, str)
+            str(value) for value in payload.get("prediction_ids", []) if isinstance(value, str)
         ]
         result = apply_multi_model_mask_consensus(
             settings,

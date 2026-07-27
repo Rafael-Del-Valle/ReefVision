@@ -204,9 +204,7 @@ class ClassificationAssignmentService:
             raise ValidationError(
                 "The classification prediction no longer matches its source annotation"
             )
-        source_revision = dict(prediction.provenance_json or {}).get(
-            "source_annotation_revision"
-        )
+        source_revision = dict(prediction.provenance_json or {}).get("source_annotation_revision")
         if source_revision is not None:
             try:
                 expected_revision = int(source_revision)
