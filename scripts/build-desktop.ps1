@@ -26,13 +26,6 @@ if (
 ) {
     throw "Tauri must package the verified catalog checkpoints as bundled-models/."
 }
-if (
-    $TauriConfig.bundle.resources.'../../../.desktop/bundled-transformers-models/' -ne
-    'bundled-transformers-models/'
-) {
-    throw "Tauri must package the Transformers vision model pack."
-}
-
 if (-not (Test-Path ".venv" -PathType Container)) {
     throw "Run .\scripts\bootstrap.ps1 first."
 }
@@ -68,19 +61,11 @@ function Invoke-ReefVisionPython {
 
 $HydrateScript = Join-Path $PSScriptRoot "hydrate-desktop-model-catalog.py"
 $BundleScript = Join-Path $PSScriptRoot "stage-bundled-models.py"
-$TransformersBundleScript = Join-Path `
-    $PSScriptRoot `
-    "stage-transformers-provider-models.py"
 $SourceModelCatalog = Join-Path $Root "config\model_catalog.json"
 $BundlePolicy = Join-Path $Root "config\desktop_ready_models.json"
-$TransformersPolicy = Join-Path $Root "config\transformers_model_pack.json"
 $GeneratedConfig = Join-Path $Root ".desktop\generated-config"
 $ModelCatalog = Join-Path $GeneratedConfig "model_catalog.json"
 $BundledModels = Join-Path $Root ".desktop\bundled-models"
-$BundledTransformersModels = Join-Path `
-    $Root `
-    ".desktop\bundled-transformers-models"
-
 New-Item -ItemType Directory -Path $GeneratedConfig -Force | Out-Null
 
 Write-ReefVisionStep "Resolving every required desktop model from pinned official releases"
@@ -161,46 +146,12 @@ Write-Host (
     "$($BundleMetadata.builtin_architecture_count) offline scratch architectures."
 ) -ForegroundColor Green
 
-Write-ReefVisionStep "Staging Florence-2, Grounding DINO, and OWLv2 model snapshots"
-Invoke-ReefVisionPython `
-    -Arguments @(
-        $TransformersBundleScript,
-        "--policy",
-        $TransformersPolicy,
-        "--output",
-        $BundledTransformersModels
-    ) `
-    -FailureMessage "Failed to stage the Transformers vision provider model pack."
-$TransformersManifest = Join-Path $BundledTransformersModels "manifest.json"
-if (-not (Test-Path $TransformersManifest -PathType Leaf)) {
-    throw "Transformers model-pack staging did not produce a manifest."
-}
-$TransformersMetadata = Get-Content -LiteralPath $TransformersManifest -Raw |
-    ConvertFrom-Json
-if (
-    $TransformersMetadata.manifest_version -ne 2 -or
-    $TransformersMetadata.model_count -ne 6 -or
-    @($TransformersMetadata.models.PSObject.Properties).Count -ne 6
-) {
-    throw "The Transformers vision model pack must contain six verified manifest-v2 models."
-}
-foreach ($ModelRecord in $TransformersMetadata.models.PSObject.Properties) {
-    if (
-        $ModelRecord.Value.file_count -lt 1 -or
-        $ModelRecord.Value.resolved_revision -notmatch '^[0-9a-f]{40}$' -or
-        $ModelRecord.Value.snapshot_sha256 -notmatch '^[0-9a-f]{64}$'
-    ) {
-        throw "Transformers model-pack record is incomplete: $($ModelRecord.Name)"
-    }
-}
 Write-Host (
-    "Bundling $($TransformersMetadata.model_count) Transformers model snapshots " +
-    "($([math]::Round($TransformersMetadata.total_size_bytes / 1GB, 2)) GB)."
+    "Transformers vision snapshots are excluded from the standard MSI and remain " +
+    "available through managed model delivery."
 ) -ForegroundColor Green
 
 $OriginalCatalogBytes = [System.IO.File]::ReadAllBytes($SourceModelCatalog)
-$PreviousWixMums = $env:WIX_MUMS
-$PreviousWixMcslfs = $env:WIX_MCSLFS
 try {
     Copy-Item -LiteralPath $ModelCatalog -Destination $SourceModelCatalog -Force
 
@@ -210,12 +161,7 @@ try {
         throw "The packaged desktop backend build failed."
     }
 
-    # Force WiX to create multiple moderate cabinets. This protects the large
-    # offline model payload from the 2 GB per-cabinet ceiling and also permits
-    # individual weight files to be split when required.
-    $env:WIX_MUMS = "512"
-    $env:WIX_MCSLFS = "512"
-    Write-ReefVisionStep "Building the Tauri MSI installer with split WiX cabinets"
+    Write-ReefVisionStep "Building the lean Tauri MSI installer"
     Invoke-ReefVisionNpm -NodeTools $NodeTools -Arguments @(
         "--prefix",
         "apps/web",
@@ -229,8 +175,6 @@ try {
     )
 }
 finally {
-    $env:WIX_MUMS = $PreviousWixMums
-    $env:WIX_MCSLFS = $PreviousWixMcslfs
     [System.IO.File]::WriteAllBytes($SourceModelCatalog, $OriginalCatalogBytes)
 }
 
