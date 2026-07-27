@@ -184,7 +184,8 @@ def test_restore_is_blocked_when_original_destination_reappears(client: TestClie
         f"/api/v1/workflow-runs/{run_id}/artifact-quarantine/restore",
         json={"artifact_ids": [artifact_id]},
     )
-    assert restored.status_code == 422
+    assert restored.status_code == 400
+    assert "destination already exists" in restored.text
     assert original_path.read_text(encoding="utf-8") == "new output"
 
 
