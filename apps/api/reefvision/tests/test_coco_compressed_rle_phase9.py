@@ -21,9 +21,10 @@ def test_interchange_round_trips_compact_coco_rle(client: TestClient) -> None:
     project = create_project(client, "Compact COCO RLE")
     project_id = str(project["id"])
     imported = import_one(client, project_id)
-    image = imported["successful"][0]
-    image_id = str(image["image_id"])
-    filename = str(image["original_filename"])
+    image_id = str(imported["successful"][0]["image_id"])
+    image_response = client.get(f"/api/v1/images/{image_id}")
+    assert image_response.status_code == 200, image_response.text
+    filename = str(image_response.json()["original_filename"])
     project_detail = client.get(f"/api/v1/projects/{project_id}")
     assert project_detail.status_code == 200, project_detail.text
     label_class = project_detail.json()["label_classes"][0]
