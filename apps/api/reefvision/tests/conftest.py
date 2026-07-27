@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import re
+import tempfile
 from collections.abc import Generator
 from pathlib import Path
 
@@ -29,6 +31,15 @@ _INTEGRATION_HINTS = (
 _PHASE_PATTERN = re.compile(r"phase(?:_|-)?(10|[1-9])", re.IGNORECASE)
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    """Keep generated test artifacts below legacy Windows path limits."""
+
+    if getattr(config.option, "basetemp", None) is None:
+        config.option.basetemp = str(
+            Path(tempfile.gettempdir()) / f"rv-pytest-{os.getpid()}"
+        )
+
+
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Attach stable suite and phase markers without rewriting every historical test.
 
@@ -44,7 +55,9 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             and item.get_closest_marker("integration") is None
         ):
             marker = (
-                "integration" if any(token in filename for token in _INTEGRATION_HINTS) else "unit"
+                "integration"
+                if any(token in filename for token in _INTEGRATION_HINTS)
+                else "unit"
             )
             item.add_marker(getattr(pytest.mark, marker))
         match = _PHASE_PATTERN.search(filename)
@@ -56,8 +69,8 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 def test_settings(tmp_path: Path) -> Settings:
     return Settings(
         env="test",
-        data_dir=tmp_path / "reefvision-test-data",
-        database_url=f"sqlite:///{(tmp_path / 'test.db').as_posix()}",
+        data_dir=tmp_path / "d",
+        database_url=f"sqlite:///{(tmp_path / 't.db').as_posix()}",
         web_origin="http://testserver",
         background_worker_enabled=False,
     )
