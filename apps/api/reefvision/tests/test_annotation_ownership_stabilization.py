@@ -148,3 +148,16 @@ def test_mask_deletion_cannot_target_another_image(
     assert first_session["mask_annotations"][0]["id"] == mask_id
     assert second_session["image"]["annotation_revision"] == 0
     assert second_session["mask_annotations"] == []
+
+
+def test_annotation_session_compatibility_alias_is_deprecated(
+    client: TestClient,
+) -> None:
+    schema = client.get("/openapi.json").json()
+    alias = schema["paths"][
+        "/api/v1/images/{image_id}/annotation-session"
+    ]["get"]
+    canonical = schema["paths"]["/api/v1/images/{image_id}/annotations"]["get"]
+
+    assert alias["deprecated"] is True
+    assert canonical.get("deprecated") is not True
