@@ -205,8 +205,6 @@ def _patch_provider_catalog() -> None:
             "efficientvitsam",
             "sam2",
             "sam_2",
-            "sam2_sidecar",
-            "sam_2_sidecar",
         }:
             return _provider(provider_name or "")
         return original_registration(
