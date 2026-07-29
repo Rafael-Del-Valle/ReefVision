@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   clearMeasurementCalibration,
+  getAdvancedMaskMeasurements,
   getMaskMeasurementProfile,
   getMaskMeasurements,
   getMeasurementCalibration,
@@ -60,6 +61,8 @@ export function MaskMeasurementPanel({
   const [depthValue, setDepthValue] = useState("");
   const [diameterValue, setDiameterValue] = useState("");
   const [profileNotes, setProfileNotes] = useState("");
+  const [pruneSpursPixels, setPruneSpursPixels] = useState("0");
+  const [bridgeGapsPixels, setBridgeGapsPixels] = useState("0");
 
   const calibrationQuery = useQuery({
     queryKey: ["measurement-calibration", imageId],
@@ -181,6 +184,23 @@ export function MaskMeasurementPanel({
       await onRevisionCommitted();
     },
   });
+  const advancedMeasurementMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedMask || !selectedMask.persisted || documentDirty) {
+        throw new Error("Save the selected mask before calculating advanced measurements");
+      }
+      const pruneSpurs = optionalNumber(pruneSpursPixels) ?? 0;
+      const bridgeGaps = optionalNumber(bridgeGapsPixels) ?? 0;
+      if (pruneSpurs < 0 || bridgeGaps < 0) {
+        throw new Error("Skeleton cleanup distances cannot be negative");
+      }
+      return getAdvancedMaskMeasurements(selectedMask.id, {
+        prune_spurs_pixels: pruneSpurs,
+        bridge_gaps_pixels: bridgeGaps,
+        surface_method: "none",
+      });
+    },
+  });
 
   const speciesOptions = useMemo(
     () =>
@@ -205,6 +225,10 @@ export function MaskMeasurementPanel({
     [labelClasses],
   );
   const measurement = measurementsQuery.data;
+  const advancedMeasurement =
+    advancedMeasurementMutation.data?.mask_annotation_id === selectedMask?.id
+      ? advancedMeasurementMutation.data
+      : null;
 
   return (
     <div
@@ -507,6 +531,110 @@ export function MaskMeasurementPanel({
             </ul>
           )}
         </>
+      )}
+
+      {selectedMask?.persisted && !documentDirty && (
+        <details>
+          <summary>Advanced shape and skeleton</summary>
+          <p className="annotation-helper">
+            Calculate shape descriptors and a centerline skeleton from the saved
+            mask. Cleanup values are optional and are measured in source-image
+            pixels.
+          </p>
+          <label>
+            Prune skeleton spurs shorter than
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={pruneSpursPixels}
+              onChange={(event) => setPruneSpursPixels(event.target.value)}
+            />
+          </label>
+          <label>
+            Bridge skeleton gaps up to
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={bridgeGapsPixels}
+              onChange={(event) => setBridgeGapsPixels(event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => advancedMeasurementMutation.mutate()}
+            disabled={advancedMeasurementMutation.isPending}
+          >
+            {advancedMeasurementMutation.isPending
+              ? "Calculating..."
+              : "Calculate advanced measurements"}
+          </button>
+          {advancedMeasurementMutation.error instanceof Error && (
+            <p className="form-error">
+              {advancedMeasurementMutation.error.message}
+            </p>
+          )}
+          {advancedMeasurement && (
+            <>
+              <div className="annotation-selection-row">
+                <strong>Shape quality</strong>
+                <span>
+                  Solidity {advancedMeasurement.shape.solidity.toFixed(4)} |
+                  Circularity {advancedMeasurement.shape.circularity.toFixed(4)} |
+                  Compactness {advancedMeasurement.shape.compactness.toFixed(4)}
+                </span>
+              </div>
+              <div className="annotation-selection-row">
+                <strong>Feret diameters</strong>
+                <span>
+                  {advancedMeasurement.shape.feret_max_pixels.toFixed(2)} px max |
+                  {advancedMeasurement.shape.feret_min_pixels.toFixed(2)} px min
+                  {advancedMeasurement.feret_max_physical != null &&
+                  advancedMeasurement.feret_min_physical != null &&
+                  advancedMeasurement.physical_unit
+                    ? ` | ${advancedMeasurement.feret_max_physical.toFixed(4)} ${advancedMeasurement.physical_unit} max | ${advancedMeasurement.feret_min_physical.toFixed(4)} ${advancedMeasurement.physical_unit} min`
+                    : ""}
+                </span>
+              </div>
+              <div className="annotation-selection-row">
+                <strong>Principal axes</strong>
+                <span>
+                  {advancedMeasurement.shape.major_axis_pixels.toFixed(2)} px
+                  major | {advancedMeasurement.shape.minor_axis_pixels.toFixed(2)}
+                  px minor | {advancedMeasurement.shape.orientation_degrees.toFixed(2)}°
+                </span>
+              </div>
+              <div className="annotation-selection-row">
+                <strong>Skeleton length</strong>
+                <span>
+                  {advancedMeasurement.skeleton.total_length_pixels.toFixed(2)} px
+                  total | {advancedMeasurement.skeleton.longest_path_pixels.toFixed(2)}
+                  px longest path
+                  {advancedMeasurement.total_length_physical != null &&
+                  advancedMeasurement.longest_path_physical != null &&
+                  advancedMeasurement.physical_unit
+                    ? ` | ${advancedMeasurement.total_length_physical.toFixed(4)} ${advancedMeasurement.physical_unit} total | ${advancedMeasurement.longest_path_physical.toFixed(4)} ${advancedMeasurement.physical_unit} longest`
+                    : ""}
+                </span>
+              </div>
+              <div className="annotation-selection-row">
+                <strong>Skeleton topology</strong>
+                <span>
+                  {advancedMeasurement.skeleton.endpoint_count} endpoints |{" "}
+                  {advancedMeasurement.skeleton.junction_count} junctions |{" "}
+                  {advancedMeasurement.skeleton.branch_count} branches
+                </span>
+              </div>
+              {advancedMeasurement.warnings.map((warning) => (
+                <p key={warning} className="form-warning">
+                  {warning}
+                </p>
+              ))}
+            </>
+          )}
+        </details>
       )}
 
       <details>
