@@ -19,7 +19,13 @@ import numpy as np
 from PIL import Image, UnidentifiedImageError
 
 from reefvision.domain.errors import ValidationError
-from reefvision.ml.providers import AssistPrediction, PixelBox, PixelPoint, mask_to_box
+from reefvision.ml.providers import (
+    AssistModelMetadata,
+    AssistPrediction,
+    PixelBox,
+    PixelPoint,
+    mask_to_box,
+)
 
 _PROVIDER_NAME = "sam2_sidecar"
 _DESCRIPTOR_SCHEMA = "reefvision-sam2-sidecar-v1"
@@ -33,6 +39,14 @@ class PreparedSam2SidecarImage:
     height: int
 
 
+@dataclass(frozen=True, slots=True)
+class Sam2SidecarDescriptor:
+    endpoint: str
+    token_env: str
+    timeout_seconds: float
+    provider_version: str
+
+
 def _validated_endpoint(value: object) -> str:
     endpoint = str(value or "").strip().rstrip("/")
     parsed = url_parse.urlsplit(endpoint)
@@ -43,6 +57,37 @@ def _validated_endpoint(value: object) -> str:
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ValidationError("SAM 2 sidecar endpoint may not contain credentials or query data")
     return endpoint
+
+
+def _read_descriptor(model_path: Path) -> Sam2SidecarDescriptor:
+    if not model_path.is_file() or model_path.suffix.casefold() != ".json":
+        raise ValidationError("SAM 2 sidecar registration descriptor is missing")
+    try:
+        payload = json.loads(model_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValidationError("SAM 2 sidecar descriptor is not valid JSON") from exc
+    if not isinstance(payload, dict) or payload.get("schema") != _DESCRIPTOR_SCHEMA:
+        raise ValidationError("SAM 2 sidecar descriptor schema is unsupported")
+    token_env = str(payload.get("token_env", "REEFVISION_SAM2_SIDECAR_TOKEN")).strip()
+    if (
+        not token_env
+        or not token_env.replace("_", "").isalnum()
+        or not token_env[0].isalpha()
+    ):
+        raise ValidationError("SAM 2 sidecar token environment name is invalid")
+    try:
+        timeout_seconds = float(payload.get("timeout_seconds", 120.0))
+    except (TypeError, ValueError) as exc:
+        raise ValidationError("SAM 2 sidecar timeout is invalid") from exc
+    if not 1 <= timeout_seconds <= 600:
+        raise ValidationError("SAM 2 sidecar timeout must be between 1 and 600 seconds")
+    provider_version = str(payload.get("sam2_version", "sam2")).strip() or "sam2"
+    return Sam2SidecarDescriptor(
+        endpoint=_validated_endpoint(payload.get("endpoint")),
+        token_env=token_env,
+        timeout_seconds=timeout_seconds,
+        provider_version=provider_version,
+    )
 
 
 def _read_json_response(raw: bytes) -> dict[str, Any]:
@@ -234,29 +279,36 @@ class SAM2SidecarAssistProvider:
         self._token: str | None = None
         self._device = "auto"
 
+    def inspect_model(self, model_path: Path) -> AssistModelMetadata:
+        descriptor = _read_descriptor(model_path)
+        return AssistModelMetadata(
+            framework="sam2-sidecar",
+            task="assist_segmentation",
+            provider_name=self.provider_name,
+            provider_version=descriptor.provider_version,
+            metadata={
+                "descriptor_schema": _DESCRIPTOR_SCHEMA,
+                "endpoint": descriptor.endpoint,
+                "token_env": descriptor.token_env,
+                "timeout_seconds": descriptor.timeout_seconds,
+                "local_sidecar": True,
+                "automatic_downloads_disabled": True,
+                "capabilities": (
+                    "box_prompt",
+                    "point_prompt",
+                    "negative_points",
+                    "context_box",
+                ),
+            },
+        )
+
     def load_model(self, model_path: Path, device: str) -> None:
-        if not model_path.is_file() or model_path.suffix.casefold() != ".json":
-            raise ValidationError("SAM 2 sidecar registration descriptor is missing")
-        try:
-            descriptor = json.loads(model_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise ValidationError("SAM 2 sidecar descriptor is not valid JSON") from exc
-        if not isinstance(descriptor, dict) or descriptor.get("schema") != _DESCRIPTOR_SCHEMA:
-            raise ValidationError("SAM 2 sidecar descriptor schema is unsupported")
-        token_env = str(descriptor.get("token_env", "REEFVISION_SAM2_SIDECAR_TOKEN")).strip()
-        if not token_env or not token_env.replace("_", "").isalnum() or not token_env[0].isalpha():
-            raise ValidationError("SAM 2 sidecar token environment name is invalid")
-        try:
-            timeout_seconds = float(descriptor.get("timeout_seconds", 120.0))
-        except (TypeError, ValueError) as exc:
-            raise ValidationError("SAM 2 sidecar timeout is invalid") from exc
-        if not 1 <= timeout_seconds <= 600:
-            raise ValidationError("SAM 2 sidecar timeout must be between 1 and 600 seconds")
-        self._endpoint = _validated_endpoint(descriptor.get("endpoint"))
-        self._timeout_seconds = timeout_seconds
-        self._token = os.environ.get(token_env)
+        descriptor = _read_descriptor(model_path)
+        self._endpoint = descriptor.endpoint
+        self._timeout_seconds = descriptor.timeout_seconds
+        self._token = os.environ.get(descriptor.token_env)
         self._device = device
-        self.provider_version = str(descriptor.get("sam2_version", "sam2"))
+        self.provider_version = descriptor.provider_version
 
     def prepare_image(self, image_path: Path) -> PreparedSam2SidecarImage:
         if self._endpoint is None:
