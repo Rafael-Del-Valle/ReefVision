@@ -55,6 +55,8 @@ export function MaskMeasurementPanel({
   const [speciesFilter, setSpeciesFilter] = useState("");
   const [stateFilter, setStateFilter] = useState("");
   const [distancePerPixel, setDistancePerPixel] = useState("");
+  const [referenceLength, setReferenceLength] = useState("");
+  const [referencePixelLength, setReferencePixelLength] = useState("");
   const [unit, setUnit] = useState("mm");
   const [defaultDepth, setDefaultDepth] = useState("");
   const [surfaceModel, setSurfaceModel] = useState<SurfaceModelKind>("none");
@@ -85,6 +87,16 @@ export function MaskMeasurementPanel({
     const calibration = calibrationQuery.data;
     setDistancePerPixel(
       calibration ? String(calibration.distance_per_pixel) : "",
+    );
+    setReferenceLength(
+      calibration?.reference_length == null
+        ? ""
+        : String(calibration.reference_length),
+    );
+    setReferencePixelLength(
+      calibration?.reference_pixel_length == null
+        ? ""
+        : String(calibration.reference_pixel_length),
     );
     setUnit(calibration?.unit ?? "mm");
     setDefaultDepth(
@@ -134,7 +146,23 @@ export function MaskMeasurementPanel({
 
   const calibrationMutation = useMutation({
     mutationFn: async () => {
-      const scale = optionalNumber(distancePerPixel);
+      const knownLength = optionalNumber(referenceLength);
+      const knownPixelLength = optionalNumber(referencePixelLength);
+      if ((knownLength === null) !== (knownPixelLength === null)) {
+        throw new Error(
+          "Known reference length and reference pixel length must be supplied together",
+        );
+      }
+      if (
+        (knownLength !== null && knownLength <= 0) ||
+        (knownPixelLength !== null && knownPixelLength <= 0)
+      ) {
+        throw new Error("Known reference values must be greater than zero");
+      }
+      const scale =
+        knownLength !== null && knownPixelLength !== null
+          ? knownLength / knownPixelLength
+          : optionalNumber(distancePerPixel);
       if (scale === null || scale <= 0) {
         throw new Error("Distance per pixel must be greater than zero");
       }
@@ -142,7 +170,10 @@ export function MaskMeasurementPanel({
       return updateMeasurementCalibration(imageId, {
         distance_per_pixel: scale,
         unit: unit.trim(),
-        source: "manual",
+        source:
+          knownLength !== null ? "known_reference_length" : "manual_scale",
+        reference_length: knownLength,
+        reference_pixel_length: knownPixelLength,
         default_depth: optionalNumber(defaultDepth),
       });
     },
@@ -187,7 +218,9 @@ export function MaskMeasurementPanel({
   const advancedMeasurementMutation = useMutation({
     mutationFn: async () => {
       if (!selectedMask || !selectedMask.persisted || documentDirty) {
-        throw new Error("Save the selected mask before calculating advanced measurements");
+        throw new Error(
+          "Save the selected mask before calculating advanced measurements",
+        );
       }
       const pruneSpurs = optionalNumber(pruneSpursPixels) ?? 0;
       const bridgeGaps = optionalNumber(bridgeGapsPixels) ?? 0;
@@ -267,6 +300,10 @@ export function MaskMeasurementPanel({
 
       <details>
         <summary>Image calibration</summary>
+        <p className="annotation-helper">
+          Enter a direct scale, or provide a known physical length and its measured
+          pixel length to calculate the scale automatically.
+        </p>
         <label>
           Distance per pixel
           <input
@@ -276,6 +313,28 @@ export function MaskMeasurementPanel({
             value={distancePerPixel}
             onChange={(event) => setDistancePerPixel(event.target.value)}
             placeholder="0.01"
+          />
+        </label>
+        <label>
+          Known reference length
+          <input
+            type="number"
+            min="0"
+            step="any"
+            value={referenceLength}
+            onChange={(event) => setReferenceLength(event.target.value)}
+            placeholder="10"
+          />
+        </label>
+        <label>
+          Reference pixel length
+          <input
+            type="number"
+            min="0"
+            step="any"
+            value={referencePixelLength}
+            onChange={(event) => setReferencePixelLength(event.target.value)}
+            placeholder="500"
           />
         </label>
         <label>
@@ -603,15 +662,17 @@ export function MaskMeasurementPanel({
                 <span>
                   {advancedMeasurement.shape.major_axis_pixels.toFixed(2)} px
                   major | {advancedMeasurement.shape.minor_axis_pixels.toFixed(2)}
-                  px minor | {advancedMeasurement.shape.orientation_degrees.toFixed(2)}°
+                  px minor |{" "}
+                  {advancedMeasurement.shape.orientation_degrees.toFixed(2)}°
                 </span>
               </div>
               <div className="annotation-selection-row">
                 <strong>Skeleton length</strong>
                 <span>
                   {advancedMeasurement.skeleton.total_length_pixels.toFixed(2)} px
-                  total | {advancedMeasurement.skeleton.longest_path_pixels.toFixed(2)}
-                  px longest path
+                  total |{" "}
+                  {advancedMeasurement.skeleton.longest_path_pixels.toFixed(2)} px
+                  longest path
                   {advancedMeasurement.total_length_physical != null &&
                   advancedMeasurement.longest_path_physical != null &&
                   advancedMeasurement.physical_unit
