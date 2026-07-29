@@ -3,7 +3,10 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError as PydanticValidationError
 
-from reefvision.schemas.measurements import MeasurementCalibrationUpdate
+from reefvision.schemas.measurements import (
+    MeasurementCalibrationResponse,
+    MeasurementCalibrationUpdate,
+)
 
 
 def test_reference_calibration_accepts_consistent_scale() -> None:
@@ -45,3 +48,17 @@ def test_reference_calibration_requires_complete_reference_pair() -> None:
             source="known scale bar",
             reference_length=10.0,
         )
+
+
+def test_legacy_response_remains_readable_when_reference_metadata_disagrees() -> None:
+    calibration = MeasurementCalibrationResponse(
+        image_id="image-1",
+        distance_per_pixel=0.2,
+        unit="mm",
+        source="legacy scale bar",
+        reference_length=10.0,
+        reference_pixel_length=500.0,
+    )
+
+    assert calibration.calibrated is True
+    assert calibration.distance_per_pixel == 0.2
