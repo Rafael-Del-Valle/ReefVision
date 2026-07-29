@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -7,6 +7,7 @@ import {
   getMaskMeasurementProfile,
   getMaskMeasurements,
   getMeasurementCalibration,
+  updateMeasurementCalibration,
 } from "./maskMeasurementsApi";
 import { MaskMeasurementPanel } from "./MaskMeasurementPanel";
 import type { EditorMaskAnnotation } from "./types";
@@ -112,6 +113,7 @@ describe("MaskMeasurementPanel", () => {
     vi.mocked(getMaskMeasurements).mockReset();
     vi.mocked(getMeasurementCalibration).mockReset();
     vi.mocked(getMaskMeasurementProfile).mockReset();
+    vi.mocked(updateMeasurementCalibration).mockReset();
     vi.mocked(getMeasurementCalibration).mockResolvedValue(null);
     vi.mocked(getMaskMeasurementProfile).mockResolvedValue({
       mask_annotation_id: selectedMask.id,
@@ -145,6 +147,42 @@ describe("MaskMeasurementPanel", () => {
         state_names: [],
       },
       expect.any(AbortSignal),
+    );
+  });
+
+  it("calculates calibration from a known reference", async () => {
+    vi.mocked(getMaskMeasurements).mockResolvedValue(basicMeasurement);
+    vi.mocked(updateMeasurementCalibration).mockResolvedValue({
+      image_id: "image-1",
+      calibrated: true,
+      distance_per_pixel: 0.02,
+      unit: "mm",
+      source: "known_reference_length",
+      reference_length: 10,
+      reference_pixel_length: 500,
+      default_depth: null,
+      notes: null,
+    });
+
+    renderPanel([selectedMask]);
+    fireEvent.click(screen.getByText("Image calibration"));
+    fireEvent.change(screen.getByLabelText("Known reference length"), {
+      target: { value: "10" },
+    });
+    fireEvent.change(screen.getByLabelText("Reference pixel length"), {
+      target: { value: "500" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save calibration" }));
+
+    await waitFor(() =>
+      expect(updateMeasurementCalibration).toHaveBeenCalledWith("image-1", {
+        distance_per_pixel: 0.02,
+        unit: "mm",
+        source: "known_reference_length",
+        reference_length: 10,
+        reference_pixel_length: 500,
+        default_depth: null,
+      }),
     );
   });
 
