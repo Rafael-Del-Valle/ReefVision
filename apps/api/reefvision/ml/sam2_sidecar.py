@@ -8,6 +8,7 @@ import json
 import os
 from dataclasses import dataclass
 from io import BytesIO
+from math import isfinite
 from pathlib import Path
 from typing import Any
 from urllib import error as url_error
@@ -18,7 +19,7 @@ import numpy as np
 from PIL import Image, UnidentifiedImageError
 
 from reefvision.domain.errors import ValidationError
-from reefvision.ml.providers import AssistPrediction, PixelBox, mask_to_box
+from reefvision.ml.providers import AssistPrediction, PixelBox, PixelPoint, mask_to_box
 
 _PROVIDER_NAME = "sam2_sidecar"
 _DESCRIPTOR_SCHEMA = "reefvision-sam2-sidecar-v1"
@@ -195,6 +196,32 @@ def _mask_prediction(
     return AssistPrediction(mask=mask, box=mask_to_box(mask), score=score)
 
 
+def _validated_box(box: PixelBox, *, width: int, height: int) -> list[float]:
+    values = [box.x_min, box.y_min, box.x_max, box.y_max]
+    if not all(isfinite(value) for value in values) or not (
+        0 <= box.x_min < box.x_max <= width
+        and 0 <= box.y_min < box.y_max <= height
+    ):
+        raise ValidationError("SAM 2 sidecar box prompt is outside the image")
+    return values
+
+
+def _validated_points(
+    points: list[PixelPoint],
+    *,
+    width: int,
+    height: int,
+) -> list[list[float]]:
+    payload: list[list[float]] = []
+    for point in points:
+        if not (isfinite(point.x) and isfinite(point.y)) or not (
+            0 <= point.x < width and 0 <= point.y < height
+        ):
+            raise ValidationError("SAM 2 sidecar point prompt is outside the image")
+        payload.append([point.x, point.y])
+    return payload
+
+
 class SAM2SidecarAssistProvider:
     """Use SAM 2 in a separate Python/CUDA environment over loopback HTTP."""
 
@@ -236,6 +263,53 @@ class SAM2SidecarAssistProvider:
             raise ValidationError("SAM 2 sidecar provider is not loaded")
         return _prepared_image(image_path)
 
+    def predict_from_points(
+        self,
+        prepared: PreparedSam2SidecarImage,
+        positive_points: list[PixelPoint],
+        negative_points: list[PixelPoint],
+        context_box: PixelBox | None = None,
+    ) -> AssistPrediction:
+        if self._endpoint is None:
+            raise ValidationError("SAM 2 sidecar provider is not loaded")
+        if not positive_points and context_box is None:
+            raise ValidationError(
+                "SAM 2 sidecar point prompting requires a positive point or context box"
+            )
+        positive_payload = _validated_points(
+            positive_points,
+            width=prepared.width,
+            height=prepared.height,
+        )
+        negative_payload = _validated_points(
+            negative_points,
+            width=prepared.width,
+            height=prepared.height,
+        )
+        context_payload = (
+            _validated_box(context_box, width=prepared.width, height=prepared.height)
+            if context_box is not None
+            else None
+        )
+        response = _post_json(
+            f"{self._endpoint}/segment-points",
+            token=self._token,
+            payload={
+                "image_png_base64": prepared.image_png_base64,
+                "positive_points": positive_payload,
+                "negative_points": negative_payload,
+                "context_box": context_payload,
+                "device": self._device,
+            },
+            timeout_seconds=self._timeout_seconds,
+        )
+        self.provider_version = str(response.get("model_version", self.provider_version))
+        return _mask_prediction(
+            response,
+            width=prepared.width,
+            height=prepared.height,
+        )
+
     def predict_from_box(
         self,
         prepared: PreparedSam2SidecarImage,
@@ -243,17 +317,13 @@ class SAM2SidecarAssistProvider:
     ) -> AssistPrediction:
         if self._endpoint is None:
             raise ValidationError("SAM 2 sidecar provider is not loaded")
-        if not (
-            0 <= box.x_min < box.x_max <= prepared.width
-            and 0 <= box.y_min < box.y_max <= prepared.height
-        ):
-            raise ValidationError("SAM 2 sidecar box prompt is outside the image")
+        box_payload = _validated_box(box, width=prepared.width, height=prepared.height)
         response = _post_json(
             f"{self._endpoint}/segment-box",
             token=self._token,
             payload={
                 "image_png_base64": prepared.image_png_base64,
-                "box": [box.x_min, box.y_min, box.x_max, box.y_max],
+                "box": box_payload,
                 "device": self._device,
             },
             timeout_seconds=self._timeout_seconds,
