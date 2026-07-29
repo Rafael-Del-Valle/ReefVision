@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 from io import BytesIO
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -10,10 +11,13 @@ from PIL import Image
 
 from reefvision.domain.errors import ValidationError
 from reefvision.ml.providers import PixelBox, PixelPoint
-from reefvision.ml.sam2_sidecar import PreparedSam2SidecarImage, SAM2SidecarAssistProvider
+from reefvision.ml.sam2_sidecar import (
+    PreparedSam2SidecarImage,
+    SAM2SidecarAssistProvider,
+)
 
 
-def _descriptor(tmp_path):
+def _descriptor(tmp_path: Path) -> Path:
     path = tmp_path / "sam2.json"
     path.write_text(
         json.dumps(
@@ -41,7 +45,7 @@ def _mask_response(*, width: int, height: int) -> dict[str, object]:
 
 
 def test_sam2_sidecar_point_prompts_are_sent_with_context(
-    tmp_path,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     provider = SAM2SidecarAssistProvider()
@@ -96,7 +100,7 @@ def test_sam2_sidecar_point_prompts_are_sent_with_context(
 
 
 def test_sam2_sidecar_point_validation_happens_before_network(
-    tmp_path,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     provider = SAM2SidecarAssistProvider()
@@ -107,7 +111,7 @@ def test_sam2_sidecar_point_validation_happens_before_network(
         height=80,
     )
 
-    def unexpected_post(*_args, **_kwargs):
+    def unexpected_post(*_args: object, **_kwargs: object) -> dict[str, object]:
         raise AssertionError("Network request should not be attempted")
 
     monkeypatch.setattr("reefvision.ml.sam2_sidecar._post_json", unexpected_post)
@@ -119,7 +123,9 @@ def test_sam2_sidecar_point_validation_happens_before_network(
         )
 
 
-def test_sam2_sidecar_requires_positive_point_or_context_box(tmp_path) -> None:
+def test_sam2_sidecar_requires_positive_point_or_context_box(
+    tmp_path: Path,
+) -> None:
     provider = SAM2SidecarAssistProvider()
     provider.load_model(_descriptor(tmp_path), "cuda:0")
     prepared = PreparedSam2SidecarImage(
