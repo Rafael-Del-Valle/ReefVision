@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from fastapi.testclient import TestClient
 from PIL import Image
 
 from reefvision.domain.errors import ValidationError
@@ -15,6 +16,7 @@ from reefvision.ml.sam2_sidecar import (
     PreparedSam2SidecarImage,
     SAM2SidecarAssistProvider,
 )
+from reefvision.tests.test_annotations import create_project, import_one
 
 
 def _descriptor(tmp_path: Path) -> Path:
@@ -140,3 +142,82 @@ def test_sam2_sidecar_requires_positive_point_or_context_box(
             positive_points=[],
             negative_points=[PixelPoint(10, 10)],
         )
+
+
+def test_registered_sam2_sidecar_runs_interactive_point_session(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "SAM 2 interactive Prompt Assist")
+    report = import_one(client, project["id"], size=(100, 80))
+    image_id = report["successful"][0]["image_id"]
+
+    registered = client.post(
+        f"/api/v1/projects/{project['id']}/sam2-sidecar-models",
+        json={
+            "display_name": "SAM 2 Sidecar",
+            "endpoint": "http://127.0.0.1:8766",
+            "token_env": "REEFVISION_SAM2_SIDECAR_TOKEN",
+            "timeout_seconds": 120,
+        },
+    )
+    assert registered.status_code == 201, registered.text
+    model = registered.json()
+    observed: dict[str, object] = {}
+
+    def fake_post_json(
+        url: str,
+        *,
+        token: str | None,
+        payload: dict[str, object],
+        timeout_seconds: float,
+    ) -> dict[str, object]:
+        observed.update(
+            {
+                "url": url,
+                "token": token,
+                "payload": payload,
+                "timeout_seconds": timeout_seconds,
+            }
+        )
+        return _mask_response(width=100, height=80)
+
+    monkeypatch.setattr("reefvision.ml.sam2_sidecar._post_json", fake_post_json)
+    created = client.post(
+        f"/api/v1/images/{image_id}/assist-sessions",
+        json={"model_id": model["id"], "device": "cuda:0"},
+    )
+    assert created.status_code == 200, created.text
+    session = created.json()
+    assert session["provider_name"] == "sam2_sidecar"
+
+    prompted = client.post(
+        f"/api/v1/assist-sessions/{session['session_id']}/points",
+        json={
+            "positive_points": [{"x": 30, "y": 20}],
+            "negative_points": [{"x": 10, "y": 10}],
+            "context_box": {
+                "x_min": 5,
+                "y_min": 5,
+                "x_max": 70,
+                "y_max": 60,
+            },
+        },
+    )
+    assert prompted.status_code == 200, prompted.text
+    result = prompted.json()
+    assert result["positive_point_count"] == 1
+    assert result["negative_point_count"] == 1
+    assert result["prompt_type"] == "point_prompt"
+    assert result["candidate_mask_png_base64"]
+    assert result["candidate_box"] == {
+        "x_min": 20.0,
+        "y_min": 10.0,
+        "x_max": 50.0,
+        "y_max": 30.0,
+    }
+    request_payload = observed["payload"]
+    assert isinstance(request_payload, dict)
+    assert request_payload["positive_points"] == [[30.0, 20.0]]
+    assert request_payload["negative_points"] == [[10.0, 10.0]]
+    assert request_payload["context_box"] == [5.0, 5.0, 70.0, 60.0]
