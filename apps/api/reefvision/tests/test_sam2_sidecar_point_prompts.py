@@ -46,6 +46,23 @@ def _mask_response(*, width: int, height: int) -> dict[str, object]:
     }
 
 
+def test_sam2_sidecar_descriptor_inspection(tmp_path: Path) -> None:
+    provider = SAM2SidecarAssistProvider()
+    metadata = provider.inspect_model(_descriptor(tmp_path))
+
+    assert metadata.framework == "sam2-sidecar"
+    assert metadata.task == "assist_segmentation"
+    assert metadata.provider_name == "sam2_sidecar"
+    assert metadata.provider_version == "sam2"
+    assert metadata.metadata["local_sidecar"] is True
+    assert metadata.metadata["capabilities"] == (
+        "box_prompt",
+        "point_prompt",
+        "negative_points",
+        "context_box",
+    )
+
+
 def test_sam2_sidecar_point_prompts_are_sent_with_context(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
