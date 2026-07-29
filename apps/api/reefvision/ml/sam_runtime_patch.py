@@ -7,6 +7,7 @@ from typing import Any
 
 from reefvision.domain.errors import ValidationError
 from reefvision.ml.providers import AnnotationAssistProvider
+from reefvision.ml.sam2_sidecar import SAM2SidecarAssistProvider
 from reefvision.ml.sam_adapters import (
     EfficientViTSAMAssistProvider,
     MobileSAMAssistProvider,
@@ -28,6 +29,8 @@ def _provider(provider_name: str) -> AnnotationAssistProvider:
         return EfficientViTSAMAssistProvider()
     if normalized in {"sam2", "sam_2"}:
         return SAM2ImageAssistProvider()
+    if normalized in {"sam2_sidecar", "sam_2_sidecar"}:
+        return SAM2SidecarAssistProvider()
     raise ValidationError(f"Unsupported assist provider: {provider_name}")
 
 
@@ -165,7 +168,9 @@ def _patch_provider_catalog() -> None:
                     display_name="EfficientViT-SAM",
                     provider_version=installed or "optional",
                     package_version=installed,
-                    supported_model_families=("EfficientViT-SAM L0/L1/L2/XL0/XL1 checkpoints",),
+                    supported_model_families=(
+                        "EfficientViT-SAM L0/L1/L2/XL0/XL1 checkpoints",
+                    ),
                     availability_status="ready" if installed else "dependency_missing",
                     availability_reason=(
                         None
@@ -200,6 +205,8 @@ def _patch_provider_catalog() -> None:
             "efficientvitsam",
             "sam2",
             "sam_2",
+            "sam2_sidecar",
+            "sam_2_sidecar",
         }:
             return _provider(provider_name or "")
         return original_registration(
@@ -213,6 +220,20 @@ def _patch_provider_catalog() -> None:
     from reefvision.ml import assist_runtime
 
     assist_runtime.assist_provider_for_name = _provider  # type: ignore[attr-defined]
+
+    from reefvision.services import assist as assist_service
+
+    original_require_ready = assist_service._require_ready_assist_provider
+
+    def require_ready_assist_provider(settings: Any, provider_name: str) -> None:
+        normalized = provider_name.strip().casefold().replace("-", "_")
+        if normalized in {"sam2_sidecar", "sam_2_sidecar"}:
+            return
+        original_require_ready(settings, provider_name)
+
+    assist_service._require_ready_assist_provider = (  # type: ignore[attr-defined]
+        require_ready_assist_provider
+    )
 
 
 def apply_sam_runtime_patch() -> None:
