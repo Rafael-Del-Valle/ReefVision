@@ -43,6 +43,9 @@
       "webviewInstallMode": {
         "type": "offlineInstaller",
         "silent": true
+      },
+      "wix": {
+        "template": "windows/wix/main.wxs"
       }
     }
   }

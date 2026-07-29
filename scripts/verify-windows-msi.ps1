@@ -22,9 +22,10 @@ if ([IO.Path]::GetExtension($ResolvedMsi).ToLowerInvariant() -ne ".msi") {
 }
 if (-not $OutputDirectory) {
     $OutputDirectory = Join-Path `
-        $Root `
-        ".artifacts\msi-verification-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+        $env:USERPROFILE `
+        "RVMSI\msi-verification-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
 }
+$OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $ExtractRoot = Join-Path $OutputDirectory "administrative-image"
 $InstallLog = Join-Path $OutputDirectory "msiexec-administrative.log"
