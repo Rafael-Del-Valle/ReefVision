@@ -1,4 +1,4 @@
-"""Run SAM 2 box-prompt refinement in an isolated localhost process.
+"""Run SAM 2 interactive refinement in an isolated localhost process.
 
 Install Meta SAM 2 and its dependencies in a separate environment, then run:
 
@@ -17,6 +17,7 @@ import hmac
 import os
 from contextlib import asynccontextmanager
 from io import BytesIO
+from math import isfinite
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +33,15 @@ class SegmentBoxRequest(BaseModel):
     device: str = "auto"
 
 
-class SegmentBoxResponse(BaseModel):
+class SegmentPointsRequest(BaseModel):
+    image_png_base64: str = Field(min_length=1)
+    positive_points: list[list[float]] = Field(default_factory=list, max_length=10000)
+    negative_points: list[list[float]] = Field(default_factory=list, max_length=10000)
+    context_box: list[float] | None = None
+    device: str = "auto"
+
+
+class SegmentResponse(BaseModel):
     mask_png_base64: str
     score: float
     model_version: str
@@ -77,6 +86,75 @@ def _resolve_device(requested: str, configured: str) -> str:
     )
 
 
+def _validated_box(
+    values: list[float] | None,
+    *,
+    width: int,
+    height: int,
+    required: bool,
+) -> np.ndarray | None:
+    if values is None:
+        if required:
+            raise HTTPException(status_code=422, detail="Box prompt is required")
+        return None
+    if len(values) != 4:
+        raise HTTPException(status_code=422, detail="Box prompt must contain four values")
+    x_min, y_min, x_max, y_max = (float(value) for value in values)
+    if not all(isfinite(value) for value in (x_min, y_min, x_max, y_max)) or not (
+        0 <= x_min < x_max <= width and 0 <= y_min < y_max <= height
+    ):
+        raise HTTPException(status_code=422, detail="Box prompt is outside the image")
+    return np.asarray([x_min, y_min, x_max, y_max], dtype=np.float32)
+
+
+def _validated_points(
+    values: list[list[float]],
+    *,
+    width: int,
+    height: int,
+    label: str,
+) -> list[list[float]]:
+    output: list[list[float]] = []
+    for value in values:
+        if len(value) != 2:
+            raise HTTPException(
+                status_code=422,
+                detail=f"{label} point prompts must contain x and y",
+            )
+        x, y = (float(component) for component in value)
+        if not (isfinite(x) and isfinite(y)) or not (0 <= x < width and 0 <= y < height):
+            raise HTTPException(
+                status_code=422,
+                detail=f"{label} point prompt is outside the image",
+            )
+        output.append([x, y])
+    return output
+
+
+def _best_prediction(
+    masks: Any,
+    scores: Any,
+    *,
+    width: int,
+    height: int,
+) -> tuple[np.ndarray, float]:
+    masks_array = np.asarray(masks)
+    scores_array = np.asarray(scores, dtype=np.float64).reshape(-1)
+    if masks_array.ndim < 3 or len(masks_array) == 0:
+        raise HTTPException(status_code=422, detail="SAM 2 returned no mask")
+    if len(scores_array) == len(masks_array):
+        order = np.argsort(scores_array)[::-1]
+    else:
+        order = np.arange(len(masks_array))
+    for raw_index in order:
+        index = int(raw_index)
+        mask = np.asarray(masks_array[index], dtype=bool)
+        if mask.shape == (height, width) and bool(mask.any()):
+            score = float(scores_array[index]) if index < len(scores_array) else 0.0
+            return mask, max(0.0, min(1.0, score))
+    raise HTTPException(status_code=422, detail="SAM 2 returned an invalid mask")
+
+
 def build_app(
     *,
     config_path: Path,
@@ -111,7 +189,7 @@ def build_app(
 
     app = FastAPI(
         title="ReefVision SAM 2 Sidecar",
-        version="1.0",
+        version="1.1",
         lifespan=lifespan,
     )
 
@@ -129,19 +207,18 @@ def build_app(
             "provider": "sam2_sidecar",
             "model_version": state.get("model_version"),
             "device": configured_device,
+            "capabilities": ["box_prompt", "point_prompt", "negative_points", "context_box"],
         }
 
-    @app.post("/segment-box", response_model=SegmentBoxResponse)
+    @app.post("/segment-box", response_model=SegmentResponse)
     def segment_box(
         payload: SegmentBoxRequest,
         _authorized: None = Depends(authorize),
-    ) -> SegmentBoxResponse:
+    ) -> SegmentResponse:
         _resolve_device(payload.device, configured_device)
         image = _decode_image(payload.image_png_base64)
         height, width = image.shape[:2]
-        x_min, y_min, x_max, y_max = (float(value) for value in payload.box)
-        if not (0 <= x_min < x_max <= width and 0 <= y_min < y_max <= height):
-            raise HTTPException(status_code=422, detail="Box prompt is outside the image")
+        box = _validated_box(payload.box, width=width, height=height, required=True)
         predictor = state.get("predictor")
         if predictor is None:
             raise HTTPException(status_code=503, detail="SAM 2 predictor is not loaded")
@@ -149,18 +226,68 @@ def build_app(
         masks, scores, _logits = predictor.predict(
             point_coords=None,
             point_labels=None,
-            box=np.asarray([x_min, y_min, x_max, y_max], dtype=np.float32),
+            box=box,
             multimask_output=False,
         )
-        if len(masks) == 0:
-            raise HTTPException(status_code=422, detail="SAM 2 returned no mask")
-        mask = np.asarray(masks[0], dtype=bool)
-        if mask.shape != (height, width) or not bool(mask.any()):
-            raise HTTPException(status_code=422, detail="SAM 2 returned an invalid mask")
-        score = float(scores[0]) if len(scores) else 0.0
-        return SegmentBoxResponse(
+        mask, score = _best_prediction(masks, scores, width=width, height=height)
+        return SegmentResponse(
             mask_png_base64=_encode_mask(mask),
-            score=max(0.0, min(1.0, score)),
+            score=score,
+            model_version=str(state.get("model_version", "sam2")),
+        )
+
+    @app.post("/segment-points", response_model=SegmentResponse)
+    def segment_points(
+        payload: SegmentPointsRequest,
+        _authorized: None = Depends(authorize),
+    ) -> SegmentResponse:
+        _resolve_device(payload.device, configured_device)
+        image = _decode_image(payload.image_png_base64)
+        height, width = image.shape[:2]
+        positive = _validated_points(
+            payload.positive_points,
+            width=width,
+            height=height,
+            label="Positive",
+        )
+        negative = _validated_points(
+            payload.negative_points,
+            width=width,
+            height=height,
+            label="Negative",
+        )
+        context_box = _validated_box(
+            payload.context_box,
+            width=width,
+            height=height,
+            required=False,
+        )
+        if not positive and context_box is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Point prompting requires a positive point or context box",
+            )
+        points = [*positive, *negative]
+        point_coords = np.asarray(points, dtype=np.float32) if points else None
+        point_labels = (
+            np.asarray([1] * len(positive) + [0] * len(negative), dtype=np.int32)
+            if points
+            else None
+        )
+        predictor = state.get("predictor")
+        if predictor is None:
+            raise HTTPException(status_code=503, detail="SAM 2 predictor is not loaded")
+        predictor.set_image(image)
+        masks, scores, _logits = predictor.predict(
+            point_coords=point_coords,
+            point_labels=point_labels,
+            box=context_box,
+            multimask_output=True,
+        )
+        mask, score = _best_prediction(masks, scores, width=width, height=height)
+        return SegmentResponse(
+            mask_png_base64=_encode_mask(mask),
+            score=score,
             model_version=str(state.get("model_version", "sam2")),
         )
 
