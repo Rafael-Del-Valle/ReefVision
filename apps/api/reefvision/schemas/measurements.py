@@ -15,7 +15,7 @@ class MeasurementPoint(BaseModel):
     y: float = Field(ge=0)
 
 
-class MeasurementCalibrationUpdate(BaseModel):
+class MeasurementCalibrationFields(BaseModel):
     distance_per_pixel: float = Field(gt=0)
     unit: str = Field(min_length=1, max_length=32)
     source: str = Field(default="manual", min_length=1, max_length=100)
@@ -40,6 +40,8 @@ class MeasurementCalibrationUpdate(BaseModel):
         stripped = value.strip()
         return stripped or None
 
+
+class MeasurementCalibrationUpdate(MeasurementCalibrationFields):
     @model_validator(mode="after")
     def validate_reference_pair(self) -> MeasurementCalibrationUpdate:
         if (self.reference_length is None) != (self.reference_pixel_length is None):
@@ -61,7 +63,7 @@ class MeasurementCalibrationUpdate(BaseModel):
         return self
 
 
-class MeasurementCalibrationResponse(MeasurementCalibrationUpdate):
+class MeasurementCalibrationResponse(MeasurementCalibrationFields):
     image_id: str
     calibrated: bool = True
 
