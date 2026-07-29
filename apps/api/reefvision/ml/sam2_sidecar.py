@@ -193,6 +193,21 @@ def check_sam2_sidecar_health(
     }
 
 
+def _resolved_sidecar_device(requested: str, configured: str) -> str:
+    normalized_requested = requested.strip().casefold()
+    normalized_configured = configured.strip().casefold()
+    if normalized_requested in {"", "auto"}:
+        return "auto"
+    if normalized_requested in {"gpu", "cuda"} and normalized_configured.startswith("cuda"):
+        return configured
+    if normalized_requested == normalized_configured:
+        return configured
+    raise ValidationError(
+        "SAM 2 sidecar is configured for "
+        f"{configured}, but Prompt Assist requested {requested or 'auto'}"
+    )
+
+
 def _prepared_image(image_path: Path) -> PreparedSam2SidecarImage:
     try:
         with Image.open(image_path) as source:
@@ -304,11 +319,21 @@ class SAM2SidecarAssistProvider:
 
     def load_model(self, model_path: Path, device: str) -> None:
         descriptor = _read_descriptor(model_path)
+        health = check_sam2_sidecar_health(
+            descriptor.endpoint,
+            token_env=descriptor.token_env,
+            timeout_seconds=descriptor.timeout_seconds,
+        )
+        configured_device = str(health["device"])
+        resolved_device = _resolved_sidecar_device(device, configured_device)
+        model_version = health.get("model_version")
         self._endpoint = descriptor.endpoint
         self._timeout_seconds = descriptor.timeout_seconds
         self._token = os.environ.get(descriptor.token_env)
-        self._device = device
-        self.provider_version = descriptor.provider_version
+        self._device = resolved_device
+        self.provider_version = (
+            str(model_version).strip() if model_version else descriptor.provider_version
+        )
 
     def prepare_image(self, image_path: Path) -> PreparedSam2SidecarImage:
         if self._endpoint is None:
