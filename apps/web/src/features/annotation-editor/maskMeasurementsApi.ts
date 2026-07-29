@@ -92,6 +92,62 @@ export interface MaskMeasurementResponse {
   surface_area_assumptions: string[];
 }
 
+export interface AdvancedMeasurementRequest {
+  prune_spurs_pixels: number;
+  bridge_gaps_pixels: number;
+  surface_method: "none";
+}
+
+export interface AdvancedMeasurementResponse {
+  mask_annotation_id: string;
+  image_id: string;
+  revision: number;
+  calibrated: boolean;
+  distance_per_pixel: number | null;
+  physical_unit: string | null;
+  shape: {
+    area_pixels: number;
+    perimeter_pixels: number;
+    convex_hull_area_pixels: number;
+    solidity: number;
+    circularity: number;
+    compactness: number;
+    feret_max_pixels: number;
+    feret_min_pixels: number;
+    major_axis_pixels: number;
+    minor_axis_pixels: number;
+    orientation_degrees: number;
+    bounding_width_pixels: number;
+    bounding_height_pixels: number;
+  };
+  skeleton: {
+    method: string;
+    skeleton_pixel_count: number;
+    total_length_pixels: number;
+    longest_path_pixels: number;
+    endpoint_count: number;
+    junction_count: number;
+    branch_count: number;
+    branch_lengths_pixels: number[];
+    pruned_pixels: number;
+    bridged_gaps: number;
+  };
+  surface: {
+    method: string;
+    area: number | null;
+    unit_squared: string | null;
+    standard_uncertainty: number | null;
+    lower_95: number | null;
+    upper_95: number | null;
+    assumptions: string[];
+  };
+  total_length_physical: number | null;
+  longest_path_physical: number | null;
+  feret_max_physical: number | null;
+  feret_min_physical: number | null;
+  warnings: string[];
+}
+
 async function apiError(response: Response, fallback: string): Promise<Error> {
   let message = `${fallback} with HTTP ${response.status}`;
   try {
@@ -128,6 +184,26 @@ export async function getMaskMeasurements(
     throw await apiError(response, "Mask measurement request failed");
   }
   return (await response.json()) as MaskMeasurementResponse;
+}
+
+export async function getAdvancedMaskMeasurements(
+  maskAnnotationId: string,
+  payload: AdvancedMeasurementRequest,
+  signal?: AbortSignal,
+): Promise<AdvancedMeasurementResponse> {
+  const response = await fetch(
+    `${getApiBaseUrl()}/mask-annotations/${encodeURIComponent(maskAnnotationId)}/advanced-measurements`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal,
+    },
+  );
+  if (!response.ok) {
+    throw await apiError(response, "Advanced measurement request failed");
+  }
+  return (await response.json()) as AdvancedMeasurementResponse;
 }
 
 export async function getMeasurementCalibration(
