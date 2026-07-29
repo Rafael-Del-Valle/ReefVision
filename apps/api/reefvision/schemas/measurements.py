@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from math import isclose
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -45,6 +46,18 @@ class MeasurementCalibrationUpdate(BaseModel):
             raise ValueError(
                 "reference_length and reference_pixel_length must be supplied together"
             )
+        if self.reference_length is not None and self.reference_pixel_length is not None:
+            expected_distance_per_pixel = self.reference_length / self.reference_pixel_length
+            if not isclose(
+                self.distance_per_pixel,
+                expected_distance_per_pixel,
+                rel_tol=1e-6,
+                abs_tol=1e-12,
+            ):
+                raise ValueError(
+                    "distance_per_pixel must match "
+                    "reference_length / reference_pixel_length"
+                )
         return self
 
 
