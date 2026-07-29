@@ -46,6 +46,27 @@ def _mask_response(*, width: int, height: int) -> dict[str, object]:
     }
 
 
+@pytest.fixture(autouse=True)
+def healthy_sidecar(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get_json(
+        url: str,
+        *,
+        token: str | None,
+        timeout_seconds: float,
+    ) -> dict[str, object]:
+        assert url == "http://127.0.0.1:8766/health"
+        assert token is None
+        assert timeout_seconds == 120.0
+        return {
+            "status": "ok",
+            "provider": "sam2_sidecar",
+            "model_version": "sam2.1_hiera_large.pt",
+            "device": "cuda:0",
+        }
+
+    monkeypatch.setattr("reefvision.ml.sam2_sidecar._get_json", fake_get_json)
+
+
 def test_sam2_sidecar_descriptor_inspection(tmp_path: Path) -> None:
     provider = SAM2SidecarAssistProvider()
     metadata = provider.inspect_model(_descriptor(tmp_path))
@@ -61,6 +82,20 @@ def test_sam2_sidecar_descriptor_inspection(tmp_path: Path) -> None:
         "negative_points",
         "context_box",
     )
+
+
+def test_sam2_sidecar_load_validates_health_and_device(tmp_path: Path) -> None:
+    provider = SAM2SidecarAssistProvider()
+    provider.load_model(_descriptor(tmp_path), "cuda")
+
+    assert provider.provider_version == "sam2.1_hiera_large.pt"
+
+
+def test_sam2_sidecar_load_rejects_incompatible_device(tmp_path: Path) -> None:
+    provider = SAM2SidecarAssistProvider()
+
+    with pytest.raises(ValidationError, match="configured for cuda:0"):
+        provider.load_model(_descriptor(tmp_path), "cpu")
 
 
 def test_sam2_sidecar_point_prompts_are_sent_with_context(
