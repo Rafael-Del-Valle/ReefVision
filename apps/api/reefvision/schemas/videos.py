@@ -1,4 +1,4 @@
-"""Managed video, sparse track, interpolation, and analytics schemas."""
+"""Managed video, sparse track, interpolation, analytics, and tracking evaluation schemas."""
 
 from __future__ import annotations
 
@@ -145,3 +145,58 @@ class VideoTrackingCreateRequest(BaseModel):
     iou: float = Field(default=0.5, ge=0, le=1)
     device: str = Field(default="auto", min_length=1, max_length=60)
     minimum_track_frames: int = Field(default=2, ge=1, le=1000000)
+
+
+class VideoTrackingEvaluationRequest(BaseModel):
+    ground_truth_track_ids: list[str] = Field(min_length=1, max_length=10000)
+    prediction_track_ids: list[str] = Field(min_length=1, max_length=10000)
+    start_frame: int | None = Field(default=None, ge=0)
+    end_frame: int | None = Field(default=None, ge=0)
+    iou_threshold: float = Field(default=0.5, gt=0, le=1)
+    class_aware: bool = True
+
+    @model_validator(mode="after")
+    def valid_frame_range(self) -> VideoTrackingEvaluationRequest:
+        if (
+            self.start_frame is not None
+            and self.end_frame is not None
+            and self.end_frame < self.start_frame
+        ):
+            raise ValueError("Evaluation end_frame must be greater than or equal to start_frame")
+        return self
+
+
+class VideoTrackingTrackEvaluation(BaseModel):
+    ground_truth_track_id: str
+    ground_truth_track_number: int
+    total_observations: int
+    matched_observations: int
+    recall: float
+    id_switches: int
+    fragmentations: int
+    matched_prediction_track_ids: list[str]
+
+
+class VideoTrackingEvaluationResponse(BaseModel):
+    video_id: str
+    start_frame: int
+    end_frame: int
+    iou_threshold: float
+    class_aware: bool
+    ground_truth_track_count: int
+    prediction_track_count: int
+    ground_truth_observations: int
+    prediction_observations: int
+    matched_observations: int
+    missed_observations: int
+    false_positive_observations: int
+    missed_tracks: int
+    false_positive_tracks: int
+    tracking_recall: float
+    tracking_precision: float
+    id_switches: int
+    fragmentations: int
+    mean_iou: float
+    mean_center_error_pixels: float | None
+    mota: float
+    per_ground_truth_track: list[VideoTrackingTrackEvaluation]
