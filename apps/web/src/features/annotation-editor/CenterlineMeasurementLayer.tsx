@@ -3,6 +3,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
@@ -24,7 +25,7 @@ interface CenterlineMeasurementLayerProps {
 }
 
 function sourcePoint(
-  event: ReactPointerEvent<SVGSVGElement>,
+  event: ReactMouseEvent<SVGSVGElement> | ReactPointerEvent<SVGSVGElement>,
   width: number,
   height: number,
 ): MeasurementPoint {

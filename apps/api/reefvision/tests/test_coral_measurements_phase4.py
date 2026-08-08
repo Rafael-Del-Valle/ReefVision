@@ -25,7 +25,7 @@ def _seed_measurement_image(client: TestClient) -> tuple[dict[str, object], str,
         f"/api/v1/images/{image_id}/annotations",
         json={
             "base_revision": 0,
-            "annotation_status": "annotated",
+            "annotation_status": "reviewed",
             "annotations": [
                 {
                     "id": "ca45f365-acde-4bf8-a411-1cc1d8c5dc5a",
@@ -156,9 +156,7 @@ def test_density_filters_and_numpy_bundle(client: TestClient) -> None:
     assert by_species_state.status_code == 200, by_species_state.text
     assert by_species_state.json()["contained_box_count"] == 1
 
-    exported = client.get(
-        f"/api/v1/projects/{project['id']}/measurement-export?format=numpy"
-    )
+    exported = client.get(f"/api/v1/projects/{project['id']}/measurement-export?format=numpy")
     assert exported.status_code == 200, exported.text
     assert exported.headers["content-type"].startswith("application/zip")
     with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
