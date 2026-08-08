@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections import Counter
 
 from sqlalchemy import select
@@ -77,7 +78,14 @@ _STRATEGY_WEIGHTS: dict[str, ReviewScoreWeights] = {
         recent_import=2,
         stale_review_state=8,
     ),
+    "random": ReviewScoreWeights(),
 }
+
+
+def _random_order_key(seed: int, image_id: str) -> str:
+    """Return a stable pseudorandom ordering key for reproducible control batches."""
+
+    return hashlib.sha256(f"{seed}:{image_id}".encode("utf-8")).hexdigest()
 
 
 class ActiveLearningRoundService:
@@ -150,6 +158,10 @@ class ActiveLearningRoundService:
             queue_items = [
                 item for item in queue_items if model_filter.intersection(item.model_ids_json)
             ]
+        if request.strategy == "random":
+            queue_items.sort(
+                key=lambda item: (_random_order_key(request.random_seed, item.image_id), item.image_id)
+            )
         selected = queue_items[: request.requested_size]
         if not selected:
             raise ValidationError("The acquisition strategy did not select any review candidates")
@@ -157,11 +169,13 @@ class ActiveLearningRoundService:
         stable_items = [
             {
                 "image_id": item.image_id,
-                "rank_position": item.rank_position,
+                "rank_position": (
+                    selection_rank if request.strategy == "random" else item.rank_position
+                ),
                 "score": item.score,
                 "input_checksum": item.input_checksum,
             }
-            for item in selected
+            for selection_rank, item in enumerate(selected, start=1)
         ]
         identity_payload = {
             "schema_version": "active-learning-identity-0001",
@@ -175,6 +189,8 @@ class ActiveLearningRoundService:
             "weights": weights.model_dump(mode="json"),
             "items": stable_items,
         }
+        if request.strategy == "random":
+            identity_payload["random_seed"] = request.random_seed
         selection_sha256 = canonical_json_sha256(identity_payload)
         existing = self.session.scalar(
             select(ActiveLearningRound).where(
@@ -197,11 +213,23 @@ class ActiveLearningRoundService:
                 {
                     **stable,
                     "queue_item_id": item.id,
-                    "reason_summary": item.reason_summary,
+                    "reason_summary": (
+                        f"Random baseline selection using deterministic seed {request.random_seed}."
+                        if request.strategy == "random"
+                        else item.reason_summary
+                    ),
+                    "queue_reason_summary": (
+                        item.reason_summary if request.strategy == "random" else None
+                    ),
                 }
                 for stable, item in zip(stable_items, selected, strict=True)
             ],
         }
+        strategy_config: dict[str, object] = {
+            "weights": weights.model_dump(mode="json")
+        }
+        if request.strategy == "random":
+            strategy_config["random_seed"] = request.random_seed
         round_record = ActiveLearningRound(
             project_id=project_id,
             dataset_version_id=version.id if version else None,
@@ -212,7 +240,7 @@ class ActiveLearningRoundService:
             requested_size=request.requested_size,
             selected_count=len(selected),
             model_ids_json=model_ids,
-            strategy_config_json={"weights": weights.model_dump(mode="json")},
+            strategy_config_json=strategy_config,
             selection_manifest_json=manifest,
             selection_sha256=selection_sha256,
             feedback_summary_json={},
