@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from io import BytesIO
 from typing import Any, cast
@@ -8,12 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from reefvision.db.models import (
-    Annotation,
-    ImageAsset,
-    LabelClass,
-    MaskAnnotation,
-)
+from reefvision.db.models import Annotation, ImageAsset, LabelClass, MaskAnnotation
 
 CLASS_MAPPING = {
     "Swiftia C": {
@@ -28,6 +24,12 @@ CLASS_MAPPING = {
         "long_label_code": "Swiftia Open",
         "color": [255, 170, 0, 255],
     },
+    "Muricea C": {
+        "id": "cbb7ff05-934e-45b9-b1b5-c34738c4a44f",
+        "short_label_code": "Muricea C",
+        "long_label_code": "Muricea Closed",
+        "color": [120, 120, 120, 255],
+    },
     "Muricea O": {
         "id": "cdd8ac00-a5e9-489b-9b8a-c3f0275fe88c",
         "short_label_code": "Muricea O",
@@ -39,6 +41,12 @@ CLASS_MAPPING = {
         "short_label_code": "Thesea C",
         "long_label_code": "Thesea Closed",
         "color": [131, 0, 131, 255],
+    },
+    "Thesea O": {
+        "id": "1731935e-7e4a-42a2-b2a7-4aa96b1c918b",
+        "short_label_code": "Thesea O",
+        "long_label_code": "Thesea Open",
+        "color": [200, 0, 255, 255],
     },
 }
 
@@ -127,14 +135,8 @@ def annotation_payload() -> dict[str, list[dict[str, Any]]]:
                 "image_path": r"C:\old-project\trial-1\coral.png",
                 "verified": True,
                 "polygons": [
-                    {
-                        "points": [[5, 45], [15, 45], [15, 55], [5, 55]],
-                        "holes": [],
-                    },
-                    {
-                        "points": [[20, 45], [30, 45], [30, 55], [20, 55]],
-                        "holes": [],
-                    },
+                    {"points": [[5, 45], [15, 45], [15, 55], [5, 55]], "holes": []},
+                    {"points": [[20, 45], [30, 45], [30, 55], [20, 55]], "holes": []},
                 ],
             },
         ]
@@ -145,21 +147,33 @@ def import_annotations(client: TestClient, project_id: str):
     return client.post(
         f"/api/v1/projects/{project_id}/imports/annotations",
         files=[
-            (
-                "files",
-                (
-                    "annotations.json",
-                    json.dumps(annotation_payload()),
-                    "application/json",
-                ),
-            ),
-            (
-                "files",
-                ("class_mapping.json", json.dumps(CLASS_MAPPING), "application/json"),
-            ),
+            ("files", ("annotations.json", json.dumps(annotation_payload()), "application/json")),
+            ("files", ("class_mapping.json", json.dumps(CLASS_MAPPING), "application/json")),
             ("files", ("data.yaml", DATA_YAML, "application/yaml")),
         ],
     )
+
+
+def _compressed_coco_counts(counts: list[int]) -> str:
+    encoded = bytearray()
+    for index, original in enumerate(counts):
+        value = original - counts[index - 2] if index > 2 else original
+        more = True
+        while more:
+            chunk = value & 0x1F
+            value >>= 5
+            more = (bool(chunk & 0x10) and value != -1) or (not bool(chunk & 0x10) and value != 0)
+            if more:
+                chunk |= 0x20
+            encoded.append(chunk + 48)
+    return base64.b64encode(bytes(encoded)).decode("ascii")
+
+
+def _solid_crop_rle(width: int, height: int) -> dict[str, Any]:
+    return {
+        "size": [height, width],
+        "counts": _compressed_coco_counts([0, width * height]),
+    }
 
 
 def test_coralnet_toolbox_import_creates_native_boxes_and_masks(client: TestClient) -> None:
@@ -238,10 +252,7 @@ def test_import_can_create_missing_class_without_reindexing_existing_classes(
         f"/api/v1/projects/{project['id']}/imports/annotations",
         files=[
             ("files", ("annotations.json", json.dumps(payload), "application/json")),
-            (
-                "files",
-                ("class_mapping.json", json.dumps(CLASS_MAPPING), "application/json"),
-            ),
+            ("files", ("class_mapping.json", json.dumps(CLASS_MAPPING), "application/json")),
             ("files", ("data.yaml", DATA_YAML, "application/yaml")),
         ],
     )
@@ -260,9 +271,7 @@ def test_import_can_create_missing_class_without_reindexing_existing_classes(
         assert session.query(Annotation).filter_by(image_id=image_id).count() == 1
 
 
-def test_polygon_holes_are_reported_instead_of_silently_discarded(
-    client: TestClient,
-) -> None:
+def test_polygon_holes_are_preserved_as_editable_raster_content(client: TestClient) -> None:
     project = create_project(client)
     import_image(client, project["id"])
     payload = {
@@ -288,6 +297,89 @@ def test_polygon_holes_are_reported_instead_of_silently_discarded(
 
     assert response.status_code == 200, response.text
     report = response.json()
-    assert report["masks_imported"] == 0
-    assert report["skipped_annotations"] == 1
-    assert "cannot preserve" in report["issues"][0]["detail"]
+    assert report["masks_imported"] == 1
+    assert report["skipped_annotations"] == 0
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        mask = session.query(MaskAnnotation).one()
+        assert mask.geometry_kind == "raster_mask"
+        assert mask.mask_path is not None
+        assert mask.provenance_json is not None
+        assert mask.provenance_json["external_polygon_holes_preserved"] is True
+        mask_id = mask.id
+
+    content = client.get(f"/api/v1/mask-annotations/{mask_id}/content")
+    assert content.status_code == 200
+    with Image.open(BytesIO(content.content)) as image:
+        assert image.getpixel((10, 10)) > 0
+        assert image.getpixel((17, 17)) == 0
+
+
+def test_semantic_maskannotation_rle_is_imported_losslessly_and_idempotently(
+    client: TestClient,
+) -> None:
+    project = create_project(client)
+    import_image(client, project["id"])
+    semantic = {
+        "coral.png": [
+            {
+                "id": "semantic-mask-1",
+                "type": "MaskAnnotation",
+                "image_path": "coral.png",
+                "shape": [80, 100],
+                "label_map": {"1": "Muricea C"},
+                "rle_masks": [
+                    {
+                        "class_id": 1,
+                        "rle": _solid_crop_rle(10, 10),
+                        "bbox": [10, 10, 19, 19],
+                    },
+                    {
+                        "class_id": 129,
+                        "rle": _solid_crop_rle(5, 5),
+                        "bbox": [30, 20, 34, 24],
+                    },
+                ],
+                "verified": True,
+            }
+        ]
+    }
+
+    def perform_import():
+        return client.post(
+            f"/api/v1/projects/{project['id']}/imports/annotations",
+            files=[
+                ("files", ("semantic.json", json.dumps(semantic), "application/json")),
+                ("files", ("class_mapping.json", json.dumps(CLASS_MAPPING), "application/json")),
+                ("files", ("data.yaml", DATA_YAML, "application/yaml")),
+            ],
+        )
+
+    response = perform_import()
+    assert response.status_code == 200, response.text
+    report = response.json()
+    assert report["masks_imported"] == 1
+    assert report["skipped_annotations"] == 0
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        mask = session.query(MaskAnnotation).one()
+        assert mask.geometry_kind == "raster_mask"
+        assert mask.area_pixels == 125
+        assert mask.provenance_json is not None
+        assert mask.provenance_json["external_semantic_rle"] is True
+        assert mask.provenance_json["external_lock_bit_normalized"] == 128
+        mask_id = mask.id
+
+    content = client.get(f"/api/v1/mask-annotations/{mask_id}/content")
+    assert content.status_code == 200
+    with Image.open(BytesIO(content.content)) as image:
+        assert image.getpixel((12, 12)) > 0
+        assert image.getpixel((32, 22)) > 0
+        assert image.getpixel((25, 25)) == 0
+
+    repeated = perform_import()
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["masks_imported"] == 0
+    assert repeated.json()["duplicate_annotations"] == 1

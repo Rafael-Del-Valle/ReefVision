@@ -14,7 +14,7 @@ class ObjectStore(Protocol):
 
 class S3ObjectStore:
     def __init__(self, bucket: str, endpoint_url: str | None = None) -> None:
-        import boto3  # type: ignore[import-untyped]
+        import boto3
 
         self.bucket = bucket
         self.client = boto3.client("s3", endpoint_url=endpoint_url)
