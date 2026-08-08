@@ -33,6 +33,21 @@ jobs:
             apps/api/reefvision/tests/test_active_learning_phase7.py
       - name: Run Milestone 7 active learning tests
         run: python -m pytest apps/api/reefvision/tests/test_active_learning_phase7.py -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+      - name: Check active-learning desktop workspace
+        working-directory: apps/web
+        run: |
+          npx prettier --check \
+            src/features/active-learning/ActiveLearningWorkspace.tsx \
+            src/features/active-learning/activeLearningApi.ts
+          npm run typecheck
       - name: Verify 0022 migration roundtrip
         shell: bash
         run: |
