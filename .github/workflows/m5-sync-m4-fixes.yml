@@ -1,0 +1,30 @@
+name: M5 Sync M4 Fixes
+
+on:
+  push:
+    branches:
+      - integration/milestone5-classification
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copy validated Milestone 4 fixes
+        shell: bash
+        run: |
+          git fetch origin integration/milestone4-measurements --depth=1
+          git show FETCH_HEAD:apps/web/src/features/annotation-editor/CenterlineMeasurementLayer.tsx > apps/web/src/features/annotation-editor/CenterlineMeasurementLayer.tsx
+          git show FETCH_HEAD:apps/api/reefvision/tests/test_coral_measurements_phase4.py > apps/api/reefvision/tests/test_coral_measurements_phase4.py
+      - name: Commit synced fixes
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/web/src/features/annotation-editor/CenterlineMeasurementLayer.tsx apps/api/reefvision/tests/test_coral_measurements_phase4.py
+          git commit -m 'Sync validated Milestone 4 fixes into classification stack'
+          git push
