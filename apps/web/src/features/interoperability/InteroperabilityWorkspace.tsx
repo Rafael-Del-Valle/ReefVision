@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { Project } from "../../api/client";
 import {
   createProjectExchange,
   getProjectExchangePackages,
+  importProjectExchange,
   inspectProjectExchange,
   projectExchangeDownloadUrl,
 } from "./projectExchangeApi";
@@ -17,9 +18,11 @@ export function InteroperabilityWorkspace({
   project,
 }: InteroperabilityWorkspaceProps) {
   const queryClient = useQueryClient();
-  const [includeMedia, setIncludeMedia] = useState(false);
+  const [includeMedia, setIncludeMedia] = useState(true);
   const [includeModelWeights, setIncludeModelWeights] = useState(false);
+  const [includeGeneratedArtifacts, setIncludeGeneratedArtifacts] = useState(true);
   const [inspectionFile, setInspectionFile] = useState<File | null>(null);
+  const [importProjectName, setImportProjectName] = useState("");
 
   const packagesQuery = useQuery({
     queryKey: ["project-exchange-packages", project.id],
@@ -31,7 +34,7 @@ export function InteroperabilityWorkspace({
       createProjectExchange(project.id, {
         include_media: includeMedia,
         include_model_weights: includeModelWeights,
-        include_generated_artifacts: false,
+        include_generated_artifacts: includeGeneratedArtifacts,
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
@@ -45,6 +48,23 @@ export function InteroperabilityWorkspace({
       return inspectProjectExchange(inspectionFile);
     },
   });
+  const importMutation = useMutation({
+    mutationFn: () => {
+      if (!inspectionFile) throw new Error("Choose an exchange ZIP first");
+      if (!inspectMutation.data?.compatible) {
+        throw new Error("Inspect a compatible exchange package before importing it");
+      }
+      return importProjectExchange(inspectionFile, importProjectName || undefined);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["projects"] });
+      await queryClient.invalidateQueries({ queryKey: ["project-summaries"] });
+    },
+  });
+
+  useEffect(() => {
+    setImportProjectName(inspectMutation.data?.project_name ?? "");
+  }, [inspectMutation.data]);
 
   return (
     <section className="feature-workspace">
@@ -53,9 +73,9 @@ export function InteroperabilityWorkspace({
           <p className="eyebrow">Phase 9</p>
           <h3>Project interoperability</h3>
           <p>
-            Export a versioned, checksummed ReefVision package or inspect one
-            safely. Import remains disabled until record-ID remapping and conflict
-            rules are fully specified.
+            Export, inspect, and import versioned ReefVision project packages. Imports
+            always create a new project with remapped record IDs; they never overwrite
+            the currently open project.
           </p>
         </div>
       </div>
@@ -74,14 +94,23 @@ export function InteroperabilityWorkspace({
           <label className="checkbox-row">
             <input
               type="checkbox"
+              checked={includeGeneratedArtifacts}
+              onChange={(event) => setIncludeGeneratedArtifacts(event.target.checked)}
+            />
+            Include raster masks and generated training artifacts
+          </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
               checked={includeModelWeights}
               onChange={(event) => setIncludeModelWeights(event.target.checked)}
             />
             Include registered model weights
           </label>
           <p>
-            Model weights are excluded by default because they can be large and
-            may have separate redistribution licenses.
+            Media and raster masks are recommended for a reopenable round trip. Model
+            weights remain optional because they can be large and may have separate
+            redistribution licenses.
           </p>
           <button
             type="button"
@@ -96,11 +125,15 @@ export function InteroperabilityWorkspace({
         </div>
 
         <div className="panel-card">
-          <h4>Inspect exchange package</h4>
+          <h4>Inspect and import package</h4>
           <input
             type="file"
             accept=".zip,.reefvision.zip,application/zip"
-            onChange={(event) => setInspectionFile(event.target.files?.[0] ?? null)}
+            onChange={(event) => {
+              setInspectionFile(event.target.files?.[0] ?? null);
+              inspectMutation.reset();
+              importMutation.reset();
+            }}
           />
           <button
             type="button"
@@ -112,11 +145,18 @@ export function InteroperabilityWorkspace({
           {inspectMutation.data && (
             <>
               <p>
-                Compatible: <strong>{inspectMutation.data.compatible ? "Yes" : "No"}</strong>
+                Compatible:{" "}
+                <strong>{inspectMutation.data.compatible ? "Yes" : "No"}</strong>
               </p>
               <p>Project: {inspectMutation.data.project_name ?? "Unknown"}</p>
               <p>Format: {inspectMutation.data.format_version ?? "Unknown"}</p>
-              <p>Media files: {inspectMutation.data.included_media_count}</p>
+              <p>Media/artifact files: {inspectMutation.data.included_media_count}</p>
+              <p>
+                Records:{" "}
+                {Object.entries(inspectMutation.data.section_counts)
+                  .map(([name, count]) => `${name} ${count}`)
+                  .join(" · ")}
+              </p>
               {inspectMutation.data.warnings.length > 0 && (
                 <ul>
                   {inspectMutation.data.warnings.map((warning) => (
@@ -131,14 +171,55 @@ export function InteroperabilityWorkspace({
                   ))}
                 </ul>
               )}
+              {inspectMutation.data.compatible && (
+                <>
+                  <label>
+                    New project name
+                    <input
+                      value={importProjectName}
+                      onChange={(event) => setImportProjectName(event.target.value)}
+                      placeholder={inspectMutation.data.project_name ?? "Imported project"}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => importMutation.mutate()}
+                    disabled={importMutation.isPending}
+                  >
+                    {importMutation.isPending ? "Importing..." : "Import as new project"}
+                  </button>
+                </>
+              )}
             </>
           )}
           {inspectMutation.error && (
             <p className="form-error">{inspectMutation.error.message}</p>
           )}
-          <button type="button" disabled title="Import is intentionally not implemented">
-            Import disabled pending ID-remapping design
-          </button>
+          {importMutation.error && (
+            <p className="form-error">{importMutation.error.message}</p>
+          )}
+          {importMutation.data && (
+            <div>
+              <p>
+                Imported <strong>{importMutation.data.project_name}</strong> as a new
+                project.
+              </p>
+              <p>
+                Remapped {importMutation.data.remapped_id_count} record IDs and restored{" "}
+                {importMutation.data.restored_file_count} managed files.
+              </p>
+              <p>
+                New project ID: <code>{importMutation.data.project_id}</code>
+              </p>
+              {importMutation.data.warnings.length > 0 && (
+                <ul>
+                  {importMutation.data.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="panel-card">
@@ -147,10 +228,10 @@ export function InteroperabilityWorkspace({
             <ul className="record-list">
               {packagesQuery.data.map((item) => (
                 <li key={item.id}>
-                  <strong>{item.status}</strong> · format {item.format_version}
+                  <strong>{item.status}</strong> · {item.direction} · format {item.format_version}
                   <br />
                   <code>{item.manifest_sha256.slice(0, 12) || "pending"}</code>
-                  {item.status === "complete" && (
+                  {item.status === "complete" && item.direction === "export" && (
                     <>
                       {" · "}
                       <a href={projectExchangeDownloadUrl(item.id)}>Download ZIP</a>
