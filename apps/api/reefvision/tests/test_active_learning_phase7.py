@@ -65,6 +65,57 @@ def test_active_learning_round_freezes_selection_and_feedback(client: TestClient
     assert finalized.json()["status"] == "complete"
 
 
+def test_random_baseline_is_seeded_explainable_and_reproducible(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Active learning random control")
+    for index in range(4):
+        imported = import_one(
+            client,
+            project["id"],
+            filename=f"random-{index}.png",
+            relative_path=f"random/random-{index}.png",
+        )
+        assert imported["successful"]
+
+    payload = {
+        "name": "Random control",
+        "strategy": "random",
+        "requested_size": 2,
+        "random_seed": 17,
+    }
+    first = client.post(
+        f"/api/v1/projects/{project['id']}/active-learning-rounds",
+        json=payload,
+    )
+    assert first.status_code == 201, first.text
+    first_round = first.json()
+    assert first_round["strategy"] == "random"
+    assert first_round["selected_count"] == 2
+    assert first_round["strategy_config_json"]["random_seed"] == 17
+    assert first_round["selection_manifest_json"]["random_seed"] == 17
+    assert all(
+        item["reason_summary"]
+        == "Random baseline selection using deterministic seed 17."
+        for item in first_round["selection_manifest_json"]["items"]
+    )
+
+    duplicate = client.post(
+        f"/api/v1/projects/{project['id']}/active-learning-rounds",
+        json={**payload, "name": "Same seeded control"},
+    )
+    assert duplicate.status_code == 201, duplicate.text
+    assert duplicate.json()["id"] == first_round["id"]
+
+    different_seed = client.post(
+        f"/api/v1/projects/{project['id']}/active-learning-rounds",
+        json={**payload, "name": "Different control", "random_seed": 18},
+    )
+    assert different_seed.status_code == 201, different_seed.text
+    assert different_seed.json()["id"] != first_round["id"]
+    assert different_seed.json()["selection_sha256"] != first_round["selection_sha256"]
+
+
 def test_active_learning_rejects_foreign_models(client: TestClient) -> None:
     project = create_project(client, "Active learning scope")
     import_one(client, project["id"], filename="sample.png", relative_path="sample.png")
