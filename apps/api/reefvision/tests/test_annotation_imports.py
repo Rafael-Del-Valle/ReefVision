@@ -4,9 +4,9 @@ import json
 from io import BytesIO
 from typing import Any, cast
 
+from PIL import Image
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from PIL import Image
 
 from reefvision.db.models import (
     Annotation,
