@@ -1,0 +1,35 @@
+name: M6 Frontend Prettier
+
+on:
+  push:
+    branches:
+      - integration/milestone6-video
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm --prefix apps/web ci
+      - name: Format Milestone 6 frontend files
+        run: |
+          npx --prefix apps/web prettier --write \
+            apps/web/src/features/video/videoApi.ts \
+            apps/web/src/features/video/VideoTrackingWorkspace.test.tsx \
+            apps/web/src/features/video/VideoTrackingWorkspace.tsx
+      - name: Commit formatting
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/web/src/features/video/videoApi.ts apps/web/src/features/video/VideoTrackingWorkspace.test.tsx apps/web/src/features/video/VideoTrackingWorkspace.tsx
+          git commit -m 'Format Milestone 6 video workspace'
+          git push
