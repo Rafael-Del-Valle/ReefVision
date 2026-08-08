@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import type { Project } from "../../api/client";
 import { AdvancedProviderWorkspace } from "../advanced-providers/AdvancedProviderWorkspace";
+import { InteroperabilityWorkspace } from "../interoperability/InteroperabilityWorkspace";
 import {
   completeActiveLearningRound,
   createActiveLearningRound,
@@ -191,6 +192,10 @@ export function ActiveLearningWorkspace({
       <details className="panel-card">
         <summary><strong>Phase 8 · Advanced Provider Lab</strong></summary>
         <AdvancedProviderWorkspace project={project} />
+      </details>
+      <details className="panel-card">
+        <summary><strong>Phase 9 · Project Interoperability</strong></summary>
+        <InteroperabilityWorkspace project={project} />
       </details>
     </section>
   );

@@ -19,6 +19,7 @@ from reefvision.jobs.diagnostics import process_diagnostics_job
 from reefvision.jobs.export import process_export_job
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.model_install import process_model_install_job
+from reefvision.jobs.project_exchange import process_project_exchange_export_job
 from reefvision.jobs.quality_control import process_quality_control_job
 from reefvision.jobs.restores import process_restore_job
 from reefvision.jobs.training_dispatch import process_task_aware_training_job
@@ -141,6 +142,8 @@ def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session
             return process_video_extract_job(settings, factory, job_id)
         if job_type == "video_tracking":
             return process_video_tracking_job(settings, factory, job_id)
+        if job_type == "project_exchange_export":
+            return process_project_exchange_export_job(settings, factory, job_id)
 
         message = f"Unsupported queued job type: {job_type}"
         _fail_job(factory, job_id, message)
