@@ -141,10 +141,7 @@ def test_image_and_crop_classification_datasets_are_immutable(client: TestClient
     image_payload = image_dataset.json()
     assert image_payload["sample_count"] == 2
     assert image_payload["manifest_json"]["mode"] == "image"
-    assert all(
-        sample["crop_bounds"] is None
-        for sample in image_payload["manifest_json"]["samples"]
-    )
+    assert all(sample["crop_bounds"] is None for sample in image_payload["manifest_json"]["samples"])
 
     crop_dataset = client.post(
         f"/api/v1/projects/{project['id']}/classification-datasets",
