@@ -9,7 +9,9 @@ import {
 function ImportReport({ report }: { report: AnnotationImportReport }) {
   return (
     <div className="import-summary" role="status">
-      <strong>{report.files_processed} annotation-support files processed</strong>
+      <strong>
+        {report.files_processed} annotation-support files processed
+      </strong>
       <span>{report.boxes_imported} boxes imported</span>
       <span>{report.masks_imported} editable masks imported</span>
       <span>{report.duplicate_annotations} duplicates skipped</span>
@@ -25,7 +27,9 @@ function ImportReport({ report }: { report: AnnotationImportReport }) {
         </small>
       ))}
       {report.issues.length > 10 && (
-        <small>{report.issues.length - 10} additional issues were reported.</small>
+        <small>
+          {report.issues.length - 10} additional issues were reported.
+        </small>
       )}
     </div>
   );
