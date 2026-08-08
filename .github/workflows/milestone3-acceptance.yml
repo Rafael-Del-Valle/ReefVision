@@ -1,0 +1,91 @@
+name: Milestone 3 Acceptance
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/milestone3-acceptance.yml"
+      - "apps/api/migrations/**"
+      - "apps/api/reefvision/api/routes/models.py"
+      - "apps/api/reefvision/api/routes/predictions.py"
+      - "apps/api/reefvision/api/routes/training.py"
+      - "apps/api/reefvision/db/models/prediction_proposal.py"
+      - "apps/api/reefvision/domain/enums.py"
+      - "apps/api/reefvision/jobs/inference.py"
+      - "apps/api/reefvision/jobs/segmentation_training.py"
+      - "apps/api/reefvision/jobs/training_dispatch.py"
+      - "apps/api/reefvision/jobs/worker.py"
+      - "apps/api/reefvision/ml/segmentation.py"
+      - "apps/api/reefvision/ml/segmentation_provider_catalog.py"
+      - "apps/api/reefvision/ml/semantic_segmentation.py"
+      - "apps/api/reefvision/services/segmentation_*.py"
+      - "apps/api/reefvision/services/training_tasks.py"
+      - "apps/api/reefvision/tests/test_segmentation_*.py"
+      - "apps/api/reefvision/tests/test_semantic_segmentation_contract.py"
+      - "apps/api/reefvision/tests/test_training_tasks.py"
+      - "apps/web/src/features/annotation-editor/Segmentation*.tsx"
+      - "apps/web/src/features/annotation-editor/segmentationInference.css"
+      - "pyproject.toml"
+  workflow_dispatch:
+
+jobs:
+  milestone3:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Lint and format Milestone 3 Python
+        run: |
+          python -m ruff check \
+            apps/api/reefvision/jobs/segmentation_training.py \
+            apps/api/reefvision/jobs/training_dispatch.py \
+            apps/api/reefvision/ml/segmentation.py \
+            apps/api/reefvision/ml/segmentation_provider_catalog.py \
+            apps/api/reefvision/ml/semantic_segmentation.py \
+            apps/api/reefvision/services/segmentation_catalog.py \
+            apps/api/reefvision/services/segmentation_models.py \
+            apps/api/reefvision/services/segmentation_predictions.py \
+            apps/api/reefvision/services/segmentation_training.py \
+            apps/api/reefvision/services/training_tasks.py \
+            apps/api/reefvision/tests/test_segmentation_model_registration.py \
+            apps/api/reefvision/tests/test_segmentation_phase3.py \
+            apps/api/reefvision/tests/test_segmentation_training_worker.py \
+            apps/api/reefvision/tests/test_semantic_segmentation_contract.py \
+            apps/api/reefvision/tests/test_training_tasks.py
+          python -m ruff format --check \
+            apps/api/reefvision/jobs/segmentation_training.py \
+            apps/api/reefvision/jobs/training_dispatch.py \
+            apps/api/reefvision/ml/segmentation.py \
+            apps/api/reefvision/ml/segmentation_provider_catalog.py \
+            apps/api/reefvision/ml/semantic_segmentation.py \
+            apps/api/reefvision/services/segmentation_catalog.py \
+            apps/api/reefvision/services/segmentation_models.py \
+            apps/api/reefvision/services/segmentation_predictions.py \
+            apps/api/reefvision/services/segmentation_training.py \
+            apps/api/reefvision/services/training_tasks.py \
+            apps/api/reefvision/tests/test_segmentation_model_registration.py \
+            apps/api/reefvision/tests/test_segmentation_phase3.py \
+            apps/api/reefvision/tests/test_segmentation_training_worker.py \
+            apps/api/reefvision/tests/test_semantic_segmentation_contract.py \
+            apps/api/reefvision/tests/test_training_tasks.py
+      - name: Run Milestone 3 segmentation tests
+        run: |
+          python -m pytest \
+            apps/api/reefvision/tests/test_segmentation_model_registration.py \
+            apps/api/reefvision/tests/test_segmentation_phase3.py \
+            apps/api/reefvision/tests/test_segmentation_training_worker.py \
+            apps/api/reefvision/tests/test_semantic_segmentation_contract.py \
+            apps/api/reefvision/tests/test_training_tasks.py
+      - name: Verify 0017 migration roundtrip
+        shell: bash
+        run: |
+          export REEFVISION_DATA_DIR="$RUNNER_TEMP/reefvision-milestone3-migrations"
+          alembic -c apps/api/alembic.ini upgrade 0016
+          alembic -c apps/api/alembic.ini upgrade 0017
+          alembic -c apps/api/alembic.ini downgrade 0016
+          alembic -c apps/api/alembic.ini upgrade head
+          alembic -c apps/api/alembic.ini current
