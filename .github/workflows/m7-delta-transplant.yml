@@ -1,0 +1,34 @@
+name: M7 Delta Transplant
+
+on:
+  push:
+    branches:
+      - integration/milestone7-on-m6
+
+permissions:
+  contents: write
+
+jobs:
+  transplant:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch historical M6 and M7 refs
+        run: git fetch origin feat/video-fish-tracking-phase6 feat/active-learning-phase7
+      - name: Apply only the historical M7 delta
+        shell: bash
+        run: |
+          git diff --binary 5bd0dacff1fd89ed9c5a521060885c8101b13f6e 9cc7cc90590941be82aed91137d1f413e3495a31 > /tmp/m7.patch
+          git apply --3way /tmp/m7.patch
+          git diff --check
+      - name: Commit transplant
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Integrate Milestone 7 active learning foundation'
+          git push
