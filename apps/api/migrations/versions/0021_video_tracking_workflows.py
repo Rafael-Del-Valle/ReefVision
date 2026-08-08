@@ -23,9 +23,7 @@ def upgrade() -> None:
         batch_op.add_column(
             sa.Column("status", sa.String(30), nullable=False, server_default="imported")
         )
-        batch_op.add_column(
-            sa.Column("revision", sa.Integer(), nullable=False, server_default="1")
-        )
+        batch_op.add_column(sa.Column("revision", sa.Integer(), nullable=False, server_default="1"))
         batch_op.add_column(
             sa.Column(
                 "updated_at",
@@ -46,9 +44,7 @@ def upgrade() -> None:
         batch_op.add_column(sa.Column("source_model_id", sa.String(36), nullable=True))
         batch_op.add_column(sa.Column("source_job_id", sa.String(36), nullable=True))
         batch_op.add_column(sa.Column("metadata_json", sa.JSON(), nullable=True))
-        batch_op.add_column(
-            sa.Column("revision", sa.Integer(), nullable=False, server_default="1")
-        )
+        batch_op.add_column(sa.Column("revision", sa.Integer(), nullable=False, server_default="1"))
         batch_op.add_column(
             sa.Column(
                 "updated_at",

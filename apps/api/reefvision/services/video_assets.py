@@ -28,9 +28,7 @@ def _safe_video_name(filename: str | None) -> str:
         raise ValidationError("Video filename is required")
     suffix = Path(name).suffix.casefold()
     if suffix not in SUPPORTED_VIDEO_EXTENSIONS:
-        raise ValidationError(
-            "Unsupported video extension; use AVI, M4V, MKV, MOV, MP4, or WebM"
-        )
+        raise ValidationError("Unsupported video extension; use AVI, M4V, MKV, MOV, MP4, or WebM")
     return name
 
 
@@ -181,8 +179,7 @@ class VideoAssetService:
             status="queued",
             progress_total=max(
                 1,
-                (video.frame_count + payload.every_n_frames - 1)
-                // payload.every_n_frames,
+                (video.frame_count + payload.every_n_frames - 1) // payload.every_n_frames,
             ),
             request_json={
                 "video_asset_id": video.id,
