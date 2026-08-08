@@ -1,0 +1,33 @@
+name: Milestone 10 Acceptance
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  workflow-graphs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Lint and format Milestone 10 Python
+        run: |
+          python -m ruff check \
+            apps/api/reefvision/api/routes/workflow_graphs.py \
+            apps/api/reefvision/schemas/workflow_graphs.py \
+            apps/api/reefvision/services/workflow_graphs.py \
+            apps/api/reefvision/services/workflow_node_registry.py \
+            apps/api/reefvision/tests/test_workflow_graphs_phase10.py
+          python -m ruff format --check \
+            apps/api/reefvision/api/routes/workflow_graphs.py \
+            apps/api/reefvision/schemas/workflow_graphs.py \
+            apps/api/reefvision/services/workflow_graphs.py \
+            apps/api/reefvision/services/workflow_node_registry.py \
+            apps/api/reefvision/tests/test_workflow_graphs_phase10.py
+      - name: Run Milestone 10 workflow graph tests
+        run: python -m pytest apps/api/reefvision/tests/test_workflow_graphs_phase10.py -q
