@@ -195,8 +195,7 @@ def test_coralnet_toolbox_import_creates_native_boxes_and_masks(client: TestClie
         assert boxes[0].provenance_json is not None
         assert boxes[0].provenance_json["import_format"] == "coralnet_toolbox"
         assert any(
-            mask.provenance_json
-            and mask.provenance_json.get("external_multipolygon_part") == 1
+            mask.provenance_json and mask.provenance_json.get("external_multipolygon_part") == 1
             for mask in masks
         )
 
