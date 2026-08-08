@@ -474,7 +474,6 @@ class AnnotationService:
                 existing_mask.x_max = x_max
                 existing_mask.y_max = y_max
                 existing_mask.area_pixels = area_pixels
-                existing_mask.source_type = "human"
                 existing_mask.status = "verified"
                 if restored:
                     existing_mask.deleted_at = None

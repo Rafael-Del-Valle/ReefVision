@@ -145,7 +145,7 @@ class EnhancedAnnotationImportService(AnnotationImportService):
             if not isinstance(item, dict):
                 raise ValidationError("Semantic MaskAnnotation contains a malformed RLE item")
             try:
-                stored_class_id = int(item.get("class_id"))
+                stored_class_id = int(str(item.get("class_id")))
             except (TypeError, ValueError) as exc:
                 raise ValidationError("Semantic MaskAnnotation class ID is malformed") from exc
             real_class_id = stored_class_id % cls.LOCK_BIT

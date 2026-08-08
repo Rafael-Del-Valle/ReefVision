@@ -426,12 +426,14 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
     .boundingBox();
   if (!polygonBox) throw new Error("Polygon geometry is unavailable");
   await page.mouse.click(polygonBox.x + polygonBox.width / 2, polygonBox.y + 2);
+  await page.getByTestId("move-polygon-nodes").click();
   await expect(
     page.locator(`[data-testid^="mask-vertex-${maskId}-"]`),
   ).toHaveCount(5);
 
   await page.getByTestId("delete-polygon-node").click();
   await page.locator(`[data-testid^="mask-vertex-${maskId}-"]`).last().click();
+  await page.getByTestId("move-polygon-nodes").click();
   await expect(
     page.locator(`[data-testid^="mask-vertex-${maskId}-"]`),
   ).toHaveCount(4);
