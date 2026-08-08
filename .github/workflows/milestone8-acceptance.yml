@@ -19,15 +19,52 @@ jobs:
         run: |
           python -m ruff check \
             apps/api/reefvision/api/routes/advanced_providers.py \
+            apps/api/reefvision/domain/enums.py \
+            apps/api/reefvision/jobs/advanced_depth.py \
+            apps/api/reefvision/jobs/worker.py \
             apps/api/reefvision/ml/advanced_provider_contracts.py \
+            apps/api/reefvision/ml/depth_anything_v2_provider.py \
+            apps/api/reefvision/ml/model_bundles.py \
+            apps/api/reefvision/ml/sam2_provider.py \
+            apps/api/reefvision/ml/assist_runtime.py \
             apps/api/reefvision/schemas/advanced_providers.py \
+            apps/api/reefvision/services/advanced_depth.py \
             apps/api/reefvision/services/advanced_providers.py \
+            apps/api/reefvision/services/models.py \
+            apps/api/reefvision/tests/test_advanced_provider_execution_phase8.py \
             apps/api/reefvision/tests/test_advanced_providers_phase8.py
           python -m ruff format --check \
             apps/api/reefvision/api/routes/advanced_providers.py \
+            apps/api/reefvision/domain/enums.py \
+            apps/api/reefvision/jobs/advanced_depth.py \
+            apps/api/reefvision/jobs/worker.py \
             apps/api/reefvision/ml/advanced_provider_contracts.py \
+            apps/api/reefvision/ml/depth_anything_v2_provider.py \
+            apps/api/reefvision/ml/model_bundles.py \
+            apps/api/reefvision/ml/sam2_provider.py \
+            apps/api/reefvision/ml/assist_runtime.py \
             apps/api/reefvision/schemas/advanced_providers.py \
+            apps/api/reefvision/services/advanced_depth.py \
             apps/api/reefvision/services/advanced_providers.py \
+            apps/api/reefvision/services/models.py \
+            apps/api/reefvision/tests/test_advanced_provider_execution_phase8.py \
             apps/api/reefvision/tests/test_advanced_providers_phase8.py
       - name: Run Milestone 8 provider tests
-        run: python -m pytest apps/api/reefvision/tests/test_advanced_providers_phase8.py -q
+        run: >-
+          python -m pytest
+          apps/api/reefvision/tests/test_advanced_providers_phase8.py
+          apps/api/reefvision/tests/test_advanced_provider_execution_phase8.py
+          -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+      - name: Check advanced-provider desktop workspace
+        working-directory: apps/web
+        run: |
+          npx prettier --check src/features/advanced-providers
+          npm run typecheck
