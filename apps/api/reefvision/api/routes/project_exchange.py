@@ -1,8 +1,8 @@
-"""ReefVision project exchange export and inspection endpoints."""
+"""ReefVision project exchange export, inspection, and import endpoints."""
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -10,10 +10,12 @@ from reefvision.api.dependencies import get_db_session
 from reefvision.schemas.project_exchange import (
     ProjectExchangeCreateRequest,
     ProjectExchangeCreateResponse,
+    ProjectExchangeImportResponse,
     ProjectExchangeInspectionResponse,
     ProjectExchangePackageResponse,
 )
 from reefvision.services.project_exchange import ProjectExchangeService
+from reefvision.services.project_exchange_import import ProjectExchangeImportService
 from reefvision.services.project_exchange_inspection import inspect_project_exchange
 
 router = APIRouter(tags=["project-exchange"])
@@ -80,3 +82,21 @@ def inspect_project_exchange_upload(
     file: Annotated[UploadFile, File(...)],
 ) -> ProjectExchangeInspectionResponse:
     return inspect_project_exchange(file.file)
+
+
+@router.post(
+    "/exchange-packages/import",
+    response_model=ProjectExchangeImportResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def import_project_exchange_upload(
+    request: Request,
+    session: DbSession,
+    file: Annotated[UploadFile, File(...)],
+    project_name: Annotated[str | None, Form(max_length=200)] = None,
+) -> ProjectExchangeImportResponse:
+    result = ProjectExchangeImportService(
+        session,
+        request.app.state.settings,
+    ).import_upload(file.file, project_name=project_name)
+    return ProjectExchangeImportResponse.model_validate(result)
