@@ -1,0 +1,62 @@
+name: Milestone 3E Semantic Acceptance
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/milestone3e-acceptance.yml"
+      - "apps/api/migrations/**"
+      - "apps/api/reefvision/jobs/semantic_training.py"
+      - "apps/api/reefvision/ml/semantic_segmentation.py"
+      - "apps/api/reefvision/services/semantic_*.py"
+      - "apps/api/reefvision/tests/test_semantic_*.py"
+      - "apps/web/src/features/annotation-editor/Segmentation*.tsx"
+      - "scripts/phase3e-acceptance.ps1"
+  workflow_dispatch:
+
+jobs:
+  semantic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Lint and format Phase 3E Python
+        run: |
+          python -m ruff check \
+            apps/api/reefvision/jobs/semantic_training.py \
+            apps/api/reefvision/ml/semantic_segmentation.py \
+            apps/api/reefvision/services/semantic_models.py \
+            apps/api/reefvision/services/semantic_predictions.py \
+            apps/api/reefvision/services/semantic_training.py \
+            apps/api/reefvision/tests/test_semantic_phase3e.py \
+            apps/api/reefvision/tests/test_semantic_segmentation_contract.py \
+            apps/api/reefvision/tests/test_semantic_training_dispatch.py
+          python -m ruff format --check \
+            apps/api/reefvision/jobs/semantic_training.py \
+            apps/api/reefvision/ml/semantic_segmentation.py \
+            apps/api/reefvision/services/semantic_models.py \
+            apps/api/reefvision/services/semantic_predictions.py \
+            apps/api/reefvision/services/semantic_training.py \
+            apps/api/reefvision/tests/test_semantic_phase3e.py \
+            apps/api/reefvision/tests/test_semantic_segmentation_contract.py \
+            apps/api/reefvision/tests/test_semantic_training_dispatch.py
+      - name: Run Phase 3E semantic tests
+        run: |
+          python -m pytest \
+            apps/api/reefvision/tests/test_semantic_phase3e.py \
+            apps/api/reefvision/tests/test_semantic_segmentation_contract.py \
+            apps/api/reefvision/tests/test_semantic_training_dispatch.py \
+            apps/api/reefvision/tests/test_training_tasks.py
+      - name: Verify 0018 migration roundtrip
+        shell: bash
+        run: |
+          export REEFVISION_DATA_DIR="$RUNNER_TEMP/reefvision-milestone3e-migrations"
+          alembic -c apps/api/alembic.ini upgrade 0017
+          alembic -c apps/api/alembic.ini upgrade 0018
+          alembic -c apps/api/alembic.ini downgrade 0017
+          alembic -c apps/api/alembic.ini upgrade head
+          alembic -c apps/api/alembic.ini current

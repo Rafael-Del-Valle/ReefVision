@@ -202,6 +202,14 @@ def test_bootstrap_auxiliary_failure_keeps_catalog_visible(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project = create_project(client, "Isolated bootstrap")
+    endpoint = f"/api/v1/projects/{project['id']}/model-hub/bootstrap"
+
+    baseline_response = client.get(endpoint)
+    assert baseline_response.status_code == 200, baseline_response.text
+    baseline_payload = baseline_response.json()
+    baseline_catalog_ids = {item["catalog_id"] for item in baseline_payload["catalog"]["models"]}
+    assert baseline_catalog_ids
+    assert any(item["task"] == "semantic_segment" for item in baseline_payload["catalog"]["models"])
 
     def fail(*args: object, **kwargs: object) -> object:
         raise RuntimeError("auxiliary readiness unavailable")
@@ -213,9 +221,10 @@ def test_bootstrap_auxiliary_failure_keeps_catalog_visible(
         "reefvision.services.bootstrap.cached_ultralytics_training_registry_summary", fail
     )
 
-    response = client.get(f"/api/v1/projects/{project['id']}/model-hub/bootstrap")
+    response = client.get(endpoint)
 
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert len(payload["catalog"]["models"]) == 40
-    assert len(payload["validation_warnings"]) == 4
+    degraded_catalog_ids = {item["catalog_id"] for item in payload["catalog"]["models"]}
+    assert degraded_catalog_ids == baseline_catalog_ids
+    assert len(payload["validation_warnings"]) == (len(baseline_payload["validation_warnings"]) + 4)

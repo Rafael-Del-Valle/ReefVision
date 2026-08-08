@@ -16,7 +16,7 @@ JobType = Literal[
     "restore",
     "diagnostics",
 ]
-ModelPurpose = Literal["detector", "segmenter", "assist"]
+ModelPurpose = Literal["detector", "segmenter", "semantic_segmenter", "assist"]
 PredictionReviewStatus = Literal[
     "pending",
     "accepted",
@@ -61,7 +61,12 @@ ANNOTATION_EVENT_TYPES: tuple[AnnotationEventType, ...] = (
     "deleted",
     "restored",
 )
-MODEL_PURPOSES: tuple[ModelPurpose, ...] = ("detector", "segmenter", "assist")
+MODEL_PURPOSES: tuple[ModelPurpose, ...] = (
+    "detector",
+    "segmenter",
+    "semantic_segmenter",
+    "assist",
+)
 PREDICTION_REVIEW_STATUSES: tuple[PredictionReviewStatus, ...] = (
     "pending",
     "accepted",

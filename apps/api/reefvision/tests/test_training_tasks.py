@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from reefvision.services.training_tasks import (
     DETECTION_TASK,
     INSTANCE_SEGMENTATION_TASK,
+    SEMANTIC_SEGMENTATION_TASK,
     task_dataset_preflight,
 )
 
@@ -116,4 +117,33 @@ def test_instance_segmentation_warns_without_validation_polygons_and_for_rasters
             "1 raster mask(s) will be excluded from YOLO polygon-segmentation "
             "training; use semantic-mask training or convert them to polygons"
         ),
+    ]
+
+
+def test_semantic_segmentation_accepts_polygon_and_raster_masks() -> None:
+    result = task_dataset_preflight(
+        SEMANTIC_SEGMENTATION_TASK,
+        [
+            FakeDatasetItem(
+                split="train",
+                mask_annotation_count=2,
+                mask_annotation_snapshot_json=[_mask("polygon"), _mask("raster_mask")],
+            ),
+            FakeDatasetItem(
+                split="validation",
+                mask_annotation_count=1,
+                mask_annotation_snapshot_json=[_mask("raster_mask")],
+            ),
+        ],
+    )
+
+    assert result.ready is True
+    assert result.polygon_count == 1
+    assert result.raster_mask_count == 2
+    assert result.blockers == []
+    assert result.warnings == [
+        (
+            "Polygon and raster masks will be flattened into one indexed semantic "
+            "label map using the dataset export overlap policy"
+        )
     ]

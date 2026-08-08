@@ -7,10 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, FiniteFloat, field_validator
 
-from reefvision.schemas.annotations import (
-    AnnotationResponse,
-    MaskAnnotationResponse,
-)
+from reefvision.schemas.annotations import AnnotationResponse, MaskAnnotationResponse
 
 
 class PredictionProposalResponse(BaseModel):
@@ -27,6 +24,8 @@ class PredictionProposalResponse(BaseModel):
     confidence: float
     geometry_kind: str = "bounding_box"
     polygon_json: list[list[float]] | None = None
+    mask_path: str | None = None
+    mask_content_sha256: str | None = None
     x_min: float
     y_min: float
     x_max: float
@@ -47,19 +46,12 @@ class PredictionListResponse(BaseModel):
 
 
 class PredictionAcceptRequest(BaseModel):
-    label_class_id: str | None = Field(
-        default=None,
-        min_length=1,
-        max_length=36,
-    )
+    label_class_id: str | None = Field(default=None, min_length=1, max_length=36)
     x_min: FiniteFloat | None = None
     y_min: FiniteFloat | None = None
     x_max: FiniteFloat | None = None
     y_max: FiniteFloat | None = None
-    polygon_json: list[list[FiniteFloat]] | None = Field(
-        default=None,
-        min_length=3,
-    )
+    polygon_json: list[list[FiniteFloat]] | None = Field(default=None, min_length=3)
 
     @field_validator("polygon_json")
     @classmethod
