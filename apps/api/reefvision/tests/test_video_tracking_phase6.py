@@ -215,7 +215,8 @@ def test_fake_detector_tracker_creates_editable_machine_track(
     )
     tracks = client.get(f"/api/v1/videos/{video['id']}/tracks")
     assert tracks.status_code == 200, tracks.text
-    machine_tracks = [item for item in tracks.json() if item["source_job_id"] == queued.json()["id"]]
+    job_id = queued.json()["id"]
+    machine_tracks = [item for item in tracks.json() if item["source_job_id"] == job_id]
     assert len(machine_tracks) == 1
     machine = machine_tracks[0]
     assert machine["source_model_id"] == model_id
