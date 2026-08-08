@@ -20,6 +20,7 @@ from reefvision.db.models import (
     LabelClass,
     MaskAnnotation,
     MaskAnnotationEvent,
+    Project,
 )
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.repositories.projects import ProjectRepository
@@ -111,7 +112,9 @@ class AnnotationImportService:
     def _color_hex(value: object) -> str:
         if isinstance(value, (list, tuple)) and len(value) >= 3:
             try:
-                red, green, blue = (max(0, min(255, int(channel))) for channel in value[:3])
+                red, green, blue = (
+                    max(0, min(255, int(channel))) for channel in value[:3]
+                )
                 return f"#{red:02X}{green:02X}{blue:02X}"
             except (TypeError, ValueError):
                 pass
@@ -172,7 +175,7 @@ class AnnotationImportService:
             result.update(extra)
         return result
 
-    def _project(self, project_id: str):
+    def _project(self, project_id: str) -> Project:
         project = self.projects.get(project_id)
         if project is None:
             raise NotFoundError("Project not found")
@@ -369,7 +372,8 @@ class AnnotationImportService:
         holes = holes_value if isinstance(holes_value, list) else []
         if holes:
             raise ValidationError(
-                "Polygon contains holes; ReefVision's editable polygon schema cannot preserve them yet"
+                "Polygon contains holes; ReefVision's editable polygon schema "
+                "cannot preserve them yet"
             )
         if not isinstance(points_value, list):
             raise ValidationError("Polygon annotation has no point list")
@@ -472,7 +476,12 @@ class AnnotationImportService:
                     annotation_files += 1
                     continue
                 raise ValidationError("JSON is not a recognized CoralNet-Toolbox export")
-            except (UnicodeDecodeError, json.JSONDecodeError, yaml.YAMLError, ValidationError) as exc:
+            except (
+                UnicodeDecodeError,
+                json.JSONDecodeError,
+                yaml.YAMLError,
+                ValidationError,
+            ) as exc:
                 issues.append(AnnotationImportIssue(source_file=filename, detail=str(exc)))
 
         if not annotation_payloads:
@@ -519,7 +528,8 @@ class AnnotationImportService:
                             source_file=source_file,
                             image_reference=image_reference,
                             detail=(
-                                "No unique ReefVision image matched this CoralNet-Toolbox image path"
+                                "No unique ReefVision image matched this "
+                                "CoralNet-Toolbox image path"
                             ),
                         )
                     )
@@ -562,7 +572,9 @@ class AnnotationImportService:
                             top_left = self._point_pair(annotation.get("top_left"))
                             bottom_right = self._point_pair(annotation.get("bottom_right"))
                             if top_left is None or bottom_right is None:
-                                raise ValidationError("Rectangle coordinates are missing or malformed")
+                                raise ValidationError(
+                                    "Rectangle coordinates are missing or malformed"
+                                )
                             coordinates = (
                                 min(top_left[0], bottom_right[0]),
                                 min(top_left[1], bottom_right[1]),
@@ -589,9 +601,13 @@ class AnnotationImportService:
                             try:
                                 size = float(annotation.get("annotation_size"))
                             except (TypeError, ValueError) as exc:
-                                raise ValidationError("Patch size is missing or malformed") from exc
+                                raise ValidationError(
+                                    "Patch size is missing or malformed"
+                                ) from exc
                             if center is None or size <= 0:
-                                raise ValidationError("Patch geometry is missing or malformed")
+                                raise ValidationError(
+                                    "Patch geometry is missing or malformed"
+                                )
                             half = size / 2.0
                             results.append(
                                 (
@@ -633,10 +649,14 @@ class AnnotationImportService:
                         elif external_type == "MultiPolygonAnnotation":
                             polygons = annotation.get("polygons")
                             if not isinstance(polygons, list) or not polygons:
-                                raise ValidationError("Multipolygon contains no polygon parts")
+                                raise ValidationError(
+                                    "Multipolygon contains no polygon parts"
+                                )
                             for part_index, raw_polygon in enumerate(polygons):
                                 if not isinstance(raw_polygon, dict):
-                                    raise ValidationError("Multipolygon contains a malformed polygon part")
+                                    raise ValidationError(
+                                        "Multipolygon contains a malformed polygon part"
+                                    )
                                 results.append(
                                     (
                                         "mask",
@@ -664,8 +684,10 @@ class AnnotationImportService:
                                 "import the exported mask image instead"
                             )
                         else:
+                            unsupported_type = external_type or "unknown"
                             raise ValidationError(
-                                f"Unsupported CoralNet-Toolbox annotation type: {external_type or 'unknown'}"
+                                "Unsupported CoralNet-Toolbox annotation type: "
+                                f"{unsupported_type}"
                             )
 
                         imported_here = False
