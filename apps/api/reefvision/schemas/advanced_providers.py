@@ -1,4 +1,4 @@
-"""Advanced provider manifest and execution-preflight schemas."""
+"""Advanced provider manifest, preflight, and execution schemas."""
 
 from __future__ import annotations
 
@@ -53,3 +53,9 @@ class AdvancedProviderPreflightResponse(BaseModel):
     output_contract: list[str]
     selected_model_id: str | None
     selected_device: str
+
+
+class AdvancedDepthJobCreateRequest(BaseModel):
+    model_id: str = Field(min_length=1, max_length=36)
+    image_ids: list[str] = Field(min_length=1, max_length=10000)
+    device: str = Field(default="auto", min_length=1, max_length=30)
