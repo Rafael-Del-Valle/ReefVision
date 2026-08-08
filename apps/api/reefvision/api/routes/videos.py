@@ -1,4 +1,4 @@
-"""Managed video import, extraction, track editing, analytics, and tracking routes."""
+"""Managed video import, extraction, track editing, analytics, exports, and tracking routes."""
 
 from __future__ import annotations
 
@@ -15,6 +15,9 @@ from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.videos import (
     VideoAssetResponse,
+    VideoBehaviorAnalyticsRequest,
+    VideoBehaviorAnalyticsResponse,
+    VideoCalibrationUpdate,
     VideoExtractRequest,
     VideoTrackAnalyticsResponse,
     VideoTrackCreate,
@@ -24,6 +27,7 @@ from reefvision.schemas.videos import (
     VideoTrackUpdate,
 )
 from reefvision.services.video_assets import VideoAssetService
+from reefvision.services.video_behavior import VideoBehaviorService
 from reefvision.services.video_tracks import VideoTrackService
 
 router = APIRouter(tags=["videos"])
@@ -66,6 +70,16 @@ def list_videos(
 @router.get("/videos/{video_id}", response_model=VideoAssetResponse)
 def get_video(video_id: str, request: Request, session: DbSession) -> VideoAssetResponse:
     return asset_service(request, session).get(video_id)
+
+
+@router.put("/videos/{video_id}/calibration", response_model=VideoAssetResponse)
+def calibrate_video(
+    video_id: str,
+    payload: VideoCalibrationUpdate,
+    request: Request,
+    session: DbSession,
+) -> VideoAssetResponse:
+    return asset_service(request, session).update_calibration(video_id, payload)
 
 
 @router.get("/videos/{video_id}/content", response_class=FileResponse)
@@ -159,6 +173,35 @@ def track_analytics(
     session: DbSession,
 ) -> VideoTrackAnalyticsResponse:
     return VideoTrackService(session).analytics(track_id)
+
+
+@router.post(
+    "/videos/{video_id}/analytics",
+    response_model=VideoBehaviorAnalyticsResponse,
+)
+def video_analytics(
+    video_id: str,
+    payload: VideoBehaviorAnalyticsRequest,
+    session: DbSession,
+) -> VideoBehaviorAnalyticsResponse:
+    return VideoBehaviorService(session).analytics(video_id, payload)
+
+
+@router.get("/videos/{video_id}/exports/{export_format}")
+def export_video_tracks(
+    video_id: str,
+    export_format: str,
+    session: DbSession,
+) -> Response:
+    content, media_type, filename = VideoBehaviorService(session).export_tracks(
+        video_id,
+        export_format,
+    )
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/videos/{video_id}/tracking-jobs", response_model=JobResponse)
