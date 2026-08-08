@@ -11,8 +11,11 @@ def test_advanced_provider_manifests_are_explicit(client: TestClient) -> None:
     manifests = {item["provider_id"]: item for item in response.json()}
 
     assert manifests["segment_anything"]["execution_supported"] is True
-    assert manifests["sam2"]["execution_supported"] is False
-    assert manifests["depth_anything_v2"]["execution_supported"] is False
+    assert manifests["sam2"]["execution_supported"] is True
+    assert manifests["sam2"]["supported_tasks"] == ["assist_segmentation"]
+    assert manifests["sam2"]["required_model_extensions"] == [".zip"]
+    assert manifests["depth_anything_v2"]["execution_supported"] is True
+    assert manifests["depth_anything_v2"]["required_model_extensions"] == [".zip"]
     assert manifests["depth_anything_v2"]["output_contracts_by_task"]["relative_depth"] == [
         "relative_depth_array",
         "depth_preview",
@@ -22,29 +25,34 @@ def test_advanced_provider_manifests_are_explicit(client: TestClient) -> None:
         "relative depth" in message.lower()
         for message in manifests["depth_anything_v2"]["known_limitations"]
     )
+    assert any(
+        "video propagation" in message.lower()
+        for message in manifests["sam2"]["known_limitations"]
+    )
 
 
-def test_blocked_provider_preflight_fails_closed(client: TestClient) -> None:
+def test_executable_provider_preflight_still_fails_closed_without_model(
+    client: TestClient,
+) -> None:
     project = create_project(client, "Provider preflight")
     response = client.post(
         f"/api/v1/projects/{project['id']}/advanced-providers/depth_anything_v2/preflight",
         json={
             "task": "relative_depth",
-            "device": "cuda",
+            "device": "cpu",
             "prompt_fields": {"image_id": "image-1"},
         },
     )
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["ready"] is False
-    assert payload["execution_supported"] is False
+    assert payload["execution_supported"] is True
     assert payload["output_contract"] == [
         "relative_depth_array",
         "depth_preview",
         "value_range",
     ]
-    assert any("adapter" in blocker.lower() for blocker in payload["blockers"])
-    assert any("model checkpoint" in blocker.lower() for blocker in payload["blockers"])
+    assert any("model" in blocker.lower() for blocker in payload["blockers"])
 
 
 def test_provider_preflight_reports_missing_prompts(client: TestClient) -> None:
