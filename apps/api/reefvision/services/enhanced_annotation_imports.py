@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
-from collections import defaultdict
+from contextlib import suppress
 from io import BytesIO
 from typing import Any, BinaryIO
 
@@ -15,7 +15,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.db.models import Annotation, ImageAsset, LabelClass, MaskAnnotation, MaskAnnotationEvent
+from reefvision.db.models import (
+    Annotation,
+    ImageAsset,
+    LabelClass,
+    MaskAnnotation,
+    MaskAnnotationEvent,
+)
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.annotation_imports import AnnotationImportIssue, AnnotationImportResponse
 from reefvision.schemas.annotations import MaskAnnotationDraft, PolygonPoint
@@ -126,7 +132,9 @@ class EnhancedAnnotationImportService(AnnotationImportService):
         except (TypeError, ValueError) as exc:
             raise ValidationError("Semantic MaskAnnotation shape is malformed") from exc
         if (width, height) != (image.width_px, image.height_px):
-            raise ValidationError("Semantic MaskAnnotation dimensions do not match the ReefVision image")
+            raise ValidationError(
+                "Semantic MaskAnnotation dimensions do not match the ReefVision image"
+            )
 
         raw_masks = annotation.get("rle_masks")
         if not isinstance(raw_masks, list):
@@ -277,7 +285,11 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                 destination.unlink(missing_ok=True)
             raise
 
-    def _validated_ring(self, points_value: object, image: ImageAsset) -> list[tuple[float, float]]:
+    def _validated_ring(
+        self,
+        points_value: object,
+        image: ImageAsset,
+    ) -> list[tuple[float, float]]:
         if not isinstance(points_value, list):
             raise ValidationError("Polygon ring has no point list")
         parsed = [self._point_pair(point) for point in points_value]
@@ -403,10 +415,8 @@ class EnhancedAnnotationImportService(AnnotationImportService):
 
         for filename, data in buffered:
             if filename.casefold().endswith((".yaml", ".yml")):
-                try:
+                with suppress(yaml.YAMLError):
                     dataset_indices.update(self._parse_dataset_names(yaml.safe_load(data)))
-                except yaml.YAMLError:
-                    pass
                 base_uploads.append((filename, BytesIO(data)))
                 continue
             try:
@@ -415,7 +425,11 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                 payload = None
             if payload is not None and self._looks_like_class_mapping(payload):
                 class_mapping.update(
-                    {str(key): value for key, value in payload.items() if isinstance(value, dict)}
+                    {
+                        str(key): value
+                        for key, value in payload.items()
+                        if isinstance(value, dict)
+                    }
                 )
                 base_uploads.append((filename, BytesIO(data)))
                 continue
@@ -424,8 +438,14 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                 for image_reference, entries in payload.items():
                     vector_entries: list[Any] = []
                     for entry in entries:
-                        if isinstance(entry, dict) and str(entry.get("type") or "") == "MaskAnnotation":
-                            semantic_annotations.append((filename, str(image_reference), entry))
+                        is_semantic = (
+                            isinstance(entry, dict)
+                            and str(entry.get("type") or "") == "MaskAnnotation"
+                        )
+                        if is_semantic:
+                            semantic_annotations.append(
+                                (filename, str(image_reference), entry)
+                            )
                         else:
                             vector_entries.append(entry)
                     filtered[str(image_reference)] = vector_entries
@@ -461,7 +481,10 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                         source_file=source_file,
                         image_reference=image_reference,
                         annotation_id=str(annotation.get("id") or "") or None,
-                        detail="No unique ReefVision image matched this CoralNet-Toolbox image path",
+                        detail=(
+                            "No unique ReefVision image matched this "
+                            "CoralNet-Toolbox image path"
+                        ),
                     )
                 )
                 continue
@@ -478,7 +501,10 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                                 source_file=source_file,
                                 image_reference=image_reference,
                                 annotation_id=str(annotation.get("id") or "") or None,
-                                detail=f"Semantic mask class {real_class_id} has no label-map entry",
+                                detail=(
+                                    f"Semantic mask class {real_class_id} "
+                                    "has no label-map entry"
+                                ),
                             )
                         )
                         continue
@@ -523,7 +549,9 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                     else:
                         semantic_imported += 1
                         verified = bool(annotation.get("verified", True))
-                        semantic_modified[image.id] = semantic_modified.get(image.id, True) and verified
+                        semantic_modified[image.id] = (
+                            semantic_modified.get(image.id, True) and verified
+                        )
             except (ValidationError, ValueError, TypeError) as exc:
                 semantic_skipped += 1
                 semantic_issues.append(
@@ -539,7 +567,8 @@ class EnhancedAnnotationImportService(AnnotationImportService):
             image = self.session.get(ImageAsset, image_id)
             if image is None:
                 continue
-            if image.annotation_revision == before_revisions.get(image_id, image.annotation_revision):
+            previous_revision = before_revisions.get(image_id, image.annotation_revision)
+            if image.annotation_revision == previous_revision:
                 image.annotation_revision += 1
             if not all_verified:
                 image.annotation_status = "in_progress"
