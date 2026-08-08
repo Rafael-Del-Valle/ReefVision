@@ -80,9 +80,7 @@ class AnnotationImportService:
             return False
         values = list(payload.values())
         return all(
-            isinstance(item, dict)
-            and "short_label_code" in item
-            and "long_label_code" in item
+            isinstance(item, dict) and "short_label_code" in item and "long_label_code" in item
             for item in values
         )
 
@@ -112,9 +110,7 @@ class AnnotationImportService:
     def _color_hex(value: object) -> str:
         if isinstance(value, (list, tuple)) and len(value) >= 3:
             try:
-                red, green, blue = (
-                    max(0, min(255, int(channel))) for channel in value[:3]
-                )
+                red, green, blue = (max(0, min(255, int(channel))) for channel in value[:3])
                 return f"#{red:02X}{green:02X}{blue:02X}"
             except (TypeError, ValueError):
                 pass
@@ -185,9 +181,7 @@ class AnnotationImportService:
         self, project_id: str
     ) -> tuple[dict[str, list[ImageAsset]], dict[str, list[ImageAsset]]]:
         images = list(
-            self.session.scalars(
-                select(ImageAsset).where(ImageAsset.project_id == project_id)
-            )
+            self.session.scalars(select(ImageAsset).where(ImageAsset.project_id == project_id))
         )
         by_basename: dict[str, list[ImageAsset]] = defaultdict(list)
         by_import_source: dict[str, list[ImageAsset]] = defaultdict(list)
@@ -291,14 +285,9 @@ class AnnotationImportService:
         return label_class
 
     @staticmethod
-    def _valid_box(
-        image: ImageAsset, coordinates: tuple[float, float, float, float]
-    ) -> bool:
+    def _valid_box(image: ImageAsset, coordinates: tuple[float, float, float, float]) -> bool:
         x_min, y_min, x_max, y_max = coordinates
-        return (
-            0 <= x_min < x_max <= image.width_px
-            and 0 <= y_min < y_max <= image.height_px
-        )
+        return 0 <= x_min < x_max <= image.width_px and 0 <= y_min < y_max <= image.height_px
 
     def _add_box(
         self,
@@ -380,9 +369,7 @@ class AnnotationImportService:
         parsed_points = [self._point_pair(point) for point in points_value]
         if any(point is None for point in parsed_points):
             raise ValidationError("Polygon contains malformed coordinates")
-        points = self._strip_closing_point(
-            [point for point in parsed_points if point is not None]
-        )
+        points = self._strip_closing_point([point for point in parsed_points if point is not None])
         annotation_id = self._stable_id(project_id, annotation.get("id"), suffix)
         if self.session.get(MaskAnnotation, annotation_id) is not None:
             return "duplicate"
@@ -601,13 +588,9 @@ class AnnotationImportService:
                             try:
                                 size = float(annotation.get("annotation_size"))
                             except (TypeError, ValueError) as exc:
-                                raise ValidationError(
-                                    "Patch size is missing or malformed"
-                                ) from exc
+                                raise ValidationError("Patch size is missing or malformed") from exc
                             if center is None or size <= 0:
-                                raise ValidationError(
-                                    "Patch geometry is missing or malformed"
-                                )
+                                raise ValidationError("Patch geometry is missing or malformed")
                             half = size / 2.0
                             results.append(
                                 (
@@ -649,9 +632,7 @@ class AnnotationImportService:
                         elif external_type == "MultiPolygonAnnotation":
                             polygons = annotation.get("polygons")
                             if not isinstance(polygons, list) or not polygons:
-                                raise ValidationError(
-                                    "Multipolygon contains no polygon parts"
-                                )
+                                raise ValidationError("Multipolygon contains no polygon parts")
                             for part_index, raw_polygon in enumerate(polygons):
                                 if not isinstance(raw_polygon, dict):
                                     raise ValidationError(
@@ -686,8 +667,7 @@ class AnnotationImportService:
                         else:
                             unsupported_type = external_type or "unknown"
                             raise ValidationError(
-                                "Unsupported CoralNet-Toolbox annotation type: "
-                                f"{unsupported_type}"
+                                f"Unsupported CoralNet-Toolbox annotation type: {unsupported_type}"
                             )
 
                         imported_here = False
