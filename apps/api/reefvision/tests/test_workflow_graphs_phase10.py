@@ -33,7 +33,7 @@ def test_workflow_registry_and_dry_run_plan(client: TestClient) -> None:
     project = create_project(client, "Workflow graph")
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     assert registry.status_code == 200, registry.text
-    node_types = {item["node_type"] for item in registry.json()}
+    registry_by_type = {item["node_type"]: item for item in registry.json()}
     assert {
         "project_source",
         "detection_inference",
@@ -41,7 +41,11 @@ def test_workflow_registry_and_dry_run_plan(client: TestClient) -> None:
         "mask_measurements",
         "video_tracking",
         "project_exchange_export",
-    }.issubset(node_types)
+    }.issubset(registry_by_type)
+    assert registry_by_type["project_source"]["executable"] is True
+    assert registry_by_type["project_images"]["executable"] is True
+    assert registry_by_type["project_exchange_export"]["executable"] is True
+    assert registry_by_type["detection_inference"]["executable"] is False
 
     validation = client.post(
         f"/api/v1/projects/{project['id']}/workflow-graphs/validate",
@@ -57,12 +61,13 @@ def test_workflow_registry_and_dry_run_plan(client: TestClient) -> None:
     )
     assert plan.status_code == 200, plan.text
     assert plan.json()["valid"] is True
-    assert plan.json()["executable"] is False
+    assert plan.json()["executable"] is True
     assert [item["node_id"] for item in plan.json()["steps"]] == [
         "project",
         "images",
     ]
-    assert "No graph executor" in plan.json()["execution_blocker"]
+    assert all(item["executable"] for item in plan.json()["steps"])
+    assert plan.json()["execution_blocker"] is None
 
 
 def test_workflow_validation_reports_type_and_parameter_errors(
