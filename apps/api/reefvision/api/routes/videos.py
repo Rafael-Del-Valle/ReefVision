@@ -18,10 +18,10 @@ from reefvision.schemas.videos import (
     VideoExtractRequest,
     VideoTrackAnalyticsResponse,
     VideoTrackCreate,
+    VideoTrackingCreateRequest,
     VideoTrackInterpolationResponse,
     VideoTrackResponse,
     VideoTrackUpdate,
-    VideoTrackingCreateRequest,
 )
 from reefvision.services.video_assets import VideoAssetService
 from reefvision.services.video_tracks import VideoTrackService
