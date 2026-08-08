@@ -1,0 +1,42 @@
+name: M4 Frontend Autofix
+
+on:
+  push:
+    branches:
+      - integration/milestone4-measurements
+    paths:
+      - ".github/workflows/m4-prettier-autofix.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: integration/milestone4-measurements
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm --prefix apps/web ci
+      - name: Format Milestone 4 frontend files
+        run: |
+          npx --prefix apps/web prettier --write \
+            apps/web/src/features/annotation-editor/CenterlineMeasurementLayer.tsx \
+            apps/web/src/features/annotation-editor/MaskAnnotationWorkspace.tsx \
+            apps/web/src/features/annotation-editor/MaskMeasurementPanel.test.tsx \
+            apps/web/src/features/annotation-editor/MaskMeasurementPanel.tsx \
+            apps/web/src/features/annotation-editor/maskMeasurementsApi.ts
+          npm --prefix apps/web run format:check
+      - name: Commit formatting
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/features/annotation-editor
+          git commit -m "Format Milestone 4 measurement UI" || exit 0
+          git push origin HEAD:integration/milestone4-measurements
