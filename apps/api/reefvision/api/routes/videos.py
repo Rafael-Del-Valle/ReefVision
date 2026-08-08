@@ -1,4 +1,4 @@
-"""Managed video import, extraction, track editing, analytics, and tracking routes."""
+"""Managed video import, extraction, track editing, analytics, tracking, and evaluation routes."""
 
 from __future__ import annotations
 
@@ -19,11 +19,14 @@ from reefvision.schemas.videos import (
     VideoTrackAnalyticsResponse,
     VideoTrackCreate,
     VideoTrackingCreateRequest,
+    VideoTrackingEvaluationRequest,
+    VideoTrackingEvaluationResponse,
     VideoTrackInterpolationResponse,
     VideoTrackResponse,
     VideoTrackUpdate,
 )
 from reefvision.services.video_assets import VideoAssetService
+from reefvision.services.video_tracking_evaluation import VideoTrackingEvaluationService
 from reefvision.services.video_tracks import VideoTrackService
 
 router = APIRouter(tags=["videos"])
@@ -159,6 +162,18 @@ def track_analytics(
     session: DbSession,
 ) -> VideoTrackAnalyticsResponse:
     return VideoTrackService(session).analytics(track_id)
+
+
+@router.post(
+    "/videos/{video_id}/tracking-evaluation",
+    response_model=VideoTrackingEvaluationResponse,
+)
+def evaluate_video_tracking(
+    video_id: str,
+    payload: VideoTrackingEvaluationRequest,
+    session: DbSession,
+) -> VideoTrackingEvaluationResponse:
+    return VideoTrackingEvaluationService(session).evaluate(video_id, payload)
 
 
 @router.post("/videos/{video_id}/tracking-jobs", response_model=JobResponse)
