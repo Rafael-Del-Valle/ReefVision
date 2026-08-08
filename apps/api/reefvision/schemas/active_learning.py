@@ -7,7 +7,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-ActiveLearningStrategy = Literal["hybrid", "uncertainty", "rare_class", "quality"]
+ActiveLearningStrategy = Literal[
+    "hybrid",
+    "uncertainty",
+    "rare_class",
+    "quality",
+    "random",
+]
 
 
 class ActiveLearningRoundCreateRequest(BaseModel):
@@ -16,6 +22,7 @@ class ActiveLearningRoundCreateRequest(BaseModel):
     strategy: ActiveLearningStrategy = "hybrid"
     requested_size: int = Field(default=50, ge=1, le=5000)
     model_ids: list[str] = Field(default_factory=list, max_length=20)
+    random_seed: int = Field(default=0, ge=0, le=2147483647)
     created_by: str | None = Field(default=None, max_length=100)
 
 
