@@ -162,9 +162,7 @@ def _compressed_coco_counts(counts: list[int]) -> str:
         while more:
             chunk = value & 0x1F
             value >>= 5
-            more = (bool(chunk & 0x10) and value != -1) or (
-                not bool(chunk & 0x10) and value != 0
-            )
+            more = (bool(chunk & 0x10) and value != -1) or (not bool(chunk & 0x10) and value != 0)
             if more:
                 chunk |= 0x20
             encoded.append(chunk + 48)
