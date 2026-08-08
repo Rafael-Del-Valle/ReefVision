@@ -97,16 +97,23 @@ def process_video_tracking_job(
         project_id = video.project_id
         video_id = video.id
         model_id = model.id
+        source_video_sha256 = video.sha256
+        model_sha256 = model.sha256
+        tracker_config = str(request.get("tracker", "bytetrack.yaml"))
+        confidence = float(request.get("confidence", 0.25))
+        iou = float(request.get("iou", 0.5))
+        device = str(request.get("device", "auto"))
+        minimum_frames = max(1, int(request.get("minimum_track_frames", 2)))
 
     try:
         provider = video_tracking_provider_for_name(provider_name)
         observations = provider.track(
             resolve_managed_project_path(settings, model_path),
             resolve_managed_project_path(settings, video_path),
-            tracker=str(request.get("tracker", "bytetrack.yaml")),
-            confidence=float(request.get("confidence", 0.25)),
-            iou=float(request.get("iou", 0.5)),
-            device=str(request.get("device", "auto")),
+            tracker=tracker_config,
+            confidence=confidence,
+            iou=iou,
+            device=device,
         )
         grouped: dict[tuple[int, str], list[TrackObservation]] = defaultdict(list)
         unmapped_labels: set[str] = set()
@@ -116,7 +123,6 @@ def process_video_tracking_job(
                 unmapped_labels.add(item.class_name)
                 continue
             grouped[(item.provider_track_id, label_class_id)].append(item)
-        minimum_frames = max(1, int(request.get("minimum_track_frames", 2)))
 
         with factory() as session:
             video = session.get(VideoAsset, video_id)
@@ -167,7 +173,13 @@ def process_video_tracking_job(
                             "provider_track_id": provider_track_id,
                             "provider_name": provider.provider_id,
                             "provider_version": provider.provider_version,
-                            "tracker": str(request.get("tracker", "bytetrack.yaml")),
+                            "tracker": tracker_config,
+                            "confidence_threshold": confidence,
+                            "iou_threshold": iou,
+                            "device": device,
+                            "minimum_track_frames": minimum_frames,
+                            "model_sha256": model_sha256,
+                            "source_video_sha256": source_video_sha256,
                             "mean_confidence": mean(item.confidence for item in ordered),
                         },
                     )
@@ -185,6 +197,9 @@ def process_video_tracking_job(
                 "unmapped_labels": sorted(unmapped_labels),
                 "provider_version": provider.provider_version,
                 "project_id": project_id,
+                "tracker": tracker_config,
+                "model_sha256": model_sha256,
+                "source_video_sha256": source_video_sha256,
             }
             job.completed_at = datetime.now(UTC)
             session.commit()
