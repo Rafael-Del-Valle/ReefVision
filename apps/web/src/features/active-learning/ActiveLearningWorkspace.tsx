@@ -7,12 +7,37 @@ import {
   createActiveLearningRound,
   getActiveLearningFeedback,
   getActiveLearningRounds,
+  type ActiveLearningRoundRecord,
   type ActiveLearningStrategy,
 } from "./activeLearningApi";
 
 interface ActiveLearningWorkspaceProps {
   project: Project;
   onOpenReviewQueue?: () => void;
+}
+
+interface SelectionReason {
+  imageId: string;
+  reason: string;
+  score: number | null;
+}
+
+function selectionReasons(
+  round: ActiveLearningRoundRecord | undefined,
+): SelectionReason[] {
+  const items = round?.selection_manifest_json.items;
+  if (!Array.isArray(items)) return [];
+  return items.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+    const imageId = typeof record.image_id === "string" ? record.image_id : "Unknown image";
+    const reason =
+      typeof record.reason_summary === "string" && record.reason_summary.trim()
+        ? record.reason_summary
+        : "Selected by the configured acquisition strategy.";
+    const score = typeof record.score === "number" ? record.score : null;
+    return [{ imageId, reason, score }];
+  });
 }
 
 export function ActiveLearningWorkspace({
@@ -23,6 +48,7 @@ export function ActiveLearningWorkspace({
   const [name, setName] = useState("Active learning round");
   const [strategy, setStrategy] = useState<ActiveLearningStrategy>("hybrid");
   const [requestedSize, setRequestedSize] = useState(50);
+  const [randomSeed, setRandomSeed] = useState(0);
   const [selectedRoundId, setSelectedRoundId] = useState("");
 
   const roundsQuery = useQuery({
@@ -32,6 +58,7 @@ export function ActiveLearningWorkspace({
   const selectedRound = roundsQuery.data?.find(
     (round) => round.id === selectedRoundId,
   );
+  const reasons = selectionReasons(selectedRound);
   const feedbackQuery = useQuery({
     queryKey: ["active-learning-feedback", selectedRoundId],
     queryFn: ({ signal }) => getActiveLearningFeedback(selectedRoundId, signal),
@@ -51,6 +78,7 @@ export function ActiveLearningWorkspace({
         name,
         strategy,
         requested_size: requestedSize,
+        random_seed: randomSeed,
       }),
     onSuccess: async (round) => {
       setSelectedRoundId(round.id);
@@ -81,7 +109,8 @@ export function ActiveLearningWorkspace({
           <h3>Active learning</h3>
           <p>
             Freeze an explainable acquisition batch, review it through the existing
-            queue, and measure how much human feedback the round produced.
+            queue, and measure how much human feedback the round produced. Random
+            baseline rounds provide a reproducible control for scientific comparisons.
           </p>
         </div>
       </div>
@@ -111,8 +140,21 @@ export function ActiveLearningWorkspace({
               <option value="uncertainty">Uncertainty</option>
               <option value="rare_class">Rare class</option>
               <option value="quality">Quality risk</option>
+              <option value="random">Random baseline</option>
             </select>
           </label>
+          {strategy === "random" && (
+            <label>
+              Random seed
+              <input
+                type="number"
+                min={0}
+                max={2147483647}
+                value={randomSeed}
+                onChange={(event) => setRandomSeed(Number(event.target.value))}
+              />
+            </label>
+          )}
           <label>
             Review budget
             <input
@@ -158,6 +200,12 @@ export function ActiveLearningWorkspace({
                 <dt>Manifest</dt>
                 <dd><code>{selectedRound.selection_sha256.slice(0, 12)}</code></dd>
               </div>
+              {selectedRound.strategy === "random" && (
+                <div>
+                  <dt>Random seed</dt>
+                  <dd>{String(selectedRound.strategy_config_json.random_seed ?? 0)}</dd>
+                </div>
+              )}
             </dl>
           )}
           <div className="button-row">
@@ -174,6 +222,24 @@ export function ActiveLearningWorkspace({
           </div>
           {completeMutation.error && (
             <p className="form-error">{completeMutation.error.message}</p>
+          )}
+        </div>
+
+        <div className="panel-card">
+          <h4>Why these images?</h4>
+          {reasons.length ? (
+            <ol>
+              {reasons.map((item) => (
+                <li key={item.imageId}>
+                  <strong>{item.imageId}</strong>
+                  {item.score !== null && <> · score {item.score.toFixed(2)}</>}
+                  <br />
+                  {item.reason}
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p>Select a round to inspect the frozen selection reasons.</p>
           )}
         </div>
 
