@@ -74,7 +74,10 @@ describe("VideoTrackingWorkspace", () => {
         frame_count: 300,
         fps: 30,
         duration_seconds: 10,
-        metadata_json: { extraction_every_n_frames: 10 },
+        metadata_json: {
+          extraction_every_n_frames: 10,
+          calibration: { distance_per_pixel: 0.25, unit: "cm" },
+        },
         frame_directory_path: "projects/project-1/videos/frames/video-1",
         extraction_job_id: "job-1",
         status: "frames_ready",
@@ -107,14 +110,32 @@ describe("VideoTrackingWorkspace", () => {
     vi.mocked(api.getTrackingModels).mockResolvedValue([]);
   });
 
-  it("shows managed video, frame, track, and automated tracking sections", async () => {
+  it("shows the complete M6 video, tracking, behavior, and export workspace", async () => {
     renderWorkspace();
 
     expect(await screen.findByText("Managed videos")).toBeInTheDocument();
+    expect(screen.getByText("Pixels to real distance")).toBeInTheDocument();
     expect(screen.getByText("Source-coordinate overlay")).toBeInTheDocument();
     expect(screen.getByText("Identities and keyframes")).toBeInTheDocument();
-    expect(screen.getByText("Detector + ByteTrack")).toBeInTheDocument();
+    expect(screen.getByText("Detector + tracker")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "ByteTrack" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "BoT-SORT" })).toBeInTheDocument();
+    expect(screen.getByText("Activity, occupancy, and schooling")).toBeInTheDocument();
+    expect(screen.getByText("Trajectory data")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "CSV" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/videos/video-1/exports/csv"),
+    );
+    expect(screen.getByRole("link", { name: "MOT" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/videos/video-1/exports/mot"),
+    );
+    expect(screen.getByRole("link", { name: "ReefVision JSON" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/videos/video-1/exports/json"),
+    );
     expect(await screen.findByText(/fish\.mp4/)).toBeInTheDocument();
     expect(await screen.findByText(/300 frames/)).toBeInTheDocument();
+    expect(await screen.findByText(/Current scale: 0\.25 cm\/px/)).toBeInTheDocument();
   });
 });
