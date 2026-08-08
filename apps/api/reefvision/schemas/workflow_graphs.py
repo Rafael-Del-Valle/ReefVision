@@ -1,4 +1,4 @@
-"""Typed, non-executing workflow graph schemas."""
+"""Typed workflow graph schemas with explicit execution readiness."""
 
 from __future__ import annotations
 
@@ -44,6 +44,7 @@ class WorkflowNodeDefinitionResponse(BaseModel):
     required_parameters: list[str]
     optional_parameters: dict[str, Any]
     execution_state: str
+    executable: bool = False
     implementation_notes: list[str]
 
 
@@ -102,6 +103,7 @@ class WorkflowPlanStep(BaseModel):
     node_type: str
     display_name: str
     execution_state: str
+    executable: bool = False
     parameters: dict[str, Any]
     input_bindings: list[WorkflowPlanInputBinding]
     output_types: dict[str, list[WorkflowDataType]]
@@ -114,4 +116,4 @@ class WorkflowGraphPlanResponse(BaseModel):
     executable: bool
     issues: list[WorkflowGraphIssue]
     steps: list[WorkflowPlanStep]
-    execution_blocker: str
+    execution_blocker: str | None
