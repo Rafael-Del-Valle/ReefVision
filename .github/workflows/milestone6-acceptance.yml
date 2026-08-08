@@ -25,7 +25,9 @@ jobs:
             apps/api/reefvision/ml/video_tracking.py \
             apps/api/reefvision/schemas/videos.py \
             apps/api/reefvision/services/video_assets.py \
+            apps/api/reefvision/services/video_tracking_evaluation.py \
             apps/api/reefvision/services/video_tracks.py \
+            apps/api/reefvision/tests/test_video_tracking_evaluation_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_phase6.py
           python -m ruff format --check \
             apps/api/migrations/versions/0021_video_tracking_workflows.py \
@@ -35,10 +37,16 @@ jobs:
             apps/api/reefvision/ml/video_tracking.py \
             apps/api/reefvision/schemas/videos.py \
             apps/api/reefvision/services/video_assets.py \
+            apps/api/reefvision/services/video_tracking_evaluation.py \
             apps/api/reefvision/services/video_tracks.py \
+            apps/api/reefvision/tests/test_video_tracking_evaluation_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_phase6.py
       - name: Run Milestone 6 video tracking tests
-        run: python -m pytest apps/api/reefvision/tests/test_video_tracking_phase6.py -q
+        run: >-
+          python -m pytest
+          apps/api/reefvision/tests/test_video_tracking_phase6.py
+          apps/api/reefvision/tests/test_video_tracking_evaluation_phase6.py
+          -q
       - name: Verify 0021 migration roundtrip
         shell: bash
         run: |
