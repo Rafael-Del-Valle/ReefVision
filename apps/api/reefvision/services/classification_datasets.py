@@ -187,9 +187,7 @@ class ClassificationDatasetService:
                 try:
                     with Image.open(source) as opened:
                         rgb = opened.convert("RGB")
-                        sample_specs: list[
-                            tuple[dict[str, Any], dict[str, Any] | None, str]
-                        ]
+                        sample_specs: list[tuple[dict[str, Any], dict[str, Any] | None, str]]
                         if payload.mode == "image":
                             labels = image_labels.get(item.image_id, [])
                             if len(labels) != 1:
