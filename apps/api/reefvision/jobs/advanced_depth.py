@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import shutil
 from datetime import UTC, datetime
-from pathlib import Path
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -52,8 +51,8 @@ def _cancel_requested(factory: sessionmaker[Session], job_id: str) -> bool:
         return job is None or job.status == "cancel_requested"
 
 
-def _relative_output_base(project: Project, job_id: str, image_id: str) -> str:
-    return f"{project.storage_root}/derived/depth/{job_id}/{image_id}"
+def _relative_output_base(project_storage_root: str, job_id: str, image_id: str) -> str:
+    return f"{project_storage_root}/derived/depth/{job_id}/{image_id}"
 
 
 def process_advanced_depth_job(
@@ -111,7 +110,6 @@ def process_advanced_depth_job(
         model_path = model.managed_path
         model_sha256 = model.sha256
         model_version = model.provider_version
-        project_id = project.id
         project_storage_root = project.storage_root
 
     provider = TransformersDepthAnythingV2Provider()
@@ -144,11 +142,7 @@ def process_advanced_depth_job(
             source = resolve_managed_project_path(settings, image.managed_path)
             if not source.is_file():
                 raise FileNotFoundError(f"Managed source image is missing: {image.managed_path}")
-            relative_base = _relative_output_base(
-                Project(id=project_id, storage_root=project_storage_root, name="depth-job"),
-                job_id,
-                image.id,
-            )
+            relative_base = _relative_output_base(project_storage_root, job_id, image.id)
             absolute_base = resolve_managed_project_path(settings, relative_base)
             prediction = provider.predict_depth(
                 source,
