@@ -24,7 +24,16 @@ jobs:
         shell: bash
         run: |
           git diff --binary b24eeef84861e57eb436c22b5b84422809e8de4f 5bd0dacff1fd89ed9c5a521060885c8101b13f6e > /tmp/m6.patch
-          git apply --3way /tmp/m6.patch
+          git apply --3way /tmp/m6.patch || true
+          git checkout --theirs apps/api/reefvision/tests/test_mask_migration_lineage.py
+          git checkout --ours apps/web/src/features/classification/ClassificationWorkspace.test.tsx
+          git add apps/api/reefvision/tests/test_mask_migration_lineage.py
+          git add apps/web/src/features/classification/ClassificationWorkspace.test.tsx
+          if git diff --name-only --diff-filter=U | grep -q .; then
+            echo 'Unexpected unresolved conflicts remain:'
+            git diff --name-only --diff-filter=U
+            exit 1
+          fi
           git diff --check
       - name: Commit transplant
         shell: bash
