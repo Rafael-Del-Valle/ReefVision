@@ -1,0 +1,544 @@
+"""Persist workflow revisions and execute typed ReefVision node adapters."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+from uuid import uuid4
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from reefvision.config import Settings
+from reefvision.db.models import (
+    DatasetVersion,
+    DatasetVersionItem,
+    ImageAsset,
+    Job,
+    MaskAnnotation,
+    ModelRegistration,
+    Project,
+    ProjectExchangePackage,
+    VideoAsset,
+    WorkflowArtifact,
+    WorkflowGraphRecord,
+    WorkflowNodeRun,
+    WorkflowRun,
+)
+from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.schemas.workflow_execution import (
+    WorkflowArtifactResponse,
+    WorkflowGraphRecordResponse,
+    WorkflowGraphSaveRequest,
+    WorkflowNodeRunResponse,
+    WorkflowRunCreateRequest,
+    WorkflowRunDetailResponse,
+    WorkflowRunResponse,
+)
+from reefvision.schemas.workflow_graphs import WorkflowGraphRequest, WorkflowPlanStep
+from reefvision.services.project_exchange import FORMAT_VERSION, ProjectExchangeService
+from reefvision.services.workflow_graphs import WorkflowGraphService
+from reefvision.storage.datasets import canonical_json_sha256
+
+EXECUTABLE_NODE_TYPES = {
+    "project_source",
+    "project_images",
+    "dataset_version_source",
+    "registered_model_source",
+    "project_video_source",
+    "verified_masks_source",
+    "project_exchange_export",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowArtifactSpec:
+    port_id: str
+    data_type: str
+    payload: dict[str, Any]
+
+
+class WorkflowExecutionService:
+    def __init__(self, session: Session, settings: Settings | None = None) -> None:
+        self.session = session
+        self.settings = settings
+        self.graphs = WorkflowGraphService(session)
+
+    def _project(self, project_id: str) -> Project:
+        project = self.session.get(Project, project_id)
+        if project is None:
+            raise NotFoundError("Project not found")
+        return project
+
+    def _graph_record(self, graph_record_id: str) -> WorkflowGraphRecord:
+        record = self.session.get(WorkflowGraphRecord, graph_record_id)
+        if record is None:
+            raise NotFoundError("Workflow graph revision not found")
+        return record
+
+    def _run(self, run_id: str) -> WorkflowRun:
+        run = self.session.get(WorkflowRun, run_id)
+        if run is None:
+            raise NotFoundError("Workflow run not found")
+        return run
+
+    def list_graphs(self, project_id: str) -> list[WorkflowGraphRecordResponse]:
+        self._project(project_id)
+        records = list(
+            self.session.scalars(
+                select(WorkflowGraphRecord)
+                .where(WorkflowGraphRecord.project_id == project_id)
+                .order_by(
+                    WorkflowGraphRecord.graph_key,
+                    WorkflowGraphRecord.revision.desc(),
+                )
+            )
+        )
+        return [WorkflowGraphRecordResponse.model_validate(record) for record in records]
+
+    def save_graph(
+        self,
+        project_id: str,
+        request: WorkflowGraphSaveRequest,
+    ) -> WorkflowGraphRecordResponse:
+        self._project(project_id)
+        validation = self.graphs.validate(project_id, request.graph)
+        if not validation.valid:
+            messages = "; ".join(issue.message for issue in validation.issues if issue.severity == "error")
+            raise ValidationError(f"Cannot save invalid workflow graph: {messages}")
+
+        graph_json = request.graph.model_dump(mode="json")
+        checksum = canonical_json_sha256(graph_json)
+        latest = self.session.scalar(
+            select(WorkflowGraphRecord)
+            .where(
+                WorkflowGraphRecord.project_id == project_id,
+                WorkflowGraphRecord.graph_key == request.graph.graph_id,
+            )
+            .order_by(WorkflowGraphRecord.revision.desc())
+            .limit(1)
+        )
+        if latest is not None and latest.graph_sha256 == checksum:
+            return WorkflowGraphRecordResponse.model_validate(latest)
+        if latest is not None and not request.create_new_revision:
+            latest.name = request.graph.name
+            latest.schema_version = request.graph.schema_version
+            latest.graph_json = graph_json
+            latest.graph_sha256 = checksum
+            self.session.commit()
+            self.session.refresh(latest)
+            return WorkflowGraphRecordResponse.model_validate(latest)
+
+        record = WorkflowGraphRecord(
+            project_id=project_id,
+            graph_key=request.graph.graph_id,
+            name=request.graph.name,
+            schema_version=request.graph.schema_version,
+            revision=(latest.revision + 1 if latest is not None else 1),
+            graph_json=graph_json,
+            graph_sha256=checksum,
+        )
+        self.session.add(record)
+        self.session.commit()
+        self.session.refresh(record)
+        return WorkflowGraphRecordResponse.model_validate(record)
+
+    def list_runs(self, project_id: str) -> list[WorkflowRunResponse]:
+        self._project(project_id)
+        runs = list(
+            self.session.scalars(
+                select(WorkflowRun)
+                .where(WorkflowRun.project_id == project_id)
+                .order_by(WorkflowRun.created_at.desc(), WorkflowRun.id)
+            )
+        )
+        return [WorkflowRunResponse.model_validate(run) for run in runs]
+
+    def get_run_detail(self, run_id: str) -> WorkflowRunDetailResponse:
+        run = self._run(run_id)
+        nodes = list(
+            self.session.scalars(
+                select(WorkflowNodeRun)
+                .where(WorkflowNodeRun.workflow_run_id == run.id)
+                .order_by(WorkflowNodeRun.execution_order, WorkflowNodeRun.node_id)
+            )
+        )
+        artifacts = list(
+            self.session.scalars(
+                select(WorkflowArtifact)
+                .where(WorkflowArtifact.workflow_run_id == run.id)
+                .order_by(WorkflowArtifact.created_at, WorkflowArtifact.id)
+            )
+        )
+        return WorkflowRunDetailResponse(
+            run=WorkflowRunResponse.model_validate(run),
+            nodes=[WorkflowNodeRunResponse.model_validate(node) for node in nodes],
+            artifacts=[WorkflowArtifactResponse.model_validate(item) for item in artifacts],
+        )
+
+    def queue_run(
+        self,
+        project_id: str,
+        request: WorkflowRunCreateRequest,
+    ) -> WorkflowRunResponse:
+        self._project(project_id)
+        record = self._graph_record(request.graph_record_id)
+        if record.project_id != project_id:
+            raise ValidationError("Workflow graph revision does not belong to this project")
+        graph = WorkflowGraphRequest.model_validate(record.graph_json)
+        plan = self.graphs.plan(project_id, graph)
+        if not plan.valid:
+            raise ValidationError("Workflow graph is no longer valid")
+        unsupported = [
+            step.node_type for step in plan.steps if step.node_type not in EXECUTABLE_NODE_TYPES
+        ]
+        if unsupported:
+            raise ValidationError(
+                "Workflow contains nodes that are not executable yet: "
+                + ", ".join(sorted(set(unsupported)))
+            )
+
+        run = WorkflowRun(
+            project_id=project_id,
+            workflow_graph_record_id=record.id,
+            status="queued",
+            graph_sha256=record.graph_sha256,
+            input_json=dict(request.inputs),
+            result_json={"stage": "queued", "completed_nodes": 0},
+        )
+        self.session.add(run)
+        self.session.flush()
+        for step in plan.steps:
+            self.session.add(
+                WorkflowNodeRun(
+                    workflow_run_id=run.id,
+                    node_id=step.node_id,
+                    node_type=step.node_type,
+                    execution_order=step.order,
+                    status="pending",
+                    parameters_json=dict(step.parameters),
+                    input_artifact_ids_json=[],
+                    output_artifact_ids_json=[],
+                    result_json={},
+                )
+            )
+        job = Job(
+            project_id=project_id,
+            job_type="workflow_run",
+            status="queued",
+            progress_current=0,
+            progress_total=len(plan.steps),
+            request_json={"workflow_run_id": run.id},
+            result_json={"stage": "queued", "workflow_run_id": run.id},
+        )
+        self.session.add(job)
+        self.session.flush()
+        run.job_id = job.id
+        self.session.commit()
+        self.session.refresh(run)
+        return WorkflowRunResponse.model_validate(run)
+
+    def execute_node(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        step: WorkflowPlanStep,
+        inputs: dict[str, list[WorkflowArtifact]],
+    ) -> list[WorkflowArtifactSpec]:
+        if self.settings is None:
+            raise ValidationError("Workflow execution requires application settings")
+        handler = getattr(self, f"_execute_{step.node_type}", None)
+        if handler is None or step.node_type not in EXECUTABLE_NODE_TYPES:
+            raise ValidationError(f"Workflow node is not executable: {step.node_type}")
+        return handler(
+            project_id=project_id,
+            run_id=run_id,
+            node_run=node_run,
+            parameters=step.parameters,
+            inputs=inputs,
+        )
+
+    @staticmethod
+    def _single_payload(inputs: dict[str, list[WorkflowArtifact]], port_id: str) -> dict[str, Any]:
+        items = inputs.get(port_id, [])
+        if len(items) != 1:
+            raise ValidationError(f"Workflow input requires exactly one artifact: {port_id}")
+        return dict(items[0].payload_json)
+
+    def _execute_project_source(
+        self,
+        *,
+        project_id: str,
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        project = self._project(project_id)
+        return [
+            WorkflowArtifactSpec(
+                port_id="project",
+                data_type="project_reference",
+                payload={
+                    "project_id": project.id,
+                    "project_name": project.name,
+                    "storage_root": project.storage_root,
+                },
+            )
+        ]
+
+    def _execute_project_images(
+        self,
+        *,
+        project_id: str,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        project_payload = self._single_payload(inputs, "project")
+        if project_payload.get("project_id") != project_id:
+            raise ValidationError("Project Images received a foreign project reference")
+        statement = select(ImageAsset).where(ImageAsset.project_id == project_id)
+        annotation_status = parameters.get("annotation_status")
+        group_key = parameters.get("group_key")
+        if annotation_status:
+            statement = statement.where(ImageAsset.annotation_status == str(annotation_status))
+        if group_key:
+            statement = statement.where(ImageAsset.group_key == str(group_key))
+        images = list(self.session.scalars(statement.order_by(ImageAsset.created_at, ImageAsset.id)))
+        return [
+            WorkflowArtifactSpec(
+                port_id="images",
+                data_type="image_collection",
+                payload={
+                    "project_id": project_id,
+                    "image_ids": [image.id for image in images],
+                    "image_sha256": {image.id: image.sha256 for image in images},
+                    "count": len(images),
+                },
+            )
+        ]
+
+    def _execute_dataset_version_source(
+        self,
+        *,
+        project_id: str,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        project_payload = self._single_payload(inputs, "project")
+        if project_payload.get("project_id") != project_id:
+            raise ValidationError("Dataset source received a foreign project reference")
+        version_id = str(parameters.get("dataset_version_id") or "")
+        version = self.session.get(DatasetVersion, version_id)
+        if version is None or version.project_id != project_id or version.status != "complete":
+            raise ValidationError("Dataset version is not a complete version in this project")
+        statement = select(DatasetVersionItem).where(
+            DatasetVersionItem.dataset_version_id == version.id
+        )
+        split = parameters.get("split")
+        if split:
+            statement = statement.where(DatasetVersionItem.split == str(split))
+        items = list(self.session.scalars(statement.order_by(DatasetVersionItem.id)))
+        image_ids = [item.image_id for item in items]
+        return [
+            WorkflowArtifactSpec(
+                port_id="dataset",
+                data_type="dataset_version",
+                payload={
+                    "dataset_version_id": version.id,
+                    "manifest_sha256": version.manifest_sha256,
+                    "split_manifest_sha256": version.split_manifest_sha256,
+                    "split": split,
+                },
+            ),
+            WorkflowArtifactSpec(
+                port_id="images",
+                data_type="image_collection",
+                payload={
+                    "project_id": project_id,
+                    "image_ids": image_ids,
+                    "count": len(image_ids),
+                    "dataset_version_id": version.id,
+                    "split": split,
+                },
+            ),
+        ]
+
+    def _execute_registered_model_source(
+        self,
+        *,
+        project_id: str,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        project_payload = self._single_payload(inputs, "project")
+        if project_payload.get("project_id") != project_id:
+            raise ValidationError("Model source received a foreign project reference")
+        model_id = str(parameters.get("model_id") or "")
+        model = self.session.get(ModelRegistration, model_id)
+        if model is None or model.project_id != project_id:
+            raise ValidationError("Registered model does not belong to this project")
+        return [
+            WorkflowArtifactSpec(
+                port_id="model",
+                data_type="model_reference",
+                payload={
+                    "model_id": model.id,
+                    "model_sha256": model.sha256,
+                    "purpose": model.purpose,
+                    "task": model.task,
+                    "provider_name": model.provider_name,
+                    "provider_version": model.provider_version,
+                },
+            )
+        ]
+
+    def _execute_project_video_source(
+        self,
+        *,
+        project_id: str,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        project_payload = self._single_payload(inputs, "project")
+        if project_payload.get("project_id") != project_id:
+            raise ValidationError("Video source received a foreign project reference")
+        video_id = str(parameters.get("video_id") or "")
+        video = self.session.get(VideoAsset, video_id)
+        if video is None or video.project_id != project_id:
+            raise ValidationError("Video does not belong to this project")
+        return [
+            WorkflowArtifactSpec(
+                port_id="video",
+                data_type="video_reference",
+                payload={
+                    "video_id": video.id,
+                    "sha256": video.sha256,
+                    "frame_count": video.frame_count,
+                    "fps": video.fps,
+                    "duration_seconds": video.duration_seconds,
+                },
+            )
+        ]
+
+    def _execute_verified_masks_source(
+        self,
+        *,
+        project_id: str,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        project_payload = self._single_payload(inputs, "project")
+        if project_payload.get("project_id") != project_id:
+            raise ValidationError("Mask source received a foreign project reference")
+        statement = (
+            select(MaskAnnotation)
+            .join(ImageAsset, ImageAsset.id == MaskAnnotation.image_id)
+            .where(
+                ImageAsset.project_id == project_id,
+                MaskAnnotation.deleted_at.is_(None),
+                MaskAnnotation.status == "verified",
+            )
+        )
+        label_class_ids = [str(item) for item in parameters.get("label_class_ids", [])]
+        image_ids = [str(item) for item in parameters.get("image_ids", [])]
+        if label_class_ids:
+            statement = statement.where(MaskAnnotation.label_class_id.in_(label_class_ids))
+        if image_ids:
+            statement = statement.where(MaskAnnotation.image_id.in_(image_ids))
+        masks = list(self.session.scalars(statement.order_by(MaskAnnotation.created_at, MaskAnnotation.id)))
+        return [
+            WorkflowArtifactSpec(
+                port_id="masks",
+                data_type="mask_annotations",
+                payload={
+                    "project_id": project_id,
+                    "mask_annotation_ids": [mask.id for mask in masks],
+                    "count": len(masks),
+                },
+            )
+        ]
+
+    def _execute_project_exchange_export(
+        self,
+        *,
+        project_id: str,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        project_payload = self._single_payload(inputs, "project")
+        if project_payload.get("project_id") != project_id:
+            raise ValidationError("Project export received a foreign project reference")
+        project = self._project(project_id)
+        package_id = str(uuid4())
+        package = ProjectExchangePackage(
+            id=package_id,
+            project_id=project_id,
+            job_id=None,
+            direction="export",
+            status="queued",
+            format_version=FORMAT_VERSION,
+            manifest_json={},
+            manifest_sha256="",
+            archive_path=f"{project.storage_root}/exchanges/{package_id}.reefvision.zip",
+            options_json={
+                "include_media": bool(parameters.get("include_media", False)),
+                "include_model_weights": bool(parameters.get("include_model_weights", False)),
+                "include_generated_artifacts": bool(
+                    parameters.get("include_generated_artifacts", False)
+                ),
+                "created_by_workflow": True,
+            },
+        )
+        self.session.add(package)
+        self.session.commit()
+        result = ProjectExchangeService(self.session, self.settings).build_export(package.id)
+        return [
+            WorkflowArtifactSpec(
+                port_id="package",
+                data_type="project_exchange_package",
+                payload={
+                    "package_id": result.id,
+                    "manifest_sha256": result.manifest_sha256,
+                    "archive_path": result.archive_path,
+                    "format_version": result.format_version,
+                },
+            )
+        ]
+
+    @staticmethod
+    def artifact_checksum(payload: dict[str, Any]) -> str:
+        return canonical_json_sha256(payload)
+
+    def persist_artifact(
+        self,
+        *,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        specification: WorkflowArtifactSpec,
+    ) -> WorkflowArtifact:
+        artifact = WorkflowArtifact(
+            workflow_run_id=run_id,
+            producer_node_run_id=node_run.id,
+            producer_port_id=specification.port_id,
+            data_type=specification.data_type,
+            payload_json=dict(specification.payload),
+            payload_sha256=self.artifact_checksum(specification.payload),
+        )
+        self.session.add(artifact)
+        self.session.flush()
+        return artifact
+
+    def run_counts(self, run_id: str) -> dict[str, int]:
+        total_nodes = self.session.scalar(
+            select(func.count(WorkflowNodeRun.id)).where(WorkflowNodeRun.workflow_run_id == run_id)
+        ) or 0
+        artifacts = self.session.scalar(
+            select(func.count(WorkflowArtifact.id)).where(WorkflowArtifact.workflow_run_id == run_id)
+        ) or 0
+        return {"node_count": int(total_nodes), "artifact_count": int(artifacts)}
