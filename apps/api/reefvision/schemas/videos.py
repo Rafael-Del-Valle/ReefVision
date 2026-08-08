@@ -1,4 +1,4 @@
-"""Managed video, sparse track, interpolation, and analytics schemas."""
+"""Managed video, sparse track, interpolation, analytics, and export schemas."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 TrackInterpolation = Literal["linear", "hold"]
 TrackGeometryKind = Literal["bbox"]
+VideoTrackerConfig = Literal["bytetrack.yaml", "botsort.yaml"]
 
 
 class VideoExtractRequest(BaseModel):
@@ -36,6 +37,13 @@ class VideoAssetResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class VideoCalibrationUpdate(BaseModel):
+    distance_per_pixel: float = Field(gt=0)
+    unit: str = Field(default="cm", min_length=1, max_length=32)
+    source: str = Field(default="manual", min_length=1, max_length=100)
+    notes: str | None = Field(default=None, max_length=1000)
 
 
 class VideoTrackKeyframe(BaseModel):
@@ -138,9 +146,80 @@ class VideoTrackAnalyticsResponse(BaseModel):
     occupancy_grid: dict[str, int]
 
 
+class VideoZone(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    x_min: float = Field(ge=0)
+    y_min: float = Field(ge=0)
+    x_max: float = Field(gt=0)
+    y_max: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def positive_zone(self) -> VideoZone:
+        if self.x_max <= self.x_min or self.y_max <= self.y_min:
+            raise ValueError("Video zones require positive width and height")
+        return self
+
+
+class VideoBehaviorAnalyticsRequest(BaseModel):
+    zones: list[VideoZone] = Field(default_factory=list)
+    heatmap_bins_x: int = Field(default=20, ge=2, le=100)
+    heatmap_bins_y: int = Field(default=20, ge=2, le=100)
+    activity_speed_threshold_pixels_per_second: float = Field(default=1.0, ge=0)
+
+
+class VideoBehaviorTrackAnalytics(BaseModel):
+    track_id: str
+    track_number: int
+    label_class_id: str
+    first_frame: int
+    last_frame: int
+    observed_frame_count: int
+    duration_seconds: float
+    distance_pixels: float
+    mean_speed_pixels_per_second: float
+    maximum_speed_pixels_per_second: float
+    active_time_seconds: float
+    inactive_time_seconds: float
+    distance_physical: float | None
+    mean_speed_physical_per_second: float | None
+    maximum_speed_physical_per_second: float | None
+    physical_unit: str | None
+    zone_time_seconds: dict[str, float]
+
+
+class VideoFrameSchoolAnalytics(BaseModel):
+    frame: int
+    timestamp_seconds: float
+    active_track_count: int
+    mean_nearest_neighbor_pixels: float | None
+    school_spread_pixels: float | None
+    mean_nearest_neighbor_physical: float | None
+    school_spread_physical: float | None
+
+
+class VideoHeatmapCell(BaseModel):
+    column: int
+    row: int
+    observation_count: int
+    occupancy_seconds: float
+
+
+class VideoBehaviorAnalyticsResponse(BaseModel):
+    video_id: str
+    fps: float
+    distance_per_pixel: float | None
+    physical_unit: str | None
+    tracks: list[VideoBehaviorTrackAnalytics]
+    school_by_frame: list[VideoFrameSchoolAnalytics]
+    heatmap_bins_x: int
+    heatmap_bins_y: int
+    heatmap: list[VideoHeatmapCell]
+    warnings: list[str]
+
+
 class VideoTrackingCreateRequest(BaseModel):
     model_id: str = Field(min_length=1, max_length=36)
-    tracker: str = Field(default="bytetrack.yaml", min_length=1, max_length=200)
+    tracker: VideoTrackerConfig = "bytetrack.yaml"
     confidence: float = Field(default=0.25, ge=0, le=1)
     iou: float = Field(default=0.5, ge=0, le=1)
     device: str = Field(default="auto", min_length=1, max_length=60)
