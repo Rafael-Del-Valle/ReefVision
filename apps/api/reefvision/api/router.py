@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from reefvision.api.routes.annotation_imports import router as annotation_imports_router
+from reefvision.api.routes.active_learning import router as active_learning_router
 from reefvision.api.routes.annotations import router as annotations_router
 from reefvision.api.routes.assist import router as assist_router
 from reefvision.api.routes.backups import router as backups_router
@@ -50,3 +51,4 @@ api_router.include_router(predictions_router)
 api_router.include_router(assist_router)
 api_router.include_router(quality_control_router)
 api_router.include_router(review_queues_router)
+api_router.include_router(active_learning_router)
