@@ -183,7 +183,8 @@ class TransformersDepthAnythingV2Provider:
             if span <= 0
             else (depth - minimum) / span
         )
-        preview = Image.fromarray((normalized * 65535.0).clip(0, 65535).astype("uint16"), mode="I;16")
+        preview_pixels = (normalized * 65535.0).clip(0, 65535).astype("uint16")
+        preview = Image.fromarray(preview_pixels)
         preview.save(preview_path, format="PNG")
         return DepthPrediction(
             width=image.width,
