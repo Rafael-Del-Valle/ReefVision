@@ -23,6 +23,7 @@ import { QualityControlDashboard } from "./features/quality-control/QualityContr
 import { ReviewQueueDashboard } from "./features/review-queues/ReviewQueueDashboard";
 import { SystemPanel } from "./features/system/SystemPanel";
 import { TrainingWorkspace } from "./features/training/TrainingWorkspace";
+import { VideoTrackingWorkspace } from "./features/video/VideoTrackingWorkspace";
 import "./styles/app.css";
 
 interface AnnotationLaunchState {
@@ -40,6 +41,7 @@ type ProjectView =
   | "models"
   | "training"
   | "classification"
+  | "video"
   | "classes"
   | "quality_control"
   | "review_queue"
@@ -133,6 +135,7 @@ export function App() {
     { id: "versions", label: "Versions" },
     { id: "training", label: "Training" },
     { id: "classification", label: "Classification" },
+    { id: "video", label: "Video Tracking" },
     { id: "models", label: "Models" },
     { id: "quality_control", label: "Quality Control" },
     { id: "review_queue", label: "Review Queue" },
@@ -312,6 +315,9 @@ export function App() {
               )}
               {activeView === "classification" && (
                 <ClassificationWorkspace project={selectedProject} />
+              )}
+              {activeView === "video" && (
+                <VideoTrackingWorkspace project={selectedProject} />
               )}
               {activeView === "models" && (
                 <ModelManager
