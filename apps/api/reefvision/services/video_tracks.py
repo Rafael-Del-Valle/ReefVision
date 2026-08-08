@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from itertools import pairwise
 from math import hypot
 
 from sqlalchemy import func, select
@@ -146,7 +147,7 @@ class VideoTrackService:
         keyframes = self._keyframes(track)
         by_frame = {item.frame: item for item in keyframes}
         frames: list[InterpolatedTrackFrame] = []
-        for first, second in zip(keyframes, keyframes[1:], strict=False):
+        for first, second in pairwise(keyframes):
             span = second.frame - first.frame
             for frame in range(first.frame, second.frame):
                 ratio = 0.0 if track.interpolation == "hold" else (frame - first.frame) / span
@@ -194,7 +195,7 @@ class VideoTrackService:
         centers = [(item.center_x, item.center_y) for item in frames]
         distances = [
             hypot(second[0] - first[0], second[1] - first[1])
-            for first, second in zip(centers, centers[1:], strict=False)
+            for first, second in pairwise(centers)
         ]
         path_length = sum(distances)
         duration = max(0.0, (frames[-1].frame - frames[0].frame) / video.fps)
