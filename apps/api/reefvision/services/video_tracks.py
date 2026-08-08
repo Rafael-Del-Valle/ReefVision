@@ -75,14 +75,17 @@ class VideoTrackService:
         self._validate_keyframes(video, payload.keyframes)
         track_number = payload.track_number
         if track_number is None:
-            track_number = int(
-                self.session.scalar(
-                    select(func.max(VideoTrack.track_number)).where(
-                        VideoTrack.video_id == video_id
+            track_number = (
+                int(
+                    self.session.scalar(
+                        select(func.max(VideoTrack.track_number)).where(
+                            VideoTrack.video_id == video_id
+                        )
                     )
+                    or 0
                 )
-                or 0
-            ) + 1
+                + 1
+            )
         conflict = self.session.scalar(
             select(VideoTrack.id).where(
                 VideoTrack.video_id == video_id,
@@ -194,8 +197,7 @@ class VideoTrackService:
         frames = interpolation.frames
         centers = [(item.center_x, item.center_y) for item in frames]
         distances = [
-            hypot(second[0] - first[0], second[1] - first[1])
-            for first, second in pairwise(centers)
+            hypot(second[0] - first[0], second[1] - first[1]) for first, second in pairwise(centers)
         ]
         path_length = sum(distances)
         duration = max(0.0, (frames[-1].frame - frames[0].frame) / video.fps)

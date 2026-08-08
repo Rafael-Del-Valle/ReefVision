@@ -125,9 +125,7 @@ def test_managed_video_import_extraction_and_track_analytics(
     track_payload = track.json()
     assert track_payload["revision"] == 1
 
-    interpolation = client.get(
-        f"/api/v1/video-tracks/{track_payload['id']}/interpolation"
-    )
+    interpolation = client.get(f"/api/v1/video-tracks/{track_payload['id']}/interpolation")
     assert interpolation.status_code == 200, interpolation.text
     frames = interpolation.json()["frames"]
     assert len(frames) == 11
