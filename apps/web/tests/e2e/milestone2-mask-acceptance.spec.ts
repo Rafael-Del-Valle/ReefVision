@@ -421,12 +421,12 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
   await page.mouse.up();
 
   await page.getByTestId("insert-polygon-node").click();
-  const polygonBox = await layer
-    .locator(`g[data-mask-id="${maskId}"] polygon`)
-    .boundingBox();
-  if (!polygonBox) throw new Error("Polygon geometry is unavailable");
-  await page.mouse.click(polygonBox.x + polygonBox.width / 2, polygonBox.y + 2);
+  await expect(page.getByTestId("enhanced-annotation-editor")).toHaveAttribute(
+    "data-vertex-edit-mode",
+    "insert",
+  );
   const selectedPolygon = layer.locator(`g[data-mask-id="${maskId}"] polygon`);
+  await selectedPolygon.click();
   const polygonPointCount = async () => {
     const points = await selectedPolygon.getAttribute("points");
     return points?.trim().split(/\s+/).filter(Boolean).length ?? 0;
