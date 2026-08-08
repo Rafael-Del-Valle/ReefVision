@@ -49,7 +49,9 @@ const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.6.0";
 
 export function App() {
   const queryClient = useQueryClient();
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
+    null,
+  );
   const [showCreate, setShowCreate] = useState(false);
   const [editorLaunch, setEditorLaunch] =
     useState<AnnotationLaunchState | null>(null);
@@ -123,7 +125,10 @@ export function App() {
     setShowOnboarding(false);
   }
 
-  const projectTabs: Array<{ id: Exclude<ProjectView, "system">; label: string }> = [
+  const projectTabs: Array<{
+    id: Exclude<ProjectView, "system">;
+    label: string;
+  }> = [
     { id: "gallery", label: "Images" },
     { id: "versions", label: "Versions" },
     { id: "training", label: "Training" },
@@ -150,7 +155,9 @@ export function App() {
             Help and onboarding
           </button>
           <div className="api-status" aria-live="polite">
-            <span className={`status-dot ${health.isSuccess ? "online" : ""}`} />
+            <span
+              className={`status-dot ${health.isSuccess ? "online" : ""}`}
+            />
             {health.isPending && "Checking API..."}
             {health.isError && "API unavailable"}
             {health.data && `Local API ${health.data.version}`}
@@ -252,7 +259,9 @@ export function App() {
                 <div>
                   <p className="eyebrow">Project settings</p>
                   <h2>{selectedProject.name}</h2>
-                  <p>{selectedProject.description || "No project description."}</p>
+                  <p>
+                    {selectedProject.description || "No project description."}
+                  </p>
                   <code>{selectedProject.storage_root}</code>
                 </div>
                 <button
@@ -403,7 +412,9 @@ export function App() {
                     setTemplate(event.target.value as "blank" | "octocoral")
                   }
                 >
-                  <option value="octocoral">Six-class octocoral template</option>
+                  <option value="octocoral">
+                    Six-class octocoral template
+                  </option>
                   <option value="blank">Blank class list</option>
                 </select>
               </label>

@@ -20,7 +20,9 @@ interface ClassificationWorkspaceProps {
   project: Project;
 }
 
-export function ClassificationWorkspace({ project }: ClassificationWorkspaceProps) {
+export function ClassificationWorkspace({
+  project,
+}: ClassificationWorkspaceProps) {
   const queryClient = useQueryClient();
   const [selectedImageId, setSelectedImageId] = useState("");
   const [labelSet, setLabelSet] = useState("species");
@@ -95,7 +97,10 @@ export function ClassificationWorkspace({ project }: ClassificationWorkspaceProp
     [imagesQuery.data?.items, selectedImageId],
   );
   const classNames = useMemo(
-    () => Object.fromEntries(project.label_classes.map((item) => [item.id, item.name])),
+    () =>
+      Object.fromEntries(
+        project.label_classes.map((item) => [item.id, item.name]),
+      ),
     [project.label_classes],
   );
 
@@ -199,7 +204,10 @@ export function ClassificationWorkspace({ project }: ClassificationWorkspaceProp
         </label>
         <label>
           Label set
-          <input value={labelSet} onChange={(event) => setLabelSet(event.target.value)} />
+          <input
+            value={labelSet}
+            onChange={(event) => setLabelSet(event.target.value)}
+          />
         </label>
         {selectedImage && (
           <img
@@ -319,12 +327,14 @@ export function ClassificationWorkspace({ project }: ClassificationWorkspaceProp
           disabled={!trainingDatasetId || trainingMutation.isPending}
           onClick={() => trainingMutation.mutate()}
         >
-          {trainingMutation.isPending ? "Queuing..." : "Launch classification training"}
+          {trainingMutation.isPending
+            ? "Queuing..."
+            : "Launch classification training"}
         </button>
         {trainingMutation.data && (
           <p className="annotation-helper">
-            Job {trainingMutation.data.id.slice(0, 8)} queued. Completed checkpoints are
-            registered automatically.
+            Job {trainingMutation.data.id.slice(0, 8)} queued. Completed
+            checkpoints are registered automatically.
           </p>
         )}
       </section>
@@ -347,16 +357,21 @@ export function ClassificationWorkspace({ project }: ClassificationWorkspaceProp
         </label>
         <button
           type="button"
-          disabled={!classifierId || !selectedImageId || inferenceMutation.isPending}
+          disabled={
+            !classifierId || !selectedImageId || inferenceMutation.isPending
+          }
           onClick={() => inferenceMutation.mutate()}
         >
-          {inferenceMutation.isPending ? "Queuing..." : "Classify selected image"}
+          {inferenceMutation.isPending
+            ? "Queuing..."
+            : "Classify selected image"}
         </button>
         <div className="annotation-selection-list">
           {(predictionsQuery.data ?? []).map((prediction) => (
             <div key={prediction.id} className="annotation-selection-row">
               <span>
-                #{prediction.rank} {classNames[prediction.label_class_id] ?? "Unknown"}{" "}
+                #{prediction.rank}{" "}
+                {classNames[prediction.label_class_id] ?? "Unknown"}{" "}
                 {(prediction.confidence * 100).toFixed(1)}%
               </span>
               <span>{prediction.status}</span>
@@ -365,7 +380,10 @@ export function ClassificationWorkspace({ project }: ClassificationWorkspaceProp
                   <button
                     type="button"
                     onClick={() =>
-                      reviewMutation.mutate({ id: prediction.id, action: "accept" })
+                      reviewMutation.mutate({
+                        id: prediction.id,
+                        action: "accept",
+                      })
                     }
                   >
                     Accept
@@ -374,7 +392,10 @@ export function ClassificationWorkspace({ project }: ClassificationWorkspaceProp
                     type="button"
                     className="secondary"
                     onClick={() =>
-                      reviewMutation.mutate({ id: prediction.id, action: "reject" })
+                      reviewMutation.mutate({
+                        id: prediction.id,
+                        action: "reject",
+                      })
                     }
                   >
                     Reject

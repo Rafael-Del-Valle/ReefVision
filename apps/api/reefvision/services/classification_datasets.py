@@ -148,7 +148,9 @@ class ClassificationDatasetService:
         image_ids = [item.image_id for item in items]
         images = {
             image.id: image
-            for image in self.session.scalars(select(ImageAsset).where(ImageAsset.id.in_(image_ids)))
+            for image in self.session.scalars(
+                select(ImageAsset).where(ImageAsset.id.in_(image_ids))
+            )
         }
         image_labels = self._labels_for_images(image_ids, payload.label_set)
         class_map = {
@@ -176,7 +178,9 @@ class ClassificationDatasetService:
                     continue
                 image = images.get(item.image_id)
                 if image is None or image.sha256 != item.image_sha256:
-                    raise ValidationError("Classification source image no longer matches its snapshot")
+                    raise ValidationError(
+                        "Classification source image no longer matches its snapshot"
+                    )
                 source = resolve_managed_project_path(self.settings, image.managed_path)
                 if not source.is_file():
                     raise ValidationError("Classification source image is missing")
@@ -187,8 +191,10 @@ class ClassificationDatasetService:
                             labels = image_labels.get(item.image_id, [])
                             if len(labels) != 1:
                                 raise ValidationError(
-                                    "Whole-image classification requires exactly one verified label "
-                                    f"in label set '{payload.label_set}' for {item.original_filename}"
+                                    "Whole-image classification requires exactly one "
+                                    "verified label "
+                                    f"in label set '{payload.label_set}' "
+                                    f"for {item.original_filename}"
                                 )
                             class_snapshot = class_map.get(labels[0].label_class_id)
                             if class_snapshot is None:

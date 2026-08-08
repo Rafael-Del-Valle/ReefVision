@@ -61,9 +61,7 @@ export function CenterlineMeasurementLayer({
       return getMaskMeasurementProfile(maskId, signal);
     },
     enabled:
-      maskId !== null &&
-      Boolean(selectedMask?.persisted) &&
-      !documentDirty,
+      maskId !== null && Boolean(selectedMask?.persisted) && !documentDirty,
     refetchOnWindowFocus: false,
     retry: false,
   });

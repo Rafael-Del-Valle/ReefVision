@@ -57,7 +57,9 @@ def process_classification_inference_job(
         )
         if len(images) != len(set(image_ids)):
             job.status = "failed"
-            job.error_message = "One or more classification images were not found in the model project"
+            job.error_message = (
+                "One or more classification images were not found in the model project"
+            )
             job.completed_at = datetime.now(UTC)
             session.commit()
             return False

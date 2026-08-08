@@ -154,7 +154,9 @@ class UltralyticsClassificationProvider:
         confidences = list(getattr(probabilities, "top5conf", []))[:top_k]
         names = dict(getattr(result, "names", {}))
         scores: list[ClassificationScore] = []
-        for rank, (index, confidence) in enumerate(zip(indices, confidences, strict=False), start=1):
+        for rank, (index, confidence) in enumerate(
+            zip(indices, confidences, strict=False), start=1
+        ):
             confidence_value = float(
                 confidence.item() if hasattr(confidence, "item") else confidence
             )

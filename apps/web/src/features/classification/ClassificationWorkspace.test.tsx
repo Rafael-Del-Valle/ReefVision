@@ -85,15 +85,13 @@ describe("ClassificationWorkspace", () => {
       page_size: 100,
       pages: 1,
     });
-    vi.mocked(api.getClassificationVersions).mockResolvedValue(
-      [
-        {
-          id: "version-1",
-          version_number: 1,
-          name: "Reviewed images",
-        },
-      ] as unknown as Awaited<ReturnType<typeof api.getClassificationVersions>>,
-    );
+    vi.mocked(api.getClassificationVersions).mockResolvedValue([
+      {
+        id: "version-1",
+        version_number: 1,
+        name: "Reviewed images",
+      },
+    ] as unknown as Awaited<ReturnType<typeof api.getClassificationVersions>>);
     vi.mocked(api.getClassificationDatasets).mockResolvedValue([]);
     vi.mocked(api.getClassifierModels).mockResolvedValue([]);
     vi.mocked(api.getImageClassificationLabels).mockResolvedValue([]);
@@ -103,7 +101,9 @@ describe("ClassificationWorkspace", () => {
   it("shows label, dataset, training, and inference sections", async () => {
     renderWorkspace();
 
-    expect(await screen.findByText("Image classification labels")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Image classification labels"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Classification dataset")).toBeInTheDocument();
     expect(screen.getByText("Ultralytics classifier")).toBeInTheDocument();
     expect(screen.getByText("Top-k predictions")).toBeInTheDocument();
