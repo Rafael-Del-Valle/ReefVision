@@ -1,6 +1,9 @@
 import { getApiBaseUrl } from "../../runtime";
 import type { JobRecord } from "../../api/client";
 
+export type VideoTrackerConfig = "bytetrack.yaml" | "botsort.yaml";
+export type VideoExportFormat = "csv" | "mot" | "json";
+
 export interface TrackingModelRecord {
   id: string;
   project_id: string;
@@ -95,6 +98,64 @@ export interface VideoTrackAnalytics {
   occupancy_grid: Record<string, number>;
 }
 
+export interface VideoZone {
+  name: string;
+  x_min: number;
+  y_min: number;
+  x_max: number;
+  y_max: number;
+}
+
+export interface VideoBehaviorTrackAnalytics {
+  track_id: string;
+  track_number: number;
+  label_class_id: string;
+  first_frame: number;
+  last_frame: number;
+  observed_frame_count: number;
+  duration_seconds: number;
+  distance_pixels: number;
+  mean_speed_pixels_per_second: number;
+  maximum_speed_pixels_per_second: number;
+  active_time_seconds: number;
+  inactive_time_seconds: number;
+  distance_physical: number | null;
+  mean_speed_physical_per_second: number | null;
+  maximum_speed_physical_per_second: number | null;
+  physical_unit: string | null;
+  zone_time_seconds: Record<string, number>;
+}
+
+export interface VideoFrameSchoolAnalytics {
+  frame: number;
+  timestamp_seconds: number;
+  active_track_count: number;
+  mean_nearest_neighbor_pixels: number | null;
+  school_spread_pixels: number | null;
+  mean_nearest_neighbor_physical: number | null;
+  school_spread_physical: number | null;
+}
+
+export interface VideoHeatmapCell {
+  column: number;
+  row: number;
+  observation_count: number;
+  occupancy_seconds: number;
+}
+
+export interface VideoBehaviorAnalytics {
+  video_id: string;
+  fps: number;
+  distance_per_pixel: number | null;
+  physical_unit: string | null;
+  tracks: VideoBehaviorTrackAnalytics[];
+  school_by_frame: VideoFrameSchoolAnalytics[];
+  heatmap_bins_x: number;
+  heatmap_bins_y: number;
+  heatmap: VideoHeatmapCell[];
+  warnings: string[];
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
@@ -127,6 +188,13 @@ export function videoFrameUrl(videoId: string, frame: number): string {
   return `${getApiBaseUrl()}/videos/${encodeURIComponent(videoId)}/frames/${frame}`;
 }
 
+export function videoExportUrl(
+  videoId: string,
+  format: VideoExportFormat,
+): string {
+  return `${getApiBaseUrl()}/videos/${encodeURIComponent(videoId)}/exports/${format}`;
+}
+
 export function getVideos(
   projectId: string,
   signal?: AbortSignal,
@@ -146,6 +214,21 @@ export function importVideo(
   return request<VideoAssetRecord>(
     `/projects/${encodeURIComponent(projectId)}/imports/videos`,
     { method: "POST", body: form },
+  );
+}
+
+export function calibrateVideo(
+  videoId: string,
+  payload: {
+    distance_per_pixel: number;
+    unit: string;
+    source: string;
+    notes?: string | null;
+  },
+): Promise<VideoAssetRecord> {
+  return request<VideoAssetRecord>(
+    `/videos/${encodeURIComponent(videoId)}/calibration`,
+    { method: "PUT", body: JSON.stringify(payload) },
   );
 }
 
@@ -231,6 +314,21 @@ export function getVideoTrackAnalytics(
   );
 }
 
+export function analyzeVideo(
+  videoId: string,
+  payload: {
+    zones: VideoZone[];
+    heatmap_bins_x: number;
+    heatmap_bins_y: number;
+    activity_speed_threshold_pixels_per_second: number;
+  },
+): Promise<VideoBehaviorAnalytics> {
+  return request<VideoBehaviorAnalytics>(
+    `/videos/${encodeURIComponent(videoId)}/analytics`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
 export async function getTrackingModels(
   projectId: string,
   signal?: AbortSignal,
@@ -252,7 +350,7 @@ export function createVideoTrackingJob(
   videoId: string,
   payload: {
     model_id: string;
-    tracker: string;
+    tracker: VideoTrackerConfig;
     confidence: number;
     iou: number;
     device: string;
