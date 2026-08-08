@@ -8,7 +8,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from reefvision.db.models import Annotation, ImageAsset, LabelClass, MaskAnnotation
+from reefvision.db.models import (
+    Annotation,
+    ImageAsset,
+    LabelClass,
+    MaskAnnotation,
+)
 
 
 CLASS_MAPPING = {
