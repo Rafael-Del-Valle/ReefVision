@@ -1,0 +1,37 @@
+name: M4 Fixture Fix
+
+on:
+  push:
+    branches:
+      - integration/milestone4-measurements
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix reviewed snapshot fixture
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('apps/api/reefvision/tests/test_coral_measurements_phase4.py')
+          text = path.read_text(encoding='utf-8')
+          old = '"annotation_status": "annotated"'
+          new = '"annotation_status": "reviewed"'
+          if old not in text:
+              raise SystemExit('Expected annotation status fixture not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/api/reefvision/tests/test_coral_measurements_phase4.py
+          git commit -m 'Use reviewed status in measurement snapshot fixture'
+          git push
