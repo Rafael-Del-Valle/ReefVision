@@ -1,4 +1,4 @@
-"""Managed video import, metadata inspection, extraction, and frame access."""
+"""Managed video import, metadata inspection, extraction, frame access, and calibration."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from reefvision.config import Settings
 from reefvision.db.models import Job, Project, VideoAsset
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.jobs import JobResponse
-from reefvision.schemas.videos import VideoAssetResponse, VideoExtractRequest
+from reefvision.schemas.videos import VideoAssetResponse, VideoCalibrationUpdate, VideoExtractRequest
 from reefvision.storage.projects import resolve_managed_project_path
 
 SUPPORTED_VIDEO_EXTENSIONS = {".avi", ".m4v", ".mkv", ".mov", ".mp4", ".webm"}
@@ -157,6 +157,21 @@ class VideoAssetService:
             if managed_path is not None:
                 managed_path.unlink(missing_ok=True)
             raise
+
+    def update_calibration(
+        self,
+        video_id: str,
+        payload: VideoCalibrationUpdate,
+    ) -> VideoAssetResponse:
+        video = self.get_record(video_id)
+        video.metadata_json = {
+            **dict(video.metadata_json or {}),
+            "calibration": payload.model_dump(mode="json"),
+        }
+        video.revision += 1
+        self.session.commit()
+        self.session.refresh(video)
+        return VideoAssetResponse.model_validate(video)
 
     def content_path(self, video_id: str) -> Path:
         video = self.get_record(video_id)
