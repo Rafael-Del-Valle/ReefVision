@@ -18,16 +18,65 @@ jobs:
       - name: Lint and format Milestone 10 Python
         run: |
           python -m ruff check \
+            apps/api/migrations/versions/0024_workflow_execution.py \
             apps/api/reefvision/api/routes/workflow_graphs.py \
+            apps/api/reefvision/db/models/workflow_execution.py \
+            apps/api/reefvision/domain/enums.py \
+            apps/api/reefvision/jobs/workflow.py \
+            apps/api/reefvision/jobs/worker.py \
+            apps/api/reefvision/schemas/workflow_execution.py \
             apps/api/reefvision/schemas/workflow_graphs.py \
+            apps/api/reefvision/services/jobs.py \
+            apps/api/reefvision/services/workflow_execution.py \
             apps/api/reefvision/services/workflow_graphs.py \
             apps/api/reefvision/services/workflow_node_registry.py \
+            apps/api/reefvision/tests/test_workflow_execution_phase10.py \
             apps/api/reefvision/tests/test_workflow_graphs_phase10.py
           python -m ruff format --check \
+            apps/api/migrations/versions/0024_workflow_execution.py \
             apps/api/reefvision/api/routes/workflow_graphs.py \
+            apps/api/reefvision/db/models/workflow_execution.py \
+            apps/api/reefvision/domain/enums.py \
+            apps/api/reefvision/jobs/workflow.py \
+            apps/api/reefvision/jobs/worker.py \
+            apps/api/reefvision/schemas/workflow_execution.py \
             apps/api/reefvision/schemas/workflow_graphs.py \
+            apps/api/reefvision/services/jobs.py \
+            apps/api/reefvision/services/workflow_execution.py \
             apps/api/reefvision/services/workflow_graphs.py \
             apps/api/reefvision/services/workflow_node_registry.py \
+            apps/api/reefvision/tests/test_workflow_execution_phase10.py \
             apps/api/reefvision/tests/test_workflow_graphs_phase10.py
-      - name: Run Milestone 10 workflow graph tests
-        run: python -m pytest apps/api/reefvision/tests/test_workflow_graphs_phase10.py -q
+      - name: Run Milestone 10 workflow tests
+        run: >-
+          python -m pytest
+          apps/api/reefvision/tests/test_workflow_graphs_phase10.py
+          apps/api/reefvision/tests/test_workflow_execution_phase10.py
+          -q
+      - name: Verify 0024 migration roundtrip
+        shell: bash
+        run: |
+          export REEFVISION_DATA_ROOT="$RUNNER_TEMP/reefvision-m10"
+          mkdir -p "$REEFVISION_DATA_ROOT"
+          python -m alembic -c apps/api/alembic.ini upgrade head
+          python -m alembic -c apps/api/alembic.ini downgrade 0023
+          python -m alembic -c apps/api/alembic.ini upgrade head
+          python - <<'PY'
+          from alembic.config import Config
+          from alembic.script import ScriptDirectory
+          scripts = ScriptDirectory.from_config(Config('apps/api/alembic.ini'))
+          assert scripts.get_heads() == ['0024'], scripts.get_heads()
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+      - name: Check workflow desktop workspace
+        working-directory: apps/web
+        run: |
+          npx prettier --check src/features/workflows
+          npm run typecheck
