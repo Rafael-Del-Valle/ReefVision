@@ -53,6 +53,7 @@ class MaskAnnotation(Base):
     x_max: Mapped[float | None] = mapped_column(Float, nullable=True)
     y_max: Mapped[float | None] = mapped_column(Float, nullable=True)
     area_pixels: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    measurement_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     source_type: Mapped[str] = mapped_column(String(30), nullable=False, default="human")
     provenance_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="verified")
