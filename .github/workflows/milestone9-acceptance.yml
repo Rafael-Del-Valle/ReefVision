@@ -24,8 +24,10 @@ jobs:
             apps/api/reefvision/jobs/project_exchange.py \
             apps/api/reefvision/schemas/project_exchange.py \
             apps/api/reefvision/services/project_exchange.py \
+            apps/api/reefvision/services/project_exchange_import.py \
             apps/api/reefvision/services/project_exchange_inspection.py \
-            apps/api/reefvision/tests/test_project_exchange_phase9.py
+            apps/api/reefvision/tests/test_project_exchange_phase9.py \
+            apps/api/reefvision/tests/test_project_exchange_roundtrip_phase9.py
           python -m ruff format --check \
             apps/api/migrations/versions/0023_project_exchange_packages.py \
             apps/api/reefvision/api/routes/project_exchange.py \
@@ -33,10 +35,29 @@ jobs:
             apps/api/reefvision/jobs/project_exchange.py \
             apps/api/reefvision/schemas/project_exchange.py \
             apps/api/reefvision/services/project_exchange.py \
+            apps/api/reefvision/services/project_exchange_import.py \
             apps/api/reefvision/services/project_exchange_inspection.py \
-            apps/api/reefvision/tests/test_project_exchange_phase9.py
+            apps/api/reefvision/tests/test_project_exchange_phase9.py \
+            apps/api/reefvision/tests/test_project_exchange_roundtrip_phase9.py
       - name: Run Milestone 9 interoperability tests
-        run: python -m pytest apps/api/reefvision/tests/test_project_exchange_phase9.py -q
+        run: >-
+          python -m pytest
+          apps/api/reefvision/tests/test_project_exchange_phase9.py
+          apps/api/reefvision/tests/test_project_exchange_roundtrip_phase9.py
+          -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+      - name: Check interoperability desktop workspace
+        working-directory: apps/web
+        run: |
+          npx prettier --check src/features/interoperability
+          npm run typecheck
       - name: Verify 0023 migration roundtrip
         shell: bash
         run: |
