@@ -27,7 +27,9 @@ function sortedKeyframes(items: VideoTrackKeyframe[]): VideoTrackKeyframe[] {
   return [...items].sort((first, second) => first.frame - second.frame);
 }
 
-export function VideoTrackingWorkspace({ project }: VideoTrackingWorkspaceProps) {
+export function VideoTrackingWorkspace({
+  project,
+}: VideoTrackingWorkspaceProps) {
   const queryClient = useQueryClient();
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [selectedVideoId, setSelectedVideoId] = useState("");
@@ -126,7 +128,9 @@ export function VideoTrackingWorkspace({ project }: VideoTrackingWorkspaceProps)
   const saveTrackMutation = useMutation({
     mutationFn: () => {
       if (!selectedVideoId || !labelClassId || keyframes.length === 0) {
-        throw new Error("A video, class, and at least one keyframe are required");
+        throw new Error(
+          "A video, class, and at least one keyframe are required",
+        );
       }
       const normalized = sortedKeyframes(keyframes);
       if (selectedTrack) {
@@ -149,11 +153,15 @@ export function VideoTrackingWorkspace({ project }: VideoTrackingWorkspaceProps)
     onSuccess: async (track) => {
       setSelectedTrackId(track.id);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["video-tracks", selectedVideoId] }),
+        queryClient.invalidateQueries({
+          queryKey: ["video-tracks", selectedVideoId],
+        }),
         queryClient.invalidateQueries({
           queryKey: ["video-track-interpolation", track.id],
         }),
-        queryClient.invalidateQueries({ queryKey: ["video-track-analytics", track.id] }),
+        queryClient.invalidateQueries({
+          queryKey: ["video-track-analytics", track.id],
+        }),
       ]);
     },
   });
@@ -267,7 +275,9 @@ export function VideoTrackingWorkspace({ project }: VideoTrackingWorkspaceProps)
                 type="number"
                 min={1}
                 value={everyNFrames}
-                onChange={(event) => setEveryNFrames(Number(event.target.value))}
+                onChange={(event) =>
+                  setEveryNFrames(Number(event.target.value))
+                }
               />
             </label>
             <button
@@ -275,7 +285,9 @@ export function VideoTrackingWorkspace({ project }: VideoTrackingWorkspaceProps)
               disabled={extractionMutation.isPending}
               onClick={() => extractionMutation.mutate()}
             >
-              {extractionMutation.isPending ? "Queuing..." : "Extract review frames"}
+              {extractionMutation.isPending
+                ? "Queuing..."
+                : "Extract review frames"}
             </button>
           </>
         )}
@@ -308,13 +320,22 @@ export function VideoTrackingWorkspace({ project }: VideoTrackingWorkspaceProps)
                 <img
                   src={videoFrameUrl(selectedVideo.id, frameIndex)}
                   alt={`Frame ${frameIndex}`}
-                  style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "contain",
+                  }}
                 />
                 {overlayFrame && (
                   <svg
                     viewBox={`0 0 ${selectedVideo.width_px} ${selectedVideo.height_px}`}
                     preserveAspectRatio="none"
-                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      width: "100%",
+                      height: "100%",
+                    }}
                   >
                     <rect
                       x={overlayFrame.bbox[0]}
@@ -375,7 +396,9 @@ export function VideoTrackingWorkspace({ project }: VideoTrackingWorkspaceProps)
           <select
             value={interpolation}
             onChange={(event) =>
-              setInterpolation(event.target.value === "hold" ? "hold" : "linear")
+              setInterpolation(
+                event.target.value === "hold" ? "hold" : "linear",
+              )
             }
           >
             <option value="linear">Linear</option>
@@ -456,7 +479,9 @@ export function VideoTrackingWorkspace({ project }: VideoTrackingWorkspaceProps)
                       className="danger-ghost"
                       onClick={() =>
                         setKeyframes((current) =>
-                          current.filter((_item, itemIndex) => itemIndex !== index),
+                          current.filter(
+                            (_item, itemIndex) => itemIndex !== index,
+                          ),
                         )
                       }
                     >
@@ -505,38 +530,48 @@ export function VideoTrackingWorkspace({ project }: VideoTrackingWorkspaceProps)
         </label>
         <button
           type="button"
-          disabled={!selectedVideoId || !trackingModelId || trackingMutation.isPending}
+          disabled={
+            !selectedVideoId || !trackingModelId || trackingMutation.isPending
+          }
           onClick={() => trackingMutation.mutate()}
         >
-          {trackingMutation.isPending ? "Queuing..." : "Track fish through video"}
+          {trackingMutation.isPending
+            ? "Queuing..."
+            : "Track fish through video"}
         </button>
         {trackingMutation.data && (
           <p className="annotation-helper">
-            Tracking job {trackingMutation.data.id.slice(0, 8)} queued. Machine tracks
-            remain editable and must be reviewed.
+            Tracking job {trackingMutation.data.id.slice(0, 8)} queued. Machine
+            tracks remain editable and must be reviewed.
           </p>
         )}
         {analyticsQuery.data && (
           <div className="annotation-selection-list">
             <div className="annotation-selection-row">
               <strong>Path length</strong>
-              <span>{analyticsQuery.data.path_length_pixels.toFixed(2)} px</span>
+              <span>
+                {analyticsQuery.data.path_length_pixels.toFixed(2)} px
+              </span>
             </div>
             <div className="annotation-selection-row">
               <strong>Mean speed</strong>
               <span>
-                {analyticsQuery.data.mean_speed_pixels_per_second.toFixed(2)} px/s
+                {analyticsQuery.data.mean_speed_pixels_per_second.toFixed(2)}{" "}
+                px/s
               </span>
             </div>
             <div className="annotation-selection-row">
               <strong>Maximum speed</strong>
               <span>
-                {analyticsQuery.data.maximum_speed_pixels_per_second.toFixed(2)} px/s
+                {analyticsQuery.data.maximum_speed_pixels_per_second.toFixed(2)}{" "}
+                px/s
               </span>
             </div>
             <div className="annotation-selection-row">
               <strong>Displacement</strong>
-              <span>{analyticsQuery.data.displacement_pixels.toFixed(2)} px</span>
+              <span>
+                {analyticsQuery.data.displacement_pixels.toFixed(2)} px
+              </span>
             </div>
           </div>
         )}

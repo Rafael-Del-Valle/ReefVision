@@ -7,7 +7,8 @@ import { VideoTrackingWorkspace } from "./VideoTrackingWorkspace";
 import * as api from "./videoApi";
 
 vi.mock("./videoApi", async () => {
-  const actual = await vi.importActual<typeof import("./videoApi")>("./videoApi");
+  const actual =
+    await vi.importActual<typeof import("./videoApi")>("./videoApi");
   return {
     ...actual,
     getVideos: vi.fn(),

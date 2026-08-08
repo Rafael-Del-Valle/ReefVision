@@ -196,10 +196,13 @@ export function updateVideoTrack(
     status: string;
   },
 ): Promise<VideoTrackRecord> {
-  return request<VideoTrackRecord>(`/video-tracks/${encodeURIComponent(trackId)}`, {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
+  return request<VideoTrackRecord>(
+    `/video-tracks/${encodeURIComponent(trackId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export function deleteVideoTrack(trackId: string): Promise<void> {
