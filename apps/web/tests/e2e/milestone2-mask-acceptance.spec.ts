@@ -113,17 +113,24 @@ async function mountBuiltApp(page: Parameters<typeof test>[0]["page"]) {
   const assets = await readdir(assetDirectory);
   const scriptName = assets.find((name) => name.endsWith(".js"));
   const styleName = assets.find((name) => name.endsWith(".css"));
-  if (!scriptName || !styleName) throw new Error("Vite build assets are missing");
+  if (!scriptName || !styleName)
+    throw new Error("Vite build assets are missing");
   const [script, style] = await Promise.all([
     readFile(path.join(assetDirectory, scriptName), "utf8"),
     readFile(path.join(assetDirectory, styleName), "utf8"),
   ]);
   await page.route("http://127.0.0.1:8000/", async (route) => {
-    await route.fulfill({ contentType: "text/html", body: '<main id="root"></main>' });
+    await route.fulfill({
+      contentType: "text/html",
+      body: '<main id="root"></main>',
+    });
   });
   await page.goto("http://127.0.0.1:8000/");
   await page.evaluate(() => {
-    window.localStorage.setItem("reefvision.onboarding.dismissed.1.6.0", "true");
+    window.localStorage.setItem(
+      "reefvision.onboarding.dismissed.1.6.0",
+      "true",
+    );
   });
   await page.addStyleTag({ content: style });
   await page.addScriptTag({ content: script, type: "module" });
@@ -235,7 +242,10 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
       await route.fulfill({ json: project });
       return;
     }
-    if (url.pathname.endsWith(`/projects/${project.id}/images`) && method === "GET") {
+    if (
+      url.pathname.endsWith(`/projects/${project.id}/images`) &&
+      method === "GET"
+    ) {
       await route.fulfill({
         json: {
           items: [sessions["image-1"].image, sessions["image-2"].image],
@@ -248,7 +258,9 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
       return;
     }
 
-    const annotationMatch = url.pathname.match(/\/images\/(image-[12])\/annotations$/);
+    const annotationMatch = url.pathname.match(
+      /\/images\/(image-[12])\/annotations$/,
+    );
     if (annotationMatch) {
       const imageId = annotationMatch[1];
       const session = sessions[imageId];
@@ -277,7 +289,9 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
       session.image = {
         ...session.image,
         annotation_revision: nextRevision,
-        annotation_status: payload.annotation_status as ReturnType<typeof makeImage>["annotation_status"],
+        annotation_status: payload.annotation_status as ReturnType<
+          typeof makeImage
+        >["annotation_status"],
       };
       session.counts_by_class = maskCounts(session.mask_annotations);
       await route.fulfill({
@@ -291,7 +305,9 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
       return;
     }
 
-    const rasterEditMatch = url.pathname.match(/\/images\/(image-[12])\/raster-mask-edits$/);
+    const rasterEditMatch = url.pathname.match(
+      /\/images\/(image-[12])\/raster-mask-edits$/,
+    );
     if (rasterEditMatch && method === "POST") {
       const imageId = rasterEditMatch[1];
       const session = sessions[imageId];
@@ -303,7 +319,9 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
       };
       rasterEditPayloads.push(payload as unknown as Record<string, unknown>);
       const existing = payload.mask_annotation_id
-        ? session.mask_annotations.find((mask) => mask.id === payload.mask_annotation_id)
+        ? session.mask_annotations.find(
+            (mask) => mask.id === payload.mask_annotation_id,
+          )
         : undefined;
       const revision = (existing?.revision ?? 0) + 1;
       const maskId = existing?.id ?? "raster-mask-1";
@@ -338,7 +356,9 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
         annotation_status: "in_progress",
       };
       session.counts_by_class = maskCounts(session.mask_annotations);
-      await route.fulfill({ json: { image: session.image, mask_annotation: raster } });
+      await route.fulfill({
+        json: { image: session.image, mask_annotation: raster },
+      });
       return;
     }
 
@@ -378,47 +398,69 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
   }
   await page.getByTestId("polygon-draft-point-0").click();
   await expect(layer.locator("g[data-mask-id]")).toHaveCount(1);
-  const maskId = await layer.locator("g[data-mask-id]").getAttribute("data-mask-id");
+  const maskId = await layer
+    .locator("g[data-mask-id]")
+    .getAttribute("data-mask-id");
   if (!maskId) throw new Error("Created polygon did not receive an ID");
 
   await page.getByTestId("activate-mask-select-tool").click();
   await layer.locator(`g[data-mask-id="${maskId}"] polygon`).click();
-  await expect(page.locator(`[data-testid^="mask-vertex-${maskId}-"]`)).toHaveCount(4);
+  await expect(
+    page.locator(`[data-testid^="mask-vertex-${maskId}-"]`),
+  ).toHaveCount(4);
 
   const firstVertex = page.getByTestId(`mask-vertex-${maskId}-0`);
   const vertexBox = await firstVertex.boundingBox();
   if (!vertexBox) throw new Error("Polygon vertex geometry is unavailable");
-  await page.mouse.move(vertexBox.x + vertexBox.width / 2, vertexBox.y + vertexBox.height / 2);
+  await page.mouse.move(
+    vertexBox.x + vertexBox.width / 2,
+    vertexBox.y + vertexBox.height / 2,
+  );
   await page.mouse.down();
   await page.mouse.move(vertexBox.x + 35, vertexBox.y + 25, { steps: 5 });
   await page.mouse.up();
 
   await page.getByTestId("insert-polygon-node").click();
-  const polygonBox = await layer.locator(`g[data-mask-id="${maskId}"] polygon`).boundingBox();
+  const polygonBox = await layer
+    .locator(`g[data-mask-id="${maskId}"] polygon`)
+    .boundingBox();
   if (!polygonBox) throw new Error("Polygon geometry is unavailable");
   await page.mouse.click(polygonBox.x + polygonBox.width / 2, polygonBox.y + 2);
-  await expect(page.locator(`[data-testid^="mask-vertex-${maskId}-"]`)).toHaveCount(5);
+  await expect(
+    page.locator(`[data-testid^="mask-vertex-${maskId}-"]`),
+  ).toHaveCount(5);
 
   await page.getByTestId("delete-polygon-node").click();
   await page.locator(`[data-testid^="mask-vertex-${maskId}-"]`).last().click();
-  await expect(page.locator(`[data-testid^="mask-vertex-${maskId}-"]`)).toHaveCount(4);
+  await expect(
+    page.locator(`[data-testid^="mask-vertex-${maskId}-"]`),
+  ).toHaveCount(4);
 
   await page.getByRole("button", { name: "Muricea Open" }).click();
-  await expect(page.locator(".annotation-selection-row strong")).toHaveText("Muricea Open");
+  await expect(page.locator(".annotation-selection-row strong")).toHaveText(
+    "Muricea Open",
+  );
   await page.getByRole("button", { name: "Undo" }).click();
-  await expect(page.locator(".annotation-selection-row strong")).toHaveText("Muricea Closed");
+  await expect(page.locator(".annotation-selection-row strong")).toHaveText(
+    "Muricea Closed",
+  );
   await page.getByRole("button", { name: "Redo" }).click();
-  await expect(page.locator(".annotation-selection-row strong")).toHaveText("Muricea Open");
+  await expect(page.locator(".annotation-selection-row strong")).toHaveText(
+    "Muricea Open",
+  );
 
-  const saveButton = page.getByTestId("mask-workspace").getByRole("button", { name: "Save now" });
+  const saveButton = page
+    .getByTestId("mask-workspace")
+    .getByRole("button", { name: "Save now" });
   await expect(saveButton).toBeEnabled();
   await saveButton.click();
-  await expect
-    .poll(() => polygonSavePayloads.length)
-    .toBeGreaterThan(0);
+  await expect.poll(() => polygonSavePayloads.length).toBeGreaterThan(0);
   expect(
-    (polygonSavePayloads.at(-1)?.mask_annotations as Array<{ label_class_id: string }>)[0]
-      .label_class_id,
+    (
+      polygonSavePayloads.at(-1)?.mask_annotations as Array<{
+        label_class_id: string;
+      }>
+    )[0].label_class_id,
   ).toBe("class-2");
 
   await page.getByLabel("Annotation type").selectOption("raster");
@@ -430,27 +472,30 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
   await page.mouse.down();
   await page.mouse.move(brushBox.x + 220, brushBox.y + 180, { steps: 8 });
   await page.mouse.up();
-  await expect
-    .poll(() => rasterEditPayloads.length)
-    .toBe(1);
+  await expect.poll(() => rasterEditPayloads.length).toBe(1);
   await expect(page.getByRole("button", { name: "Erase" })).toBeEnabled();
   await page.getByRole("button", { name: "Erase" }).click();
   await page.mouse.move(brushBox.x + 160, brushBox.y + 140);
   await page.mouse.down();
   await page.mouse.move(brushBox.x + 190, brushBox.y + 155, { steps: 4 });
   await page.mouse.up();
-  await expect
-    .poll(() => rasterEditPayloads.length)
-    .toBe(2);
-  expect(rasterEditPayloads.map((payload) => payload.mode)).toEqual(["paint", "erase"]);
+  await expect.poll(() => rasterEditPayloads.length).toBe(2);
+  expect(rasterEditPayloads.map((payload) => payload.mode)).toEqual([
+    "paint",
+    "erase",
+  ]);
   expect(rasterEditPayloads[1].mask_annotation_id).toBe("raster-mask-1");
 
   await page.getByLabel("Annotation type").selectOption("boxes");
   await expect(page.getByTestId("annotation-editor")).toBeVisible();
   await page.keyboard.press("d");
-  await expect(page.getByRole("heading", { name: "swiftia-day90.png" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "swiftia-day90.png" }),
+  ).toBeVisible();
   await page.keyboard.press("a");
-  await expect(page.getByRole("heading", { name: "swiftia-day0.png" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "swiftia-day0.png" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Back to gallery" }).click();
 
   await page.goto("about:blank");
@@ -462,8 +507,12 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
   await expect(page.locator(`g[data-mask-id="${maskId}"]`)).toHaveCount(1);
   await page.getByTestId("activate-mask-select-tool").click();
   await page.locator(`g[data-mask-id="${maskId}"] polygon`).click();
-  await expect(page.locator(".annotation-selection-row strong")).toHaveText("Muricea Open");
+  await expect(page.locator(".annotation-selection-row strong")).toHaveText(
+    "Muricea Open",
+  );
 
   await page.getByLabel("Annotation type").selectOption("raster");
-  await expect(page.getByRole("button", { name: /Muricea Closed \| r2/ })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Muricea Closed \| r2/ }),
+  ).toBeVisible();
 });
