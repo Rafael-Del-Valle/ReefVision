@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import BackupRecord, ImageAsset, Job, QualityControlRun
+from reefvision.jobs.advanced_depth import process_advanced_depth_job
 from reefvision.jobs.backups import process_backup_job
 from reefvision.jobs.classification_inference import process_classification_inference_job
 from reefvision.jobs.classification_training import process_classification_training_job
@@ -141,6 +142,8 @@ def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session
             return process_video_extract_job(settings, factory, job_id)
         if job_type == "video_tracking":
             return process_video_tracking_job(settings, factory, job_id)
+        if job_type == "advanced_depth":
+            return process_advanced_depth_job(settings, factory, job_id)
 
         message = f"Unsupported queued job type: {job_type}"
         _fail_job(factory, job_id, message)
