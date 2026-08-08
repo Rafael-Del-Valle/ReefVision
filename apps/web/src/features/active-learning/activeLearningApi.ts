@@ -4,7 +4,8 @@ export type ActiveLearningStrategy =
   | "hybrid"
   | "uncertainty"
   | "rare_class"
-  | "quality";
+  | "quality"
+  | "random";
 
 export interface ActiveLearningRoundRecord {
   id: string;
@@ -77,6 +78,7 @@ export function createActiveLearningRound(
     strategy: ActiveLearningStrategy;
     requested_size: number;
     model_ids?: string[];
+    random_seed?: number;
   },
 ): Promise<ActiveLearningRoundRecord> {
   return request<ActiveLearningRoundRecord>(
