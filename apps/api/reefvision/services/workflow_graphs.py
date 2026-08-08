@@ -1,4 +1,4 @@
-"""Validate typed workflow graphs and produce non-executing dry-run plans."""
+"""Validate typed workflow graphs and produce execution-aware dry-run plans."""
 
 from __future__ import annotations
 
@@ -36,16 +36,16 @@ _ACTIONS: dict[str, str] = {
     "dataset_version_source": "Load one immutable dataset version and its image membership.",
     "registered_model_source": "Resolve one registered project model and verify its checkpoint metadata.",
     "project_video_source": "Resolve one managed source video.",
-    "verified_masks_source": "Read existing non-deleted mask annotations.",
-    "detection_inference": "Queue the existing detector inference job for the resolved images.",
-    "segmentation_inference": "Queue the existing segmentation inference job for the resolved images.",
-    "classification_inference": "Queue the existing top-k classification inference job.",
+    "verified_masks_source": "Read existing non-deleted verified mask annotations.",
+    "detection_inference": "Run the existing detector inference operation for the resolved images.",
+    "segmentation_inference": "Run registered segmentation inference for the resolved images.",
+    "classification_inference": "Run existing top-k classification inference.",
     "detection_review_gate": "Pause until detection proposals are reviewed by a human.",
     "mask_review_gate": "Pause until mask proposals are reviewed by a human.",
     "classification_review_gate": "Pause until class predictions are reviewed by a human.",
     "mask_measurements": "Calculate Phase 4 measurements and create the selected table export.",
-    "video_tracking": "Queue the existing detector-plus-tracker video job.",
-    "project_exchange_export": "Queue a Phase 9 checksummed project exchange export.",
+    "video_tracking": "Run existing detector-plus-tracker video tracking.",
+    "project_exchange_export": "Build a Phase 9 checksummed project exchange export inline.",
 }
 
 
@@ -217,7 +217,6 @@ class WorkflowGraphService:
         incoming: dict[tuple[str, str], list[WorkflowEdge]] = defaultdict(list)
         outgoing_nodes: dict[str, set[str]] = defaultdict(set)
         indegree: dict[str, int] = {node_id: 0 for node_id in nodes}
-        valid_edge_types: dict[str, WorkflowDataType] = {}
 
         for edge in graph.edges:
             source = nodes.get(edge.source_node_id)
@@ -273,9 +272,7 @@ class WorkflowGraphService:
                 )
                 continue
             compatible = [
-                item
-                for item in source_port.accepted_types
-                if item in target_port.accepted_types
+                item for item in source_port.accepted_types if item in target_port.accepted_types
             ]
             if not compatible:
                 issues.append(
@@ -293,7 +290,6 @@ class WorkflowGraphService:
                 )
                 continue
             incoming[(target.node_id, target_port.port_id)].append(edge)
-            valid_edge_types[edge.edge_id] = compatible[0]
             if target.node_id not in outgoing_nodes[source.node_id]:
                 outgoing_nodes[source.node_id].add(target.node_id)
                 indegree[target.node_id] += 1
@@ -369,7 +365,7 @@ class WorkflowGraphService:
                 self._issue(
                     "error",
                     "cycle_detected",
-                    "Workflow graphs must be acyclic in the Phase 10 foundation",
+                    "Workflow graphs must be acyclic",
                 )
             )
             topological_order = []
@@ -398,9 +394,7 @@ class WorkflowGraphService:
                 executable=False,
                 issues=validation.issues,
                 steps=[],
-                execution_blocker=(
-                    "Graph validation failed. Phase 10 never executes invalid graphs."
-                ),
+                execution_blocker="Graph validation failed. Invalid graphs are never executed.",
             )
 
         nodes = {node.node_id: node for node in graph.nodes}
@@ -408,9 +402,12 @@ class WorkflowGraphService:
         for edge in graph.edges:
             edge_by_target[edge.target_node_id].append(edge)
         steps: list[WorkflowPlanStep] = []
+        blocked_nodes: list[str] = []
         for order, node_id in enumerate(validation.topological_order, start=1):
             node = nodes[node_id]
             definition = self.registry[node.node_type]
+            if not definition.executable:
+                blocked_nodes.append(f"{node.node_id} ({definition.display_name})")
             source_definitions = {
                 edge.edge_id: self.registry[nodes[edge.source_node_id].node_type]
                 for edge in edge_by_target.get(node_id, [])
@@ -441,23 +438,26 @@ class WorkflowGraphService:
                     node_type=node.node_type,
                     display_name=definition.display_name,
                     execution_state=definition.execution_state,
+                    executable=definition.executable,
                     parameters={**definition.optional_parameters, **node.parameters},
                     input_bindings=bindings,
                     output_types={
-                        port.port_id: port.accepted_types
-                        for port in definition.output_ports
+                        port.port_id: port.accepted_types for port in definition.output_ports
                     },
                     action=_ACTIONS[node.node_type],
                 )
             )
+        executable = not blocked_nodes
         return WorkflowGraphPlanResponse(
             valid=True,
             graph_id=graph.graph_id,
-            executable=False,
+            executable=executable,
             issues=validation.issues,
             steps=steps,
             execution_blocker=(
-                "Phase 10 defines and validates graph semantics only. "
-                "No graph executor, scheduling engine, or automatic review-gate continuation is enabled."
+                None
+                if executable
+                else "Workflow contains nodes without execution adapters: "
+                + ", ".join(blocked_nodes)
             ),
         )
