@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from reefvision.api.routes.annotation_imports import router as annotation_imports_router
 from reefvision.api.routes.annotations import router as annotations_router
 from reefvision.api.routes.assist import router as assist_router
 from reefvision.api.routes.backups import router as backups_router
@@ -35,6 +36,7 @@ api_router.include_router(projects_router)
 api_router.include_router(class_operations_router)
 api_router.include_router(class_visibility_router)
 api_router.include_router(images_router)
+api_router.include_router(annotation_imports_router)
 api_router.include_router(annotations_router)
 api_router.include_router(raster_edits_router)
 api_router.include_router(measurements_router)
