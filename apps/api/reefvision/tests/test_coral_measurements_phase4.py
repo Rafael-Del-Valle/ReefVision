@@ -25,7 +25,7 @@ def _seed_measurement_image(client: TestClient) -> tuple[dict[str, object], str,
         f"/api/v1/images/{image_id}/annotations",
         json={
             "base_revision": 0,
-            "annotation_status": "annotated",
+            "annotation_status": "reviewed",
             "annotations": [
                 {
                     "id": "ca45f365-acde-4bf8-a411-1cc1d8c5dc5a",
