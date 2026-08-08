@@ -14,12 +14,8 @@ from reefvision.ml.provider_hub import (
     cached_model_provider_catalog,
     cached_runtime_provider_statuses,
 )
-from reefvision.ml.segmentation_provider_catalog import (
-    segmentation_provider_descriptor,
-)
-from reefvision.ml.ultralytics_registry import (
-    cached_ultralytics_training_registry_summary,
-)
+from reefvision.ml.segmentation_provider_catalog import segmentation_provider_descriptor
+from reefvision.ml.ultralytics_registry import cached_ultralytics_training_registry_summary
 from reefvision.schemas.bootstrap import (
     ModelHubBootstrapResponse,
     TrainingWorkspaceBootstrapResponse,
@@ -33,12 +29,8 @@ from reefvision.schemas.models import (
     RuntimeProviderStatusResponse,
 )
 from reefvision.services.models import ModelService
-from reefvision.services.segmentation_catalog import (
-    SegmentationModelCatalogService,
-)
-from reefvision.services.segmentation_training import (
-    SegmentationTrainingService,
-)
+from reefvision.services.segmentation_catalog import SegmentationModelCatalogService
+from reefvision.services.semantic_training import SemanticTrainingService
 
 
 class BootstrapService:
@@ -47,7 +39,7 @@ class BootstrapService:
         self.settings = settings
         self.catalog = SegmentationModelCatalogService(session, settings)
         self.models = ModelService(session, settings)
-        self.training = SegmentationTrainingService(session, settings)
+        self.training = SemanticTrainingService(session, settings)
         self.training.catalog = self.catalog
 
     def model_hub_bootstrap(
@@ -104,13 +96,13 @@ class BootstrapService:
                         current_cuda=report.current_cuda,
                         automatic_downloads_disabled=(report.automatic_downloads_disabled),
                         explicit_checkpoint_required=(report.explicit_checkpoint_required),
-                        requirements_file=(report.requirements_file),
+                        requirements_file=report.requirements_file,
                         issues=list(report.issues),
                         packages=[
                             ProviderDependencyPackageResponse(
-                                distribution_name=(item.distribution_name),
-                                required_version=(item.required_version),
-                                installed_version=(item.installed_version),
+                                distribution_name=item.distribution_name,
+                                required_version=item.required_version,
+                                installed_version=item.installed_version,
                                 status=item.status,
                             )
                             for item in report.package_statuses
@@ -158,9 +150,9 @@ class BootstrapService:
             validation_warnings=warnings,
             last_refresh_timestamp=datetime.now(UTC),
             provider_catalog_checked_at=provider_catalog_checked_at,
-            provider_preflight_checked_at=(provider_preflight_checked_at),
+            provider_preflight_checked_at=provider_preflight_checked_at,
             runtime_statuses_checked_at=runtime_statuses_checked_at,
-            training_compatibility_checked_at=(training_compatibility_checked_at),
+            training_compatibility_checked_at=training_compatibility_checked_at,
         )
 
     def training_workspace_bootstrap(
