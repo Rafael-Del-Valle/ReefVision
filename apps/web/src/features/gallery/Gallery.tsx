@@ -17,6 +17,7 @@ import {
   type Project,
   type ProjectImageListItem,
 } from "../../api/client";
+import { AnnotationImportControls } from "./AnnotationImportControls";
 
 const statuses: { value: AnnotationStatus | ""; label: string }[] = [
   { value: "", label: "All statuses" },
@@ -344,6 +345,8 @@ export function Gallery({
       {importer.isPending && <p>Importing and validating images...</p>}
       {importer.error && <p className="form-error">{importer.error.message}</p>}
       {report && <ImportSummary report={report} />}
+
+      <AnnotationImportControls projectId={project.id} />
 
       <section className="annotation-sidebar-section">
         <div className="section-heading">
