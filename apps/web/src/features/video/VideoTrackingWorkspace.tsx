@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { Project } from "../../api/client";
 import {
+  analyzeVideo,
+  calibrateVideo,
   createVideoTrack,
   createVideoTrackingJob,
   deleteVideoTrack,
@@ -15,8 +17,11 @@ import {
   importVideo,
   updateVideoTrack,
   videoContentUrl,
+  videoExportUrl,
   videoFrameUrl,
+  type VideoTrackerConfig,
   type VideoTrackKeyframe,
+  type VideoZone,
 } from "./videoApi";
 
 interface VideoTrackingWorkspaceProps {
@@ -45,6 +50,15 @@ export function VideoTrackingWorkspace({
   const [trackStatus, setTrackStatus] = useState("verified");
   const [keyframes, setKeyframes] = useState<VideoTrackKeyframe[]>([]);
   const [trackingModelId, setTrackingModelId] = useState("");
+  const [tracker, setTracker] = useState<VideoTrackerConfig>("bytetrack.yaml");
+  const [distancePerPixel, setDistancePerPixel] = useState("");
+  const [physicalUnit, setPhysicalUnit] = useState("cm");
+  const [activityThreshold, setActivityThreshold] = useState(1);
+  const [zoneName, setZoneName] = useState("");
+  const [zoneXMin, setZoneXMin] = useState(0);
+  const [zoneYMin, setZoneYMin] = useState(0);
+  const [zoneXMax, setZoneXMax] = useState(0);
+  const [zoneYMax, setZoneYMax] = useState(0);
 
   const videosQuery = useQuery({
     queryKey: ["videos", project.id],
@@ -84,16 +98,19 @@ export function VideoTrackingWorkspace({
       setSelectedVideoId(videosQuery.data[0].id);
     }
   }, [selectedVideoId, videosQuery.data]);
+
   useEffect(() => {
     setFrameIndex(0);
     setSelectedTrackId("");
     setKeyframes([]);
   }, [selectedVideoId]);
+
   useEffect(() => {
     if (!trackingModelId && modelsQuery.data?.[0]) {
       setTrackingModelId(modelsQuery.data[0].id);
     }
   }, [modelsQuery.data, trackingModelId]);
+
   useEffect(() => {
     if (!selectedTrack) {
       setKeyframes([]);
@@ -108,6 +125,24 @@ export function VideoTrackingWorkspace({
     setKeyframes(sortedKeyframes(selectedTrack.keyframes_json));
   }, [selectedTrack]);
 
+  useEffect(() => {
+    const calibration = selectedVideo?.metadata_json.calibration;
+    if (calibration && typeof calibration === "object") {
+      const record = calibration as Record<string, unknown>;
+      setDistancePerPixel(String(record.distance_per_pixel ?? ""));
+      setPhysicalUnit(String(record.unit ?? "cm"));
+    } else {
+      setDistancePerPixel("");
+      setPhysicalUnit("cm");
+    }
+    if (selectedVideo) {
+      setZoneXMin(0);
+      setZoneYMin(0);
+      setZoneXMax(selectedVideo.width_px);
+      setZoneYMax(selectedVideo.height_px);
+    }
+  }, [selectedVideo]);
+
   const uploadMutation = useMutation({
     mutationFn: () => {
       if (!uploadFile) throw new Error("Choose a video file first");
@@ -119,12 +154,30 @@ export function VideoTrackingWorkspace({
       await queryClient.invalidateQueries({ queryKey: ["videos", project.id] });
     },
   });
+
+  const calibrationMutation = useMutation({
+    mutationFn: () => {
+      if (!selectedVideoId || !distancePerPixel) {
+        throw new Error("Select a video and enter distance per pixel");
+      }
+      return calibrateVideo(selectedVideoId, {
+        distance_per_pixel: Number(distancePerPixel),
+        unit: physicalUnit,
+        source: "video workspace",
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["videos", project.id] });
+    },
+  });
+
   const extractionMutation = useMutation({
     mutationFn: () => extractVideoFrames(selectedVideoId, everyNFrames),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["videos", project.id] });
     },
   });
+
   const saveTrackMutation = useMutation({
     mutationFn: () => {
       if (!selectedVideoId || !labelClassId || keyframes.length === 0) {
@@ -165,6 +218,7 @@ export function VideoTrackingWorkspace({
       ]);
     },
   });
+
   const deleteTrackMutation = useMutation({
     mutationFn: () => {
       if (!selectedTrackId) throw new Error("Select a track first");
@@ -178,11 +232,12 @@ export function VideoTrackingWorkspace({
       });
     },
   });
+
   const trackingMutation = useMutation({
     mutationFn: () =>
       createVideoTrackingJob(selectedVideoId, {
         model_id: trackingModelId,
-        tracker: "bytetrack.yaml",
+        tracker,
         confidence: 0.25,
         iou: 0.5,
         device: "auto",
@@ -190,6 +245,29 @@ export function VideoTrackingWorkspace({
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["videos", project.id] });
+    },
+  });
+
+  const behaviorMutation = useMutation({
+    mutationFn: () => {
+      if (!selectedVideoId) throw new Error("Select a video first");
+      const zones: VideoZone[] = zoneName.trim()
+        ? [
+            {
+              name: zoneName.trim(),
+              x_min: zoneXMin,
+              y_min: zoneYMin,
+              x_max: zoneXMax,
+              y_max: zoneYMax,
+            },
+          ]
+        : [];
+      return analyzeVideo(selectedVideoId, {
+        zones,
+        heatmap_bins_x: 10,
+        heatmap_bins_y: 10,
+        activity_speed_threshold_pixels_per_second: activityThreshold,
+      });
     },
   });
 
@@ -203,12 +281,33 @@ export function VideoTrackingWorkspace({
   const extractionStride = Number(
     selectedVideo?.metadata_json.extraction_every_n_frames ?? everyNFrames,
   );
+  const calibration =
+    selectedVideo?.metadata_json.calibration &&
+    typeof selectedVideo.metadata_json.calibration === "object"
+      ? (selectedVideo.metadata_json.calibration as Record<string, unknown>)
+      : null;
+  const selectedBehaviorTrack = behaviorMutation.data?.tracks.find(
+    (item) => item.track_id === selectedTrackId,
+  );
+  const schoolingFrames = behaviorMutation.data?.school_by_frame ?? [];
+  const schoolingFramesWithPairs = schoolingFrames.filter(
+    (item) => item.mean_nearest_neighbor_pixels !== null,
+  );
+  const meanSchoolSpread =
+    schoolingFramesWithPairs.length > 0
+      ? schoolingFramesWithPairs.reduce(
+          (sum, item) => sum + (item.school_spread_pixels ?? 0),
+          0,
+        ) / schoolingFramesWithPairs.length
+      : null;
   const error =
     uploadMutation.error ??
+    calibrationMutation.error ??
     extractionMutation.error ??
     saveTrackMutation.error ??
     deleteTrackMutation.error ??
-    trackingMutation.error;
+    trackingMutation.error ??
+    behaviorMutation.error;
 
   function updateKeyframe(
     index: number,
@@ -267,7 +366,8 @@ export function VideoTrackingWorkspace({
             <p className="annotation-helper">
               {selectedVideo.width_px}×{selectedVideo.height_px} |{" "}
               {selectedVideo.frame_count.toLocaleString()} frames |{" "}
-              {selectedVideo.fps.toFixed(3)} fps
+              {selectedVideo.fps.toFixed(3)} fps |{" "}
+              {selectedVideo.duration_seconds.toFixed(2)} s
             </p>
             <label>
               Extract every N frames
@@ -291,6 +391,46 @@ export function VideoTrackingWorkspace({
             </button>
           </>
         )}
+      </section>
+
+      <section className="management-card">
+        <p className="eyebrow">Physical calibration</p>
+        <h3>Pixels to real distance</h3>
+        <label>
+          Distance per pixel
+          <input
+            type="number"
+            min={0}
+            step="any"
+            value={distancePerPixel}
+            onChange={(event) => setDistancePerPixel(event.target.value)}
+          />
+        </label>
+        <label>
+          Unit
+          <input
+            value={physicalUnit}
+            onChange={(event) => setPhysicalUnit(event.target.value)}
+          />
+        </label>
+        <button
+          type="button"
+          disabled={
+            !selectedVideoId ||
+            !distancePerPixel ||
+            calibrationMutation.isPending
+          }
+          onClick={() => calibrationMutation.mutate()}
+        >
+          {calibrationMutation.isPending ? "Saving..." : "Save calibration"}
+        </button>
+        <p className="annotation-helper">
+          {calibration
+            ? `Current scale: ${String(calibration.distance_per_pixel)} ${String(
+                calibration.unit ?? "units",
+              )}/px`
+            : "No physical calibration saved. Pixel measurements remain available."}
+        </p>
       </section>
 
       <section className="management-card">
@@ -514,7 +654,7 @@ export function VideoTrackingWorkspace({
 
       <section className="management-card">
         <p className="eyebrow">Automated tracking</p>
-        <h3>Detector + ByteTrack</h3>
+        <h3>Detector + tracker</h3>
         <label>
           Detection model
           <select
@@ -528,6 +668,18 @@ export function VideoTrackingWorkspace({
             ))}
           </select>
         </label>
+        <label>
+          Tracker
+          <select
+            value={tracker}
+            onChange={(event) =>
+              setTracker(event.target.value as VideoTrackerConfig)
+            }
+          >
+            <option value="bytetrack.yaml">ByteTrack</option>
+            <option value="botsort.yaml">BoT-SORT</option>
+          </select>
+        </label>
         <button
           type="button"
           disabled={
@@ -537,7 +689,7 @@ export function VideoTrackingWorkspace({
         >
           {trackingMutation.isPending
             ? "Queuing..."
-            : "Track fish through video"}
+            : `Track fish with ${tracker === "botsort.yaml" ? "BoT-SORT" : "ByteTrack"}`}
         </button>
         {trackingMutation.data && (
           <p className="annotation-helper">
@@ -574,6 +726,153 @@ export function VideoTrackingWorkspace({
               </span>
             </div>
           </div>
+        )}
+      </section>
+
+      <section className="management-card">
+        <p className="eyebrow">Behavior analytics</p>
+        <h3>Activity, occupancy, and schooling</h3>
+        <label>
+          Active speed threshold (px/s)
+          <input
+            type="number"
+            min={0}
+            step="any"
+            value={activityThreshold}
+            onChange={(event) => setActivityThreshold(Number(event.target.value))}
+          />
+        </label>
+        <label>
+          Optional zone name
+          <input
+            value={zoneName}
+            placeholder="e.g. feeding area"
+            onChange={(event) => setZoneName(event.target.value)}
+          />
+        </label>
+        <div className="annotation-editor-inline-actions">
+          <label>
+            X min
+            <input
+              type="number"
+              min={0}
+              value={zoneXMin}
+              onChange={(event) => setZoneXMin(Number(event.target.value))}
+            />
+          </label>
+          <label>
+            Y min
+            <input
+              type="number"
+              min={0}
+              value={zoneYMin}
+              onChange={(event) => setZoneYMin(Number(event.target.value))}
+            />
+          </label>
+          <label>
+            X max
+            <input
+              type="number"
+              min={0}
+              value={zoneXMax}
+              onChange={(event) => setZoneXMax(Number(event.target.value))}
+            />
+          </label>
+          <label>
+            Y max
+            <input
+              type="number"
+              min={0}
+              value={zoneYMax}
+              onChange={(event) => setZoneYMax(Number(event.target.value))}
+            />
+          </label>
+        </div>
+        <button
+          type="button"
+          disabled={!selectedVideoId || behaviorMutation.isPending}
+          onClick={() => behaviorMutation.mutate()}
+        >
+          {behaviorMutation.isPending ? "Calculating..." : "Analyze behavior"}
+        </button>
+        {behaviorMutation.data && (
+          <>
+            {behaviorMutation.data.warnings.map((warning) => (
+              <p key={warning} className="annotation-helper">
+                {warning}
+              </p>
+            ))}
+            <div className="annotation-selection-list">
+              <div className="annotation-selection-row">
+                <strong>Tracks analyzed</strong>
+                <span>{behaviorMutation.data.tracks.length}</span>
+              </div>
+              <div className="annotation-selection-row">
+                <strong>Occupied heatmap cells</strong>
+                <span>{behaviorMutation.data.heatmap.length}</span>
+              </div>
+              <div className="annotation-selection-row">
+                <strong>Schooling frames</strong>
+                <span>{schoolingFramesWithPairs.length}</span>
+              </div>
+              <div className="annotation-selection-row">
+                <strong>Mean school spread</strong>
+                <span>
+                  {meanSchoolSpread === null
+                    ? "n/a"
+                    : `${meanSchoolSpread.toFixed(2)} px`}
+                </span>
+              </div>
+              {selectedBehaviorTrack && (
+                <>
+                  <div className="annotation-selection-row">
+                    <strong>Selected track active time</strong>
+                    <span>
+                      {selectedBehaviorTrack.active_time_seconds.toFixed(2)} s
+                    </span>
+                  </div>
+                  <div className="annotation-selection-row">
+                    <strong>Selected track inactive time</strong>
+                    <span>
+                      {selectedBehaviorTrack.inactive_time_seconds.toFixed(2)} s
+                    </span>
+                  </div>
+                  <div className="annotation-selection-row">
+                    <strong>Selected track physical distance</strong>
+                    <span>
+                      {selectedBehaviorTrack.distance_physical === null
+                        ? "not calibrated"
+                        : `${selectedBehaviorTrack.distance_physical.toFixed(3)} ${selectedBehaviorTrack.physical_unit ?? "units"}`}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </section>
+
+      <section className="management-card">
+        <p className="eyebrow">Research exports</p>
+        <h3>Trajectory data</h3>
+        <p className="annotation-helper">
+          Export interpolated source-coordinate tracks for spreadsheets,
+          MOTChallenge-compatible tools, or ReefVision-preserving JSON.
+        </p>
+        {selectedVideoId ? (
+          <div className="annotation-editor-inline-actions">
+            <a href={videoExportUrl(selectedVideoId, "csv")} download>
+              CSV
+            </a>
+            <a href={videoExportUrl(selectedVideoId, "mot")} download>
+              MOT
+            </a>
+            <a href={videoExportUrl(selectedVideoId, "json")} download>
+              ReefVision JSON
+            </a>
+          </div>
+        ) : (
+          <p className="annotation-helper">Select a video to export tracks.</p>
         )}
       </section>
 
