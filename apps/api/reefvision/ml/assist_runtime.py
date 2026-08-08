@@ -20,6 +20,7 @@ from reefvision.ml.providers import (
     resample_stroke_points,
     stroke_bounds,
 )
+from reefvision.ml.sam2_provider import TransformersSam2AssistProvider
 
 
 @dataclass
@@ -69,6 +70,8 @@ class AssistRuntime:
         return datetime.now(UTC)
 
     def _provider_for_model(self, provider_name: str) -> AnnotationAssistProvider:
+        if provider_name.strip().casefold() == "sam2":
+            return TransformersSam2AssistProvider()
         return assist_provider_for_name(provider_name)
 
     def _cache_key(
