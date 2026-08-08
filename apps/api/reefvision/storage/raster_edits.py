@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import shutil
 from pathlib import Path
-from typing import cast
 from uuid import uuid4
 
 from PIL import Image, ImageDraw, UnidentifiedImageError
@@ -32,7 +31,7 @@ def _load_source_mask(
             image.load()
             if image.size != expected_size:
                 raise ValidationError("Raster mask dimensions do not match the source image")
-            return cast(Image.Image, image.convert("L"))
+            return image.convert("L")
     except (OSError, UnidentifiedImageError) as exc:
         raise ValidationError("Raster mask content could not be read") from exc
 
