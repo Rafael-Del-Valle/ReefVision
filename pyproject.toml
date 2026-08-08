@@ -26,10 +26,15 @@ dev = [
   "build>=1.2,<2",
   "httpx>=0.28,<1",
   "mypy>=1.14,<2",
+  "networkx>=3.2,<4",
+  "numpy>=1.26,<3",
+  "opencv-python-headless>=4.10,<5",
   "pyinstaller>=6.21,<7",
   "pytest>=8.3,<9",
   "pytest-cov>=6,<7",
   "ruff>=0.9,<1",
+  "scikit-image>=0.24,<1",
+  "types-networkx>=3.2,<4",
   "types-PyYAML>=6.0,<7",
 ]
 
@@ -74,5 +79,20 @@ module = "alembic.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["cv2", "numpy", "psutil", "segment_anything", "torch", "ultralytics"]
+module = [
+  "boto3",
+  "boto3.*",
+  "cv2",
+  "psutil",
+  "segment_anything",
+  "segment_anything.*",
+  "skimage",
+  "skimage.*",
+  "torch",
+  "torch.*",
+  "transformers",
+  "transformers.*",
+  "ultralytics",
+  "ultralytics.*",
+]
 ignore_missing_imports = true
