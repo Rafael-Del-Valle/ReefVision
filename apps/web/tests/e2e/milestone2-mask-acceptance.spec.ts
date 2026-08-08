@@ -502,11 +502,15 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
   await expect(page.getByTestId("annotation-editor")).toBeVisible();
   await page.keyboard.press("d");
   await expect(
-    page.getByRole("heading", { name: "swiftia-day90.png" }),
+    page
+      .getByTestId("annotation-editor")
+      .getByRole("heading", { name: "swiftia-day90.png" }),
   ).toBeVisible();
   await page.keyboard.press("a");
   await expect(
-    page.getByRole("heading", { name: "swiftia-day0.png" }),
+    page
+      .getByTestId("annotation-editor")
+      .getByRole("heading", { name: "swiftia-day0.png" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Back to gallery" }).click();
 
