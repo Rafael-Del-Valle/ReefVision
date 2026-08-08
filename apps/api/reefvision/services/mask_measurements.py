@@ -7,6 +7,7 @@ import io
 import json
 import struct
 import zipfile
+from itertools import pairwise
 from math import hypot, nan, pi
 from pathlib import Path
 from typing import Any
@@ -153,10 +154,7 @@ def _raster_measurements(
 
 
 def _centerline_length(points: list[MeasurementPoint]) -> float:
-    return sum(
-        hypot(second.x - first.x, second.y - first.y)
-        for first, second in zip(points, points[1:], strict=False)
-    )
+    return sum(hypot(second.x - first.x, second.y - first.y) for first, second in pairwise(points))
 
 
 def _normalized(values: list[str] | None) -> list[str]:
@@ -299,10 +297,7 @@ class MaskMeasurementService:
         points = payload.centerline_points
         if any(point.x > image.width_px or point.y > image.height_px for point in points):
             raise ValidationError("Centerline points cannot extend outside the image bounds")
-        if any(
-            first.x == second.x and first.y == second.y
-            for first, second in zip(points, points[1:], strict=False)
-        ):
+        if any(first.x == second.x and first.y == second.y for first, second in pairwise(points)):
             raise ValidationError("Centerlines cannot contain consecutive duplicate points")
 
         new_measurement = {
