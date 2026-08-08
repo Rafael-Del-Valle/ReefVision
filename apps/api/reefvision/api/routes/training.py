@@ -25,15 +25,18 @@ from reefvision.schemas.training import (
     TrainingTilingRequest,
 )
 from reefvision.services.bootstrap import BootstrapService
-from reefvision.services.training import TrainingService
+from reefvision.services.segmentation_catalog import SegmentationModelCatalogService
+from reefvision.services.segmentation_training import SegmentationTrainingService
 
 router = APIRouter(tags=["training"])
 DbSession = Annotated[Session, Depends(get_db_session)]
 
 
-def service(request: Request, session: Session) -> TrainingService:
+def service(request: Request, session: Session) -> SegmentationTrainingService:
     settings: Settings = request.app.state.settings
-    return TrainingService(session, settings)
+    result = SegmentationTrainingService(session, settings)
+    result.catalog = SegmentationModelCatalogService(session, settings)
+    return result
 
 
 def bootstrap_service(request: Request, session: Session) -> BootstrapService:

@@ -13,7 +13,7 @@ from reefvision.schemas.predictions import (
     PredictionListResponse,
     PredictionReviewResponse,
 )
-from reefvision.services.predictions import PredictionService
+from reefvision.services.segmentation_predictions import SegmentationPredictionService
 
 router = APIRouter(tags=["predictions"])
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -28,7 +28,7 @@ def list_predictions(
     min_confidence: float | None = None,
     review_status: str | None = None,
 ) -> PredictionListResponse:
-    return PredictionService(session).list_for_image(
+    return SegmentationPredictionService(session).list_for_image(
         image_id,
         model_id=model_id,
         label_class_id=label_class_id,
@@ -44,7 +44,7 @@ def list_predictions(
 def accept_prediction(
     proposal_id: str, payload: PredictionAcceptRequest, session: DbSession
 ) -> PredictionReviewResponse:
-    return PredictionService(session).accept(proposal_id, payload)
+    return SegmentationPredictionService(session).accept(proposal_id, payload)
 
 
 @router.post(
@@ -52,11 +52,11 @@ def accept_prediction(
     response_model=PredictionReviewResponse,
 )
 def reject_prediction(proposal_id: str, session: DbSession) -> PredictionReviewResponse:
-    return PredictionService(session).reject(proposal_id)
+    return SegmentationPredictionService(session).reject(proposal_id)
 
 
 @router.post("/prediction-proposals/bulk-review", response_model=PredictionBulkReviewResponse)
 def bulk_review_predictions(
     payload: PredictionBulkReviewRequest, session: DbSession
 ) -> PredictionBulkReviewResponse:
-    return PredictionService(session).bulk_review(payload)
+    return SegmentationPredictionService(session).bulk_review(payload)

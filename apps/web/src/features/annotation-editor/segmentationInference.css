@@ -1,0 +1,18 @@
+.annotation-editor-segmentation-launcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: min(34rem, 50vw);
+}
+
+.annotation-editor-segmentation-launcher select {
+  min-width: 9rem;
+  max-width: 15rem;
+}
+
+.annotation-editor-segmentation-launcher .annotation-helper {
+  max-width: 15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
