@@ -1,4 +1,4 @@
-"""Advanced provider manifests and fail-closed preflight endpoints."""
+"""Advanced provider manifests, preflight, and execution endpoints."""
 
 from typing import Annotated
 
@@ -7,10 +7,13 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.schemas.advanced_providers import (
+    AdvancedDepthJobCreateRequest,
     AdvancedProviderManifestResponse,
     AdvancedProviderPreflightRequest,
     AdvancedProviderPreflightResponse,
 )
+from reefvision.schemas.jobs import JobResponse
+from reefvision.services.advanced_depth import AdvancedDepthService
 from reefvision.services.advanced_providers import AdvancedProviderService
 
 router = APIRouter(tags=["advanced-providers"])
@@ -44,3 +47,19 @@ def preflight_advanced_provider(
     session: DbSession,
 ) -> AdvancedProviderPreflightResponse:
     return service(request, session).preflight(project_id, provider_id, payload)
+
+
+@router.post(
+    "/projects/{project_id}/advanced-providers/depth-anything-v2/jobs",
+    response_model=JobResponse,
+)
+def create_depth_anything_job(
+    project_id: str,
+    payload: AdvancedDepthJobCreateRequest,
+    request: Request,
+    session: DbSession,
+) -> JobResponse:
+    return AdvancedDepthService(session, request.app.state.settings).create_job(
+        project_id,
+        payload,
+    )
