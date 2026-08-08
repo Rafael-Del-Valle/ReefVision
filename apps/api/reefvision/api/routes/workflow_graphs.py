@@ -1,17 +1,25 @@
-"""Workflow node registry, validation, and dry-run planning endpoints."""
+"""Workflow registry, validation, persistence, and execution endpoints."""
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
+from reefvision.schemas.workflow_execution import (
+    WorkflowGraphRecordResponse,
+    WorkflowGraphSaveRequest,
+    WorkflowRunCreateRequest,
+    WorkflowRunDetailResponse,
+    WorkflowRunResponse,
+)
 from reefvision.schemas.workflow_graphs import (
     WorkflowGraphPlanResponse,
     WorkflowGraphRequest,
     WorkflowGraphValidationResponse,
     WorkflowNodeDefinitionResponse,
 )
+from reefvision.services.workflow_execution import WorkflowExecutionService
 from reefvision.services.workflow_graphs import WorkflowGraphService
 
 router = APIRouter(tags=["workflow-graphs"])
@@ -48,3 +56,66 @@ def plan_workflow_graph(
     session: DbSession,
 ) -> WorkflowGraphPlanResponse:
     return WorkflowGraphService(session).plan(project_id, payload)
+
+
+@router.get(
+    "/projects/{project_id}/workflow-graphs",
+    response_model=list[WorkflowGraphRecordResponse],
+)
+def list_saved_workflow_graphs(
+    project_id: str,
+    session: DbSession,
+) -> list[WorkflowGraphRecordResponse]:
+    return WorkflowExecutionService(session).list_graphs(project_id)
+
+
+@router.post(
+    "/projects/{project_id}/workflow-graphs",
+    response_model=WorkflowGraphRecordResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def save_workflow_graph(
+    project_id: str,
+    payload: WorkflowGraphSaveRequest,
+    session: DbSession,
+) -> WorkflowGraphRecordResponse:
+    return WorkflowExecutionService(session).save_graph(project_id, payload)
+
+
+@router.get(
+    "/projects/{project_id}/workflow-runs",
+    response_model=list[WorkflowRunResponse],
+)
+def list_workflow_runs(
+    project_id: str,
+    session: DbSession,
+) -> list[WorkflowRunResponse]:
+    return WorkflowExecutionService(session).list_runs(project_id)
+
+
+@router.post(
+    "/projects/{project_id}/workflow-runs",
+    response_model=WorkflowRunResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def queue_workflow_run(
+    project_id: str,
+    payload: WorkflowRunCreateRequest,
+    request: Request,
+    session: DbSession,
+) -> WorkflowRunResponse:
+    return WorkflowExecutionService(session, request.app.state.settings).queue_run(
+        project_id,
+        payload,
+    )
+
+
+@router.get(
+    "/workflow-runs/{run_id}",
+    response_model=WorkflowRunDetailResponse,
+)
+def get_workflow_run(
+    run_id: str,
+    session: DbSession,
+) -> WorkflowRunDetailResponse:
+    return WorkflowExecutionService(session).get_run_detail(run_id)
