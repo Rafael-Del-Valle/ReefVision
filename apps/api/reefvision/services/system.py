@@ -409,7 +409,7 @@ class SystemService:
         return None
 
     def _user_path_entries(self) -> set[str]:
-        raw = os.environ.get("PATH") or ""
+        raw = os.environ.get("Path") or os.environ.get("PATH") or ""
         return {entry.strip() for entry in raw.split(";") if entry.strip()}
 
     def _managed_wrapper(self, path: Path) -> bool:
