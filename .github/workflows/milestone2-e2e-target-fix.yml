@@ -1,0 +1,46 @@
+name: Milestone 2 E2E Target Fix
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/milestone2-e2e-target-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Patch polygon insert interaction
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path("apps/web/tests/e2e/milestone2-mask-acceptance.spec.ts")
+          text = path.read_text(encoding="utf-8")
+          old = '''  await page.getByTestId("insert-polygon-node").click();\n  const polygonBox = await layer\n    .locator(`g[data-mask-id="${maskId}"] polygon`)\n    .boundingBox();\n  if (!polygonBox) throw new Error("Polygon geometry is unavailable");\n  await page.mouse.click(polygonBox.x + polygonBox.width / 2, polygonBox.y + 2);\n  const selectedPolygon = layer.locator(`g[data-mask-id="${maskId}"] polygon`);\n'''
+          new = '''  await page.getByTestId("insert-polygon-node").click();\n  await expect(page.getByTestId("enhanced-annotation-editor")).toHaveAttribute(\n    "data-vertex-edit-mode",\n    "insert",\n  );\n  const selectedPolygon = layer.locator(`g[data-mask-id="${maskId}"] polygon`);\n  await selectedPolygon.click();\n'''
+          if old not in text:
+              raise SystemExit("Expected polygon insertion interaction block was not found")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+        working-directory: apps/web
+      - run: npx prettier --write tests/e2e/milestone2-mask-acceptance.spec.ts
+        working-directory: apps/web
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/tests/e2e/milestone2-mask-acceptance.spec.ts
+          git commit -m "Target polygon element in insert-node acceptance test"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
