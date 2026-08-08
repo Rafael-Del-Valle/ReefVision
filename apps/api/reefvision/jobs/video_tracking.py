@@ -135,14 +135,17 @@ def process_video_tracking_job(
             for track in existing:
                 track.deleted_at = datetime.now(UTC)
                 track.revision += 1
-            next_number = int(
-                session.scalar(
-                    select(func.max(VideoTrack.track_number)).where(
-                        VideoTrack.video_id == video_id
+            next_number = (
+                int(
+                    session.scalar(
+                        select(func.max(VideoTrack.track_number)).where(
+                            VideoTrack.video_id == video_id
+                        )
                     )
+                    or 0
                 )
-                or 0
-            ) + 1
+                + 1
+            )
             created = 0
             observation_count = 0
             for (provider_track_id, label_class_id), items in sorted(grouped.items()):

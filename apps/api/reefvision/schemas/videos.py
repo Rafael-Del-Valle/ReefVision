@@ -51,9 +51,7 @@ class VideoTrackKeyframe(BaseModel):
     ) -> tuple[float, float, float, float]:
         x, y, width, height = value
         if x < 0 or y < 0 or width <= 0 or height <= 0:
-            raise ValueError(
-                "Track boxes require nonnegative origins and positive dimensions"
-            )
+            raise ValueError("Track boxes require nonnegative origins and positive dimensions")
         return value
 
 
