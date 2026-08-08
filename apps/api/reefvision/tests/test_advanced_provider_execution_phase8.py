@@ -9,6 +9,7 @@ import numpy
 import pytest
 from fastapi.testclient import TestClient
 
+from reefvision.domain.errors import ValidationError
 from reefvision.jobs import advanced_depth as advanced_depth_job
 from reefvision.ml.advanced_provider_contracts import DepthPrediction
 from reefvision.ml.model_bundles import inspect_transformers_bundle
@@ -50,6 +51,27 @@ def _register_bundle(
     return response.json()
 
 
+def _queue_depth_job(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    project_id: str,
+    model_id: object,
+    image_id: str,
+) -> str:
+    monkeypatch.setattr(
+        advanced_providers_service,
+        "_managed_runtime_status",
+        lambda _provider_id: ("ready", None),
+    )
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/advanced-providers/depth-anything-v2/jobs",
+        json={"model_id": model_id, "image_ids": [image_id], "device": "cpu"},
+    )
+    assert queued.status_code == 200, queued.text
+    return str(queued.json()["id"])
+
+
 def test_safe_transformers_bundles_register_for_sam2_and_depth(
     client: TestClient,
 ) -> None:
@@ -89,7 +111,7 @@ def test_transformers_bundle_rejects_path_traversal(tmp_path: Path) -> None:
         archive.writestr("model.safetensors", b"weights")
         archive.writestr("../escape.txt", b"nope")
 
-    with pytest.raises(Exception, match="unsafe path"):
+    with pytest.raises(ValidationError, match="unsafe path"):
         inspect_transformers_bundle(bundle)
 
 
@@ -139,8 +161,7 @@ def test_depth_job_writes_provenance_and_managed_outputs(
         filename="depth-source.png",
         relative_path="depth/depth-source.png",
     )
-    assert imported["successful"]
-    image_id = str(imported["image_id"])
+    image_id = str(imported["successful"][0]["image_id"])
     model = _register_bundle(
         client,
         project["id"],
@@ -149,18 +170,13 @@ def test_depth_job_writes_provenance_and_managed_outputs(
         provider_name="depth_anything_v2",
         content=_transformers_bundle("depth_anything", "DepthAnythingForDepthEstimation"),
     )
-
-    monkeypatch.setattr(
-        advanced_providers_service,
-        "_managed_runtime_status",
-        lambda _provider_id: ("ready", None),
+    job_id = _queue_depth_job(
+        client,
+        monkeypatch,
+        project_id=project["id"],
+        model_id=model["id"],
+        image_id=image_id,
     )
-    queued = client.post(
-        f"/api/v1/projects/{project['id']}/advanced-providers/depth-anything-v2/jobs",
-        json={"model_id": model["id"], "image_ids": [image_id], "device": "cpu"},
-    )
-    assert queued.status_code == 200, queued.text
-    job_id = str(queued.json()["id"])
 
     monkeypatch.setattr(
         advanced_depth_job,
@@ -195,3 +211,60 @@ def test_depth_job_writes_provenance_and_managed_outputs(
     assert depth_path.is_file()
     assert preview_path.is_file()
     assert numpy.load(depth_path, allow_pickle=False).tolist() == [[1.0, 2.0]]
+
+
+def test_cancelled_depth_job_removes_partial_output(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Depth cancellation")
+    imported = import_one(
+        client,
+        project["id"],
+        filename="cancel-depth.png",
+        relative_path="depth/cancel-depth.png",
+    )
+    image_id = str(imported["successful"][0]["image_id"])
+    model = _register_bundle(
+        client,
+        project["id"],
+        filename="depth-cancel.zip",
+        purpose="depth",
+        provider_name="depth_anything_v2",
+        content=_transformers_bundle("depth_anything", "DepthAnythingForDepthEstimation"),
+    )
+    job_id = _queue_depth_job(
+        client,
+        monkeypatch,
+        project_id=project["id"],
+        model_id=model["id"],
+        image_id=image_id,
+    )
+    output_directory = (
+        client.app.state.settings.resolved_data_dir
+        / "projects"
+        / project["id"]
+        / "derived"
+        / "depth"
+        / job_id
+    )
+    output_directory.mkdir(parents=True, exist_ok=True)
+    (output_directory / "stale.npy").write_bytes(b"stale")
+
+    monkeypatch.setattr(
+        advanced_depth_job,
+        "TransformersDepthAnythingV2Provider",
+        _FakeDepthProvider,
+    )
+    monkeypatch.setattr(advanced_depth_job, "_cancel_requested", lambda _factory, _job_id: True)
+    processed = advanced_depth_job.process_advanced_depth_job(
+        client.app.state.settings,
+        client.app.state.session_factory,
+        job_id,
+    )
+    assert processed is False
+
+    job = client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "cancelled"
+    assert job["result_json"]["outputs"] == []
+    assert not output_directory.exists()
