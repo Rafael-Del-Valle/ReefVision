@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version
 
 from sqlalchemy.orm import Session
 
@@ -31,6 +32,7 @@ class _AdvancedProviderProfile:
     known_limitations: tuple[str, ...]
     integration_notes: tuple[str, ...]
     model_required: bool = True
+    expected_model_purpose: str | None = None
 
 
 _PROFILES: tuple[_AdvancedProviderProfile, ...] = (
@@ -50,6 +52,7 @@ _PROFILES: tuple[_AdvancedProviderProfile, ...] = (
         integration_notes=(
             "prompt_type must identify box, click, or brush prompting; the prompt geometry remains in the existing assist-session request.",
         ),
+        expected_model_purpose="assist",
     ),
     _AdvancedProviderProfile(
         provider_id="grounding_dino",
@@ -114,30 +117,30 @@ _PROFILES: tuple[_AdvancedProviderProfile, ...] = (
         required_packages=("transformers", "accelerate", "safetensors"),
         recommended_devices=("cuda", "cpu"),
         known_limitations=("No pinned or security-reviewed Florence-2 runtime exists yet.",),
-        integration_notes=("Generated text must remain advisory and must never alter class labels automatically.",),
+        integration_notes=(
+            "Generated text must remain advisory and must never alter class labels automatically.",
+        ),
     ),
     _AdvancedProviderProfile(
         provider_id="sam2",
         display_name="SAM 2",
-        execution_supported=False,
-        supported_tasks=("assist_segmentation", "video_propagation"),
-        prompt_fields_by_task={
-            "assist_segmentation": ("image_id", "prompt_type"),
-            "video_propagation": ("video_id", "seed_frame", "seed_masks"),
-        },
+        execution_supported=True,
+        supported_tasks=("assist_segmentation",),
+        prompt_fields_by_task={"assist_segmentation": ("image_id", "prompt_type")},
         output_contracts_by_task={
-            "assist_segmentation": ("mask_candidate",),
-            "video_propagation": ("frame_mask_proposals", "object_ids"),
+            "assist_segmentation": ("mask_candidate", "bounding_box")
         },
-        required_model_extensions=(".pt", ".pth"),
-        required_packages=("torch", "torchvision", "sam2"),
-        recommended_devices=("cuda",),
+        required_model_extensions=(".zip",),
+        required_packages=("transformers", "torch", "safetensors"),
+        recommended_devices=("cuda", "cpu"),
         known_limitations=(
-            "Windows desktop packaging, checkpoint validation, and long-video memory behavior are not verified.",
+            "This milestone enables SAM2 image prompting only; SAM2 video propagation remains disabled until its long-video memory and cancellation behavior are validated.",
+            "The provider accepts local Transformers-style ReefVision ZIP bundles and does not download weights automatically.",
         ),
         integration_notes=(
-            "Video outputs must remain editable proposals and use source-frame coordinates compatible with Phase 6 tracks.",
+            "SAM2 image prompts use the existing ReefVision Prompt Assist session, edit, accept, and mask-persistence workflow.",
         ),
+        expected_model_purpose="assist",
     ),
     _AdvancedProviderProfile(
         provider_id="mobilesam",
@@ -150,7 +153,9 @@ _PROFILES: tuple[_AdvancedProviderProfile, ...] = (
         required_packages=("torch", "torchvision"),
         recommended_devices=("cpu", "cuda"),
         known_limitations=("No pinned package or checkpoint inspector exists yet.",),
-        integration_notes=("The adapter should implement the same image-prompt contract as original SAM.",),
+        integration_notes=(
+            "The adapter should implement the same image-prompt contract as original SAM.",
+        ),
     ),
     _AdvancedProviderProfile(
         provider_id="fastsam",
@@ -162,31 +167,69 @@ _PROFILES: tuple[_AdvancedProviderProfile, ...] = (
         required_model_extensions=(".pt",),
         required_packages=("ultralytics",),
         recommended_devices=("cuda", "cpu"),
-        known_limitations=("The installed Ultralytics package is present, but ReefVision has no reviewed FastSAM adapter.",),
-        integration_notes=("Do not route FastSAM through the detector provider without task-specific result validation.",),
+        known_limitations=(
+            "The installed Ultralytics package is present, but ReefVision has no reviewed FastSAM adapter.",
+        ),
+        integration_notes=(
+            "Do not route FastSAM through the detector provider without task-specific result validation.",
+        ),
     ),
     _AdvancedProviderProfile(
         provider_id="depth_anything_v2",
         display_name="Depth Anything V2",
-        execution_supported=False,
+        execution_supported=True,
         supported_tasks=("relative_depth",),
         prompt_fields_by_task={"relative_depth": ("image_id",)},
         output_contracts_by_task={
             "relative_depth": ("relative_depth_array", "depth_preview", "value_range")
         },
-        required_model_extensions=(".pth", ".safetensors"),
-        required_packages=("torch", "torchvision", "transformers"),
+        required_model_extensions=(".zip",),
+        required_packages=("transformers", "torch", "numpy", "safetensors"),
         recommended_devices=("cuda", "cpu"),
         known_limitations=(
             "Predictions are relative depth, not calibrated metric distance.",
-            "No ReefVision checkpoint inspector, tiling policy, or packaged adapter exists yet.",
+            "Depth values must not be interpreted as meters or converted to surface area without a separate calibrated geometry model.",
+            "The provider accepts local Transformers-style ReefVision ZIP bundles and does not download weights automatically.",
         ),
         integration_notes=(
-            "Depth outputs should be stored as immutable float arrays with source-image checksum and model provenance.",
-            "Depth must not be converted to coral surface area until a separate calibration and geometry model is selected.",
+            "Depth outputs are stored as immutable float arrays plus a 16-bit preview with source-image and model provenance.",
         ),
+        expected_model_purpose="depth",
     ),
 )
+
+_MANAGED_TRANSFORMERS_PROVIDERS = {"sam2", "depth_anything_v2"}
+
+
+def _installed_version(distribution_name: str) -> str | None:
+    try:
+        return version(distribution_name)
+    except PackageNotFoundError:
+        return None
+
+
+def _managed_runtime_status(provider_id: str) -> tuple[str, str | None]:
+    if provider_id not in _MANAGED_TRANSFORMERS_PROVIDERS:
+        return "not_managed", None
+    required = ["transformers", "torch"]
+    if provider_id == "depth_anything_v2":
+        required.append("numpy")
+    missing = [item for item in required if _installed_version(item) is None]
+    if missing:
+        return (
+            "dependency_missing",
+            "Install the optional advanced provider dependencies: " + ", ".join(missing),
+        )
+    return "ready", None
+
+
+def _cuda_available() -> bool:
+    try:
+        import torch
+
+        return bool(torch.cuda.is_available())
+    except Exception:
+        return False
 
 
 class AdvancedProviderService:
@@ -213,8 +256,11 @@ class AdvancedProviderService:
         }
         results: list[AdvancedProviderManifestResponse] = []
         for profile in _PROFILES:
-            descriptor = descriptors.get(profile.provider_id)
-            maturity = descriptor.availability_status if descriptor else "not_registered"
+            if profile.provider_id in _MANAGED_TRANSFORMERS_PROVIDERS:
+                maturity, _ = _managed_runtime_status(profile.provider_id)
+            else:
+                descriptor = descriptors.get(profile.provider_id)
+                maturity = descriptor.availability_status if descriptor else "not_registered"
             results.append(
                 AdvancedProviderManifestResponse(
                     provider_id=profile.provider_id,
@@ -248,22 +294,30 @@ class AdvancedProviderService:
         if request.task not in profile.supported_tasks:
             raise ValidationError("The selected provider does not declare the requested task")
 
-        descriptors = {
-            item.provider_id: item for item in list_model_providers(self.settings, refresh=True)
-        }
-        descriptor = descriptors.get(provider_id)
-        availability_status = descriptor.availability_status if descriptor else "not_registered"
         blockers: list[str] = []
         warnings: list[str] = list(profile.known_limitations)
+        if provider_id in _MANAGED_TRANSFORMERS_PROVIDERS:
+            availability_status, availability_reason = _managed_runtime_status(provider_id)
+            if availability_status != "ready" and availability_reason:
+                blockers.append(availability_reason)
+        else:
+            descriptors = {
+                item.provider_id: item
+                for item in list_model_providers(self.settings, refresh=True)
+            }
+            descriptor = descriptors.get(provider_id)
+            availability_status = (
+                descriptor.availability_status if descriptor else "not_registered"
+            )
+            if descriptor is None:
+                blockers.append("The provider is not registered in the main provider hub")
+            elif descriptor.availability_status != "ready":
+                blockers.append(
+                    descriptor.availability_reason
+                    or f"Provider availability is {descriptor.availability_status}"
+                )
         if not profile.execution_supported:
             blockers.append("No reviewed ReefVision execution adapter is enabled for this provider")
-        if descriptor is None:
-            blockers.append("The provider is not registered in the main provider hub")
-        elif descriptor.availability_status != "ready":
-            blockers.append(
-                descriptor.availability_reason
-                or f"Provider availability is {descriptor.availability_status}"
-            )
 
         required_fields = list(profile.prompt_fields_by_task[request.task])
         provided_fields = sorted(request.prompt_fields)
@@ -274,9 +328,7 @@ class AdvancedProviderService:
             or request.prompt_fields[field] in (None, "", [], {})
         ]
         if missing_fields:
-            blockers.append(
-                "Missing required prompt fields: " + ", ".join(missing_fields)
-            )
+            blockers.append("Missing required prompt fields: " + ", ".join(missing_fields))
 
         selected_model_id: str | None = None
         if profile.model_required:
@@ -290,12 +342,24 @@ class AdvancedProviderService:
                     blockers.append(
                         f"Selected model is registered for provider {model.provider_name}, not {provider_id}"
                     )
+                elif (
+                    profile.expected_model_purpose is not None
+                    and model.purpose != profile.expected_model_purpose
+                ):
+                    blockers.append(
+                        f"Selected model purpose is {model.purpose}, not {profile.expected_model_purpose}"
+                    )
                 else:
                     selected_model_id = model.id
 
-        if request.device not in {"auto", "cpu", "cuda", "0"}:
-            warnings.append("Device value is provider-specific and has not been desktop-validated")
-        if request.device in {"cpu"} and "cpu" not in profile.recommended_devices:
+        normalized_device = request.device.strip().casefold()
+        if normalized_device not in {"auto", "cpu", "cuda", "cuda:0", "0"}:
+            blockers.append("Supported devices are auto, cpu, and cuda")
+        elif normalized_device in {"cuda", "cuda:0", "0"} and not _cuda_available():
+            blockers.append("CUDA was requested but Torch does not report an available CUDA device")
+        elif normalized_device == "auto" and not _cuda_available():
+            warnings.append("CUDA is unavailable; this provider will fall back to CPU")
+        if normalized_device == "cpu" and "cpu" not in profile.recommended_devices:
             warnings.append("CPU execution is not recommended for this provider profile")
 
         return AdvancedProviderPreflightResponse(
