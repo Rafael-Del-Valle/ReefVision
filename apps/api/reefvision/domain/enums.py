@@ -16,7 +16,7 @@ JobType = Literal[
     "restore",
     "diagnostics",
 ]
-ModelPurpose = Literal["detector", "assist"]
+ModelPurpose = Literal["detector", "segmenter", "assist"]
 PredictionReviewStatus = Literal[
     "pending",
     "accepted",
@@ -61,7 +61,7 @@ ANNOTATION_EVENT_TYPES: tuple[AnnotationEventType, ...] = (
     "deleted",
     "restored",
 )
-MODEL_PURPOSES: tuple[ModelPurpose, ...] = ("detector", "assist")
+MODEL_PURPOSES: tuple[ModelPurpose, ...] = ("detector", "segmenter", "assist")
 PREDICTION_REVIEW_STATUSES: tuple[PredictionReviewStatus, ...] = (
     "pending",
     "accepted",

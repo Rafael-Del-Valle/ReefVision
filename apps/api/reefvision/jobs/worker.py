@@ -19,7 +19,7 @@ from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.model_install import process_model_install_job
 from reefvision.jobs.quality_control import process_quality_control_job
 from reefvision.jobs.restores import process_restore_job
-from reefvision.jobs.training import process_training_job
+from reefvision.jobs.training_dispatch import process_task_aware_training_job
 from reefvision.jobs.video import process_video_extract_job
 from reefvision.repositories.jobs import JobRepository
 from reefvision.storage.images import create_thumbnail
@@ -127,7 +127,7 @@ def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session
         if job_type == "diagnostics":
             return process_diagnostics_job(settings, factory, job_id)
         if job_type == "training":
-            return process_training_job(settings, factory, job_id)
+            return process_task_aware_training_job(settings, factory, job_id)
         if job_type == "model_install":
             return process_model_install_job(settings, factory, job_id)
         if job_type == "video_extract":
@@ -146,8 +146,6 @@ def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session
         )
         return True
     except Exception as exc:
-        # A single malformed or unexpected job must never terminate the only
-        # background worker or block every later model installation at 0%.
         _fail_job(factory, job_id, f"Unexpected background job failure: {exc}")
         LOGGER.exception(
             "Background job failed unexpectedly",
@@ -171,8 +169,6 @@ async def thumbnail_worker_loop(
         try:
             processed = await asyncio.to_thread(process_next_thumbnail_job, settings, factory)
         except Exception:
-            # Protect the long-lived worker task itself from infrastructure-level
-            # failures that occur outside an individual job handler.
             LOGGER.exception(
                 "Background worker iteration failed",
                 extra={
