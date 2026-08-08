@@ -425,11 +425,7 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                 payload = None
             if payload is not None and self._looks_like_class_mapping(payload):
                 class_mapping.update(
-                    {
-                        str(key): value
-                        for key, value in payload.items()
-                        if isinstance(value, dict)
-                    }
+                    {str(key): value for key, value in payload.items() if isinstance(value, dict)}
                 )
                 base_uploads.append((filename, BytesIO(data)))
                 continue
@@ -443,15 +439,11 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                             and str(entry.get("type") or "") == "MaskAnnotation"
                         )
                         if is_semantic:
-                            semantic_annotations.append(
-                                (filename, str(image_reference), entry)
-                            )
+                            semantic_annotations.append((filename, str(image_reference), entry))
                         else:
                             vector_entries.append(entry)
                     filtered[str(image_reference)] = vector_entries
-                base_uploads.append(
-                    (filename, BytesIO(json.dumps(filtered).encode("utf-8")))
-                )
+                base_uploads.append((filename, BytesIO(json.dumps(filtered).encode("utf-8"))))
                 continue
             base_uploads.append((filename, BytesIO(data)))
 
@@ -481,10 +473,7 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                         source_file=source_file,
                         image_reference=image_reference,
                         annotation_id=str(annotation.get("id") or "") or None,
-                        detail=(
-                            "No unique ReefVision image matched this "
-                            "CoralNet-Toolbox image path"
-                        ),
+                        detail="No unique ReefVision image matched this CoralNet-Toolbox image path",
                     )
                 )
                 continue
@@ -501,10 +490,7 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                                 source_file=source_file,
                                 image_reference=image_reference,
                                 annotation_id=str(annotation.get("id") or "") or None,
-                                detail=(
-                                    f"Semantic mask class {real_class_id} "
-                                    "has no label-map entry"
-                                ),
+                                detail=f"Semantic mask class {real_class_id} has no label-map entry",
                             )
                         )
                         continue
