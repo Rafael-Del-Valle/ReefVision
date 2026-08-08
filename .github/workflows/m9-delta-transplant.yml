@@ -1,0 +1,89 @@
+name: M9 Delta Transplant
+
+on:
+  push:
+    branches:
+      - integration/milestone9-on-m8
+
+permissions:
+  contents: write
+
+jobs:
+  transplant:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch historical M9 ref
+        run: git fetch origin feat/project-interoperability-phase9
+      - name: Apply only the historical M9 delta
+        shell: bash
+        run: |
+          set +e
+          git diff --binary bce744dfb6a9f9a9d4bb91fbe8b7b54b318e1cde 2ef1e53d69801557931859f65b88733d657d4838 > /tmp/m9.patch
+          git apply --3way /tmp/m9.patch
+          apply_status=$?
+          set -e
+
+          if git diff --name-only --diff-filter=U | grep -qx 'apps/api/reefvision/api/router.py'; then
+            git checkout --ours apps/api/reefvision/api/router.py
+            python - <<'PY'
+          from pathlib import Path
+          path = Path('apps/api/reefvision/api/router.py')
+          text = path.read_text(encoding='utf-8')
+          import_line = 'from reefvision.api.routes.project_exchange import router as project_exchange_router\n'
+          if import_line not in text:
+              anchor = 'from reefvision.api.routes.projects import router as projects_router\n'
+              text = text.replace(anchor, import_line + anchor)
+          include_line = 'api_router.include_router(project_exchange_router)\n'
+          if include_line not in text:
+              text = text.rstrip() + '\n' + include_line
+          path.write_text(text, encoding='utf-8')
+          PY
+            git add apps/api/reefvision/api/router.py
+          fi
+
+          if git diff --name-only --diff-filter=U | grep -qx 'apps/web/src/features/active-learning/ActiveLearningWorkspace.tsx'; then
+            git checkout --ours apps/web/src/features/active-learning/ActiveLearningWorkspace.tsx
+            python - <<'PY'
+          from pathlib import Path
+          path = Path('apps/web/src/features/active-learning/ActiveLearningWorkspace.tsx')
+          text = path.read_text(encoding='utf-8')
+          import_line = 'import { InteroperabilityWorkspace } from "../interoperability/InteroperabilityWorkspace";\n'
+          if import_line not in text:
+              anchor = 'import { AdvancedProviderWorkspace } from "../advanced-providers/AdvancedProviderWorkspace";\n'
+              text = text.replace(anchor, anchor + import_line)
+          block = '''      <details className="panel-card">\n        <summary><strong>Phase 9 · Project Interoperability</strong></summary>\n        <InteroperabilityWorkspace project={project} />\n      </details>\n'''
+          if 'Phase 9 · Project Interoperability' not in text:
+              marker = '    </section>\n  );\n}\n'
+              text = text.replace(marker, block + marker)
+          path.write_text(text, encoding='utf-8')
+          PY
+            git add apps/web/src/features/active-learning/ActiveLearningWorkspace.tsx
+          fi
+
+          if git diff --name-only --diff-filter=U | grep -qx 'apps/web/src/features/advanced-providers/AdvancedProviderWorkspace.tsx'; then
+            git checkout --ours apps/web/src/features/advanced-providers/AdvancedProviderWorkspace.tsx
+            git add apps/web/src/features/advanced-providers/AdvancedProviderWorkspace.tsx
+          fi
+
+          unmerged="$(git diff --name-only --diff-filter=U)"
+          if [ -n "$unmerged" ]; then
+            echo "Unresolved M9 conflicts:"
+            echo "$unmerged"
+            exit 1
+          fi
+          if [ "$apply_status" -ne 0 ]; then
+            echo 'Historical M9 patch reported conflicts; resolved known UI/router conflicts and verified no others remain.'
+          fi
+          git diff --check
+      - name: Commit transplant
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Integrate Milestone 9 project interoperability foundation'
+          git push
