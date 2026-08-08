@@ -20,15 +20,17 @@ from reefvision.schemas.dataset_versions import (
     DatasetVersionResponse,
     ExportResponse,
 )
-from reefvision.services.mask_aware_dataset_versions import MaskAwareDatasetVersionService
+from reefvision.services.measurement_aware_dataset_versions import (
+    MeasurementAwareDatasetVersionService,
+)
 
 router = APIRouter(tags=["dataset_versions"])
 DbSession = Annotated[Session, Depends(get_db_session)]
 
 
-def service(request: Request, session: Session) -> MaskAwareDatasetVersionService:
+def service(request: Request, session: Session) -> MeasurementAwareDatasetVersionService:
     settings: Settings = request.app.state.settings
-    return MaskAwareDatasetVersionService(session, settings)
+    return MeasurementAwareDatasetVersionService(session, settings)
 
 
 @router.get("/projects/{project_id}/dataset-versions", response_model=list[DatasetVersionResponse])

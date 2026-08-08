@@ -1,5 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 
 import {
   getAnnotationSession,
@@ -14,6 +21,7 @@ import {
   toAnnotationSavePayload,
   type ExtendedAnnotationSavePayload,
 } from "./annotationEditorReducer";
+import { CenterlineMeasurementLayer } from "./CenterlineMeasurementLayer";
 import {
   addMaskAnnotation,
   changeMaskAnnotationClass,
@@ -38,6 +46,7 @@ export function MaskAnnotationWorkspace({
   onClose,
 }: MaskAnnotationWorkspaceProps) {
   const queryClient = useQueryClient();
+  const [centerlineEditing, setCenterlineEditing] = useState(false);
   const [state, dispatch] = useReducer(
     annotationEditorReducer,
     initialAnnotationEditorState,
@@ -49,6 +58,10 @@ export function MaskAnnotationWorkspace({
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useEffect(() => {
+    setCenterlineEditing(false);
+  }, [imageId]);
 
   const sessionQuery = useQuery({
     queryKey: ["annotation-session", imageId],
@@ -159,6 +172,18 @@ export function MaskAnnotationWorkspace({
     dispatch({ type: "setActiveClassId", classId: labelClassId });
   }
 
+  const refreshAfterMeasurementChange = useCallback(async (): Promise<void> => {
+    const refreshed = await sessionQuery.refetch();
+    if (refreshed.data) {
+      dispatch({ type: "loadSession", session: refreshed.data });
+      loadedImageIdRef.current = imageId;
+    }
+    await queryClient.invalidateQueries({
+      queryKey: ["project-images", project.id],
+    });
+    await queryClient.invalidateQueries({ queryKey: ["mask-measurements"] });
+  }, [imageId, project.id, queryClient, sessionQuery]);
+
   async function leaveWorkspace(destination: "boxes" | "close") {
     const saved = await saveNow();
     if (!saved && !window.confirm("Discard unsaved mask edits?")) {
@@ -219,6 +244,10 @@ export function MaskAnnotationWorkspace({
   const selectedMasks = state.document.maskAnnotations.filter((mask) =>
     state.selectedMaskIds.includes(mask.id),
   );
+  const selectedMeasurementMask =
+    selectedMasks.length === 1 ? selectedMasks[0] : null;
+  const measurementEditingAvailable =
+    selectedMeasurementMask?.persisted === true && !isDirty(state);
 
   return (
     <div className="annotation-editor-shell" data-testid="mask-workspace">
@@ -236,7 +265,10 @@ export function MaskAnnotationWorkspace({
             className={state.tool === "select" ? "active" : "secondary"}
             data-testid="activate-mask-select-tool"
             title="Select masks and edit polygon vertices"
-            onClick={() => dispatch({ type: "setTool", tool: "select" })}
+            onClick={() => {
+              setCenterlineEditing(false);
+              dispatch({ type: "setTool", tool: "select" });
+            }}
           >
             Select vertices
           </button>
@@ -245,9 +277,25 @@ export function MaskAnnotationWorkspace({
             className={state.tool === "polygon" ? "active" : "secondary"}
             data-testid="activate-polygon-tool"
             title="Draw a polygon mask"
-            onClick={() => dispatch({ type: "setTool", tool: "polygon" })}
+            onClick={() => {
+              setCenterlineEditing(false);
+              dispatch({ type: "setTool", tool: "polygon" });
+            }}
           >
             Polygon
+          </button>
+          <button
+            type="button"
+            className={centerlineEditing ? "active" : "secondary"}
+            data-testid="activate-centerline-tool"
+            title="Draw total-linear-extension centerline points"
+            disabled={!measurementEditingAvailable}
+            onClick={() => {
+              dispatch({ type: "setTool", tool: "select" });
+              setCenterlineEditing((current) => !current);
+            }}
+          >
+            Centerline
           </button>
           <button
             type="button"
@@ -397,8 +445,12 @@ export function MaskAnnotationWorkspace({
               ))}
             </div>
             <MaskMeasurementPanel
+              projectId={project.id}
+              imageId={image.id}
+              labelClasses={sessionQuery.data.label_classes}
               selectedMasks={selectedMasks}
               documentDirty={isDirty(state)}
+              onRevisionCommitted={refreshAfterMeasurementChange}
             />
           </section>
         </aside>
@@ -452,6 +504,15 @@ export function MaskAnnotationWorkspace({
                   dispatch({ type: "setMaskSelection", selection })
                 }
                 onDeleteMaskIds={deleteMasks}
+              />
+              <CenterlineMeasurementLayer
+                width={image.width_px}
+                height={image.height_px}
+                selectedMask={selectedMeasurementMask}
+                documentDirty={isDirty(state)}
+                editing={centerlineEditing}
+                onEditingChange={setCenterlineEditing}
+                onRevisionCommitted={refreshAfterMeasurementChange}
               />
             </div>
           </div>
