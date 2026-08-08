@@ -31,6 +31,12 @@ from reefvision.db.models.training_draft import TrainingDraft
 from reefvision.db.models.training_run import TrainingRun
 from reefvision.db.models.video_asset import VideoAsset
 from reefvision.db.models.video_track import VideoTrack
+from reefvision.db.models.workflow_execution import (
+    WorkflowArtifact,
+    WorkflowGraphRecord,
+    WorkflowNodeRun,
+    WorkflowRun,
+)
 
 __all__ = [
     "ActiveLearningRound",
@@ -64,4 +70,8 @@ __all__ = [
     "TrainingRun",
     "VideoAsset",
     "VideoTrack",
+    "WorkflowArtifact",
+    "WorkflowGraphRecord",
+    "WorkflowNodeRun",
+    "WorkflowRun",
 ]
