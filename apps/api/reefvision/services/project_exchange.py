@@ -19,6 +19,9 @@ from reefvision.config import Settings
 from reefvision.db.models import (
     ActiveLearningRound,
     Annotation,
+    AnnotationEvent,
+    ClassOperation,
+    ClassVisibilityPreference,
     ClassificationDataset,
     ClassificationPrediction,
     DatasetVersion,
@@ -29,14 +32,17 @@ from reefvision.db.models import (
     Job,
     LabelClass,
     MaskAnnotation,
+    MaskAnnotationEvent,
     ModelRegistration,
     PredictionProposal,
     Project,
+    ProjectClassVisibilityDefault,
     ProjectExchangePackage,
     QualityControlIssue,
     QualityControlRun,
     ReviewQueue,
     ReviewQueueItem,
+    TrainingDraft,
     TrainingRun,
     VideoAsset,
     VideoTrack,
@@ -81,6 +87,19 @@ def _jsonl_bytes(rows: Iterable[dict[str, object]]) -> bytes:
 
 def _sha256_bytes(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
+
+
+def _sha256_file(path: Path) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    total = 0
+    with path.open("rb") as source:
+        while True:
+            chunk = source.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+            total += len(chunk)
+    return digest.hexdigest(), total
 
 
 def _safe_member(name: str) -> bool:
@@ -170,6 +189,16 @@ class ProjectExchangeService:
         image_ids = list(
             self.session.scalars(select(ImageAsset.id).where(ImageAsset.project_id == project.id))
         )
+        annotation_ids = list(
+            self.session.scalars(
+                select(Annotation.id).where(Annotation.image_id.in_(image_ids))
+            )
+        ) if image_ids else []
+        mask_annotation_ids = list(
+            self.session.scalars(
+                select(MaskAnnotation.id).where(MaskAnnotation.image_id.in_(image_ids))
+            )
+        ) if image_ids else []
         video_ids = list(
             self.session.scalars(select(VideoAsset.id).where(VideoAsset.project_id == project.id))
         )
@@ -185,6 +214,25 @@ class ProjectExchangeService:
                     select(LabelClass).where(LabelClass.project_id == project.id)
                 )
             ),
+            "class_operations": list(
+                self.session.scalars(
+                    select(ClassOperation).where(ClassOperation.project_id == project.id)
+                )
+            ),
+            "project_class_visibility_defaults": list(
+                self.session.scalars(
+                    select(ProjectClassVisibilityDefault).where(
+                        ProjectClassVisibilityDefault.project_id == project.id
+                    )
+                )
+            ),
+            "class_visibility_preferences": list(
+                self.session.scalars(
+                    select(ClassVisibilityPreference).where(
+                        ClassVisibilityPreference.project_id == project.id
+                    )
+                )
+            ),
             "images": list(
                 self.session.scalars(
                     select(ImageAsset).where(ImageAsset.project_id == project.id)
@@ -195,11 +243,25 @@ class ProjectExchangeService:
                     select(Annotation).where(Annotation.image_id.in_(image_ids))
                 )
             ) if image_ids else [],
+            "annotation_events": list(
+                self.session.scalars(
+                    select(AnnotationEvent).where(
+                        AnnotationEvent.annotation_id.in_(annotation_ids)
+                    )
+                )
+            ) if annotation_ids else [],
             "mask_annotations": list(
                 self.session.scalars(
                     select(MaskAnnotation).where(MaskAnnotation.image_id.in_(image_ids))
                 )
             ) if image_ids else [],
+            "mask_annotation_events": list(
+                self.session.scalars(
+                    select(MaskAnnotationEvent).where(
+                        MaskAnnotationEvent.mask_annotation_id.in_(mask_annotation_ids)
+                    )
+                )
+            ) if mask_annotation_ids else [],
             "image_labels": list(
                 self.session.scalars(
                     select(ImageLabel).where(ImageLabel.image_id.in_(image_ids))
@@ -251,6 +313,11 @@ class ProjectExchangeService:
                     select(ModelRegistration).where(ModelRegistration.project_id == project.id)
                 )
             ),
+            "training_drafts": list(
+                self.session.scalars(
+                    select(TrainingDraft).where(TrainingDraft.project_id == project.id)
+                )
+            ),
             "training_runs": list(
                 self.session.scalars(
                     select(TrainingRun).where(TrainingRun.project_id == project.id)
@@ -291,12 +358,37 @@ class ProjectExchangeService:
         }
         return sections
 
+    def _archive_file(
+        self,
+        archive: zipfile.ZipFile,
+        *,
+        source: Path,
+        member: str,
+        kind: str,
+        record_id: str,
+        known_sha256: str | None = None,
+    ) -> dict[str, object]:
+        if not source.is_file():
+            raise ValidationError(f"Managed exchange artifact is missing: {source.name}")
+        sha256, size = _sha256_file(source)
+        if known_sha256 is not None and sha256 != known_sha256:
+            raise ValidationError(f"Managed exchange artifact checksum changed: {source.name}")
+        archive.write(source, member)
+        return {
+            "kind": kind,
+            "record_id": record_id,
+            "path": member,
+            "sha256": sha256,
+            "size_bytes": size,
+        }
+
     def build_export(self, package_id: str) -> ProjectExchangePackageResponse:
         package = self._package(package_id)
         project = self._project(package.project_id)
         options = dict(package.options_json)
         include_media = bool(options.get("include_media", False))
         include_model_weights = bool(options.get("include_model_weights", False))
+        include_generated_artifacts = bool(options.get("include_generated_artifacts", False))
         archive_path = resolve_managed_project_path(self.settings, package.archive_path)
         archive_path.parent.mkdir(parents=True, exist_ok=True)
         temporary = archive_path.with_suffix(archive_path.suffix + ".part")
@@ -322,57 +414,93 @@ class ProjectExchangeService:
                 if include_media:
                     for image in sections["images"]:
                         source = resolve_managed_project_path(self.settings, image.managed_path)
-                        if not source.is_file():
-                            raise ValidationError(
-                                f"Managed image is missing: {image.original_filename}"
-                            )
                         member = f"media/images/{image.id}{source.suffix.lower()}"
-                        archive.write(source, member)
                         media_manifest.append(
-                            {
-                                "kind": "image",
-                                "record_id": image.id,
-                                "path": member,
-                                "sha256": image.sha256,
-                                "size_bytes": source.stat().st_size,
-                            }
+                            self._archive_file(
+                                archive,
+                                source=source,
+                                member=member,
+                                kind="image",
+                                record_id=image.id,
+                                known_sha256=image.sha256,
+                            )
                         )
                     for video in sections["videos"]:
                         source = resolve_managed_project_path(self.settings, video.managed_path)
-                        if not source.is_file():
-                            raise ValidationError(
-                                f"Managed video is missing: {video.original_filename}"
-                            )
                         member = f"media/videos/{video.id}{source.suffix.lower()}"
-                        archive.write(source, member)
                         media_manifest.append(
-                            {
-                                "kind": "video",
-                                "record_id": video.id,
-                                "path": member,
-                                "sha256": video.sha256,
-                                "size_bytes": source.stat().st_size,
-                            }
+                            self._archive_file(
+                                archive,
+                                source=source,
+                                member=member,
+                                kind="video",
+                                record_id=video.id,
+                                known_sha256=video.sha256,
+                            )
                         )
 
                 if include_model_weights:
                     for model in sections["models"]:
                         source = resolve_managed_project_path(self.settings, model.managed_path)
-                        if not source.is_file():
-                            raise ValidationError(
-                                f"Managed model is missing: {model.display_name}"
-                            )
                         member = f"models/{model.id}{source.suffix.lower()}"
-                        archive.write(source, member)
                         media_manifest.append(
-                            {
-                                "kind": "model",
-                                "record_id": model.id,
-                                "path": member,
-                                "sha256": model.sha256,
-                                "size_bytes": source.stat().st_size,
-                            }
+                            self._archive_file(
+                                archive,
+                                source=source,
+                                member=member,
+                                kind="model",
+                                record_id=model.id,
+                                known_sha256=model.sha256,
+                            )
                         )
+
+                if include_generated_artifacts:
+                    for mask in sections["mask_annotations"]:
+                        if not mask.mask_path:
+                            continue
+                        source = resolve_managed_project_path(self.settings, mask.mask_path)
+                        member = f"artifacts/masks/{mask.id}{source.suffix.lower()}"
+                        media_manifest.append(
+                            self._archive_file(
+                                archive,
+                                source=source,
+                                member=member,
+                                kind="mask",
+                                record_id=mask.id,
+                            )
+                        )
+                    for training_run in sections["training_runs"]:
+                        if training_run.logs_path:
+                            source = resolve_managed_project_path(
+                                self.settings, training_run.logs_path
+                            )
+                            member = f"artifacts/training/{training_run.id}/logs{source.suffix.lower()}"
+                            media_manifest.append(
+                                self._archive_file(
+                                    archive,
+                                    source=source,
+                                    member=member,
+                                    kind="training_log",
+                                    record_id=training_run.id,
+                                )
+                            )
+                        if training_run.result_checkpoint_path:
+                            source = resolve_managed_project_path(
+                                self.settings, training_run.result_checkpoint_path
+                            )
+                            member = (
+                                f"artifacts/training/{training_run.id}/checkpoint"
+                                f"{source.suffix.lower()}"
+                            )
+                            media_manifest.append(
+                                self._archive_file(
+                                    archive,
+                                    source=source,
+                                    member=member,
+                                    kind="training_checkpoint",
+                                    record_id=training_run.id,
+                                )
+                            )
 
                 manifest = {
                     "format_name": FORMAT_NAME,
@@ -387,7 +515,7 @@ class ProjectExchangeService:
                     "sections": section_manifest,
                     "media": media_manifest,
                     "import_policy": {
-                        "mode": "preflight_only",
+                        "mode": "create_new_project",
                         "id_remapping_required": True,
                         "existing_projects_must_not_be_overwritten": True,
                     },
@@ -469,9 +597,34 @@ class ProjectExchangeService:
                     section_counts[str(name)] = len(lines)
                     if len(lines) != int(descriptor.get("count", -1)):
                         errors.append(f"Section row count failed: {name}")
-                if not manifest.get("media"):
+                media = manifest.get("media", [])
+                if not isinstance(media, list):
+                    errors.append("Manifest media list is invalid")
+                    media = []
+                for descriptor in media:
+                    if not isinstance(descriptor, dict):
+                        errors.append("Media descriptor is invalid")
+                        continue
+                    member = str(descriptor.get("path", ""))
+                    if not _safe_member(member) or member not in names:
+                        errors.append(f"Media file is missing or unsafe: {member}")
+                        continue
+                    digest = hashlib.sha256()
+                    size = 0
+                    with archive.open(member) as input_stream:
+                        while True:
+                            chunk = input_stream.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            digest.update(chunk)
+                            size += len(chunk)
+                    if digest.hexdigest() != str(descriptor.get("sha256") or ""):
+                        errors.append(f"Media checksum failed: {member}")
+                    if size != int(descriptor.get("size_bytes", -1)):
+                        errors.append(f"Media size failed: {member}")
+                if not media:
                     warnings.append(
-                        "Package does not include original media; import would require relinking files"
+                        "Package does not include original media; a reopenable import requires relinking or a media-inclusive export"
                     )
         except (zipfile.BadZipFile, json.JSONDecodeError, OSError) as exc:
             errors.append(f"Archive could not be inspected: {exc}")
