@@ -87,9 +87,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["image_id"], ["images.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["model_id"], ["model_registrations.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(
-            ["label_class_id"], ["label_classes.id"], ondelete="RESTRICT"
-        ),
+        sa.ForeignKeyConstraint(["label_class_id"], ["label_classes.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
             ["accepted_image_label_id"], ["image_labels.id"], ondelete="SET NULL"
         ),
