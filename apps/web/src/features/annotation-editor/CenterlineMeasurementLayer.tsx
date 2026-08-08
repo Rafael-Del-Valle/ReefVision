@@ -25,9 +25,7 @@ interface CenterlineMeasurementLayerProps {
 }
 
 function sourcePoint(
-  event:
-    | ReactMouseEvent<SVGSVGElement>
-    | ReactPointerEvent<SVGSVGElement>,
+  event: ReactMouseEvent<SVGSVGElement> | ReactPointerEvent<SVGSVGElement>,
   width: number,
   height: number,
 ): MeasurementPoint {
