@@ -585,8 +585,9 @@ class AnnotationImportService:
                             )
                         elif external_type == "PatchAnnotation":
                             center = self._point_pair(annotation.get("center_xy"))
+                            raw_size = annotation.get("annotation_size")
                             try:
-                                size = float(annotation.get("annotation_size"))
+                                size = float(raw_size) if raw_size is not None else 0.0
                             except (TypeError, ValueError) as exc:
                                 raise ValidationError("Patch size is missing or malformed") from exc
                             if center is None or size <= 0:
