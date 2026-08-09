@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections import Counter
+from collections import Counter, defaultdict
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -27,6 +27,12 @@ from reefvision.schemas.active_learning import (
     ActiveLearningRoundResponse,
 )
 from reefvision.schemas.review_queues import ReviewQueueCreateRequest, ReviewScoreWeights
+from reefvision.services.active_learning_committee import (
+    COMMITTEE_FORMULA_ID,
+    COMMITTEE_FORMULA_VERSION,
+    COMMITTEE_WEIGHTS,
+    score_committee_disagreement,
+)
 from reefvision.services.review_queues import ReviewQueueService
 from reefvision.storage.datasets import canonical_json_sha256
 
@@ -78,6 +84,7 @@ _STRATEGY_WEIGHTS: dict[str, ReviewScoreWeights] = {
         recent_import=2,
         stale_review_state=8,
     ),
+    "committee": ReviewScoreWeights(),
     "random": ReviewScoreWeights(),
 }
 
@@ -128,6 +135,51 @@ class ActiveLearningRoundService:
             raise ValidationError("All acquisition models must belong to the selected project")
         return model_ids
 
+    def _committee_signals(
+        self,
+        *,
+        project_id: str,
+        model_ids: list[str],
+        image_ids: list[str],
+    ) -> dict[str, dict[str, object]]:
+        models = list(
+            self.session.scalars(
+                select(ModelRegistration).where(
+                    ModelRegistration.project_id == project_id,
+                    ModelRegistration.id.in_(model_ids),
+                )
+            )
+        )
+        model_names = {model.id: model.display_name for model in models}
+        predictions_by_image: dict[str, list[dict[str, object]]] = defaultdict(list)
+        if image_ids:
+            rows = self.session.execute(
+                select(
+                    PredictionProposal.image_id,
+                    PredictionProposal.model_id,
+                    PredictionProposal.confidence,
+                ).where(
+                    PredictionProposal.project_id == project_id,
+                    PredictionProposal.image_id.in_(image_ids),
+                    PredictionProposal.model_id.in_(model_ids),
+                )
+            )
+            for image_id, model_id, confidence in rows:
+                predictions_by_image[str(image_id)].append(
+                    {
+                        "model_id": str(model_id),
+                        "confidence": float(confidence),
+                    }
+                )
+        return {
+            image_id: score_committee_disagreement(
+                model_ids=model_ids,
+                model_names=model_names,
+                predictions=predictions_by_image.get(image_id, []),
+            )
+            for image_id in image_ids
+        }
+
     def create_round(
         self,
         project_id: str,
@@ -136,6 +188,10 @@ class ActiveLearningRoundService:
         self._project(project_id)
         version = self._dataset_version(project_id, request.dataset_version_id)
         model_ids = self._model_ids(project_id, request.model_ids)
+        if request.strategy == "committee" and len(model_ids) < 2:
+            raise ValidationError(
+                "Committee active learning requires at least two distinct acquisition models"
+            )
         weights = _STRATEGY_WEIGHTS[request.strategy]
         queue_request = ReviewQueueCreateRequest(
             signal_weights=weights,
@@ -158,26 +214,51 @@ class ActiveLearningRoundService:
             queue_items = [
                 item for item in queue_items if model_filter.intersection(item.model_ids_json)
             ]
-        if request.strategy == "random":
+
+        committee_signals: dict[str, dict[str, object]] = {}
+        if request.strategy == "committee":
+            committee_signals = self._committee_signals(
+                project_id=project_id,
+                model_ids=model_ids,
+                image_ids=[item.image_id for item in queue_items],
+            )
+            queue_items.sort(
+                key=lambda item: (
+                    -float(committee_signals[item.image_id]["score"]),
+                    item.rank_position,
+                    item.image_id,
+                )
+            )
+        elif request.strategy == "random":
             queue_items.sort(
                 key=lambda item: (_random_order_key(request.random_seed, item.image_id), item.image_id)
             )
+
         selected = queue_items[: request.requested_size]
         if not selected:
             raise ValidationError("The acquisition strategy did not select any review candidates")
 
-        stable_items = [
-            {
+        stable_items: list[dict[str, object]] = []
+        for selection_rank, item in enumerate(selected, start=1):
+            stable: dict[str, object] = {
                 "image_id": item.image_id,
                 "rank_position": (
-                    selection_rank if request.strategy == "random" else item.rank_position
+                    selection_rank
+                    if request.strategy in {"random", "committee"}
+                    else item.rank_position
                 ),
-                "score": item.score,
+                "score": (
+                    float(committee_signals[item.image_id]["score"])
+                    if request.strategy == "committee"
+                    else item.score
+                ),
                 "input_checksum": item.input_checksum,
             }
-            for selection_rank, item in enumerate(selected, start=1)
-        ]
-        identity_payload = {
+            if request.strategy == "committee":
+                stable["committee"] = committee_signals[item.image_id]
+            stable_items.append(stable)
+
+        identity_payload: dict[str, object] = {
             "schema_version": "active-learning-identity-0001",
             "project_id": project_id,
             "dataset_version_id": version.id if version else None,
@@ -191,6 +272,10 @@ class ActiveLearningRoundService:
         }
         if request.strategy == "random":
             identity_payload["random_seed"] = request.random_seed
+        if request.strategy == "committee":
+            identity_payload["committee_formula_id"] = COMMITTEE_FORMULA_ID
+            identity_payload["committee_formula_version"] = COMMITTEE_FORMULA_VERSION
+            identity_payload["committee_weights"] = dict(COMMITTEE_WEIGHTS)
         selection_sha256 = canonical_json_sha256(identity_payload)
         existing = self.session.scalar(
             select(ActiveLearningRound).where(
@@ -216,10 +301,14 @@ class ActiveLearningRoundService:
                     "reason_summary": (
                         f"Random baseline selection using deterministic seed {request.random_seed}."
                         if request.strategy == "random"
+                        else str(committee_signals[item.image_id]["reason_summary"])
+                        if request.strategy == "committee"
                         else item.reason_summary
                     ),
                     "queue_reason_summary": (
-                        item.reason_summary if request.strategy == "random" else None
+                        item.reason_summary
+                        if request.strategy in {"random", "committee"}
+                        else None
                     ),
                 }
                 for stable, item in zip(stable_items, selected, strict=True)
@@ -230,6 +319,15 @@ class ActiveLearningRoundService:
         }
         if request.strategy == "random":
             strategy_config["random_seed"] = request.random_seed
+        if request.strategy == "committee":
+            strategy_config.update(
+                {
+                    "committee_formula_id": COMMITTEE_FORMULA_ID,
+                    "committee_formula_version": COMMITTEE_FORMULA_VERSION,
+                    "committee_weights": dict(COMMITTEE_WEIGHTS),
+                    "minimum_models": 2,
+                }
+            )
         round_record = ActiveLearningRound(
             project_id=project_id,
             dataset_version_id=version.id if version else None,
