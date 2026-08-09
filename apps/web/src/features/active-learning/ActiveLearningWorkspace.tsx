@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { Project } from "../../api/client";
 import {
   completeActiveLearningRound,
   createActiveLearningRound,
   getActiveLearningFeedback,
+  getActiveLearningModels,
   getActiveLearningRounds,
   type ActiveLearningRoundRecord,
   type ActiveLearningStrategy,
@@ -49,12 +50,24 @@ export function ActiveLearningWorkspace({
   const [strategy, setStrategy] = useState<ActiveLearningStrategy>("hybrid");
   const [requestedSize, setRequestedSize] = useState(50);
   const [randomSeed, setRandomSeed] = useState(0);
+  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const [selectedRoundId, setSelectedRoundId] = useState("");
 
   const roundsQuery = useQuery({
     queryKey: ["active-learning-rounds", project.id],
     queryFn: ({ signal }) => getActiveLearningRounds(project.id, signal),
   });
+  const modelsQuery = useQuery({
+    queryKey: ["active-learning-models", project.id],
+    queryFn: ({ signal }) => getActiveLearningModels(project.id, signal),
+  });
+  const detectorModels = useMemo(
+    () =>
+      (modelsQuery.data ?? []).filter(
+        (model) => model.purpose === "detector" && model.task === "detect",
+      ),
+    [modelsQuery.data],
+  );
   const selectedRound = roundsQuery.data?.find(
     (round) => round.id === selectedRoundId,
   );
@@ -72,12 +85,22 @@ export function ActiveLearningWorkspace({
     }
   }, [roundsQuery.data, selectedRoundId]);
 
+  function toggleModel(modelId: string): void {
+    setSelectedModelIds((current) =>
+      current.includes(modelId)
+        ? current.filter((value) => value !== modelId)
+        : [...current, modelId],
+    );
+  }
+
+  const committeeReady = strategy !== "committee" || selectedModelIds.length >= 2;
   const createMutation = useMutation({
     mutationFn: () =>
       createActiveLearningRound(project.id, {
         name,
         strategy,
         requested_size: requestedSize,
+        model_ids: selectedModelIds,
         random_seed: randomSeed,
       }),
     onSuccess: async (round) => {
@@ -109,8 +132,9 @@ export function ActiveLearningWorkspace({
           <h3>Active learning</h3>
           <p>
             Freeze an explainable acquisition batch, review it through the existing
-            queue, and measure how much human feedback the round produced. Random
-            baseline rounds provide a reproducible control for scientific comparisons.
+            queue, and measure how much human feedback the round produced. Committee
+            rounds compare independent detector outputs directly; random baseline rounds
+            provide a reproducible control for scientific comparisons.
           </p>
         </div>
       </div>
@@ -140,9 +164,47 @@ export function ActiveLearningWorkspace({
               <option value="uncertainty">Uncertainty</option>
               <option value="rare_class">Rare class</option>
               <option value="quality">Quality risk</option>
+              <option value="committee">Multi-model committee</option>
               <option value="random">Random baseline</option>
             </select>
           </label>
+
+          <fieldset>
+            <legend>Acquisition models</legend>
+            <p className="muted-copy">
+              Model filtering is optional for most strategies. Committee mode requires
+              at least two independent detectors; three is the recommended default for a
+              useful 2-of-3-style comparison, but ReefVision supports larger committees.
+            </p>
+            {detectorModels.length ? (
+              <div className="annotation-selection-list">
+                {detectorModels.map((model) => (
+                  <label key={model.id} className="annotation-selection-row">
+                    <input
+                      type="checkbox"
+                      checked={selectedModelIds.includes(model.id)}
+                      onChange={() => toggleModel(model.id)}
+                    />
+                    <span>
+                      <strong>{model.display_name}</strong>
+                      <br />
+                      <small>
+                        {model.provider_name} · {model.task} · {model.sha256.slice(0, 10)}
+                      </small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <p>No registered detection models are available for this project.</p>
+            )}
+            {strategy === "committee" && selectedModelIds.length < 2 && (
+              <p className="form-error">
+                Select at least two registered detectors for committee acquisition.
+              </p>
+            )}
+          </fieldset>
+
           {strategy === "random" && (
             <label>
               Random seed
@@ -165,7 +227,10 @@ export function ActiveLearningWorkspace({
               onChange={(event) => setRequestedSize(Number(event.target.value))}
             />
           </label>
-          <button type="submit" disabled={createMutation.isPending || !name.trim()}>
+          <button
+            type="submit"
+            disabled={createMutation.isPending || !name.trim() || !committeeReady}
+          >
             {createMutation.isPending ? "Creating..." : "Create round"}
           </button>
           {createMutation.error && (
@@ -193,13 +258,32 @@ export function ActiveLearningWorkspace({
                 <dd>{selectedRound.selected_count}</dd>
               </div>
               <div>
+                <dt>Models</dt>
+                <dd>{selectedRound.model_ids_json.length || "All available"}</dd>
+              </div>
+              <div>
                 <dt>Review queue</dt>
-                <dd><code>{selectedRound.review_queue_id}</code></dd>
+                <dd>
+                  <code>{selectedRound.review_queue_id}</code>
+                </dd>
               </div>
               <div>
                 <dt>Manifest</dt>
-                <dd><code>{selectedRound.selection_sha256.slice(0, 12)}</code></dd>
+                <dd>
+                  <code>{selectedRound.selection_sha256.slice(0, 12)}</code>
+                </dd>
               </div>
+              {selectedRound.strategy === "committee" && (
+                <div>
+                  <dt>Committee formula</dt>
+                  <dd>
+                    {String(
+                      selectedRound.strategy_config_json.committee_formula_id ??
+                        "detection_committee_disagreement_v1",
+                    )}
+                  </dd>
+                </div>
+              )}
               {selectedRound.strategy === "random" && (
                 <div>
                   <dt>Random seed</dt>
@@ -247,18 +331,27 @@ export function ActiveLearningWorkspace({
           <h4>Feedback progress</h4>
           {feedbackQuery.data ? (
             <>
-              <progress
-                max={1}
-                value={feedbackQuery.data.completion_fraction}
-              />
+              <progress max={1} value={feedbackQuery.data.completion_fraction} />
               <p>
                 {(feedbackQuery.data.completion_fraction * 100).toFixed(1)}% terminal
               </p>
               <dl className="metric-list">
-                <div><dt>Pending</dt><dd>{feedbackQuery.data.pending_count}</dd></div>
-                <div><dt>In progress</dt><dd>{feedbackQuery.data.in_progress_count}</dd></div>
-                <div><dt>Completed</dt><dd>{feedbackQuery.data.completed_count}</dd></div>
-                <div><dt>Skipped</dt><dd>{feedbackQuery.data.skipped_count}</dd></div>
+                <div>
+                  <dt>Pending</dt>
+                  <dd>{feedbackQuery.data.pending_count}</dd>
+                </div>
+                <div>
+                  <dt>In progress</dt>
+                  <dd>{feedbackQuery.data.in_progress_count}</dd>
+                </div>
+                <div>
+                  <dt>Completed</dt>
+                  <dd>{feedbackQuery.data.completed_count}</dd>
+                </div>
+                <div>
+                  <dt>Skipped</dt>
+                  <dd>{feedbackQuery.data.skipped_count}</dd>
+                </div>
               </dl>
             </>
           ) : (
