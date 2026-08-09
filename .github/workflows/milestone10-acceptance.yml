@@ -25,9 +25,12 @@ jobs:
             apps/api/reefvision/domain/enums.py \
             apps/api/reefvision/jobs/workflow.py \
             apps/api/reefvision/jobs/worker.py \
+            apps/api/reefvision/ml/model_bundles.py \
+            apps/api/reefvision/ml/sam2_provider.py \
             apps/api/reefvision/schemas/workflow_execution.py \
             apps/api/reefvision/schemas/workflow_graphs.py \
             apps/api/reefvision/services/jobs.py \
+            apps/api/reefvision/services/models.py \
             apps/api/reefvision/services/workflow_auto_label.py \
             apps/api/reefvision/services/workflow_consensus.py \
             apps/api/reefvision/services/workflow_execution.py \
@@ -44,6 +47,7 @@ jobs:
             apps/api/reefvision/tests/test_workflow_prompt_assist_graph_phase10.py \
             apps/api/reefvision/tests/test_workflow_prompt_assist_phase10.py \
             apps/api/reefvision/tests/test_workflow_review_phase10.py \
+            apps/api/reefvision/tests/test_workflow_sam2_registration_phase10.py \
             apps/api/reefvision/tests/test_workflow_vlm_graph_phase10.py \
             apps/api/reefvision/tests/test_workflow_vlm_phase10.py
           python -m ruff format --check \
@@ -54,9 +58,12 @@ jobs:
             apps/api/reefvision/domain/enums.py \
             apps/api/reefvision/jobs/workflow.py \
             apps/api/reefvision/jobs/worker.py \
+            apps/api/reefvision/ml/model_bundles.py \
+            apps/api/reefvision/ml/sam2_provider.py \
             apps/api/reefvision/schemas/workflow_execution.py \
             apps/api/reefvision/schemas/workflow_graphs.py \
             apps/api/reefvision/services/jobs.py \
+            apps/api/reefvision/services/models.py \
             apps/api/reefvision/services/workflow_auto_label.py \
             apps/api/reefvision/services/workflow_consensus.py \
             apps/api/reefvision/services/workflow_execution.py \
@@ -73,6 +80,7 @@ jobs:
             apps/api/reefvision/tests/test_workflow_prompt_assist_graph_phase10.py \
             apps/api/reefvision/tests/test_workflow_prompt_assist_phase10.py \
             apps/api/reefvision/tests/test_workflow_review_phase10.py \
+            apps/api/reefvision/tests/test_workflow_sam2_registration_phase10.py \
             apps/api/reefvision/tests/test_workflow_vlm_graph_phase10.py \
             apps/api/reefvision/tests/test_workflow_vlm_phase10.py
       - name: Run Milestone 10 workflow tests
@@ -85,6 +93,7 @@ jobs:
           apps/api/reefvision/tests/test_workflow_auto_label_phase10.py
           apps/api/reefvision/tests/test_workflow_prompt_assist_graph_phase10.py
           apps/api/reefvision/tests/test_workflow_prompt_assist_phase10.py
+          apps/api/reefvision/tests/test_workflow_sam2_registration_phase10.py
           apps/api/reefvision/tests/test_workflow_vlm_graph_phase10.py
           apps/api/reefvision/tests/test_workflow_vlm_phase10.py
           -q
