@@ -106,9 +106,10 @@ def create_depth_map_artifacts(
         f"{project.storage_root}/derived/depth/{job_id}",
     )
     shutil.rmtree(output_directory, ignore_errors=True)
-    provider = provider_factory(model.provider_name)
+    provider: DepthRegistrationProvider | None = None
     outputs: list[dict[str, object]] = []
     try:
+        provider = provider_factory(model.provider_name)
         model_path = resolve_managed_project_path(settings, model.managed_path)
         provider.load_model(model_path, device)
         job.result_json = {
@@ -198,8 +199,11 @@ def create_depth_map_artifacts(
             session.commit()
         raise
     finally:
-        provider.unload_model()
+        if provider is not None:
+            provider.unload_model()
 
+    if provider is None:  # pragma: no cover - successful execution always resolves a provider
+        raise RuntimeError("Depth provider unexpectedly unavailable after successful execution")
     return {
         "schema_version": "relative-depth-maps-0001",
         "project_id": project_id,
