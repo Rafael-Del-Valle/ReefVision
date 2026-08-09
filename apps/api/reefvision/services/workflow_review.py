@@ -21,6 +21,10 @@ from reefvision.schemas.workflow_execution import (
     WorkflowReviewResumeRequest,
     WorkflowRunResponse,
 )
+from reefvision.services.workflow_auto_label import (
+    ensure_disagreement_active_learning_round,
+    materialize_consensus_annotations,
+)
 
 REVIEW_GATE_NODE_TYPES = {
     "detection_review_gate",
@@ -90,6 +94,72 @@ def _pending_review_count(session: Session, artifacts: list[WorkflowArtifact]) -
     return pending
 
 
+def _disagreement_artifact_for_consensus(
+    session: Session,
+    consensus_artifact: WorkflowArtifact,
+) -> WorkflowArtifact | None:
+    return session.scalar(
+        select(WorkflowArtifact)
+        .where(
+            WorkflowArtifact.workflow_run_id == consensus_artifact.workflow_run_id,
+            WorkflowArtifact.producer_node_run_id == consensus_artifact.producer_node_run_id,
+            WorkflowArtifact.data_type == "detection_disagreements",
+        )
+        .order_by(WorkflowArtifact.created_at.desc(), WorkflowArtifact.id.desc())
+        .limit(1)
+    )
+
+
+def _auto_label_post_review(
+    session: Session,
+    *,
+    project_id: str,
+    artifacts: list[WorkflowArtifact],
+    reviewed_by: str,
+) -> dict[str, Any]:
+    consensus_artifacts = [
+        artifact for artifact in artifacts if artifact.data_type == "detection_consensus"
+    ]
+    if not consensus_artifacts:
+        return {}
+
+    materialized: list[dict[str, Any]] = []
+    active_learning: list[dict[str, Any]] = []
+    for consensus_artifact in consensus_artifacts:
+        materialized.append(
+            materialize_consensus_annotations(
+                session,
+                project_id=project_id,
+                artifact=consensus_artifact,
+                reviewed_by=reviewed_by,
+            )
+        )
+        disagreement_artifact = _disagreement_artifact_for_consensus(
+            session,
+            consensus_artifact,
+        )
+        if disagreement_artifact is None:
+            continue
+        handoff = ensure_disagreement_active_learning_round(
+            session,
+            project_id=project_id,
+            artifact=disagreement_artifact,
+            created_by=reviewed_by,
+        )
+        if handoff is not None:
+            active_learning.append(
+                {
+                    "source_artifact_id": disagreement_artifact.id,
+                    **handoff,
+                }
+            )
+
+    return {
+        "consensus_materialization": materialized,
+        "active_learning_handoff": active_learning,
+    }
+
+
 def resume_review_gate(
     session: Session,
     node_run_id: str,
@@ -119,6 +189,17 @@ def resume_review_gate(
             f"{pending_count} model prediction(s) are still pending review"
         )
 
+    auto_label_result = (
+        _auto_label_post_review(
+            session,
+            project_id=run.project_id,
+            artifacts=artifacts,
+            reviewed_by=request.reviewed_by,
+        )
+        if node_run.node_type == "detection_review_gate"
+        else {}
+    )
+
     now = _now()
     result = dict(node_run.result_json or {})
     result["review_approval"] = {
@@ -126,6 +207,7 @@ def resume_review_gate(
         "note": request.note,
         "approved_at": now.isoformat(),
         "input_artifact_ids": [artifact.id for artifact in artifacts],
+        **auto_label_result,
     }
     node_run.result_json = result
     node_run.status = "review_approved"
