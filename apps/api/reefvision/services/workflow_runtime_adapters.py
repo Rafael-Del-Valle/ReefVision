@@ -25,6 +25,7 @@ from reefvision.jobs.classification_inference import process_classification_infe
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.services.mask_measurements import MaskMeasurementService
+from reefvision.services.workflow_prompt_assist import create_prompt_assist_mask_proposals
 from reefvision.services.workflow_review import WorkflowReviewRequired
 from reefvision.services.workflow_vlm import VlmClassDefinition, run_vlm_detection
 from reefvision.storage.projects import resolve_managed_project_path
@@ -36,6 +37,7 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "detection_review_gate",
     "mask_review_gate",
     "classification_review_gate",
+    "prompt_assist_masks",
     "mask_measurements",
     "video_tracking",
 }
@@ -613,6 +615,35 @@ def _classification_review_gate(
     )
 
 
+def _prompt_assist_masks(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    boxes_artifact = _single_artifact(inputs, "boxes")
+    model_payload = _single_payload(inputs, "model")
+    model_id = str(model_payload.get("model_id") or "")
+    if not model_id:
+        raise ValidationError("Prompt Assist Masks requires a registered assist model")
+    payload = create_prompt_assist_mask_proposals(
+        session,
+        settings,
+        project_id=project_id,
+        boxes_artifact=boxes_artifact,
+        model_id=model_id,
+        device=str(parameters.get("device", "auto")),
+    )
+    return [
+        {
+            "port_id": "proposals",
+            "data_type": "mask_proposals",
+            "payload": payload,
+        }
+    ]
+
+
 def _mask_measurements(
     session: Session,
     settings: Settings,
@@ -740,6 +771,7 @@ _ADAPTERS = {
     "detection_review_gate": _detection_review_gate,
     "mask_review_gate": _mask_review_gate,
     "classification_review_gate": _classification_review_gate,
+    "prompt_assist_masks": _prompt_assist_masks,
     "mask_measurements": _mask_measurements,
     "video_tracking": _video_tracking,
 }
