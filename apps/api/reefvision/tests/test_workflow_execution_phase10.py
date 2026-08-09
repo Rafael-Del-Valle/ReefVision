@@ -225,10 +225,10 @@ def test_workflow_export_node_builds_project_exchange_artifact(
         assert package.manifest_sha256 == artifact["payload_json"]["manifest_sha256"]
 
 
-def test_queue_rejects_valid_graph_with_pending_execution_adapter(
+def test_queue_rejects_workflow_that_still_requires_human_review(
     client: TestClient,
 ) -> None:
-    project = create_project(client, "Pending workflow adapter")
+    project = create_project(client, "Pending human review workflow")
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
         model = ModelRegistration(
@@ -252,8 +252,8 @@ def test_queue_rejects_valid_graph_with_pending_execution_adapter(
         model_id = model.id
 
     graph = {
-        "graph_id": "pending-segmentation",
-        "name": "Pending segmentation adapter",
+        "graph_id": "pending-mask-review",
+        "name": "Segmentation waiting for review",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
             {"node_id": "images", "node_type": "project_images"},
@@ -263,6 +263,7 @@ def test_queue_rejects_valid_graph_with_pending_execution_adapter(
                 "parameters": {"model_id": model_id},
             },
             {"node_id": "segment", "node_type": "segmentation_inference"},
+            {"node_id": "review", "node_type": "mask_review_gate"},
         ],
         "edges": [
             {
@@ -293,6 +294,13 @@ def test_queue_rejects_valid_graph_with_pending_execution_adapter(
                 "target_node_id": "segment",
                 "target_port_id": "model",
             },
+            {
+                "edge_id": "segment-review",
+                "source_node_id": "segment",
+                "source_port_id": "proposals",
+                "target_node_id": "review",
+                "target_port_id": "proposals",
+            },
         ],
     }
     plan = client.post(
@@ -302,7 +310,7 @@ def test_queue_rejects_valid_graph_with_pending_execution_adapter(
     assert plan.status_code == 200, plan.text
     assert plan.json()["valid"] is True
     assert plan.json()["executable"] is False
-    assert "Segmentation Inference" in str(plan.json()["execution_blocker"])
+    assert "Mask Review Gate" in str(plan.json()["execution_blocker"])
 
     saved = _save_graph(client, project["id"], graph)
     response = client.post(
