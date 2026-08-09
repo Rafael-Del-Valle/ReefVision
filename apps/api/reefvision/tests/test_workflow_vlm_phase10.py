@@ -108,32 +108,50 @@ def test_openai_vlm_uses_structured_output_and_normalizes_pixels(
     assert "secret-openai" not in json.dumps(result)
 
 
-def test_gemini_vlm_uses_interactions_structured_schema(
+def test_gemini_vlm_uses_generate_content_inline_image_and_structured_schema(
     tmp_path: Path,
     classes: list[VlmClassDefinition],
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path.endswith("/v1beta/interactions")
+        assert request.url.path == "/v1beta/models/test-gemini-vision:generateContent"
         assert request.headers["x-goog-api-key"] == "secret-gemini"
         body = json.loads(request.content)
-        assert body["store"] is False
-        assert body["response_format"]["mime_type"] == "application/json"
-        assert body["input"][1]["type"] == "image"
+        assert body["contents"][0]["role"] == "user"
+        parts = body["contents"][0]["parts"]
+        assert parts[0]["text"]
+        assert parts[1]["inline_data"]["mime_type"] == "image/jpeg"
+        assert parts[1]["inline_data"]["data"]
+        response_format = body["generationConfig"]["responseFormat"]["text"]
+        assert response_format["mimeType"] == "application/json"
+        assert response_format["schema"]["required"] == ["detections"]
         return httpx.Response(
             200,
             json={
-                "id": "interaction-gemini",
-                "usage_metadata": {"prompt_token_count": 11, "candidates_token_count": 7},
-                "output_text": json.dumps(
+                "usageMetadata": {
+                    "promptTokenCount": 11,
+                    "candidatesTokenCount": 7,
+                },
+                "candidates": [
                     {
-                        "detections": [
-                            {
-                                "label_class_id": "class-open",
-                                "box_2d": [0, 0, 1000, 1000],
-                            }
-                        ]
+                        "content": {
+                            "role": "model",
+                            "parts": [
+                                {
+                                    "text": json.dumps(
+                                        {
+                                            "detections": [
+                                                {
+                                                    "label_class_id": "class-open",
+                                                    "box_2d": [0, 0, 1000, 1000],
+                                                }
+                                            ]
+                                        }
+                                    )
+                                }
+                            ],
+                        }
                     }
-                ),
+                ],
             },
         )
 
@@ -141,9 +159,10 @@ def test_gemini_vlm_uses_interactions_structured_schema(
         result = _run(_settings(tmp_path, "gemini"), "gemini", client, classes)
 
     assert result["provider"] == "gemini"
+    assert result["response_id"] is None
     assert result["detections"][0]["box"]["x_max"] == 1000.0
     assert result["detections"][0]["box"]["y_max"] == 500.0
-    assert result["usage"]["prompt_token_count"] == 11
+    assert result["usage"]["promptTokenCount"] == 11
     assert "secret-gemini" not in json.dumps(result)
 
 
