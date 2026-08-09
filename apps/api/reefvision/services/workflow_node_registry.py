@@ -217,7 +217,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             node_type="detection_review_gate",
             display_name="Detection Review Gate",
             category="human_review",
-            description="Require human acceptance or rejection of detection proposals.",
+            description="Pause until detection proposals or consensus detections are reviewed.",
             input_ports=[
                 _input(
                     "proposals",
@@ -229,34 +229,43 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             output_ports=[_output("boxes", "Reviewed Boxes", "reviewed_boxes")],
             required_parameters=[],
             optional_parameters={"queue_name": None},
-            execution_state="review_gate_pending",
-            implementation_notes=["Graph execution must pause here until human review is complete."],
+            execution_state="pausable_review_gate",
+            executable=True,
+            implementation_notes=[
+                "Execution persists a waiting-for-review state and resumes without rerunning completed nodes."
+            ],
         ),
         WorkflowNodeDefinitionResponse(
             node_type="mask_review_gate",
             display_name="Mask Review Gate",
             category="human_review",
-            description="Require human acceptance or rejection of mask proposals.",
+            description="Pause until segmentation proposals are reviewed.",
             input_ports=[_input("proposals", "Mask Proposals", "mask_proposals")],
             output_ports=[_output("masks", "Reviewed Masks", "reviewed_masks")],
             required_parameters=[],
             optional_parameters={"queue_name": None},
-            execution_state="review_gate_pending",
-            implementation_notes=["Graph execution must pause here until human review is complete."],
+            execution_state="pausable_review_gate",
+            executable=True,
+            implementation_notes=[
+                "Execution persists a waiting-for-review state and resumes after all proposals are reviewed."
+            ],
         ),
         WorkflowNodeDefinitionResponse(
             node_type="classification_review_gate",
             display_name="Classification Review Gate",
             category="human_review",
-            description="Require human review of classification predictions.",
+            description="Pause until classification predictions are reviewed.",
             input_ports=[
                 _input("predictions", "Class Predictions", "classification_predictions")
             ],
             output_ports=[_output("labels", "Reviewed Labels", "reviewed_labels")],
             required_parameters=[],
             optional_parameters={},
-            execution_state="review_gate_pending",
-            implementation_notes=["Accepted results become normal image labels with provenance."],
+            execution_state="pausable_review_gate",
+            executable=True,
+            implementation_notes=[
+                "Execution persists a waiting-for-review state and resumes after classification review."
+            ],
         ),
         WorkflowNodeDefinitionResponse(
             node_type="mask_measurements",
