@@ -14,6 +14,11 @@ from reefvision.config import Settings
 from reefvision.db.models import ExperimentRecord, Job, ModelRegistration, Project, TrainingRun
 from reefvision.domain.enums import MODEL_PURPOSES
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
+from reefvision.ml.depth_anything_v2_provider import (
+    DepthModelMetadata,
+    DepthRegistrationProvider,
+    TransformersDepthAnythingV2Provider,
+)
 from reefvision.ml.provider_hub import provider_for_registration
 from reefvision.ml.providers import (
     AnnotationAssistProvider,
@@ -42,6 +47,9 @@ from reefvision.storage.models import (
     stage_model_upload,
 )
 from reefvision.storage.projects import resolve_managed_project_path
+
+RegistrationProvider = DetectionProvider | AnnotationAssistProvider | DepthRegistrationProvider
+RegistrationMetadata = DetectionModelMetadata | AssistModelMetadata | DepthModelMetadata
 
 
 def _humanize_catalog_family(catalog_model_id: str | None) -> str | None:
@@ -81,17 +89,23 @@ class ModelService:
             raise NotFoundError("Model not found")
         return model
 
-    def _provider_for_purpose(self, purpose: str) -> DetectionProvider | AnnotationAssistProvider:
+    def _provider_for_purpose(self, purpose: str) -> RegistrationProvider:
         if purpose not in MODEL_PURPOSES:
             raise ValidationError("Unknown model purpose")
+        if purpose == "depth":
+            return TransformersDepthAnythingV2Provider()
         return provider_for_registration(purpose, settings=self.settings)
 
     def _provider_for_registration(
         self, purpose: str, provider_name: str
-    ) -> DetectionProvider | AnnotationAssistProvider:
+    ) -> RegistrationProvider:
         normalized = provider_name.strip().casefold()
         if purpose == "assist" and normalized == "sam2":
             return TransformersSam2AssistProvider()
+        if purpose == "depth":
+            if normalized != "depth_anything_v2":
+                raise ValidationError(f"Unsupported depth provider: {provider_name}")
+            return TransformersDepthAnythingV2Provider()
         return provider_for_registration(
             purpose,
             provider_name=provider_name,
@@ -102,7 +116,7 @@ class ModelService:
         self,
         *,
         project: Project,
-        metadata: DetectionModelMetadata | AssistModelMetadata,
+        metadata: RegistrationMetadata,
     ) -> dict[str, object]:
         if not isinstance(metadata, DetectionModelMetadata):
             return {}
