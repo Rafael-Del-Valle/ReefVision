@@ -205,3 +205,36 @@ def test_committee_round_selects_image_with_highest_model_disagreement(
         },
     )
     assert too_small.status_code == 422, too_small.text
+
+    with app.state.session_factory() as session:
+        assist = ModelRegistration(
+            project_id=project["id"],
+            purpose="assist",
+            display_name="Not a committee detector",
+            source_filename="assist.pth",
+            managed_path=f"projects/{project['id']}/models/assist.pth",
+            sha256="9" * 64,
+            file_size_bytes=10,
+            framework="segment_anything",
+            task="assist_segmentation",
+            provider_name="segment_anything",
+            provider_version="test",
+            class_map_json={},
+            input_size_json=None,
+            metadata_json={},
+        )
+        session.add(assist)
+        session.commit()
+        assist_id = assist.id
+
+    wrong_purpose = client.post(
+        f"/api/v1/projects/{project['id']}/active-learning-rounds",
+        json={
+            "name": "Mixed-purpose committee",
+            "strategy": "committee",
+            "requested_size": 1,
+            "model_ids": [model_ids[0], assist_id],
+        },
+    )
+    assert wrong_purpose.status_code == 422, wrong_purpose.text
+    assert "requires registered detection models" in wrong_purpose.text
