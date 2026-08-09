@@ -14,7 +14,6 @@ from reefvision.db.models import (
     PredictionProposal,
     WorkflowArtifact,
     WorkflowNodeRun,
-    WorkflowRun,
 )
 from reefvision.ml.providers import AssistPrediction, PixelBox
 from reefvision.services.workflow_prompt_assist import create_prompt_assist_mask_proposals
@@ -46,6 +45,7 @@ class FakeAssistProvider:
 
     def predict_from_box(self, prepared_image: Any, box: PixelBox) -> AssistPrediction:
         assert prepared_image["image_path"]
+        assert box == PixelBox(x_min=10.0, y_min=12.0, x_max=42.0, y_max=48.0)
         mask = numpy.zeros((80, 100), dtype=bool)
         mask[12:48, 10:42] = True
         return AssistPrediction(
@@ -128,8 +128,16 @@ def _seed_reviewed_boxes(
             payload_json={
                 "schema_version": "workflow-reviewed-artifact-0001",
                 "project_id": project["id"],
-                "annotation_ids": [annotation.id],
                 "count": 1,
+                "review_approval": {
+                    "consensus_materialization": [
+                        {
+                            "artifact_id": "consensus-source",
+                            "annotation_ids": [annotation.id],
+                            "materialized_count": 1,
+                        }
+                    ]
+                },
             },
             payload_sha256="b" * 64,
         )
