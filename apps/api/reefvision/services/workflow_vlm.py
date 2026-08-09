@@ -177,20 +177,32 @@ def _gemini_request(
     image_b64: str,
     media_type: str,
 ) -> tuple[str, dict[str, str], dict[str, Any]]:
+    model_name = model.removeprefix("models/")
     return (
-        "https://generativelanguage.googleapis.com/v1beta/interactions",
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
         {},
         {
-            "model": model,
-            "store": False,
-            "input": [
-                {"type": "text", "text": prompt},
-                {"type": "image", "data": image_b64, "mime_type": media_type},
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"text": prompt},
+                        {
+                            "inline_data": {
+                                "mime_type": media_type,
+                                "data": image_b64,
+                            }
+                        },
+                    ],
+                }
             ],
-            "response_format": {
-                "type": "text",
-                "mime_type": "application/json",
-                "schema": schema,
+            "generationConfig": {
+                "responseFormat": {
+                    "text": {
+                        "mimeType": "application/json",
+                        "schema": schema,
+                    }
+                }
             },
         },
     )
@@ -273,7 +285,10 @@ def _extract_provider_result(provider: str, response: dict[str, Any]) -> dict[st
                 and isinstance(item.get("input"), dict)
             ):
                 return dict(item["input"])
-        raise CloudVlmProviderError(provider, "response did not contain submit_detections tool data")
+        raise CloudVlmProviderError(
+            provider,
+            "response did not contain submit_detections tool data",
+        )
 
     text = _extract_json_text(response)
     if text is None:
@@ -324,7 +339,9 @@ def _normalize_detections(
         if class_definition is None or not isinstance(box, list) or len(box) != 4:
             continue
         try:
-            y_min, x_min, y_max, x_max = [min(max(float(value), 0.0), 1000.0) for value in box]
+            y_min, x_min, y_max, x_max = [
+                min(max(float(value), 0.0), 1000.0) for value in box
+            ]
         except (TypeError, ValueError):
             continue
         if x_max <= x_min or y_max <= y_min:
@@ -419,7 +436,11 @@ def run_vlm_detection(
             retryable = response.status_code == 429 or response.status_code >= 500
             try:
                 error_payload = response.json()
-                message = str(error_payload.get("error") or error_payload.get("message") or "HTTP error")
+                message = str(
+                    error_payload.get("error")
+                    or error_payload.get("message")
+                    or "HTTP error"
+                )
             except (ValueError, AttributeError):
                 message = response.text[:500] or "HTTP error"
             raise CloudVlmProviderError(
