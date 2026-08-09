@@ -64,6 +64,25 @@ def _save_mask(
     return relative_path, _file_sha256(destination), destination
 
 
+def _reviewed_annotation_ids(payload: dict[str, Any]) -> list[str]:
+    direct = [str(value) for value in payload.get("annotation_ids", []) if value]
+    if direct:
+        return list(dict.fromkeys(direct))
+
+    approval = payload.get("review_approval")
+    if not isinstance(approval, dict):
+        return []
+    materialization = approval.get("consensus_materialization")
+    if not isinstance(materialization, list):
+        return []
+    recovered: list[str] = []
+    for item in materialization:
+        if not isinstance(item, dict):
+            continue
+        recovered.extend(str(value) for value in item.get("annotation_ids", []) if value)
+    return list(dict.fromkeys(recovered))
+
+
 def create_prompt_assist_mask_proposals(
     session: Session,
     settings: Settings,
@@ -86,7 +105,7 @@ def create_prompt_assist_mask_proposals(
     if payload.get("project_id") != project_id:
         raise ValidationError("Reviewed boxes belong to another project")
 
-    annotation_ids = [str(value) for value in payload.get("annotation_ids", [])]
+    annotation_ids = _reviewed_annotation_ids(payload)
     if not annotation_ids:
         raise ValidationError("Prompt Assist Masks requires at least one reviewed annotation")
 
