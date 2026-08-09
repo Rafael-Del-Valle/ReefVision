@@ -27,9 +27,19 @@ from reefvision.db.models.project import utc_now
 from reefvision.domain.errors import ValidationError
 from reefvision.ml.provider_hub import assist_provider_for_name
 from reefvision.ml.providers import AnnotationAssistProvider, PixelBox
+from reefvision.ml.sam2_provider import TransformersSam2AssistProvider
 from reefvision.storage.projects import resolve_managed_project_path
 
 AssistProviderFactory = Callable[[str], AnnotationAssistProvider]
+
+
+def workflow_assist_provider_for_name(provider_name: str) -> AnnotationAssistProvider:
+    """Resolve assist providers needed by executable workflow nodes."""
+
+    normalized = provider_name.strip().casefold()
+    if normalized == "sam2":
+        return TransformersSam2AssistProvider()
+    return assist_provider_for_name(provider_name)
 
 
 def _file_sha256(path: Path) -> str:
@@ -91,7 +101,7 @@ def create_prompt_assist_mask_proposals(
     boxes_artifact: WorkflowArtifact,
     model_id: str,
     device: str = "auto",
-    provider_factory: AssistProviderFactory = assist_provider_for_name,
+    provider_factory: AssistProviderFactory = workflow_assist_provider_for_name,
 ) -> dict[str, Any]:
     """Generate pending raster mask proposals from approved box annotations.
 
