@@ -135,6 +135,26 @@ class ActiveLearningRoundService:
             raise ValidationError("All acquisition models must belong to the selected project")
         return model_ids
 
+    def _validate_committee_models(self, project_id: str, model_ids: list[str]) -> None:
+        if len(model_ids) < 2:
+            raise ValidationError(
+                "Committee active learning requires at least two distinct acquisition models"
+            )
+        models = list(
+            self.session.scalars(
+                select(ModelRegistration).where(
+                    ModelRegistration.project_id == project_id,
+                    ModelRegistration.id.in_(model_ids),
+                )
+            )
+        )
+        if len(models) != len(model_ids) or any(
+            model.purpose != "detector" or model.task != "detect" for model in models
+        ):
+            raise ValidationError(
+                "Committee active learning requires registered detection models with task='detect'"
+            )
+
     def _committee_signals(
         self,
         *,
@@ -188,10 +208,8 @@ class ActiveLearningRoundService:
         self._project(project_id)
         version = self._dataset_version(project_id, request.dataset_version_id)
         model_ids = self._model_ids(project_id, request.model_ids)
-        if request.strategy == "committee" and len(model_ids) < 2:
-            raise ValidationError(
-                "Committee active learning requires at least two distinct acquisition models"
-            )
+        if request.strategy == "committee":
+            self._validate_committee_models(project_id, model_ids)
         weights = _STRATEGY_WEIGHTS[request.strategy]
         queue_request = ReviewQueueCreateRequest(
             signal_weights=weights,
