@@ -114,14 +114,16 @@ def materialize_consensus_annotations(
             continue
         image_id = str(raw.get("image_id") or "")
         label_class_id = str(raw.get("label_class_id") or "")
-        consensus_id = str(
-            raw.get("consensus_id") or canonical_json_sha256(raw)[:20]
-        )
+        consensus_id = str(raw.get("consensus_id") or canonical_json_sha256(raw)[:20])
         image = images.get(image_id)
         label_class = classes.get(label_class_id)
         if image is None:
             skipped.append(
-                {"consensus_id": consensus_id, "image_id": image_id, "reason": "image_not_found"}
+                {
+                    "consensus_id": consensus_id,
+                    "image_id": image_id,
+                    "reason": "image_not_found",
+                }
             )
             continue
         if label_class is None:
@@ -288,7 +290,11 @@ def ensure_disagreement_active_learning_round(
             )
         )
     )
-    by_image = {image_id: items for image_id, items in by_image.items() if image_id in valid_image_ids}
+    by_image = {
+        image_id: items
+        for image_id, items in by_image.items()
+        if image_id in valid_image_ids
+    }
     if not by_image:
         return None
 
@@ -354,7 +360,16 @@ def ensure_disagreement_active_learning_round(
             for item in image_detections
         )
         severity = min(votes_missing / max(required_votes, 1), 1.0)
-        score = round(min(100.0, 70.0 + (20.0 * severity) + min(10.0, 2.0 * disagreement_count)), 2)
+        normalized_disagreement_count = min(disagreement_count / 5.0, 1.0)
+        score = round(
+            min(
+                100.0,
+                70.0
+                + (20.0 * severity)
+                + min(10.0, 2.0 * disagreement_count),
+            ),
+            2,
+        )
         class_ids = sorted(
             {
                 str(item["label_class_id"])
@@ -394,7 +409,7 @@ def ensure_disagreement_active_learning_round(
                 "consensus_votes_missing": float(votes_missing),
             },
             normalized_signals_json={
-                "consensus_disagreement_count": min(disagreement_count / 5.0, 1.0),
+                "consensus_disagreement_count": normalized_disagreement_count,
                 "consensus_votes_missing": severity,
             },
             weights_json={
@@ -405,6 +420,9 @@ def ensure_disagreement_active_learning_round(
                 {
                     "signal_id": "workflow_consensus_disagreement",
                     "label": "Auto Label model disagreement",
+                    "raw_value": float(disagreement_count),
+                    "normalized_value": max(normalized_disagreement_count, severity),
+                    "weight": 100.0,
                     "contribution": score,
                     "description": reason,
                 }
