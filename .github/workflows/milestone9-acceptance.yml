@@ -24,8 +24,10 @@ jobs:
             apps/api/reefvision/jobs/project_exchange.py \
             apps/api/reefvision/schemas/project_exchange.py \
             apps/api/reefvision/services/project_exchange.py \
+            apps/api/reefvision/services/project_exchange_classification.py \
             apps/api/reefvision/services/project_exchange_import.py \
             apps/api/reefvision/services/project_exchange_inspection.py \
+            apps/api/reefvision/tests/test_project_exchange_classification_phase9.py \
             apps/api/reefvision/tests/test_project_exchange_phase9.py \
             apps/api/reefvision/tests/test_project_exchange_roundtrip_phase9.py
           python -m ruff format --check \
@@ -35,8 +37,10 @@ jobs:
             apps/api/reefvision/jobs/project_exchange.py \
             apps/api/reefvision/schemas/project_exchange.py \
             apps/api/reefvision/services/project_exchange.py \
+            apps/api/reefvision/services/project_exchange_classification.py \
             apps/api/reefvision/services/project_exchange_import.py \
             apps/api/reefvision/services/project_exchange_inspection.py \
+            apps/api/reefvision/tests/test_project_exchange_classification_phase9.py \
             apps/api/reefvision/tests/test_project_exchange_phase9.py \
             apps/api/reefvision/tests/test_project_exchange_roundtrip_phase9.py
       - name: Run Milestone 9 interoperability tests
@@ -44,6 +48,7 @@ jobs:
           python -m pytest
           apps/api/reefvision/tests/test_project_exchange_phase9.py
           apps/api/reefvision/tests/test_project_exchange_roundtrip_phase9.py
+          apps/api/reefvision/tests/test_project_exchange_classification_phase9.py
           -q
       - uses: actions/setup-node@v4
         with:
