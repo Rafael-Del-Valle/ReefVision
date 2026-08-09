@@ -5,7 +5,18 @@ export type ActiveLearningStrategy =
   | "uncertainty"
   | "rare_class"
   | "quality"
+  | "committee"
   | "random";
+
+export interface ActiveLearningModelChoice {
+  id: string;
+  project_id: string;
+  display_name: string;
+  purpose: string;
+  task: string;
+  provider_name: string;
+  sha256: string;
+}
 
 export interface ActiveLearningRoundRecord {
   id: string;
@@ -66,6 +77,16 @@ export function getActiveLearningRounds(
 ): Promise<ActiveLearningRoundRecord[]> {
   return request<ActiveLearningRoundRecord[]>(
     `/projects/${encodeURIComponent(projectId)}/active-learning-rounds`,
+    { signal },
+  );
+}
+
+export function getActiveLearningModels(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<ActiveLearningModelChoice[]> {
+  return request<ActiveLearningModelChoice[]>(
+    `/projects/${encodeURIComponent(projectId)}/models`,
     { signal },
   );
 }
