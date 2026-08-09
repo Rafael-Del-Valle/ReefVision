@@ -9,6 +9,7 @@ from reefvision.api.dependencies import get_db_session
 from reefvision.schemas.workflow_execution import (
     WorkflowGraphRecordResponse,
     WorkflowGraphSaveRequest,
+    WorkflowReviewResumeRequest,
     WorkflowRunCreateRequest,
     WorkflowRunDetailResponse,
     WorkflowRunResponse,
@@ -21,6 +22,7 @@ from reefvision.schemas.workflow_graphs import (
 )
 from reefvision.services.workflow_execution import WorkflowExecutionService
 from reefvision.services.workflow_graphs import WorkflowGraphService
+from reefvision.services.workflow_review import resume_review_gate
 
 router = APIRouter(tags=["workflow-graphs"])
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -119,3 +121,16 @@ def get_workflow_run(
     session: DbSession,
 ) -> WorkflowRunDetailResponse:
     return WorkflowExecutionService(session).get_run_detail(run_id)
+
+
+@router.post(
+    "/workflow-node-runs/{node_run_id}/resume-review",
+    response_model=WorkflowRunResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def resume_workflow_review(
+    node_run_id: str,
+    payload: WorkflowReviewResumeRequest,
+    session: DbSession,
+) -> WorkflowRunResponse:
+    return resume_review_gate(session, node_run_id, payload)
