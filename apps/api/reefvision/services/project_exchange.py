@@ -189,16 +189,24 @@ class ProjectExchangeService:
         image_ids = list(
             self.session.scalars(select(ImageAsset.id).where(ImageAsset.project_id == project.id))
         )
-        annotation_ids = list(
-            self.session.scalars(
-                select(Annotation.id).where(Annotation.image_id.in_(image_ids))
+        annotation_ids = (
+            list(
+                self.session.scalars(
+                    select(Annotation.id).where(Annotation.image_id.in_(image_ids))
+                )
             )
-        ) if image_ids else []
-        mask_annotation_ids = list(
-            self.session.scalars(
-                select(MaskAnnotation.id).where(MaskAnnotation.image_id.in_(image_ids))
+            if image_ids
+            else []
+        )
+        mask_annotation_ids = (
+            list(
+                self.session.scalars(
+                    select(MaskAnnotation.id).where(MaskAnnotation.image_id.in_(image_ids))
+                )
             )
-        ) if image_ids else []
+            if image_ids
+            else []
+        )
         video_ids = list(
             self.session.scalars(select(VideoAsset.id).where(VideoAsset.project_id == project.id))
         )
@@ -238,35 +246,55 @@ class ProjectExchangeService:
                     select(ImageAsset).where(ImageAsset.project_id == project.id)
                 )
             ),
-            "annotations": list(
-                self.session.scalars(
-                    select(Annotation).where(Annotation.image_id.in_(image_ids))
-                )
-            ) if image_ids else [],
-            "annotation_events": list(
-                self.session.scalars(
-                    select(AnnotationEvent).where(
-                        AnnotationEvent.annotation_id.in_(annotation_ids)
+            "annotations": (
+                list(
+                    self.session.scalars(
+                        select(Annotation).where(Annotation.image_id.in_(image_ids))
                     )
                 )
-            ) if annotation_ids else [],
-            "mask_annotations": list(
-                self.session.scalars(
-                    select(MaskAnnotation).where(MaskAnnotation.image_id.in_(image_ids))
-                )
-            ) if image_ids else [],
-            "mask_annotation_events": list(
-                self.session.scalars(
-                    select(MaskAnnotationEvent).where(
-                        MaskAnnotationEvent.mask_annotation_id.in_(mask_annotation_ids)
+                if image_ids
+                else []
+            ),
+            "annotation_events": (
+                list(
+                    self.session.scalars(
+                        select(AnnotationEvent).where(
+                            AnnotationEvent.annotation_id.in_(annotation_ids)
+                        )
                     )
                 )
-            ) if mask_annotation_ids else [],
-            "image_labels": list(
-                self.session.scalars(
-                    select(ImageLabel).where(ImageLabel.image_id.in_(image_ids))
+                if annotation_ids
+                else []
+            ),
+            "mask_annotations": (
+                list(
+                    self.session.scalars(
+                        select(MaskAnnotation).where(MaskAnnotation.image_id.in_(image_ids))
+                    )
                 )
-            ) if image_ids else [],
+                if image_ids
+                else []
+            ),
+            "mask_annotation_events": (
+                list(
+                    self.session.scalars(
+                        select(MaskAnnotationEvent).where(
+                            MaskAnnotationEvent.mask_annotation_id.in_(mask_annotation_ids)
+                        )
+                    )
+                )
+                if mask_annotation_ids
+                else []
+            ),
+            "image_labels": (
+                list(
+                    self.session.scalars(
+                        select(ImageLabel).where(ImageLabel.image_id.in_(image_ids))
+                    )
+                )
+                if image_ids
+                else []
+            ),
             "prediction_proposals": list(
                 self.session.scalars(
                     select(PredictionProposal).where(PredictionProposal.project_id == project.id)
@@ -291,23 +319,31 @@ class ProjectExchangeService:
                     select(VideoAsset).where(VideoAsset.project_id == project.id)
                 )
             ),
-            "video_tracks": list(
-                self.session.scalars(
-                    select(VideoTrack).where(VideoTrack.video_id.in_(video_ids))
+            "video_tracks": (
+                list(
+                    self.session.scalars(
+                        select(VideoTrack).where(VideoTrack.video_id.in_(video_ids))
+                    )
                 )
-            ) if video_ids else [],
+                if video_ids
+                else []
+            ),
             "dataset_versions": list(
                 self.session.scalars(
                     select(DatasetVersion).where(DatasetVersion.project_id == project.id)
                 )
             ),
-            "dataset_version_items": list(
-                self.session.scalars(
-                    select(DatasetVersionItem).where(
-                        DatasetVersionItem.dataset_version_id.in_(version_ids)
+            "dataset_version_items": (
+                list(
+                    self.session.scalars(
+                        select(DatasetVersionItem).where(
+                            DatasetVersionItem.dataset_version_id.in_(version_ids)
+                        )
                     )
                 )
-            ) if version_ids else [],
+                if version_ids
+                else []
+            ),
             "models": list(
                 self.session.scalars(
                     select(ModelRegistration).where(ModelRegistration.project_id == project.id)
@@ -469,6 +505,18 @@ class ProjectExchangeService:
                                 record_id=mask.id,
                             )
                         )
+                    for dataset in sections["classification_datasets"]:
+                        source = resolve_managed_project_path(self.settings, dataset.archive_path)
+                        member = f"artifacts/classification/{dataset.id}.zip"
+                        media_manifest.append(
+                            self._archive_file(
+                                archive,
+                                source=source,
+                                member=member,
+                                kind="classification_dataset_archive",
+                                record_id=dataset.id,
+                            )
+                        )
                     for training_run in sections["training_runs"]:
                         if training_run.logs_path:
                             source = resolve_managed_project_path(
@@ -521,7 +569,9 @@ class ProjectExchangeService:
                     },
                 }
                 manifest_bytes = json.dumps(
-                    manifest, indent=2, sort_keys=True
+                    manifest,
+                    indent=2,
+                    sort_keys=True,
                 ).encode("utf-8")
                 archive.writestr(MANIFEST_NAME, manifest_bytes)
             temporary.replace(archive_path)
