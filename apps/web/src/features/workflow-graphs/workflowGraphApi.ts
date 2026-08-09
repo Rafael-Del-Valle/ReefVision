@@ -22,6 +22,7 @@ export interface WorkflowNodeDefinition {
   required_parameters: string[];
   optional_parameters: Record<string, unknown>;
   execution_state: string;
+  executable: boolean;
   implementation_notes: string[];
 }
 
@@ -54,6 +55,7 @@ export interface WorkflowGraphPlan {
     node_type: string;
     display_name: string;
     execution_state: string;
+    executable: boolean;
     parameters: Record<string, unknown>;
     input_bindings: Array<{
       target_port_id: string;
@@ -64,7 +66,68 @@ export interface WorkflowGraphPlan {
     output_types: Record<string, string[]>;
     action: string;
   }>;
-  execution_blocker: string;
+  execution_blocker: string | null;
+}
+
+export interface WorkflowGraphRecord {
+  id: string;
+  project_id: string;
+  graph_key: string;
+  name: string;
+  schema_version: string;
+  revision: number;
+  graph_json: Record<string, unknown>;
+  graph_sha256: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkflowRun {
+  id: string;
+  project_id: string;
+  workflow_graph_record_id: string;
+  job_id: string | null;
+  status: string;
+  graph_sha256: string;
+  input_json: Record<string, unknown>;
+  result_json: Record<string, unknown>;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface WorkflowNodeRun {
+  id: string;
+  workflow_run_id: string;
+  node_id: string;
+  node_type: string;
+  execution_order: number;
+  status: string;
+  parameters_json: Record<string, unknown>;
+  input_artifact_ids_json: string[];
+  output_artifact_ids_json: string[];
+  result_json: Record<string, unknown>;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface WorkflowArtifact {
+  id: string;
+  workflow_run_id: string;
+  producer_node_run_id: string;
+  producer_port_id: string;
+  data_type: string;
+  payload_json: Record<string, unknown>;
+  payload_sha256: string;
+  created_at: string;
+}
+
+export interface WorkflowRunDetail {
+  run: WorkflowRun;
+  nodes: WorkflowNodeRun[];
+  artifacts: WorkflowArtifact[];
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -114,4 +177,68 @@ export function planWorkflowGraph(
     `/projects/${encodeURIComponent(projectId)}/workflow-graphs/plan`,
     { method: "POST", body: JSON.stringify(graph) },
   );
+}
+
+export function listSavedWorkflowGraphs(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<WorkflowGraphRecord[]> {
+  return request<WorkflowGraphRecord[]>(
+    `/projects/${encodeURIComponent(projectId)}/workflow-graphs`,
+    { signal },
+  );
+}
+
+export function saveWorkflowGraph(
+  projectId: string,
+  graph: Record<string, unknown>,
+): Promise<WorkflowGraphRecord> {
+  return request<WorkflowGraphRecord>(
+    `/projects/${encodeURIComponent(projectId)}/workflow-graphs`,
+    {
+      method: "POST",
+      body: JSON.stringify({ graph, create_new_revision: true }),
+    },
+  );
+}
+
+export function listWorkflowRuns(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<WorkflowRun[]> {
+  return request<WorkflowRun[]>(
+    `/projects/${encodeURIComponent(projectId)}/workflow-runs`,
+    { signal },
+  );
+}
+
+export function queueWorkflowRun(
+  projectId: string,
+  graphRecordId: string,
+): Promise<WorkflowRun> {
+  return request<WorkflowRun>(
+    `/projects/${encodeURIComponent(projectId)}/workflow-runs`,
+    {
+      method: "POST",
+      body: JSON.stringify({ graph_record_id: graphRecordId, inputs: {} }),
+    },
+  );
+}
+
+export function getWorkflowRunDetail(
+  runId: string,
+  signal?: AbortSignal,
+): Promise<WorkflowRunDetail> {
+  return request<WorkflowRunDetail>(
+    `/workflow-runs/${encodeURIComponent(runId)}`,
+    { signal },
+  );
+}
+
+export function cancelWorkflowRunJob(
+  jobId: string,
+): Promise<{ status: string }> {
+  return request<{ status: string }>(`/jobs/${encodeURIComponent(jobId)}/cancel`, {
+    method: "POST",
+  });
 }
