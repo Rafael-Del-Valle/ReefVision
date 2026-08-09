@@ -17,6 +17,7 @@ from reefvision.db.models import (
     WorkflowRun,
 )
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.schemas.review_queues import ReviewQueueItemResponse
 from reefvision.services.workflow_auto_label import (
     ensure_disagreement_active_learning_round,
     materialize_consensus_annotations,
@@ -158,7 +159,12 @@ def _seed_valid_consensus_review(
                 "mean_confidence": 0.91,
                 "minimum_pairwise_iou": 0.72,
                 "box_strategy": "mean",
-                "box": {"x_min": 10.0, "y_min": 12.0, "x_max": 42.0, "y_max": 48.0},
+                "box": {
+                    "x_min": 10.0,
+                    "y_min": 12.0,
+                    "x_max": 42.0,
+                    "y_max": 48.0,
+                },
                 "members": [],
             }
         ],
@@ -186,7 +192,12 @@ def _seed_valid_consensus_review(
                 "source_ids": [model_id],
                 "votes_missing": 1,
                 "reason": "insufficient_votes",
-                "box": {"x_min": 55.0, "y_min": 15.0, "x_max": 75.0, "y_max": 35.0},
+                "box": {
+                    "x_min": 55.0,
+                    "y_min": 15.0,
+                    "x_max": 75.0,
+                    "y_max": 35.0,
+                },
             }
         ],
     }
@@ -246,7 +257,10 @@ def test_reviewed_consensus_materializes_annotation_and_routes_disagreement(
 
     resumed = client.post(
         f"/api/v1/workflow-node-runs/{review_node['id']}/resume-review",
-        json={"reviewed_by": "scientist", "note": "Consensus checked against source image."},
+        json={
+            "reviewed_by": "scientist",
+            "note": "Consensus checked against source image.",
+        },
     )
     assert resumed.status_code == 202, resumed.text
 
@@ -263,12 +277,15 @@ def test_reviewed_consensus_materializes_annotation_and_routes_disagreement(
         assert annotation.provenance_json["vote_count"] == 2
         assert annotation.provenance_json["required_votes"] == 2
         assert annotation.provenance_json["reviewed_by"] == "scientist"
-        assert session.scalar(
-            select(func.count(AnnotationEvent.id)).where(
-                AnnotationEvent.annotation_id == annotation.id,
-                AnnotationEvent.event_type == "created",
+        assert (
+            session.scalar(
+                select(func.count(AnnotationEvent.id)).where(
+                    AnnotationEvent.annotation_id == annotation.id,
+                    AnnotationEvent.event_type == "created",
+                )
             )
-        ) == 1
+            == 1
+        )
 
         rounds = list(
             session.scalars(
@@ -293,6 +310,11 @@ def test_reviewed_consensus_materializes_annotation_and_routes_disagreement(
         assert queue_items[0].image_id == image_id
         assert "Consensus disagreement" in str(queue_items[0].reason_summary)
         assert queue_items[0].review_state == "pending"
+        serialized_queue_item = ReviewQueueItemResponse.model_validate(queue_items[0])
+        assert serialized_queue_item.score_breakdown_json[0].signal_id == (
+            "workflow_consensus_disagreement"
+        )
+        assert serialized_queue_item.score_breakdown_json[0].raw_value == 1.0
 
         review = session.get(WorkflowNodeRun, str(review_node["id"]))
         assert review is not None
