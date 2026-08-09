@@ -26,7 +26,10 @@ def _sam2_bundle_bytes() -> bytes:
                 }
             ),
         )
-        archive.writestr("preprocessor_config.json", json.dumps({"image_processor_type": "Sam2ImageProcessor"}))
+        archive.writestr(
+            "preprocessor_config.json",
+            json.dumps({"image_processor_type": "Sam2ImageProcessor"}),
+        )
         archive.writestr("model.safetensors", b"synthetic-test-weight-placeholder")
     return buffer.getvalue()
 
