@@ -27,9 +27,11 @@ jobs:
             apps/api/reefvision/schemas/workflow_execution.py \
             apps/api/reefvision/schemas/workflow_graphs.py \
             apps/api/reefvision/services/jobs.py \
+            apps/api/reefvision/services/workflow_consensus.py \
             apps/api/reefvision/services/workflow_execution.py \
             apps/api/reefvision/services/workflow_graphs.py \
             apps/api/reefvision/services/workflow_node_registry.py \
+            apps/api/reefvision/tests/test_workflow_consensus_phase10.py \
             apps/api/reefvision/tests/test_workflow_execution_phase10.py \
             apps/api/reefvision/tests/test_workflow_graphs_phase10.py
           python -m ruff format --check \
@@ -42,9 +44,11 @@ jobs:
             apps/api/reefvision/schemas/workflow_execution.py \
             apps/api/reefvision/schemas/workflow_graphs.py \
             apps/api/reefvision/services/jobs.py \
+            apps/api/reefvision/services/workflow_consensus.py \
             apps/api/reefvision/services/workflow_execution.py \
             apps/api/reefvision/services/workflow_graphs.py \
             apps/api/reefvision/services/workflow_node_registry.py \
+            apps/api/reefvision/tests/test_workflow_consensus_phase10.py \
             apps/api/reefvision/tests/test_workflow_execution_phase10.py \
             apps/api/reefvision/tests/test_workflow_graphs_phase10.py
       - name: Run Milestone 10 workflow tests
@@ -52,6 +56,7 @@ jobs:
           python -m pytest
           apps/api/reefvision/tests/test_workflow_graphs_phase10.py
           apps/api/reefvision/tests/test_workflow_execution_phase10.py
+          apps/api/reefvision/tests/test_workflow_consensus_phase10.py
           -q
       - name: Verify 0024 migration roundtrip
         shell: bash
@@ -78,5 +83,5 @@ jobs:
       - name: Check workflow desktop workspace
         working-directory: apps/web
         run: |
-          npx prettier --check src/features/workflows
+          npx prettier --check src/features/workflow-graphs
           npm run typecheck
