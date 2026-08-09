@@ -37,6 +37,7 @@ def test_workflow_registry_and_dry_run_plan(client: TestClient) -> None:
     assert {
         "project_source",
         "detection_inference",
+        "detection_consensus",
         "mask_review_gate",
         "mask_measurements",
         "video_tracking",
@@ -45,7 +46,12 @@ def test_workflow_registry_and_dry_run_plan(client: TestClient) -> None:
     assert registry_by_type["project_source"]["executable"] is True
     assert registry_by_type["project_images"]["executable"] is True
     assert registry_by_type["project_exchange_export"]["executable"] is True
-    assert registry_by_type["detection_inference"]["executable"] is False
+    assert registry_by_type["detection_inference"]["executable"] is True
+    assert registry_by_type["detection_consensus"]["executable"] is True
+    consensus_input = registry_by_type["detection_consensus"]["input_ports"][0]
+    assert consensus_input["port_id"] == "predictions"
+    assert consensus_input["multiple"] is True
+    assert registry_by_type["detection_consensus"]["optional_parameters"]["required_votes"] == 2
 
     validation = client.post(
         f"/api/v1/projects/{project['id']}/workflow-graphs/validate",
@@ -180,6 +186,5 @@ def test_workflow_validation_checks_model_purpose(client: TestClient) -> None:
     assert response.status_code == 200, response.text
     assert response.json()["valid"] is False
     assert any(
-        item["code"] == "model_purpose_mismatch"
-        for item in response.json()["issues"]
+        item["code"] == "model_purpose_mismatch" for item in response.json()["issues"]
     )
