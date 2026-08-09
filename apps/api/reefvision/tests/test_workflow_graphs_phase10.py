@@ -38,6 +38,8 @@ def test_workflow_registry_and_dry_run_plan(client: TestClient) -> None:
         "project_source",
         "detection_inference",
         "detection_consensus",
+        "segmentation_inference",
+        "classification_inference",
         "mask_review_gate",
         "mask_measurements",
         "video_tracking",
@@ -48,6 +50,11 @@ def test_workflow_registry_and_dry_run_plan(client: TestClient) -> None:
     assert registry_by_type["project_exchange_export"]["executable"] is True
     assert registry_by_type["detection_inference"]["executable"] is True
     assert registry_by_type["detection_consensus"]["executable"] is True
+    assert registry_by_type["segmentation_inference"]["executable"] is True
+    assert registry_by_type["classification_inference"]["executable"] is True
+    assert registry_by_type["mask_measurements"]["executable"] is True
+    assert registry_by_type["video_tracking"]["executable"] is True
+    assert registry_by_type["mask_review_gate"]["executable"] is False
     consensus_input = registry_by_type["detection_consensus"]["input_ports"][0]
     assert consensus_input["port_id"] == "predictions"
     assert consensus_input["multiple"] is True
