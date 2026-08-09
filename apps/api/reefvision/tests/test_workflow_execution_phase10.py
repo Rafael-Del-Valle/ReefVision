@@ -225,10 +225,10 @@ def test_workflow_export_node_builds_project_exchange_artifact(
         assert package.manifest_sha256 == artifact["payload_json"]["manifest_sha256"]
 
 
-def test_queue_rejects_workflow_that_still_requires_human_review(
+def test_workflow_with_human_review_gate_can_be_queued(
     client: TestClient,
 ) -> None:
-    project = create_project(client, "Pending human review workflow")
+    project = create_project(client, "Pausable human review workflow")
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
         model = ModelRegistration(
@@ -252,7 +252,7 @@ def test_queue_rejects_workflow_that_still_requires_human_review(
         model_id = model.id
 
     graph = {
-        "graph_id": "pending-mask-review",
+        "graph_id": "pausable-mask-review",
         "name": "Segmentation waiting for review",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
@@ -309,16 +309,16 @@ def test_queue_rejects_workflow_that_still_requires_human_review(
     )
     assert plan.status_code == 200, plan.text
     assert plan.json()["valid"] is True
-    assert plan.json()["executable"] is False
-    assert "Mask Review Gate" in str(plan.json()["execution_blocker"])
+    assert plan.json()["executable"] is True
+    assert plan.json()["execution_blocker"] is None
 
     saved = _save_graph(client, project["id"], graph)
     response = client.post(
         f"/api/v1/projects/{project['id']}/workflow-runs",
         json={"graph_record_id": saved["id"]},
     )
-    assert response.status_code == 400
-    assert "not executable yet" in response.json()["detail"]
+    assert response.status_code == 202, response.text
+    assert response.json()["status"] == "queued"
 
 
 def test_cancelling_queued_workflow_updates_run_and_nodes(client: TestClient) -> None:
