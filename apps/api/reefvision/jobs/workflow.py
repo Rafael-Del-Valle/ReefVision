@@ -18,6 +18,7 @@ from reefvision.db.models import (
 from reefvision.schemas.workflow_graphs import WorkflowGraphRequest
 from reefvision.services.workflow_execution import WorkflowExecutionService
 from reefvision.services.workflow_graphs import WorkflowGraphService
+from reefvision.services.workflow_review import WorkflowReviewRequired
 from reefvision.storage.datasets import canonical_json_sha256
 
 
@@ -53,6 +54,70 @@ def _set_terminal(
         session.commit()
 
 
+def _set_waiting_for_review(
+    factory: sessionmaker[Session],
+    job_id: str,
+    run_id: str,
+    *,
+    completed_nodes: int,
+    review: WorkflowReviewRequired,
+) -> None:
+    with factory() as session:
+        details = dict(review.details)
+        requested_node_id = str(details.get("node_run_id") or "")
+        node_run = session.get(WorkflowNodeRun, requested_node_id) if requested_node_id else None
+        if node_run is None:
+            node_run = session.scalar(
+                select(WorkflowNodeRun)
+                .where(
+                    WorkflowNodeRun.workflow_run_id == run_id,
+                    WorkflowNodeRun.status == "running",
+                )
+                .order_by(WorkflowNodeRun.execution_order)
+            )
+        if node_run is None:
+            raise RuntimeError("Workflow review pause could not resolve the active review node")
+
+        node_run.status = "waiting_for_review"
+        node_run.error_message = None
+        node_run.completed_at = None
+        node_run.result_json = {
+            **dict(node_run.result_json or {}),
+            "review": {
+                "message": str(review),
+                **details,
+            },
+        }
+
+        job = session.get(Job, job_id)
+        run = session.get(WorkflowRun, run_id)
+        if job is not None:
+            job.status = "waiting_for_review"
+            job.progress_current = completed_nodes
+            job.error_message = None
+            job.completed_at = None
+            job.result_json = {
+                **dict(job.result_json or {}),
+                "stage": "waiting_for_review",
+                "workflow_run_id": run_id,
+                "completed_nodes": completed_nodes,
+                "review_node_run_id": node_run.id,
+                "review_node_id": node_run.node_id,
+            }
+        if run is not None:
+            run.status = "waiting_for_review"
+            run.error_message = None
+            run.completed_at = None
+            run.result_json = {
+                **dict(run.result_json or {}),
+                "stage": "waiting_for_review",
+                "completed_nodes": completed_nodes,
+                "review_node_run_id": node_run.id,
+                "review_node_id": node_run.node_id,
+            }
+        session.commit()
+
+
 def _cancel_requested(factory: sessionmaker[Session], job_id: str) -> bool:
     with factory() as session:
         job = session.get(Job, job_id)
@@ -65,7 +130,7 @@ def _cancel_remaining_nodes(factory: sessionmaker[Session], run_id: str) -> None
             session.scalars(
                 select(WorkflowNodeRun).where(
                     WorkflowNodeRun.workflow_run_id == run_id,
-                    WorkflowNodeRun.status.in_(("pending", "running")),
+                    WorkflowNodeRun.status.in_(("pending", "running", "waiting_for_review")),
                 )
             )
         )
@@ -165,14 +230,18 @@ def process_workflow_run_job(
             run.completed_at = job.completed_at
             session.commit()
             return False
+        now = _now()
         job.status = "running"
-        job.started_at = _now()
+        job.started_at = job.started_at or now
         job.error_message = None
         job.result_json = {"stage": "running", "workflow_run_id": run.id}
         run.status = "running"
-        run.started_at = job.started_at
+        run.started_at = run.started_at or now
         run.error_message = None
-        run.result_json = {"stage": "running", "completed_nodes": 0}
+        run.result_json = {
+            **dict(run.result_json or {}),
+            "stage": "running",
+        }
         for node in session.scalars(
             select(WorkflowNodeRun).where(
                 WorkflowNodeRun.workflow_run_id == run.id,
@@ -218,7 +287,7 @@ def process_workflow_run_job(
                     bindings=list(step.input_bindings),
                 )
                 node_run.status = "running"
-                node_run.started_at = _now()
+                node_run.started_at = node_run.started_at or _now()
                 node_run.completed_at = None
                 node_run.error_message = None
                 node_run.parameters_json = dict(step.parameters)
@@ -267,7 +336,10 @@ def process_workflow_run_job(
                     )
                 node_run.status = "succeeded"
                 node_run.output_artifact_ids_json = output_ids
-                node_run.result_json = {"outputs": output_summary}
+                node_run.result_json = {
+                    **dict(node_run.result_json or {}),
+                    "outputs": output_summary,
+                }
                 node_run.completed_at = _now()
                 session.commit()
 
@@ -330,6 +402,15 @@ def process_workflow_run_job(
                     **counts,
                 }
             session.commit()
+        return True
+    except WorkflowReviewRequired as exc:
+        _set_waiting_for_review(
+            factory,
+            job_id,
+            run_id,
+            completed_nodes=completed_nodes,
+            review=exc,
+        )
         return True
     except Exception as exc:
         with factory() as session:
