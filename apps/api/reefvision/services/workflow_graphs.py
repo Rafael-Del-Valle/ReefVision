@@ -7,7 +7,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from reefvision.db.models import DatasetVersion, ModelRegistration, Project, VideoAsset
+from reefvision.db.models import (
+    DatasetVersion,
+    LabelClass,
+    ModelRegistration,
+    Project,
+    VideoAsset,
+)
 from reefvision.schemas.workflow_graphs import (
     WorkflowEdge,
     WorkflowGraphIssue,
@@ -19,6 +25,7 @@ from reefvision.schemas.workflow_graphs import (
     WorkflowPlanStep,
 )
 from reefvision.services.workflow_node_registry import workflow_node_registry
+from reefvision.services.workflow_vlm import SUPPORTED_VLM_PROVIDERS
 
 SUPPORTED_GRAPH_SCHEMA = "workflow-graph-0001"
 
@@ -37,6 +44,7 @@ _ACTIONS: dict[str, str] = {
     "project_video_source": "Resolve one managed source video.",
     "verified_masks_source": "Read existing non-deleted verified mask annotations.",
     "detection_inference": "Run the existing detector inference operation for the resolved images.",
+    "vlm_detection": "Send images to one opted-in cloud vision provider and normalize boxes.",
     "detection_consensus": "Match independent detections and apply configurable N-of-M voting.",
     "segmentation_inference": "Run registered segmentation inference for the resolved images.",
     "classification_inference": "Run existing top-k classification inference.",
@@ -88,6 +96,124 @@ class WorkflowGraphService:
     ) -> dict[str, Any]:
         ports = definition.input_ports if inputs else definition.output_ports
         return {port.port_id: port for port in ports}
+
+    def _validate_dataset_source(
+        self,
+        project_id: str,
+        node_id: str,
+        parameters: dict[str, Any],
+        issues: list[WorkflowGraphIssue],
+        referenced_dataset_ids: set[str],
+    ) -> None:
+        version_id = str(parameters.get("dataset_version_id", ""))
+        if not version_id:
+            return
+        referenced_dataset_ids.add(version_id)
+        version = self.session.get(DatasetVersion, version_id)
+        if version is None or version.project_id != project_id:
+            issues.append(
+                self._issue(
+                    "error",
+                    "dataset_scope_mismatch",
+                    "Dataset version does not belong to this project",
+                    node_id=node_id,
+                )
+            )
+        elif version.status != "complete":
+            issues.append(
+                self._issue(
+                    "error",
+                    "dataset_incomplete",
+                    "Dataset version must be complete",
+                    node_id=node_id,
+                )
+            )
+
+    def _validate_model_source(
+        self,
+        project_id: str,
+        node_id: str,
+        parameters: dict[str, Any],
+        issues: list[WorkflowGraphIssue],
+        referenced_model_ids: set[str],
+    ) -> None:
+        model_id = str(parameters.get("model_id", ""))
+        if not model_id:
+            return
+        referenced_model_ids.add(model_id)
+        model = self.session.get(ModelRegistration, model_id)
+        if model is None or model.project_id != project_id:
+            issues.append(
+                self._issue(
+                    "error",
+                    "model_scope_mismatch",
+                    "Registered model does not belong to this project",
+                    node_id=node_id,
+                )
+            )
+
+    def _validate_video_source(
+        self,
+        project_id: str,
+        node_id: str,
+        parameters: dict[str, Any],
+        issues: list[WorkflowGraphIssue],
+        referenced_video_ids: set[str],
+    ) -> None:
+        video_id = str(parameters.get("video_id", ""))
+        if not video_id:
+            return
+        referenced_video_ids.add(video_id)
+        video = self.session.get(VideoAsset, video_id)
+        if video is None or video.project_id != project_id:
+            issues.append(
+                self._issue(
+                    "error",
+                    "video_scope_mismatch",
+                    "Video does not belong to this project",
+                    node_id=node_id,
+                )
+            )
+
+    def _validate_vlm_node(
+        self,
+        project_id: str,
+        node_id: str,
+        parameters: dict[str, Any],
+        issues: list[WorkflowGraphIssue],
+    ) -> None:
+        provider = str(parameters.get("provider") or "").strip().lower()
+        if provider and provider not in SUPPORTED_VLM_PROVIDERS:
+            issues.append(
+                self._issue(
+                    "error",
+                    "unsupported_vlm_provider",
+                    f"Cloud VLM provider must be one of {sorted(SUPPORTED_VLM_PROVIDERS)}",
+                    node_id=node_id,
+                )
+            )
+        class_ids = [str(value) for value in parameters.get("label_class_ids", [])]
+        if len(class_ids) != len(set(class_ids)):
+            issues.append(
+                self._issue(
+                    "error",
+                    "duplicate_vlm_class",
+                    "Cloud VLM label_class_ids must be unique",
+                    node_id=node_id,
+                )
+            )
+        for class_id in class_ids:
+            label_class = self.session.get(LabelClass, class_id)
+            if label_class is None or label_class.project_id != project_id:
+                issues.append(
+                    self._issue(
+                        "error",
+                        "vlm_class_scope_mismatch",
+                        "Every Cloud VLM class must belong to the selected project",
+                        node_id=node_id,
+                    )
+                )
+                break
 
     def validate(
         self,
@@ -151,56 +277,31 @@ class WorkflowGraphService:
                     )
 
             if node.node_type == "dataset_version_source":
-                version_id = str(node.parameters.get("dataset_version_id", ""))
-                if version_id:
-                    referenced_dataset_ids.add(version_id)
-                    version = self.session.get(DatasetVersion, version_id)
-                    if version is None or version.project_id != project_id:
-                        issues.append(
-                            self._issue(
-                                "error",
-                                "dataset_scope_mismatch",
-                                "Dataset version does not belong to this project",
-                                node_id=node.node_id,
-                            )
-                        )
-                    elif version.status != "complete":
-                        issues.append(
-                            self._issue(
-                                "error",
-                                "dataset_incomplete",
-                                "Dataset version must be complete",
-                                node_id=node.node_id,
-                            )
-                        )
+                self._validate_dataset_source(
+                    project_id,
+                    node.node_id,
+                    node.parameters,
+                    issues,
+                    referenced_dataset_ids,
+                )
             elif node.node_type == "registered_model_source":
-                model_id = str(node.parameters.get("model_id", ""))
-                if model_id:
-                    referenced_model_ids.add(model_id)
-                    model = self.session.get(ModelRegistration, model_id)
-                    if model is None or model.project_id != project_id:
-                        issues.append(
-                            self._issue(
-                                "error",
-                                "model_scope_mismatch",
-                                "Registered model does not belong to this project",
-                                node_id=node.node_id,
-                            )
-                        )
+                self._validate_model_source(
+                    project_id,
+                    node.node_id,
+                    node.parameters,
+                    issues,
+                    referenced_model_ids,
+                )
             elif node.node_type == "project_video_source":
-                video_id = str(node.parameters.get("video_id", ""))
-                if video_id:
-                    referenced_video_ids.add(video_id)
-                    video = self.session.get(VideoAsset, video_id)
-                    if video is None or video.project_id != project_id:
-                        issues.append(
-                            self._issue(
-                                "error",
-                                "video_scope_mismatch",
-                                "Video does not belong to this project",
-                                node_id=node.node_id,
-                            )
-                        )
+                self._validate_video_source(
+                    project_id,
+                    node.node_id,
+                    node.parameters,
+                    issues,
+                    referenced_video_ids,
+                )
+            elif node.node_type == "vlm_detection":
+                self._validate_vlm_node(project_id, node.node_id, node.parameters, issues)
 
         edge_counts = Counter(edge.edge_id for edge in graph.edges)
         for edge_id, count in edge_counts.items():
