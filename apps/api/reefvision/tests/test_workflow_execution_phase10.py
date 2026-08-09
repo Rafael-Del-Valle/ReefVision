@@ -41,10 +41,12 @@ def _save_graph(
     client: TestClient,
     project_id: str,
     graph: dict[str, object],
+    *,
+    create_new_revision: bool = True,
 ) -> dict[str, object]:
     response = client.post(
         f"/api/v1/projects/{project_id}/workflow-graphs",
-        json={"graph": graph},
+        json={"graph": graph, "create_new_revision": create_new_revision},
     )
     assert response.status_code == 201, response.text
     return response.json()
@@ -150,6 +152,26 @@ def test_workflow_graph_revisions_are_deduplicated_and_versioned(
     assert [item["revision"] for item in listing.json()] == [2, 1]
 
 
+def test_changed_workflow_is_immutable_even_when_client_requests_in_place_update(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Immutable workflow revisions")
+    first = _save_graph(client, project["id"], _project_images_graph())
+    changed = _save_graph(
+        client,
+        project["id"],
+        _project_images_graph(annotation_status="reviewed"),
+        create_new_revision=False,
+    )
+
+    assert changed["id"] != first["id"]
+    assert changed["revision"] == 2
+    listing = client.get(f"/api/v1/projects/{project['id']}/workflow-graphs").json()
+    original = next(item for item in listing if item["id"] == first["id"])
+    assert original["revision"] == 1
+    assert original["graph_sha256"] == first["graph_sha256"]
+
+
 def test_workflow_export_node_builds_project_exchange_artifact(
     client: TestClient,
 ) -> None:
@@ -211,14 +233,14 @@ def test_queue_rejects_valid_graph_with_pending_execution_adapter(
     with app.state.session_factory() as session:
         model = ModelRegistration(
             project_id=project["id"],
-            purpose="detector",
-            display_name="Workflow detector",
-            source_filename="detector.pt",
-            managed_path=f"projects/{project['id']}/models/detector.pt",
+            purpose="segmenter",
+            display_name="Workflow segmenter",
+            source_filename="segmenter.pt",
+            managed_path=f"projects/{project['id']}/models/segmenter.pt",
             sha256="d" * 64,
             file_size_bytes=10,
             framework="test",
-            task="detect",
+            task="segment",
             provider_name="ultralytics",
             provider_version="test",
             class_map_json={},
@@ -230,8 +252,8 @@ def test_queue_rejects_valid_graph_with_pending_execution_adapter(
         model_id = model.id
 
     graph = {
-        "graph_id": "pending-detection",
-        "name": "Pending detector adapter",
+        "graph_id": "pending-segmentation",
+        "name": "Pending segmentation adapter",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
             {"node_id": "images", "node_type": "project_images"},
@@ -240,7 +262,7 @@ def test_queue_rejects_valid_graph_with_pending_execution_adapter(
                 "node_type": "registered_model_source",
                 "parameters": {"model_id": model_id},
             },
-            {"node_id": "detect", "node_type": "detection_inference"},
+            {"node_id": "segment", "node_type": "segmentation_inference"},
         ],
         "edges": [
             {
@@ -258,17 +280,17 @@ def test_queue_rejects_valid_graph_with_pending_execution_adapter(
                 "target_port_id": "project",
             },
             {
-                "edge_id": "images-detect",
+                "edge_id": "images-segment",
                 "source_node_id": "images",
                 "source_port_id": "images",
-                "target_node_id": "detect",
+                "target_node_id": "segment",
                 "target_port_id": "images",
             },
             {
-                "edge_id": "model-detect",
+                "edge_id": "model-segment",
                 "source_node_id": "model",
                 "source_port_id": "model",
-                "target_node_id": "detect",
+                "target_node_id": "segment",
                 "target_port_id": "model",
             },
         ],
@@ -280,7 +302,7 @@ def test_queue_rejects_valid_graph_with_pending_execution_adapter(
     assert plan.status_code == 200, plan.text
     assert plan.json()["valid"] is True
     assert plan.json()["executable"] is False
-    assert "Detection Inference" in str(plan.json()["execution_blocker"])
+    assert "Segmentation Inference" in str(plan.json()["execution_blocker"])
 
     saved = _save_graph(client, project["id"], graph)
     response = client.post(
