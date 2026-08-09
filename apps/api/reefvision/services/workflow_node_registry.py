@@ -93,7 +93,9 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             optional_parameters={},
             execution_state="executable_source",
             executable=True,
-            implementation_notes=["Downstream task compatibility is validated from model purpose and task."],
+            implementation_notes=[
+                "Downstream task compatibility is validated from model purpose and task."
+            ],
         ),
         WorkflowNodeDefinitionResponse(
             node_type="project_video_source",
@@ -136,7 +138,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             execution_state="executable_inference",
             executable=True,
             implementation_notes=[
-                "Invokes the existing inference processor inline with a persisted child job to avoid nested-worker deadlock."
+                "Invokes the existing inference processor inline with a persisted child job."
             ],
         ),
         WorkflowNodeDefinitionResponse(
@@ -144,7 +146,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             display_name="Detection Consensus",
             category="auto_label",
             description=(
-                "Combine detections from multiple independent models or providers using configurable N-of-M voting."
+                "Combine detections from independent models or providers using N-of-M voting."
             ),
             input_ports=[
                 _input(
@@ -170,14 +172,14 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             executable=True,
             implementation_notes=[
                 "Each upstream source contributes at most one vote to a matched detection.",
-                "The same node accepts local detector outputs now and normalized GPT/Gemini/Claude outputs later.",
+                "Local detectors work now; normalized cloud VLM detections can use the same input.",
             ],
         ),
         WorkflowNodeDefinitionResponse(
             node_type="segmentation_inference",
             display_name="Segmentation Inference",
             category="inference",
-            description="Plan registered instance-segmentation inference over images.",
+            description="Run registered instance or semantic segmentation over images.",
             input_ports=[
                 _input("images", "Images", "image_collection"),
                 _input("model", "Segmenter", "model_reference"),
@@ -185,14 +187,17 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             output_ports=[_output("proposals", "Mask Proposals", "mask_proposals")],
             required_parameters=[],
             optional_parameters={"confidence": 0.25, "iou": 0.5, "device": "auto"},
-            execution_state="adapter_pending",
-            implementation_notes=["The existing segmentation operation still needs a workflow-safe direct adapter."],
+            execution_state="executable_inference",
+            executable=True,
+            implementation_notes=[
+                "Reuses the production instance/semantic inference processor and persists child-job provenance."
+            ],
         ),
         WorkflowNodeDefinitionResponse(
             node_type="classification_inference",
             display_name="Classification Inference",
             category="inference",
-            description="Plan top-k classifier inference over images.",
+            description="Run top-k registered classifier inference over images.",
             input_ports=[
                 _input("images", "Images", "image_collection"),
                 _input("model", "Classifier", "model_reference"),
@@ -202,8 +207,11 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             ],
             required_parameters=["label_set"],
             optional_parameters={"top_k": 5, "device": "auto"},
-            execution_state="adapter_pending",
-            implementation_notes=["The Phase 5 inference job still needs a workflow-safe direct adapter."],
+            execution_state="executable_inference",
+            executable=True,
+            implementation_notes=[
+                "Reuses the Phase 5 classification inference processor and reviewable predictions."
+            ],
         ),
         WorkflowNodeDefinitionResponse(
             node_type="detection_review_gate",
@@ -254,19 +262,22 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             node_type="mask_measurements",
             display_name="Coral Mask Measurements",
             category="analysis",
-            description="Plan calibrated Phase 4 measurements from reviewed or existing masks.",
+            description="Calculate calibrated Phase 4 measurements from verified masks.",
             input_ports=[_input("masks", "Masks", "reviewed_masks", "mask_annotations")],
             output_ports=[_output("measurements", "Measurement Table", "measurement_table")],
             required_parameters=[],
-            optional_parameters={"profile": "default", "export_format": "csv"},
-            execution_state="adapter_pending",
-            implementation_notes=["The existing measurement services still need a typed workflow adapter."],
+            optional_parameters={"profile": "default"},
+            execution_state="executable_analysis",
+            executable=True,
+            implementation_notes=[
+                "Uses the existing scientific measurement service and emits typed measurement rows."
+            ],
         ),
         WorkflowNodeDefinitionResponse(
             node_type="video_tracking",
             display_name="Video Tracking",
             category="video",
-            description="Plan detector-plus-tracker execution for one managed video.",
+            description="Run detector-plus-tracker execution for one managed video.",
             input_ports=[
                 _input("video", "Video", "video_reference"),
                 _input("model", "Detection Model", "model_reference"),
@@ -280,8 +291,11 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 "minimum_track_frames": 2,
                 "device": "auto",
             },
-            execution_state="adapter_pending",
-            implementation_notes=["The Phase 6 tracker still needs cancellation propagation from workflow runs."],
+            execution_state="executable_video",
+            executable=True,
+            implementation_notes=[
+                "Reuses the Phase 6 production tracker and records its child job and tracks."
+            ],
         ),
         WorkflowNodeDefinitionResponse(
             node_type="project_exchange_export",
