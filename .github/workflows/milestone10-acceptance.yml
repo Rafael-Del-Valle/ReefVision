@@ -25,6 +25,7 @@ jobs:
             apps/api/reefvision/domain/enums.py \
             apps/api/reefvision/jobs/workflow.py \
             apps/api/reefvision/jobs/worker.py \
+            apps/api/reefvision/ml/depth_anything_v2_provider.py \
             apps/api/reefvision/ml/model_bundles.py \
             apps/api/reefvision/ml/sam2_provider.py \
             apps/api/reefvision/schemas/workflow_execution.py \
@@ -33,6 +34,7 @@ jobs:
             apps/api/reefvision/services/models.py \
             apps/api/reefvision/services/workflow_auto_label.py \
             apps/api/reefvision/services/workflow_consensus.py \
+            apps/api/reefvision/services/workflow_depth.py \
             apps/api/reefvision/services/workflow_execution.py \
             apps/api/reefvision/services/workflow_graphs.py \
             apps/api/reefvision/services/workflow_node_registry.py \
@@ -42,6 +44,7 @@ jobs:
             apps/api/reefvision/services/workflow_vlm.py \
             apps/api/reefvision/tests/test_workflow_auto_label_phase10.py \
             apps/api/reefvision/tests/test_workflow_consensus_phase10.py \
+            apps/api/reefvision/tests/test_workflow_depth_phase10.py \
             apps/api/reefvision/tests/test_workflow_execution_phase10.py \
             apps/api/reefvision/tests/test_workflow_graphs_phase10.py \
             apps/api/reefvision/tests/test_workflow_prompt_assist_graph_phase10.py \
@@ -58,6 +61,7 @@ jobs:
             apps/api/reefvision/domain/enums.py \
             apps/api/reefvision/jobs/workflow.py \
             apps/api/reefvision/jobs/worker.py \
+            apps/api/reefvision/ml/depth_anything_v2_provider.py \
             apps/api/reefvision/ml/model_bundles.py \
             apps/api/reefvision/ml/sam2_provider.py \
             apps/api/reefvision/schemas/workflow_execution.py \
@@ -66,6 +70,7 @@ jobs:
             apps/api/reefvision/services/models.py \
             apps/api/reefvision/services/workflow_auto_label.py \
             apps/api/reefvision/services/workflow_consensus.py \
+            apps/api/reefvision/services/workflow_depth.py \
             apps/api/reefvision/services/workflow_execution.py \
             apps/api/reefvision/services/workflow_graphs.py \
             apps/api/reefvision/services/workflow_node_registry.py \
@@ -75,6 +80,7 @@ jobs:
             apps/api/reefvision/services/workflow_vlm.py \
             apps/api/reefvision/tests/test_workflow_auto_label_phase10.py \
             apps/api/reefvision/tests/test_workflow_consensus_phase10.py \
+            apps/api/reefvision/tests/test_workflow_depth_phase10.py \
             apps/api/reefvision/tests/test_workflow_execution_phase10.py \
             apps/api/reefvision/tests/test_workflow_graphs_phase10.py \
             apps/api/reefvision/tests/test_workflow_prompt_assist_graph_phase10.py \
@@ -94,6 +100,7 @@ jobs:
           apps/api/reefvision/tests/test_workflow_prompt_assist_graph_phase10.py
           apps/api/reefvision/tests/test_workflow_prompt_assist_phase10.py
           apps/api/reefvision/tests/test_workflow_sam2_registration_phase10.py
+          apps/api/reefvision/tests/test_workflow_depth_phase10.py
           apps/api/reefvision/tests/test_workflow_vlm_graph_phase10.py
           apps/api/reefvision/tests/test_workflow_vlm_phase10.py
           -q
