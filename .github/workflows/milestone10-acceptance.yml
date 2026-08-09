@@ -33,6 +33,7 @@ jobs:
             apps/api/reefvision/services/workflow_execution.py \
             apps/api/reefvision/services/workflow_graphs.py \
             apps/api/reefvision/services/workflow_node_registry.py \
+            apps/api/reefvision/services/workflow_prompt_assist.py \
             apps/api/reefvision/services/workflow_review.py \
             apps/api/reefvision/services/workflow_runtime_adapters.py \
             apps/api/reefvision/services/workflow_vlm.py \
@@ -40,6 +41,7 @@ jobs:
             apps/api/reefvision/tests/test_workflow_consensus_phase10.py \
             apps/api/reefvision/tests/test_workflow_execution_phase10.py \
             apps/api/reefvision/tests/test_workflow_graphs_phase10.py \
+            apps/api/reefvision/tests/test_workflow_prompt_assist_phase10.py \
             apps/api/reefvision/tests/test_workflow_review_phase10.py \
             apps/api/reefvision/tests/test_workflow_vlm_graph_phase10.py \
             apps/api/reefvision/tests/test_workflow_vlm_phase10.py
@@ -59,6 +61,7 @@ jobs:
             apps/api/reefvision/services/workflow_execution.py \
             apps/api/reefvision/services/workflow_graphs.py \
             apps/api/reefvision/services/workflow_node_registry.py \
+            apps/api/reefvision/services/workflow_prompt_assist.py \
             apps/api/reefvision/services/workflow_review.py \
             apps/api/reefvision/services/workflow_runtime_adapters.py \
             apps/api/reefvision/services/workflow_vlm.py \
@@ -66,6 +69,7 @@ jobs:
             apps/api/reefvision/tests/test_workflow_consensus_phase10.py \
             apps/api/reefvision/tests/test_workflow_execution_phase10.py \
             apps/api/reefvision/tests/test_workflow_graphs_phase10.py \
+            apps/api/reefvision/tests/test_workflow_prompt_assist_phase10.py \
             apps/api/reefvision/tests/test_workflow_review_phase10.py \
             apps/api/reefvision/tests/test_workflow_vlm_graph_phase10.py \
             apps/api/reefvision/tests/test_workflow_vlm_phase10.py
@@ -77,6 +81,7 @@ jobs:
           apps/api/reefvision/tests/test_workflow_consensus_phase10.py
           apps/api/reefvision/tests/test_workflow_review_phase10.py
           apps/api/reefvision/tests/test_workflow_auto_label_phase10.py
+          apps/api/reefvision/tests/test_workflow_prompt_assist_phase10.py
           apps/api/reefvision/tests/test_workflow_vlm_graph_phase10.py
           apps/api/reefvision/tests/test_workflow_vlm_phase10.py
           -q
