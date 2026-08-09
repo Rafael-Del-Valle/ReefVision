@@ -31,10 +31,12 @@ jobs:
             apps/api/reefvision/services/workflow_execution.py \
             apps/api/reefvision/services/workflow_graphs.py \
             apps/api/reefvision/services/workflow_node_registry.py \
+            apps/api/reefvision/services/workflow_review.py \
             apps/api/reefvision/services/workflow_runtime_adapters.py \
             apps/api/reefvision/tests/test_workflow_consensus_phase10.py \
             apps/api/reefvision/tests/test_workflow_execution_phase10.py \
-            apps/api/reefvision/tests/test_workflow_graphs_phase10.py
+            apps/api/reefvision/tests/test_workflow_graphs_phase10.py \
+            apps/api/reefvision/tests/test_workflow_review_phase10.py
           python -m ruff format --check \
             apps/api/migrations/versions/0024_workflow_execution.py \
             apps/api/reefvision/api/routes/workflow_graphs.py \
@@ -49,16 +51,19 @@ jobs:
             apps/api/reefvision/services/workflow_execution.py \
             apps/api/reefvision/services/workflow_graphs.py \
             apps/api/reefvision/services/workflow_node_registry.py \
+            apps/api/reefvision/services/workflow_review.py \
             apps/api/reefvision/services/workflow_runtime_adapters.py \
             apps/api/reefvision/tests/test_workflow_consensus_phase10.py \
             apps/api/reefvision/tests/test_workflow_execution_phase10.py \
-            apps/api/reefvision/tests/test_workflow_graphs_phase10.py
+            apps/api/reefvision/tests/test_workflow_graphs_phase10.py \
+            apps/api/reefvision/tests/test_workflow_review_phase10.py
       - name: Run Milestone 10 workflow tests
         run: >-
           python -m pytest
           apps/api/reefvision/tests/test_workflow_graphs_phase10.py
           apps/api/reefvision/tests/test_workflow_execution_phase10.py
           apps/api/reefvision/tests/test_workflow_consensus_phase10.py
+          apps/api/reefvision/tests/test_workflow_review_phase10.py
           -q
       - name: Verify 0024 migration roundtrip
         shell: bash
