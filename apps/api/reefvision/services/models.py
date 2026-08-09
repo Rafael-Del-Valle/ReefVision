@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import BinaryIO
 from uuid import uuid4
@@ -20,6 +21,7 @@ from reefvision.ml.providers import (
     DetectionModelMetadata,
     DetectionProvider,
 )
+from reefvision.ml.sam2_provider import TransformersSam2AssistProvider
 from reefvision.repositories.annotations import AnnotationRepository
 from reefvision.repositories.images import ImageRepository
 from reefvision.repositories.models import ModelRepository
@@ -87,6 +89,9 @@ class ModelService:
     def _provider_for_registration(
         self, purpose: str, provider_name: str
     ) -> DetectionProvider | AnnotationAssistProvider:
+        normalized = provider_name.strip().casefold()
+        if purpose == "assist" and normalized == "sam2":
+            return TransformersSam2AssistProvider()
         return provider_for_registration(
             purpose,
             provider_name=provider_name,
@@ -212,11 +217,12 @@ class ModelService:
         notes: str | None,
     ) -> ModelRegistrationResponse:
         filename = safe_model_name(upload_filename)
-        if not self.settings.allow_unsafe_pickled_models:
+        suffix = Path(filename).suffix.lower()
+        if suffix in {".pt", ".pth"} and not self.settings.allow_unsafe_pickled_models:
             raise ValidationError("Trusted PyTorch-style checkpoints are disabled by configuration")
         project = self._project(project_id)
         directories = project_model_directories(self.settings, project.storage_root)
-        staging_path = directories["staging"] / f"{uuid4()}{Path(filename).suffix.lower()}"
+        staging_path = directories["staging"] / f"{uuid4()}{suffix}"
         try:
             stage_model_upload(upload_stream, staging_path, self.settings.model_max_upload_bytes)
             response = self._register_model_path(
@@ -296,9 +302,12 @@ class ModelService:
         ):
             raise ConflictError("Models with predictions or accepted annotations cannot be removed")
         path = resolve_managed_project_path(self.settings, model.managed_path)
+        extracted_bundle = path.parent / f".{path.stem}.bundle"
         self.session.delete(model)
         self.session.commit()
         path.unlink(missing_ok=True)
+        if path.suffix.casefold() == ".zip":
+            shutil.rmtree(extracted_bundle, ignore_errors=True)
 
     def create_inference_job(
         self, project_id: str, payload: InferenceJobCreateRequest
