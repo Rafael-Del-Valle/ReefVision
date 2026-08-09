@@ -20,8 +20,10 @@ from reefvision.db.models import (
     LabelClass,
     ModelRegistration,
     PredictionProposal,
+    Project,
     WorkflowArtifact,
 )
+from reefvision.db.models.project import utc_now
 from reefvision.domain.errors import ValidationError
 from reefvision.ml.provider_hub import assist_provider_for_name
 from reefvision.ml.providers import AnnotationAssistProvider, PixelBox
@@ -53,7 +55,7 @@ def _save_mask(
     destination = output_root / f"{proposal_id}.png"
     temporary = output_root / f".{proposal_id}.tmp"
     try:
-        image = Image.fromarray(mask.astype("uint8") * 255, mode="L")
+        image = Image.fromarray(mask.astype("uint8") * 255)
         image.save(temporary, format="PNG", optimize=True)
         os.replace(temporary, destination)
     finally:
@@ -88,6 +90,9 @@ def create_prompt_assist_mask_proposals(
     if not annotation_ids:
         raise ValidationError("Prompt Assist Masks requires at least one reviewed annotation")
 
+    project = session.get(Project, project_id)
+    if project is None:
+        raise ValidationError("Project was not found")
     model = session.get(ModelRegistration, model_id)
     if model is None or model.project_id != project_id:
         raise ValidationError("Prompt Assist model does not belong to this project")
@@ -132,16 +137,6 @@ def create_prompt_assist_mask_proposals(
     if set(classes) != set(class_ids):
         raise ValidationError("Every reviewed annotation class must belong to this project")
 
-    project_storage_root = next(iter(images.values())).project.storage_root if images else None
-    if project_storage_root is None:
-        # Avoid depending on the image relationship being eagerly loaded.
-        from reefvision.db.models import Project
-
-        project = session.get(Project, project_id)
-        if project is None:
-            raise ValidationError("Project was not found")
-        project_storage_root = project.storage_root
-
     job = Job(
         project_id=project_id,
         job_type="inference",
@@ -157,6 +152,7 @@ def create_prompt_assist_mask_proposals(
             "created_by_workflow": True,
         },
         result_json={"stage": "running", "created_by_workflow": True},
+        started_at=utc_now(),
     )
     session.add(job)
     session.commit()
@@ -192,7 +188,7 @@ def create_prompt_assist_mask_proposals(
             proposal_id = str(uuid4())
             mask_path, mask_sha256, absolute_path = _save_mask(
                 settings,
-                project_storage_root=project_storage_root,
+                project_storage_root=project.storage_root,
                 proposal_id=proposal_id,
                 mask=prediction.mask,
             )
@@ -244,6 +240,7 @@ def create_prompt_assist_mask_proposals(
             proposals.append(proposal)
             job.progress_current = index
         job.status = "succeeded"
+        job.completed_at = utc_now()
         job.result_json = {
             "stage": "succeeded",
             "proposal_count": len(proposals),
@@ -258,6 +255,7 @@ def create_prompt_assist_mask_proposals(
         if failed_job is not None:
             failed_job.status = "failed"
             failed_job.error_message = str(exc)
+            failed_job.completed_at = utc_now()
             failed_job.result_json = {
                 "stage": "failed",
                 "error_type": type(exc).__name__,
