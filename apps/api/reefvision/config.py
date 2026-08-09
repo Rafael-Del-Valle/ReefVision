@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DESKTOP_WEB_ORIGINS = (
@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     assist_cache_max_items: int = Field(default=4, ge=1, le=64)
     smart_mask_sample_spacing: float = Field(default=14.0, gt=1, le=512)
     allow_unsafe_pickled_models: bool = True
+    cloud_inference_enabled: bool = False
+    cloud_request_timeout_seconds: float = Field(default=90.0, gt=1, le=600)
+    cloud_max_inline_image_bytes: int = Field(default=15_000_000, ge=65_536, le=20_000_000)
+    openai_api_key: SecretStr | None = None
+    gemini_api_key: SecretStr | None = None
+    anthropic_api_key: SecretStr | None = None
     log_max_bytes: int = Field(default=1_048_576, ge=65_536)
     log_backup_count: int = Field(default=5, ge=1, le=50)
 
