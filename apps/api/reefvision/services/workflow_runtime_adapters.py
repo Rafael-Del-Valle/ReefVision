@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from reefvision.config import Settings
 from reefvision.db.models import (
     ClassificationPrediction,
+    ImageAsset,
     Job,
+    LabelClass,
     ModelRegistration,
     PredictionProposal,
     VideoAsset,
@@ -24,10 +26,13 @@ from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.services.mask_measurements import MaskMeasurementService
 from reefvision.services.workflow_review import WorkflowReviewRequired
+from reefvision.services.workflow_vlm import VlmClassDefinition, run_vlm_detection
+from reefvision.storage.projects import resolve_managed_project_path
 
 RUNTIME_ADAPTER_NODE_TYPES = {
     "segmentation_inference",
     "classification_inference",
+    "vlm_detection",
     "detection_review_gate",
     "mask_review_gate",
     "classification_review_gate",
@@ -267,6 +272,138 @@ def _classification_inference(
                     }
                     for prediction in predictions
                 ],
+            },
+        }
+    ]
+
+
+def _vlm_detection(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    image_payload = _single_payload(inputs, "images")
+    if image_payload.get("project_id") != project_id:
+        raise ValidationError("Cloud VLM Detection received a foreign image collection")
+    image_ids = [str(value) for value in image_payload.get("image_ids", [])]
+    if not image_ids:
+        raise ValidationError("Cloud VLM Detection requires at least one image")
+
+    provider = str(parameters.get("provider") or "").strip().lower()
+    model = str(parameters.get("model") or "").strip()
+    prompt = str(
+        parameters.get("prompt")
+        or "Detect every visible instance of the selected classes."
+    ).strip()
+    requested_class_ids = [str(value) for value in parameters.get("label_class_ids", [])]
+    if not requested_class_ids:
+        raise ValidationError("Cloud VLM Detection requires label_class_ids")
+
+    class_rows = list(
+        session.scalars(
+            select(LabelClass).where(
+                LabelClass.project_id == project_id,
+                LabelClass.id.in_(requested_class_ids),
+            )
+        )
+    )
+    classes_by_id = {item.id: item for item in class_rows}
+    if set(classes_by_id) != set(requested_class_ids):
+        raise ValidationError("Every Cloud VLM Detection class must belong to this project")
+    classes = [
+        VlmClassDefinition(
+            label_class_id=classes_by_id[class_id].id,
+            name=classes_by_id[class_id].name,
+            scientific_name=classes_by_id[class_id].scientific_name,
+            state_name=classes_by_id[class_id].state_name,
+            description=classes_by_id[class_id].description,
+        )
+        for class_id in requested_class_ids
+    ]
+
+    image_rows = list(
+        session.scalars(
+            select(ImageAsset).where(
+                ImageAsset.project_id == project_id,
+                ImageAsset.id.in_(image_ids),
+            )
+        )
+    )
+    images_by_id = {item.id: item for item in image_rows}
+    if set(images_by_id) != set(image_ids):
+        raise ValidationError("Every Cloud VLM Detection image must belong to this project")
+
+    detections: list[dict[str, Any]] = []
+    usage_by_image: dict[str, dict[str, Any]] = {}
+    response_ids: dict[str, str | None] = {}
+    prompt_sha256: str | None = None
+    schema_sha256: str | None = None
+    for image_id in image_ids:
+        image = images_by_id[image_id]
+        managed_path = resolve_managed_project_path(settings, image.managed_path)
+        if not managed_path.exists():
+            raise ValidationError(f"Managed image file is missing: {image.id}")
+        result = run_vlm_detection(
+            settings,
+            provider=provider,
+            model=model,
+            prompt=prompt,
+            classes=classes,
+            image_id=image.id,
+            image_bytes=managed_path.read_bytes(),
+            media_type=image.media_type,
+            image_width=image.width_px,
+            image_height=image.height_px,
+        )
+        prompt_sha256 = str(result["prompt_sha256"])
+        schema_sha256 = str(result["schema_sha256"])
+        usage_by_image[image.id] = dict(result.get("usage") or {})
+        response_ids[image.id] = (
+            str(result["response_id"]) if result.get("response_id") is not None else None
+        )
+        for detection in result["detections"]:
+            detections.append(
+                {
+                    **dict(detection),
+                    "provenance": {
+                        "source": "cloud_vlm",
+                        "provider": provider,
+                        "model": model,
+                        "response_id": response_ids[image.id],
+                        "prompt_sha256": prompt_sha256,
+                        "schema_sha256": schema_sha256,
+                        "image_sha256": image.sha256,
+                    },
+                }
+            )
+
+    return [
+        {
+            "port_id": "proposals",
+            "data_type": "detection_proposals",
+            "payload": {
+                "schema_version": "cloud-vlm-detection-proposals-0001",
+                "project_id": project_id,
+                "source_id": f"cloud-vlm:{provider}:{model}",
+                "source_kind": "cloud_vlm",
+                "provider_name": provider,
+                "provider_model": model,
+                "image_ids": image_ids,
+                "image_sha256": {
+                    image_id: images_by_id[image_id].sha256 for image_id in image_ids
+                },
+                "label_class_ids": requested_class_ids,
+                "prompt": prompt,
+                "prompt_sha256": prompt_sha256,
+                "schema_sha256": schema_sha256,
+                "usage_by_image": usage_by_image,
+                "response_ids": response_ids,
+                "proposal_ids": [],
+                "count": len(detections),
+                "detections": detections,
+                "credentials_persisted": False,
             },
         }
     ]
@@ -599,6 +736,7 @@ def _video_tracking(
 _ADAPTERS = {
     "segmentation_inference": _segmentation_inference,
     "classification_inference": _classification_inference,
+    "vlm_detection": _vlm_detection,
     "detection_review_gate": _detection_review_gate,
     "mask_review_gate": _mask_review_gate,
     "classification_review_gate": _classification_review_gate,
