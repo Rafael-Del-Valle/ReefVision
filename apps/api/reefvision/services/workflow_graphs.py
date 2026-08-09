@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from reefvision.db.models import DatasetVersion, ModelRegistration, Project, VideoAsset
 from reefvision.schemas.workflow_graphs import (
-    WorkflowDataType,
     WorkflowEdge,
     WorkflowGraphIssue,
     WorkflowGraphPlanResponse,
