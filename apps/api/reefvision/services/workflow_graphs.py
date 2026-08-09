@@ -38,6 +38,7 @@ _ACTIONS: dict[str, str] = {
     "project_video_source": "Resolve one managed source video.",
     "verified_masks_source": "Read existing non-deleted verified mask annotations.",
     "detection_inference": "Run the existing detector inference operation for the resolved images.",
+    "detection_consensus": "Match independent detections and apply configurable N-of-M voting.",
     "segmentation_inference": "Run registered segmentation inference for the resolved images.",
     "classification_inference": "Run existing top-k classification inference.",
     "detection_review_gate": "Pause until detection proposals are reviewed by a human.",
