@@ -10,6 +10,7 @@ import {
   listWorkflowRuns,
   planWorkflowGraph,
   queueWorkflowRun,
+  resumeWorkflowReviewNode,
   saveWorkflowGraph,
   validateWorkflowGraph,
 } from "./workflowGraphApi";
@@ -73,6 +74,7 @@ const consensusExampleGraph = {
         box_strategy: "mean",
       },
     },
+    { node_id: "review", node_type: "detection_review_gate" },
   ],
   edges: [
     {
@@ -112,11 +114,23 @@ const consensusExampleGraph = {
         target_port_id: "predictions",
       },
     ]),
+    {
+      edge_id: "consensus-review",
+      source_node_id: "consensus",
+      source_port_id: "consensus",
+      target_node_id: "review",
+      target_port_id: "proposals",
+    },
   ],
 };
 
 function statusIsActive(status: string | undefined): boolean {
-  return status === "queued" || status === "running" || status === "cancel_requested";
+  return (
+    status === "queued" ||
+    status === "running" ||
+    status === "cancel_requested" ||
+    status === "waiting_for_review"
+  );
 }
 
 function shortHash(value: string): string {
@@ -182,6 +196,18 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
       void runsQuery.refetch();
     },
   });
+  const resumeReviewMutation = useMutation({
+    mutationFn: (nodeRunId: string) =>
+      resumeWorkflowReviewNode(
+        nodeRunId,
+        "local_user",
+        "Approved from the workflow workspace after human review.",
+      ),
+    onSuccess: () => {
+      void runsQuery.refetch();
+      void runDetailQuery.refetch();
+    },
+  });
   const cancelMutation = useMutation({
     mutationFn: (jobId: string) => cancelWorkflowRunJob(jobId),
     onSuccess: () => {
@@ -195,6 +221,7 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
     planMutation.error ??
     saveMutation.error ??
     saveAndRunMutation.error ??
+    resumeReviewMutation.error ??
     cancelMutation.error;
   const selectedRun = runDetailQuery.data?.run;
 
@@ -231,7 +258,7 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
                 setGraphJson(JSON.stringify(consensusExampleGraph, null, 2))
               }
             >
-              Load 2-of-3 consensus
+              Load 2-of-3 consensus + review
             </button>
           </div>
           <textarea
@@ -275,9 +302,10 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
           {mutationError && <p className="form-error">{mutationError.message}</p>}
           <p className="muted-copy">
             The 2-of-3 template uses registered detection models today. Replace its
-            three placeholder model IDs before validation. GPT, Gemini, and Claude
-            provider nodes can feed the same consensus node once those cloud adapters
-            are enabled.
+            three placeholder model IDs before validation. When a review gate pauses,
+            review the underlying predictions in the relevant ReefVision review tool,
+            then resume it here. GPT, Gemini, and Claude provider nodes can feed the
+            same consensus node once those cloud adapters are enabled.
           </p>
         </div>
 
@@ -411,6 +439,13 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
               <p>
                 Status: <strong>{selectedRun.status}</strong>
               </p>
+              {selectedRun.status === "waiting_for_review" && (
+                <p className="muted-copy">
+                  This run is safely paused. Complete the requested human review, then
+                  resume the waiting node below. Completed upstream nodes and artifacts
+                  will be reused.
+                </p>
+              )}
               {selectedRun.error_message && (
                 <p className="form-error">{selectedRun.error_message}</p>
               )}
@@ -420,6 +455,17 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
                   <li key={node.id}>
                     <strong>{node.node_id}</strong> · {node.node_type} · {node.status}
                     {node.error_message ? ` — ${node.error_message}` : ""}
+                    {node.status === "waiting_for_review" && (
+                      <div className="button-row">
+                        <button
+                          type="button"
+                          disabled={resumeReviewMutation.isPending}
+                          onClick={() => resumeReviewMutation.mutate(node.id)}
+                        >
+                          Resume after review
+                        </button>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ol>
