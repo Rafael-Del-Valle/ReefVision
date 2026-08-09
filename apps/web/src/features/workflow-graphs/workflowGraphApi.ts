@@ -235,6 +235,20 @@ export function getWorkflowRunDetail(
   );
 }
 
+export function resumeWorkflowReviewNode(
+  nodeRunId: string,
+  reviewedBy = "local_user",
+  note?: string,
+): Promise<WorkflowRun> {
+  return request<WorkflowRun>(
+    `/workflow-node-runs/${encodeURIComponent(nodeRunId)}/resume-review`,
+    {
+      method: "POST",
+      body: JSON.stringify({ reviewed_by: reviewedBy, note: note ?? null }),
+    },
+  );
+}
+
 export function cancelWorkflowRunJob(
   jobId: string,
 ): Promise<{ status: string }> {
