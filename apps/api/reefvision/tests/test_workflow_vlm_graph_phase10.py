@@ -88,6 +88,5 @@ def test_vlm_graph_rejects_unknown_provider_and_foreign_class(client: TestClient
     assert foreign.status_code == 200, foreign.text
     assert foreign.json()["valid"] is False
     assert any(
-        issue["code"] == "vlm_class_scope_mismatch"
-        for issue in foreign.json()["issues"]
+        issue["code"] == "vlm_class_scope_mismatch" for issue in foreign.json()["issues"]
     )
