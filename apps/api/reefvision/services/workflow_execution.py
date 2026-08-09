@@ -41,6 +41,10 @@ from reefvision.schemas.workflow_graphs import WorkflowGraphRequest, WorkflowPla
 from reefvision.services.project_exchange import FORMAT_VERSION, ProjectExchangeService
 from reefvision.services.workflow_consensus import build_detection_consensus
 from reefvision.services.workflow_graphs import WorkflowGraphService
+from reefvision.services.workflow_runtime_adapters import (
+    RUNTIME_ADAPTER_NODE_TYPES,
+    execute_runtime_adapter,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 
 EXECUTABLE_NODE_TYPES = {
@@ -53,6 +57,7 @@ EXECUTABLE_NODE_TYPES = {
     "detection_inference",
     "detection_consensus",
     "project_exchange_export",
+    *RUNTIME_ADAPTER_NODE_TYPES,
 }
 
 
@@ -251,16 +256,35 @@ class WorkflowExecutionService:
     ) -> list[WorkflowArtifactSpec]:
         if self.settings is None:
             raise ValidationError("Workflow execution requires application settings")
-        handler = getattr(self, f"_execute_{step.node_type}", None)
-        if handler is None or step.node_type not in EXECUTABLE_NODE_TYPES:
+        if step.node_type not in EXECUTABLE_NODE_TYPES:
             raise ValidationError(f"Workflow node is not executable: {step.node_type}")
-        return handler(
-            project_id=project_id,
-            run_id=run_id,
-            node_run=node_run,
-            parameters=step.parameters,
-            inputs=inputs,
-        )
+        handler = getattr(self, f"_execute_{step.node_type}", None)
+        if handler is not None:
+            return handler(
+                project_id=project_id,
+                run_id=run_id,
+                node_run=node_run,
+                parameters=step.parameters,
+                inputs=inputs,
+            )
+        if step.node_type in RUNTIME_ADAPTER_NODE_TYPES:
+            outputs = execute_runtime_adapter(
+                step.node_type,
+                session=self.session,
+                settings=self.settings,
+                project_id=project_id,
+                parameters=step.parameters,
+                inputs=inputs,
+            )
+            return [
+                WorkflowArtifactSpec(
+                    port_id=str(output["port_id"]),
+                    data_type=str(output["data_type"]),
+                    payload=dict(output["payload"]),
+                )
+                for output in outputs
+            ]
+        raise ValidationError(f"Workflow node is not executable: {step.node_type}")
 
     @staticmethod
     def _single_payload(
@@ -592,6 +616,7 @@ class WorkflowExecutionService:
                 port_id="video",
                 data_type="video_reference",
                 payload={
+                    "project_id": project_id,
                     "video_id": video.id,
                     "sha256": video.sha256,
                     "frame_count": video.frame_count,
