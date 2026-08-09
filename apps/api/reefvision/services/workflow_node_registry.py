@@ -13,12 +13,14 @@ def _input(
     display_name: str,
     *accepted_types: str,
     required: bool = True,
+    multiple: bool = False,
 ) -> WorkflowPortDefinition:
     return WorkflowPortDefinition(
         port_id=port_id,
         display_name=display_name,
         accepted_types=list(accepted_types),
         required=required,
+        multiple=multiple,
     )
 
 
@@ -123,7 +125,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             node_type="detection_inference",
             display_name="Detection Inference",
             category="inference",
-            description="Plan existing registered detector inference over an image collection.",
+            description="Run an existing registered detector over an image collection.",
             input_ports=[
                 _input("images", "Images", "image_collection"),
                 _input("model", "Detector", "model_reference"),
@@ -131,8 +133,45 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             output_ports=[_output("proposals", "Detection Proposals", "detection_proposals")],
             required_parameters=[],
             optional_parameters={"confidence": 0.25, "iou": 0.5, "device": "auto"},
-            execution_state="adapter_pending",
-            implementation_notes=["The existing inference operation still needs a workflow-safe direct adapter."],
+            execution_state="executable_inference",
+            executable=True,
+            implementation_notes=[
+                "Invokes the existing inference processor inline with a persisted child job to avoid nested-worker deadlock."
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
+            node_type="detection_consensus",
+            display_name="Detection Consensus",
+            category="auto_label",
+            description=(
+                "Combine detections from multiple independent models or providers using configurable N-of-M voting."
+            ),
+            input_ports=[
+                _input(
+                    "predictions",
+                    "Prediction Sources",
+                    "detection_proposals",
+                    multiple=True,
+                )
+            ],
+            output_ports=[
+                _output("consensus", "Consensus Detections", "detection_consensus"),
+                _output("disagreements", "Consensus Failures", "detection_disagreements"),
+            ],
+            required_parameters=[],
+            optional_parameters={
+                "required_votes": 2,
+                "iou_threshold": 0.5,
+                "confidence_threshold": 0.0,
+                "class_aware": True,
+                "box_strategy": "mean",
+            },
+            execution_state="executable_consensus",
+            executable=True,
+            implementation_notes=[
+                "Each upstream source contributes at most one vote to a matched detection.",
+                "The same node accepts local detector outputs now and normalized GPT/Gemini/Claude outputs later.",
+            ],
         ),
         WorkflowNodeDefinitionResponse(
             node_type="segmentation_inference",
@@ -171,7 +210,14 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             display_name="Detection Review Gate",
             category="human_review",
             description="Require human acceptance or rejection of detection proposals.",
-            input_ports=[_input("proposals", "Detection Proposals", "detection_proposals")],
+            input_ports=[
+                _input(
+                    "proposals",
+                    "Detection Proposals",
+                    "detection_proposals",
+                    "detection_consensus",
+                )
+            ],
             output_ports=[_output("boxes", "Reviewed Boxes", "reviewed_boxes")],
             required_parameters=[],
             optional_parameters={"queue_name": None},
