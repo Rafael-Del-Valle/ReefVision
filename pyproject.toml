@@ -13,6 +13,7 @@ authors = [{ name = "Rafael Del Valle" }]
 dependencies = [
   "alembic>=1.14,<2",
   "fastapi>=0.139,<1",
+  "httpx>=0.28,<1",
   "pydantic-settings>=2.7,<3",
   "pillow>=11,<13",
   "python-multipart>=0.0.20,<1",
@@ -24,7 +25,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "build>=1.2,<2",
-  "httpx>=0.28,<1",
   "mypy>=1.14,<2",
   "networkx>=3.2,<4",
   "numpy>=1.26,<3",
