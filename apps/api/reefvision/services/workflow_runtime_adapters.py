@@ -16,29 +16,41 @@ from reefvision.db.models import (
     VideoAsset,
     VideoTrack,
     WorkflowArtifact,
+    WorkflowNodeRun,
 )
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.classification_inference import process_classification_inference_job
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.services.mask_measurements import MaskMeasurementService
+from reefvision.services.workflow_review import WorkflowReviewRequired
 
 RUNTIME_ADAPTER_NODE_TYPES = {
     "segmentation_inference",
     "classification_inference",
+    "detection_review_gate",
+    "mask_review_gate",
+    "classification_review_gate",
     "mask_measurements",
     "video_tracking",
 }
+
+
+def _single_artifact(
+    inputs: dict[str, list[WorkflowArtifact]],
+    port_id: str,
+) -> WorkflowArtifact:
+    artifacts = inputs.get(port_id, [])
+    if len(artifacts) != 1:
+        raise ValidationError(f"Workflow input requires exactly one artifact: {port_id}")
+    return artifacts[0]
 
 
 def _single_payload(
     inputs: dict[str, list[WorkflowArtifact]],
     port_id: str,
 ) -> dict[str, Any]:
-    artifacts = inputs.get(port_id, [])
-    if len(artifacts) != 1:
-        raise ValidationError(f"Workflow input requires exactly one artifact: {port_id}")
-    return dict(artifacts[0].payload_json)
+    return dict(_single_artifact(inputs, port_id).payload_json)
 
 
 def _child_factory(session: Session) -> sessionmaker[Session]:
@@ -260,6 +272,210 @@ def _classification_inference(
     ]
 
 
+def _current_review_node(
+    session: Session,
+    source: WorkflowArtifact,
+    node_type: str,
+) -> WorkflowNodeRun:
+    node_run = session.scalar(
+        select(WorkflowNodeRun).where(
+            WorkflowNodeRun.workflow_run_id == source.workflow_run_id,
+            WorkflowNodeRun.node_type == node_type,
+            WorkflowNodeRun.status == "running",
+        )
+    )
+    if node_run is None:
+        raise ValidationError("The active workflow review node could not be resolved")
+    return node_run
+
+
+def _review_gate(
+    session: Session,
+    project_id: str,
+    inputs: dict[str, list[WorkflowArtifact]],
+    *,
+    node_type: str,
+    input_port: str,
+    output_port: str,
+    output_type: str,
+) -> list[dict[str, Any]]:
+    source = _single_artifact(inputs, input_port)
+    payload = dict(source.payload_json or {})
+    if payload.get("project_id") != project_id:
+        raise ValidationError("Human Review received artifacts from another project")
+    node_run = _current_review_node(session, source, node_type)
+    approval = dict((node_run.result_json or {}).get("review_approval") or {})
+    if not approval:
+        item_count = int(payload.get("count", 0) or 0)
+        raise WorkflowReviewRequired(
+            f"{node_run.node_id} is waiting for human review",
+            details={
+                "node_run_id": node_run.id,
+                "node_id": node_run.node_id,
+                "node_type": node_type,
+                "source_artifact_id": source.id,
+                "source_data_type": source.data_type,
+                "item_count": item_count,
+            },
+        )
+
+    reviewed_payload: dict[str, Any] = {
+        "schema_version": "workflow-reviewed-artifact-0001",
+        "project_id": project_id,
+        "source_artifact_id": source.id,
+        "source_data_type": source.data_type,
+        "review_approval": approval,
+    }
+    if source.data_type in {"detection_proposals", "mask_proposals"}:
+        proposal_ids = [str(value) for value in payload.get("proposal_ids", [])]
+        proposals = list(
+            session.scalars(
+                select(PredictionProposal).where(PredictionProposal.id.in_(proposal_ids))
+            )
+        )
+        pending = [item.id for item in proposals if item.review_status == "pending"]
+        if pending:
+            raise WorkflowReviewRequired(
+                f"{len(pending)} model prediction(s) still require review",
+                details={
+                    "node_run_id": node_run.id,
+                    "pending_prediction_ids": pending,
+                },
+            )
+        accepted = [
+            item
+            for item in proposals
+            if item.review_status in {"accepted", "edited_and_accepted"}
+        ]
+        reviewed_payload.update(
+            {
+                "accepted_proposal_ids": [item.id for item in accepted],
+                "rejected_proposal_ids": [
+                    item.id for item in proposals if item.review_status == "rejected"
+                ],
+            }
+        )
+        if output_type == "reviewed_boxes":
+            reviewed_payload["annotation_ids"] = [
+                item.accepted_annotation_id
+                for item in accepted
+                if item.accepted_annotation_id is not None
+            ]
+        else:
+            reviewed_payload["mask_annotation_ids"] = [
+                item.accepted_mask_annotation_id
+                for item in accepted
+                if item.accepted_mask_annotation_id is not None
+            ]
+    elif source.data_type == "classification_predictions":
+        prediction_ids = [str(value) for value in payload.get("prediction_ids", [])]
+        predictions = list(
+            session.scalars(
+                select(ClassificationPrediction).where(
+                    ClassificationPrediction.id.in_(prediction_ids)
+                )
+            )
+        )
+        pending = [item.id for item in predictions if item.status == "pending"]
+        if pending:
+            raise WorkflowReviewRequired(
+                f"{len(pending)} classification prediction(s) still require review",
+                details={
+                    "node_run_id": node_run.id,
+                    "pending_prediction_ids": pending,
+                },
+            )
+        accepted = [item for item in predictions if item.status == "accepted"]
+        reviewed_payload.update(
+            {
+                "accepted_prediction_ids": [item.id for item in accepted],
+                "rejected_prediction_ids": [
+                    item.id for item in predictions if item.status == "rejected"
+                ],
+                "image_label_ids": [
+                    item.accepted_image_label_id
+                    for item in accepted
+                    if item.accepted_image_label_id is not None
+                ],
+            }
+        )
+    elif source.data_type == "detection_consensus":
+        reviewed_payload.update(
+            {
+                "detections": list(payload.get("detections", [])),
+                "count": int(payload.get("count", 0) or 0),
+                "consensus": True,
+            }
+        )
+    else:
+        raise ValidationError(f"Unsupported human-review artifact: {source.data_type}")
+
+    return [
+        {
+            "port_id": output_port,
+            "data_type": output_type,
+            "payload": reviewed_payload,
+        }
+    ]
+
+
+def _detection_review_gate(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    del settings, parameters
+    return _review_gate(
+        session,
+        project_id,
+        inputs,
+        node_type="detection_review_gate",
+        input_port="proposals",
+        output_port="boxes",
+        output_type="reviewed_boxes",
+    )
+
+
+def _mask_review_gate(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    del settings, parameters
+    return _review_gate(
+        session,
+        project_id,
+        inputs,
+        node_type="mask_review_gate",
+        input_port="proposals",
+        output_port="masks",
+        output_type="reviewed_masks",
+    )
+
+
+def _classification_review_gate(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    del settings, parameters
+    return _review_gate(
+        session,
+        project_id,
+        inputs,
+        node_type="classification_review_gate",
+        input_port="predictions",
+        output_port="labels",
+        output_type="reviewed_labels",
+    )
+
+
 def _mask_measurements(
     session: Session,
     settings: Settings,
@@ -272,7 +488,9 @@ def _mask_measurements(
         raise ValidationError("Mask Measurements received masks from another project")
     mask_ids = [str(value) for value in mask_payload.get("mask_annotation_ids", [])]
     measurement_service = MaskMeasurementService(session, settings)
-    rows = [measurement_service.measure(mask_id).model_dump(mode="json") for mask_id in mask_ids]
+    rows = [
+        measurement_service.measure(mask_id).model_dump(mode="json") for mask_id in mask_ids
+    ]
     return [
         {
             "port_id": "measurements",
@@ -381,6 +599,9 @@ def _video_tracking(
 _ADAPTERS = {
     "segmentation_inference": _segmentation_inference,
     "classification_inference": _classification_inference,
+    "detection_review_gate": _detection_review_gate,
+    "mask_review_gate": _mask_review_gate,
+    "classification_review_gate": _classification_review_gate,
     "mask_measurements": _mask_measurements,
     "video_tracking": _video_tracking,
 }
