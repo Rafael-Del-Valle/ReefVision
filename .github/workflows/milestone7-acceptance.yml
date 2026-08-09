@@ -22,17 +22,25 @@ jobs:
             apps/api/reefvision/api/routes/active_learning.py \
             apps/api/reefvision/db/models/active_learning_round.py \
             apps/api/reefvision/schemas/active_learning.py \
+            apps/api/reefvision/services/active_learning_committee.py \
             apps/api/reefvision/services/active_learning_rounds.py \
+            apps/api/reefvision/tests/test_active_learning_committee_phase7.py \
             apps/api/reefvision/tests/test_active_learning_phase7.py
           python -m ruff format --check \
             apps/api/migrations/versions/0022_active_learning_rounds.py \
             apps/api/reefvision/api/routes/active_learning.py \
             apps/api/reefvision/db/models/active_learning_round.py \
             apps/api/reefvision/schemas/active_learning.py \
+            apps/api/reefvision/services/active_learning_committee.py \
             apps/api/reefvision/services/active_learning_rounds.py \
+            apps/api/reefvision/tests/test_active_learning_committee_phase7.py \
             apps/api/reefvision/tests/test_active_learning_phase7.py
       - name: Run Milestone 7 active learning tests
-        run: python -m pytest apps/api/reefvision/tests/test_active_learning_phase7.py -q
+        run: >-
+          python -m pytest
+          apps/api/reefvision/tests/test_active_learning_phase7.py
+          apps/api/reefvision/tests/test_active_learning_committee_phase7.py
+          -q
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
