@@ -15,6 +15,8 @@ WorkflowDataType = Literal[
     "box_annotations",
     "mask_annotations",
     "detection_proposals",
+    "detection_consensus",
+    "detection_disagreements",
     "mask_proposals",
     "classification_predictions",
     "reviewed_boxes",
