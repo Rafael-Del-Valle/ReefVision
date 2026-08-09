@@ -41,9 +41,7 @@ class JobService:
             "model_install",
             "workflow_run",
         }:
-            raise ConflictError(
-                "Only supported failed background jobs can be retried"
-            )
+            raise ConflictError("Only supported failed background jobs can be retried")
         job.status = "queued"
         job.progress_current = 0
         job.error_message = None
@@ -101,7 +99,7 @@ class JobService:
         )
         backup = self.backups.get_by_job_id(job.id) if job.job_type == "backup" else None
         workflow_run = self._workflow_run(job)
-        if job.status == "queued":
+        if job.status in {"queued", "waiting_for_review"}:
             now = utc_now()
             job.status = "cancelled"
             job.completed_at = now
@@ -121,12 +119,14 @@ class JobService:
                 for node in self.session.scalars(
                     select(WorkflowNodeRun).where(
                         WorkflowNodeRun.workflow_run_id == workflow_run.id,
-                        WorkflowNodeRun.status == "pending",
+                        WorkflowNodeRun.status.in_(
+                            ("pending", "waiting_for_review", "review_approved")
+                        ),
                     )
                 ):
                     node.status = "cancelled"
                     node.completed_at = now
-                    node.error_message = "Workflow run was cancelled before execution"
+                    node.error_message = "Workflow run was cancelled before completion"
         elif job.status == "running":
             job.status = "cancel_requested"
             if quality_control_run is not None:
@@ -140,7 +140,9 @@ class JobService:
                     "stage": "cancel_requested",
                 }
         else:
-            raise ConflictError("Only queued or running jobs can be cancelled")
+            raise ConflictError(
+                "Only queued, running, or waiting-for-review jobs can be cancelled"
+            )
         self.session.commit()
         self.session.refresh(job)
         return job
