@@ -34,6 +34,7 @@ _MODEL_PURPOSES_BY_NODE: dict[str, set[str]] = {
     "segmentation_inference": {"segmenter", "semantic_segmenter"},
     "classification_inference": {"classifier"},
     "prompt_assist_masks": {"assist"},
+    "relative_depth_estimation": {"depth"},
     "video_tracking": {"detector", "segmenter"},
 }
 
@@ -51,6 +52,9 @@ _ACTIONS: dict[str, str] = {
     "classification_inference": "Run existing top-k classification inference.",
     "detection_review_gate": "Pause until detection proposals are reviewed by a human.",
     "prompt_assist_masks": "Generate reviewable raster masks from reviewed detection boxes.",
+    "relative_depth_estimation": (
+        "Generate checksummed relative-depth arrays and previews for project images."
+    ),
     "mask_review_gate": "Pause until mask proposals are reviewed by a human.",
     "classification_review_gate": "Pause until class predictions are reviewed by a human.",
     "mask_measurements": "Calculate Phase 4 measurements and create the selected table export.",
