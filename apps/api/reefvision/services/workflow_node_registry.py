@@ -277,7 +277,32 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             implementation_notes=[
                 "Uses the provider-neutral AnnotationAssistProvider box-prompt interface.",
                 "Outputs remain pending PredictionProposals until the Mask Review Gate approves them.",
-                "Works with the current Segment Anything provider and is designed for SAM2-compatible providers.",
+                "Works with Segment Anything and registered local SAM2 bundles.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
+            node_type="relative_depth_estimation",
+            display_name="Relative Depth Estimation",
+            category="analysis",
+            description=(
+                "Run a registered Depth Anything V2 model over project images and persist "
+                "relative-depth arrays plus 16-bit preview maps."
+            ),
+            input_ports=[
+                _input("images", "Images", "image_collection"),
+                _input("model", "Depth Model", "model_reference"),
+            ],
+            output_ports=[
+                _output("depth_maps", "Relative Depth Maps", "relative_depth_maps")
+            ],
+            required_parameters=[],
+            optional_parameters={"device": "auto"},
+            execution_state="executable_depth",
+            executable=True,
+            implementation_notes=[
+                "Depth Anything V2 outputs are relative monocular depth, not metric distance.",
+                "Artifacts persist float32 .npy data, 16-bit PNG previews, and checksums.",
+                "metric_units remains null unless a future calibrated conversion node is added.",
             ],
         ),
         WorkflowNodeDefinitionResponse(
