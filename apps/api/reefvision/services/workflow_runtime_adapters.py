@@ -25,6 +25,7 @@ from reefvision.jobs.classification_inference import process_classification_infe
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.services.mask_measurements import MaskMeasurementService
+from reefvision.services.workflow_depth import create_depth_map_artifacts
 from reefvision.services.workflow_prompt_assist import create_prompt_assist_mask_proposals
 from reefvision.services.workflow_review import WorkflowReviewRequired
 from reefvision.services.workflow_vlm import VlmClassDefinition, run_vlm_detection
@@ -38,6 +39,7 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "mask_review_gate",
     "classification_review_gate",
     "prompt_assist_masks",
+    "relative_depth_estimation",
     "mask_measurements",
     "video_tracking",
 }
@@ -644,6 +646,36 @@ def _prompt_assist_masks(
     ]
 
 
+def _relative_depth_estimation(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    image_payload = _single_payload(inputs, "images")
+    model_payload = _single_payload(inputs, "model")
+    if image_payload.get("project_id") != project_id:
+        raise ValidationError("Relative Depth Estimation received images from another project")
+    image_ids = [str(value) for value in image_payload.get("image_ids", [])]
+    model_id = str(model_payload.get("model_id") or "")
+    payload = create_depth_map_artifacts(
+        session,
+        settings,
+        project_id=project_id,
+        image_ids=image_ids,
+        model_id=model_id,
+        device=str(parameters.get("device", "auto")),
+    )
+    return [
+        {
+            "port_id": "depth_maps",
+            "data_type": "relative_depth_maps",
+            "payload": payload,
+        }
+    ]
+
+
 def _mask_measurements(
     session: Session,
     settings: Settings,
@@ -772,6 +804,7 @@ _ADAPTERS = {
     "mask_review_gate": _mask_review_gate,
     "classification_review_gate": _classification_review_gate,
     "prompt_assist_masks": _prompt_assist_masks,
+    "relative_depth_estimation": _relative_depth_estimation,
     "mask_measurements": _mask_measurements,
     "video_tracking": _video_tracking,
 }
