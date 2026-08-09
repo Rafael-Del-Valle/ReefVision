@@ -47,6 +47,9 @@ from reefvision.db.models import (
     VideoTrack,
 )
 from reefvision.domain.errors import ValidationError
+from reefvision.services.project_exchange_classification import (
+    restore_classification_dataset_materialization,
+)
 from reefvision.services.projects import slugify
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import create_managed_project_directory, resolve_managed_project_path
@@ -188,9 +191,7 @@ def _section_order(section_names: set[str]) -> list[str]:
     remaining = set(dependencies)
     while remaining:
         ready = sorted(
-            section
-            for section in remaining
-            if not (dependencies[section] & remaining)
+            section for section in remaining if not (dependencies[section] & remaining)
         )
         if not ready:
             raise ValidationError(
@@ -357,6 +358,11 @@ class ProjectExchangeImportService:
         elif section_name == "training_runs":
             if "job_id" in values:
                 values["job_id"] = None
+        elif section_name == "classification_datasets":
+            manifest_json = values.get("manifest_json")
+            if not isinstance(manifest_json, dict):
+                raise ValidationError("Classification dataset manifest is invalid")
+            values["manifest_sha256"] = canonical_json_sha256(manifest_json)
         return values, deferred_self_refs
 
     def _copy_media(
@@ -376,6 +382,10 @@ class ProjectExchangeImportService:
             "video": ("videos", "managed_path"),
             "model": ("models", "managed_path"),
             "mask": ("mask_annotations", "mask_path"),
+            "classification_dataset_archive": (
+                "classification_datasets",
+                "archive_path",
+            ),
             "training_log": ("training_runs", "logs_path"),
             "training_checkpoint": ("training_runs", "result_checkpoint_path"),
         }
@@ -469,9 +479,11 @@ class ProjectExchangeImportService:
                 default_annotation_type=str(
                     project_row.get("default_annotation_type") or "bbox"
                 ),
-                created_at=_coerce_datetime(project_row.get("created_at"))
-                if project_row.get("created_at")
-                else datetime.now(UTC),
+                created_at=(
+                    _coerce_datetime(project_row.get("created_at"))
+                    if project_row.get("created_at")
+                    else datetime.now(UTC)
+                ),
                 updated_at=datetime.now(UTC),
                 archived_at=None,
             )
@@ -512,13 +524,13 @@ class ProjectExchangeImportService:
                     transformed_rows,
                 )
 
-                for old_id, row in transformed_rows.get("images", {}).items():
+                for old_id in transformed_rows.get("images", {}):
                     if ("image", old_id) not in restored_keys:
                         raise ValidationError(
                             "A reopenable import requires original image media; "
                             f"missing image record {old_id}"
                         )
-                for old_id, row in transformed_rows.get("videos", {}).items():
+                for old_id in transformed_rows.get("videos", {}):
                     if ("video", old_id) not in restored_keys:
                         raise ValidationError(
                             "A reopenable import requires original video media; "
@@ -529,6 +541,39 @@ class ProjectExchangeImportService:
                         raise ValidationError(
                             "A raster-mask annotation is missing its packaged mask artifact"
                         )
+                for old_id, row in transformed_rows.get(
+                    "classification_datasets", {}
+                ).items():
+                    if ("classification_dataset_archive", old_id) not in restored_keys:
+                        raise ValidationError(
+                            "A classification dataset is missing its packaged materialization archive"
+                        )
+                    archive_path_value = row.get("archive_path")
+                    output_path_value = row.get("output_path")
+                    manifest_json = row.get("manifest_json")
+                    manifest_sha256 = row.get("manifest_sha256")
+                    if (
+                        not isinstance(archive_path_value, str)
+                        or not isinstance(output_path_value, str)
+                        or not isinstance(manifest_json, dict)
+                        or not isinstance(manifest_sha256, str)
+                    ):
+                        raise ValidationError(
+                            "Classification dataset paths or manifest are invalid after remapping"
+                        )
+                    restore_classification_dataset_materialization(
+                        archive_path=resolve_managed_project_path(
+                            self.settings,
+                            archive_path_value,
+                        ),
+                        output_path=resolve_managed_project_path(
+                            self.settings,
+                            output_path_value,
+                        ),
+                        manifest_json=manifest_json,
+                        manifest_sha256=manifest_sha256,
+                        sample_count=int(row.get("sample_count", 0)),
+                    )
                 for old_id, row in transformed_rows.get("models", {}).items():
                     if ("model", old_id) not in restored_keys:
                         metadata = dict(row.get("metadata_json") or {})
