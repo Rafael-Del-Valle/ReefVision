@@ -143,7 +143,7 @@ def _remap_value(value: object, id_map: dict[str, str], old_root: str, new_root:
         return [_remap_value(item, id_map, old_root, new_root) for item in value]
     if isinstance(value, dict):
         return {
-            str(key): _remap_value(item, id_map, old_root, new_root)
+            id_map.get(str(key), str(key)): _remap_value(item, id_map, old_root, new_root)
             for key, item in value.items()
         }
     return value
