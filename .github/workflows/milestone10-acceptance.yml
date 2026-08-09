@@ -27,12 +27,14 @@ jobs:
             apps/api/reefvision/schemas/workflow_execution.py \
             apps/api/reefvision/schemas/workflow_graphs.py \
             apps/api/reefvision/services/jobs.py \
+            apps/api/reefvision/services/workflow_auto_label.py \
             apps/api/reefvision/services/workflow_consensus.py \
             apps/api/reefvision/services/workflow_execution.py \
             apps/api/reefvision/services/workflow_graphs.py \
             apps/api/reefvision/services/workflow_node_registry.py \
             apps/api/reefvision/services/workflow_review.py \
             apps/api/reefvision/services/workflow_runtime_adapters.py \
+            apps/api/reefvision/tests/test_workflow_auto_label_phase10.py \
             apps/api/reefvision/tests/test_workflow_consensus_phase10.py \
             apps/api/reefvision/tests/test_workflow_execution_phase10.py \
             apps/api/reefvision/tests/test_workflow_graphs_phase10.py \
@@ -47,12 +49,14 @@ jobs:
             apps/api/reefvision/schemas/workflow_execution.py \
             apps/api/reefvision/schemas/workflow_graphs.py \
             apps/api/reefvision/services/jobs.py \
+            apps/api/reefvision/services/workflow_auto_label.py \
             apps/api/reefvision/services/workflow_consensus.py \
             apps/api/reefvision/services/workflow_execution.py \
             apps/api/reefvision/services/workflow_graphs.py \
             apps/api/reefvision/services/workflow_node_registry.py \
             apps/api/reefvision/services/workflow_review.py \
             apps/api/reefvision/services/workflow_runtime_adapters.py \
+            apps/api/reefvision/tests/test_workflow_auto_label_phase10.py \
             apps/api/reefvision/tests/test_workflow_consensus_phase10.py \
             apps/api/reefvision/tests/test_workflow_execution_phase10.py \
             apps/api/reefvision/tests/test_workflow_graphs_phase10.py \
@@ -64,6 +68,7 @@ jobs:
           apps/api/reefvision/tests/test_workflow_execution_phase10.py
           apps/api/reefvision/tests/test_workflow_consensus_phase10.py
           apps/api/reefvision/tests/test_workflow_review_phase10.py
+          apps/api/reefvision/tests/test_workflow_auto_label_phase10.py
           -q
       - name: Verify 0024 migration roundtrip
         shell: bash
