@@ -7,7 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import (
@@ -17,6 +17,7 @@ from reefvision.db.models import (
     Job,
     MaskAnnotation,
     ModelRegistration,
+    PredictionProposal,
     Project,
     ProjectExchangePackage,
     VideoAsset,
@@ -26,6 +27,7 @@ from reefvision.db.models import (
     WorkflowRun,
 )
 from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.jobs.inference import process_inference_job
 from reefvision.schemas.workflow_execution import (
     WorkflowArtifactResponse,
     WorkflowGraphRecordResponse,
@@ -37,6 +39,7 @@ from reefvision.schemas.workflow_execution import (
 )
 from reefvision.schemas.workflow_graphs import WorkflowGraphRequest, WorkflowPlanStep
 from reefvision.services.project_exchange import FORMAT_VERSION, ProjectExchangeService
+from reefvision.services.workflow_consensus import build_detection_consensus
 from reefvision.services.workflow_graphs import WorkflowGraphService
 from reefvision.storage.datasets import canonical_json_sha256
 
@@ -47,6 +50,8 @@ EXECUTABLE_NODE_TYPES = {
     "registered_model_source",
     "project_video_source",
     "verified_masks_source",
+    "detection_inference",
+    "detection_consensus",
     "project_exchange_export",
 }
 
@@ -104,7 +109,9 @@ class WorkflowExecutionService:
         self._project(project_id)
         validation = self.graphs.validate(project_id, request.graph)
         if not validation.valid:
-            messages = "; ".join(issue.message for issue in validation.issues if issue.severity == "error")
+            messages = "; ".join(
+                issue.message for issue in validation.issues if issue.severity == "error"
+            )
             raise ValidationError(f"Cannot save invalid workflow graph: {messages}")
 
         graph_json = request.graph.model_dump(mode="json")
@@ -120,15 +127,10 @@ class WorkflowExecutionService:
         )
         if latest is not None and latest.graph_sha256 == checksum:
             return WorkflowGraphRecordResponse.model_validate(latest)
-        if latest is not None and not request.create_new_revision:
-            latest.name = request.graph.name
-            latest.schema_version = request.graph.schema_version
-            latest.graph_json = graph_json
-            latest.graph_sha256 = checksum
-            self.session.commit()
-            self.session.refresh(latest)
-            return WorkflowGraphRecordResponse.model_validate(latest)
 
+        # Workflow graph records are immutable provenance. Even when older clients send
+        # create_new_revision=False, a changed graph receives a new revision instead of
+        # mutating a record that an existing WorkflowRun may already reference.
         record = WorkflowGraphRecord(
             project_id=project_id,
             graph_key=request.graph.graph_id,
@@ -261,7 +263,10 @@ class WorkflowExecutionService:
         )
 
     @staticmethod
-    def _single_payload(inputs: dict[str, list[WorkflowArtifact]], port_id: str) -> dict[str, Any]:
+    def _single_payload(
+        inputs: dict[str, list[WorkflowArtifact]],
+        port_id: str,
+    ) -> dict[str, Any]:
         items = inputs.get(port_id, [])
         if len(items) != 1:
             raise ValidationError(f"Workflow input requires exactly one artifact: {port_id}")
@@ -304,7 +309,9 @@ class WorkflowExecutionService:
             statement = statement.where(ImageAsset.annotation_status == str(annotation_status))
         if group_key:
             statement = statement.where(ImageAsset.group_key == str(group_key))
-        images = list(self.session.scalars(statement.order_by(ImageAsset.created_at, ImageAsset.id)))
+        images = list(
+            self.session.scalars(statement.order_by(ImageAsset.created_at, ImageAsset.id))
+        )
         return [
             WorkflowArtifactSpec(
                 port_id="images",
@@ -348,8 +355,14 @@ class WorkflowExecutionService:
                 payload={
                     "dataset_version_id": version.id,
                     "manifest_sha256": version.manifest_sha256,
-                    "split_manifest_sha256": version.split_manifest_sha256,
+                    "version_number": version.version_number,
+                    "split_method": version.split_method,
                     "split": split,
+                    "split_counts": {
+                        "train": version.train_image_count,
+                        "val": version.val_image_count,
+                        "test": version.test_image_count,
+                    },
                 },
             ),
             WorkflowArtifactSpec(
@@ -360,6 +373,7 @@ class WorkflowExecutionService:
                     "image_ids": image_ids,
                     "count": len(image_ids),
                     "dataset_version_id": version.id,
+                    "dataset_manifest_sha256": version.manifest_sha256,
                     "split": split,
                 },
             ),
@@ -385,6 +399,7 @@ class WorkflowExecutionService:
                 port_id="model",
                 data_type="model_reference",
                 payload={
+                    "project_id": project_id,
                     "model_id": model.id,
                     "model_sha256": model.sha256,
                     "purpose": model.purpose,
@@ -393,6 +408,168 @@ class WorkflowExecutionService:
                     "provider_version": model.provider_version,
                 },
             )
+        ]
+
+    def _execute_detection_inference(
+        self,
+        *,
+        project_id: str,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        image_payload = self._single_payload(inputs, "images")
+        model_payload = self._single_payload(inputs, "model")
+        if image_payload.get("project_id") != project_id:
+            raise ValidationError("Detection inference received a foreign image collection")
+        image_ids = [str(image_id) for image_id in image_payload.get("image_ids", [])]
+        if not image_ids:
+            raise ValidationError("Detection inference requires at least one image")
+        model_id = str(model_payload.get("model_id") or "")
+        model = self.session.get(ModelRegistration, model_id)
+        if model is None or model.project_id != project_id:
+            raise ValidationError("Detection inference model does not belong to this project")
+        if model.task != "detect":
+            raise ValidationError("Detection Inference requires a model with task='detect'")
+
+        child_job = Job(
+            project_id=project_id,
+            job_type="inference",
+            status="queued",
+            progress_current=0,
+            progress_total=len(image_ids),
+            request_json={
+                "model_id": model.id,
+                "image_ids": image_ids,
+                "confidence_threshold": float(parameters.get("confidence", 0.25)),
+                "iou_threshold": float(parameters.get("iou", 0.5)),
+                "device": str(parameters.get("device", "auto")),
+                "model_task": "detect",
+                "created_by_workflow": True,
+            },
+            result_json={"stage": "queued", "created_by_workflow": True},
+        )
+        self.session.add(child_job)
+        self.session.commit()
+        child_job_id = child_job.id
+
+        bind = self.session.get_bind()
+        factory = sessionmaker(bind=bind, expire_on_commit=False)
+        process_inference_job(self.settings, factory, child_job_id)
+        self.session.expire_all()
+        completed_job = self.session.get(Job, child_job_id)
+        if completed_job is None or completed_job.status != "succeeded":
+            detail = completed_job.error_message if completed_job is not None else "job disappeared"
+            raise ValidationError(f"Detection inference child job failed: {detail}")
+
+        proposals = list(
+            self.session.scalars(
+                select(PredictionProposal)
+                .where(PredictionProposal.inference_job_id == child_job_id)
+                .order_by(
+                    PredictionProposal.image_id,
+                    PredictionProposal.created_at,
+                    PredictionProposal.id,
+                )
+            )
+        )
+        detections = [
+            {
+                "proposal_id": proposal.id,
+                "image_id": proposal.image_id,
+                "label_class_id": proposal.label_class_id,
+                "predicted_label": proposal.predicted_label,
+                "predicted_index": proposal.predicted_index,
+                "confidence": proposal.confidence,
+                "geometry_kind": proposal.geometry_kind,
+                "box": {
+                    "x_min": proposal.x_min,
+                    "y_min": proposal.y_min,
+                    "x_max": proposal.x_max,
+                    "y_max": proposal.y_max,
+                },
+                "provenance": dict(proposal.provenance_json or {}),
+            }
+            for proposal in proposals
+        ]
+        return [
+            WorkflowArtifactSpec(
+                port_id="proposals",
+                data_type="detection_proposals",
+                payload={
+                    "schema_version": "detection-proposals-0001",
+                    "project_id": project_id,
+                    "source_id": model.id,
+                    "source_kind": "registered_model",
+                    "source_model_id": model.id,
+                    "source_model_sha256": model.sha256,
+                    "provider_name": model.provider_name,
+                    "provider_version": model.provider_version,
+                    "inference_job_id": child_job_id,
+                    "image_ids": image_ids,
+                    "proposal_ids": [proposal.id for proposal in proposals],
+                    "count": len(proposals),
+                    "detections": detections,
+                },
+            )
+        ]
+
+    def _execute_detection_consensus(
+        self,
+        *,
+        project_id: str,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        prediction_artifacts = inputs.get("predictions", [])
+        if not prediction_artifacts:
+            raise ValidationError("Detection Consensus requires prediction artifacts")
+        sources: list[dict[str, Any]] = []
+        for artifact in prediction_artifacts:
+            payload = dict(artifact.payload_json)
+            if payload.get("project_id") != project_id:
+                raise ValidationError("Detection Consensus received predictions from another project")
+            payload.setdefault("source_id", artifact.id)
+            sources.append(payload)
+        result = build_detection_consensus(
+            sources,
+            required_votes=int(parameters.get("required_votes", 2)),
+            iou_threshold=float(parameters.get("iou_threshold", 0.5)),
+            confidence_threshold=float(parameters.get("confidence_threshold", 0.0)),
+            class_aware=bool(parameters.get("class_aware", True)),
+            box_strategy=str(parameters.get("box_strategy", "mean")),
+        )
+        common = {
+            "schema_version": result["schema_version"],
+            "project_id": project_id,
+            "source_ids": result["source_ids"],
+            "source_count": result["source_count"],
+            "required_votes": result["required_votes"],
+            "iou_threshold": result["iou_threshold"],
+            "confidence_threshold": result["confidence_threshold"],
+            "class_aware": result["class_aware"],
+            "box_strategy": result["box_strategy"],
+        }
+        return [
+            WorkflowArtifactSpec(
+                port_id="consensus",
+                data_type="detection_consensus",
+                payload={
+                    **common,
+                    "count": result["consensus_count"],
+                    "detections": result["consensus"],
+                },
+            ),
+            WorkflowArtifactSpec(
+                port_id="disagreements",
+                data_type="detection_disagreements",
+                payload={
+                    **common,
+                    "count": result["disagreement_count"],
+                    "detections": result["disagreements"],
+                },
+            ),
         ]
 
     def _execute_project_video_source(
@@ -450,7 +627,11 @@ class WorkflowExecutionService:
             statement = statement.where(MaskAnnotation.label_class_id.in_(label_class_ids))
         if image_ids:
             statement = statement.where(MaskAnnotation.image_id.in_(image_ids))
-        masks = list(self.session.scalars(statement.order_by(MaskAnnotation.created_at, MaskAnnotation.id)))
+        masks = list(
+            self.session.scalars(
+                statement.order_by(MaskAnnotation.created_at, MaskAnnotation.id)
+            )
+        )
         return [
             WorkflowArtifactSpec(
                 port_id="masks",
@@ -536,9 +717,13 @@ class WorkflowExecutionService:
 
     def run_counts(self, run_id: str) -> dict[str, int]:
         total_nodes = self.session.scalar(
-            select(func.count(WorkflowNodeRun.id)).where(WorkflowNodeRun.workflow_run_id == run_id)
+            select(func.count(WorkflowNodeRun.id)).where(
+                WorkflowNodeRun.workflow_run_id == run_id
+            )
         ) or 0
         artifacts = self.session.scalar(
-            select(func.count(WorkflowArtifact.id)).where(WorkflowArtifact.workflow_run_id == run_id)
+            select(func.count(WorkflowArtifact.id)).where(
+                WorkflowArtifact.workflow_run_id == run_id
+            )
         ) or 0
         return {"node_count": int(total_nodes), "artifact_count": int(artifacts)}
