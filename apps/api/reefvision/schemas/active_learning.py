@@ -12,6 +12,7 @@ ActiveLearningStrategy = Literal[
     "uncertainty",
     "rare_class",
     "quality",
+    "committee",
     "random",
 ]
 
