@@ -35,6 +35,11 @@ class WorkflowRunCreateRequest(BaseModel):
     inputs: dict[str, Any] = Field(default_factory=dict)
 
 
+class WorkflowReviewResumeRequest(BaseModel):
+    reviewed_by: str = Field(default="local_user", min_length=1, max_length=200)
+    note: str | None = Field(default=None, max_length=2000)
+
+
 class WorkflowRunResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
