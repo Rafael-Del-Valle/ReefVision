@@ -142,6 +142,28 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             ],
         ),
         WorkflowNodeDefinitionResponse(
+            node_type="vlm_detection",
+            display_name="Cloud VLM Detection",
+            category="auto_label",
+            description=(
+                "Run OpenAI, Gemini, or Claude vision over project images and normalize "
+                "detections into ReefVision classes for consensus voting."
+            ),
+            input_ports=[_input("images", "Images", "image_collection")],
+            output_ports=[_output("proposals", "VLM Detections", "detection_proposals")],
+            required_parameters=["provider", "model", "label_class_ids"],
+            optional_parameters={
+                "prompt": "Detect every visible instance of the selected classes.",
+            },
+            execution_state="executable_cloud_auto_label",
+            executable=True,
+            implementation_notes=[
+                "Cloud inference is disabled by default and requires explicit runtime opt-in.",
+                "API credentials come only from protected environment settings and are not artifacts.",
+                "VLM confidence is treated as uncalibrated vote-only evidence.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
             node_type="detection_consensus",
             display_name="Detection Consensus",
             category="auto_label",
@@ -172,7 +194,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             executable=True,
             implementation_notes=[
                 "Each upstream source contributes at most one vote to a matched detection.",
-                "Local detectors work now; normalized cloud VLM detections can use the same input.",
+                "Local detectors and cloud VLM detections share the same normalized input type.",
             ],
         ),
         WorkflowNodeDefinitionResponse(
