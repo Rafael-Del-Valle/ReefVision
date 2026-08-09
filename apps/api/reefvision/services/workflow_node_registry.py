@@ -258,6 +258,29 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             ],
         ),
         WorkflowNodeDefinitionResponse(
+            node_type="prompt_assist_masks",
+            display_name="Prompt Assist Masks",
+            category="auto_label",
+            description=(
+                "Convert reviewed detection boxes into reviewable raster mask proposals using "
+                "a registered box-prompt assist model."
+            ),
+            input_ports=[
+                _input("boxes", "Reviewed Boxes", "reviewed_boxes"),
+                _input("model", "Assist Model", "model_reference"),
+            ],
+            output_ports=[_output("proposals", "Mask Proposals", "mask_proposals")],
+            required_parameters=[],
+            optional_parameters={"device": "auto"},
+            execution_state="executable_prompt_assist",
+            executable=True,
+            implementation_notes=[
+                "Uses the provider-neutral AnnotationAssistProvider box-prompt interface.",
+                "Outputs remain pending PredictionProposals until the Mask Review Gate approves them.",
+                "Works with the current Segment Anything provider and is designed for SAM2-compatible providers.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
             node_type="mask_review_gate",
             display_name="Mask Review Gate",
             category="human_review",
