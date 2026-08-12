@@ -51,6 +51,12 @@ _ACTIONS: dict[str, str] = {
     "detection_consensus": "Match independent detections and apply configurable N-of-M voting.",
     "segmentation_inference": "Run registered segmentation inference for the resolved images.",
     "classification_inference": "Run existing top-k classification inference.",
+    "classification_dataset_materialize": (
+        "Materialize an immutable whole-image or crop classification dataset."
+    ),
+    "classification_training": (
+        "Run the production classification trainer and return its registered classifier."
+    ),
     "model_training": (
         "Run the existing task-aware Training workspace against an immutable dataset version."
     ),
