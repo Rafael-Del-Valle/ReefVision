@@ -236,6 +236,68 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             ],
         ),
         WorkflowNodeDefinitionResponse(
+            node_type="model_training",
+            display_name="Model Training",
+            category="training",
+            description=(
+                "Train or retrain detection, instance-segmentation, or semantic-segmentation "
+                "models from an immutable ReefVision dataset version."
+            ),
+            input_ports=[
+                _input("dataset", "Dataset Version", "dataset_version"),
+                _input(
+                    "initial_model",
+                    "Initial Model",
+                    "model_reference",
+                    required=False,
+                ),
+            ],
+            output_ports=[_output("training", "Training Result", "training_result")],
+            required_parameters=["task"],
+            optional_parameters={
+                "draft_name": None,
+                "run_name": None,
+                "notes": None,
+                "catalog_model_id": None,
+                "provider_id": None,
+                "architecture": None,
+                "device": "auto",
+                "precision": "fp32",
+                "random_seed": None,
+                "tiling_config": {},
+                "training_config": {},
+                "tuning_config": {},
+                "evaluation_config": {},
+                "resource_limits": {},
+            },
+            execution_state="executable_training",
+            executable=True,
+            implementation_notes=[
+                "Uses the existing Training workspace preflight and task-aware production worker.",
+                "Supported tasks are detect, segment, and semantic_segment.",
+                "An optional registered detector or segmenter seeds retraining without creating a separate retrain code path.",
+                "Semantic nnU-Net training currently starts from scratch.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
+            node_type="register_trained_model",
+            display_name="Register Trained Model",
+            category="training",
+            description=(
+                "Register a completed workflow training checkpoint in ReefVision's normal model registry."
+            ),
+            input_ports=[_input("training", "Training Result", "training_result")],
+            output_ports=[_output("model", "Registered Model", "model_reference")],
+            required_parameters=[],
+            optional_parameters={"display_name": None, "notes": None},
+            execution_state="executable_training",
+            executable=True,
+            implementation_notes=[
+                "Preserves dataset, split, experiment, architecture, provider, and checkpoint lineage.",
+                "The resulting model_reference can feed normal inference or later retraining nodes."
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
             node_type="detection_review_gate",
             display_name="Detection Review Gate",
             category="human_review",
@@ -302,7 +364,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             implementation_notes=[
                 "Depth Anything V2 outputs are relative monocular depth, not metric distance.",
                 "Artifacts persist float32 .npy data, 16-bit PNG previews, and checksums.",
-                "metric_units remains null unless a future calibrated conversion node is added.",
+                "metric_units remains null unless a future calibrated conversion node is added."
             ],
         ),
         WorkflowNodeDefinitionResponse(
