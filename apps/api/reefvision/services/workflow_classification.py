@@ -75,6 +75,8 @@ def train_workflow_classifier(
     project_id: str,
     dataset_payload: dict[str, Any],
     parameters: dict[str, Any],
+    workflow_run_id: str | None = None,
+    workflow_node_run_id: str | None = None,
     processor: ClassificationTrainingProcessor = process_classification_training_job,
 ) -> dict[str, Any]:
     """Run the production classification trainer inline and return its registered model."""
@@ -107,7 +109,12 @@ def train_workflow_classifier(
         status="queued",
         progress_current=0,
         progress_total=request.epochs,
-        request_json={**request.model_dump(mode="json"), "created_by_workflow": True},
+        request_json={
+            **request.model_dump(mode="json"),
+            "created_by_workflow": True,
+            "workflow_run_id": workflow_run_id,
+            "workflow_node_run_id": workflow_node_run_id,
+        },
         result_json={"stage": "queued", "created_by_workflow": True},
     )
     session.add(job)
@@ -145,6 +152,8 @@ def train_workflow_classifier(
         "classification_manifest_sha256": dataset.manifest_sha256,
         "dataset_version_id": dataset.dataset_version_id,
         "classification_training_job_id": completed.id,
+        "workflow_run_id": workflow_run_id,
+        "workflow_node_run_id": workflow_node_run_id,
         "metrics": dict((completed.result_json or {}).get("metrics") or {}),
         "architecture": request.architecture,
         "run_name": request.run_name,
