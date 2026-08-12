@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
@@ -45,6 +46,10 @@ from reefvision.services.workflow_runtime_adapters import (
     RUNTIME_ADAPTER_NODE_TYPES,
     execute_runtime_adapter,
 )
+from reefvision.services.workflow_training import (
+    create_workflow_training_result,
+    register_workflow_trained_model,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 
 EXECUTABLE_NODE_TYPES = {
@@ -56,6 +61,8 @@ EXECUTABLE_NODE_TYPES = {
     "verified_masks_source",
     "detection_inference",
     "detection_consensus",
+    "model_training",
+    "register_trained_model",
     "project_exchange_export",
     *RUNTIME_ADAPTER_NODE_TYPES,
 }
@@ -296,6 +303,16 @@ class WorkflowExecutionService:
             raise ValidationError(f"Workflow input requires exactly one artifact: {port_id}")
         return dict(items[0].payload_json)
 
+    @staticmethod
+    def _optional_payload(
+        inputs: dict[str, list[WorkflowArtifact]],
+        port_id: str,
+    ) -> dict[str, Any] | None:
+        items = inputs.get(port_id, [])
+        if len(items) > 1:
+            raise ValidationError(f"Workflow input accepts at most one artifact: {port_id}")
+        return dict(items[0].payload_json) if items else None
+
     def _execute_project_source(
         self,
         *,
@@ -364,29 +381,36 @@ class WorkflowExecutionService:
         version = self.session.get(DatasetVersion, version_id)
         if version is None or version.project_id != project_id or version.status != "complete":
             raise ValidationError("Dataset version is not a complete version in this project")
-        statement = select(DatasetVersionItem).where(
-            DatasetVersionItem.dataset_version_id == version.id
+        all_items = list(
+            self.session.scalars(
+                select(DatasetVersionItem)
+                .where(DatasetVersionItem.dataset_version_id == version.id)
+                .order_by(DatasetVersionItem.id)
+            )
         )
+        split_counts = dict(Counter(str(item.split) for item in all_items))
         split = parameters.get("split")
-        if split:
-            statement = statement.where(DatasetVersionItem.split == str(split))
-        items = list(self.session.scalars(statement.order_by(DatasetVersionItem.id)))
+        items = (
+            [item for item in all_items if item.split == str(split)]
+            if split
+            else all_items
+        )
         image_ids = [item.image_id for item in items]
         return [
             WorkflowArtifactSpec(
                 port_id="dataset",
                 data_type="dataset_version",
                 payload={
+                    "project_id": project_id,
                     "dataset_version_id": version.id,
                     "manifest_sha256": version.manifest_sha256,
                     "version_number": version.version_number,
-                    "split_method": version.split_method,
+                    "split_method": version.resolved_split_method,
                     "split": split,
-                    "split_counts": {
-                        "train": version.train_image_count,
-                        "val": version.val_image_count,
-                        "test": version.test_image_count,
-                    },
+                    "split_counts": split_counts,
+                    "image_count": version.image_count,
+                    "annotation_count": version.annotation_count,
+                    "mask_annotation_count": version.mask_annotation_count,
                 },
             ),
             WorkflowArtifactSpec(
@@ -594,6 +618,56 @@ class WorkflowExecutionService:
                     "detections": result["disagreements"],
                 },
             ),
+        ]
+
+    def _execute_model_training(
+        self,
+        *,
+        project_id: str,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        dataset_payload = self._single_payload(inputs, "dataset")
+        initial_model_payload = self._optional_payload(inputs, "initial_model")
+        result = create_workflow_training_result(
+            self.session,
+            self.settings,
+            project_id=project_id,
+            dataset_payload=dataset_payload,
+            parameters=parameters,
+            initial_model_payload=initial_model_payload,
+        )
+        return [
+            WorkflowArtifactSpec(
+                port_id="training",
+                data_type="training_result",
+                payload=result,
+            )
+        ]
+
+    def _execute_register_trained_model(
+        self,
+        *,
+        project_id: str,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        training_payload = self._single_payload(inputs, "training")
+        result = register_workflow_trained_model(
+            self.session,
+            self.settings,
+            project_id=project_id,
+            training_payload=training_payload,
+            parameters=parameters,
+        )
+        return [
+            WorkflowArtifactSpec(
+                port_id="model",
+                data_type="model_reference",
+                payload=result,
+            )
         ]
 
     def _execute_project_video_source(
