@@ -43,6 +43,9 @@ _ACTIONS: dict[str, str] = {
     "project_source": "Resolve the project selected in the API route.",
     "project_images": "Resolve project images using the configured filters.",
     "dataset_version_source": "Load one immutable dataset version and its image membership.",
+    "dataset_version_create": (
+        "Freeze current reviewed project state into a new immutable dataset version."
+    ),
     "registered_model_source": "Resolve one registered project model and verify its checkpoint metadata.",
     "project_video_source": "Resolve one managed source video.",
     "verified_masks_source": "Read existing non-deleted verified mask annotations.",
