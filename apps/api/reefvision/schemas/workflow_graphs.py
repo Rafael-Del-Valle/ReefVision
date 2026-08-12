@@ -10,6 +10,7 @@ WorkflowDataType = Literal[
     "project_reference",
     "image_collection",
     "dataset_version",
+    "classification_dataset",
     "model_reference",
     "video_reference",
     "box_annotations",
