@@ -98,6 +98,8 @@ def create_workflow_training_result(
     dataset_payload: dict[str, Any],
     parameters: dict[str, Any],
     initial_model_payload: dict[str, Any] | None = None,
+    workflow_run_id: str | None = None,
+    workflow_node_run_id: str | None = None,
     training_service_factory: TrainingServiceFactory = SemanticTrainingService,
     processor: TrainingProcessor = process_task_aware_training_job,
 ) -> dict[str, Any]:
@@ -188,6 +190,20 @@ def create_workflow_training_result(
     if not run_response.job_id:
         raise ValidationError("Training run was created without a background job")
 
+    child_job = session.get(Job, run_response.job_id)
+    if child_job is None:
+        raise ValidationError("Training child job disappeared before execution")
+    child_request = dict(child_job.request_json or {})
+    child_request.update(
+        {
+            "created_by_workflow": True,
+            "workflow_run_id": workflow_run_id,
+            "workflow_node_run_id": workflow_node_run_id,
+        }
+    )
+    child_job.request_json = child_request
+    session.commit()
+
     child_factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
     processed = processor(settings, child_factory, run_response.job_id)
     session.expire_all()
@@ -213,6 +229,8 @@ def create_workflow_training_result(
         "schema_version": "workflow-training-result-0001",
         "project_id": project_id,
         "created_by_workflow": True,
+        "workflow_run_id": workflow_run_id,
+        "workflow_node_run_id": workflow_node_run_id,
         "training_run_id": run.id,
         "training_job_id": job.id,
         "training_draft_id": draft.id,
@@ -267,6 +285,8 @@ def register_workflow_trained_model(
         raise ValidationError("Only completed workflow training runs can be registered")
     expected_sha = str(training_payload.get("result_checkpoint_sha256") or "")
     checkpoint = resolve_managed_project_path(settings, run.result_checkpoint_path)
+    if not checkpoint.is_file():
+        raise ValidationError("Training checkpoint is missing before model registration")
     actual_sha, _ = hash_model_file(checkpoint)
     if expected_sha and actual_sha != expected_sha:
         raise ValidationError("Training checkpoint checksum changed before model registration")
