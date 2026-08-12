@@ -111,11 +111,11 @@ def create_workflow_dataset_version(
         raise ValidationError("Create Dataset Version requires eligible_annotation_statuses")
     statuses = [str(value) for value in statuses_value]
 
-    reuse_parent = bool(
-        parameters.get(
-            "reuse_parent_assignments",
-            parent_version_id is not None,
-        )
+    raw_reuse_parent = parameters.get("reuse_parent_assignments")
+    reuse_parent = (
+        parent_version_id is not None
+        if raw_reuse_parent is None
+        else bool(raw_reuse_parent)
     )
     if reuse_parent and parent_version_id is None:
         raise ValidationError("Split reuse requires a parent dataset version")
