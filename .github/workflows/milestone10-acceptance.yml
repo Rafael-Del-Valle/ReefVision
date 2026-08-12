@@ -33,6 +33,7 @@ jobs:
             apps/api/reefvision/services/jobs.py \
             apps/api/reefvision/services/models.py \
             apps/api/reefvision/services/workflow_auto_label.py \
+            apps/api/reefvision/services/workflow_classification.py \
             apps/api/reefvision/services/workflow_consensus.py \
             apps/api/reefvision/services/workflow_depth.py \
             apps/api/reefvision/services/workflow_execution.py \
@@ -44,6 +45,7 @@ jobs:
             apps/api/reefvision/services/workflow_training.py \
             apps/api/reefvision/services/workflow_vlm.py \
             apps/api/reefvision/tests/test_workflow_auto_label_phase10.py \
+            apps/api/reefvision/tests/test_workflow_classification_training_phase10.py \
             apps/api/reefvision/tests/test_workflow_consensus_phase10.py \
             apps/api/reefvision/tests/test_workflow_depth_phase10.py \
             apps/api/reefvision/tests/test_workflow_execution_phase10.py \
@@ -71,6 +73,7 @@ jobs:
             apps/api/reefvision/services/jobs.py \
             apps/api/reefvision/services/models.py \
             apps/api/reefvision/services/workflow_auto_label.py \
+            apps/api/reefvision/services/workflow_classification.py \
             apps/api/reefvision/services/workflow_consensus.py \
             apps/api/reefvision/services/workflow_depth.py \
             apps/api/reefvision/services/workflow_execution.py \
@@ -82,6 +85,7 @@ jobs:
             apps/api/reefvision/services/workflow_training.py \
             apps/api/reefvision/services/workflow_vlm.py \
             apps/api/reefvision/tests/test_workflow_auto_label_phase10.py \
+            apps/api/reefvision/tests/test_workflow_classification_training_phase10.py \
             apps/api/reefvision/tests/test_workflow_consensus_phase10.py \
             apps/api/reefvision/tests/test_workflow_depth_phase10.py \
             apps/api/reefvision/tests/test_workflow_execution_phase10.py \
@@ -106,6 +110,7 @@ jobs:
           apps/api/reefvision/tests/test_workflow_sam2_registration_phase10.py
           apps/api/reefvision/tests/test_workflow_depth_phase10.py
           apps/api/reefvision/tests/test_workflow_training_phase10.py
+          apps/api/reefvision/tests/test_workflow_classification_training_phase10.py
           apps/api/reefvision/tests/test_workflow_vlm_graph_phase10.py
           apps/api/reefvision/tests/test_workflow_vlm_phase10.py
           -q
