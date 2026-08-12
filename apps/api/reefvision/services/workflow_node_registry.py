@@ -236,6 +236,57 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             ],
         ),
         WorkflowNodeDefinitionResponse(
+            node_type="classification_dataset_materialize",
+            display_name="Classification Dataset",
+            category="training",
+            description=(
+                "Materialize a whole-image or crop classification dataset from an immutable dataset version."
+            ),
+            input_ports=[_input("dataset", "Dataset Version", "dataset_version")],
+            output_ports=[
+                _output("classification_dataset", "Classification Dataset", "classification_dataset")
+            ],
+            required_parameters=[],
+            optional_parameters={
+                "mode": "image",
+                "label_set": "default",
+                "minimum_crop_pixels": 16,
+            },
+            execution_state="executable_training",
+            executable=True,
+            implementation_notes=[
+                "Uses the existing immutable classification dataset materializer.",
+                "Modes are image, box_crop, and mask_crop.",
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
+            node_type="classification_training",
+            display_name="Classification Training",
+            category="training",
+            description=(
+                "Train an Ultralytics classifier and return the automatically registered model."
+            ),
+            input_ports=[
+                _input("classification_dataset", "Classification Dataset", "classification_dataset")
+            ],
+            output_ports=[_output("model", "Registered Classifier", "model_reference")],
+            required_parameters=[],
+            optional_parameters={
+                "architecture": "yolo11n-cls.pt",
+                "run_name": "classification",
+                "epochs": 50,
+                "image_size": 224,
+                "batch": 16,
+                "device": "auto",
+            },
+            execution_state="executable_training",
+            executable=True,
+            implementation_notes=[
+                "Reuses the production classification_training job inline to avoid nested-worker deadlock.",
+                "The production job registers the trained classifier automatically."
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
             node_type="model_training",
             display_name="Model Training",
             category="training",
