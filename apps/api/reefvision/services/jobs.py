@@ -29,6 +29,41 @@ class JobService:
             return None
         return self.session.scalar(select(WorkflowRun).where(WorkflowRun.job_id == job.id))
 
+    def _workflow_child_jobs(self, run: WorkflowRun, parent_job_id: str) -> list[Job]:
+        candidates = list(
+            self.session.scalars(
+                select(Job).where(
+                    Job.project_id == run.project_id,
+                    Job.id != parent_job_id,
+                    Job.status.in_(("queued", "running", "cancel_requested")),
+                )
+            )
+        )
+        return [
+            child
+            for child in candidates
+            if str((child.request_json or {}).get("workflow_run_id") or "") == run.id
+        ]
+
+    def _cancel_workflow_children(
+        self,
+        run: WorkflowRun,
+        parent_job_id: str,
+        *,
+        now,
+    ) -> dict[str, int]:
+        counts = {"cancelled": 0, "cancel_requested": 0}
+        for child in self._workflow_child_jobs(run, parent_job_id):
+            if child.status == "queued":
+                child.status = "cancelled"
+                child.completed_at = now
+                child.error_message = "Parent workflow was cancelled before child execution"
+                counts["cancelled"] += 1
+            elif child.status == "running":
+                child.status = "cancel_requested"
+                counts["cancel_requested"] += 1
+        return counts
+
     def retry(self, job_id: str) -> Job:
         job = self.get(job_id)
         if job.status != "failed" or job.job_type not in {
@@ -99,8 +134,16 @@ class JobService:
         )
         backup = self.backups.get_by_job_id(job.id) if job.job_type == "backup" else None
         workflow_run = self._workflow_run(job)
+        now = utc_now()
+        child_cancellation = {"cancelled": 0, "cancel_requested": 0}
+        if workflow_run is not None:
+            child_cancellation = self._cancel_workflow_children(
+                workflow_run,
+                job.id,
+                now=now,
+            )
+
         if job.status in {"queued", "waiting_for_review"}:
-            now = utc_now()
             job.status = "cancelled"
             job.completed_at = now
             if quality_control_run is not None:
@@ -115,6 +158,7 @@ class JobService:
                 workflow_run.result_json = {
                     **dict(workflow_run.result_json or {}),
                     "stage": "cancelled",
+                    "child_job_cancellation": child_cancellation,
                 }
                 for node in self.session.scalars(
                     select(WorkflowNodeRun).where(
@@ -138,6 +182,7 @@ class JobService:
                 workflow_run.result_json = {
                     **dict(workflow_run.result_json or {}),
                     "stage": "cancel_requested",
+                    "child_job_cancellation": child_cancellation,
                 }
         else:
             raise ConflictError(
