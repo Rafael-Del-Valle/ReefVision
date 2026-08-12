@@ -40,6 +40,10 @@ from reefvision.schemas.workflow_execution import (
 )
 from reefvision.schemas.workflow_graphs import WorkflowGraphRequest, WorkflowPlanStep
 from reefvision.services.project_exchange import FORMAT_VERSION, ProjectExchangeService
+from reefvision.services.workflow_classification import (
+    materialize_workflow_classification_dataset,
+    train_workflow_classifier,
+)
 from reefvision.services.workflow_consensus import build_detection_consensus
 from reefvision.services.workflow_graphs import WorkflowGraphService
 from reefvision.services.workflow_runtime_adapters import (
@@ -61,6 +65,8 @@ EXECUTABLE_NODE_TYPES = {
     "verified_masks_source",
     "detection_inference",
     "detection_consensus",
+    "classification_dataset_materialize",
+    "classification_training",
     "model_training",
     "register_trained_model",
     "project_exchange_export",
@@ -618,6 +624,54 @@ class WorkflowExecutionService:
                     "detections": result["disagreements"],
                 },
             ),
+        ]
+
+    def _execute_classification_dataset_materialize(
+        self,
+        *,
+        project_id: str,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        dataset_payload = self._single_payload(inputs, "dataset")
+        result = materialize_workflow_classification_dataset(
+            self.session,
+            self.settings,
+            project_id=project_id,
+            dataset_payload=dataset_payload,
+            parameters=parameters,
+        )
+        return [
+            WorkflowArtifactSpec(
+                port_id="classification_dataset",
+                data_type="classification_dataset",
+                payload=result,
+            )
+        ]
+
+    def _execute_classification_training(
+        self,
+        *,
+        project_id: str,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        dataset_payload = self._single_payload(inputs, "classification_dataset")
+        result = train_workflow_classifier(
+            self.session,
+            self.settings,
+            project_id=project_id,
+            dataset_payload=dataset_payload,
+            parameters=parameters,
+        )
+        return [
+            WorkflowArtifactSpec(
+                port_id="model",
+                data_type="model_reference",
+                payload=result,
+            )
         ]
 
     def _execute_model_training(
