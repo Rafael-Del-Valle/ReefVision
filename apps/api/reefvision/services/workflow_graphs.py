@@ -28,6 +28,7 @@ from reefvision.services.workflow_node_registry import workflow_node_registry
 from reefvision.services.workflow_vlm import SUPPORTED_VLM_PROVIDERS
 
 SUPPORTED_GRAPH_SCHEMA = "workflow-graph-0001"
+_WORKFLOW_TRAINING_TASKS = {"detect", "segment", "semantic_segment"}
 
 _MODEL_PURPOSES_BY_NODE: dict[str, set[str]] = {
     "detection_inference": {"detector"},
@@ -50,6 +51,12 @@ _ACTIONS: dict[str, str] = {
     "detection_consensus": "Match independent detections and apply configurable N-of-M voting.",
     "segmentation_inference": "Run registered segmentation inference for the resolved images.",
     "classification_inference": "Run existing top-k classification inference.",
+    "model_training": (
+        "Run the existing task-aware Training workspace against an immutable dataset version."
+    ),
+    "register_trained_model": (
+        "Register a completed training checkpoint with dataset, split, and experiment lineage."
+    ),
     "detection_review_gate": "Pause until detection proposals are reviewed by a human.",
     "prompt_assist_masks": "Generate reviewable raster masks from reviewed detection boxes.",
     "relative_depth_estimation": (
@@ -221,6 +228,32 @@ class WorkflowGraphService:
                 )
                 break
 
+    def _validate_training_node(
+        self,
+        node_id: str,
+        parameters: dict[str, Any],
+        issues: list[WorkflowGraphIssue],
+    ) -> None:
+        task = str(parameters.get("task") or "").strip()
+        if task and task not in _WORKFLOW_TRAINING_TASKS:
+            issues.append(
+                self._issue(
+                    "error",
+                    "unsupported_training_task",
+                    "Model Training task must be detect, segment, or semantic_segment",
+                    node_id=node_id,
+                )
+            )
+        if parameters.get("catalog_model_id") and parameters.get("architecture"):
+            issues.append(
+                self._issue(
+                    "warning",
+                    "training_catalog_architecture_override",
+                    "catalog_model_id resolves its own architecture; the explicit architecture may be ignored",
+                    node_id=node_id,
+                )
+            )
+
     def validate(
         self,
         project_id: str,
@@ -308,6 +341,8 @@ class WorkflowGraphService:
                 )
             elif node.node_type == "vlm_detection":
                 self._validate_vlm_node(project_id, node.node_id, node.parameters, issues)
+            elif node.node_type == "model_training":
+                self._validate_training_node(node.node_id, node.parameters, issues)
 
         edge_counts = Counter(edge.edge_id for edge in graph.edges)
         for edge_id, count in edge_counts.items():
