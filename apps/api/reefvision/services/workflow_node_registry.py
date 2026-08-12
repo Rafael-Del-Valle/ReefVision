@@ -83,6 +83,54 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             implementation_notes=["The selected version must be complete and belong to the project."],
         ),
         WorkflowNodeDefinitionResponse(
+            node_type="dataset_version_create",
+            display_name="Create Dataset Version",
+            category="training",
+            description=(
+                "Freeze current reviewed annotations, masks, and measurements into a new immutable dataset version."
+            ),
+            input_ports=[
+                _input("project", "Project", "project_reference"),
+                _input(
+                    "parent_dataset",
+                    "Parent Dataset",
+                    "dataset_version",
+                    required=False,
+                ),
+                _input(
+                    "reviewed",
+                    "Reviewed Results",
+                    "reviewed_boxes",
+                    "reviewed_masks",
+                    "reviewed_labels",
+                    required=False,
+                    multiple=True,
+                ),
+            ],
+            output_ports=[
+                _output("dataset", "Dataset Version", "dataset_version"),
+                _output("images", "Version Images", "image_collection"),
+            ],
+            required_parameters=[],
+            optional_parameters={
+                "name": None,
+                "notes": None,
+                "eligible_annotation_statuses": ["reviewed"],
+                "split_method": "random",
+                "requested_ratios": {"train": 0.7, "validation": 0.2, "test": 0.1},
+                "split_seed": 42,
+                "reuse_parent_assignments": None,
+            },
+            execution_state="executable_training",
+            executable=True,
+            implementation_notes=[
+                "Uses the same measurement-aware, mask-aware immutable snapshot service as the Dataset workspace.",
+                "Reviewed inputs establish execution order; canonical project state is frozen only after those review nodes complete.",
+                "A workflow-run/node identity makes retries idempotent instead of creating duplicate dataset versions.",
+                "Parent split assignments are reused by default when a parent dataset is connected."
+            ],
+        ),
+        WorkflowNodeDefinitionResponse(
             node_type="registered_model_source",
             display_name="Registered Model",
             category="sources",
