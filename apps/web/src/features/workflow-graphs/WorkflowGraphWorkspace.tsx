@@ -14,115 +14,12 @@ import {
   saveWorkflowGraph,
   validateWorkflowGraph,
 } from "./workflowGraphApi";
+import { workflowTemplates } from "./workflowTemplates";
+import { WorkflowVisualEditor } from "./WorkflowVisualEditor";
 
 interface WorkflowGraphWorkspaceProps {
   project: Project;
 }
-
-const executableExampleGraph = {
-  graph_id: "project-images-runtime",
-  name: "Project images runtime",
-  schema_version: "workflow-graph-0001",
-  nodes: [
-    { node_id: "project", node_type: "project_source" },
-    { node_id: "images", node_type: "project_images" },
-  ],
-  edges: [
-    {
-      edge_id: "project-images",
-      source_node_id: "project",
-      source_port_id: "project",
-      target_node_id: "images",
-      target_port_id: "project",
-    },
-  ],
-};
-
-const consensusExampleGraph = {
-  graph_id: "two-of-three-detection-consensus",
-  name: "2-of-3 detection consensus",
-  schema_version: "workflow-graph-0001",
-  nodes: [
-    { node_id: "project", node_type: "project_source" },
-    { node_id: "images", node_type: "project_images" },
-    {
-      node_id: "model_a",
-      node_type: "registered_model_source",
-      parameters: { model_id: "replace-with-model-a-id" },
-    },
-    {
-      node_id: "model_b",
-      node_type: "registered_model_source",
-      parameters: { model_id: "replace-with-model-b-id" },
-    },
-    {
-      node_id: "model_c",
-      node_type: "registered_model_source",
-      parameters: { model_id: "replace-with-model-c-id" },
-    },
-    { node_id: "detect_a", node_type: "detection_inference" },
-    { node_id: "detect_b", node_type: "detection_inference" },
-    { node_id: "detect_c", node_type: "detection_inference" },
-    {
-      node_id: "consensus",
-      node_type: "detection_consensus",
-      parameters: {
-        required_votes: 2,
-        iou_threshold: 0.5,
-        confidence_threshold: 0.25,
-        class_aware: true,
-        box_strategy: "mean",
-      },
-    },
-    { node_id: "review", node_type: "detection_review_gate" },
-  ],
-  edges: [
-    {
-      edge_id: "project-images",
-      source_node_id: "project",
-      source_port_id: "project",
-      target_node_id: "images",
-      target_port_id: "project",
-    },
-    ...["a", "b", "c"].flatMap((suffix) => [
-      {
-        edge_id: `project-model-${suffix}`,
-        source_node_id: "project",
-        source_port_id: "project",
-        target_node_id: `model_${suffix}`,
-        target_port_id: "project",
-      },
-      {
-        edge_id: `images-detect-${suffix}`,
-        source_node_id: "images",
-        source_port_id: "images",
-        target_node_id: `detect_${suffix}`,
-        target_port_id: "images",
-      },
-      {
-        edge_id: `model-detect-${suffix}`,
-        source_node_id: `model_${suffix}`,
-        source_port_id: "model",
-        target_node_id: `detect_${suffix}`,
-        target_port_id: "model",
-      },
-      {
-        edge_id: `detect-consensus-${suffix}`,
-        source_node_id: `detect_${suffix}`,
-        source_port_id: "proposals",
-        target_node_id: "consensus",
-        target_port_id: "predictions",
-      },
-    ]),
-    {
-      edge_id: "consensus-review",
-      source_node_id: "consensus",
-      source_port_id: "consensus",
-      target_node_id: "review",
-      target_port_id: "proposals",
-    },
-  ],
-};
 
 function statusIsActive(status: string | undefined): boolean {
   return (
@@ -137,11 +34,25 @@ function shortHash(value: string): string {
   return value.length > 12 ? `${value.slice(0, 12)}…` : value;
 }
 
+function safeParseGraph(value: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && !Array.isArray(parsed) && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps) {
-  const [graphJson, setGraphJson] = useState(
-    JSON.stringify(executableExampleGraph, null, 2),
+  const [graphJson, setGraphJson] = useState(() =>
+    JSON.stringify(workflowTemplates[0]?.graph ?? {}, null, 2),
   );
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState(
+    workflowTemplates[0]?.id ?? "",
+  );
 
   const registryQuery = useQuery({
     queryKey: ["workflow-node-registry"],
@@ -164,7 +75,16 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
   });
 
   function parsedGraph(): Record<string, unknown> {
-    return JSON.parse(graphJson) as Record<string, unknown>;
+    const parsed = safeParseGraph(graphJson);
+    if (!parsed) throw new Error("Graph JSON must be a valid JSON object.");
+    return parsed;
+  }
+
+  function loadTemplate(templateId: string): void {
+    const template = workflowTemplates.find((item) => item.id === templateId);
+    if (!template) return;
+    setSelectedTemplateId(template.id);
+    setGraphJson(JSON.stringify(template.graph, null, 2));
   }
 
   const validationMutation = useMutation({
@@ -224,6 +144,7 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
     resumeReviewMutation.error ??
     cancelMutation.error;
   const selectedRun = runDetailQuery.data?.run;
+  const visualGraph = safeParseGraph(graphJson);
 
   return (
     <section className="feature-workspace">
@@ -232,37 +153,67 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
           <p className="eyebrow">Executable workflows</p>
           <h3>Workflow graph editor and runner</h3>
           <p>
-            Define typed ReefVision workflows, validate and save immutable revisions,
-            then execute supported nodes with persisted run history and artifacts.
+            Build typed computer-vision pipelines visually, validate them before
+            execution, save immutable revisions, and inspect persisted node/artifact
+            lineage after each run.
           </p>
         </div>
       </div>
 
-      <div className="feature-grid">
+      <div className="panel-card">
+        <h4>Workflow templates</h4>
+        <p className="muted-copy">
+          Templates are starting points. Replace placeholder dataset, model, class, and
+          cloud-model identifiers before validation. The visual editor and JSON view stay
+          synchronized.
+        </p>
+        <div className="button-row" style={{ alignItems: "end" }}>
+          <label>
+            Template
+            <select
+              value={selectedTemplateId}
+              onChange={(event) => loadTemplate(event.target.value)}
+            >
+              {workflowTemplates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => loadTemplate(selectedTemplateId)}
+          >
+            Reload template
+          </button>
+        </div>
+        <p>
+          {workflowTemplates.find((item) => item.id === selectedTemplateId)?.description}
+        </p>
+      </div>
+
+      <div className="panel-card" style={{ marginTop: 12 }}>
+        <h4>Visual workflow editor</h4>
+        {visualGraph ? (
+          <WorkflowVisualEditor
+            graph={visualGraph}
+            registry={registryQuery.data ?? []}
+            onChange={(graph) => setGraphJson(JSON.stringify(graph, null, 2))}
+          />
+        ) : (
+          <p className="form-error">
+            Fix the JSON syntax below before continuing visual editing.
+          </p>
+        )}
+      </div>
+
+      <div className="feature-grid" style={{ marginTop: 12 }}>
         <div className="panel-card">
           <h4>Graph JSON</h4>
-          <div className="button-row">
-            <button
-              type="button"
-              className="secondary"
-              onClick={() =>
-                setGraphJson(JSON.stringify(executableExampleGraph, null, 2))
-              }
-            >
-              Load executable example
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() =>
-                setGraphJson(JSON.stringify(consensusExampleGraph, null, 2))
-              }
-            >
-              Load 2-of-3 consensus + review
-            </button>
-          </div>
           <textarea
-            rows={30}
+            rows={22}
             value={graphJson}
             onChange={(event) => setGraphJson(event.target.value)}
             spellCheck={false}
@@ -301,11 +252,9 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
           </div>
           {mutationError && <p className="form-error">{mutationError.message}</p>}
           <p className="muted-copy">
-            The 2-of-3 template uses registered detection models today. Replace its
-            three placeholder model IDs before validation. When a review gate pauses,
-            review the underlying predictions in the relevant ReefVision review tool,
-            then resume it here. GPT, Gemini, and Claude provider nodes can feed the
-            same consensus node once those cloud adapters are enabled.
+            Review gates pause safely. Complete the requested review in ReefVision, then
+            resume the waiting node below. Completed upstream nodes and paid/cloud
+            artifacts are reused rather than recomputed.
           </p>
         </div>
 
@@ -335,6 +284,11 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
                 {definition.output_ports.map((item) => item.port_id).join(", ") ||
                   "none"}
               </p>
+              {definition.required_parameters.length > 0 && (
+                <p>
+                  Required parameters: {definition.required_parameters.join(", ")}
+                </p>
+              )}
             </details>
           ))}
         </div>
@@ -389,10 +343,19 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
           <h4>Saved revisions</h4>
           {savedGraphsQuery.data?.length ? (
             <ul>
-              {savedGraphsQuery.data.slice(0, 8).map((record) => (
+              {savedGraphsQuery.data.slice(0, 10).map((record) => (
                 <li key={record.id}>
                   <strong>{record.name}</strong> · rev {record.revision} ·{" "}
-                  <code>{shortHash(record.graph_sha256)}</code>
+                  <code>{shortHash(record.graph_sha256)}</code>{" "}
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() =>
+                      setGraphJson(JSON.stringify(record.graph_json, null, 2))
+                    }
+                  >
+                    Load
+                  </button>
                 </li>
               ))}
             </ul>
@@ -466,6 +429,12 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
                         </button>
                       </div>
                     )}
+                    {Object.keys(node.result_json).length > 0 && (
+                      <details>
+                        <summary>Node result</summary>
+                        <pre>{JSON.stringify(node.result_json, null, 2)}</pre>
+                      </details>
+                    )}
                   </li>
                 ))}
               </ol>
@@ -475,6 +444,10 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
                   <li key={artifact.id}>
                     <code>{artifact.data_type}</code> from {artifact.producer_port_id} ·{" "}
                     <code>{shortHash(artifact.payload_sha256)}</code>
+                    <details>
+                      <summary>Inspect artifact</summary>
+                      <pre>{JSON.stringify(artifact.payload_json, null, 2)}</pre>
+                    </details>
                   </li>
                 ))}
               </ul>
