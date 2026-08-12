@@ -23,6 +23,8 @@ WorkflowDataType = Literal[
     "reviewed_masks",
     "reviewed_labels",
     "measurement_table",
+    "relative_depth_maps",
+    "training_result",
     "video_tracks",
     "project_exchange_package",
 ]
