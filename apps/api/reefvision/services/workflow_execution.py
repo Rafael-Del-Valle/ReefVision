@@ -280,12 +280,17 @@ class WorkflowExecutionService:
                 inputs=inputs,
             )
         if step.node_type in RUNTIME_ADAPTER_NODE_TYPES:
+            runtime_parameters = {
+                **step.parameters,
+                "__workflow_run_id": run_id,
+                "__workflow_node_run_id": node_run.id,
+            }
             outputs = execute_runtime_adapter(
                 step.node_type,
                 session=self.session,
                 settings=self.settings,
                 project_id=project_id,
-                parameters=step.parameters,
+                parameters=runtime_parameters,
                 inputs=inputs,
             )
             return [
@@ -508,9 +513,10 @@ class WorkflowExecutionService:
         self,
         *,
         project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
         parameters: dict[str, Any],
         inputs: dict[str, list[WorkflowArtifact]],
-        **_: object,
     ) -> list[WorkflowArtifactSpec]:
         image_payload = self._single_payload(inputs, "images")
         model_payload = self._single_payload(inputs, "model")
@@ -540,6 +546,8 @@ class WorkflowExecutionService:
                 "device": str(parameters.get("device", "auto")),
                 "model_task": "detect",
                 "created_by_workflow": True,
+                "workflow_run_id": run_id,
+                "workflow_node_run_id": node_run.id,
             },
             result_json={"stage": "queued", "created_by_workflow": True},
         )
@@ -694,9 +702,10 @@ class WorkflowExecutionService:
         self,
         *,
         project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
         parameters: dict[str, Any],
         inputs: dict[str, list[WorkflowArtifact]],
-        **_: object,
     ) -> list[WorkflowArtifactSpec]:
         dataset_payload = self._single_payload(inputs, "classification_dataset")
         result = train_workflow_classifier(
@@ -705,6 +714,8 @@ class WorkflowExecutionService:
             project_id=project_id,
             dataset_payload=dataset_payload,
             parameters=parameters,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
         )
         return [
             WorkflowArtifactSpec(
@@ -718,9 +729,10 @@ class WorkflowExecutionService:
         self,
         *,
         project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
         parameters: dict[str, Any],
         inputs: dict[str, list[WorkflowArtifact]],
-        **_: object,
     ) -> list[WorkflowArtifactSpec]:
         dataset_payload = self._single_payload(inputs, "dataset")
         initial_model_payload = self._optional_payload(inputs, "initial_model")
@@ -731,6 +743,8 @@ class WorkflowExecutionService:
             dataset_payload=dataset_payload,
             parameters=parameters,
             initial_model_payload=initial_model_payload,
+            workflow_run_id=run_id,
+            workflow_node_run_id=node_run.id,
         )
         return [
             WorkflowArtifactSpec(
