@@ -45,6 +45,7 @@ from reefvision.services.workflow_classification import (
     train_workflow_classifier,
 )
 from reefvision.services.workflow_consensus import build_detection_consensus
+from reefvision.services.workflow_datasets import create_workflow_dataset_version
 from reefvision.services.workflow_graphs import WorkflowGraphService
 from reefvision.services.workflow_runtime_adapters import (
     RUNTIME_ADAPTER_NODE_TYPES,
@@ -60,6 +61,7 @@ EXECUTABLE_NODE_TYPES = {
     "project_source",
     "project_images",
     "dataset_version_source",
+    "dataset_version_create",
     "registered_model_source",
     "project_video_source",
     "verified_masks_source",
@@ -146,9 +148,6 @@ class WorkflowExecutionService:
         if latest is not None and latest.graph_sha256 == checksum:
             return WorkflowGraphRecordResponse.model_validate(latest)
 
-        # Workflow graph records are immutable provenance. Even when older clients send
-        # create_new_revision=False, a changed graph receives a new revision instead of
-        # mutating a record that an existing WorkflowRun may already reference.
         record = WorkflowGraphRecord(
             project_id=project_id,
             graph_key=request.graph.graph_id,
@@ -396,11 +395,7 @@ class WorkflowExecutionService:
         )
         split_counts = dict(Counter(str(item.split) for item in all_items))
         split = parameters.get("split")
-        items = (
-            [item for item in all_items if item.split == str(split)]
-            if split
-            else all_items
-        )
+        items = [item for item in all_items if item.split == str(split)] if split else all_items
         image_ids = [item.image_id for item in items]
         return [
             WorkflowArtifactSpec(
@@ -429,6 +424,51 @@ class WorkflowExecutionService:
                     "dataset_version_id": version.id,
                     "dataset_manifest_sha256": version.manifest_sha256,
                     "split": split,
+                },
+            ),
+        ]
+
+    def _execute_dataset_version_create(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        node_run: WorkflowNodeRun,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+    ) -> list[WorkflowArtifactSpec]:
+        project_payload = self._single_payload(inputs, "project")
+        parent_payload = self._optional_payload(inputs, "parent_dataset")
+        reviewed_payloads = [
+            dict(artifact.payload_json) for artifact in inputs.get("reviewed", [])
+        ]
+        result = create_workflow_dataset_version(
+            self.session,
+            self.settings,
+            project_id=project_id,
+            run_id=run_id,
+            node_run_id=node_run.id,
+            parameters=parameters,
+            project_payload=project_payload,
+            parent_dataset_payload=parent_payload,
+            reviewed_payloads=reviewed_payloads,
+        )
+        image_ids = [str(value) for value in result.get("image_ids", [])]
+        return [
+            WorkflowArtifactSpec(
+                port_id="dataset",
+                data_type="dataset_version",
+                payload=result,
+            ),
+            WorkflowArtifactSpec(
+                port_id="images",
+                data_type="image_collection",
+                payload={
+                    "project_id": project_id,
+                    "image_ids": image_ids,
+                    "count": len(image_ids),
+                    "dataset_version_id": result["dataset_version_id"],
+                    "dataset_manifest_sha256": result["manifest_sha256"],
                 },
             ),
         ]
