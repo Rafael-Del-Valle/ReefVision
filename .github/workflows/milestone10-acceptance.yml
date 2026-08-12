@@ -41,6 +41,7 @@ jobs:
             apps/api/reefvision/services/workflow_prompt_assist.py \
             apps/api/reefvision/services/workflow_review.py \
             apps/api/reefvision/services/workflow_runtime_adapters.py \
+            apps/api/reefvision/services/workflow_training.py \
             apps/api/reefvision/services/workflow_vlm.py \
             apps/api/reefvision/tests/test_workflow_auto_label_phase10.py \
             apps/api/reefvision/tests/test_workflow_consensus_phase10.py \
@@ -51,6 +52,7 @@ jobs:
             apps/api/reefvision/tests/test_workflow_prompt_assist_phase10.py \
             apps/api/reefvision/tests/test_workflow_review_phase10.py \
             apps/api/reefvision/tests/test_workflow_sam2_registration_phase10.py \
+            apps/api/reefvision/tests/test_workflow_training_phase10.py \
             apps/api/reefvision/tests/test_workflow_vlm_graph_phase10.py \
             apps/api/reefvision/tests/test_workflow_vlm_phase10.py
           python -m ruff format --check \
@@ -77,6 +79,7 @@ jobs:
             apps/api/reefvision/services/workflow_prompt_assist.py \
             apps/api/reefvision/services/workflow_review.py \
             apps/api/reefvision/services/workflow_runtime_adapters.py \
+            apps/api/reefvision/services/workflow_training.py \
             apps/api/reefvision/services/workflow_vlm.py \
             apps/api/reefvision/tests/test_workflow_auto_label_phase10.py \
             apps/api/reefvision/tests/test_workflow_consensus_phase10.py \
@@ -87,6 +90,7 @@ jobs:
             apps/api/reefvision/tests/test_workflow_prompt_assist_phase10.py \
             apps/api/reefvision/tests/test_workflow_review_phase10.py \
             apps/api/reefvision/tests/test_workflow_sam2_registration_phase10.py \
+            apps/api/reefvision/tests/test_workflow_training_phase10.py \
             apps/api/reefvision/tests/test_workflow_vlm_graph_phase10.py \
             apps/api/reefvision/tests/test_workflow_vlm_phase10.py
       - name: Run Milestone 10 workflow tests
@@ -101,6 +105,7 @@ jobs:
           apps/api/reefvision/tests/test_workflow_prompt_assist_phase10.py
           apps/api/reefvision/tests/test_workflow_sam2_registration_phase10.py
           apps/api/reefvision/tests/test_workflow_depth_phase10.py
+          apps/api/reefvision/tests/test_workflow_training_phase10.py
           apps/api/reefvision/tests/test_workflow_vlm_graph_phase10.py
           apps/api/reefvision/tests/test_workflow_vlm_phase10.py
           -q
