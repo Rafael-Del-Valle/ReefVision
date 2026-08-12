@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from reefvision.db.models import DatasetVersion, DatasetVersionItem, WorkflowNodeRun, WorkflowRun
+from reefvision.db.models import DatasetVersion, DatasetVersionItem
 from reefvision.schemas.workflow_graphs import WorkflowGraphRequest
 from reefvision.services.workflow_datasets import create_workflow_dataset_version
 from reefvision.services.workflow_graphs import WorkflowGraphService
