@@ -24,6 +24,7 @@ import { QualityControlDashboard } from "./features/quality-control/QualityContr
 import { ReviewQueueDashboard } from "./features/review-queues/ReviewQueueDashboard";
 import { SystemPanel } from "./features/system/SystemPanel";
 import { TrainingWorkspace } from "./features/training/TrainingWorkspace";
+import { VideoTrackExchangePanel } from "./features/video/VideoTrackExchangePanel";
 import { VideoTrackingWorkspace } from "./features/video/VideoTrackingWorkspace";
 import "./styles/app.css";
 
@@ -320,7 +321,10 @@ export function App() {
                 <ClassificationWorkspace project={selectedProject} />
               )}
               {activeView === "video" && (
-                <VideoTrackingWorkspace project={selectedProject} />
+                <>
+                  <VideoTrackingWorkspace project={selectedProject} />
+                  <VideoTrackExchangePanel project={selectedProject} />
+                </>
               )}
               {activeView === "active_learning" && (
                 <ActiveLearningWorkspace
