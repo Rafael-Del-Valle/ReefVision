@@ -149,17 +149,56 @@ class VideoTrackingEvaluationService:
         return by_frame
 
     @staticmethod
+    def _compatible(
+        truth: _Observation,
+        prediction: _Observation,
+        *,
+        class_aware: bool,
+    ) -> bool:
+        return not class_aware or truth.label_class_id == prediction.label_class_id
+
+    @classmethod
     def _match_frame(
+        cls,
         ground_truth: list[_Observation],
         predictions: list[_Observation],
         *,
         iou_threshold: float,
         class_aware: bool,
+        previous_assignments: dict[str, str],
     ) -> list[tuple[_Observation, _Observation, float, float]]:
+        truth_by_id = {item.track_id: item for item in ground_truth}
+        prediction_by_id = {item.track_id: item for item in predictions}
+        used_truth: set[str] = set()
+        used_predictions: set[str] = set()
+        matches: list[tuple[_Observation, _Observation, float, float]] = []
+
+        # CLEAR-MOT-style continuity preference: if yesterday's association still
+        # passes the current frame gate, preserve it before solving new ambiguity.
+        for truth_id, prediction_id in sorted(previous_assignments.items()):
+            truth = truth_by_id.get(truth_id)
+            prediction = prediction_by_id.get(prediction_id)
+            if truth is None or prediction is None:
+                continue
+            if not cls._compatible(truth, prediction, class_aware=class_aware):
+                continue
+            overlap = _iou(truth.bbox, prediction.bbox)
+            if overlap < iou_threshold:
+                continue
+            used_truth.add(truth.track_id)
+            used_predictions.add(prediction.track_id)
+            matches.append(
+                (truth, prediction, overlap, _center_error(truth.bbox, prediction.bbox))
+            )
+
         candidates: list[tuple[float, str, str, _Observation, _Observation]] = []
         for truth in ground_truth:
+            if truth.track_id in used_truth:
+                continue
             for prediction in predictions:
-                if class_aware and truth.label_class_id != prediction.label_class_id:
+                if prediction.track_id in used_predictions:
+                    continue
+                if not cls._compatible(truth, prediction, class_aware=class_aware):
                     continue
                 overlap = _iou(truth.bbox, prediction.bbox)
                 if overlap < iou_threshold:
@@ -167,9 +206,6 @@ class VideoTrackingEvaluationService:
                 candidates.append((-overlap, truth.track_id, prediction.track_id, truth, prediction))
         candidates.sort(key=lambda item: (item[0], item[1], item[2]))
 
-        used_truth: set[str] = set()
-        used_predictions: set[str] = set()
-        matches: list[tuple[_Observation, _Observation, float, float]] = []
         for negative_iou, _truth_id, _prediction_id, truth, prediction in candidates:
             if truth.track_id in used_truth or prediction.track_id in used_predictions:
                 continue
@@ -217,6 +253,7 @@ class VideoTrackingEvaluationService:
         matched_prediction_tracks: set[str] = set()
         all_ious: list[float] = []
         all_center_errors: list[float] = []
+        previous_assignments: dict[str, str] = {}
 
         for frame in range(start_frame, end_frame + 1):
             matches = self._match_frame(
@@ -224,7 +261,11 @@ class VideoTrackingEvaluationService:
                 prediction_by_frame.get(frame, []),
                 iou_threshold=payload.iou_threshold,
                 class_aware=payload.class_aware,
+                previous_assignments=previous_assignments,
             )
+            previous_assignments = {
+                truth.track_id: prediction.track_id for truth, prediction, _iou_value, _error in matches
+            }
             for truth, prediction, overlap, center_error in matches:
                 match_by_truth_frame[(truth.track_id, frame)] = (
                     prediction.track_id,
