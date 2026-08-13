@@ -18,6 +18,8 @@ from reefvision.schemas.videos import (
     VideoExtractRequest,
     VideoTrackAnalyticsResponse,
     VideoTrackCreate,
+    VideoTrackingBenchmarkRequest,
+    VideoTrackingBenchmarkResponse,
     VideoTrackingCreateRequest,
     VideoTrackingEvaluationRequest,
     VideoTrackingEvaluationResponse,
@@ -26,6 +28,7 @@ from reefvision.schemas.videos import (
     VideoTrackUpdate,
 )
 from reefvision.services.video_assets import VideoAssetService
+from reefvision.services.video_tracking_benchmark import VideoTrackingBenchmarkService
 from reefvision.services.video_tracking_evaluation import VideoTrackingEvaluationService
 from reefvision.services.video_tracks import VideoTrackService
 
@@ -174,6 +177,18 @@ def evaluate_tracking(
     session: DbSession,
 ) -> VideoTrackingEvaluationResponse:
     return VideoTrackingEvaluationService(session).evaluate(video_id, payload)
+
+
+@router.post(
+    "/videos/{video_id}/tracking-benchmark",
+    response_model=VideoTrackingBenchmarkResponse,
+)
+def benchmark_tracking(
+    video_id: str,
+    payload: VideoTrackingBenchmarkRequest,
+    session: DbSession,
+) -> VideoTrackingBenchmarkResponse:
+    return VideoTrackingBenchmarkService(session).benchmark(video_id, payload)
 
 
 @router.post("/videos/{video_id}/tracking-jobs", response_model=JobResponse)
