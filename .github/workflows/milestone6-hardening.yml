@@ -1,0 +1,58 @@
+name: Milestone 6 Hardening
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tracking-edge-cases:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Lint and format hardening changes
+        run: |
+          python -m ruff check \
+            apps/api/reefvision/api/routes/videos.py \
+            apps/api/reefvision/schemas/videos.py \
+            apps/api/reefvision/services/video_track_csv_validation.py \
+            apps/api/reefvision/services/video_tracking_runs.py \
+            apps/api/reefvision/tests/test_video_track_csv_import_hardening_phase6.py \
+            apps/api/reefvision/tests/test_video_track_csv_validation_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_runs_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_zero_predictions_phase6.py
+          python -m ruff format --check \
+            apps/api/reefvision/api/routes/videos.py \
+            apps/api/reefvision/schemas/videos.py \
+            apps/api/reefvision/services/video_track_csv_validation.py \
+            apps/api/reefvision/services/video_tracking_runs.py \
+            apps/api/reefvision/tests/test_video_track_csv_import_hardening_phase6.py \
+            apps/api/reefvision/tests/test_video_track_csv_validation_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_runs_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_zero_predictions_phase6.py
+      - name: Run hardening tests
+        run: |
+          python -m pytest \
+            apps/api/reefvision/tests/test_video_track_csv_import_hardening_phase6.py \
+            apps/api/reefvision/tests/test_video_track_csv_validation_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_runs_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_zero_predictions_phase6.py \
+            -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+      - name: Verify tracking run client contract
+        working-directory: apps/web
+        run: |
+          npx prettier --check src/features/video/videoApi.ts
+          npm run typecheck
