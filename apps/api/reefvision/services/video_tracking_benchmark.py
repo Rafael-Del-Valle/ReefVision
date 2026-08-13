@@ -98,11 +98,6 @@ class VideoTrackingBenchmarkService:
                 .order_by(VideoTrack.track_number, VideoTrack.id)
             )
         )
-        if not track_ids:
-            raise ValidationError(
-                f"Tracking job {candidate.source_job_id} has no active tracks for this video"
-            )
-
         tracker = request.get("tracker")
         model_id = request.get("model_id")
         return _ResolvedCandidate(
