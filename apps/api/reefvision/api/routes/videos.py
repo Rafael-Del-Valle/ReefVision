@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from typing import Annotated
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Request, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -13,6 +14,10 @@ from reefvision.config import Settings
 from reefvision.db.models import Job, ModelRegistration
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.jobs import JobResponse
+from reefvision.schemas.video_track_exchange import (
+    VideoTrackExchangeFormat,
+    VideoTrackImportResponse,
+)
 from reefvision.schemas.videos import (
     VideoAssetResponse,
     VideoExtractRequest,
@@ -29,6 +34,7 @@ from reefvision.schemas.videos import (
     VideoTrackUpdate,
 )
 from reefvision.services.video_assets import VideoAssetService
+from reefvision.services.video_track_exchange import VideoTrackExchangeService
 from reefvision.services.video_tracking_benchmark import VideoTrackingBenchmarkService
 from reefvision.services.video_tracking_evaluation import VideoTrackingEvaluationService
 from reefvision.services.video_tracking_runs import VideoTrackingRunService
@@ -36,6 +42,7 @@ from reefvision.services.video_tracks import VideoTrackService
 
 router = APIRouter(tags=["videos"])
 DbSession = Annotated[Session, Depends(get_db_session)]
+MAX_TRACK_EXCHANGE_BYTES = 50 * 1024 * 1024
 
 
 def asset_service(request: Request, session: Session) -> VideoAssetService:
@@ -130,6 +137,62 @@ def create_track(
     session: DbSession,
 ) -> VideoTrackResponse:
     return VideoTrackService(session).create(video_id, payload)
+
+
+@router.get("/videos/{video_id}/tracks/export")
+def export_tracks(
+    video_id: str,
+    session: DbSession,
+    exchange_format: Annotated[
+        VideoTrackExchangeFormat,
+        Query(alias="format"),
+    ] = "reefvision_json",
+) -> Response:
+    payload = VideoTrackExchangeService(session).export(video_id, exchange_format)
+    encoded_filename = quote(payload.filename, safe="")
+    return Response(
+        content=payload.content,
+        media_type=payload.media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+            "X-ReefVision-Track-Format": exchange_format,
+        },
+    )
+
+
+@router.post(
+    "/videos/{video_id}/tracks/import",
+    response_model=VideoTrackImportResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def import_tracks(
+    video_id: str,
+    session: DbSession,
+    file: Annotated[UploadFile, File()],
+    exchange_format: Annotated[
+        VideoTrackExchangeFormat,
+        Query(alias="format"),
+    ] = "reefvision_json",
+    mot_label_class_id: Annotated[
+        str | None,
+        Query(min_length=1, max_length=100),
+    ] = None,
+) -> VideoTrackImportResponse:
+    raw = file.file.read(MAX_TRACK_EXCHANGE_BYTES + 1)
+    if len(raw) > MAX_TRACK_EXCHANGE_BYTES:
+        raise ValidationError(
+            f"Track exchange upload exceeds {MAX_TRACK_EXCHANGE_BYTES // (1024 * 1024)} MiB"
+        )
+    try:
+        content = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise ValidationError("Track exchange files must be UTF-8 text") from exc
+    return VideoTrackExchangeService(session).import_text(
+        video_id,
+        exchange_format,
+        content,
+        mot_label_class_id=mot_label_class_id,
+    )
 
 
 @router.put("/video-tracks/{track_id}", response_model=VideoTrackResponse)
