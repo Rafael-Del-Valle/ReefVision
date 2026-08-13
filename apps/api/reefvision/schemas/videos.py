@@ -215,12 +215,19 @@ class VideoTrackingEvaluationResponse(BaseModel):
 
 class VideoTrackingBenchmarkCandidate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
-    prediction_track_ids: list[str] = Field(min_length=1, max_length=10000)
+    prediction_track_ids: list[str] = Field(default_factory=list, max_length=10000)
+    source_job_id: str | None = Field(default=None, min_length=1, max_length=36)
 
     @model_validator(mode="after")
-    def unique_prediction_tracks(self) -> VideoTrackingBenchmarkCandidate:
+    def validate_selector(self) -> VideoTrackingBenchmarkCandidate:
         if len(set(self.prediction_track_ids)) != len(self.prediction_track_ids):
             raise ValueError("Candidate prediction track IDs must be unique")
+        has_tracks = bool(self.prediction_track_ids)
+        has_job = self.source_job_id is not None
+        if has_tracks == has_job:
+            raise ValueError(
+                "Candidate requires exactly one of prediction_track_ids or source_job_id"
+            )
         return self
 
 
@@ -254,6 +261,8 @@ class VideoTrackingBenchmarkRequest(BaseModel):
 class VideoTrackingBenchmarkResult(BaseModel):
     rank: int = Field(ge=1)
     name: str
+    source_job_id: str | None
+    prediction_track_ids: list[str]
     evaluation: VideoTrackingEvaluationResponse
 
 
