@@ -92,16 +92,17 @@ def test_tracking_evaluation_counts_misses_false_positives_switches_and_fragment
         label_class_id,
         [{"frame": 2, "bbox": [70, 40, 10, 10]}],
     )
+    prediction_ids = [
+        str(prediction_a["id"]),
+        str(prediction_b["id"]),
+        str(false_positive["id"]),
+    ]
 
     response = client.post(
         f"/api/v1/videos/{video['id']}/tracking-evaluation",
         json={
             "ground_truth_track_ids": [truth["id"]],
-            "prediction_track_ids": [
-                prediction_a["id"],
-                prediction_b["id"],
-                false_positive["id"],
-            ],
+            "prediction_track_ids": prediction_ids,
             "iou_threshold": 0.5,
             "class_aware": True,
             "start_frame": 0,
@@ -111,6 +112,9 @@ def test_tracking_evaluation_counts_misses_false_positives_switches_and_fragment
     assert response.status_code == 200, response.text
     result = response.json()
     assert result["schema_version"] == "video-tracking-evaluation-0001"
+    assert result["matching_policy"] == "temporal-continuity-then-greedy-iou"
+    assert result["ground_truth_track_ids"] == [truth["id"]]
+    assert result["prediction_track_ids"] == prediction_ids
     assert result["ground_truth_observations"] == 4
     assert result["prediction_observations"] == 4
     assert result["matched_observations"] == 3
@@ -120,6 +124,7 @@ def test_tracking_evaluation_counts_misses_false_positives_switches_and_fragment
     assert result["precision"] == pytest.approx(0.75)
     assert result["missed_tracks"] == 0
     assert result["false_positive_tracks"] == 1
+    assert result["false_positive_prediction_track_ids"] == [false_positive["id"]]
     assert result["id_switches"] == 1
     assert result["fragmentations"] == 1
     assert result["mean_iou"] == pytest.approx(1.0)
