@@ -145,3 +145,69 @@ class VideoTrackingCreateRequest(BaseModel):
     iou: float = Field(default=0.5, ge=0, le=1)
     device: str = Field(default="auto", min_length=1, max_length=60)
     minimum_track_frames: int = Field(default=2, ge=1, le=1000000)
+
+
+class VideoTrackingEvaluationRequest(BaseModel):
+    ground_truth_track_ids: list[str] = Field(min_length=1, max_length=10000)
+    prediction_track_ids: list[str] = Field(min_length=1, max_length=10000)
+    iou_threshold: float = Field(default=0.5, ge=0, le=1)
+    class_aware: bool = True
+    start_frame: int | None = Field(default=None, ge=0)
+    end_frame: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_track_sets_and_range(self) -> VideoTrackingEvaluationRequest:
+        if len(set(self.ground_truth_track_ids)) != len(self.ground_truth_track_ids):
+            raise ValueError("Ground-truth track IDs must be unique")
+        if len(set(self.prediction_track_ids)) != len(self.prediction_track_ids):
+            raise ValueError("Prediction track IDs must be unique")
+        if set(self.ground_truth_track_ids) & set(self.prediction_track_ids):
+            raise ValueError("Ground-truth and prediction track IDs must not overlap")
+        if (
+            self.start_frame is not None
+            and self.end_frame is not None
+            and self.end_frame < self.start_frame
+        ):
+            raise ValueError("end_frame must be greater than or equal to start_frame")
+        return self
+
+
+class VideoTrackingEvaluationPerTrack(BaseModel):
+    ground_truth_track_id: str
+    ground_truth_track_number: int
+    label_class_id: str
+    ground_truth_observations: int
+    matched_observations: int
+    missed_observations: int
+    recall: float
+    id_switches: int
+    fragmentations: int
+    matched_prediction_track_ids: list[str]
+    mean_iou: float | None
+    mean_center_error_pixels: float | None
+
+
+class VideoTrackingEvaluationResponse(BaseModel):
+    schema_version: Literal["video-tracking-evaluation-0001"]
+    video_id: str
+    start_frame: int
+    end_frame: int
+    iou_threshold: float
+    class_aware: bool
+    ground_truth_track_count: int
+    prediction_track_count: int
+    ground_truth_observations: int
+    prediction_observations: int
+    matched_observations: int
+    missed_observations: int
+    false_positive_observations: int
+    recall: float
+    precision: float
+    missed_tracks: int
+    false_positive_tracks: int
+    id_switches: int
+    fragmentations: int
+    mean_iou: float | None
+    mean_center_error_pixels: float | None
+    mota: float
+    per_track: list[VideoTrackingEvaluationPerTrack]
