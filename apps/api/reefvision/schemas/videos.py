@@ -211,3 +211,54 @@ class VideoTrackingEvaluationResponse(BaseModel):
     mean_center_error_pixels: float | None
     mota: float
     per_track: list[VideoTrackingEvaluationPerTrack]
+
+
+class VideoTrackingBenchmarkCandidate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    prediction_track_ids: list[str] = Field(min_length=1, max_length=10000)
+
+    @model_validator(mode="after")
+    def unique_prediction_tracks(self) -> VideoTrackingBenchmarkCandidate:
+        if len(set(self.prediction_track_ids)) != len(self.prediction_track_ids):
+            raise ValueError("Candidate prediction track IDs must be unique")
+        return self
+
+
+class VideoTrackingBenchmarkRequest(BaseModel):
+    ground_truth_track_ids: list[str] = Field(min_length=1, max_length=10000)
+    candidates: list[VideoTrackingBenchmarkCandidate] = Field(min_length=2, max_length=20)
+    iou_threshold: float = Field(default=0.5, ge=0, le=1)
+    class_aware: bool = True
+    start_frame: int | None = Field(default=None, ge=0)
+    end_frame: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_benchmark(self) -> VideoTrackingBenchmarkRequest:
+        if len(set(self.ground_truth_track_ids)) != len(self.ground_truth_track_ids):
+            raise ValueError("Ground-truth track IDs must be unique")
+        normalized_names = [candidate.name.strip().casefold() for candidate in self.candidates]
+        if len(set(normalized_names)) != len(normalized_names):
+            raise ValueError("Benchmark candidate names must be unique")
+        truth_ids = set(self.ground_truth_track_ids)
+        if any(truth_ids & set(candidate.prediction_track_ids) for candidate in self.candidates):
+            raise ValueError("Ground-truth and candidate prediction track IDs must not overlap")
+        if (
+            self.start_frame is not None
+            and self.end_frame is not None
+            and self.end_frame < self.start_frame
+        ):
+            raise ValueError("end_frame must be greater than or equal to start_frame")
+        return self
+
+
+class VideoTrackingBenchmarkResult(BaseModel):
+    rank: int = Field(ge=1)
+    name: str
+    evaluation: VideoTrackingEvaluationResponse
+
+
+class VideoTrackingBenchmarkResponse(BaseModel):
+    schema_version: Literal["video-tracking-benchmark-0001"]
+    video_id: str
+    winner: str
+    results: list[VideoTrackingBenchmarkResult]
