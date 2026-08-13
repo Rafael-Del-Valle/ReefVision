@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { Project } from "../../api/client";
 import {
+  benchmarkVideoTracking,
   createVideoTrack,
   createVideoTrackingJob,
   deleteVideoTrack,
@@ -23,8 +24,30 @@ interface VideoTrackingWorkspaceProps {
   project: Project;
 }
 
+interface TrackingRunSummary {
+  jobId: string;
+  tracker: string;
+  modelId: string | null;
+  trackCount: number;
+}
+
 function sortedKeyframes(items: VideoTrackKeyframe[]): VideoTrackKeyframe[] {
   return [...items].sort((first, second) => first.frame - second.frame);
+}
+
+function trackerLabel(value: string): string {
+  if (value.toLowerCase().includes("botsort")) return "BoT-SORT";
+  if (value.toLowerCase().includes("bytetrack")) return "ByteTrack";
+  return value.replace(/\.ya?ml$/i, "");
+}
+
+function toggleSelection(
+  current: string[],
+  value: string,
+  checked: boolean,
+): string[] {
+  if (checked) return current.includes(value) ? current : [...current, value];
+  return current.filter((item) => item !== value);
 }
 
 export function VideoTrackingWorkspace({
@@ -45,6 +68,11 @@ export function VideoTrackingWorkspace({
   const [trackStatus, setTrackStatus] = useState("verified");
   const [keyframes, setKeyframes] = useState<VideoTrackKeyframe[]>([]);
   const [trackingModelId, setTrackingModelId] = useState("");
+  const [trackerName, setTrackerName] = useState("bytetrack.yaml");
+  const [groundTruthTrackIds, setGroundTruthTrackIds] = useState<string[]>([]);
+  const [benchmarkJobIds, setBenchmarkJobIds] = useState<string[]>([]);
+  const [benchmarkIou, setBenchmarkIou] = useState(0.5);
+  const [benchmarkClassAware, setBenchmarkClassAware] = useState(true);
 
   const videosQuery = useQuery({
     queryKey: ["videos", project.id],
@@ -79,6 +107,36 @@ export function VideoTrackingWorkspace({
     queryFn: ({ signal }) => getTrackingModels(project.id, signal),
   });
 
+  const manualGroundTruthTracks = useMemo(
+    () =>
+      (tracksQuery.data ?? []).filter(
+        (track) => !track.source_job_id && track.status === "verified",
+      ),
+    [tracksQuery.data],
+  );
+  const trackingRuns = useMemo(() => {
+    const byJob = new Map<string, TrackingRunSummary>();
+    for (const track of tracksQuery.data ?? []) {
+      if (!track.source_job_id) continue;
+      const rawTracker = track.metadata_json?.tracker;
+      const tracker = typeof rawTracker === "string" ? rawTracker : "tracker";
+      const existing = byJob.get(track.source_job_id);
+      if (existing) {
+        existing.trackCount += 1;
+      } else {
+        byJob.set(track.source_job_id, {
+          jobId: track.source_job_id,
+          tracker,
+          modelId: track.source_model_id,
+          trackCount: 1,
+        });
+      }
+    }
+    return [...byJob.values()].sort((first, second) =>
+      first.jobId.localeCompare(second.jobId),
+    );
+  }, [tracksQuery.data]);
+
   useEffect(() => {
     if (!selectedVideoId && videosQuery.data?.[0]) {
       setSelectedVideoId(videosQuery.data[0].id);
@@ -88,6 +146,8 @@ export function VideoTrackingWorkspace({
     setFrameIndex(0);
     setSelectedTrackId("");
     setKeyframes([]);
+    setGroundTruthTrackIds([]);
+    setBenchmarkJobIds([]);
   }, [selectedVideoId]);
   useEffect(() => {
     if (!trackingModelId && modelsQuery.data?.[0]) {
@@ -182,7 +242,7 @@ export function VideoTrackingWorkspace({
     mutationFn: () =>
       createVideoTrackingJob(selectedVideoId, {
         model_id: trackingModelId,
-        tracker: "bytetrack.yaml",
+        tracker: trackerName,
         confidence: 0.25,
         iou: 0.5,
         device: "auto",
@@ -190,6 +250,30 @@ export function VideoTrackingWorkspace({
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["videos", project.id] });
+    },
+  });
+  const benchmarkMutation = useMutation({
+    mutationFn: () => {
+      if (!selectedVideoId) throw new Error("Select a video first");
+      if (groundTruthTrackIds.length === 0) {
+        throw new Error("Select at least one verified manual ground-truth track");
+      }
+      if (benchmarkJobIds.length < 2) {
+        throw new Error("Select at least two machine tracking runs to compare");
+      }
+      const byJob = new Map(trackingRuns.map((run) => [run.jobId, run]));
+      return benchmarkVideoTracking(selectedVideoId, {
+        ground_truth_track_ids: groundTruthTrackIds,
+        candidates: benchmarkJobIds.map((jobId) => {
+          const run = byJob.get(jobId);
+          return {
+            name: `${trackerLabel(run?.tracker ?? "Tracker")} · ${jobId.slice(0, 8)}`,
+            source_job_id: jobId,
+          };
+        }),
+        iou_threshold: benchmarkIou,
+        class_aware: benchmarkClassAware,
+      });
     },
   });
 
@@ -208,7 +292,8 @@ export function VideoTrackingWorkspace({
     extractionMutation.error ??
     saveTrackMutation.error ??
     deleteTrackMutation.error ??
-    trackingMutation.error;
+    trackingMutation.error ??
+    benchmarkMutation.error;
 
   function updateKeyframe(
     index: number,
@@ -514,7 +599,7 @@ export function VideoTrackingWorkspace({
 
       <section className="management-card">
         <p className="eyebrow">Automated tracking</p>
-        <h3>Detector + ByteTrack</h3>
+        <h3>Detector + tracker</h3>
         <label>
           Detection model
           <select
@@ -528,6 +613,16 @@ export function VideoTrackingWorkspace({
             ))}
           </select>
         </label>
+        <label>
+          Tracker
+          <select
+            value={trackerName}
+            onChange={(event) => setTrackerName(event.target.value)}
+          >
+            <option value="bytetrack.yaml">ByteTrack</option>
+            <option value="botsort.yaml">BoT-SORT</option>
+          </select>
+        </label>
         <button
           type="button"
           disabled={
@@ -537,12 +632,12 @@ export function VideoTrackingWorkspace({
         >
           {trackingMutation.isPending
             ? "Queuing..."
-            : "Track fish through video"}
+            : `Run ${trackerLabel(trackerName)}`}
         </button>
         {trackingMutation.data && (
           <p className="annotation-helper">
-            Tracking job {trackingMutation.data.id.slice(0, 8)} queued. Machine
-            tracks remain editable and must be reviewed.
+            {trackerLabel(trackerName)} job {trackingMutation.data.id.slice(0, 8)}
+            {" "}queued. Its tracks remain independent from other tracker runs.
           </p>
         )}
         {analyticsQuery.data && (
@@ -574,6 +669,142 @@ export function VideoTrackingWorkspace({
               </span>
             </div>
           </div>
+        )}
+      </section>
+
+      <section className="management-card">
+        <p className="eyebrow">Scientific validation</p>
+        <h3>Tracker benchmark</h3>
+        <p className="annotation-helper">
+          Compare independent tracker jobs against the same verified manual tracks.
+          Ground-truth interpolation is honored; model tracks only receive credit for
+          persisted observations.
+        </p>
+        <strong>Ground-truth tracks</strong>
+        {manualGroundTruthTracks.length === 0 ? (
+          <p className="annotation-helper">
+            Create and verify at least one manual track before benchmarking.
+          </p>
+        ) : (
+          <div className="annotation-selection-list">
+            {manualGroundTruthTracks.map((track) => (
+              <label key={track.id} className="annotation-selection-row">
+                <input
+                  type="checkbox"
+                  checked={groundTruthTrackIds.includes(track.id)}
+                  onChange={(event) =>
+                    setGroundTruthTrackIds((current) =>
+                      toggleSelection(current, track.id, event.target.checked),
+                    )
+                  }
+                />
+                <span>Track {track.track_number}</span>
+              </label>
+            ))}
+          </div>
+        )}
+        <strong>Machine tracking runs</strong>
+        {trackingRuns.length === 0 ? (
+          <p className="annotation-helper">
+            Run ByteTrack and BoT-SORT to create benchmark candidates.
+          </p>
+        ) : (
+          <div className="annotation-selection-list">
+            {trackingRuns.map((run) => (
+              <label key={run.jobId} className="annotation-selection-row">
+                <input
+                  type="checkbox"
+                  checked={benchmarkJobIds.includes(run.jobId)}
+                  onChange={(event) =>
+                    setBenchmarkJobIds((current) =>
+                      toggleSelection(current, run.jobId, event.target.checked),
+                    )
+                  }
+                />
+                <span>
+                  {trackerLabel(run.tracker)} · {run.jobId.slice(0, 8)} ·{" "}
+                  {run.trackCount} tracks
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+        <label>
+          Match IoU threshold
+          <input
+            type="number"
+            min={0}
+            max={1}
+            step={0.05}
+            value={benchmarkIou}
+            onChange={(event) => setBenchmarkIou(Number(event.target.value))}
+          />
+        </label>
+        <label className="annotation-selection-row">
+          <input
+            type="checkbox"
+            checked={benchmarkClassAware}
+            onChange={(event) => setBenchmarkClassAware(event.target.checked)}
+          />
+          <span>Require matching identity class</span>
+        </label>
+        <button
+          type="button"
+          disabled={
+            benchmarkMutation.isPending ||
+            groundTruthTrackIds.length === 0 ||
+            benchmarkJobIds.length < 2
+          }
+          onClick={() => benchmarkMutation.mutate()}
+        >
+          {benchmarkMutation.isPending ? "Evaluating..." : "Compare tracker runs"}
+        </button>
+        {benchmarkMutation.data && (
+          <>
+            <p className="annotation-helper">
+              Winner: <strong>{benchmarkMutation.data.winner}</strong>. Ranking uses
+              MOTA, then recall, precision, identity/fragmentation errors, and center
+              error as deterministic tie-breakers.
+            </p>
+            <div style={{ overflowX: "auto" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Rank</th>
+                    <th>Run</th>
+                    <th>MOTA</th>
+                    <th>Recall</th>
+                    <th>Precision</th>
+                    <th>ID switches</th>
+                    <th>Fragments</th>
+                    <th>Mean IoU</th>
+                    <th>Center error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {benchmarkMutation.data.results.map((result) => (
+                    <tr key={result.name}>
+                      <td>{result.rank}</td>
+                      <td>{result.name}</td>
+                      <td>{result.evaluation.mota.toFixed(3)}</td>
+                      <td>{result.evaluation.recall.toFixed(3)}</td>
+                      <td>{result.evaluation.precision.toFixed(3)}</td>
+                      <td>{result.evaluation.id_switches}</td>
+                      <td>{result.evaluation.fragmentations}</td>
+                      <td>
+                        {result.evaluation.mean_iou?.toFixed(3) ?? "—"}
+                      </td>
+                      <td>
+                        {result.evaluation.mean_center_error_pixels === null
+                          ? "—"
+                          : `${result.evaluation.mean_center_error_pixels.toFixed(2)} px`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
 
