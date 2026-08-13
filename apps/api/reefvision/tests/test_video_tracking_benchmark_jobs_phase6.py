@@ -95,7 +95,15 @@ def test_benchmark_resolves_prediction_tracks_from_tracking_job(
             project_id=str(project["id"]),
             job_type="video_tracking",
             status="succeeded",
-            request_json={"video_id": str(video["id"]), "tracker": "bytetrack.yaml"},
+            request_json={
+                "video_id": str(video["id"]),
+                "tracker": "bytetrack.yaml",
+                "model_id": "model-123",
+                "confidence": 0.2,
+                "iou": 0.4,
+                "device": "cpu",
+                "minimum_track_frames": 2,
+            },
         )
         session.add(job)
         session.flush()
@@ -120,9 +128,26 @@ def test_benchmark_resolves_prediction_tracks_from_tracking_job(
     assert response.status_code == 200, response.text
     result = response.json()
     assert result["winner"] == "ByteTrack"
+    assert result["ground_truth_track_ids"] == [truth["id"]]
+    assert result["start_frame"] == 0
+    assert result["end_frame"] == 1
+    assert result["iou_threshold"] == pytest.approx(0.5)
+    assert result["class_aware"] is True
+
     byte_result = result["results"][0]
     assert byte_result["source_job_id"] == job_id
     assert byte_result["prediction_track_ids"] == [good["id"]]
+    assert byte_result["tracker"] == "bytetrack.yaml"
+    assert byte_result["model_id"] == "model-123"
+    assert byte_result["job_status"] == "succeeded"
+    assert byte_result["tracking_settings"] == {
+        "tracker": "bytetrack.yaml",
+        "model_id": "model-123",
+        "confidence": 0.2,
+        "iou": 0.4,
+        "device": "cpu",
+        "minimum_track_frames": 2,
+    }
     assert byte_result["evaluation"]["mota"] == pytest.approx(1.0)
 
 
@@ -155,3 +180,61 @@ def test_benchmark_rejects_job_without_tracks_for_selected_video(
         },
     )
     assert response.status_code == 422
+
+
+def test_benchmark_rejects_wrong_video_and_incomplete_tracking_jobs(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Tracking job validation")
+    first_video = _video(client, str(project["id"]), monkeypatch)
+    second_video = _video(client, str(project["id"]), monkeypatch)
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        wrong_video_job = Job(
+            project_id=str(project["id"]),
+            job_type="video_tracking",
+            status="succeeded",
+            request_json={
+                "video_id": str(second_video["id"]),
+                "tracker": "botsort.yaml",
+            },
+        )
+        incomplete_job = Job(
+            project_id=str(project["id"]),
+            job_type="video_tracking",
+            status="running",
+            request_json={
+                "video_id": str(first_video["id"]),
+                "tracker": "bytetrack.yaml",
+            },
+        )
+        session.add_all([wrong_video_job, incomplete_job])
+        session.commit()
+        wrong_video_job_id = wrong_video_job.id
+        incomplete_job_id = incomplete_job.id
+
+    wrong_video = client.post(
+        f"/api/v1/videos/{first_video['id']}/tracking-benchmark",
+        json={
+            "ground_truth_track_ids": ["truth"],
+            "candidates": [
+                {"name": "Wrong video", "source_job_id": wrong_video_job_id},
+                {"name": "Other", "prediction_track_ids": ["prediction"]},
+            ],
+        },
+    )
+    assert wrong_video.status_code == 422
+
+    incomplete = client.post(
+        f"/api/v1/videos/{first_video['id']}/tracking-benchmark",
+        json={
+            "ground_truth_track_ids": ["truth"],
+            "candidates": [
+                {"name": "Incomplete", "source_job_id": incomplete_job_id},
+                {"name": "Other", "prediction_track_ids": ["prediction"]},
+            ],
+        },
+    )
+    assert incomplete.status_code == 422
