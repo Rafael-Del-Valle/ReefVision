@@ -28,6 +28,7 @@ jobs:
             apps/api/reefvision/services/video_tracking_benchmark.py \
             apps/api/reefvision/services/video_tracking_evaluation.py \
             apps/api/reefvision/services/video_tracks.py \
+            apps/api/reefvision/tests/test_video_tracking_benchmark_jobs_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_benchmark_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_evaluation_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_phase6.py
@@ -42,6 +43,7 @@ jobs:
             apps/api/reefvision/services/video_tracking_benchmark.py \
             apps/api/reefvision/services/video_tracking_evaluation.py \
             apps/api/reefvision/services/video_tracks.py \
+            apps/api/reefvision/tests/test_video_tracking_benchmark_jobs_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_benchmark_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_evaluation_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_phase6.py
@@ -51,6 +53,7 @@ jobs:
             apps/api/reefvision/tests/test_video_tracking_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_evaluation_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_benchmark_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_benchmark_jobs_phase6.py \
             -q
       - name: Verify 0021 migration roundtrip
         shell: bash
