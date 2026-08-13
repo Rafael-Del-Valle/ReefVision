@@ -78,6 +78,8 @@ class VideoTrackingEvaluationService:
 
     def _tracks(self, video_id: str, track_ids: list[str], role: str) -> list[VideoTrack]:
         unique_ids = list(dict.fromkeys(track_ids))
+        if not unique_ids:
+            return []
         rows = list(
             self.session.scalars(
                 select(VideoTrack).where(
