@@ -1,0 +1,50 @@
+name: Milestone 6 Video Occupancy
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  occupancy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Lint and format occupancy backend
+        run: |
+          python -m ruff check \
+            apps/api/reefvision/api/routes/videos.py \
+            apps/api/reefvision/schemas/video_occupancy.py \
+            apps/api/reefvision/services/video_occupancy.py \
+            apps/api/reefvision/tests/test_video_occupancy_phase6.py
+          python -m ruff format --check \
+            apps/api/reefvision/api/routes/videos.py \
+            apps/api/reefvision/schemas/video_occupancy.py \
+            apps/api/reefvision/services/video_occupancy.py \
+            apps/api/reefvision/tests/test_video_occupancy_phase6.py
+      - name: Run occupancy backend tests
+        run: python -m pytest apps/api/reefvision/tests/test_video_occupancy_phase6.py -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+      - name: Check occupancy desktop and reports
+        working-directory: apps/web
+        run: |
+          npx prettier --check \
+            src/features/video/VideoOccupancyPanel.tsx \
+            src/features/video/VideoTrackExchangePanel.tsx \
+            src/features/video/videoOccupancyApi.ts \
+            src/features/video/videoOccupancyReport.ts \
+            src/features/video/videoOccupancyReport.test.ts
+          npm run typecheck
+          npx vitest run src/features/video/videoOccupancyReport.test.ts --config vite.config.mjs --configLoader runner
