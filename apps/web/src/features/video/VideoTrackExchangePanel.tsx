@@ -1,7 +1,8 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import type { Project } from "../../api/client";
+import { getVideos } from "./videoApi";
 import {
   importVideoTracks,
   videoTrackExportUrl,
@@ -10,7 +11,6 @@ import {
 
 interface VideoTrackExchangePanelProps {
   project: Project;
-  videoId: string;
 }
 
 const formatLabels: Record<VideoTrackExchangeFormat, string> = {
@@ -19,16 +19,25 @@ const formatLabels: Record<VideoTrackExchangeFormat, string> = {
   mot_csv: "MOTChallenge text (1-based frame/coordinates)",
 };
 
-export function VideoTrackExchangePanel({
-  project,
-  videoId,
-}: VideoTrackExchangePanelProps) {
+export function VideoTrackExchangePanel({ project }: VideoTrackExchangePanelProps) {
   const queryClient = useQueryClient();
+  const [videoId, setVideoId] = useState("");
   const [format, setFormat] = useState<VideoTrackExchangeFormat>("reefvision_json");
   const [importFile, setImportFile] = useState<File | null>(null);
   const [motLabelClassId, setMotLabelClassId] = useState(
     project.label_classes[0]?.id ?? "",
   );
+
+  const videosQuery = useQuery({
+    queryKey: ["videos", project.id],
+    queryFn: ({ signal }) => getVideos(project.id, signal),
+  });
+
+  useEffect(() => {
+    if (!videoId && videosQuery.data?.[0]) {
+      setVideoId(videosQuery.data[0].id);
+    }
+  }, [videoId, videosQuery.data]);
 
   useEffect(() => {
     setImportFile(null);
@@ -67,6 +76,19 @@ export function VideoTrackExchangePanel({
         1-based frame and left/top coordinates and does not carry ReefVision classes.
       </p>
       <label>
+        Video
+        <select value={videoId} onChange={(event) => setVideoId(event.target.value)}>
+          {(videosQuery.data ?? []).map((video) => (
+            <option key={video.id} value={video.id}>
+              {video.original_filename}
+            </option>
+          ))}
+        </select>
+      </label>
+      {videosQuery.isError && (
+        <p className="form-error">{videosQuery.error.message}</p>
+      )}
+      <label>
         Format
         <select
           value={format}
@@ -80,7 +102,7 @@ export function VideoTrackExchangePanel({
         </select>
       </label>
       <a
-        href={videoTrackExportUrl(videoId, format)}
+        href={videoId ? videoTrackExportUrl(videoId, format) : undefined}
         download
         aria-disabled={!videoId}
         onClick={(event) => {
@@ -94,7 +116,11 @@ export function VideoTrackExchangePanel({
         Import track file
         <input
           type="file"
-          accept={format === "reefvision_json" ? ".json,application/json" : ".csv,.txt,text/plain,text/csv"}
+          accept={
+            format === "reefvision_json"
+              ? ".json,application/json"
+              : ".csv,.txt,text/plain,text/csv"
+          }
           onChange={(event) => setImportFile(event.target.files?.[0] ?? null)}
         />
       </label>
