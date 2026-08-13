@@ -153,7 +153,7 @@ class VideoTrackingRunResponse(BaseModel):
     video_id: str
     status: str
     tracker: str
-    model_id: str
+    model_id: str | None
     confidence: float
     iou: float
     device: str
