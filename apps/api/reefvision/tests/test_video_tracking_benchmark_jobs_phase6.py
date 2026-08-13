@@ -151,19 +151,39 @@ def test_benchmark_resolves_prediction_tracks_from_tracking_job(
     assert byte_result["evaluation"]["mota"] == pytest.approx(1.0)
 
 
-def test_benchmark_rejects_job_without_tracks_for_selected_video(
+def test_benchmark_scores_succeeded_job_with_zero_prediction_tracks(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    project = create_project(client, "Missing job tracks")
+    project = create_project(client, "Zero-output tracker benchmark")
     video = _video(client, str(project["id"]), monkeypatch)
+    classes = cast(list[dict[str, object]], project["label_classes"])
+    label_class_id = str(classes[0]["id"])
+    truth = _track(
+        client,
+        str(video["id"]),
+        label_class_id,
+        [{"frame": 0, "bbox": [10, 10, 20, 20]}],
+    )
+    perfect = _track(
+        client,
+        str(video["id"]),
+        label_class_id,
+        [{"frame": 0, "bbox": [10, 10, 20, 20]}],
+    )
+
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
         job = Job(
             project_id=str(project["id"]),
             job_type="video_tracking",
             status="succeeded",
-            request_json={"video_id": str(video["id"]), "tracker": "bytetrack.yaml"},
+            request_json={
+                "video_id": str(video["id"]),
+                "tracker": "botsort.yaml",
+                "model_id": "model-zero",
+            },
+            result_json={"track_count": 0, "observation_count": 0},
         )
         session.add(job)
         session.commit()
@@ -172,14 +192,27 @@ def test_benchmark_rejects_job_without_tracks_for_selected_video(
     response = client.post(
         f"/api/v1/videos/{video['id']}/tracking-benchmark",
         json={
-            "ground_truth_track_ids": ["truth"],
+            "ground_truth_track_ids": [truth["id"]],
             "candidates": [
-                {"name": "Empty job", "source_job_id": job_id},
-                {"name": "Other", "prediction_track_ids": ["prediction"]},
+                {"name": "Zero output", "source_job_id": job_id},
+                {"name": "Perfect", "prediction_track_ids": [perfect["id"]]},
             ],
+            "start_frame": 0,
+            "end_frame": 0,
         },
     )
-    assert response.status_code == 422
+    assert response.status_code == 200, response.text
+    result = response.json()
+    zero_result = next(item for item in result["results"] if item["name"] == "Zero output")
+    evaluation = zero_result["evaluation"]
+    assert zero_result["prediction_track_ids"] == []
+    assert evaluation["prediction_track_count"] == 0
+    assert evaluation["prediction_observations"] == 0
+    assert evaluation["matched_observations"] == 0
+    assert evaluation["missed_observations"] == 1
+    assert evaluation["recall"] == pytest.approx(0.0)
+    assert evaluation["precision"] == pytest.approx(0.0)
+    assert evaluation["mota"] == pytest.approx(0.0)
 
 
 def test_benchmark_rejects_wrong_video_and_incomplete_tracking_jobs(
