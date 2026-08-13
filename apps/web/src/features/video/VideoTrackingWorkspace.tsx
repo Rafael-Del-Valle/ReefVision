@@ -11,6 +11,7 @@ import {
   getTrackingModels,
   getVideoTrackAnalytics,
   getVideoTrackInterpolation,
+  getVideoTrackingRuns,
   getVideoTracks,
   getVideos,
   importVideo,
@@ -19,16 +20,10 @@ import {
   videoFrameUrl,
   type VideoTrackKeyframe,
 } from "./videoApi";
+import { trackingBenchmarkCsv, trackingBenchmarkJson } from "./trackingReport";
 
 interface VideoTrackingWorkspaceProps {
   project: Project;
-}
-
-interface TrackingRunSummary {
-  jobId: string;
-  tracker: string;
-  modelId: string | null;
-  trackCount: number;
 }
 
 function sortedKeyframes(items: VideoTrackKeyframe[]): VideoTrackKeyframe[] {
@@ -67,12 +62,21 @@ export function VideoTrackingWorkspace({
   );
   const [trackStatus, setTrackStatus] = useState("verified");
   const [keyframes, setKeyframes] = useState<VideoTrackKeyframe[]>([]);
+
   const [trackingModelId, setTrackingModelId] = useState("");
   const [trackerName, setTrackerName] = useState("bytetrack.yaml");
+  const [trackingConfidence, setTrackingConfidence] = useState(0.25);
+  const [trackingIou, setTrackingIou] = useState(0.5);
+  const [trackingDevice, setTrackingDevice] = useState("auto");
+  const [minimumTrackFrames, setMinimumTrackFrames] = useState(2);
+
   const [groundTruthTrackIds, setGroundTruthTrackIds] = useState<string[]>([]);
   const [benchmarkJobIds, setBenchmarkJobIds] = useState<string[]>([]);
   const [benchmarkIou, setBenchmarkIou] = useState(0.5);
   const [benchmarkClassAware, setBenchmarkClassAware] = useState(true);
+  const [benchmarkStartFrame, setBenchmarkStartFrame] = useState(0);
+  const [benchmarkEndFrame, setBenchmarkEndFrame] = useState(0);
+  const [copiedReport, setCopiedReport] = useState<"json" | "csv" | null>(null);
 
   const videosQuery = useQuery({
     queryKey: ["videos", project.id],
@@ -85,6 +89,12 @@ export function VideoTrackingWorkspace({
   const tracksQuery = useQuery({
     queryKey: ["video-tracks", selectedVideoId],
     queryFn: ({ signal }) => getVideoTracks(selectedVideoId, signal),
+    enabled: Boolean(selectedVideoId),
+    refetchInterval: 3000,
+  });
+  const trackingRunsQuery = useQuery({
+    queryKey: ["video-tracking-runs", selectedVideoId],
+    queryFn: ({ signal }) => getVideoTrackingRuns(selectedVideoId, signal),
     enabled: Boolean(selectedVideoId),
     refetchInterval: 3000,
   });
@@ -114,28 +124,10 @@ export function VideoTrackingWorkspace({
       ),
     [tracksQuery.data],
   );
-  const trackingRuns = useMemo(() => {
-    const byJob = new Map<string, TrackingRunSummary>();
-    for (const track of tracksQuery.data ?? []) {
-      if (!track.source_job_id) continue;
-      const rawTracker = track.metadata_json?.tracker;
-      const tracker = typeof rawTracker === "string" ? rawTracker : "tracker";
-      const existing = byJob.get(track.source_job_id);
-      if (existing) {
-        existing.trackCount += 1;
-      } else {
-        byJob.set(track.source_job_id, {
-          jobId: track.source_job_id,
-          tracker,
-          modelId: track.source_model_id,
-          trackCount: 1,
-        });
-      }
-    }
-    return [...byJob.values()].sort((first, second) =>
-      first.jobId.localeCompare(second.jobId),
-    );
-  }, [tracksQuery.data]);
+  const succeededTrackingRuns = useMemo(
+    () => (trackingRunsQuery.data ?? []).filter((run) => run.status === "succeeded"),
+    [trackingRunsQuery.data],
+  );
 
   useEffect(() => {
     if (!selectedVideoId && videosQuery.data?.[0]) {
@@ -148,7 +140,15 @@ export function VideoTrackingWorkspace({
     setKeyframes([]);
     setGroundTruthTrackIds([]);
     setBenchmarkJobIds([]);
+    setBenchmarkStartFrame(0);
+    setBenchmarkEndFrame(0);
+    setCopiedReport(null);
   }, [selectedVideoId]);
+  useEffect(() => {
+    if (selectedVideo) {
+      setBenchmarkEndFrame(Math.max(0, selectedVideo.frame_count - 1));
+    }
+  }, [selectedVideo]);
   useEffect(() => {
     if (!trackingModelId && modelsQuery.data?.[0]) {
       setTrackingModelId(modelsQuery.data[0].id);
@@ -239,17 +239,32 @@ export function VideoTrackingWorkspace({
     },
   });
   const trackingMutation = useMutation({
-    mutationFn: () =>
-      createVideoTrackingJob(selectedVideoId, {
+    mutationFn: () => {
+      if (trackingConfidence < 0 || trackingConfidence > 1) {
+        throw new Error("Tracking confidence must be between 0 and 1");
+      }
+      if (trackingIou < 0 || trackingIou > 1) {
+        throw new Error("Tracking IoU must be between 0 and 1");
+      }
+      if (minimumTrackFrames < 1) {
+        throw new Error("Minimum track frames must be at least 1");
+      }
+      return createVideoTrackingJob(selectedVideoId, {
         model_id: trackingModelId,
         tracker: trackerName,
-        confidence: 0.25,
-        iou: 0.5,
-        device: "auto",
-        minimum_track_frames: 2,
-      }),
+        confidence: trackingConfidence,
+        iou: trackingIou,
+        device: trackingDevice,
+        minimum_track_frames: minimumTrackFrames,
+      });
+    },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["videos", project.id] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["videos", project.id] }),
+        queryClient.invalidateQueries({
+          queryKey: ["video-tracking-runs", selectedVideoId],
+        }),
+      ]);
     },
   });
   const benchmarkMutation = useMutation({
@@ -259,9 +274,14 @@ export function VideoTrackingWorkspace({
         throw new Error("Select at least one verified manual ground-truth track");
       }
       if (benchmarkJobIds.length < 2) {
-        throw new Error("Select at least two machine tracking runs to compare");
+        throw new Error("Select at least two succeeded tracking runs to compare");
       }
-      const byJob = new Map(trackingRuns.map((run) => [run.jobId, run]));
+      if (benchmarkEndFrame < benchmarkStartFrame) {
+        throw new Error("Benchmark end frame must be at or after the start frame");
+      }
+      const byJob = new Map(
+        succeededTrackingRuns.map((run) => [run.job_id, run]),
+      );
       return benchmarkVideoTracking(selectedVideoId, {
         ground_truth_track_ids: groundTruthTrackIds,
         candidates: benchmarkJobIds.map((jobId) => {
@@ -273,8 +293,11 @@ export function VideoTrackingWorkspace({
         }),
         iou_threshold: benchmarkIou,
         class_aware: benchmarkClassAware,
+        start_frame: benchmarkStartFrame,
+        end_frame: benchmarkEndFrame,
       });
     },
+    onSuccess: () => setCopiedReport(null),
   });
 
   const overlayFrame = useMemo(
@@ -293,7 +316,8 @@ export function VideoTrackingWorkspace({
     saveTrackMutation.error ??
     deleteTrackMutation.error ??
     trackingMutation.error ??
-    benchmarkMutation.error;
+    benchmarkMutation.error ??
+    trackingRunsQuery.error;
 
   function updateKeyframe(
     index: number,
@@ -310,6 +334,16 @@ export function VideoTrackingWorkspace({
         return { ...keyframe, bbox };
       }),
     );
+  }
+
+  async function copyBenchmarkReport(kind: "json" | "csv") {
+    if (!benchmarkMutation.data) return;
+    const content =
+      kind === "json"
+        ? trackingBenchmarkJson(benchmarkMutation.data)
+        : trackingBenchmarkCsv(benchmarkMutation.data);
+    await navigator.clipboard.writeText(content);
+    setCopiedReport(kind);
   }
 
   return (
@@ -623,6 +657,49 @@ export function VideoTrackingWorkspace({
             <option value="botsort.yaml">BoT-SORT</option>
           </select>
         </label>
+        <label>
+          Detection confidence
+          <input
+            type="number"
+            min={0}
+            max={1}
+            step={0.05}
+            value={trackingConfidence}
+            onChange={(event) => setTrackingConfidence(Number(event.target.value))}
+          />
+        </label>
+        <label>
+          Detector IoU
+          <input
+            type="number"
+            min={0}
+            max={1}
+            step={0.05}
+            value={trackingIou}
+            onChange={(event) => setTrackingIou(Number(event.target.value))}
+          />
+        </label>
+        <label>
+          Device
+          <select
+            value={trackingDevice}
+            onChange={(event) => setTrackingDevice(event.target.value)}
+          >
+            <option value="auto">Auto</option>
+            <option value="cpu">CPU</option>
+            <option value="0">CUDA device 0</option>
+          </select>
+        </label>
+        <label>
+          Minimum observations per retained track
+          <input
+            type="number"
+            min={1}
+            step={1}
+            value={minimumTrackFrames}
+            onChange={(event) => setMinimumTrackFrames(Number(event.target.value))}
+          />
+        </label>
         <button
           type="button"
           disabled={
@@ -636,9 +713,42 @@ export function VideoTrackingWorkspace({
         </button>
         {trackingMutation.data && (
           <p className="annotation-helper">
-            {trackerLabel(trackerName)} job {trackingMutation.data.id.slice(0, 8)}
-            {" "}queued. Its tracks remain independent from other tracker runs.
+            Tracking job {trackingMutation.data.id.slice(0, 8)} queued. Run history
+            retains independent ByteTrack and BoT-SORT outputs, including zero-track
+            results.
           </p>
+        )}
+        {(trackingRunsQuery.data ?? []).length > 0 && (
+          <div style={{ overflowX: "auto" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Run</th>
+                  <th>Tracker</th>
+                  <th>Status</th>
+                  <th>Tracks</th>
+                  <th>Observations</th>
+                  <th>Confidence</th>
+                  <th>IoU</th>
+                  <th>Device</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(trackingRunsQuery.data ?? []).map((run) => (
+                  <tr key={run.job_id}>
+                    <td>{run.job_id.slice(0, 8)}</td>
+                    <td>{trackerLabel(run.tracker)}</td>
+                    <td>{run.status}</td>
+                    <td>{run.track_count}</td>
+                    <td>{run.observation_count}</td>
+                    <td>{run.confidence.toFixed(2)}</td>
+                    <td>{run.iou.toFixed(2)}</td>
+                    <td>{run.device}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
         {analyticsQuery.data && (
           <div className="annotation-selection-list">
@@ -651,15 +761,13 @@ export function VideoTrackingWorkspace({
             <div className="annotation-selection-row">
               <strong>Mean speed</strong>
               <span>
-                {analyticsQuery.data.mean_speed_pixels_per_second.toFixed(2)}{" "}
-                px/s
+                {analyticsQuery.data.mean_speed_pixels_per_second.toFixed(2)} px/s
               </span>
             </div>
             <div className="annotation-selection-row">
               <strong>Maximum speed</strong>
               <span>
-                {analyticsQuery.data.maximum_speed_pixels_per_second.toFixed(2)}{" "}
-                px/s
+                {analyticsQuery.data.maximum_speed_pixels_per_second.toFixed(2)} px/s
               </span>
             </div>
             <div className="annotation-selection-row">
@@ -676,9 +784,9 @@ export function VideoTrackingWorkspace({
         <p className="eyebrow">Scientific validation</p>
         <h3>Tracker benchmark</h3>
         <p className="annotation-helper">
-          Compare independent tracker jobs against the same verified manual tracks.
-          Ground-truth interpolation is honored; model tracks only receive credit for
-          persisted observations.
+          Compare independent tracking jobs against the same verified manual tracks.
+          Manual ground truth may interpolate between keyframes; machine tracks only
+          receive credit for observations actually produced by the tracker.
         </p>
         <strong>Ground-truth tracks</strong>
         {manualGroundTruthTracks.length === 0 ? (
@@ -703,32 +811,52 @@ export function VideoTrackingWorkspace({
             ))}
           </div>
         )}
-        <strong>Machine tracking runs</strong>
-        {trackingRuns.length === 0 ? (
+        <strong>Succeeded machine tracking runs</strong>
+        {succeededTrackingRuns.length === 0 ? (
           <p className="annotation-helper">
             Run ByteTrack and BoT-SORT to create benchmark candidates.
           </p>
         ) : (
           <div className="annotation-selection-list">
-            {trackingRuns.map((run) => (
-              <label key={run.jobId} className="annotation-selection-row">
+            {succeededTrackingRuns.map((run) => (
+              <label key={run.job_id} className="annotation-selection-row">
                 <input
                   type="checkbox"
-                  checked={benchmarkJobIds.includes(run.jobId)}
+                  checked={benchmarkJobIds.includes(run.job_id)}
                   onChange={(event) =>
                     setBenchmarkJobIds((current) =>
-                      toggleSelection(current, run.jobId, event.target.checked),
+                      toggleSelection(current, run.job_id, event.target.checked),
                     )
                   }
                 />
                 <span>
-                  {trackerLabel(run.tracker)} · {run.jobId.slice(0, 8)} ·{" "}
-                  {run.trackCount} tracks
+                  {trackerLabel(run.tracker)} · {run.job_id.slice(0, 8)} ·{" "}
+                  {run.track_count} tracks / {run.observation_count} observations
                 </span>
               </label>
             ))}
           </div>
         )}
+        <label>
+          Benchmark start frame
+          <input
+            type="number"
+            min={0}
+            max={Math.max(0, (selectedVideo?.frame_count ?? 1) - 1)}
+            value={benchmarkStartFrame}
+            onChange={(event) => setBenchmarkStartFrame(Number(event.target.value))}
+          />
+        </label>
+        <label>
+          Benchmark end frame
+          <input
+            type="number"
+            min={0}
+            max={Math.max(0, (selectedVideo?.frame_count ?? 1) - 1)}
+            value={benchmarkEndFrame}
+            onChange={(event) => setBenchmarkEndFrame(Number(event.target.value))}
+          />
+        </label>
         <label>
           Match IoU threshold
           <input
@@ -791,9 +919,7 @@ export function VideoTrackingWorkspace({
                       <td>{result.evaluation.precision.toFixed(3)}</td>
                       <td>{result.evaluation.id_switches}</td>
                       <td>{result.evaluation.fragmentations}</td>
-                      <td>
-                        {result.evaluation.mean_iou?.toFixed(3) ?? "—"}
-                      </td>
+                      <td>{result.evaluation.mean_iou?.toFixed(3) ?? "—"}</td>
                       <td>
                         {result.evaluation.mean_center_error_pixels === null
                           ? "—"
@@ -804,6 +930,28 @@ export function VideoTrackingWorkspace({
                 </tbody>
               </table>
             </div>
+            <div className="annotation-editor-inline-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => void copyBenchmarkReport("json")}
+              >
+                {copiedReport === "json" ? "JSON copied" : "Copy benchmark JSON"}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => void copyBenchmarkReport("csv")}
+              >
+                {copiedReport === "csv" ? "CSV copied" : "Copy benchmark CSV"}
+              </button>
+            </div>
+            <details>
+              <summary>Reproducibility details</summary>
+              <pre style={{ overflowX: "auto", whiteSpace: "pre-wrap" }}>
+                {trackingBenchmarkJson(benchmarkMutation.data)}
+              </pre>
+            </details>
           </>
         )}
       </section>
