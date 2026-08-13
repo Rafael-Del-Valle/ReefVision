@@ -27,11 +27,13 @@ jobs:
             apps/api/reefvision/services/video_assets.py \
             apps/api/reefvision/services/video_tracking_benchmark.py \
             apps/api/reefvision/services/video_tracking_evaluation.py \
+            apps/api/reefvision/services/video_tracking_runs.py \
             apps/api/reefvision/services/video_tracks.py \
             apps/api/reefvision/tests/test_video_tracking_benchmark_jobs_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_benchmark_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_evaluation_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_run_isolation_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_runs_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_temporal_matching_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_phase6.py
           python -m ruff format --check \
@@ -44,11 +46,13 @@ jobs:
             apps/api/reefvision/services/video_assets.py \
             apps/api/reefvision/services/video_tracking_benchmark.py \
             apps/api/reefvision/services/video_tracking_evaluation.py \
+            apps/api/reefvision/services/video_tracking_runs.py \
             apps/api/reefvision/services/video_tracks.py \
             apps/api/reefvision/tests/test_video_tracking_benchmark_jobs_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_benchmark_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_evaluation_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_run_isolation_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_runs_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_temporal_matching_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_phase6.py
       - name: Run Milestone 6 video tracking tests
@@ -59,6 +63,7 @@ jobs:
             apps/api/reefvision/tests/test_video_tracking_benchmark_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_benchmark_jobs_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_run_isolation_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_runs_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_temporal_matching_phase6.py \
             -q
       - name: Verify 0021 migration roundtrip
@@ -88,3 +93,4 @@ jobs:
         run: |
           npx prettier --check src/features/video
           npm run typecheck
+          npx vitest run src/features/video/trackingReport.test.ts --config vite.config.mjs --configLoader runner
