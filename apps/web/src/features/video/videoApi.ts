@@ -117,6 +117,9 @@ export interface VideoTrackingEvaluation {
   end_frame: number;
   iou_threshold: number;
   class_aware: boolean;
+  matching_policy: "temporal-continuity-then-greedy-iou";
+  ground_truth_track_ids: string[];
+  prediction_track_ids: string[];
   ground_truth_track_count: number;
   prediction_track_count: number;
   ground_truth_observations: number;
@@ -128,6 +131,7 @@ export interface VideoTrackingEvaluation {
   precision: number;
   missed_tracks: number;
   false_positive_tracks: number;
+  false_positive_prediction_track_ids: string[];
   id_switches: number;
   fragmentations: number;
   mean_iou: number | null;
@@ -147,6 +151,10 @@ export interface VideoTrackingBenchmarkResult {
   name: string;
   source_job_id: string | null;
   prediction_track_ids: string[];
+  tracker: string | null;
+  model_id: string | null;
+  job_status: string | null;
+  tracking_settings: Record<string, unknown>;
   evaluation: VideoTrackingEvaluation;
 }
 
@@ -154,6 +162,11 @@ export interface VideoTrackingBenchmark {
   schema_version: "video-tracking-benchmark-0001";
   video_id: string;
   winner: string;
+  ground_truth_track_ids: string[];
+  start_frame: number;
+  end_frame: number;
+  iou_threshold: number;
+  class_aware: boolean;
   results: VideoTrackingBenchmarkResult[];
 }
 
