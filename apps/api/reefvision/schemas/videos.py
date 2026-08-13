@@ -194,6 +194,9 @@ class VideoTrackingEvaluationResponse(BaseModel):
     end_frame: int
     iou_threshold: float
     class_aware: bool
+    matching_policy: Literal["temporal-continuity-then-greedy-iou"]
+    ground_truth_track_ids: list[str]
+    prediction_track_ids: list[str]
     ground_truth_track_count: int
     prediction_track_count: int
     ground_truth_observations: int
@@ -205,6 +208,7 @@ class VideoTrackingEvaluationResponse(BaseModel):
     precision: float
     missed_tracks: int
     false_positive_tracks: int
+    false_positive_prediction_track_ids: list[str]
     id_switches: int
     fragmentations: int
     mean_iou: float | None
@@ -263,6 +267,10 @@ class VideoTrackingBenchmarkResult(BaseModel):
     name: str
     source_job_id: str | None
     prediction_track_ids: list[str]
+    tracker: str | None
+    model_id: str | None
+    job_status: str | None
+    tracking_settings: dict[str, Any]
     evaluation: VideoTrackingEvaluationResponse
 
 
@@ -270,4 +278,9 @@ class VideoTrackingBenchmarkResponse(BaseModel):
     schema_version: Literal["video-tracking-benchmark-0001"]
     video_id: str
     winner: str
+    ground_truth_track_ids: list[str]
+    start_frame: int
+    end_frame: int
+    iou_threshold: float
+    class_aware: bool
     results: list[VideoTrackingBenchmarkResult]
