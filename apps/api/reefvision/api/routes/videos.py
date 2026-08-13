@@ -23,6 +23,7 @@ from reefvision.schemas.videos import (
     VideoTrackingCreateRequest,
     VideoTrackingEvaluationRequest,
     VideoTrackingEvaluationResponse,
+    VideoTrackingRunResponse,
     VideoTrackInterpolationResponse,
     VideoTrackResponse,
     VideoTrackUpdate,
@@ -30,6 +31,7 @@ from reefvision.schemas.videos import (
 from reefvision.services.video_assets import VideoAssetService
 from reefvision.services.video_tracking_benchmark import VideoTrackingBenchmarkService
 from reefvision.services.video_tracking_evaluation import VideoTrackingEvaluationService
+from reefvision.services.video_tracking_runs import VideoTrackingRunService
 from reefvision.services.video_tracks import VideoTrackService
 
 router = APIRouter(tags=["videos"])
@@ -165,6 +167,17 @@ def track_analytics(
     session: DbSession,
 ) -> VideoTrackAnalyticsResponse:
     return VideoTrackService(session).analytics(track_id)
+
+
+@router.get(
+    "/videos/{video_id}/tracking-runs",
+    response_model=list[VideoTrackingRunResponse],
+)
+def list_tracking_runs(
+    video_id: str,
+    session: DbSession,
+) -> list[VideoTrackingRunResponse]:
+    return VideoTrackingRunService(session).list(video_id)
 
 
 @router.post(
