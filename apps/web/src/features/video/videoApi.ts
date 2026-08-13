@@ -95,6 +95,26 @@ export interface VideoTrackAnalytics {
   occupancy_grid: Record<string, number>;
 }
 
+export interface VideoTrackingRun {
+  job_id: string;
+  project_id: string;
+  video_id: string;
+  status: string;
+  tracker: string;
+  model_id: string;
+  confidence: number;
+  iou: number;
+  device: string;
+  minimum_track_frames: number;
+  track_count: number;
+  observation_count: number;
+  unmapped_labels: string[];
+  error_message: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
 export interface VideoTrackingEvaluationPerTrack {
   ground_truth_track_id: string;
   ground_truth_track_number: number;
@@ -240,6 +260,16 @@ export function getVideoTracks(
 ): Promise<VideoTrackRecord[]> {
   return request<VideoTrackRecord[]>(
     `/videos/${encodeURIComponent(videoId)}/tracks`,
+    { signal },
+  );
+}
+
+export function getVideoTrackingRuns(
+  videoId: string,
+  signal?: AbortSignal,
+): Promise<VideoTrackingRun[]> {
+  return request<VideoTrackingRun[]>(
+    `/videos/${encodeURIComponent(videoId)}/tracking-runs`,
     { signal },
   );
 }
