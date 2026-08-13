@@ -52,7 +52,10 @@ def _center_error(
 ) -> float:
     ax, ay, aw, ah = first
     bx, by, bw, bh = second
-    return hypot((ax + aw / 2.0) - (bx + bw / 2.0), (ay + ah / 2.0) - (by + bh / 2.0))
+    return hypot(
+        (ax + aw / 2.0) - (bx + bw / 2.0),
+        (ay + ah / 2.0) - (by + bh / 2.0),
+    )
 
 
 class VideoTrackingEvaluationService:
@@ -173,8 +176,8 @@ class VideoTrackingEvaluationService:
         used_predictions: set[str] = set()
         matches: list[tuple[_Observation, _Observation, float, float]] = []
 
-        # CLEAR-MOT-style continuity preference: if yesterday's association still
-        # passes the current frame gate, preserve it before solving new ambiguity.
+        # Preserve a previous-frame association when it still passes the current
+        # frame's class and IoU gates before solving newly ambiguous associations.
         for truth_id, prediction_id in sorted(previous_assignments.items()):
             truth = truth_by_id.get(truth_id)
             prediction = prediction_by_id.get(prediction_id)
@@ -233,14 +236,20 @@ class VideoTrackingEvaluationService:
             raise ValidationError("Evaluation end_frame must be greater than or equal to start_frame")
 
         truth_tracks = self._tracks(
-            video_id, payload.ground_truth_track_ids, "Ground-truth"
+            video_id,
+            payload.ground_truth_track_ids,
+            "Ground-truth",
         )
         prediction_tracks = self._tracks(
-            video_id, payload.prediction_track_ids, "Prediction"
+            video_id,
+            payload.prediction_track_ids,
+            "Prediction",
         )
         truth_by_frame = self._ground_truth_observations(truth_tracks, start_frame, end_frame)
         prediction_by_frame = self._prediction_observations(
-            prediction_tracks, start_frame, end_frame
+            prediction_tracks,
+            start_frame,
+            end_frame,
         )
 
         truth_count = sum(len(items) for items in truth_by_frame.values())
@@ -264,7 +273,8 @@ class VideoTrackingEvaluationService:
                 previous_assignments=previous_assignments,
             )
             previous_assignments = {
-                truth.track_id: prediction.track_id for truth, prediction, _iou_value, _error in matches
+                truth.track_id: prediction.track_id
+                for truth, prediction, _overlap, _error in matches
             }
             for truth, prediction, overlap, center_error in matches:
                 match_by_truth_frame[(truth.track_id, frame)] = (
@@ -289,7 +299,8 @@ class VideoTrackingEvaluationService:
 
         for track in truth_tracks:
             observations = sorted(
-                truth_observations_by_track.get(track.id, []), key=lambda item: item.frame
+                truth_observations_by_track.get(track.id, []),
+                key=lambda item: item.frame,
             )
             matched_rows: list[tuple[int, str, float, float]] = []
             matched_state: list[bool] = []
@@ -305,10 +316,7 @@ class VideoTrackingEvaluationService:
             switches = 0
             previous_prediction_id: str | None = None
             for _frame, prediction_id, _overlap, _center_error_px in matched_rows:
-                if (
-                    previous_prediction_id is not None
-                    and prediction_id != previous_prediction_id
-                ):
+                if previous_prediction_id is not None and prediction_id != previous_prediction_id:
                     switches += 1
                 previous_prediction_id = prediction_id
 
@@ -338,9 +346,7 @@ class VideoTrackingEvaluationService:
                     recall=(matched_count / len(observations)) if observations else 0.0,
                     id_switches=switches,
                     fragmentations=fragmentations,
-                    matched_prediction_track_ids=sorted(
-                        {row[1] for row in matched_rows}
-                    ),
+                    matched_prediction_track_ids=sorted({row[1] for row in matched_rows}),
                     mean_iou=(sum(track_ious) / len(track_ious)) if track_ious else None,
                     mean_center_error_pixels=(
                         sum(track_errors) / len(track_errors) if track_errors else None
@@ -352,7 +358,10 @@ class VideoTrackingEvaluationService:
         missed_observations = truth_count - matched_count
         false_positive_observations = prediction_count - len(matched_prediction_observations)
         missed_tracks = len(truth_tracks) - matched_truth_tracks
-        false_positive_tracks = len(prediction_tracks) - len(matched_prediction_tracks)
+        false_positive_prediction_track_ids = sorted(
+            track.id for track in prediction_tracks if track.id not in matched_prediction_tracks
+        )
+        false_positive_tracks = len(false_positive_prediction_track_ids)
         mota = 1.0 - (
             missed_observations + false_positive_observations + id_switches_total
         ) / truth_count
@@ -364,6 +373,9 @@ class VideoTrackingEvaluationService:
             end_frame=end_frame,
             iou_threshold=payload.iou_threshold,
             class_aware=payload.class_aware,
+            matching_policy="temporal-continuity-then-greedy-iou",
+            ground_truth_track_ids=[track.id for track in truth_tracks],
+            prediction_track_ids=[track.id for track in prediction_tracks],
             ground_truth_track_count=len(truth_tracks),
             prediction_track_count=len(prediction_tracks),
             ground_truth_observations=truth_count,
@@ -375,6 +387,7 @@ class VideoTrackingEvaluationService:
             precision=(matched_count / prediction_count) if prediction_count else 0.0,
             missed_tracks=missed_tracks,
             false_positive_tracks=false_positive_tracks,
+            false_positive_prediction_track_ids=false_positive_prediction_track_ids,
             id_switches=id_switches_total,
             fragmentations=fragmentations_total,
             mean_iou=(sum(all_ious) / len(all_ious)) if all_ious else None,
