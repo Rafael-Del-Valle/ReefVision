@@ -100,13 +100,17 @@ def process_video_tracking_job(
 
     try:
         provider = video_tracking_provider_for_name(provider_name)
+        tracker_name = str(request.get("tracker", "bytetrack.yaml"))
+        confidence = float(request.get("confidence", 0.25))
+        iou = float(request.get("iou", 0.5))
+        device = str(request.get("device", "auto"))
         observations = provider.track(
             resolve_managed_project_path(settings, model_path),
             resolve_managed_project_path(settings, video_path),
-            tracker=str(request.get("tracker", "bytetrack.yaml")),
-            confidence=float(request.get("confidence", 0.25)),
-            iou=float(request.get("iou", 0.5)),
-            device=str(request.get("device", "auto")),
+            tracker=tracker_name,
+            confidence=confidence,
+            iou=iou,
+            device=device,
         )
         grouped: dict[tuple[int, str], list[TrackObservation]] = defaultdict(list)
         unmapped_labels: set[str] = set()
@@ -123,11 +127,14 @@ def process_video_tracking_job(
             job = session.get(Job, job_id)
             if video is None or job is None:
                 raise RuntimeError("Video tracking records disappeared")
+            # Retries of one persisted job replace only that job's own products.
+            # Independent ByteTrack/BoT-SORT runs from the same detector must coexist
+            # so they can be reviewed and scientifically benchmarked side by side.
             existing = list(
                 session.scalars(
                     select(VideoTrack).where(
                         VideoTrack.video_id == video_id,
-                        VideoTrack.source_model_id == model_id,
+                        VideoTrack.source_job_id == job_id,
                         VideoTrack.deleted_at.is_(None),
                     )
                 )
@@ -167,7 +174,7 @@ def process_video_tracking_job(
                             "provider_track_id": provider_track_id,
                             "provider_name": provider.provider_id,
                             "provider_version": provider.provider_version,
-                            "tracker": str(request.get("tracker", "bytetrack.yaml")),
+                            "tracker": tracker_name,
                             "mean_confidence": mean(item.confidence for item in ordered),
                         },
                     )
@@ -185,6 +192,14 @@ def process_video_tracking_job(
                 "unmapped_labels": sorted(unmapped_labels),
                 "provider_version": provider.provider_version,
                 "project_id": project_id,
+                "video_id": video_id,
+                "model_id": model_id,
+                "source_job_id": job_id,
+                "tracker": tracker_name,
+                "confidence": confidence,
+                "iou": iou,
+                "device": device,
+                "minimum_track_frames": minimum_frames,
             }
             job.completed_at = datetime.now(UTC)
             session.commit()

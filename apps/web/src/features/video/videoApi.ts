@@ -95,6 +95,101 @@ export interface VideoTrackAnalytics {
   occupancy_grid: Record<string, number>;
 }
 
+export interface VideoTrackingRun {
+  job_id: string;
+  project_id: string;
+  video_id: string;
+  status: string;
+  tracker: string;
+  model_id: string;
+  confidence: number;
+  iou: number;
+  device: string;
+  minimum_track_frames: number;
+  track_count: number;
+  observation_count: number;
+  unmapped_labels: string[];
+  error_message: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface VideoTrackingEvaluationPerTrack {
+  ground_truth_track_id: string;
+  ground_truth_track_number: number;
+  label_class_id: string;
+  ground_truth_observations: number;
+  matched_observations: number;
+  missed_observations: number;
+  recall: number;
+  id_switches: number;
+  fragmentations: number;
+  matched_prediction_track_ids: string[];
+  mean_iou: number | null;
+  mean_center_error_pixels: number | null;
+}
+
+export interface VideoTrackingEvaluation {
+  schema_version: "video-tracking-evaluation-0001";
+  video_id: string;
+  start_frame: number;
+  end_frame: number;
+  iou_threshold: number;
+  class_aware: boolean;
+  matching_policy: "temporal-continuity-then-greedy-iou";
+  ground_truth_track_ids: string[];
+  prediction_track_ids: string[];
+  ground_truth_track_count: number;
+  prediction_track_count: number;
+  ground_truth_observations: number;
+  prediction_observations: number;
+  matched_observations: number;
+  missed_observations: number;
+  false_positive_observations: number;
+  recall: number;
+  precision: number;
+  missed_tracks: number;
+  false_positive_tracks: number;
+  false_positive_prediction_track_ids: string[];
+  id_switches: number;
+  fragmentations: number;
+  mean_iou: number | null;
+  mean_center_error_pixels: number | null;
+  mota: number;
+  per_track: VideoTrackingEvaluationPerTrack[];
+}
+
+export interface VideoTrackingBenchmarkCandidate {
+  name: string;
+  prediction_track_ids?: string[];
+  source_job_id?: string;
+}
+
+export interface VideoTrackingBenchmarkResult {
+  rank: number;
+  name: string;
+  source_job_id: string | null;
+  prediction_track_ids: string[];
+  tracker: string | null;
+  model_id: string | null;
+  job_status: string | null;
+  tracking_settings: Record<string, unknown>;
+  evaluation: VideoTrackingEvaluation;
+}
+
+export interface VideoTrackingBenchmark {
+  schema_version: "video-tracking-benchmark-0001";
+  video_id: string;
+  winner: string;
+  ground_truth_track_ids: string[];
+  start_frame: number;
+  end_frame: number;
+  iou_threshold: number;
+  class_aware: boolean;
+  results: VideoTrackingBenchmarkResult[];
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
@@ -169,6 +264,16 @@ export function getVideoTracks(
   );
 }
 
+export function getVideoTrackingRuns(
+  videoId: string,
+  signal?: AbortSignal,
+): Promise<VideoTrackingRun[]> {
+  return request<VideoTrackingRun[]>(
+    `/videos/${encodeURIComponent(videoId)}/tracking-runs`,
+    { signal },
+  );
+}
+
 export function createVideoTrack(
   videoId: string,
   payload: {
@@ -228,6 +333,40 @@ export function getVideoTrackAnalytics(
   return request<VideoTrackAnalytics>(
     `/video-tracks/${encodeURIComponent(trackId)}/analytics`,
     { signal },
+  );
+}
+
+export function evaluateVideoTracking(
+  videoId: string,
+  payload: {
+    ground_truth_track_ids: string[];
+    prediction_track_ids: string[];
+    iou_threshold?: number;
+    class_aware?: boolean;
+    start_frame?: number;
+    end_frame?: number;
+  },
+): Promise<VideoTrackingEvaluation> {
+  return request<VideoTrackingEvaluation>(
+    `/videos/${encodeURIComponent(videoId)}/tracking-evaluation`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export function benchmarkVideoTracking(
+  videoId: string,
+  payload: {
+    ground_truth_track_ids: string[];
+    candidates: VideoTrackingBenchmarkCandidate[];
+    iou_threshold?: number;
+    class_aware?: boolean;
+    start_frame?: number;
+    end_frame?: number;
+  },
+): Promise<VideoTrackingBenchmark> {
+  return request<VideoTrackingBenchmark>(
+    `/videos/${encodeURIComponent(videoId)}/tracking-benchmark`,
+    { method: "POST", body: JSON.stringify(payload) },
   );
 }
 

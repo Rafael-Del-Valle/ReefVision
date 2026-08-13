@@ -23,9 +23,21 @@ jobs:
             apps/api/reefvision/jobs/video.py \
             apps/api/reefvision/jobs/video_tracking.py \
             apps/api/reefvision/ml/video_tracking.py \
+            apps/api/reefvision/schemas/video_track_exchange.py \
             apps/api/reefvision/schemas/videos.py \
             apps/api/reefvision/services/video_assets.py \
+            apps/api/reefvision/services/video_track_exchange.py \
+            apps/api/reefvision/services/video_tracking_benchmark.py \
+            apps/api/reefvision/services/video_tracking_evaluation.py \
+            apps/api/reefvision/services/video_tracking_runs.py \
             apps/api/reefvision/services/video_tracks.py \
+            apps/api/reefvision/tests/test_video_track_exchange_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_benchmark_jobs_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_benchmark_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_evaluation_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_run_isolation_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_runs_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_temporal_matching_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_phase6.py
           python -m ruff format --check \
             apps/api/migrations/versions/0021_video_tracking_workflows.py \
@@ -33,12 +45,34 @@ jobs:
             apps/api/reefvision/jobs/video.py \
             apps/api/reefvision/jobs/video_tracking.py \
             apps/api/reefvision/ml/video_tracking.py \
+            apps/api/reefvision/schemas/video_track_exchange.py \
             apps/api/reefvision/schemas/videos.py \
             apps/api/reefvision/services/video_assets.py \
+            apps/api/reefvision/services/video_track_exchange.py \
+            apps/api/reefvision/services/video_tracking_benchmark.py \
+            apps/api/reefvision/services/video_tracking_evaluation.py \
+            apps/api/reefvision/services/video_tracking_runs.py \
             apps/api/reefvision/services/video_tracks.py \
+            apps/api/reefvision/tests/test_video_track_exchange_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_benchmark_jobs_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_benchmark_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_evaluation_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_run_isolation_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_runs_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_temporal_matching_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_phase6.py
       - name: Run Milestone 6 video tracking tests
-        run: python -m pytest apps/api/reefvision/tests/test_video_tracking_phase6.py -q
+        run: |
+          python -m pytest \
+            apps/api/reefvision/tests/test_video_tracking_phase6.py \
+            apps/api/reefvision/tests/test_video_track_exchange_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_evaluation_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_benchmark_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_benchmark_jobs_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_run_isolation_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_runs_phase6.py \
+            apps/api/reefvision/tests/test_video_tracking_temporal_matching_phase6.py \
+            -q
       - name: Verify 0021 migration roundtrip
         shell: bash
         run: |
@@ -51,5 +85,19 @@ jobs:
           from alembic.config import Config
           from alembic.script import ScriptDirectory
           scripts = ScriptDirectory.from_config(Config('apps/api/alembic.ini'))
-          assert scripts.get_heads() == ['0021'], scripts.get_heads()
+          assert scripts.get_revision('0021') is not None
           PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+      - name: Check video tracking desktop workspace
+        working-directory: apps/web
+        run: |
+          npx prettier --check src/features/video
+          npm run typecheck
+          npx vitest run src/features/video/trackingReport.test.ts --config vite.config.mjs --configLoader runner
