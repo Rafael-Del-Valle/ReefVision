@@ -1,0 +1,48 @@
+name: Milestone 6 Video Science
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  calibrated-video-science:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Lint and format video science backend
+        run: |
+          python -m ruff check \
+            apps/api/reefvision/api/routes/videos.py \
+            apps/api/reefvision/schemas/video_science.py \
+            apps/api/reefvision/services/video_science.py \
+            apps/api/reefvision/tests/test_video_science_phase6.py
+          python -m ruff format --check \
+            apps/api/reefvision/api/routes/videos.py \
+            apps/api/reefvision/schemas/video_science.py \
+            apps/api/reefvision/services/video_science.py \
+            apps/api/reefvision/tests/test_video_science_phase6.py
+      - name: Run calibrated video science tests
+        run: |
+          python -m pytest apps/api/reefvision/tests/test_video_science_phase6.py -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+      - name: Check video science desktop
+        working-directory: apps/web
+        run: |
+          npx prettier --check \
+            src/features/video/VideoSciencePanel.tsx \
+            src/features/video/VideoTrackExchangePanel.tsx \
+            src/features/video/videoScienceApi.ts
+          npm run typecheck
