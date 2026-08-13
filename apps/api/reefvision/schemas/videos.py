@@ -1,4 +1,4 @@
-"""Managed video, sparse track, interpolation, and analytics schemas."""
+"""Managed video, sparse track, interpolation, analytics, and benchmark schemas."""
 
 from __future__ import annotations
 
@@ -147,9 +147,29 @@ class VideoTrackingCreateRequest(BaseModel):
     minimum_track_frames: int = Field(default=2, ge=1, le=1000000)
 
 
+class VideoTrackingRunResponse(BaseModel):
+    job_id: str
+    project_id: str
+    video_id: str
+    status: str
+    tracker: str
+    model_id: str
+    confidence: float
+    iou: float
+    device: str
+    minimum_track_frames: int
+    track_count: int
+    observation_count: int
+    unmapped_labels: list[str]
+    error_message: str | None
+    created_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+
+
 class VideoTrackingEvaluationRequest(BaseModel):
     ground_truth_track_ids: list[str] = Field(min_length=1, max_length=10000)
-    prediction_track_ids: list[str] = Field(min_length=1, max_length=10000)
+    prediction_track_ids: list[str] = Field(default_factory=list, max_length=10000)
     iou_threshold: float = Field(default=0.5, ge=0, le=1)
     class_aware: bool = True
     start_frame: int | None = Field(default=None, ge=0)
