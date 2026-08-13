@@ -23,12 +23,15 @@ jobs:
             apps/api/reefvision/jobs/video.py \
             apps/api/reefvision/jobs/video_tracking.py \
             apps/api/reefvision/ml/video_tracking.py \
+            apps/api/reefvision/schemas/video_track_exchange.py \
             apps/api/reefvision/schemas/videos.py \
             apps/api/reefvision/services/video_assets.py \
+            apps/api/reefvision/services/video_track_exchange.py \
             apps/api/reefvision/services/video_tracking_benchmark.py \
             apps/api/reefvision/services/video_tracking_evaluation.py \
             apps/api/reefvision/services/video_tracking_runs.py \
             apps/api/reefvision/services/video_tracks.py \
+            apps/api/reefvision/tests/test_video_track_exchange_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_benchmark_jobs_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_benchmark_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_evaluation_phase6.py \
@@ -42,12 +45,15 @@ jobs:
             apps/api/reefvision/jobs/video.py \
             apps/api/reefvision/jobs/video_tracking.py \
             apps/api/reefvision/ml/video_tracking.py \
+            apps/api/reefvision/schemas/video_track_exchange.py \
             apps/api/reefvision/schemas/videos.py \
             apps/api/reefvision/services/video_assets.py \
+            apps/api/reefvision/services/video_track_exchange.py \
             apps/api/reefvision/services/video_tracking_benchmark.py \
             apps/api/reefvision/services/video_tracking_evaluation.py \
             apps/api/reefvision/services/video_tracking_runs.py \
             apps/api/reefvision/services/video_tracks.py \
+            apps/api/reefvision/tests/test_video_track_exchange_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_benchmark_jobs_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_benchmark_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_evaluation_phase6.py \
@@ -59,6 +65,7 @@ jobs:
         run: |
           python -m pytest \
             apps/api/reefvision/tests/test_video_tracking_phase6.py \
+            apps/api/reefvision/tests/test_video_track_exchange_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_evaluation_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_benchmark_phase6.py \
             apps/api/reefvision/tests/test_video_tracking_benchmark_jobs_phase6.py \
