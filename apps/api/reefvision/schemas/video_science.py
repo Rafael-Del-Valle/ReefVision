@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, FiniteFloat, model_validator
 
 DistanceUnit = Literal["mm", "cm", "m"]
 
@@ -108,3 +108,83 @@ class VideoSchoolingAnalyticsResponse(BaseModel):
     distance_unit: DistanceUnit
     calibration: VideoSpatialCalibrationResponse
     frames: list[VideoSchoolingFrameMetrics]
+
+
+class VideoCameraIntrinsicsSetRequest(BaseModel):
+    fx_px: FiniteFloat = Field(gt=0)
+    fy_px: FiniteFloat = Field(gt=0)
+    cx_px: FiniteFloat
+    cy_px: FiniteFloat
+    method: str = Field(default="camera_calibration", min_length=1, max_length=80)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class VideoCameraIntrinsicsResponse(BaseModel):
+    schema_version: Literal["video-camera-intrinsics-0001"]
+    video_id: str
+    fx_px: float
+    fy_px: float
+    cx_px: float
+    cy_px: float
+    method: str
+    notes: str | None
+    video_revision: int
+
+
+class VideoDepthSample(BaseModel):
+    track_id: str = Field(min_length=1, max_length=100)
+    frame: int = Field(ge=0)
+    depth: FiniteFloat = Field(gt=0)
+    confidence: float | None = Field(default=None, ge=0, le=1)
+
+
+class VideoDepthTrackAnalyticsRequest(BaseModel):
+    unit: DistanceUnit = "m"
+    samples: list[VideoDepthSample] = Field(min_length=2, max_length=2_000_000)
+    maximum_frame_gap: int | None = Field(default=None, ge=1, le=100_000)
+
+    @model_validator(mode="after")
+    def validate_samples(self) -> VideoDepthTrackAnalyticsRequest:
+        identities = [(sample.track_id, sample.frame) for sample in self.samples]
+        if len(identities) != len(set(identities)):
+            raise ValueError("Depth samples must use unique track/frame pairs")
+        return self
+
+
+class VideoDepthTrackPoint3D(BaseModel):
+    frame: int
+    timestamp_seconds: float
+    center_x_px: float
+    center_y_px: float
+    x: float
+    y: float
+    z: float
+    depth_confidence: float | None
+
+
+class VideoDepthTrack3DAnalytics(BaseModel):
+    track_id: str
+    track_number: int
+    label_class_id: str
+    observed_frame_count: int
+    first_frame: int
+    last_frame: int
+    duration_seconds: float
+    path_length_3d: float
+    displacement_3d: float
+    mean_speed_3d_per_second: float
+    maximum_speed_3d_per_second: float
+    mean_depth: float
+    minimum_depth: float
+    maximum_depth: float
+    skipped_gap_count: int
+    points: list[VideoDepthTrackPoint3D]
+
+
+class VideoDepthTrackAnalyticsResponse(BaseModel):
+    schema_version: Literal["video-depth-track-analytics-0001"]
+    video_id: str
+    unit: DistanceUnit
+    camera_intrinsics: VideoCameraIntrinsicsResponse
+    tracks: list[VideoDepthTrack3DAnalytics]
+    warnings: list[str]
