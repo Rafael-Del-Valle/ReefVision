@@ -5,6 +5,7 @@ import type { Project } from "../../api/client";
 import {
   createProjectExchange,
   getProjectExchangePackages,
+  importProjectExchange,
   inspectProjectExchange,
   projectExchangeDownloadUrl,
 } from "./projectExchangeApi";
@@ -20,6 +21,7 @@ export function InteroperabilityWorkspace({
   const [includeMedia, setIncludeMedia] = useState(false);
   const [includeModelWeights, setIncludeModelWeights] = useState(false);
   const [inspectionFile, setInspectionFile] = useState<File | null>(null);
+  const [importProjectName, setImportProjectName] = useState("");
 
   const packagesQuery = useQuery({
     queryKey: ["project-exchange-packages", project.id],
@@ -45,6 +47,21 @@ export function InteroperabilityWorkspace({
       return inspectProjectExchange(inspectionFile);
     },
   });
+  const importMutation = useMutation({
+    mutationFn: () => {
+      if (!inspectionFile) throw new Error("Choose an exchange ZIP first");
+      if (!inspectMutation.data?.compatible) {
+        throw new Error("Inspect a compatible exchange package before importing");
+      }
+      return importProjectExchange(
+        inspectionFile,
+        importProjectName.trim() || undefined,
+      );
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
 
   return (
     <section className="feature-workspace">
@@ -53,9 +70,9 @@ export function InteroperabilityWorkspace({
           <p className="eyebrow">Phase 9</p>
           <h3>Project interoperability</h3>
           <p>
-            Export a versioned, checksummed ReefVision package or inspect one
-            safely. Import remains disabled until record-ID remapping and conflict
-            rules are fully specified.
+            Export a versioned, checksummed ReefVision package, inspect it without
+            executing package content, or import it as a new project with record-ID
+            remapping. Existing projects are never overwritten.
           </p>
         </div>
       </div>
@@ -96,11 +113,15 @@ export function InteroperabilityWorkspace({
         </div>
 
         <div className="panel-card">
-          <h4>Inspect exchange package</h4>
+          <h4>Inspect or import exchange package</h4>
           <input
             type="file"
             accept=".zip,.reefvision.zip,application/zip"
-            onChange={(event) => setInspectionFile(event.target.files?.[0] ?? null)}
+            onChange={(event) => {
+              setInspectionFile(event.target.files?.[0] ?? null);
+              inspectMutation.reset();
+              importMutation.reset();
+            }}
           />
           <button
             type="button"
@@ -112,11 +133,12 @@ export function InteroperabilityWorkspace({
           {inspectMutation.data && (
             <>
               <p>
-                Compatible: <strong>{inspectMutation.data.compatible ? "Yes" : "No"}</strong>
+                Compatible:{" "}
+                <strong>{inspectMutation.data.compatible ? "Yes" : "No"}</strong>
               </p>
               <p>Project: {inspectMutation.data.project_name ?? "Unknown"}</p>
               <p>Format: {inspectMutation.data.format_version ?? "Unknown"}</p>
-              <p>Media files: {inspectMutation.data.included_media_count}</p>
+              <p>Packaged files: {inspectMutation.data.included_media_count}</p>
               {inspectMutation.data.warnings.length > 0 && (
                 <ul>
                   {inspectMutation.data.warnings.map((warning) => (
@@ -131,14 +153,69 @@ export function InteroperabilityWorkspace({
                   ))}
                 </ul>
               )}
+              <label>
+                Imported project name (optional)
+                <input
+                  value={importProjectName}
+                  onChange={(event) => setImportProjectName(event.target.value)}
+                  placeholder={
+                    inspectMutation.data.project_name ?? "Use package project name"
+                  }
+                />
+              </label>
+              <p className="annotation-helper">
+                Import always creates a new managed project. Source UUIDs are remapped,
+                exact ID references inside workflow/provenance JSON are remapped, and
+                packaged media is copied into the new project storage tree.
+              </p>
+              <button
+                type="button"
+                onClick={() => importMutation.mutate()}
+                disabled={
+                  !inspectionFile ||
+                  !inspectMutation.data.compatible ||
+                  importMutation.isPending
+                }
+              >
+                {importMutation.isPending
+                  ? "Importing..."
+                  : "Import as new project"}
+              </button>
             </>
           )}
           {inspectMutation.error && (
             <p className="form-error">{inspectMutation.error.message}</p>
           )}
-          <button type="button" disabled title="Import is intentionally not implemented">
-            Import disabled pending ID-remapping design
-          </button>
+          {importMutation.error && (
+            <p className="form-error">{importMutation.error.message}</p>
+          )}
+          {importMutation.data && (
+            <div className="annotation-selection-list">
+              <div className="annotation-selection-row">
+                <strong>Imported project</strong>
+                <span>{importMutation.data.project_name}</span>
+              </div>
+              <div className="annotation-selection-row">
+                <strong>Slug</strong>
+                <code>{importMutation.data.project_slug}</code>
+              </div>
+              <div className="annotation-selection-row">
+                <strong>Copied media</strong>
+                <span>{importMutation.data.copied_media_count}</span>
+              </div>
+              <div className="annotation-selection-row">
+                <strong>Source manifest</strong>
+                <code>
+                  {importMutation.data.source_manifest_sha256.slice(0, 12)}
+                </code>
+              </div>
+              {importMutation.data.warnings.map((warning) => (
+                <p key={warning} className="annotation-helper">
+                  {warning}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="panel-card">
