@@ -3,8 +3,16 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any, cast
 
-from reefvision.jobs.workflow_cache_runtime import _node_cache_eligible
+import pytest
+
+from reefvision.jobs import workflow_runs
+from reefvision.jobs.workflow_cache_runtime import (
+    _node_cache_eligible,
+    _stable_copy_cached_outputs,
+)
 from reefvision.jobs.workflow_segmentation_review_runtime import _review_summary
+from reefvision.jobs.workflow_segmentation_runtime import _assist_provider
+from reefvision.ml.catalog_expansion import UnifiedSegmentAnythingAssistProvider
 from reefvision.services.workflow_definition_extensions import (
     install_workflow_definition_extensions,
 )
@@ -48,6 +56,12 @@ def test_prompt_assist_template_connects_detector_boxes_to_segmenter_prompts() -
         and edge.target_node_id == "export"
         for edge in template.workflow.edges
     )
+
+
+def test_segment_anything_uses_checkpoint_aware_smart_mask_provider() -> None:
+    provider = _assist_provider("segment_anything")
+
+    assert isinstance(provider, UnifiedSegmentAnythingAssistProvider)
 
 
 def test_review_summary_separates_accepted_rejected_and_pending_masks() -> None:
@@ -94,3 +108,36 @@ def test_failed_run_cache_reuses_only_nodes_recorded_as_succeeded() -> None:
     assert _node_cache_eligible(cast(Any, reusable), "segment") is True
     assert _node_cache_eligible(cast(Any, failed_node), "segment") is False
     assert _node_cache_eligible(cast(Any, succeeded_run), "segment") is True
+
+
+def test_cached_artifact_copy_preserves_exact_semantic_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_payload = {
+        "prediction_ids": ["proposal-1"],
+        "_cache_key": "stable-key",
+    }
+    cached = SimpleNamespace(
+        port_name="detections",
+        artifact_type="detections",
+        payload_json=dict(original_payload),
+        managed_path=None,
+        size_bytes=None,
+    )
+    captured: list[dict[str, Any]] = []
+
+    def fake_save_artifact(_session: Any, **kwargs: Any) -> Any:
+        captured.append(kwargs)
+        return SimpleNamespace(**kwargs)
+
+    monkeypatch.setattr(workflow_runs, "_save_artifact", fake_save_artifact)
+
+    _stable_copy_cached_outputs(
+        cast(Any, object()),
+        run=cast(Any, SimpleNamespace(id="new-run")),
+        node_id="detect",
+        cached=[cast(Any, cached)],
+    )
+
+    assert captured[0]["payload"] == original_payload
+    assert "_reused_from_artifact_id" not in captured[0]["payload"]
