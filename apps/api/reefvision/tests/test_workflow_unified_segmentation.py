@@ -7,6 +7,7 @@ import pytest
 
 from reefvision.jobs import workflow_runs
 from reefvision.jobs.workflow_cache_runtime import (
+    _artifact_cache_eligible,
     _node_cache_eligible,
     _select_cached_source_artifacts,
     _stable_copy_cached_outputs,
@@ -111,6 +112,28 @@ def test_failed_run_cache_reuses_only_nodes_recorded_as_succeeded() -> None:
     assert _node_cache_eligible(cast(Any, succeeded_run), "segment") is True
 
 
+def test_review_dependent_measurements_are_recomputed_not_cached() -> None:
+    reviewed_measurement = SimpleNamespace(
+        artifact_type="measurements",
+        payload_json={
+            "segmentation_review": {"review_resolved": True},
+            "_cache_key": "measurement-key",
+        },
+    )
+    ordinary_measurement = SimpleNamespace(
+        artifact_type="measurements",
+        payload_json={"_cache_key": "measurement-key"},
+    )
+    segmentation = SimpleNamespace(
+        artifact_type="masks",
+        payload_json={"_cache_key": "segment-key"},
+    )
+
+    assert _artifact_cache_eligible(cast(Any, reviewed_measurement)) is False
+    assert _artifact_cache_eligible(cast(Any, ordinary_measurement)) is True
+    assert _artifact_cache_eligible(cast(Any, segmentation)) is True
+
+
 def test_cache_selects_complete_output_set_from_one_newest_source_run() -> None:
     newest = SimpleNamespace(
         id="run-newest",
@@ -127,6 +150,7 @@ def test_cache_selects_complete_output_set_from_one_newest_source_run() -> None:
             SimpleNamespace(
                 id="new-masks",
                 port_name="masks",
+                artifact_type="masks",
                 payload_json={"_cache_key": "same-key"},
             ),
             newest,
@@ -135,6 +159,7 @@ def test_cache_selects_complete_output_set_from_one_newest_source_run() -> None:
             SimpleNamespace(
                 id="new-qc",
                 port_name="qc",
+                artifact_type="artifact",
                 payload_json={"_cache_key": "same-key"},
             ),
             newest,
@@ -143,6 +168,7 @@ def test_cache_selects_complete_output_set_from_one_newest_source_run() -> None:
             SimpleNamespace(
                 id="old-masks",
                 port_name="masks",
+                artifact_type="masks",
                 payload_json={"_cache_key": "same-key"},
             ),
             older,
