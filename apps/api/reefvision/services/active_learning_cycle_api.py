@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from math import isfinite
+from typing import Any
 
 from reefvision.db.models import (
     ActiveLearningCycle,
     ClassificationDatasetSnapshot,
+    Job,
     ModelRegistration,
     TrainingRun,
 )
 from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.schemas.active_learning_cycles import (
+    ActiveLearningClassificationEvaluationJobsRequest,
     ActiveLearningCycleResponse,
     ActiveLearningDatasetRecordRequest,
     ActiveLearningEvaluationRequest,
@@ -21,6 +25,7 @@ from reefvision.schemas.active_learning_cycles import (
     PromotionGateResult,
 )
 from reefvision.services.active_learning_cycles import ActiveLearningCycleService
+from reefvision.storage.datasets import canonical_json_sha256
 
 
 def _event(event_type: str, **details: object) -> dict[str, object]:
@@ -34,6 +39,54 @@ def _event(event_type: str, **details: object) -> dict[str, object]:
 def _classification_snapshot_id(cycle: ActiveLearningCycle) -> str | None:
     raw = dict(cycle.selection_result_json or {}).get("classification_dataset_snapshot_id")
     return str(raw) if raw else None
+
+
+def _scalar_metrics(raw: object) -> dict[str, float]:
+    if not isinstance(raw, dict):
+        raise ValidationError("Classification evaluation job is missing its metrics payload")
+    output: dict[str, float] = {}
+    for key, value in raw.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        normalized = float(value)
+        if isfinite(normalized):
+            output[str(key)] = normalized
+    if not output:
+        raise ValidationError("Classification evaluation job contains no scalar promotion metrics")
+    return output
+
+
+def _sample_universe(manifest: dict[str, Any]) -> dict[str, list[list[str]]]:
+    raw_evaluated = manifest.get("evaluated_samples")
+    raw_excluded = manifest.get("excluded_samples")
+    if not isinstance(raw_evaluated, list) or not isinstance(raw_excluded, list):
+        raise ValidationError("Classification evaluation manifest is missing its sample universe")
+    evaluated = sorted(
+        [
+            [str(item.get("sample_id") or ""), str(item.get("sample_sha256") or "")]
+            for item in raw_evaluated
+            if isinstance(item, dict)
+        ]
+    )
+    excluded = sorted(
+        [
+            [
+                str(item.get("sample_id") or ""),
+                str(item.get("sample_sha256") or ""),
+                str(item.get("reason") or ""),
+            ]
+            for item in raw_excluded
+            if isinstance(item, dict)
+        ]
+    )
+    if any(not sample_id or not sample_sha for sample_id, sample_sha in evaluated):
+        raise ValidationError("Classification evaluation manifest has incomplete evaluated samples")
+    if any(
+        not sample_id or not sample_sha or not reason
+        for sample_id, sample_sha, reason in excluded
+    ):
+        raise ValidationError("Classification evaluation manifest has incomplete excluded samples")
+    return {"evaluated": evaluated, "excluded": excluded}
 
 
 class PublicActiveLearningCycleService(ActiveLearningCycleService):
@@ -262,6 +315,151 @@ class PublicActiveLearningCycleService(ActiveLearningCycleService):
                 "compatibility_warnings": [
                     *response.compatibility_warnings,
                     compatibility_message,
+                ],
+            }
+        )
+
+    def evaluate_and_promote_from_classification_jobs(
+        self,
+        cycle_id: str,
+        request: ActiveLearningClassificationEvaluationJobsRequest,
+    ) -> ActiveLearningPromotionResponse:
+        """Promote only from two completed, sample-identical held-out evaluation jobs."""
+
+        cycle = self._cycle(cycle_id)
+        if _classification_snapshot_id(cycle) is None:
+            raise ValidationError(
+                "Evaluation-job promotion is only available for classification active-learning cycles"
+            )
+        if not cycle.source_model_id:
+            raise ValidationError(
+                "Classification promotion from evaluation jobs requires a baseline source model"
+            )
+        if not cycle.candidate_model_id:
+            raise ValidationError(
+                "Classification promotion from evaluation jobs requires a registered candidate model"
+            )
+
+        def evaluation_job(job_id: str, role: str) -> tuple[Job, dict[str, Any], dict[str, Any]]:
+            job = self.session.get(Job, job_id)
+            if job is None or job.project_id != cycle.project_id:
+                raise ValidationError(f"{role} evaluation job must belong to the cycle project")
+            if job.job_type != "classification_snapshot_evaluation" or job.status != "succeeded":
+                raise ValidationError(
+                    f"{role} evaluation job must be a succeeded classification snapshot evaluation"
+                )
+            result = dict(job.result_json or {})
+            if result.get("stage") != "completed" or result.get("split") != "test":
+                raise ValidationError(
+                    f"{role} classifier promotion evaluation must be a completed held-out test split"
+                )
+            manifest = result.get("evaluation_manifest")
+            if not isinstance(manifest, dict):
+                raise ValidationError(f"{role} evaluation job is missing its immutable manifest")
+            expected_manifest_sha = str(result.get("evaluation_manifest_sha256") or "")
+            if not expected_manifest_sha or canonical_json_sha256(manifest) != expected_manifest_sha:
+                raise ValidationError(f"{role} evaluation manifest integrity check failed")
+            for key in (
+                "classification_dataset_snapshot_id",
+                "snapshot_manifest_sha256",
+                "model_id",
+                "model_checksum",
+                "split",
+            ):
+                if str(manifest.get(key) or "") != str(result.get(key) or ""):
+                    raise ValidationError(
+                        f"{role} evaluation manifest does not match its persisted job result"
+                    )
+            return job, result, manifest
+
+        baseline_job, baseline_result, baseline_manifest = evaluation_job(
+            request.baseline_evaluation_job_id,
+            "Baseline",
+        )
+        candidate_job, candidate_result, candidate_manifest = evaluation_job(
+            request.candidate_evaluation_job_id,
+            "Candidate",
+        )
+        if str(baseline_result.get("model_id") or "") != cycle.source_model_id:
+            raise ValidationError(
+                "Baseline evaluation job must evaluate the cycle's source classifier"
+            )
+        if str(candidate_result.get("model_id") or "") != cycle.candidate_model_id:
+            raise ValidationError(
+                "Candidate evaluation job must evaluate the cycle's candidate classifier"
+            )
+        baseline_snapshot_id = str(
+            baseline_result.get("classification_dataset_snapshot_id") or ""
+        )
+        candidate_snapshot_id = str(
+            candidate_result.get("classification_dataset_snapshot_id") or ""
+        )
+        if not baseline_snapshot_id or baseline_snapshot_id != candidate_snapshot_id:
+            raise ValidationError(
+                "Baseline and candidate evaluation jobs must use the same classification snapshot"
+            )
+        if str(baseline_result.get("snapshot_manifest_sha256") or "") != str(
+            candidate_result.get("snapshot_manifest_sha256") or ""
+        ):
+            raise ValidationError(
+                "Baseline and candidate evaluation jobs must use the same snapshot revision"
+            )
+        baseline_universe = _sample_universe(baseline_manifest)
+        candidate_universe = _sample_universe(candidate_manifest)
+        if baseline_universe != candidate_universe:
+            raise ValidationError(
+                "Baseline and candidate evaluation jobs must score the exact same evaluated and "
+                "excluded frozen samples"
+            )
+        sample_universe_sha256 = canonical_json_sha256(baseline_universe)
+        promotion_request = ActiveLearningEvaluationRequest(
+            baseline_metrics=_scalar_metrics(baseline_result.get("metrics")),
+            candidate_metrics=_scalar_metrics(candidate_result.get("metrics")),
+            candidate_model_id=cycle.candidate_model_id,
+            baseline_classification_snapshot_id=baseline_snapshot_id,
+            candidate_classification_snapshot_id=candidate_snapshot_id,
+            baseline_metric_schema_id="reefvision-classification-snapshot-evaluation-v1",
+            candidate_metric_schema_id="reefvision-classification-snapshot-evaluation-v1",
+        )
+        response = self.evaluate_and_promote(cycle_id, promotion_request)
+        cycle = self._cycle(cycle_id)
+        cycle.promotion_result_json = {
+            **dict(cycle.promotion_result_json or {}),
+            "baseline_classification_evaluation_job_id": baseline_job.id,
+            "candidate_classification_evaluation_job_id": candidate_job.id,
+            "baseline_evaluation_manifest_sha256": baseline_result.get(
+                "evaluation_manifest_sha256"
+            ),
+            "candidate_evaluation_manifest_sha256": candidate_result.get(
+                "evaluation_manifest_sha256"
+            ),
+            "classification_evaluation_sample_universe_sha256": sample_universe_sha256,
+        }
+        verification_message = (
+            "Classifier promotion metrics were derived directly from completed held-out jobs "
+            "with the same immutable snapshot and exact sample universe."
+        )
+        cycle.warnings_json = list(
+            dict.fromkeys([*list(cycle.warnings_json or []), verification_message])
+        )
+        cycle.history_json = [
+            *list(cycle.history_json or []),
+            _event(
+                "classification_promotion_evaluations_verified",
+                baseline_evaluation_job_id=baseline_job.id,
+                candidate_evaluation_job_id=candidate_job.id,
+                classification_dataset_snapshot_id=baseline_snapshot_id,
+                sample_universe_sha256=sample_universe_sha256,
+            ),
+        ]
+        self.session.commit()
+        self.session.refresh(cycle)
+        return response.model_copy(
+            update={
+                "cycle": self._response(cycle),
+                "compatibility_warnings": [
+                    *response.compatibility_warnings,
+                    verification_message,
                 ],
             }
         )
