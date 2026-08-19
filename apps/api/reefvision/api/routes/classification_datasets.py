@@ -12,8 +12,13 @@ from reefvision.schemas.classification_datasets import (
     ClassificationDatasetCreateRequest,
     ClassificationDatasetDetailResponse,
     ClassificationDatasetSnapshotResponse,
+    ClassificationSnapshotTrainingRequest,
+    ClassificationSnapshotTrainingResponse,
 )
 from reefvision.services.classification_datasets import ClassificationDatasetService
+from reefvision.services.classification_snapshot_training import (
+    ClassificationSnapshotTrainingService,
+)
 
 router = APIRouter(tags=["classification-datasets"])
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -52,3 +57,21 @@ def get_classification_dataset_snapshot(
     session: DbSession,
 ) -> ClassificationDatasetDetailResponse:
     return ClassificationDatasetService(session).get(snapshot_id)
+
+
+@router.post(
+    "/projects/{project_id}/classification-dataset-snapshots/{snapshot_id}/training-runs",
+    response_model=ClassificationSnapshotTrainingResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def train_classification_dataset_snapshot(
+    project_id: str,
+    snapshot_id: str,
+    payload: ClassificationSnapshotTrainingRequest,
+    session: DbSession,
+) -> ClassificationSnapshotTrainingResponse:
+    return ClassificationSnapshotTrainingService(session).queue(
+        project_id,
+        snapshot_id,
+        payload,
+    )
