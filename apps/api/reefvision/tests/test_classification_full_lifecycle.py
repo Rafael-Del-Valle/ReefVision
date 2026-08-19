@@ -7,19 +7,32 @@ import pytest
 from pydantic import ValidationError as PydanticValidationError
 
 from reefvision.domain.errors import ValidationError
+from reefvision.jobs.classification_snapshot_evaluation import (
+    _verified_probability_mapping,
+)
 from reefvision.jobs.classification_snapshot_integrity_runtime import (
     _current_verified_source_path,
 )
 from reefvision.jobs.classification_snapshot_training import _sample_payload
-from reefvision.schemas.active_learning_cycles import ActiveLearningDatasetRecordRequest
-from reefvision.schemas.classification import ClassificationInferenceRequest
-from reefvision.schemas.classification_datasets import ClassificationSnapshotTrainingRequest
+from reefvision.schemas.active_learning_cycles import (
+    ActiveLearningClassificationEvaluationJobsRequest,
+    ActiveLearningDatasetRecordRequest,
+)
+from reefvision.schemas.classification import (
+    ClassificationInferenceRequest,
+    ClassificationTrainingRequest,
+)
+from reefvision.schemas.classification_datasets import (
+    ClassificationSnapshotEvaluationRequest,
+    ClassificationSnapshotTrainingRequest,
+)
 from reefvision.schemas.classification_evaluation import (
     ClassificationCalibrationBin,
     ClassificationClassEvaluation,
     ClassificationConfusionCell,
     ClassificationEvaluationResponse,
 )
+from reefvision.services.active_learning_cycle_api import _sample_universe
 from reefvision.services.classification_evaluation import (
     _label_set_candidates,
     _prediction_target_key,
@@ -28,6 +41,10 @@ from reefvision.services.classification_evaluation import (
 from reefvision.services.classification_evaluation_metrics_runtime import (
     _cohen_kappa,
     _matthews_correlation_coefficient,
+)
+from reefvision.services.classification_metrics import (
+    ClassificationObservation,
+    build_classification_evaluation,
 )
 from reefvision.services.generalized_classification_jobs import (
     _normalized_scope,
@@ -66,6 +83,20 @@ def test_snapshot_training_request_defaults_to_installed_ultralytics_yaml() -> N
     assert request.epochs == 100
     assert request.precision == "amp"
     assert request.mask_background == "black"
+
+
+def test_legacy_classification_training_uses_real_installed_v8_yaml() -> None:
+    request = ClassificationTrainingRequest(dataset_version_id="dataset-1")
+
+    assert request.architecture == "yolov8-cls.yaml"
+
+
+def test_snapshot_evaluation_defaults_to_held_out_test_split() -> None:
+    request = ClassificationSnapshotEvaluationRequest(model_id="model-1")
+
+    assert request.split == "test"
+    assert request.top_k_values == [1, 3, 5]
+    assert request.include_curves is True
 
 
 def test_snapshot_source_path_can_relocate_when_identity_is_unchanged() -> None:
@@ -156,6 +187,22 @@ def test_snapshot_mask_classifier_requires_training_preprocessing_at_inference()
         _require_snapshot_preprocessing_match(metadata, changed)
 
 
+def test_probability_mapping_normalizes_every_registered_output_class() -> None:
+    mapped = _verified_probability_mapping(
+        {"open": "class-open", "closed": "class-closed"},
+        {"open": 2.0, "closed": 1.0},
+    )
+
+    assert mapped == pytest.approx(
+        {"class-open": 2.0 / 3.0, "class-closed": 1.0 / 3.0}
+    )
+    with pytest.raises(RuntimeError, match="not mapped"):
+        _verified_probability_mapping(
+            {"open": "class-open"},
+            {"open": 0.5, "unknown": 0.5},
+        )
+
+
 def test_active_learning_dataset_record_requires_exactly_one_immutable_dataset() -> None:
     detection = ActiveLearningDatasetRecordRequest(dataset_version_id="dataset-1")
     classification = ActiveLearningDatasetRecordRequest(
@@ -171,6 +218,37 @@ def test_active_learning_dataset_record_requires_exactly_one_immutable_dataset()
             dataset_version_id="dataset-1",
             classification_dataset_snapshot_id="snapshot-1",
         )
+
+
+def test_active_learning_classifier_promotion_requires_distinct_evaluation_jobs() -> None:
+    request = ActiveLearningClassificationEvaluationJobsRequest(
+        baseline_evaluation_job_id="baseline-job",
+        candidate_evaluation_job_id="candidate-job",
+    )
+
+    assert request.baseline_evaluation_job_id == "baseline-job"
+    with pytest.raises(PydanticValidationError):
+        ActiveLearningClassificationEvaluationJobsRequest(
+            baseline_evaluation_job_id="same-job",
+            candidate_evaluation_job_id="same-job",
+        )
+
+
+def test_active_learning_sample_universe_is_sorted_and_complete() -> None:
+    manifest = {
+        "evaluated_samples": [
+            {"sample_id": "b", "sample_sha256": "2" * 64},
+            {"sample_id": "a", "sample_sha256": "1" * 64},
+        ],
+        "excluded_samples": [
+            {"sample_id": "c", "sample_sha256": "3" * 64, "reason": "minimum"}
+        ],
+    }
+
+    universe = _sample_universe(manifest)
+
+    assert universe["evaluated"][0][0] == "a"
+    assert universe["excluded"] == [["c", "3" * 64, "minimum"]]
 
 
 def _evaluation_response() -> ClassificationEvaluationResponse:
@@ -262,3 +340,52 @@ def test_multiclass_agreement_metrics_match_symmetric_binary_confusion() -> None
 
     assert _matthews_correlation_coefficient(response) == pytest.approx(0.6)
     assert _cohen_kappa(response) == pytest.approx(0.6)
+
+
+def test_held_out_metric_engine_reports_top_k_curves_and_calibration() -> None:
+    observations = [
+        ClassificationObservation(
+            actual_label_class_id="a",
+            predicted_label_class_id="a",
+            confidence=0.9,
+            probabilities_by_class_id={"a": 0.9, "b": 0.1},
+        ),
+        ClassificationObservation(
+            actual_label_class_id="a",
+            predicted_label_class_id="b",
+            confidence=0.6,
+            probabilities_by_class_id={"a": 0.4, "b": 0.6},
+        ),
+        ClassificationObservation(
+            actual_label_class_id="b",
+            predicted_label_class_id="b",
+            confidence=0.8,
+            probabilities_by_class_id={"a": 0.2, "b": 0.8},
+        ),
+        ClassificationObservation(
+            actual_label_class_id="b",
+            predicted_label_class_id="b",
+            confidence=0.7,
+            probabilities_by_class_id={"a": 0.3, "b": 0.7},
+        ),
+    ]
+
+    result = build_classification_evaluation(
+        project_id="project-1",
+        model_id="model-1",
+        observations=observations,
+        calibration_bin_count=5,
+        top_k_values=[1, 2],
+        include_curves=True,
+    )
+
+    assert result.accuracy == pytest.approx(0.75)
+    assert result.top_k_accuracy[0].accuracy == pytest.approx(0.75)
+    assert result.top_k_accuracy[1].accuracy == pytest.approx(1.0)
+    assert result.expected_calibration_error is not None
+    assert result.temperature_scale is not None
+    assert result.temperature_scaled_negative_log_likelihood is not None
+    assert result.isotonic_calibration
+    assert all(item.curve for item in result.per_class)
+    assert all(item.roc_auc is not None for item in result.per_class)
+    assert all(item.precision_recall_auc is not None for item in result.per_class)
