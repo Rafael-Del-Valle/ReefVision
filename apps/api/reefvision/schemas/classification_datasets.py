@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ClassificationDatasetRatios(BaseModel):
@@ -59,6 +59,34 @@ class ClassificationSnapshotTrainingResponse(BaseModel):
     target_kind: str
     label_set_id: str
     cardinality: str
+    status: str
+
+
+class ClassificationSnapshotEvaluationRequest(BaseModel):
+    model_id: str = Field(min_length=1, max_length=36)
+    split: Literal["train", "validation", "test"] = "test"
+    device: str = Field(default="auto", min_length=1, max_length=60)
+    calibration_bin_count: int = Field(default=10, ge=2, le=100)
+    top_k_values: list[int] = Field(default_factory=lambda: [1, 3, 5], max_length=20)
+    include_curves: bool = True
+
+    @field_validator("top_k_values")
+    @classmethod
+    def valid_top_k(cls, values: list[int]) -> list[int]:
+        if any(value < 1 or value > 1000 for value in values):
+            raise ValueError("Top-k values must be between one and one thousand")
+        return sorted(set(values))
+
+
+class ClassificationSnapshotEvaluationQueueResponse(BaseModel):
+    job_id: str
+    project_id: str
+    snapshot_id: str
+    snapshot_manifest_sha256: str
+    model_id: str
+    model_checksum: str
+    split: str
+    sample_count: int = Field(ge=1)
     status: str
 
 
