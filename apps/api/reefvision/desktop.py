@@ -38,6 +38,7 @@ class DesktopLaunchOptions:
     context_file: Path | None
     run_migrations: bool
     safe_mode: bool = False
+    self_test: bool = False
 
 
 def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
@@ -53,6 +54,14 @@ def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
         action="store_true",
         help="Start without background job processing",
     )
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help=(
+            "Validate packaged migrations, ML provider imports, and FastAPI/OpenAPI "
+            "construction, then exit without starting the API server"
+        ),
+    )
     namespace = parser.parse_args(argv)
     return DesktopLaunchOptions(
         host=namespace.host,
@@ -62,6 +71,7 @@ def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
         context_file=namespace.context_file,
         run_migrations=namespace.run_migrations,
         safe_mode=namespace.safe_mode,
+        self_test=namespace.self_test,
     )
 
 
@@ -122,7 +132,9 @@ def apply_desktop_environment(options: DesktopLaunchOptions) -> None:
     os.environ["REEFVISION_API_PORT"] = str(options.port)
     os.environ["REEFVISION_DATA_DIR"] = str(options.data_dir)
     os.environ["REEFVISION_SAFE_MODE"] = "true" if options.safe_mode else "false"
-    os.environ["REEFVISION_BACKGROUND_WORKER_ENABLED"] = "false" if options.safe_mode else "true"
+    os.environ["REEFVISION_BACKGROUND_WORKER_ENABLED"] = (
+        "false" if options.safe_mode else "true"
+    )
     clear_settings_cache()
 
 
@@ -187,6 +199,35 @@ def run_pending_migrations(settings: Settings) -> None:
     config.set_main_option("script_location", str(migrations_dir))
     config.set_main_option("sqlalchemy.url", settings.resolved_database_url)
     command.upgrade(config, "head")
+
+
+def run_self_test(settings: Settings) -> int:
+    """Exercise packaged resources and providers without opening a server socket."""
+
+    alembic_ini, migrations_dir = resolve_alembic_paths()
+    if not alembic_ini.is_file():
+        raise RuntimeError(f"Packaged Alembic configuration is missing: {alembic_ini}")
+    if not migrations_dir.is_dir():
+        raise RuntimeError(f"Packaged Alembic migrations are missing: {migrations_dir}")
+
+    from reefvision.ml.dependencies import (
+        configure_provider_runtime,
+        require_all_implemented_providers_ready,
+    )
+
+    provider_runtime = settings.resolved_data_dir / "provider-runtime-self-test"
+    configure_provider_runtime(data_dir=provider_runtime)
+    require_all_implemented_providers_ready()
+
+    from reefvision.main import create_app
+
+    app = create_app(settings)
+    schema = app.openapi()
+    paths = schema.get("paths")
+    if not isinstance(paths, dict) or not paths:
+        raise RuntimeError("Packaged FastAPI application produced no OpenAPI paths")
+    LOGGER.info("Desktop self-test validated %s OpenAPI paths", len(paths))
+    return 0
 
 
 def resolve_server_port(server: object, requested_port: int) -> int:
@@ -260,6 +301,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if options.run_migrations:
             LOGGER.info("Applying pending Alembic migrations")
             run_pending_migrations(settings)
+        if options.self_test:
+            LOGGER.info("Running packaged ReefVision desktop self-test")
+            return run_self_test(settings)
         configure_windows_event_loop_policy()
         LOGGER.info("Loading FastAPI application factory")
         return asyncio.run(run_api_server(settings, options))
