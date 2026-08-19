@@ -70,6 +70,41 @@ jobs:
           }
           Get-Content -LiteralPath $LogPath -Tail 60
 
+      - name: Create installer bundle manifest
+        shell: pwsh
+        run: |
+          $Bundle = Join-Path $PWD "apps\web\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\msi"
+          $Files = @(
+            Get-ChildItem -LiteralPath $Bundle -File |
+              Where-Object { $_.Extension -in @('.msi', '.cab') } |
+              Sort-Object Name
+          )
+          if (@($Files | Where-Object Extension -eq '.msi').Count -lt 1) {
+            throw "Installer bundle manifest cannot be created without an MSI."
+          }
+          if (@($Files | Where-Object Extension -eq '.cab').Count -lt 1) {
+            throw "The split installer is missing its external CAB payload."
+          }
+          $Manifest = [pscustomobject]@{
+            schema = "reefvision-windows-installer-bundle-v1"
+            commit_sha = "${{ github.sha }}"
+            generated_at = (Get-Date).ToUniversalTime().ToString("o")
+            file_count = $Files.Count
+            total_size_bytes = ($Files | Measure-Object Length -Sum).Sum
+            files = @(
+              $Files | ForEach-Object {
+                [pscustomobject]@{
+                  name = $_.Name
+                  size_bytes = $_.Length
+                  sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+                }
+              }
+            )
+          }
+          $Manifest |
+            ConvertTo-Json -Depth 6 |
+            Set-Content -LiteralPath (Join-Path $Bundle "installer-bundle-manifest.json") -Encoding utf8
+
       # Retain the complete packaging log for installer-size and resource audits.
       - name: Upload Windows build diagnostics
         if: always()
@@ -90,5 +125,6 @@ jobs:
           path: |
             apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
             apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.cab
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/installer-bundle-manifest.json
           if-no-files-found: error
           retention-days: 14
