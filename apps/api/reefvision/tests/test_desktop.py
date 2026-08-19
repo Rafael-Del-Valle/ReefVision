@@ -7,6 +7,7 @@ from reefvision.config import clear_settings_cache
 from reefvision.desktop import (
     DesktopLaunchOptions,
     build_settings,
+    parse_args,
     project_root,
     resolve_alembic_paths,
     resolve_server_port,
@@ -56,6 +57,25 @@ def test_build_settings_applies_desktop_launch_options(tmp_path: Path) -> None:
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
+
+
+def test_parse_args_enables_packaged_self_test_without_starting_server() -> None:
+    options = parse_args(
+        [
+            "--self-test",
+            "--safe-mode",
+            "--data-dir",
+            "C:/reefvision-self-test",
+            "--log-file",
+            "C:/reefvision-self-test.log",
+        ]
+    )
+
+    assert options.self_test is True
+    assert options.safe_mode is True
+    assert options.run_migrations is True
+    assert options.data_dir == Path("C:/reefvision-self-test")
+    assert options.log_file == Path("C:/reefvision-self-test.log")
 
 
 def test_resolve_server_port_reads_ephemeral_listener() -> None:
