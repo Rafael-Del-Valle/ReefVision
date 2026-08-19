@@ -127,6 +127,8 @@ class DepthMapImportRequest(BaseModel):
         if width > 16_384:
             raise ValueError("Depth map width exceeds 16384 pixels")
         if self.depth_kind == "metric":
+            if any(float(value) <= 0 for row in self.values for value in row):
+                raise ValueError("Metric depth values must be greater than zero")
             if not self.unit:
                 self.unit = "m"
             if self.source_kind is None:
