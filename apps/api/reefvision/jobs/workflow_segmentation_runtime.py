@@ -1,13 +1,14 @@
 """Unified instance, semantic, and prompt-assisted segmentation for Fusion workflows.
 
 Trained instance/semantic segmenters continue through the production inference worker. SAM,
-SAM 2, MobileSAM, FastSAM, and compatible sidecar registrations use detector proposals as
-box prompts and create the same pending raster-mask proposal contract. No generated mask is
-promoted to an annotation here; explicit review remains mandatory.
+SAM 2, MobileSAM, FastSAM, EfficientViT-SAM, and compatible sidecar registrations use
+detector proposals as box prompts and create the same pending raster-mask proposal contract.
+No generated mask is promoted to an annotation here; explicit review remains mandatory.
 """
 
 from __future__ import annotations
 
+from contextlib import suppress
 from datetime import UTC, datetime
 from io import BytesIO
 from typing import Any
@@ -29,7 +30,6 @@ from reefvision.db.models import (
     WorkflowRun,
 )
 from reefvision.jobs import workflow_runs
-from reefvision.ml.provider_hub import assist_provider_for_name
 from reefvision.ml.providers import PixelBox
 from reefvision.ml.sam2_sidecar import SAM2SidecarAssistProvider
 from reefvision.storage.masks import remove_prediction_mask_png, write_prediction_mask_png
@@ -41,10 +41,22 @@ _ASSIST_TASK = "assist_segmentation"
 
 
 def _assist_provider(provider_name: str) -> Any:
-    normalized = provider_name.strip().casefold()
+    normalized = provider_name.strip().casefold().replace("-", "_")
     if normalized == "sam2_sidecar":
         return SAM2SidecarAssistProvider()
-    return assist_provider_for_name(provider_name)
+    if normalized in {"segment_anything", "sam", "original_sam"}:
+        # This checkpoint-aware adapter covers original SAM, Ultralytics SAM/SAM2,
+        # MobileSAM.pt, and FastSAM. The FastSAM runtime patch modifies this class before
+        # any workflow job executes.
+        from reefvision.ml.catalog_expansion import UnifiedSegmentAnythingAssistProvider
+
+        return UnifiedSegmentAnythingAssistProvider()
+    # MobileSAM, SAM2, EfficientViT-SAM, and other optional-pack provider names are added
+    # by apply_sam_runtime_patch(). Resolve the module function at execution time so Fusion
+    # sees the final patched factory instead of an import-time copy.
+    from reefvision.ml import provider_hub
+
+    return provider_hub.assist_provider_for_name(provider_name)
 
 
 def _mask_png_bytes(mask: Any, *, width: int, height: int) -> bytes:
@@ -60,7 +72,7 @@ def _mask_png_bytes(mask: Any, *, width: int, height: int) -> bytes:
     if not bool(binary.any()):
         raise RuntimeError("Assist segmentation returned an empty mask")
     stream = BytesIO()
-    Image.fromarray(binary.astype(np.uint8) * 255, mode="L").save(
+    Image.fromarray(binary.astype(np.uint8) * 255).save(
         stream,
         format="PNG",
         optimize=True,
@@ -117,6 +129,7 @@ def _enrich_segmentation_output(
             "proposal_review_state": (
                 "accepted_masks_available" if accepted_mask_ids else "pending_review"
             ),
+            "review_before_accept": True,
         }
     )
     if len(mask_output) == 4:
@@ -142,6 +155,7 @@ def _prompt_assisted_segmentation(
 ) -> workflow_runs.ArtifactOutputs:
     payloads = [workflow_runs._artifact_payload(item) for item in inputs]
     image_ids = workflow_runs._list_values(payloads, "image_ids")
+    image_id_set = set(image_ids)
     configured_prompts = configuration.get("prompt_prediction_ids")
     prompt_ids = (
         [str(value) for value in configured_prompts]
@@ -155,10 +169,13 @@ def _prompt_assisted_segmentation(
             "to the Segmenter prompts input"
         )
 
+    # This session is read-only. Do not commit here: a commit would expire the ORM rows that
+    # are deliberately used after the session closes during model inference.
     with factory() as session:
         project = session.get(Project, run.project_id)
         if project is None:
             raise RuntimeError("Workflow project disappeared before assist segmentation")
+        project_storage_root = project.storage_root
         prompts = list(
             session.scalars(
                 select(PredictionProposal)
@@ -171,7 +188,7 @@ def _prompt_assisted_segmentation(
         )
         if len(prompts) != len(prompt_ids):
             raise RuntimeError("One or more prompt predictions are missing from the project")
-        if image_ids and any(prompt.image_id not in set(image_ids) for prompt in prompts):
+        if image_ids and any(prompt.image_id not in image_id_set for prompt in prompts):
             raise RuntimeError("Prompt predictions must belong to the Segmenter image input")
         prompt_image_ids = list(dict.fromkeys(prompt.image_id for prompt in prompts))
         images = list(
@@ -185,6 +202,10 @@ def _prompt_assisted_segmentation(
         image_by_id = {image.id: image for image in images}
         if len(image_by_id) != len(prompt_image_ids):
             raise RuntimeError("One or more prompt source images are missing")
+
+    # Create an already-running child record so another worker slot cannot steal what is a
+    # synchronous workflow sub-operation.
+    with factory() as session:
         child = Job(
             project_id=run.project_id,
             job_type="inference",
@@ -207,18 +228,18 @@ def _prompt_assisted_segmentation(
         session.commit()
         session.refresh(child)
         child_id = child.id
-        project_storage_root = project.storage_root
 
-    model_path = resolve_verified_model_path(
-        settings,
-        model.managed_path,
-        expected_sha256=model.sha256,
-    )
-    provider = _assist_provider(model.provider_name)
-    provider.load_model(model_path, str(configuration.get("device", "auto")))
+    provider: Any | None = None
     stored_masks: list[tuple[str, str]] = []
     proposals_to_add: list[PredictionProposal] = []
     try:
+        model_path = resolve_verified_model_path(
+            settings,
+            model.managed_path,
+            expected_sha256=model.sha256,
+        )
+        provider = _assist_provider(model.provider_name)
+        provider.load_model(model_path, str(configuration.get("device", "auto")))
         prepared_by_image: dict[str, Any] = {}
         for index, prompt in enumerate(prompts, start=1):
             image = image_by_id[prompt.image_id]
@@ -283,7 +304,7 @@ def _prompt_assisted_segmentation(
                     },
                     provenance_json={
                         "provider_name": model.provider_name,
-                        "provider_version": provider.provider_version,
+                        "provider_version": str(provider.provider_version),
                         "model_task": _ASSIST_TASK,
                         "proposal_geometry": "raster_mask",
                         "source_prediction_id": prompt.id,
@@ -308,6 +329,8 @@ def _prompt_assisted_segmentation(
                 }
                 session.commit()
 
+        proposal_ids = [proposal.id for proposal in proposals_to_add]
+        provider_version = str(provider.provider_version)
         with factory() as session:
             session.add_all(proposals_to_add)
             child = session.get(Job, child_id)
@@ -328,13 +351,13 @@ def _prompt_assisted_segmentation(
                 "masks",
                 {
                     "image_ids": prompt_image_ids,
-                    "prediction_ids": [proposal.id for proposal in proposals_to_add],
+                    "prediction_ids": proposal_ids,
                     "prompt_prediction_ids": prompt_ids,
                     "mask_annotation_ids": [],
                     "model_id": model.id,
                     "model_task": _ASSIST_TASK,
                     "provider_name": model.provider_name,
-                    "provider_version": provider.provider_version,
+                    "provider_version": provider_version,
                     "segmentation_mode": "prompt_assisted",
                     "geometry_kind": "raster_mask",
                     "child_job_id": child_id,
@@ -353,15 +376,18 @@ def _prompt_assisted_segmentation(
                 child.completed_at = datetime.now(UTC)
                 session.commit()
         for proposal_id, relative_path in stored_masks:
-            remove_prediction_mask_png(
-                settings,
-                project_storage_root=project_storage_root,
-                proposal_id=proposal_id,
-                relative_path=relative_path,
-            )
+            with suppress(Exception):
+                remove_prediction_mask_png(
+                    settings,
+                    project_storage_root=project_storage_root,
+                    proposal_id=proposal_id,
+                    relative_path=relative_path,
+                )
         raise
     finally:
-        provider.unload_model()
+        if provider is not None:
+            with suppress(Exception):
+                provider.unload_model()
 
 
 def _unified_model_inference(
