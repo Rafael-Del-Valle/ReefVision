@@ -20,6 +20,7 @@ from reefvision.services.workflow_definition_extensions import (
     install_workflow_definition_extensions,
 )
 from reefvision.services.workflow_full_platform_templates import full_platform_templates
+from reefvision.services.workflow_segmentation_templates import unified_segmentation_templates
 from reefvision.services.workflows import WorkflowService
 
 install_workflow_definition_extensions()
@@ -44,6 +45,7 @@ def list_workflow_templates() -> list[WorkflowTemplate]:
     return [
         *WorkflowService.templates(),
         *full_platform_templates(),
+        *unified_segmentation_templates(),
         multi_model_auto_labeling_template(),
         independent_mask_auto_labeling_template(),
     ]
