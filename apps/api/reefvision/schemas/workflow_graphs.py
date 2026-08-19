@@ -27,6 +27,7 @@ WorkflowDataType = Literal[
     "relative_depth_maps",
     "training_result",
     "video_tracks",
+    "video_3d_trajectories",
     "project_exchange_package",
 ]
 
