@@ -9,13 +9,14 @@ detection dataset layout used by ``acceptance_coral_detection.py``:
 
 It deterministically partitions the original training split into a labeled seed and a
 hidden-label acquisition pool. A baseline detector is trained through the existing real
-coral detection acceptance runner. The baseline then generates production ReefVision
-prediction proposals on the unlabeled pool, and the production ``uncertainty`` Active
-Learning round selects an annotation budget from those candidates. A deterministic
-random arm receives the exact same budget from the exact same pool. Two fresh ReefVision
-projects are then trained from scratch on seed + selected samples while sharing the same
-validation and test splits. The report compares downstream validation metrics and keeps
-all source hashes and selected-image identities.
+coral detection acceptance runner. The hidden pool is then imported without labels and
+frozen into an immutable pool-only ReefVision dataset version. The baseline generates
+production prediction proposals on that pool, and the production ``uncertainty`` Active
+Learning round selects an annotation budget strictly from that dataset scope. A
+deterministic random arm receives the exact same budget from the exact same pool. Two
+fresh ReefVision projects are then trained from scratch on seed + selected samples while
+sharing the same validation and test splits. The report compares downstream validation
+metrics and keeps all source hashes and selected-image identities.
 
 The experiment passes when both equal-budget arms execute reproducibly. Active Learning
 is not required to beat random; the observed delta is scientific evidence, not a software
@@ -109,9 +110,21 @@ def build_detection_dataset(
 ) -> None:
     if destination.exists():
         raise RuntimeError(f"Dataset destination already exists: {destination}")
-    _copy_pairs(train_pairs, destination / "train" / "images", destination / "train" / "labels")
-    _copy_pairs(valid_pairs, destination / "valid" / "images", destination / "valid" / "labels")
-    _copy_pairs(test_pairs, destination / "test" / "images", destination / "test" / "labels")
+    _copy_pairs(
+        train_pairs,
+        destination / "train" / "images",
+        destination / "train" / "labels",
+    )
+    _copy_pairs(
+        valid_pairs,
+        destination / "valid" / "images",
+        destination / "valid" / "labels",
+    )
+    _copy_pairs(
+        test_pairs,
+        destination / "test" / "images",
+        destination / "test" / "labels",
+    )
 
 
 def run_detection_acceptance(
@@ -140,7 +153,8 @@ def run_detection_acceptance(
     report_path = output / "report.json"
     if completed.returncode != 0 or not report_path.is_file():
         raise RuntimeError(
-            f"Detection acceptance child run failed for {dataset} with code {completed.returncode}"
+            f"Detection acceptance child run failed for {dataset} with code "
+            f"{completed.returncode}"
         )
     report = json.loads(report_path.read_text(encoding="utf-8"))
     if report.get("acceptance") != "PASS":
@@ -226,10 +240,11 @@ def main() -> int:
     project_id = str(baseline_report["dataset"]["reefvision_project_id"])
     model_id = str(baseline_report["model"]["id"])
     pool_image_to_source: dict[str, tuple[Path, Path]] = {}
-    pool_source_to_image: dict[str, str] = {}
     pool_prediction_summary: dict[str, dict[str, float | int]] = {}
+    pool_version: dict[str, Any]
 
     with TestClient(app) as client:
+        pool_assignments: list[dict[str, str]] = []
         for image_path, label_path in pool_pairs:
             imported = require(
                 client.post(
@@ -237,7 +252,11 @@ def main() -> int:
                     files=[
                         (
                             "files",
-                            (image_path.name, image_path.read_bytes(), "application/octet-stream"),
+                            (
+                                image_path.name,
+                                image_path.read_bytes(),
+                                "application/octet-stream",
+                            ),
                         )
                     ],
                     data={"relative_paths": f"active-learning-pool/{image_path.name}"},
@@ -246,7 +265,29 @@ def main() -> int:
             )
             image_id = str(imported["successful"][0]["image_id"])
             pool_image_to_source[image_id] = (image_path, label_path)
-            pool_source_to_image[str(image_path)] = image_id
+            pool_assignments.append({"image_id": image_id, "split": "unassigned"})
+
+        pool_version = require(
+            client.post(
+                f"/api/v1/projects/{project_id}/dataset-versions",
+                json={
+                    "name": "Equal-budget Active Learning hidden acquisition pool",
+                    "notes": (
+                        "Immutable pool-only scope. Source labels remain hidden from "
+                        "ReefVision acquisition and are used only after selection."
+                    ),
+                    "creator": "ReefVision release acceptance",
+                    "eligible_annotation_statuses": ["unannotated"],
+                    "split_method": "manual",
+                    "manual_assignments": pool_assignments,
+                },
+            ),
+            201,
+        )
+        if int(pool_version["image_count"]) != len(pool_pairs):
+            raise RuntimeError(
+                "Pool dataset version does not contain exactly the hidden acquisition pool"
+            )
 
         inference_job = require(
             client.post(
@@ -260,7 +301,11 @@ def main() -> int:
             ),
             200,
         )
-        if not process_inference_job(settings, app.state.session_factory, inference_job["id"]):
+        if not process_inference_job(
+            settings,
+            app.state.session_factory,
+            inference_job["id"],
+        ):
             raise RuntimeError("Baseline inference over the Active Learning pool failed")
         with app.state.session_factory() as session:
             proposals = list(
@@ -272,7 +317,9 @@ def main() -> int:
                     )
                 )
             )
-        by_image: dict[str, list[float]] = {image_id: [] for image_id in pool_image_to_source}
+        by_image: dict[str, list[float]] = {
+            image_id: [] for image_id in pool_image_to_source
+        }
         for proposal in proposals:
             by_image[proposal.image_id].append(float(proposal.confidence))
         for image_id, confidences in by_image.items():
@@ -291,6 +338,7 @@ def main() -> int:
                     "name": "Equal-budget uncertainty acquisition",
                     "strategy": "uncertainty",
                     "requested_size": args.budget,
+                    "dataset_version_id": pool_version["id"],
                     "model_ids": [model_id],
                     "created_by": "ReefVision release acceptance",
                 },
@@ -299,7 +347,10 @@ def main() -> int:
         )
     app.state.engine.dispose()
 
-    selection_items = list(active_round["selection_manifest_json"].get("items", []))
+    selection_manifest = dict(active_round["selection_manifest_json"])
+    if selection_manifest.get("dataset_version_id") != pool_version["id"]:
+        raise RuntimeError("Active Learning round did not preserve the pool-only dataset scope")
+    selection_items = list(selection_manifest.get("items", []))
     active_ids = [str(item["image_id"]) for item in selection_items]
     if len(active_ids) != args.budget or any(
         image_id not in pool_image_to_source for image_id in active_ids
@@ -315,13 +366,19 @@ def main() -> int:
     random_dataset = output / "random-dataset"
     build_detection_dataset(
         active_dataset,
-        train_pairs=sorted(seed_pairs + active_pairs, key=lambda item: item[0].name.casefold()),
+        train_pairs=sorted(
+            seed_pairs + active_pairs,
+            key=lambda item: item[0].name.casefold(),
+        ),
         valid_pairs=source_splits["valid"],
         test_pairs=source_splits["test"],
     )
     build_detection_dataset(
         random_dataset,
-        train_pairs=sorted(seed_pairs + random_pairs, key=lambda item: item[0].name.casefold()),
+        train_pairs=sorted(
+            seed_pairs + random_pairs,
+            key=lambda item: item[0].name.casefold(),
+        ),
         valid_pairs=source_splits["valid"],
         test_pairs=source_splits["test"],
     )
@@ -344,7 +401,8 @@ def main() -> int:
     random_metrics = _selected_metric_summary(random_report)
     map_delta = (
         active_metrics["map50_95"] - random_metrics["map50_95"]
-        if active_metrics["map50_95"] is not None and random_metrics["map50_95"] is not None
+        if active_metrics["map50_95"] is not None
+        and random_metrics["map50_95"] is not None
         else None
     )
     active_paths = {str(path) for path, _label in active_pairs}
@@ -356,7 +414,8 @@ def main() -> int:
         ).strip(),
         "scope": (
             "Equal-budget real biological detection Active Learning experiment. PASS means "
-            "both acquisition arms executed reproducibly, not that Active Learning beat random."
+            "both acquisition arms executed reproducibly, not that Active Learning beat "
+            "random."
         ),
         "source_dataset": str(source),
         "partition_seed": args.partition_seed,
@@ -369,16 +428,19 @@ def main() -> int:
             "report_path": str(baseline_output / "report.json"),
             "model_id": model_id,
             "metrics": _selected_metric_summary(baseline_report),
+            "pool_dataset_version_id": pool_version["id"],
+            "pool_dataset_manifest_sha256": pool_version["manifest_sha256"],
             "pool_inference_job_id": inference_job["id"],
             "pool_prediction_summary": pool_prediction_summary,
         },
         "active_learning": {
             "strategy": "uncertainty",
             "round_id": active_round["id"],
+            "dataset_version_id": pool_version["id"],
             "selection_sha256": active_round["selection_sha256"],
             "selected_image_ids": active_ids,
             "selected_source_images": sorted(active_paths),
-            "selection_manifest": active_round["selection_manifest_json"],
+            "selection_manifest": selection_manifest,
             "report_path": str(output / "active-learning-run" / "report.json"),
             "metrics": active_metrics,
         },
@@ -398,7 +460,8 @@ def main() -> int:
         "duration_seconds": time.perf_counter() - experiment_started,
     }
     (output / "report.json").write_text(
-        json.dumps(report, indent=2, default=str) + "\n", encoding="utf-8"
+        json.dumps(report, indent=2, default=str) + "\n",
+        encoding="utf-8",
     )
     print(json.dumps(report, indent=2, default=str))
     return 0
