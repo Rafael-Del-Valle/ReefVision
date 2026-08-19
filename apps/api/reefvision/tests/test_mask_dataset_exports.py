@@ -153,6 +153,10 @@ def test_yolo_segmentation_export_uses_frozen_polygon_snapshot(
     assert label_files[0].read_text(encoding="utf-8") == (
         "0 0.10000000 0.10000000 0.50000000 0.10000000 0.50000000 0.50000000 0.10000000 0.50000000"
     )
+    data_yaml = (output_root / "data.yaml").read_text(encoding="utf-8")
+    assert "path:" not in data_yaml
+    assert "train: images/train" in data_yaml
+    assert "val: images/validation" in data_yaml
     manifest_file = test_settings.resolved_data_dir / Path(str(export["manifest_path"]))
     manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
     assert manifest["format"] == "yolo_segmentation"

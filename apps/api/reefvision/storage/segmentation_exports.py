@@ -53,7 +53,6 @@ def _write_data_yaml(
     class_map: list[dict[str, Any]],
 ) -> None:
     yaml_lines = [
-        "path: .",
         "train: images/train",
         "val: images/validation",
         "test: images/test",

@@ -60,7 +60,7 @@ Add `-PreviousInstallerPath C:\path\to\previous\ReefVision.msi -PreviousInstalle
 | Evidence | Status | Current evidence |
 | --- | --- | --- |
 | Coral detection training and inference | PASS | 16 real APAL coral-ova images and 305 YOLO boxes; YOLO11 nano, 2 CUDA epochs, registered checkpoint, 96 held-out pending proposals, and restart inference |
-| Coral segmentation training and inference | NOT RUN | Biological validation remains outstanding |
+| Coral segmentation training and inference | NOT RUN | Real-data harness prepared; requires a genuine YOLO polygon coral dataset and hardware execution |
 | Coral classification training and inference | NOT RUN | Biological validation remains outstanding |
 | SAM2 CPU | PASS | Verified `sam2_b.pt` executed through production Smart Mask provider on CPU |
 | SAM2 CUDA | PASS | Verified `sam2_b.pt` executed on RTX 4060 Laptop GPU with no CPU fallback |
@@ -95,5 +95,24 @@ execution PASS, not a scientific-performance claim. The registered model produce
 and loaded successfully in a fresh application instance. Full hashes, lineage,
 configuration, metrics, and IDs are in
 `.artifacts/coral-detection-acceptance-20260819-170915/report.json`.
+
+Real coral instance-segmentation acceptance is prepared in
+`scripts/acceptance_coral_segmentation.py`. The harness refuses box-only YOLO labels,
+requires explicit train/validation/test polygon splits, preserves source image and
+label hashes in an isolated ReefVision data root, trains through the task-aware
+segmentation worker, registers the resulting segmenter, requires held-out polygon-mask
+proposals, accepts one through ReefVision's normal human-review path, and verifies both
+the registered model and accepted mask after application restart. This evidence row
+remains `NOT RUN` until a genuine biological polygon dataset and hardware execution
+produce a JSON report.
+
+Example future hardware run:
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\acceptance_coral_segmentation.py `
+  --dataset C:\path\to\real-coral-yolo-segmentation `
+  --output .\.artifacts\coral-segmentation-acceptance-<timestamp> `
+  --biological-context "Real coral imagery with manually verified polygon masks"
+```
 
 Synthetic software tests do not establish biological accuracy, tracking quality, calibration accuracy, or hardware-provider readiness.
