@@ -5,6 +5,17 @@ export interface MeasurementPoint {
   y: number;
 }
 
+export interface CalibrationCameraSignature {
+  width_px?: number | null;
+  height_px?: number | null;
+  camera_make?: string | null;
+  camera_model?: string | null;
+  lens_model?: string | null;
+  focal_length_mm?: number | null;
+  capture_distance?: number | null;
+  setup_notes?: string | null;
+}
+
 export interface MeasurementCalibration {
   image_id: string;
   calibrated: boolean;
@@ -15,6 +26,13 @@ export interface MeasurementCalibration {
   reference_pixel_length: number | null;
   default_depth: number | null;
   notes: string | null;
+  confidence: number | null;
+  detector: string | null;
+  profile_name: string | null;
+  profile_source_image_id: string | null;
+  camera_signature: CalibrationCameraSignature | null;
+  perspective_homography: number[][] | null;
+  reference_plane_only: boolean;
 }
 
 export interface MeasurementCalibrationUpdate {
@@ -23,6 +41,85 @@ export interface MeasurementCalibrationUpdate {
   source: string;
   reference_length?: number | null;
   reference_pixel_length?: number | null;
+  default_depth?: number | null;
+  notes?: string | null;
+  confidence?: number | null;
+  detector?: string | null;
+  profile_name?: string | null;
+  profile_source_image_id?: string | null;
+  camera_signature?: CalibrationCameraSignature | null;
+  perspective_homography?: number[][] | null;
+  reference_plane_only?: boolean;
+}
+
+export interface CalibrationRoi {
+  x_min: number;
+  y_min: number;
+  x_max: number;
+  y_max: number;
+}
+
+export interface RulerCalibrationDetectRequest {
+  roi?: CalibrationRoi | null;
+  orientation?: "auto" | "horizontal" | "vertical";
+}
+
+export interface RulerCalibrationCandidate {
+  image_id: string;
+  method: "automatic_ruler";
+  orientation: "horizontal" | "vertical";
+  roi: CalibrationRoi;
+  base_interval_pixels: number;
+  major_interval_pixels: number | null;
+  tick_positions_pixels: number[];
+  interval_count: number;
+  interval_coefficient_of_variation: number;
+  confidence: number;
+  unit_inferred: false;
+  reference_length_required: true;
+  warnings: string[];
+}
+
+export interface MarkerCalibrationDetectRequest {
+  kind: "aruco" | "charuco";
+  unit: string;
+  dictionary?: string;
+  marker_length: number;
+  marker_id?: number | null;
+  charuco_squares_x?: number | null;
+  charuco_squares_y?: number | null;
+  charuco_square_length?: number | null;
+}
+
+export interface MarkerCalibrationCandidate {
+  image_id: string;
+  method: "aruco" | "charuco";
+  marker_id: number | null;
+  detected_corner_count: number;
+  confidence: number;
+  calibration: MeasurementCalibrationUpdate;
+  reference_plane_only: true;
+  corners_pixels: number[][];
+  warnings: string[];
+}
+
+export interface CalibrationProfile {
+  project_id: string;
+  source_image_id: string;
+  profile_name: string;
+  unit: string;
+  distance_per_pixel: number;
+  width_px: number;
+  height_px: number;
+  source: string;
+  confidence: number | null;
+  camera_signature: CalibrationCameraSignature | null;
+  notes: string | null;
+}
+
+export interface ApplyCalibrationProfileRequest {
+  source_image_id: string;
+  confirm_same_setup: boolean;
   default_depth?: number | null;
   notes?: string | null;
 }
@@ -90,6 +187,10 @@ export interface MaskMeasurementResponse {
   surface_area_model: SurfaceModelKind;
   surface_area_physical: number | null;
   surface_area_assumptions: string[];
+  perspective_corrected: boolean;
+  calibration_source: string | null;
+  calibration_confidence: number | null;
+  calibration_profile_name: string | null;
 }
 
 async function apiError(response: Response, fallback: string): Promise<Error> {
@@ -158,6 +259,74 @@ export async function updateMeasurementCalibration(
   );
   if (!response.ok) {
     throw await apiError(response, "Calibration update failed");
+  }
+  return (await response.json()) as MeasurementCalibration;
+}
+
+export async function detectRulerCalibration(
+  imageId: string,
+  payload: RulerCalibrationDetectRequest,
+): Promise<RulerCalibrationCandidate> {
+  const response = await fetch(
+    `${getApiBaseUrl()}/images/${encodeURIComponent(imageId)}/measurement-calibration/ruler-detect`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) {
+    throw await apiError(response, "Automatic ruler detection failed");
+  }
+  return (await response.json()) as RulerCalibrationCandidate;
+}
+
+export async function detectMarkerCalibration(
+  imageId: string,
+  payload: MarkerCalibrationDetectRequest,
+): Promise<MarkerCalibrationCandidate> {
+  const response = await fetch(
+    `${getApiBaseUrl()}/images/${encodeURIComponent(imageId)}/measurement-calibration/marker-detect`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) {
+    throw await apiError(response, "Marker calibration detection failed");
+  }
+  return (await response.json()) as MarkerCalibrationCandidate;
+}
+
+export async function getMeasurementCalibrationProfiles(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<CalibrationProfile[]> {
+  const response = await fetch(
+    `${getApiBaseUrl()}/projects/${encodeURIComponent(projectId)}/measurement-calibration-profiles`,
+    { signal },
+  );
+  if (!response.ok) {
+    throw await apiError(response, "Calibration profile request failed");
+  }
+  return (await response.json()) as CalibrationProfile[];
+}
+
+export async function applyMeasurementCalibrationProfile(
+  imageId: string,
+  payload: ApplyCalibrationProfileRequest,
+): Promise<MeasurementCalibration> {
+  const response = await fetch(
+    `${getApiBaseUrl()}/images/${encodeURIComponent(imageId)}/measurement-calibration/apply-profile`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) {
+    throw await apiError(response, "Calibration profile application failed");
   }
   return (await response.json()) as MeasurementCalibration;
 }
