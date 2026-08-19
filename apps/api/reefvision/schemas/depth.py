@@ -10,12 +10,35 @@ from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_validator
 from reefvision.schemas.jobs import JobResponse
 
 DepthKind = Literal["relative", "metric"]
+DepthSourceKind = Literal[
+    "relative_fixture",
+    "relative_monocular",
+    "relative_imported",
+    "metric_monocular_estimate",
+    "calibrated_metric",
+    "imported_metric",
+    "rgbd_metric",
+    "stereo_metric",
+]
 DepthProvider = Literal[
     "luminance_relative",
     "depth_anything_v2_relative",
     "depth_anything_v2_metric",
     "imported",
 ]
+
+_RELATIVE_SOURCE_KINDS: set[str] = {
+    "relative_fixture",
+    "relative_monocular",
+    "relative_imported",
+}
+_METRIC_SOURCE_KINDS: set[str] = {
+    "metric_monocular_estimate",
+    "calibrated_metric",
+    "imported_metric",
+    "rgbd_metric",
+    "stereo_metric",
+}
 
 
 class CameraIntrinsics(BaseModel):
@@ -86,6 +109,7 @@ class DepthProviderReadinessResponse(BaseModel):
 class DepthMapImportRequest(BaseModel):
     values: list[list[FiniteFloat]] = Field(min_length=1, max_length=16_384)
     depth_kind: DepthKind
+    source_kind: DepthSourceKind | None = None
     unit: str | None = Field(default=None, max_length=30)
     provider_id: str = Field(default="imported", min_length=1, max_length=120)
     model_id: str = Field(default="external-depth-map", min_length=1, max_length=500)
@@ -102,10 +126,19 @@ class DepthMapImportRequest(BaseModel):
             raise ValueError("Depth map rows must have equal length")
         if width > 16_384:
             raise ValueError("Depth map width exceeds 16384 pixels")
-        if self.depth_kind == "metric" and not self.unit:
-            self.unit = "m"
-        if self.depth_kind == "relative":
+        if self.depth_kind == "metric":
+            if not self.unit:
+                self.unit = "m"
+            if self.source_kind is None:
+                self.source_kind = "imported_metric"
+            if self.source_kind not in _METRIC_SOURCE_KINDS:
+                raise ValueError("Metric depth requires a metric depth source kind")
+        else:
             self.unit = None
+            if self.source_kind is None:
+                self.source_kind = "relative_imported"
+            if self.source_kind not in _RELATIVE_SOURCE_KINDS:
+                raise ValueError("Relative depth requires a relative depth source kind")
         return self
 
 
@@ -119,6 +152,7 @@ class DepthMapResponse(BaseModel):
     model_id: str
     model_checksum: str | None
     depth_kind: str
+    source_kind: DepthSourceKind | None = None
     unit: str | None
     managed_path: str
     preview_path: str
@@ -154,17 +188,23 @@ class DepthAwareMaskMeasurementResponse(BaseModel):
     image_id: str
     depth_map_id: str
     depth_kind: DepthKind
+    source_kind: DepthSourceKind | None = None
     unit: str | None
+    area_unit: str | None = None
     depth: DepthValueSummary
     pixel_area: int
     depth_weighted_area_index: float | None
     metric_area: float | None
+    metric_projected_area: float | None = None
+    visible_surface_area_3d: float | None = None
+    surface_triangle_count: int = 0
     metric_width: float | None
     metric_height: float | None
     centroid_x: float | None
     centroid_y: float | None
     centroid_z: float | None
     camera_intrinsics: CameraIntrinsics | None
+    physical_measurements_valid: bool = False
     method: str
     warnings: list[str]
 
