@@ -51,3 +51,5 @@ class ActiveLearningFeedbackResponse(BaseModel):
     skipped_count: int
     completion_fraction: float
     prediction_review_counts: dict[str, int]
+    feedback_dataset_version_id: str | None = None
+    feedback_manifest_sha256: str | None = None
