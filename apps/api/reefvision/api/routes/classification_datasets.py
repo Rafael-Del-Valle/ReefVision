@@ -8,14 +8,20 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
+from reefvision.config import get_settings
 from reefvision.schemas.classification_datasets import (
     ClassificationDatasetCreateRequest,
     ClassificationDatasetDetailResponse,
     ClassificationDatasetSnapshotResponse,
+    ClassificationSnapshotEvaluationQueueResponse,
+    ClassificationSnapshotEvaluationRequest,
     ClassificationSnapshotTrainingRequest,
     ClassificationSnapshotTrainingResponse,
 )
 from reefvision.services.classification_datasets import ClassificationDatasetService
+from reefvision.services.classification_snapshot_evaluations import (
+    ClassificationSnapshotEvaluationService,
+)
 from reefvision.services.classification_snapshot_training import (
     ClassificationSnapshotTrainingService,
 )
@@ -80,3 +86,21 @@ def train_classification_dataset_snapshot(
     )
     apply_training_scheduler_requirements(session, response.training_run_id)
     return response
+
+
+@router.post(
+    "/projects/{project_id}/classification-dataset-snapshots/{snapshot_id}/evaluations",
+    response_model=ClassificationSnapshotEvaluationQueueResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def evaluate_classification_dataset_snapshot(
+    project_id: str,
+    snapshot_id: str,
+    payload: ClassificationSnapshotEvaluationRequest,
+    session: DbSession,
+) -> ClassificationSnapshotEvaluationQueueResponse:
+    return ClassificationSnapshotEvaluationService(session, get_settings()).queue(
+        project_id,
+        snapshot_id,
+        payload,
+    )
