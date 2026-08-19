@@ -8,6 +8,7 @@ import pytest
 from reefvision.jobs import workflow_runs
 from reefvision.jobs.workflow_cache_runtime import (
     _node_cache_eligible,
+    _select_cached_source_artifacts,
     _stable_copy_cached_outputs,
 )
 from reefvision.jobs.workflow_segmentation_review_runtime import _review_summary
@@ -108,6 +109,54 @@ def test_failed_run_cache_reuses_only_nodes_recorded_as_succeeded() -> None:
     assert _node_cache_eligible(cast(Any, reusable), "segment") is True
     assert _node_cache_eligible(cast(Any, failed_node), "segment") is False
     assert _node_cache_eligible(cast(Any, succeeded_run), "segment") is True
+
+
+def test_cache_selects_complete_output_set_from_one_newest_source_run() -> None:
+    newest = SimpleNamespace(
+        id="run-newest",
+        status="failed",
+        node_state_json={"segment": {"status": "succeeded"}},
+    )
+    older = SimpleNamespace(
+        id="run-older",
+        status="succeeded",
+        node_state_json={},
+    )
+    rows = [
+        (
+            SimpleNamespace(
+                id="new-masks",
+                port_name="masks",
+                payload_json={"_cache_key": "same-key"},
+            ),
+            newest,
+        ),
+        (
+            SimpleNamespace(
+                id="new-qc",
+                port_name="qc",
+                payload_json={"_cache_key": "same-key"},
+            ),
+            newest,
+        ),
+        (
+            SimpleNamespace(
+                id="old-masks",
+                port_name="masks",
+                payload_json={"_cache_key": "same-key"},
+            ),
+            older,
+        ),
+    ]
+
+    selected = _select_cached_source_artifacts(
+        cast(Any, rows),
+        current_run_id="current",
+        node_id="segment",
+        cache_key="same-key",
+    )
+
+    assert [artifact.id for artifact in selected] == ["new-masks", "new-qc"]
 
 
 def test_cached_artifact_copy_preserves_exact_semantic_payload(
