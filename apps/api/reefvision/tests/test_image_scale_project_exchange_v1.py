@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from reefvision.config import Settings
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
-from reefvision.tests.test_images import create_project, import_one
+from reefvision.tests.test_annotations import create_project, import_one
 
 
 def test_scale_calibration_round_trip_remaps_profile_source_and_preserves_homography(
