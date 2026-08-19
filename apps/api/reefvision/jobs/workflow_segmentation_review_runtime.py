@@ -15,6 +15,9 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.db.models import PredictionProposal, WorkflowArtifact, WorkflowRun
 from reefvision.jobs import workflow_runs
+from reefvision.jobs.workflow_cache_runtime import install_workflow_cache_runtime
+
+install_workflow_cache_runtime()
 
 _ORIGINAL_MEASUREMENT_SNAPSHOT = workflow_runs._measurement_snapshot
 _REJECTED_STATES = {"rejected", "dismissed"}
