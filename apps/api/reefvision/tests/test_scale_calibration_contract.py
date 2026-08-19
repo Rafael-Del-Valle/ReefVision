@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError as PydanticValidationError
 
+from reefvision.schemas.image_calibration import MarkerCalibrationDetectRequest
 from reefvision.schemas.measurements import (
     MaskMeasurementResponse,
     MeasurementCalibrationUpdate,
@@ -105,4 +106,16 @@ def test_homography_cannot_claim_non_planar_metric_validity() -> None:
                 [0.0, 0.0, 1.0],
             ],
             reference_plane_only=False,
+        )
+
+
+def test_charuco_marker_must_be_smaller_than_board_square() -> None:
+    with pytest.raises(PydanticValidationError, match="marker_length must be smaller"):
+        MarkerCalibrationDetectRequest(
+            kind="charuco",
+            unit="mm",
+            marker_length=10,
+            charuco_squares_x=5,
+            charuco_squares_y=7,
+            charuco_square_length=10,
         )
