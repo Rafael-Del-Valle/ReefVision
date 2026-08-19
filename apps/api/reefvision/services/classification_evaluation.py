@@ -1,4 +1,4 @@
-"""Evaluate classification predictions against verified annotation classes."""
+"""Evaluate classification predictions against reviewed task-specific ground truth."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 
 from reefvision.db.models import (
     Annotation,
+    ClassificationAssignment,
+    ClassificationLabelSet,
     ClassificationPrediction,
     ImageAsset,
     ModelRegistration,
@@ -24,6 +26,37 @@ from reefvision.schemas.classification_evaluation import (
     ClassificationEvaluationResponse,
     ClassificationReviewFilter,
 )
+
+
+def _prediction_target_kind(prediction: ClassificationPrediction) -> str:
+    if prediction.target_kind:
+        return prediction.target_kind.strip().casefold()
+    return "annotation" if prediction.annotation_id else "image"
+
+
+def _prediction_target_key(
+    prediction: ClassificationPrediction,
+    target_kind: str,
+) -> str | None:
+    if prediction.target_key:
+        return prediction.target_key
+    if target_kind == "annotation" and prediction.annotation_id:
+        return f"annotation:{prediction.annotation_id}"
+    if target_kind == "image":
+        return f"image:{prediction.image_id}"
+    if target_kind == "mask" and prediction.mask_annotation_id:
+        return f"mask:{prediction.mask_annotation_id}"
+    if target_kind == "fragment":
+        fragment_key = prediction.fragment_key or prediction.mask_annotation_id
+        return f"fragment:{fragment_key}" if fragment_key else None
+    return None
+
+
+def _label_set_candidates(prediction: ClassificationPrediction, target_kind: str) -> tuple[str, ...]:
+    key = prediction.label_set.strip().casefold()
+    if key == "default" and target_kind != "annotation":
+        return (key, f"default-{target_kind}")
+    return (key,)
 
 
 class ClassificationEvaluationService:
@@ -93,50 +126,144 @@ class ClassificationEvaluationService:
             )
         )
 
+        label_sets = list(
+            self.session.scalars(
+                select(ClassificationLabelSet).where(
+                    ClassificationLabelSet.project_id == project_id,
+                    ClassificationLabelSet.is_active.is_(True),
+                )
+            )
+        )
+        label_set_by_key = {item.key.strip().casefold(): item for item in label_sets}
+        accepted_assignments = list(
+            self.session.scalars(
+                select(ClassificationAssignment)
+                .where(
+                    ClassificationAssignment.project_id == project_id,
+                    ClassificationAssignment.status == "accepted",
+                )
+                .order_by(
+                    ClassificationAssignment.updated_at,
+                    ClassificationAssignment.created_at,
+                    ClassificationAssignment.id,
+                )
+            )
+        )
+        assignment_by_target: dict[tuple[str, str, str], ClassificationAssignment] = {}
+        for assignment in accepted_assignments:
+            assignment_by_target[
+                (assignment.label_set_id, assignment.target_kind, assignment.target_key)
+            ] = assignment
+
         observations: list[tuple[str, str, float, bool]] = []
         warnings: list[str] = []
-        missing_annotation_count = 0
+        missing_truth_count = 0
         unresolved_prediction_count = 0
-        post_review_ground_truth_count = 0
+        self_referential_truth_count = 0
+        model_derived_truth_count = 0
+        multi_label_truth_count = 0
+        annotation_fallback_count = 0
+        missing_label_set_count = 0
+
         for prediction in predictions:
-            annotation = (
-                self.session.get(Annotation, prediction.annotation_id)
-                if prediction.annotation_id
-                else None
-            )
-            if annotation is None or annotation.deleted_at is not None:
-                missing_annotation_count += 1
-                continue
             if prediction.label_class_id is None:
                 unresolved_prediction_count += 1
                 continue
-            if annotation.source_type == "accepted_prediction":
-                post_review_ground_truth_count += 1
-            actual = annotation.label_class_id
+            target_kind = _prediction_target_kind(prediction)
+            target_key = _prediction_target_key(prediction, target_kind)
+            label_set = next(
+                (
+                    label_set_by_key[key]
+                    for key in _label_set_candidates(prediction, target_kind)
+                    if key in label_set_by_key
+                    and label_set_by_key[key].target_kind == target_kind
+                ),
+                None,
+            )
+
+            truth_class_id: str | None = None
+            truth_assignment: ClassificationAssignment | None = None
+            if label_set is not None:
+                if label_set.cardinality != "single":
+                    multi_label_truth_count += 1
+                    continue
+                if target_key is not None:
+                    truth_assignment = assignment_by_target.get(
+                        (label_set.id, target_kind, target_key)
+                    )
+                if truth_assignment is not None:
+                    if truth_assignment.source_prediction_id == prediction.id:
+                        self_referential_truth_count += 1
+                        continue
+                    truth_class_id = truth_assignment.label_class_id
+                    if (
+                        truth_assignment.source_prediction_id is not None
+                        or truth_assignment.source_model_id is not None
+                    ):
+                        model_derived_truth_count += 1
+            elif target_kind != "annotation":
+                missing_label_set_count += 1
+
+            if truth_class_id is None and target_kind == "annotation":
+                annotation = (
+                    self.session.get(Annotation, prediction.annotation_id)
+                    if prediction.annotation_id
+                    else None
+                )
+                if annotation is not None and annotation.deleted_at is None:
+                    truth_class_id = annotation.label_class_id
+                    annotation_fallback_count += 1
+
+            if truth_class_id is None:
+                missing_truth_count += 1
+                continue
+
             predicted = prediction.label_class_id
             observations.append(
                 (
-                    actual,
+                    truth_class_id,
                     predicted,
                     float(prediction.confidence),
-                    actual == predicted,
+                    truth_class_id == predicted,
                 )
             )
-        if missing_annotation_count:
+
+        if missing_truth_count:
             warnings.append(
-                f"{missing_annotation_count} predictions were skipped because their source "
-                "annotation is unavailable."
+                f"{missing_truth_count} predictions were skipped because no accepted "
+                "classification assignment or legacy annotation truth was available."
+            )
+        if missing_label_set_count:
+            warnings.append(
+                f"{missing_label_set_count} generalized predictions could not resolve an active "
+                "classification label set for their target kind."
             )
         if unresolved_prediction_count:
             warnings.append(
                 f"{unresolved_prediction_count} predictions were skipped because they do not "
                 "resolve to a project class."
             )
-        if post_review_ground_truth_count:
+        if self_referential_truth_count:
             warnings.append(
-                f"{post_review_ground_truth_count} evaluated annotations were previously "
-                "changed by accepted predictions. Include pending predictions only or use an "
-                "immutable dataset version for an unbiased final evaluation."
+                f"{self_referential_truth_count} predictions were excluded because the accepted "
+                "ground-truth assignment was created from that same prediction."
+            )
+        if model_derived_truth_count:
+            warnings.append(
+                f"{model_derived_truth_count} observations use human-accepted assignments that "
+                "originated from model predictions. Use a frozen immutable test snapshot for an "
+                "independent final performance claim."
+            )
+        if multi_label_truth_count:
+            warnings.append(
+                f"{multi_label_truth_count} predictions were skipped because this confusion-matrix "
+                "evaluator currently requires single-label classification truth."
+            )
+        if annotation_fallback_count:
+            warnings.append(
+                f"{annotation_fallback_count} annotation-target observations used the annotation's "
+                "primary class as backward-compatible ground truth because no reviewed assignment "
+                "was available."
             )
 
         confusion = Counter(
@@ -147,6 +274,7 @@ class ClassificationEvaluationService:
             | {predicted for _actual, predicted, _confidence, _correct in observations}
         )
         class_results: list[ClassificationClassEvaluation] = []
+        sample_count = len(observations)
         for label_class_id in classes:
             support = sum(
                 count
@@ -161,8 +289,24 @@ class ClassificationEvaluationService:
             true_positive_count = confusion[(label_class_id, label_class_id)]
             false_positive_count = predicted_count - true_positive_count
             false_negative_count = support - true_positive_count
+            true_negative_count = sample_count - (
+                true_positive_count + false_positive_count + false_negative_count
+            )
             precision = true_positive_count / predicted_count if predicted_count else 0.0
             recall = true_positive_count / support if support else 0.0
+            specificity_denominator = true_negative_count + false_positive_count
+            specificity = (
+                true_negative_count / specificity_denominator
+                if specificity_denominator
+                else 0.0
+            )
+            negative_predictive_denominator = true_negative_count + false_negative_count
+            negative_predictive_value = (
+                true_negative_count / negative_predictive_denominator
+                if negative_predictive_denominator
+                else 0.0
+            )
+            balanced_class_accuracy = (recall + specificity) / 2.0
             f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
             class_results.append(
                 ClassificationClassEvaluation(
@@ -170,20 +314,27 @@ class ClassificationEvaluationService:
                     support=support,
                     predicted_count=predicted_count,
                     true_positive_count=true_positive_count,
+                    true_negative_count=true_negative_count,
                     false_positive_count=false_positive_count,
                     false_negative_count=false_negative_count,
                     precision=precision,
                     recall=recall,
+                    sensitivity=recall,
+                    specificity=specificity,
+                    negative_predictive_value=negative_predictive_value,
+                    balanced_accuracy=balanced_class_accuracy,
                     f1=f1,
                 )
             )
 
-        sample_count = len(observations)
         correct_count = sum(1 for observation in observations if observation[3])
         accuracy = correct_count / sample_count if sample_count else 0.0
         macro_precision = mean(item.precision for item in class_results) if class_results else 0.0
         macro_recall = mean(item.recall for item in class_results) if class_results else 0.0
         macro_f1 = mean(item.f1 for item in class_results) if class_results else 0.0
+        balanced_accuracy = (
+            mean(item.balanced_accuracy for item in class_results) if class_results else 0.0
+        )
         weighted_f1 = (
             sum(item.f1 * item.support for item in class_results) / sample_count
             if sample_count
@@ -239,6 +390,7 @@ class ClassificationEvaluationService:
             sample_count=sample_count,
             correct_count=correct_count,
             accuracy=accuracy,
+            balanced_accuracy=balanced_accuracy,
             macro_precision=macro_precision,
             macro_recall=macro_recall,
             macro_f1=macro_f1,
