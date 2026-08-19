@@ -15,6 +15,7 @@ from sqlalchemy import select
 from reefvision.db.models import (
     Job,
     Project,
+    TrainingDraft,
     WorkflowArtifact,
     WorkflowGraphRecord,
     WorkflowNodeRun,
@@ -56,6 +57,11 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                             Job.project_id == project.id,
                             Job.job_type != "project_exchange_export",
                         )
+                    )
+                ),
+                "training_drafts": list(
+                    self.session.scalars(
+                        select(TrainingDraft).where(TrainingDraft.project_id == project.id)
                     )
                 ),
                 "workflow_graphs": list(
