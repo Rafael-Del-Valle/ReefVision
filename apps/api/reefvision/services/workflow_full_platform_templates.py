@@ -2,7 +2,7 @@
 
 These templates exercise advanced runtime paths added after the original Phase 10 planner:
 probability-only Active Learning, depth-aware coral measurements, calibrated metric 3D fish
-trajectories, and configurable behavior analysis.
+trajectories, configurable behavior analysis, and metric coral visible-surface geometry.
 """
 
 from __future__ import annotations
@@ -90,17 +90,17 @@ def classification_uncertainty_review_template() -> WorkflowTemplate:
 
 
 def depth_aware_coral_measurement_template() -> WorkflowTemplate:
-    """Segment coral and combine masks with aligned depth maps before export."""
+    """Segment coral and combine masks with aligned relative depth before export."""
 
     return WorkflowTemplate(
         template_id="depth-aware-coral-measurement",
-        name="Depth-aware coral measurement",
+        name="Relative-depth coral measurement",
         description=(
-            "Generate an aligned depth map, segment coral, calculate calibrated 2D and "
-            "depth-aware measurements, and export the resulting scientific artifact."
+            "Generate aligned relative monocular depth, segment coral, calculate 2D and "
+            "relative-depth statistics without physical units, and export the result."
         ),
         workflow=WorkflowValidationRequest(
-            name="Depth-aware coral measurement",
+            name="Relative-depth coral measurement",
             nodes=[
                 WorkflowNode(id="images", node_type="image_input"),
                 WorkflowNode(
@@ -119,6 +119,99 @@ def depth_aware_coral_measurement_template() -> WorkflowTemplate:
                     configuration={"model_id": "<select-segmenter>"},
                 ),
                 WorkflowNode(id="measure", node_type="measurement"),
+                WorkflowNode(
+                    id="export",
+                    node_type="export",
+                    configuration={"format": "json"},
+                ),
+            ],
+            edges=[
+                WorkflowEdge(
+                    source_node_id="images",
+                    source_port="images",
+                    target_node_id="depth",
+                    target_port="images",
+                ),
+                WorkflowEdge(
+                    source_node_id="images",
+                    source_port="images",
+                    target_node_id="segment",
+                    target_port="images",
+                ),
+                WorkflowEdge(
+                    source_node_id="segment",
+                    source_port="masks",
+                    target_node_id="measure",
+                    target_port="masks",
+                ),
+                WorkflowEdge(
+                    source_node_id="depth",
+                    source_port="depth_maps",
+                    target_node_id="measure",
+                    target_port="depth_maps",
+                ),
+                WorkflowEdge(
+                    source_node_id="measure",
+                    source_port="measurements",
+                    target_node_id="export",
+                    target_port="artifact",
+                ),
+            ],
+        ),
+    )
+
+
+def metric_coral_visible_surface_template() -> WorkflowTemplate:
+    """Segment coral and calculate physical visible-surface geometry from metric depth."""
+
+    return WorkflowTemplate(
+        template_id="metric-coral-visible-surface",
+        name="Metric 3D coral visible surface",
+        description=(
+            "Generate aligned metric depth, segment coral, calculate physical dimensions, "
+            "camera-facing projected area, and triangulated camera-visible 3D surface area. "
+            "Hidden and back-facing coral surface is explicitly not reconstructed."
+        ),
+        workflow=WorkflowValidationRequest(
+            name="Metric 3D coral visible surface",
+            nodes=[
+                WorkflowNode(id="images", node_type="image_input"),
+                WorkflowNode(
+                    id="depth",
+                    node_type="depth_estimation",
+                    configuration={
+                        "provider_id": "depth_anything_v2_metric",
+                        "model_id": "<select-local-metric-depth-checkpoint>",
+                        "depth_kind": "metric",
+                        "unit": "m",
+                        "local_files_only": True,
+                        "camera_intrinsics": {
+                            "fx_px": "<set-fx-pixels>",
+                            "fy_px": "<set-fy-pixels>",
+                            "cx_px": "<set-cx-pixels>",
+                            "cy_px": "<set-cy-pixels>",
+                        },
+                    },
+                ),
+                WorkflowNode(
+                    id="segment",
+                    node_type="segmenter",
+                    configuration={"model_id": "<select-segmenter>"},
+                ),
+                WorkflowNode(
+                    id="measure",
+                    node_type="measurement",
+                    configuration={
+                        "measurement_mode": "coral_metric_surface",
+                        "allowed_depth_source_kinds": [
+                            "metric_monocular_estimate",
+                            "calibrated_metric",
+                            "imported_metric",
+                            "rgbd_metric",
+                            "stereo_metric",
+                        ],
+                    },
+                ),
                 WorkflowNode(
                     id="export",
                     node_type="export",
@@ -312,6 +405,7 @@ def full_platform_templates() -> list[WorkflowTemplate]:
     return [
         classification_uncertainty_review_template(),
         depth_aware_coral_measurement_template(),
+        metric_coral_visible_surface_template(),
         calibrated_3d_fish_trajectory_template(),
         configurable_fish_behavior_template(),
     ]
