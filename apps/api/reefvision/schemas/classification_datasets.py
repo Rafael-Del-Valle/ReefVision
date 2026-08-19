@@ -34,7 +34,7 @@ class ClassificationSnapshotTrainingRequest(BaseModel):
     """Launch single-label Ultralytics training from an immutable classification snapshot."""
 
     run_name: str = Field(min_length=1, max_length=200)
-    architecture: str = Field(default="yolo11n-cls", min_length=1, max_length=200)
+    architecture: str = Field(default="yolo11-cls.yaml", min_length=1, max_length=200)
     initial_checkpoint_model_id: str | None = Field(default=None, max_length=36)
     epochs: int = Field(default=100, ge=1, le=10000)
     patience: int = Field(default=30, ge=0, le=10000)
