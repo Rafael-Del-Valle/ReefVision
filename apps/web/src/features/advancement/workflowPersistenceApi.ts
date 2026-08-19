@@ -12,6 +12,37 @@ export interface PersistedWorkflow {
   updated_at: string;
 }
 
+export interface PersistedWorkflowRevision {
+  id: string;
+  workflow_id: string;
+  revision_number: number;
+  workflow_json: Record<string, unknown>;
+  workflow_checksum: string;
+  validation_json: Record<string, unknown>;
+  created_by: string;
+  created_at: string;
+}
+
+export interface PersistedWorkflowDetail {
+  workflow: PersistedWorkflow;
+  current_revision: PersistedWorkflowRevision;
+  validation: {
+    project_id: string;
+    name: string;
+    valid: boolean;
+    workflow_checksum: string;
+    topological_order: string[];
+    execution_stages: Array<{ stage_index: number; node_ids: string[] }>;
+    issues: Array<{
+      severity: "error" | "warning";
+      code: string;
+      message: string;
+      node_id: string | null;
+      edge_index: number | null;
+    }>;
+  };
+}
+
 export interface WorkflowRunRecord {
   id: string;
   workflow_id: string;
@@ -45,6 +76,24 @@ export interface WorkflowRetryResponse {
     progress_current: number;
     progress_total: number;
   };
+}
+
+export type WorkflowRunCreateResponse = WorkflowRetryResponse;
+
+export interface EditableWorkflowPayload {
+  name: string;
+  nodes: Array<{
+    id: string;
+    node_type: string;
+    label?: string | null;
+    configuration: Record<string, unknown>;
+  }>;
+  edges: Array<{
+    source_node_id: string;
+    source_port: string;
+    target_node_id: string;
+    target_port: string;
+  }>;
 }
 
 export interface WorkflowArtifactCleanupAction {
@@ -117,13 +166,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     let message = `Request failed with HTTP ${response.status}`;
     try {
-      const payload = (await response.json()) as { detail?: string };
+      const payload = (await response.json()) as {
+        detail?: string | { message?: string; reason?: string };
+      };
       if (typeof payload.detail === "string") message = payload.detail;
+      if (payload.detail && typeof payload.detail === "object") {
+        message = payload.detail.message ?? payload.detail.reason ?? message;
+      }
     } catch {
       // Keep the HTTP fallback for non-JSON errors.
     }
     throw new Error(message);
   }
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
@@ -133,10 +188,65 @@ export function listPersistedWorkflows(projectId: string, signal?: AbortSignal) 
   });
 }
 
+export function createPersistedWorkflow(
+  projectId: string,
+  payload: {
+    name: string;
+    description?: string | null;
+    workflow: EditableWorkflowPayload;
+    status?: "draft" | "published" | "archived";
+    creator?: string;
+  },
+) {
+  return request<PersistedWorkflowDetail>(`/projects/${projectId}/workflows`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getPersistedWorkflow(workflowId: string, signal?: AbortSignal) {
+  return request<PersistedWorkflowDetail>(`/workflows/${workflowId}`, { signal });
+}
+
+export function createWorkflowRevision(
+  workflowId: string,
+  workflow: EditableWorkflowPayload,
+  creator = "local_user",
+) {
+  return request<PersistedWorkflowDetail>(`/workflows/${workflowId}/revisions`, {
+    method: "POST",
+    body: JSON.stringify({ workflow, creator }),
+  });
+}
+
+export function listWorkflowRevisions(workflowId: string, signal?: AbortSignal) {
+  return request<PersistedWorkflowRevision[]>(`/workflows/${workflowId}/revisions`, {
+    signal,
+  });
+}
+
+export function queueWorkflowRun(
+  workflowId: string,
+  payload: {
+    workflow_revision_id?: string;
+    inputs?: Record<string, unknown>;
+    use_cache?: boolean;
+  } = {},
+) {
+  return request<WorkflowRunCreateResponse>(`/workflows/${workflowId}/runs`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function listWorkflowRuns(workflowId: string, signal?: AbortSignal) {
   return request<WorkflowRunRecord[]>(`/workflows/${workflowId}/runs`, {
     signal,
   });
+}
+
+export function getWorkflowRun(runId: string, signal?: AbortSignal) {
+  return request<WorkflowRunRecord>(`/workflow-runs/${runId}`, { signal });
 }
 
 export function retryWorkflowRun(
