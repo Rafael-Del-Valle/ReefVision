@@ -32,10 +32,15 @@ jobs:
         run: |
           python -m pytest \
             apps/api/reefvision/tests/test_active_learning_phase7.py \
+            apps/api/reefvision/tests/test_active_learning_detection_acceptance_harness.py \
             apps/api/reefvision/tests/test_project_exchange_phase9.py \
             apps/api/reefvision/tests/test_project_exchange_roundtrip_v1.py \
+            apps/api/reefvision/tests/test_coral_segmentation_acceptance_harness.py \
+            apps/api/reefvision/tests/test_physical_calibration_acceptance_harness.py \
             apps/api/reefvision/tests/test_image_scale_calibration.py \
             apps/api/reefvision/tests/test_scale_calibration_contract.py \
+            apps/api/reefvision/tests/test_scale_assistant_acceptance_harness.py \
+            apps/api/reefvision/tests/test_scale_assistant_packaging_contract.py \
             apps/api/reefvision/tests/test_image_scale_project_exchange_v1.py \
             apps/api/reefvision/tests/test_workflow_graphs_phase10.py \
             apps/api/reefvision/tests/test_workflow_execution_phase10.py \
