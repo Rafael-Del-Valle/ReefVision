@@ -134,7 +134,8 @@ def run_pipeline_with_registered_sam2(
 
 workflow_consensus.run_independent_segmentation_pipeline = run_pipeline_with_registered_sam2
 
-# Worker startup imports this module for workflow runtime extensions. Import the full
-# science bridge here as a side effect so measurement, behavior, and active-learning nodes
-# execute the production services instead of metadata-only snapshot placeholders.
+# Worker startup imports this module for workflow runtime extensions. Import the science
+# bridge first, then the probability bridge so measurement, behavior, depth, and
+# uncertainty-aware active-learning nodes all use production services.
 from reefvision.jobs import workflow_science_runtime as _workflow_science_runtime  # noqa: E402,F401
+from reefvision.jobs import workflow_active_learning_runtime as _workflow_active_learning_runtime  # noqa: E402,F401
