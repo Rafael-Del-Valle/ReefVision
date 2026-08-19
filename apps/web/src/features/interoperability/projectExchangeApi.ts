@@ -25,6 +25,7 @@ export interface ProjectExchangeInspection {
   project_name: string | null;
   section_counts: Record<string, number>;
   included_media_count: number;
+  included_generated_artifact_count: number;
   warnings: string[];
   errors: string[];
 }
@@ -36,6 +37,7 @@ export interface ProjectExchangeImportResult {
   source_manifest_sha256: string;
   imported_counts: Record<string, number>;
   copied_media_count: number;
+  copied_generated_artifact_count: number;
   warnings: string[];
   package: ProjectExchangePackageRecord;
 }
