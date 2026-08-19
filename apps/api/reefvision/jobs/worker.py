@@ -185,7 +185,7 @@ def process_next_thumbnail_job(
         LOGGER.exception(
             "Background job failed unexpectedly",
             extra={
-                "event_id": "background_worker_unexpected_failure",
+                "event_id": "background_job_unexpected_failure",
                 "component": "background_worker",
                 "job_id": job_id,
                 "job_type": job_type,
