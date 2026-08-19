@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import Job, ProjectExchangePackage
-from reefvision.services.project_exchange import ProjectExchangeService
+from reefvision.services.project_exchange_v1 import ProjectExchangeV1Service
 
 
 def process_project_exchange_export_job(
@@ -40,7 +40,7 @@ def process_project_exchange_export_job(
 
     try:
         with factory() as session:
-            package_response = ProjectExchangeService(session, settings).build_export(
+            package_response = ProjectExchangeV1Service(session, settings).build_export(
                 package_id
             )
         with factory() as session:
