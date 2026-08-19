@@ -2,6 +2,7 @@ from reefvision.services.workflow_definition_extensions import (
     install_workflow_definition_extensions,
 )
 from reefvision.services.workflow_full_platform_templates import (
+    calibrated_3d_fish_trajectory_template,
     classification_uncertainty_review_template,
     configurable_fish_behavior_template,
     depth_aware_coral_measurement_template,
@@ -82,6 +83,13 @@ def test_metric_coral_surface_template_is_fail_closed_for_physical_depth() -> No
         and edge.target_port == "depth_maps"
         for edge in template.workflow.edges
     )
+
+
+def test_video_3d_template_uses_canonical_rgbd_metric_source_name() -> None:
+    template = calibrated_3d_fish_trajectory_template()
+    nodes = {node.id: node for node in template.workflow.nodes}
+
+    assert nodes["measure3d"].configuration["depth_source_kind"] == "rgbd_metric"
 
 
 def test_configurable_behavior_template_exposes_research_controls() -> None:
