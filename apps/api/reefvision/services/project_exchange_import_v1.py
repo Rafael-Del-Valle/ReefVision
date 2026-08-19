@@ -13,14 +13,18 @@ from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
 from reefvision.db.models import (
+    ActiveLearningRound,
     AnnotationEvent,
     ClassOperation,
     ClassVisibilityPreference,
+    DatasetVersion,
     ExportRecord,
     MaskAnnotationEvent,
     Project,
     ProjectClassVisibilityDefault,
     ProjectExchangePackage,
+    ReviewQueue,
+    ReviewQueueItem,
     TrainingDraft,
 )
 from reefvision.schemas.project_exchange import ProjectExchangeImportResponse
@@ -117,15 +121,19 @@ def _operation_checksum(operation: ClassOperation) -> str:
         ]
 
     raw_impacts = plan.get("compatibility_impacts", [])
-    impacts = [
-        {
-            "key": str(item.get("key", "")),
-            "status": str(item.get("status", "")),
-            "record_ids": list(item.get("record_ids", [])),
-        }
-        for item in raw_impacts
-        if isinstance(item, dict)
-    ] if isinstance(raw_impacts, list) else []
+    impacts = (
+        [
+            {
+                "key": str(item.get("key", "")),
+                "status": str(item.get("status", "")),
+                "record_ids": list(item.get("record_ids", [])),
+            }
+            for item in raw_impacts
+            if isinstance(item, dict)
+        ]
+        if isinstance(raw_impacts, list)
+        else []
+    )
     payload = {
         "operation_type": operation.operation_type,
         "project_id": operation.project_id,
@@ -152,6 +160,151 @@ def _refresh_class_operation_checksums(session: Session, project_id: str) -> Non
     session.flush()
 
 
+def _refresh_review_queue_checksums(session: Session, project_id: str) -> None:
+    queues = list(
+        session.scalars(select(ReviewQueue).where(ReviewQueue.project_id == project_id))
+    )
+    items = list(
+        session.scalars(
+            select(ReviewQueueItem).where(ReviewQueueItem.project_id == project_id)
+        )
+    )
+    items_by_queue: dict[str, list[ReviewQueueItem]] = {}
+    for item in items:
+        items_by_queue.setdefault(item.review_queue_id, []).append(item)
+
+    for queue in queues:
+        queue_items = sorted(
+            items_by_queue.get(queue.id, []),
+            key=lambda item: (item.rank_position, item.image_id, item.id),
+        )
+        source_item_checksums = {item.id: item.input_checksum for item in queue_items}
+        source_queue_checksums = dict(queue.input_checksums_json or {})
+        configuration = dict(queue.configuration_json or {})
+        configuration["exchange_import"] = {
+            "checksum_schema": "review-queue-item-exchange-import-0001",
+            "source_queue_input_checksums": source_queue_checksums,
+            "source_item_checksums_by_imported_item_id": source_item_checksums,
+        }
+        queue.configuration_json = configuration
+
+        for item in queue_items:
+            item.input_checksum = canonical_json_sha256(
+                {
+                    "schema_version": "review-queue-item-exchange-import-0001",
+                    "review_queue_id": item.review_queue_id,
+                    "project_id": item.project_id,
+                    "dataset_version_id": item.dataset_version_id,
+                    "image_id": item.image_id,
+                    "split": item.split,
+                    "score": item.score,
+                    "rank_position": item.rank_position,
+                    "highest_qc_severity": item.highest_qc_severity,
+                    "label_class_ids": item.label_class_ids_json,
+                    "model_ids": item.model_ids_json,
+                    "related_issue_ids": item.related_issue_ids_json,
+                    "signal_values": item.signal_values_json,
+                    "normalized_signals": item.normalized_signals_json,
+                    "weights": item.weights_json,
+                    "score_breakdown": item.score_breakdown_json,
+                }
+            )
+
+        queue.input_checksums_json = {
+            "queue_scope_sha256": canonical_json_sha256(
+                {
+                    "image_ids": sorted(item.image_id for item in queue_items),
+                    "scores": {item.image_id: item.score for item in queue_items},
+                    "source_quality_control_run_id": queue.source_quality_control_run_id,
+                }
+            ),
+            "item_count": len(queue_items),
+        }
+    session.flush()
+
+
+def _refresh_active_learning_checksums(session: Session, project_id: str) -> None:
+    rounds = list(
+        session.scalars(
+            select(ActiveLearningRound).where(ActiveLearningRound.project_id == project_id)
+        )
+    )
+    queue_items = list(
+        session.scalars(
+            select(ReviewQueueItem).where(ReviewQueueItem.project_id == project_id)
+        )
+    )
+    items_by_id = {item.id: item for item in queue_items}
+
+    for round_record in rounds:
+        source_selection_sha256 = round_record.selection_sha256
+        manifest = dict(round_record.selection_manifest_json or {})
+        raw_items = manifest.get("items", [])
+        refreshed_items: list[dict[str, Any]] = []
+        if isinstance(raw_items, list):
+            for raw_item in raw_items:
+                if not isinstance(raw_item, dict):
+                    continue
+                item = dict(raw_item)
+                queue_item_id = item.get("queue_item_id")
+                queue_item = (
+                    items_by_id.get(queue_item_id)
+                    if isinstance(queue_item_id, str)
+                    else None
+                )
+                if queue_item is not None:
+                    item["input_checksum"] = queue_item.input_checksum
+                refreshed_items.append(item)
+        manifest["items"] = refreshed_items
+        round_record.selection_manifest_json = manifest
+
+        stable_items = [
+            {
+                "image_id": item.get("image_id"),
+                "rank_position": item.get("rank_position"),
+                "score": item.get("score"),
+                "input_checksum": item.get("input_checksum"),
+            }
+            for item in refreshed_items
+        ]
+        weights = manifest.get("weights")
+        if not isinstance(weights, dict):
+            strategy_config = dict(round_record.strategy_config_json or {})
+            raw_weights = strategy_config.get("weights", {})
+            weights = raw_weights if isinstance(raw_weights, dict) else {}
+        identity_payload = {
+            "schema_version": "active-learning-identity-0001",
+            "project_id": round_record.project_id,
+            "dataset_version_id": round_record.dataset_version_id,
+            "strategy": round_record.strategy,
+            "model_ids": round_record.model_ids_json,
+            "requested_size": round_record.requested_size,
+            "queue_formula_id": manifest.get("queue_formula_id"),
+            "queue_formula_version": manifest.get("queue_formula_version"),
+            "weights": weights,
+            "items": stable_items,
+        }
+        round_record.selection_sha256 = canonical_json_sha256(identity_payload)
+
+        strategy_config = dict(round_record.strategy_config_json or {})
+        strategy_config["exchange_import"] = {
+            "source_selection_sha256": source_selection_sha256,
+            "selection_checksum_schema": "active-learning-identity-0001",
+        }
+        round_record.strategy_config_json = strategy_config
+
+        feedback_summary = dict(round_record.feedback_summary_json or {})
+        feedback_dataset_id = feedback_summary.get("feedback_dataset_version_id")
+        if isinstance(feedback_dataset_id, str):
+            feedback_dataset = session.get(DatasetVersion, feedback_dataset_id)
+            if feedback_dataset is not None:
+                feedback_summary["feedback_manifest_sha256"] = (
+                    feedback_dataset.manifest_sha256
+                )
+        round_record.feedback_summary_json = feedback_summary
+    session.flush()
+
+
 def import_project_exchange_v1(
     source: BinaryIO,
     session: Session,
@@ -174,6 +327,8 @@ def import_project_exchange_v1(
 
     try:
         _refresh_class_operation_checksums(session, project.id)
+        _refresh_review_queue_checksums(session, project.id)
+        _refresh_active_learning_checksums(session, project.id)
         copied_generated = _restore_generated_artifacts(
             source,
             project=project,
