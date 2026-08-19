@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.schemas.active_learning_cycles import (
+    ActiveLearningClassificationEvaluationJobsRequest,
     ActiveLearningCycleCreateRequest,
     ActiveLearningCycleListResponse,
     ActiveLearningCycleResponse,
@@ -129,6 +130,20 @@ def evaluate_active_learning_candidate(
         cycle_id,
         payload,
     )
+
+
+@router.post(
+    "/active-learning-cycles/{cycle_id}/evaluate-classification-jobs",
+    response_model=ActiveLearningPromotionResponse,
+)
+def evaluate_active_learning_classifier_jobs(
+    cycle_id: str,
+    payload: ActiveLearningClassificationEvaluationJobsRequest,
+    session: DbSession,
+) -> ActiveLearningPromotionResponse:
+    return PublicActiveLearningCycleService(
+        session
+    ).evaluate_and_promote_from_classification_jobs(cycle_id, payload)
 
 
 @router.post(
