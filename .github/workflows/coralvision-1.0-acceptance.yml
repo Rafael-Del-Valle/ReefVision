@@ -112,10 +112,20 @@ jobs:
       - name: Bootstrap desktop build environment
         shell: pwsh
         run: .\scripts\bootstrap.ps1
-      - name: Build CoralVision MSI
+      - name: Build and verify CoralVision MSI
         shell: pwsh
         run: .\scripts\build-desktop.ps1 -TargetTriple x86_64-pc-windows-msvc
-      - name: Upload Windows installer
+      - name: Upload MSI verification diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coralvision-1.0-msi-diagnostics
+          if-no-files-found: warn
+          path: |
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/**
+            ${{ runner.temp }}/reefvision-msi-*.log
+            ${{ runner.temp }}/reefvision-sidecar-*.log
+      - name: Upload release-validated Windows installer
         uses: actions/upload-artifact@v4
         with:
           name: coralvision-1.0-windows-msi
