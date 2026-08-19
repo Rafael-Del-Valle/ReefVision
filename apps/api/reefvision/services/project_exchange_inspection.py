@@ -29,11 +29,56 @@ def _sha256(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _validate_file_inventory(
+    *,
+    archive: zipfile.ZipFile,
+    name_set: set[str],
+    descriptors: Any,
+    label: str,
+    require_source_relative_path: bool,
+    errors: list[str],
+) -> list[dict[str, Any]]:
+    if not isinstance(descriptors, list):
+        errors.append(f"Manifest {label} inventory is invalid")
+        return []
+    valid: list[dict[str, Any]] = []
+    for index, descriptor_value in enumerate(descriptors):
+        if not isinstance(descriptor_value, dict):
+            errors.append(f"{label.title()} descriptor is invalid: {index}")
+            continue
+        descriptor = descriptor_value
+        member = str(descriptor.get("path", ""))
+        if not _safe_member(member):
+            errors.append(f"{label.title()} path is unsafe: {member or index}")
+            continue
+        if require_source_relative_path:
+            source_relative_path = str(descriptor.get("source_relative_path", ""))
+            if not _safe_member(source_relative_path):
+                errors.append(
+                    f"Generated artifact restore path is unsafe: {source_relative_path or index}"
+                )
+                continue
+        if member not in name_set:
+            errors.append(f"{label.title()} file is missing: {member or index}")
+            continue
+        payload = archive.read(member)
+        expected_sha = str(descriptor.get("sha256", ""))
+        if expected_sha and _sha256(payload) != expected_sha:
+            errors.append(f"{label.title()} checksum failed: {member}")
+        expected_size = descriptor.get("size_bytes")
+        if expected_size is not None and len(payload) != int(expected_size):
+            errors.append(f"{label.title()} size failed: {member}")
+        valid.append(descriptor)
+    return valid
+
+
 def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionResponse:
     warnings: list[str] = []
     errors: list[str] = []
     section_counts: dict[str, int] = {}
     manifest: dict[str, Any] | None = None
+    included_media_count = 0
+    included_generated_artifact_count = 0
     try:
         source.seek(0)
         with zipfile.ZipFile(source, "r") as archive:
@@ -63,6 +108,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                     project_name=None,
                     section_counts={},
                     included_media_count=0,
+                    included_generated_artifact_count=0,
                     warnings=warnings,
                     errors=errors,
                 )
@@ -106,29 +152,29 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                         )
                         break
 
-            media_value = manifest.get("media", [])
-            if not isinstance(media_value, list):
-                errors.append("Manifest media inventory is invalid")
-                media_value = []
-            for index, descriptor_value in enumerate(media_value):
-                if not isinstance(descriptor_value, dict):
-                    errors.append(f"Media descriptor is invalid: {index}")
-                    continue
-                member = str(descriptor_value.get("path", ""))
-                if member not in name_set:
-                    errors.append(f"Media file is missing: {member or index}")
-                    continue
-                payload = archive.read(member)
-                expected_sha = str(descriptor_value.get("sha256", ""))
-                if expected_sha and _sha256(payload) != expected_sha:
-                    errors.append(f"Media checksum failed: {member}")
-                expected_size = descriptor_value.get("size_bytes")
-                if expected_size is not None and len(payload) != int(expected_size):
-                    errors.append(f"Media size failed: {member}")
-            if not media_value:
+            media = _validate_file_inventory(
+                archive=archive,
+                name_set=name_set,
+                descriptors=manifest.get("media", []),
+                label="media",
+                require_source_relative_path=False,
+                errors=errors,
+            )
+            included_media_count = len(media)
+            if not media:
                 warnings.append(
-                    "Package does not include original media; import would require relinking files"
+                    "Package does not include original media; imported records may require relinking files"
                 )
+
+            generated = _validate_file_inventory(
+                archive=archive,
+                name_set=name_set,
+                descriptors=manifest.get("generated_artifacts", []),
+                label="generated artifact",
+                require_source_relative_path=True,
+                errors=errors,
+            )
+            included_generated_artifact_count = len(generated)
     except (zipfile.BadZipFile, json.JSONDecodeError, OSError, ValueError) as exc:
         errors.append(f"Archive could not be inspected: {exc}")
 
@@ -143,11 +189,8 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
             str(project_value.get("name")) if isinstance(project_value, dict) else None
         ),
         section_counts=section_counts,
-        included_media_count=(
-            len(manifest.get("media", []))
-            if manifest and isinstance(manifest.get("media"), list)
-            else 0
-        ),
+        included_media_count=included_media_count,
+        included_generated_artifact_count=included_generated_artifact_count,
         warnings=warnings,
         errors=errors,
     )
