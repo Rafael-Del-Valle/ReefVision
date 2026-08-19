@@ -26,7 +26,7 @@ def _mode_aware_validate(
     project_id: str,
     request: WorkflowValidationRequest,
 ) -> WorkflowValidationResponse:
-    """Restore mode-specific required inputs hidden by the shared measurement primitive."""
+    """Restore task/mode-specific requirements hidden by shared workflow primitives."""
 
     response = _ORIGINAL_VALIDATE(self, project_id, request)
     issues = list(response.issues)
@@ -36,30 +36,50 @@ def _mode_aware_validate(
             connected_ports[edge.target_node_id].add(edge.target_port)
 
     for node in request.nodes:
-        if node.node_type != "measurement":
-            continue
-        mode = str(node.configuration.get("measurement_mode", "coral_mask")).strip().casefold()
         ports = connected_ports[node.id]
-        if mode == "video_depth_3d":
-            required_ports = ("video", "tracks")
-        elif mode == "coral_metric_surface":
-            required_ports = ("masks", "depth_maps")
-        else:
-            required_ports = ("masks",)
-        for port_name in required_ports:
-            if port_name in ports:
-                continue
-            issues.append(
-                WorkflowValidationIssue(
-                    severity="error",
-                    code="measurement_mode_input_missing",
-                    node_id=node.id,
-                    message=(
-                        f"Scientific measurement mode {mode!r} requires input "
-                        f"{port_name!r} to be connected."
-                    ),
+        if node.node_type == "measurement":
+            mode = str(node.configuration.get("measurement_mode", "coral_mask")).strip().casefold()
+            if mode == "video_depth_3d":
+                required_ports = ("video", "tracks")
+            elif mode == "coral_metric_surface":
+                required_ports = ("masks", "depth_maps")
+            else:
+                required_ports = ("masks",)
+            for port_name in required_ports:
+                if port_name in ports:
+                    continue
+                issues.append(
+                    WorkflowValidationIssue(
+                        severity="error",
+                        code="measurement_mode_input_missing",
+                        node_id=node.id,
+                        message=(
+                            f"Scientific measurement mode {mode!r} requires input "
+                            f"{port_name!r} to be connected."
+                        ),
+                    )
                 )
-            )
+
+        if node.node_type == "segmenter":
+            model_id = str(node.configuration.get("model_id", "")).strip()
+            model = self.session.get(workflow_service.ModelRegistration, model_id) if model_id else None
+            if (
+                model is not None
+                and model.project_id == project_id
+                and str(model.task).strip().casefold() == "assist_segmentation"
+                and "prompts" not in ports
+            ):
+                issues.append(
+                    WorkflowValidationIssue(
+                        severity="error",
+                        code="assist_segmentation_prompt_missing",
+                        node_id=node.id,
+                        message=(
+                            "Prompt-assisted Segmenter models require detector proposals on the "
+                            "'prompts' input. Connect a detector before SAM/SAM2/MobileSAM/FastSAM."
+                        ),
+                    )
+                )
 
     return response.model_copy(
         update={
@@ -96,6 +116,19 @@ def install_workflow_definition_extensions() -> None:
             outputs={"artifact": "artifact"},
         ),
     )
+
+    # One Segmenter primitive now covers trained instance segmentation, semantic
+    # segmentation, and prompt-assisted SAM-family models. Prompts stay optional in the
+    # generic definition because only assist_segmentation requires them; validation above
+    # restores that task-specific requirement.
+    segmenter = workflow_service.NODE_DEFINITIONS.get("segmenter")
+    if segmenter is not None:
+        workflow_service.NODE_DEFINITIONS["segmenter"] = workflow_service._NodeDefinition(
+            display_name="Unified segmenter",
+            inputs=dict(segmenter.inputs),
+            outputs=dict(segmenter.outputs),
+            model_tasks=("segment", "semantic_segment", "assist_segmentation"),
+        )
 
     # The unified scientific measurement node supports coral masks plus optional aligned
     # depth maps, and calibrated video-track 3D analysis. The generic ports are optional
