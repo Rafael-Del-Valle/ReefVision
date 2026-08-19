@@ -82,3 +82,8 @@ class DepthMap(Base):
         onupdate=utc_now,
         nullable=False,
     )
+
+    @property
+    def source_kind(self) -> str | None:
+        value = dict(self.metadata_json or {}).get("depth_source_kind")
+        return str(value) if value is not None else None
