@@ -5,10 +5,15 @@ import type { Project } from "../../api/client";
 import { getVideoTracks, getVideos } from "./videoApi";
 import {
   clearVideoCalibration,
+  clearVideoCameraIntrinsics,
   getCalibratedTrackAnalytics,
+  getDepthTrackAnalytics,
   getSchoolingAnalytics,
   getVideoCalibration,
+  getVideoCameraIntrinsics,
   setVideoCalibration,
+  setVideoCameraIntrinsics,
+  type VideoDepthSample,
   type VideoDistanceUnit,
 } from "./videoScienceApi";
 
@@ -16,9 +21,66 @@ interface VideoSciencePanelProps {
   project: Project;
 }
 
+interface TrackIdentity {
+  id: string;
+  track_number: number;
+}
+
 function toggleSelection(current: string[], value: string, checked: boolean): string[] {
   if (checked) return current.includes(value) ? current : [...current, value];
   return current.filter((item) => item !== value);
+}
+
+function parseDepthSamples(text: string, tracks: TrackIdentity[]): VideoDepthSample[] {
+  const byNumber = new Map(tracks.map((track) => [String(track.track_number), track.id]));
+  const knownIds = new Set(tracks.map((track) => track.id));
+  const samples: VideoDepthSample[] = [];
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (const [index, line] of lines.entries()) {
+    const columns = line.split(",").map((value) => value.trim());
+    if (
+      index === 0 &&
+      columns[0]?.toLowerCase().includes("track") &&
+      columns[1]?.toLowerCase().includes("frame")
+    ) {
+      continue;
+    }
+    if (columns.length < 3) {
+      throw new Error(
+        `Depth row ${index + 1} must contain track, frame, and depth columns.`,
+      );
+    }
+    const trackToken = columns[0];
+    const trackId = byNumber.get(trackToken) ?? (knownIds.has(trackToken) ? trackToken : null);
+    if (!trackId) {
+      throw new Error(`Depth row ${index + 1} references unknown track ${trackToken}.`);
+    }
+    const frame = Number(columns[1]);
+    const depth = Number(columns[2]);
+    const confidence = columns[3] ? Number(columns[3]) : null;
+    if (!Number.isInteger(frame) || frame < 0) {
+      throw new Error(`Depth row ${index + 1} has an invalid frame.`);
+    }
+    if (!Number.isFinite(depth) || depth <= 0) {
+      throw new Error(`Depth row ${index + 1} has an invalid positive depth.`);
+    }
+    if (
+      confidence !== null &&
+      (!Number.isFinite(confidence) || confidence < 0 || confidence > 1)
+    ) {
+      throw new Error(`Depth row ${index + 1} confidence must be between 0 and 1.`);
+    }
+    samples.push({ track_id: trackId, frame, depth, confidence });
+  }
+
+  if (samples.length < 2) {
+    throw new Error("Provide at least two metric depth samples.");
+  }
+  return samples;
 }
 
 export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
@@ -34,6 +96,17 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
   const [schoolTrackIds, setSchoolTrackIds] = useState<string[]>([]);
   const [schoolStartFrame, setSchoolStartFrame] = useState(0);
   const [schoolEndFrame, setSchoolEndFrame] = useState(0);
+  const [cameraFx, setCameraFx] = useState(1000);
+  const [cameraFy, setCameraFy] = useState(1000);
+  const [cameraCx, setCameraCx] = useState(0);
+  const [cameraCy, setCameraCy] = useState(0);
+  const [cameraMethod, setCameraMethod] = useState("camera_calibration");
+  const [cameraNotes, setCameraNotes] = useState("");
+  const [depthUnit, setDepthUnit] = useState<VideoDistanceUnit>("m");
+  const [depthSamplesText, setDepthSamplesText] = useState(
+    "track,frame,depth,confidence\n",
+  );
+  const [maximumFrameGap, setMaximumFrameGap] = useState("");
 
   const videosQuery = useQuery({
     queryKey: ["videos", project.id],
@@ -48,6 +121,11 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
   const calibrationQuery = useQuery({
     queryKey: ["video-calibration", videoId],
     queryFn: ({ signal }) => getVideoCalibration(videoId, signal),
+    enabled: Boolean(videoId),
+  });
+  const cameraQuery = useQuery({
+    queryKey: ["video-camera-intrinsics", videoId],
+    queryFn: ({ signal }) => getVideoCameraIntrinsics(videoId, signal),
     enabled: Boolean(videoId),
   });
   const calibratedTrackQuery = useQuery({
@@ -67,7 +145,14 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
     setSchoolTrackIds([]);
     setSchoolStartFrame(0);
     setSchoolEndFrame(Math.max(0, (selectedVideo?.frame_count ?? 1) - 1));
-  }, [videoId, selectedVideo?.frame_count]);
+    if (!cameraQuery.data && selectedVideo) {
+      const focalGuess = Math.max(selectedVideo.width_px, selectedVideo.height_px, 1);
+      setCameraFx(focalGuess);
+      setCameraFy(focalGuess);
+      setCameraCx(selectedVideo.width_px / 2);
+      setCameraCy(selectedVideo.height_px / 2);
+    }
+  }, [videoId, selectedVideo, cameraQuery.data]);
 
   useEffect(() => {
     const calibration = calibrationQuery.data;
@@ -79,6 +164,17 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
     setReferenceLabel(calibration.reference_label ?? "");
     setNotes(calibration.notes ?? "");
   }, [calibrationQuery.data]);
+
+  useEffect(() => {
+    const camera = cameraQuery.data;
+    if (!camera) return;
+    setCameraFx(camera.fx_px);
+    setCameraFy(camera.fy_px);
+    setCameraCx(camera.cx_px);
+    setCameraCy(camera.cy_px);
+    setCameraMethod(camera.method);
+    setCameraNotes(camera.notes ?? "");
+  }, [cameraQuery.data]);
 
   const calibrationMutation = useMutation({
     mutationFn: () => {
@@ -137,6 +233,58 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
     },
   });
 
+  const cameraMutation = useMutation({
+    mutationFn: () => {
+      if (!videoId) throw new Error("Select a video first");
+      if (cameraFx <= 0 || cameraFy <= 0) {
+        throw new Error("Camera focal lengths must be positive");
+      }
+      return setVideoCameraIntrinsics(videoId, {
+        fx_px: cameraFx,
+        fy_px: cameraFy,
+        cx_px: cameraCx,
+        cy_px: cameraCy,
+        method: cameraMethod.trim() || "camera_calibration",
+        notes: cameraNotes.trim() || null,
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["video-camera-intrinsics", videoId],
+      });
+    },
+  });
+
+  const clearCameraMutation = useMutation({
+    mutationFn: () => clearVideoCameraIntrinsics(videoId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["video-camera-intrinsics", videoId],
+      });
+    },
+  });
+
+  const depthAnalyticsMutation = useMutation({
+    mutationFn: () => {
+      if (!videoId) throw new Error("Select a video first");
+      if (!cameraQuery.data) {
+        throw new Error("Save camera intrinsics before 3D trajectory analysis");
+      }
+      const samples = parseDepthSamples(depthSamplesText, tracksQuery.data ?? []);
+      const frameGap = maximumFrameGap.trim()
+        ? Number.parseInt(maximumFrameGap, 10)
+        : null;
+      if (frameGap !== null && (!Number.isInteger(frameGap) || frameGap < 1)) {
+        throw new Error("Maximum frame gap must be a positive integer");
+      }
+      return getDepthTrackAnalytics(videoId, {
+        unit: depthUnit,
+        samples,
+        maximum_frame_gap: frameGap,
+      });
+    },
+  });
+
   const classNames = useMemo(
     () => new Map(project.label_classes.map((item) => [item.id, item.name])),
     [project.label_classes],
@@ -145,19 +293,22 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
     videosQuery.error ??
     tracksQuery.error ??
     calibrationQuery.error ??
+    cameraQuery.error ??
     calibratedTrackQuery.error ??
     calibrationMutation.error ??
     clearMutation.error ??
-    schoolingMutation.error;
+    schoolingMutation.error ??
+    cameraMutation.error ??
+    clearCameraMutation.error ??
+    depthAnalyticsMutation.error;
 
   return (
     <section className="management-card" data-testid="video-science-panel">
       <p className="eyebrow">Video science</p>
-      <h3>Calibration and schooling metrics</h3>
+      <h3>Calibration, schooling, and 3D movement</h3>
       <p className="annotation-helper">
-        Convert pixel trajectories into physical distance and speed with a known-length
-        calibration, then summarize group spacing, nearest-neighbor distance, centroid
-        spread, movement speed, and polarization.
+        Convert pixel trajectories into physical distance and speed, quantify schooling,
+        and back-project verified metric depth samples into calibrated 3D fish trajectories.
       </p>
       <label>
         Video
@@ -396,6 +547,190 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
           </div>
         </div>
       )}
+
+      <h4>Metric depth / 3D trajectories</h4>
+      <p className="annotation-helper">
+        Use calibrated metric depth from stereo, RGB-D, or another validated metric source.
+        Relative Depth Anything values are not physical distances unless independently
+        calibrated. ReefVision combines each depth sample with the interpolated track center
+        and camera intrinsics to reconstruct X/Y/Z movement.
+      </p>
+      <div className="annotation-selection-list">
+        <label>
+          fx (pixels)
+          <input
+            type="number"
+            min={0.000001}
+            step="any"
+            value={cameraFx}
+            onChange={(event) => setCameraFx(Number(event.target.value))}
+          />
+        </label>
+        <label>
+          fy (pixels)
+          <input
+            type="number"
+            min={0.000001}
+            step="any"
+            value={cameraFy}
+            onChange={(event) => setCameraFy(Number(event.target.value))}
+          />
+        </label>
+        <label>
+          cx (pixels)
+          <input
+            type="number"
+            step="any"
+            value={cameraCx}
+            onChange={(event) => setCameraCx(Number(event.target.value))}
+          />
+        </label>
+        <label>
+          cy (pixels)
+          <input
+            type="number"
+            step="any"
+            value={cameraCy}
+            onChange={(event) => setCameraCy(Number(event.target.value))}
+          />
+        </label>
+        <label>
+          Intrinsics method
+          <input
+            value={cameraMethod}
+            onChange={(event) => setCameraMethod(event.target.value)}
+          />
+        </label>
+        <label>
+          Intrinsics notes
+          <textarea
+            value={cameraNotes}
+            onChange={(event) => setCameraNotes(event.target.value)}
+          />
+        </label>
+      </div>
+      <div className="annotation-editor-inline-actions">
+        <button
+          type="button"
+          disabled={!videoId || cameraMutation.isPending}
+          onClick={() => cameraMutation.mutate()}
+        >
+          {cameraMutation.isPending ? "Saving..." : "Save camera intrinsics"}
+        </button>
+        <button
+          type="button"
+          className="danger-ghost"
+          disabled={!cameraQuery.data || clearCameraMutation.isPending}
+          onClick={() => clearCameraMutation.mutate()}
+        >
+          Clear intrinsics
+        </button>
+      </div>
+      {cameraQuery.data && (
+        <p className="annotation-helper">
+          Saved intrinsics: fx {cameraQuery.data.fx_px.toFixed(2)}, fy{" "}
+          {cameraQuery.data.fy_px.toFixed(2)}, principal point ({cameraQuery.data.cx_px.toFixed(2)}, {" "}
+          {cameraQuery.data.cy_px.toFixed(2)}) px.
+        </p>
+      )}
+      <label>
+        Depth unit
+        <select
+          value={depthUnit}
+          onChange={(event) => setDepthUnit(event.target.value as VideoDistanceUnit)}
+        >
+          <option value="mm">Millimeters</option>
+          <option value="cm">Centimeters</option>
+          <option value="m">Meters</option>
+        </select>
+      </label>
+      <label>
+        Metric depth samples (CSV)
+        <textarea
+          rows={8}
+          value={depthSamplesText}
+          onChange={(event) => setDepthSamplesText(event.target.value)}
+          placeholder="track,frame,depth,confidence\n1,0,1.25,0.98\n1,10,1.30,0.97"
+        />
+      </label>
+      <p className="annotation-helper">
+        The first column may be the visible track number or the full track ID. Confidence is
+        optional. Available tracks: {(tracksQuery.data ?? []).map((track) => track.track_number).join(", ") || "none"}.
+      </p>
+      <label>
+        Maximum frame gap to bridge (optional)
+        <input
+          type="number"
+          min={1}
+          step={1}
+          value={maximumFrameGap}
+          onChange={(event) => setMaximumFrameGap(event.target.value)}
+          placeholder="Leave blank to use every consecutive sample pair"
+        />
+      </label>
+      <button
+        type="button"
+        disabled={!cameraQuery.data || depthAnalyticsMutation.isPending}
+        onClick={() => depthAnalyticsMutation.mutate()}
+      >
+        {depthAnalyticsMutation.isPending
+          ? "Reconstructing..."
+          : "Calculate 3D trajectories"}
+      </button>
+      {depthAnalyticsMutation.data && (
+        <div className="annotation-selection-list">
+          {depthAnalyticsMutation.data.tracks.map((track) => (
+            <div key={track.track_id} className="panel-card">
+              <strong>
+                Track {track.track_number} — {classNames.get(track.label_class_id) ?? "Unknown class"}
+              </strong>
+              <dl className="metric-list">
+                <div>
+                  <dt>3D path</dt>
+                  <dd>
+                    {track.path_length_3d.toFixed(4)} {depthAnalyticsMutation.data.unit}
+                  </dd>
+                </div>
+                <div>
+                  <dt>3D displacement</dt>
+                  <dd>
+                    {track.displacement_3d.toFixed(4)} {depthAnalyticsMutation.data.unit}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Mean 3D speed</dt>
+                  <dd>
+                    {track.mean_speed_3d_per_second.toFixed(4)} {depthAnalyticsMutation.data.unit}/s
+                  </dd>
+                </div>
+                <div>
+                  <dt>Maximum 3D speed</dt>
+                  <dd>
+                    {track.maximum_speed_3d_per_second.toFixed(4)}{" "}
+                    {depthAnalyticsMutation.data.unit}/s
+                  </dd>
+                </div>
+                <div>
+                  <dt>Mean depth</dt>
+                  <dd>
+                    {track.mean_depth.toFixed(4)} {depthAnalyticsMutation.data.unit}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Samples</dt>
+                  <dd>{track.observed_frame_count}</dd>
+                </div>
+              </dl>
+            </div>
+          ))}
+          {depthAnalyticsMutation.data.warnings.map((warning) => (
+            <p key={warning} className="annotation-helper">
+              {warning}
+            </p>
+          ))}
+        </div>
+      )}
+
       {error instanceof Error && <p className="form-error">{error.message}</p>}
     </section>
   );
