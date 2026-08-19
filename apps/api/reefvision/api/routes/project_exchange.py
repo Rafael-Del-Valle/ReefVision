@@ -14,7 +14,7 @@ from reefvision.schemas.project_exchange import (
     ProjectExchangeInspectionResponse,
     ProjectExchangePackageResponse,
 )
-from reefvision.services.project_exchange_import import import_project_exchange
+from reefvision.services.project_exchange_import_v1 import import_project_exchange_v1
 from reefvision.services.project_exchange_inspection import inspect_project_exchange
 from reefvision.services.project_exchange_v1 import ProjectExchangeV1Service
 
@@ -95,7 +95,7 @@ def import_project_exchange_upload(
     file: Annotated[UploadFile, File(...)],
     project_name: Annotated[str | None, Form()] = None,
 ) -> ProjectExchangeImportResponse:
-    return import_project_exchange(
+    return import_project_exchange_v1(
         file.file,
         session,
         request.app.state.settings,
