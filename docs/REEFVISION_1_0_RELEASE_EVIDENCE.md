@@ -57,20 +57,27 @@ Add `-PreviousInstallerPath C:\path\to\previous\ReefVision.msi -PreviousInstalle
 
 ## Scientific and hardware validation
 
-| Evidence | Status |
-| --- | --- |
-| Coral detection training and inference | NOT RUN |
-| Coral segmentation training and inference | NOT RUN |
-| Coral classification training and inference | NOT RUN |
-| SAM2 CPU | NOT RUN |
-| SAM2 CUDA | NOT RUN |
-| Depth Anything CPU | NOT RUN |
-| Depth Anything CUDA | NOT RUN |
-| Unavailable-device recovery | NOT RUN |
-| CUDA out-of-memory recovery | NOT RUN |
-| ByteTrack benchmark against scored footage | NOT RUN |
-| BoT-SORT benchmark against scored footage | NOT RUN |
-| Active Learning equal-budget comparison | NOT RUN |
-| Physical and metric-depth calibration validation | NOT RUN |
+| Evidence | Status | Current evidence |
+| --- | --- | --- |
+| Coral detection training and inference | NOT RUN | Biological validation remains outstanding |
+| Coral segmentation training and inference | NOT RUN | Biological validation remains outstanding |
+| Coral classification training and inference | NOT RUN | Biological validation remains outstanding |
+| SAM2 CPU | PASS | Verified `sam2_b.pt` executed through production Smart Mask provider on CPU |
+| SAM2 CUDA | PASS | Verified `sam2_b.pt` executed on RTX 4060 Laptop GPU with no CPU fallback |
+| Depth Anything CPU | BLOCKED | No verified Depth Anything V2 checkpoint is cataloged or staged |
+| Depth Anything CUDA | BLOCKED | No verified Depth Anything V2 checkpoint is cataloged or staged |
+| Unavailable-device recovery | PASS | Production device resolver rejected `cuda:99` without fallback |
+| CUDA out-of-memory recovery | NOT RUN | No explicit production recovery contract; unsafe real OOM was not attempted |
+| ByteTrack benchmark against scored footage | NOT RUN | Scored-footage validation remains outstanding |
+| BoT-SORT benchmark against scored footage | NOT RUN | Scored-footage validation remains outstanding |
+| Active Learning equal-budget comparison | NOT RUN | Scientific comparison remains outstanding |
+| Physical and metric-depth calibration validation | NOT RUN | Calibration validation remains outstanding |
+
+Hardware evidence generated 2026-08-19 on Windows 11 with PyTorch 2.5.1+cu121,
+Transformers 4.57.2, and an NVIDIA GeForce RTX 4060 Laptop GPU (8 GiB VRAM):
+`.artifacts/model-provider-acceptance-20260819T200343Z/report.json`. The deterministic
+synthetic input establishes provider and hardware execution only, not biological accuracy.
+Depth Anything remains relative monocular depth and is not metric physical depth unless
+separately calibrated.
 
 Synthetic software tests do not establish biological accuracy, tracking quality, calibration accuracy, or hardware-provider readiness.
