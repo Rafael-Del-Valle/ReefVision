@@ -136,7 +136,7 @@ def test_sam2_sidecar_descriptor_must_use_loopback(tmp_path) -> None:
         provider.load_model(descriptor, "cuda:0")
 
 
-def test_sam2_sidecar_mask_response_is_binary_and_dimension_checked() -> None:
+def test_sam2_sidecar_mask_response_is_binary_boxed_and_dimension_checked() -> None:
     mask = np.zeros((12, 16), dtype=np.uint8)
     mask[2:8, 4:10] = 255
     stream = BytesIO()
@@ -154,6 +154,7 @@ def test_sam2_sidecar_mask_response_is_binary_and_dimension_checked() -> None:
     assert prediction.score == 0.91
     assert prediction.mask.dtype == np.bool_
     assert int(prediction.mask.sum()) == 36
+    assert prediction.box == PixelBox(x_min=4.0, y_min=2.0, x_max=10.0, y_max=8.0)
 
     with pytest.raises(ValidationError, match="dimensions"):
         _mask_prediction(
