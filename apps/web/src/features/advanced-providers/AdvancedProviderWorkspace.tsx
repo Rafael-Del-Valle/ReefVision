@@ -41,7 +41,7 @@ export function AdvancedProviderWorkspace({
       : firstTask;
     if (resolvedTask !== task) setTask(resolvedTask);
     const fields = resolvedTask
-      ? selectedManifest?.prompt_fields_by_task[resolvedTask] ?? []
+      ? (selectedManifest?.prompt_fields_by_task[resolvedTask] ?? [])
       : [];
     const example = Object.fromEntries(
       fields.map((field) => [
@@ -71,8 +71,9 @@ export function AdvancedProviderWorkspace({
           <p className="eyebrow">Phase 8</p>
           <h3>Advanced Provider Lab</h3>
           <p>
-            Inspect optional model adapters and run fail-closed preflight checks.
-            A blocked provider is documented here, not exposed as a working tool.
+            Inspect optional model adapters and run fail-closed preflight
+            checks. A blocked provider is documented here, not exposed as a
+            working tool.
           </p>
         </div>
       </div>
@@ -98,12 +99,15 @@ export function AdvancedProviderWorkspace({
               <p>
                 Execution:{" "}
                 <strong>
-                  {selectedManifest.execution_supported ? "implemented" : "blocked"}
+                  {selectedManifest.execution_supported
+                    ? "implemented"
+                    : "blocked"}
                 </strong>
               </p>
               <p>Tasks: {selectedManifest.supported_tasks.join(", ")}</p>
               <p>
-                Model files: {selectedManifest.required_model_extensions.join(", ")}
+                Model files:{" "}
+                {selectedManifest.required_model_extensions.join(", ")}
               </p>
               <h5>Packages</h5>
               <ul>
@@ -131,7 +135,10 @@ export function AdvancedProviderWorkspace({
           <h4>Execution preflight</h4>
           <label>
             Task
-            <select value={task} onChange={(event) => setTask(event.target.value)}>
+            <select
+              value={task}
+              onChange={(event) => setTask(event.target.value)}
+            >
               {selectedManifest?.supported_tasks.map((item) => (
                 <option key={item} value={item}>
                   {item}
@@ -186,7 +193,9 @@ export function AdvancedProviderWorkspace({
                 <strong>{preflightMutation.data.ready ? "Yes" : "No"}</strong>
               </p>
               <p>Availability: {preflightMutation.data.availability_status}</p>
-              <p>Outputs: {preflightMutation.data.output_contract.join(", ")}</p>
+              <p>
+                Outputs: {preflightMutation.data.output_contract.join(", ")}
+              </p>
               <h5>Blockers</h5>
               {preflightMutation.data.blockers.length ? (
                 <ul>

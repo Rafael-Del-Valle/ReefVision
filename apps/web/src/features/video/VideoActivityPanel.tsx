@@ -81,13 +81,17 @@ export function VideoActivityPanel({ project }: VideoActivityPanelProps) {
       <p className="eyebrow">Behavior</p>
       <h3>Activity and movement bouts</h3>
       <p className="annotation-helper">
-        Classify calibrated trajectory intervals as active or resting using a physical
-        speed threshold. Short active bursts can be suppressed with a minimum bout
-        duration before activity fraction and bout statistics are summarized.
+        Classify calibrated trajectory intervals as active or resting using a
+        physical speed threshold. Short active bursts can be suppressed with a
+        minimum bout duration before activity fraction and bout statistics are
+        summarized.
       </p>
       <label>
         Video
-        <select value={videoId} onChange={(event) => setVideoId(event.target.value)}>
+        <select
+          value={videoId}
+          onChange={(event) => setVideoId(event.target.value)}
+        >
           {(videosQuery.data ?? []).map((video) => (
             <option key={video.id} value={video.id}>
               {video.original_filename}
@@ -97,11 +101,15 @@ export function VideoActivityPanel({ project }: VideoActivityPanelProps) {
       </label>
       <label>
         Track
-        <select value={trackId} onChange={(event) => setTrackId(event.target.value)}>
+        <select
+          value={trackId}
+          onChange={(event) => setTrackId(event.target.value)}
+        >
           <option value="">Select a track</option>
           {(tracksQuery.data ?? []).map((track) => (
             <option key={track.id} value={track.id}>
-              Track {track.track_number} — {classNames.get(track.label_class_id) ?? "Unknown class"}
+              Track {track.track_number} —{" "}
+              {classNames.get(track.label_class_id) ?? "Unknown class"}
             </option>
           ))}
         </select>
@@ -114,8 +122,8 @@ export function VideoActivityPanel({ project }: VideoActivityPanelProps) {
         </p>
       ) : (
         <p className="annotation-helper">
-          Save a spatial calibration in the Video science panel before calculating
-          physical activity metrics.
+          Save a spatial calibration in the Video science panel before
+          calculating physical activity metrics.
         </p>
       )}
       <label>
@@ -135,7 +143,9 @@ export function VideoActivityPanel({ project }: VideoActivityPanelProps) {
           min={0}
           step="any"
           value={minimumBoutSeconds}
-          onChange={(event) => setMinimumBoutSeconds(Number(event.target.value))}
+          onChange={(event) =>
+            setMinimumBoutSeconds(Number(event.target.value))
+          }
         />
       </label>
       <label>
@@ -160,7 +170,9 @@ export function VideoActivityPanel({ project }: VideoActivityPanelProps) {
       </label>
       <button
         type="button"
-        disabled={activityMutation.isPending || !trackId || !calibrationQuery.data}
+        disabled={
+          activityMutation.isPending || !trackId || !calibrationQuery.data
+        }
         onClick={() => activityMutation.mutate()}
       >
         {activityMutation.isPending ? "Calculating..." : "Calculate activity"}
@@ -171,7 +183,9 @@ export function VideoActivityPanel({ project }: VideoActivityPanelProps) {
           <div className="annotation-selection-list">
             <div className="annotation-selection-row">
               <strong>Active fraction</strong>
-              <span>{(activityMutation.data.active_fraction * 100).toFixed(1)}%</span>
+              <span>
+                {(activityMutation.data.active_fraction * 100).toFixed(1)}%
+              </span>
             </div>
             <div className="annotation-selection-row">
               <strong>Active / rest time</strong>

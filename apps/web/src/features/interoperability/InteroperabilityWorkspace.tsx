@@ -20,7 +20,8 @@ export function InteroperabilityWorkspace({
   const queryClient = useQueryClient();
   const [includeMedia, setIncludeMedia] = useState(false);
   const [includeModelWeights, setIncludeModelWeights] = useState(false);
-  const [includeGeneratedArtifacts, setIncludeGeneratedArtifacts] = useState(false);
+  const [includeGeneratedArtifacts, setIncludeGeneratedArtifacts] =
+    useState(false);
   const [inspectionFile, setInspectionFile] = useState<File | null>(null);
   const [importProjectName, setImportProjectName] = useState("");
 
@@ -52,7 +53,9 @@ export function InteroperabilityWorkspace({
     mutationFn: () => {
       if (!inspectionFile) throw new Error("Choose an exchange ZIP first");
       if (!inspectMutation.data?.compatible) {
-        throw new Error("Inspect a compatible exchange package before importing");
+        throw new Error(
+          "Inspect a compatible exchange package before importing",
+        );
       }
       return importProjectExchange(
         inspectionFile,
@@ -71,9 +74,9 @@ export function InteroperabilityWorkspace({
           <p className="eyebrow">Phase 9</p>
           <h3>Project interoperability</h3>
           <p>
-            Export a versioned, checksummed ReefVision package, inspect it without
-            executing package content, or import it as a new project with record-ID
-            remapping. Existing projects are never overwritten.
+            Export a versioned, checksummed ReefVision package, inspect it
+            without executing package content, or import it as a new project
+            with record-ID remapping. Existing projects are never overwritten.
           </p>
         </div>
       </div>
@@ -101,14 +104,18 @@ export function InteroperabilityWorkspace({
             <input
               type="checkbox"
               checked={includeGeneratedArtifacts}
-              onChange={(event) => setIncludeGeneratedArtifacts(event.target.checked)}
+              onChange={(event) =>
+                setIncludeGeneratedArtifacts(event.target.checked)
+              }
             />
-            Include generated datasets, depth maps, previews, frames, and training artifacts
+            Include generated datasets, depth maps, previews, frames, and
+            training artifacts
           </label>
           <p>
-            Original media, model weights, and generated artifacts are independent
-            opt-ins because complete scientific projects can be much larger than their
-            metadata alone. Model weights may also have separate redistribution licenses.
+            Original media, model weights, and generated artifacts are
+            independent opt-ins because complete scientific projects can be much
+            larger than their metadata alone. Model weights may also have
+            separate redistribution licenses.
           </p>
           <button
             type="button"
@@ -144,13 +151,19 @@ export function InteroperabilityWorkspace({
             <>
               <p>
                 Compatible:{" "}
-                <strong>{inspectMutation.data.compatible ? "Yes" : "No"}</strong>
+                <strong>
+                  {inspectMutation.data.compatible ? "Yes" : "No"}
+                </strong>
               </p>
               <p>Project: {inspectMutation.data.project_name ?? "Unknown"}</p>
               <p>Format: {inspectMutation.data.format_version ?? "Unknown"}</p>
-              <p>Original/model files: {inspectMutation.data.included_media_count}</p>
               <p>
-                Generated artifacts: {inspectMutation.data.included_generated_artifact_count}
+                Original/model files:{" "}
+                {inspectMutation.data.included_media_count}
+              </p>
+              <p>
+                Generated artifacts:{" "}
+                {inspectMutation.data.included_generated_artifact_count}
               </p>
               {inspectMutation.data.warnings.length > 0 && (
                 <ul>
@@ -172,15 +185,17 @@ export function InteroperabilityWorkspace({
                   value={importProjectName}
                   onChange={(event) => setImportProjectName(event.target.value)}
                   placeholder={
-                    inspectMutation.data.project_name ?? "Use package project name"
+                    inspectMutation.data.project_name ??
+                    "Use package project name"
                   }
                 />
               </label>
               <p className="annotation-helper">
-                Import always creates a new managed project. Source UUIDs are remapped,
-                exact ID references inside workflow/provenance JSON are remapped, packaged
-                media is copied into the new project storage tree, and included generated
-                artifacts are restored to their managed project-relative paths.
+                Import always creates a new managed project. Source UUIDs are
+                remapped, exact ID references inside workflow/provenance JSON
+                are remapped, packaged media is copied into the new project
+                storage tree, and included generated artifacts are restored to
+                their managed project-relative paths.
               </p>
               <button
                 type="button"
@@ -219,7 +234,9 @@ export function InteroperabilityWorkspace({
               </div>
               <div className="annotation-selection-row">
                 <strong>Restored generated artifacts</strong>
-                <span>{importMutation.data.copied_generated_artifact_count}</span>
+                <span>
+                  {importMutation.data.copied_generated_artifact_count}
+                </span>
               </div>
               <div className="annotation-selection-row">
                 <strong>Source manifest</strong>
@@ -248,7 +265,9 @@ export function InteroperabilityWorkspace({
                   {item.status === "complete" && (
                     <>
                       {" · "}
-                      <a href={projectExchangeDownloadUrl(item.id)}>Download ZIP</a>
+                      <a href={projectExchangeDownloadUrl(item.id)}>
+                        Download ZIP
+                      </a>
                     </>
                   )}
                   {item.error_message && (

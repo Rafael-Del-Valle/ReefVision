@@ -252,7 +252,10 @@ export function resumeWorkflowReviewNode(
 export function cancelWorkflowRunJob(
   jobId: string,
 ): Promise<{ status: string }> {
-  return request<{ status: string }>(`/jobs/${encodeURIComponent(jobId)}/cancel`, {
-    method: "POST",
-  });
+  return request<{ status: string }>(
+    `/jobs/${encodeURIComponent(jobId)}/cancel`,
+    {
+      method: "POST",
+    },
+  );
 }

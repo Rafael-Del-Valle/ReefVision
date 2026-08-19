@@ -1,11 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
-import {
-  getDatasetVersions,
-  getModels,
-  type Project,
-} from "../../api/client";
+import { getDatasetVersions, getModels, type Project } from "../../api/client";
 import { AdvancedProviderWorkspace } from "../advanced-providers/AdvancedProviderWorkspace";
 import { InteroperabilityWorkspace } from "../interoperability/InteroperabilityWorkspace";
 import { WorkflowGraphWorkspace } from "../workflow-graphs/WorkflowGraphWorkspace";
@@ -120,15 +116,18 @@ export function ActiveLearningWorkspace({
   }
 
   return (
-    <section className="feature-workspace" data-testid="active-learning-workspace">
+    <section
+      className="feature-workspace"
+      data-testid="active-learning-workspace"
+    >
       <div className="section-heading">
         <div>
           <p className="eyebrow">Phase 7</p>
           <h3>Active learning</h3>
           <p>
-            Freeze an explainable acquisition batch, review it through the existing
-            queue, and turn verified human feedback into the next immutable dataset
-            version.
+            Freeze an explainable acquisition batch, review it through the
+            existing queue, and turn verified human feedback into the next
+            immutable dataset version.
           </p>
         </div>
       </div>
@@ -144,7 +143,10 @@ export function ActiveLearningWorkspace({
           <h4>Create acquisition round</h4>
           <label>
             Round name
-            <input value={name} onChange={(event) => setName(event.target.value)} />
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
           </label>
           <label>
             Input dataset
@@ -193,7 +195,9 @@ export function ActiveLearningWorkspace({
               Leave every model unchecked to use all available model signals.
             </p>
             {(modelsQuery.data ?? []).length === 0 ? (
-              <p className="annotation-helper">No registered models are available.</p>
+              <p className="annotation-helper">
+                No registered models are available.
+              </p>
             ) : (
               (modelsQuery.data ?? []).map((model) => (
                 <label key={model.id}>
@@ -207,7 +211,10 @@ export function ActiveLearningWorkspace({
               ))
             )}
           </fieldset>
-          <button type="submit" disabled={createMutation.isPending || !name.trim()}>
+          <button
+            type="submit"
+            disabled={createMutation.isPending || !name.trim()}
+          >
             {createMutation.isPending ? "Creating..." : "Create round"}
           </button>
           {createMutation.error && (
@@ -239,7 +246,9 @@ export function ActiveLearningWorkspace({
                   <dt>Input dataset</dt>
                   <dd>
                     {selectedRound.dataset_version_id ? (
-                      <code>{selectedRound.dataset_version_id.slice(0, 12)}</code>
+                      <code>
+                        {selectedRound.dataset_version_id.slice(0, 12)}
+                      </code>
                     ) : (
                       "Current project"
                     )}
@@ -267,20 +276,27 @@ export function ActiveLearningWorkspace({
                 </div>
               </dl>
               <p className="annotation-helper">
-                Completing the round creates a new reviewed dataset snapshot. Queue
-                items marked completed must also be marked Reviewed in the annotation
-                workspace; skipped items do not enter the feedback requirement.
+                Completing the round creates a new reviewed dataset snapshot.
+                Queue items marked completed must also be marked Reviewed in the
+                annotation workspace; skipped items do not enter the feedback
+                requirement.
               </p>
             </>
           )}
           <div className="button-row">
-            <button type="button" className="secondary" onClick={onOpenReviewQueue}>
+            <button
+              type="button"
+              className="secondary"
+              onClick={onOpenReviewQueue}
+            >
               Open Review Queue
             </button>
             <button
               type="button"
               onClick={() => completeMutation.mutate()}
-              disabled={!selectedRoundId || selectedRound?.status === "complete"}
+              disabled={
+                !selectedRoundId || selectedRound?.status === "complete"
+              }
             >
               Complete round + snapshot feedback
             </button>
@@ -295,11 +311,15 @@ export function ActiveLearningWorkspace({
           {selectionItems.length > 0 ? (
             <div className="annotation-selection-list">
               {selectionItems.map((item, index) => (
-                <div key={item.queue_item_id} className="annotation-selection-row">
+                <div
+                  key={item.queue_item_id}
+                  className="annotation-selection-row"
+                >
                   <div>
                     <strong>#{index + 1}</strong>
                     <p className="annotation-helper">
-                      {item.reason_summary || "Selected by the active-learning score."}
+                      {item.reason_summary ||
+                        "Selected by the active-learning score."}
                     </p>
                     <small>Image {item.image_id.slice(0, 12)}</small>
                   </div>
@@ -316,9 +336,13 @@ export function ActiveLearningWorkspace({
           <h4>Feedback progress</h4>
           {feedbackQuery.data ? (
             <>
-              <progress max={1} value={feedbackQuery.data.completion_fraction} />
+              <progress
+                max={1}
+                value={feedbackQuery.data.completion_fraction}
+              />
               <p>
-                {(feedbackQuery.data.completion_fraction * 100).toFixed(1)}% terminal
+                {(feedbackQuery.data.completion_fraction * 100).toFixed(1)}%
+                terminal
               </p>
               <dl className="metric-list">
                 <div>
@@ -343,14 +367,20 @@ export function ActiveLearningWorkspace({
                   <div className="annotation-selection-row">
                     <strong>Feedback dataset</strong>
                     <code>
-                      {feedbackQuery.data.feedback_dataset_version_id.slice(0, 12)}
+                      {feedbackQuery.data.feedback_dataset_version_id.slice(
+                        0,
+                        12,
+                      )}
                     </code>
                   </div>
                   {feedbackQuery.data.feedback_manifest_sha256 && (
                     <div className="annotation-selection-row">
                       <strong>Dataset manifest</strong>
                       <code>
-                        {feedbackQuery.data.feedback_manifest_sha256.slice(0, 12)}
+                        {feedbackQuery.data.feedback_manifest_sha256.slice(
+                          0,
+                          12,
+                        )}
                       </code>
                     </div>
                   )}

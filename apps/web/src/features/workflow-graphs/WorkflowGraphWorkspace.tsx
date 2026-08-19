@@ -45,7 +45,9 @@ function safeParseGraph(value: string): Record<string, unknown> | null {
   }
 }
 
-export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps) {
+export function WorkflowGraphWorkspace({
+  project,
+}: WorkflowGraphWorkspaceProps) {
   const [graphJson, setGraphJson] = useState(() =>
     JSON.stringify(workflowTemplates[0]?.graph ?? {}, null, 2),
   );
@@ -154,8 +156,8 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
           <h3>Workflow graph editor and runner</h3>
           <p>
             Build typed computer-vision pipelines visually, validate them before
-            execution, save immutable revisions, and inspect persisted node/artifact
-            lineage after each run.
+            execution, save immutable revisions, and inspect persisted
+            node/artifact lineage after each run.
           </p>
         </div>
       </div>
@@ -163,9 +165,9 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
       <div className="panel-card">
         <h4>Workflow templates</h4>
         <p className="muted-copy">
-          Templates are starting points. Replace placeholder dataset, model, class, and
-          cloud-model identifiers before validation. The visual editor and JSON view stay
-          synchronized.
+          Templates are starting points. Replace placeholder dataset, model,
+          class, and cloud-model identifiers before validation. The visual
+          editor and JSON view stay synchronized.
         </p>
         <div className="button-row" style={{ alignItems: "end" }}>
           <label>
@@ -190,7 +192,10 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
           </button>
         </div>
         <p>
-          {workflowTemplates.find((item) => item.id === selectedTemplateId)?.description}
+          {
+            workflowTemplates.find((item) => item.id === selectedTemplateId)
+              ?.description
+          }
         </p>
       </div>
 
@@ -250,11 +255,13 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
               Save &amp; run
             </button>
           </div>
-          {mutationError && <p className="form-error">{mutationError.message}</p>}
+          {mutationError && (
+            <p className="form-error">{mutationError.message}</p>
+          )}
           <p className="muted-copy">
-            Review gates pause safely. Complete the requested review in ReefVision, then
-            resume the waiting node below. Completed upstream nodes and paid/cloud
-            artifacts are reused rather than recomputed.
+            Review gates pause safely. Complete the requested review in
+            ReefVision, then resume the waiting node below. Completed upstream
+            nodes and paid/cloud artifacts are reused rather than recomputed.
           </p>
         </div>
 
@@ -263,7 +270,8 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
           {registryQuery.data?.map((definition) => (
             <details key={definition.node_type}>
               <summary>
-                <strong>{definition.display_name}</strong> · {definition.category} ·{" "}
+                <strong>{definition.display_name}</strong> ·{" "}
+                {definition.category} ·{" "}
                 {definition.executable ? "executable" : "pending"}
               </summary>
               <p>{definition.description}</p>
@@ -281,12 +289,14 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
               </p>
               <p>
                 Outputs:{" "}
-                {definition.output_ports.map((item) => item.port_id).join(", ") ||
-                  "none"}
+                {definition.output_ports
+                  .map((item) => item.port_id)
+                  .join(", ") || "none"}
               </p>
               {definition.required_parameters.length > 0 && (
                 <p>
-                  Required parameters: {definition.required_parameters.join(", ")}
+                  Required parameters:{" "}
+                  {definition.required_parameters.join(", ")}
                 </p>
               )}
             </details>
@@ -404,9 +414,9 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
               </p>
               {selectedRun.status === "waiting_for_review" && (
                 <p className="muted-copy">
-                  This run is safely paused. Complete the requested human review, then
-                  resume the waiting node below. Completed upstream nodes and artifacts
-                  will be reused.
+                  This run is safely paused. Complete the requested human
+                  review, then resume the waiting node below. Completed upstream
+                  nodes and artifacts will be reused.
                 </p>
               )}
               {selectedRun.error_message && (
@@ -416,7 +426,8 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
               <ol>
                 {runDetailQuery.data?.nodes.map((node) => (
                   <li key={node.id}>
-                    <strong>{node.node_id}</strong> · {node.node_type} · {node.status}
+                    <strong>{node.node_id}</strong> · {node.node_type} ·{" "}
+                    {node.status}
                     {node.error_message ? ` — ${node.error_message}` : ""}
                     {node.status === "waiting_for_review" && (
                       <div className="button-row">
@@ -442,18 +453,23 @@ export function WorkflowGraphWorkspace({ project }: WorkflowGraphWorkspaceProps)
               <ul>
                 {runDetailQuery.data?.artifacts.map((artifact) => (
                   <li key={artifact.id}>
-                    <code>{artifact.data_type}</code> from {artifact.producer_port_id} ·{" "}
+                    <code>{artifact.data_type}</code> from{" "}
+                    {artifact.producer_port_id} ·{" "}
                     <code>{shortHash(artifact.payload_sha256)}</code>
                     <details>
                       <summary>Inspect artifact</summary>
-                      <pre>{JSON.stringify(artifact.payload_json, null, 2)}</pre>
+                      <pre>
+                        {JSON.stringify(artifact.payload_json, null, 2)}
+                      </pre>
                     </details>
                   </li>
                 ))}
               </ul>
             </>
           ) : (
-            <p>Select a recent run or use Save &amp; run to inspect execution.</p>
+            <p>
+              Select a recent run or use Save &amp; run to inspect execution.
+            </p>
           )}
         </div>
       </div>

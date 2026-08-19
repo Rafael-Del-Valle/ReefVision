@@ -19,10 +19,13 @@ const formatLabels: Record<VideoTrackExchangeFormat, string> = {
   mot_csv: "MOTChallenge text (1-based frame/coordinates)",
 };
 
-export function VideoTrackExchangePanel({ project }: VideoTrackExchangePanelProps) {
+export function VideoTrackExchangePanel({
+  project,
+}: VideoTrackExchangePanelProps) {
   const queryClient = useQueryClient();
   const [videoId, setVideoId] = useState("");
-  const [format, setFormat] = useState<VideoTrackExchangeFormat>("reefvision_json");
+  const [format, setFormat] =
+    useState<VideoTrackExchangeFormat>("reefvision_json");
   const [importFile, setImportFile] = useState<File | null>(null);
   const [motLabelClassId, setMotLabelClassId] = useState(
     project.label_classes[0]?.id ?? "",
@@ -48,7 +51,9 @@ export function VideoTrackExchangePanel({ project }: VideoTrackExchangePanelProp
       if (!videoId) throw new Error("Select a video first");
       if (!importFile) throw new Error("Choose a track file first");
       if (format === "mot_csv" && !motLabelClassId) {
-        throw new Error("Choose the ReefVision class to apply to imported MOT tracks");
+        throw new Error(
+          "Choose the ReefVision class to apply to imported MOT tracks",
+        );
       }
       return importVideoTracks(
         videoId,
@@ -61,23 +66,32 @@ export function VideoTrackExchangePanel({ project }: VideoTrackExchangePanelProp
       setImportFile(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["video-tracks", videoId] }),
-        queryClient.invalidateQueries({ queryKey: ["video-tracking-runs", videoId] }),
+        queryClient.invalidateQueries({
+          queryKey: ["video-tracking-runs", videoId],
+        }),
       ]);
     },
   });
 
   return (
-    <section className="management-card" data-testid="video-track-exchange-panel">
+    <section
+      className="management-card"
+      data-testid="video-track-exchange-panel"
+    >
       <p className="eyebrow">Interoperability</p>
       <h3>Track interchange</h3>
       <p className="annotation-helper">
         ReefVision JSON preserves classes, interpolation, status, keyframes, and
         provenance metadata. CSV stores persisted 0-based observations. MOT uses
-        1-based frame and left/top coordinates and does not carry ReefVision classes.
+        1-based frame and left/top coordinates and does not carry ReefVision
+        classes.
       </p>
       <label>
         Video
-        <select value={videoId} onChange={(event) => setVideoId(event.target.value)}>
+        <select
+          value={videoId}
+          onChange={(event) => setVideoId(event.target.value)}
+        >
           {(videosQuery.data ?? []).map((video) => (
             <option key={video.id} value={video.id}>
               {video.original_filename}
@@ -92,13 +106,17 @@ export function VideoTrackExchangePanel({ project }: VideoTrackExchangePanelProp
         Format
         <select
           value={format}
-          onChange={(event) => setFormat(event.target.value as VideoTrackExchangeFormat)}
+          onChange={(event) =>
+            setFormat(event.target.value as VideoTrackExchangeFormat)
+          }
         >
-          {(Object.keys(formatLabels) as VideoTrackExchangeFormat[]).map((value) => (
-            <option key={value} value={value}>
-              {formatLabels[value]}
-            </option>
-          ))}
+          {(Object.keys(formatLabels) as VideoTrackExchangeFormat[]).map(
+            (value) => (
+              <option key={value} value={value}>
+                {formatLabels[value]}
+              </option>
+            ),
+          )}
         </select>
       </label>
       <a

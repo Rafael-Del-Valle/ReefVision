@@ -8,7 +8,7 @@ This guide covers the current ReefVision desktop shell, sidecar build, MSI packa
 
 Development and packaging require:
 
-- Python with the ReefVision pinned dependencies installed;
+- Python 3.12.x with the ReefVision pinned dependencies installed;
 - Node.js and npm;
 - a Rust toolchain;
 - Visual Studio 2022 build tools with the MSVC C++ toolchain and Windows SDK.
@@ -29,7 +29,7 @@ The development script sets `REEFVISION_DESKTOP_DATA_DIR` to `.desktop/dev-data`
 
 ## Production build
 
-Build the packaged app and NSIS installer with:
+Build the packaged app and MSI installer with:
 
 ```powershell
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-desktop.ps1
@@ -42,7 +42,7 @@ The build script:
 - stages the sidecar into `apps/web/src-tauri/binaries`;
 - removes dependency test trees, bytecode, and development caches from the staged runtime;
 - preserves the complete required CPU/GPU provider runtime and scientific resources;
-- runs `tauri build --bundles msi`; and
+- runs `tauri build --bundles msi`, using split external WiX cabinets when the release payload exceeds a single embedded cabinet; and
 - verifies the MSI through administrative extraction and a packaged-backend self-test.
 
 ## Installer location and checksum
@@ -70,7 +70,7 @@ Before claiming upgrade safety:
 1. Install the previous ReefVision desktop version.
 2. Create or open a project using isolated test data.
 3. Confirm projects, managed images, models, dataset versions, QC runs, and review queues exist.
-4. Install the new NSIS package over the old version.
+4. Install the new MSI package over the old version.
 5. Reopen the application and verify the same data is intact.
 
 Never run upgrade or uninstall acceptance against a personal ReefVision installation or real user data. The installer should preserve user data because ReefVision stores active data in the Tauri per-user application-data directory rather than the installation directory.

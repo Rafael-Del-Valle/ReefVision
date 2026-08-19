@@ -6,7 +6,9 @@ function csvCell(value: unknown): string {
   return `"${text.replaceAll('"', '""')}"`;
 }
 
-export function trackingBenchmarkCsv(benchmark: VideoTrackingBenchmark): string {
+export function trackingBenchmarkCsv(
+  benchmark: VideoTrackingBenchmark,
+): string {
   const headers = [
     "rank",
     "name",
@@ -73,6 +75,8 @@ export function trackingBenchmarkCsv(benchmark: VideoTrackingBenchmark): string 
     .join("\n");
 }
 
-export function trackingBenchmarkJson(benchmark: VideoTrackingBenchmark): string {
+export function trackingBenchmarkJson(
+  benchmark: VideoTrackingBenchmark,
+): string {
   return `${JSON.stringify(benchmark, null, 2)}\n`;
 }

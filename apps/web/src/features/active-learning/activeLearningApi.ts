@@ -1,10 +1,7 @@
 import { getApiBaseUrl } from "../../runtime";
 
 export type ActiveLearningStrategy =
-  | "hybrid"
-  | "uncertainty"
-  | "rare_class"
-  | "quality";
+  "hybrid" | "uncertainty" | "rare_class" | "quality";
 
 export interface ActiveLearningSelectionItem {
   image_id: string;

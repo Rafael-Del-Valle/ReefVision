@@ -81,7 +81,9 @@ export function WorkflowVisualEditor({
     () => new Map(registry.map((item) => [item.node_type, item])),
     [registry],
   );
-  const selectedNode = graph?.nodes.find((item) => item.node_id === selectedNodeId);
+  const selectedNode = graph?.nodes.find(
+    (item) => item.node_id === selectedNodeId,
+  );
 
   useEffect(() => {
     setParameterText(JSON.stringify(selectedNode?.parameters ?? {}, null, 2));
@@ -90,11 +92,12 @@ export function WorkflowVisualEditor({
   if (!graph) {
     return (
       <p className="form-error">
-        Visual editing is unavailable until the graph JSON contains nodes and edges
-        arrays.
+        Visual editing is unavailable until the graph JSON contains nodes and
+        edges arrays.
       </p>
     );
   }
+  const currentGraph = graph;
 
   function emit(next: GraphShape): void {
     onChange(next as unknown as Record<string, unknown>);
@@ -108,9 +111,9 @@ export function WorkflowVisualEditor({
     const definition = definitions.get(nodeType);
     if (!definition) return;
     const base = slug(nodeType) || "node";
-    let suffix = graph.nodes.length + 1;
+    let suffix = currentGraph.nodes.length + 1;
     let nodeId = `${base}-${suffix}`;
-    while (graph.nodes.some((item) => item.node_id === nodeId)) {
+    while (currentGraph.nodes.some((item) => item.node_id === nodeId)) {
       suffix += 1;
       nodeId = `${base}-${suffix}`;
     }
@@ -121,18 +124,18 @@ export function WorkflowVisualEditor({
       node_id: nodeId,
       node_type: nodeType,
       parameters,
-      position: defaultPosition(graph.nodes.length),
+      position: defaultPosition(currentGraph.nodes.length),
     };
-    emit({ ...graph, nodes: [...graph.nodes, node] });
+    emit({ ...currentGraph, nodes: [...currentGraph.nodes, node] });
     setSelectedNodeId(nodeId);
     setMessage(`Added ${definition.display_name}.`);
   }
 
   function removeNode(nodeId: string): void {
     emit({
-      ...graph,
-      nodes: graph.nodes.filter((item) => item.node_id !== nodeId),
-      edges: graph.edges.filter(
+      ...currentGraph,
+      nodes: currentGraph.nodes.filter((item) => item.node_id !== nodeId),
+      edges: currentGraph.edges.filter(
         (edge) =>
           edge.source_node_id !== nodeId && edge.target_node_id !== nodeId,
       ),
@@ -143,8 +146,8 @@ export function WorkflowVisualEditor({
 
   function moveNode(nodeId: string, x: number, y: number): void {
     emit({
-      ...graph,
-      nodes: graph.nodes.map((node, index) => {
+      ...currentGraph,
+      nodes: currentGraph.nodes.map((node, index) => {
         const resolved = positionedNode(node, index);
         return resolved.node_id === nodeId
           ? {
@@ -183,7 +186,7 @@ export function WorkflowVisualEditor({
       setMessage("Those ports have incompatible artifact types.");
       return;
     }
-    const duplicate = graph.edges.some(
+    const duplicate = currentGraph.edges.some(
       (edge) =>
         edge.source_node_id === pending.nodeId &&
         edge.source_port_id === pending.portId &&
@@ -196,8 +199,8 @@ export function WorkflowVisualEditor({
       return;
     }
     const retainedEdges = multiple
-      ? graph.edges
-      : graph.edges.filter(
+      ? currentGraph.edges
+      : currentGraph.edges.filter(
           (edge) =>
             !(
               edge.target_node_id === targetNodeId &&
@@ -207,14 +210,14 @@ export function WorkflowVisualEditor({
     const edgeBase = slug(
       `${pending.nodeId}-${pending.portId}-${targetNodeId}-${targetPortId}`,
     );
-    let edgeId = edgeBase || `edge-${graph.edges.length + 1}`;
+    let edgeId = edgeBase || `edge-${currentGraph.edges.length + 1}`;
     let suffix = 2;
     while (retainedEdges.some((edge) => edge.edge_id === edgeId)) {
       edgeId = `${edgeBase}-${suffix}`;
       suffix += 1;
     }
     emit({
-      ...graph,
+      ...currentGraph,
       edges: [
         ...retainedEdges,
         {
@@ -238,8 +241,8 @@ export function WorkflowVisualEditor({
         throw new Error("Parameters must be a JSON object.");
       }
       emit({
-        ...graph,
-        nodes: graph.nodes.map((node) =>
+        ...currentGraph,
+        nodes: currentGraph.nodes.map((node) =>
           node.node_id === selectedNode.node_id
             ? { ...node, parameters: value as Record<string, unknown> }
             : node,
@@ -247,14 +250,19 @@ export function WorkflowVisualEditor({
       });
       setMessage(`Updated parameters for ${selectedNode.node_id}.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Invalid parameter JSON.");
+      setMessage(
+        error instanceof Error ? error.message : "Invalid parameter JSON.",
+      );
     }
   }
 
   const positions = new Map(
-    graph.nodes.map((node, index) => {
+    currentGraph.nodes.map((node, index) => {
       const resolved = positionedNode(node, index);
-      return [resolved.node_id, resolved.position ?? defaultPosition(index)] as const;
+      return [
+        resolved.node_id,
+        resolved.position ?? defaultPosition(index),
+      ] as const;
     }),
   );
 
@@ -279,7 +287,11 @@ export function WorkflowVisualEditor({
           </select>
         </label>
         {pending && (
-          <button type="button" className="secondary" onClick={() => setPending(null)}>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setPending(null)}
+          >
             Cancel connection
           </button>
         )}
@@ -311,7 +323,7 @@ export function WorkflowVisualEditor({
             height={CANVAS_HEIGHT}
             style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
           >
-            {graph.edges.map((edge) => {
+            {currentGraph.edges.map((edge) => {
               const source = positions.get(edge.source_node_id);
               const target = positions.get(edge.target_node_id);
               if (!source || !target) return null;
@@ -333,7 +345,7 @@ export function WorkflowVisualEditor({
             })}
           </svg>
 
-          {graph.nodes.map((rawNode, index) => {
+          {currentGraph.nodes.map((rawNode, index) => {
             const node = positionedNode(rawNode, index);
             const position = node.position ?? defaultPosition(index);
             const definition = definitions.get(node.node_type);
@@ -345,7 +357,10 @@ export function WorkflowVisualEditor({
                   left: position.x,
                   top: position.y,
                   width: NODE_WIDTH,
-                  border: selectedNodeId === node.node_id ? "2px solid currentColor" : "1px solid #777",
+                  border:
+                    selectedNodeId === node.node_id
+                      ? "2px solid currentColor"
+                      : "1px solid #777",
                   borderRadius: 8,
                   background: "var(--panel-background, Canvas)",
                   boxShadow: "0 4px 16px rgba(0,0,0,.12)",
@@ -455,7 +470,8 @@ export function WorkflowVisualEditor({
           {selectedNode ? (
             <>
               <p>
-                <strong>{selectedNode.node_id}</strong> · {selectedNode.node_type}
+                <strong>{selectedNode.node_id}</strong> ·{" "}
+                {selectedNode.node_type}
               </p>
               <textarea
                 rows={12}
@@ -475,21 +491,21 @@ export function WorkflowVisualEditor({
         </div>
         <div className="panel-card">
           <h5>Connections</h5>
-          {graph.edges.length ? (
+          {currentGraph.edges.length ? (
             <ul>
-              {graph.edges.map((edge) => (
+              {currentGraph.edges.map((edge) => (
                 <li key={edge.edge_id}>
                   <code>
-                    {edge.source_node_id}.{edge.source_port_id} → {edge.target_node_id}.
-                    {edge.target_port_id}
+                    {edge.source_node_id}.{edge.source_port_id} →{" "}
+                    {edge.target_node_id}.{edge.target_port_id}
                   </code>{" "}
                   <button
                     type="button"
                     className="secondary"
                     onClick={() =>
                       emit({
-                        ...graph,
-                        edges: graph.edges.filter(
+                        ...currentGraph,
+                        edges: currentGraph.edges.filter(
                           (candidate) => candidate.edge_id !== edge.edge_id,
                         ),
                       })
@@ -501,7 +517,10 @@ export function WorkflowVisualEditor({
               ))}
             </ul>
           ) : (
-            <p>No connections yet. Select an output port, then a compatible input port.</p>
+            <p>
+              No connections yet. Select an output port, then a compatible input
+              port.
+            </p>
           )}
         </div>
       </div>

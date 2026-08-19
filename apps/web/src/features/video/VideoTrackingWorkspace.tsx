@@ -125,7 +125,10 @@ export function VideoTrackingWorkspace({
     [tracksQuery.data],
   );
   const succeededTrackingRuns = useMemo(
-    () => (trackingRunsQuery.data ?? []).filter((run) => run.status === "succeeded"),
+    () =>
+      (trackingRunsQuery.data ?? []).filter(
+        (run) => run.status === "succeeded",
+      ),
     [trackingRunsQuery.data],
   );
 
@@ -271,13 +274,19 @@ export function VideoTrackingWorkspace({
     mutationFn: () => {
       if (!selectedVideoId) throw new Error("Select a video first");
       if (groundTruthTrackIds.length === 0) {
-        throw new Error("Select at least one verified manual ground-truth track");
+        throw new Error(
+          "Select at least one verified manual ground-truth track",
+        );
       }
       if (benchmarkJobIds.length < 2) {
-        throw new Error("Select at least two succeeded tracking runs to compare");
+        throw new Error(
+          "Select at least two succeeded tracking runs to compare",
+        );
       }
       if (benchmarkEndFrame < benchmarkStartFrame) {
-        throw new Error("Benchmark end frame must be at or after the start frame");
+        throw new Error(
+          "Benchmark end frame must be at or after the start frame",
+        );
       }
       const byJob = new Map(
         succeededTrackingRuns.map((run) => [run.job_id, run]),
@@ -665,7 +674,9 @@ export function VideoTrackingWorkspace({
             max={1}
             step={0.05}
             value={trackingConfidence}
-            onChange={(event) => setTrackingConfidence(Number(event.target.value))}
+            onChange={(event) =>
+              setTrackingConfidence(Number(event.target.value))
+            }
           />
         </label>
         <label>
@@ -697,7 +708,9 @@ export function VideoTrackingWorkspace({
             min={1}
             step={1}
             value={minimumTrackFrames}
-            onChange={(event) => setMinimumTrackFrames(Number(event.target.value))}
+            onChange={(event) =>
+              setMinimumTrackFrames(Number(event.target.value))
+            }
           />
         </label>
         <button
@@ -713,9 +726,9 @@ export function VideoTrackingWorkspace({
         </button>
         {trackingMutation.data && (
           <p className="annotation-helper">
-            Tracking job {trackingMutation.data.id.slice(0, 8)} queued. Run history
-            retains independent ByteTrack and BoT-SORT outputs, including zero-track
-            results.
+            Tracking job {trackingMutation.data.id.slice(0, 8)} queued. Run
+            history retains independent ByteTrack and BoT-SORT outputs,
+            including zero-track results.
           </p>
         )}
         {(trackingRunsQuery.data ?? []).length > 0 && (
@@ -761,13 +774,15 @@ export function VideoTrackingWorkspace({
             <div className="annotation-selection-row">
               <strong>Mean speed</strong>
               <span>
-                {analyticsQuery.data.mean_speed_pixels_per_second.toFixed(2)} px/s
+                {analyticsQuery.data.mean_speed_pixels_per_second.toFixed(2)}{" "}
+                px/s
               </span>
             </div>
             <div className="annotation-selection-row">
               <strong>Maximum speed</strong>
               <span>
-                {analyticsQuery.data.maximum_speed_pixels_per_second.toFixed(2)} px/s
+                {analyticsQuery.data.maximum_speed_pixels_per_second.toFixed(2)}{" "}
+                px/s
               </span>
             </div>
             <div className="annotation-selection-row">
@@ -784,9 +799,10 @@ export function VideoTrackingWorkspace({
         <p className="eyebrow">Scientific validation</p>
         <h3>Tracker benchmark</h3>
         <p className="annotation-helper">
-          Compare independent tracking jobs against the same verified manual tracks.
-          Manual ground truth may interpolate between keyframes; machine tracks only
-          receive credit for observations actually produced by the tracker.
+          Compare independent tracking jobs against the same verified manual
+          tracks. Manual ground truth may interpolate between keyframes; machine
+          tracks only receive credit for observations actually produced by the
+          tracker.
         </p>
         <strong>Ground-truth tracks</strong>
         {manualGroundTruthTracks.length === 0 ? (
@@ -825,13 +841,18 @@ export function VideoTrackingWorkspace({
                   checked={benchmarkJobIds.includes(run.job_id)}
                   onChange={(event) =>
                     setBenchmarkJobIds((current) =>
-                      toggleSelection(current, run.job_id, event.target.checked),
+                      toggleSelection(
+                        current,
+                        run.job_id,
+                        event.target.checked,
+                      ),
                     )
                   }
                 />
                 <span>
                   {trackerLabel(run.tracker)} · {run.job_id.slice(0, 8)} ·{" "}
-                  {run.track_count} tracks / {run.observation_count} observations
+                  {run.track_count} tracks / {run.observation_count}{" "}
+                  observations
                 </span>
               </label>
             ))}
@@ -844,7 +865,9 @@ export function VideoTrackingWorkspace({
             min={0}
             max={Math.max(0, (selectedVideo?.frame_count ?? 1) - 1)}
             value={benchmarkStartFrame}
-            onChange={(event) => setBenchmarkStartFrame(Number(event.target.value))}
+            onChange={(event) =>
+              setBenchmarkStartFrame(Number(event.target.value))
+            }
           />
         </label>
         <label>
@@ -854,7 +877,9 @@ export function VideoTrackingWorkspace({
             min={0}
             max={Math.max(0, (selectedVideo?.frame_count ?? 1) - 1)}
             value={benchmarkEndFrame}
-            onChange={(event) => setBenchmarkEndFrame(Number(event.target.value))}
+            onChange={(event) =>
+              setBenchmarkEndFrame(Number(event.target.value))
+            }
           />
         </label>
         <label>
@@ -885,14 +910,16 @@ export function VideoTrackingWorkspace({
           }
           onClick={() => benchmarkMutation.mutate()}
         >
-          {benchmarkMutation.isPending ? "Evaluating..." : "Compare tracker runs"}
+          {benchmarkMutation.isPending
+            ? "Evaluating..."
+            : "Compare tracker runs"}
         </button>
         {benchmarkMutation.data && (
           <>
             <p className="annotation-helper">
-              Winner: <strong>{benchmarkMutation.data.winner}</strong>. Ranking uses
-              MOTA, then recall, precision, identity/fragmentation errors, and center
-              error as deterministic tie-breakers.
+              Winner: <strong>{benchmarkMutation.data.winner}</strong>. Ranking
+              uses MOTA, then recall, precision, identity/fragmentation errors,
+              and center error as deterministic tie-breakers.
             </p>
             <div style={{ overflowX: "auto" }}>
               <table>
@@ -936,7 +963,9 @@ export function VideoTrackingWorkspace({
                 className="secondary"
                 onClick={() => void copyBenchmarkReport("json")}
               >
-                {copiedReport === "json" ? "JSON copied" : "Copy benchmark JSON"}
+                {copiedReport === "json"
+                  ? "JSON copied"
+                  : "Copy benchmark JSON"}
               </button>
               <button
                 type="button"

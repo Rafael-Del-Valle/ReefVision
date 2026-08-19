@@ -16,7 +16,11 @@ interface VideoOccupancyPanelProps {
 
 type CopiedOccupancyReport = "json" | "cells_csv" | "tracks_csv" | null;
 
-function toggleSelection(current: string[], value: string, checked: boolean): string[] {
+function toggleSelection(
+  current: string[],
+  value: string,
+  checked: boolean,
+): string[] {
   if (checked) return current.includes(value) ? current : [...current, value];
   return current.filter((item) => item !== value);
 }
@@ -61,11 +65,18 @@ export function VideoOccupancyPanel({ project }: VideoOccupancyPanelProps) {
     mutationFn: () => {
       if (!videoId) throw new Error("Select a video first");
       if (trackIds.length === 0) throw new Error("Select at least one track");
-      if (gridRows < 1 || gridRows > 50 || gridColumns < 1 || gridColumns > 50) {
+      if (
+        gridRows < 1 ||
+        gridRows > 50 ||
+        gridColumns < 1 ||
+        gridColumns > 50
+      ) {
         throw new Error("Occupancy grid dimensions must be between 1 and 50");
       }
       if (endFrame < startFrame) {
-        throw new Error("Occupancy end frame must be at or after the start frame");
+        throw new Error(
+          "Occupancy end frame must be at or after the start frame",
+        );
       }
       return getVideoOccupancy(videoId, {
         track_ids: trackIds,
@@ -91,7 +102,8 @@ export function VideoOccupancyPanel({ project }: VideoOccupancyPanelProps) {
     setCopiedReport(kind);
   }
 
-  const error = videosQuery.error ?? tracksQuery.error ?? occupancyMutation.error;
+  const error =
+    videosQuery.error ?? tracksQuery.error ?? occupancyMutation.error;
 
   return (
     <section className="management-card" data-testid="video-occupancy-panel">
@@ -99,12 +111,16 @@ export function VideoOccupancyPanel({ project }: VideoOccupancyPanelProps) {
       <h3>Occupancy analysis</h3>
       <p className="annotation-helper">
         Divide the image plane into a configurable grid and summarize fish-frame
-        observations, occupied-frame frequency, unique tracks, and dwell time per cell.
-        Each interpolated track-frame contributes one occupancy observation.
+        observations, occupied-frame frequency, unique tracks, and dwell time
+        per cell. Each interpolated track-frame contributes one occupancy
+        observation.
       </p>
       <label>
         Video
-        <select value={videoId} onChange={(event) => setVideoId(event.target.value)}>
+        <select
+          value={videoId}
+          onChange={(event) => setVideoId(event.target.value)}
+        >
           {(videosQuery.data ?? []).map((video) => (
             <option key={video.id} value={video.id}>
               {video.original_filename}
@@ -125,7 +141,8 @@ export function VideoOccupancyPanel({ project }: VideoOccupancyPanelProps) {
               }
             />
             <span>
-              Track {track.track_number} — {classNames.get(track.label_class_id) ?? "Unknown class"}
+              Track {track.track_number} —{" "}
+              {classNames.get(track.label_class_id) ?? "Unknown class"}
             </span>
           </label>
         ))}
@@ -191,7 +208,9 @@ export function VideoOccupancyPanel({ project }: VideoOccupancyPanelProps) {
             </div>
             <div className="annotation-selection-row">
               <strong>Total fish-seconds</strong>
-              <span>{occupancyMutation.data.total_track_seconds.toFixed(3)} s</span>
+              <span>
+                {occupancyMutation.data.total_track_seconds.toFixed(3)} s
+              </span>
             </div>
           </div>
           <div className="annotation-editor-inline-actions">
@@ -207,14 +226,18 @@ export function VideoOccupancyPanel({ project }: VideoOccupancyPanelProps) {
               className="secondary"
               onClick={() => void copyReport("cells_csv")}
             >
-              {copiedReport === "cells_csv" ? "Cell CSV copied" : "Copy cell CSV"}
+              {copiedReport === "cells_csv"
+                ? "Cell CSV copied"
+                : "Copy cell CSV"}
             </button>
             <button
               type="button"
               className="secondary"
               onClick={() => void copyReport("tracks_csv")}
             >
-              {copiedReport === "tracks_csv" ? "Track CSV copied" : "Copy track CSV"}
+              {copiedReport === "tracks_csv"
+                ? "Track CSV copied"
+                : "Copy track CSV"}
             </button>
           </div>
           <details>
@@ -240,7 +263,8 @@ export function VideoOccupancyPanel({ project }: VideoOccupancyPanelProps) {
                       <td>{cell.observation_count}</td>
                       <td>{(cell.observation_fraction * 100).toFixed(1)}%</td>
                       <td>
-                        {cell.occupied_frame_count} ({(cell.occupied_frame_fraction * 100).toFixed(1)}%)
+                        {cell.occupied_frame_count} (
+                        {(cell.occupied_frame_fraction * 100).toFixed(1)}%)
                       </td>
                       <td>{cell.unique_track_count}</td>
                       <td>{cell.dwell_seconds.toFixed(3)} s</td>

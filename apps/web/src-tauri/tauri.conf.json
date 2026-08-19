@@ -1,6 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "ReefVision",
+  "mainBinaryName": "ReefVision",
   "version": "1.7.0",
   "identifier": "org.reefvision.desktop",
   "build": {

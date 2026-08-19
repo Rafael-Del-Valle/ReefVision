@@ -1,9 +1,7 @@
 import { getApiBaseUrl } from "../../runtime";
 
 export type VideoTrackExchangeFormat =
-  | "reefvision_json"
-  | "reefvision_csv"
-  | "mot_csv";
+  "reefvision_json" | "reefvision_csv" | "mot_csv";
 
 export interface VideoTrackImportResult {
   schema_version: "video-track-import-0001";

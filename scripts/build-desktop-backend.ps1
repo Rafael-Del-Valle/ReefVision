@@ -127,15 +127,7 @@ $ProviderMetadataPackages = @(
     "ultralytics",
     "segment-anything"
 )
-$OptionalBundledTorchPatterns = @(
-    "cudnn_*.dll",
-    "cublas*.dll",
-    "cusparse*.dll",
-    "cusolver*.dll",
-    "cufft*.dll",
-    "curand*.dll",
-    "nvrtc*.dll",
-    "nvJitLink*.dll",
+$BundledTorchDevelopmentPatterns = @(
     "*.lib"
 )
 $PackagingDebrisDirectoryNames = @(
@@ -312,7 +304,7 @@ Write-ReefVisionStep "Trimming packaged desktop runtime to the supported install
 Remove-ReefVisionPackagingDebris -BundlePath $SourceBundle
 $TorchLibPath = Join-Path $SourceBundle "_internal\torch\lib"
 if (Test-Path $TorchLibPath -PathType Container) {
-    foreach ($pattern in $OptionalBundledTorchPatterns) {
+    foreach ($pattern in $BundledTorchDevelopmentPatterns) {
         Get-ChildItem -Path $TorchLibPath -Filter $pattern -File -ErrorAction SilentlyContinue |
             Remove-Item -Force
     }

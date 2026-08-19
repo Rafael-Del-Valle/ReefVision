@@ -8,9 +8,10 @@ import { ActiveLearningWorkspace } from "./ActiveLearningWorkspace";
 import * as activeApi from "./activeLearningApi";
 
 vi.mock("../../api/client", async () => {
-  const actual = await vi.importActual<typeof import("../../api/client")>(
-    "../../api/client",
-  );
+  const actual =
+    await vi.importActual<typeof import("../../api/client")>(
+      "../../api/client",
+    );
   return {
     ...actual,
     getDatasetVersions: vi.fn(),
@@ -19,10 +20,9 @@ vi.mock("../../api/client", async () => {
 });
 
 vi.mock("./activeLearningApi", async () => {
-  const actual =
-    await vi.importActual<typeof import("./activeLearningApi")>(
-      "./activeLearningApi",
-    );
+  const actual = await vi.importActual<typeof import("./activeLearningApi")>(
+    "./activeLearningApi",
+  );
   return {
     ...actual,
     getActiveLearningRounds: vi.fn(),
@@ -129,12 +129,16 @@ describe("ActiveLearningWorkspace", () => {
     expect(screen.getByText("Model filter")).toBeInTheDocument();
     expect(screen.getByText("Why these images?")).toBeInTheDocument();
     expect(
-      await screen.findByText("Low model confidence made this image uncertain."),
+      await screen.findByText(
+        "Low model confidence made this image uncertain.",
+      ),
     ).toBeInTheDocument();
-    expect(screen.getByText("Feedback dataset")).toBeInTheDocument();
+    expect(await screen.findByText("Feedback dataset")).toBeInTheDocument();
     expect(screen.getByText("Dataset manifest")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Complete round + snapshot feedback" }),
+      screen.getByRole("button", {
+        name: "Complete round + snapshot feedback",
+      }),
     ).toBeDisabled();
   });
 });

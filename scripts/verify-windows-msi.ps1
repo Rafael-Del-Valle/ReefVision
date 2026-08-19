@@ -57,8 +57,15 @@ try {
     }
     Write-Host "Administrative extraction root: $ExtractRoot"
 
-    & msiexec.exe /a $Msi.FullName /qn "TARGETDIR=$ExtractRoot" /L*v $MsiLog
-    $MsiExitCode = $LASTEXITCODE
+    $MsiProcess = Start-Process -FilePath 'msiexec.exe' -ArgumentList @(
+        '/a',
+        $Msi.FullName,
+        '/qn',
+        "TARGETDIR=$ExtractRoot",
+        '/L*v',
+        $MsiLog
+    ) -Wait -PassThru
+    $MsiExitCode = $MsiProcess.ExitCode
     if ($MsiExitCode -notin @(0, 3010)) {
         Show-Tail -Path $MsiLog
         throw "Windows Installer administrative extraction failed with exit code $MsiExitCode."

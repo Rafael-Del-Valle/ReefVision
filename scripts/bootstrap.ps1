@@ -21,7 +21,7 @@ $NodeTools = Ensure-ReefVisionNodeTools -AllowInstall -NonInteractive:$NonIntera
 Write-ReefVisionStep "Checking Python"
 $PythonCommand = Get-Command python -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($null -eq $PythonCommand) {
-    throw "Python was not found. Install Python 3.11 or newer, reopen the terminal, and rerun this script."
+    throw "Python was not found. Install Python 3.12.x, reopen the terminal, and rerun this script."
 }
 
 $PythonVersion = & $PythonCommand.Source -c "import sys; print('.'.join(map(str, sys.version_info[:3])))"
@@ -29,11 +29,8 @@ if ($LASTEXITCODE -ne 0) {
     throw "Python was found but could not be started."
 }
 $PythonMajorMinor = $PythonVersion.Split('.')
-if ([int]$PythonMajorMinor[0] -lt 3 -or ([int]$PythonMajorMinor[0] -eq 3 -and [int]$PythonMajorMinor[1] -lt 11)) {
-    throw "Python 3.11 or newer is required. Found Python $PythonVersion."
-}
 if ([int]$PythonMajorMinor[0] -ne 3 -or [int]$PythonMajorMinor[1] -ne 12) {
-    throw "The pinned ReefVision provider stack currently requires Python 3.12.x. Found Python $PythonVersion."
+    throw "ReefVision development and the pinned provider stack require Python 3.12.x. Found Python $PythonVersion."
 }
 Write-Host "Python: $PythonVersion" -ForegroundColor DarkGray
 

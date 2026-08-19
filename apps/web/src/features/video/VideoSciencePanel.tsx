@@ -26,13 +26,22 @@ interface TrackIdentity {
   track_number: number;
 }
 
-function toggleSelection(current: string[], value: string, checked: boolean): string[] {
+function toggleSelection(
+  current: string[],
+  value: string,
+  checked: boolean,
+): string[] {
   if (checked) return current.includes(value) ? current : [...current, value];
   return current.filter((item) => item !== value);
 }
 
-function parseDepthSamples(text: string, tracks: TrackIdentity[]): VideoDepthSample[] {
-  const byNumber = new Map(tracks.map((track) => [String(track.track_number), track.id]));
+function parseDepthSamples(
+  text: string,
+  tracks: TrackIdentity[],
+): VideoDepthSample[] {
+  const byNumber = new Map(
+    tracks.map((track) => [String(track.track_number), track.id]),
+  );
   const knownIds = new Set(tracks.map((track) => track.id));
   const samples: VideoDepthSample[] = [];
   const lines = text
@@ -55,9 +64,13 @@ function parseDepthSamples(text: string, tracks: TrackIdentity[]): VideoDepthSam
       );
     }
     const trackToken = columns[0];
-    const trackId = byNumber.get(trackToken) ?? (knownIds.has(trackToken) ? trackToken : null);
+    const trackId =
+      byNumber.get(trackToken) ??
+      (knownIds.has(trackToken) ? trackToken : null);
     if (!trackId) {
-      throw new Error(`Depth row ${index + 1} references unknown track ${trackToken}.`);
+      throw new Error(
+        `Depth row ${index + 1} references unknown track ${trackToken}.`,
+      );
     }
     const frame = Number(columns[1]);
     const depth = Number(columns[2]);
@@ -72,7 +85,9 @@ function parseDepthSamples(text: string, tracks: TrackIdentity[]): VideoDepthSam
       confidence !== null &&
       (!Number.isFinite(confidence) || confidence < 0 || confidence > 1)
     ) {
-      throw new Error(`Depth row ${index + 1} confidence must be between 0 and 1.`);
+      throw new Error(
+        `Depth row ${index + 1} confidence must be between 0 and 1.`,
+      );
     }
     samples.push({ track_id: trackId, frame, depth, confidence });
   }
@@ -130,7 +145,8 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
   });
   const calibratedTrackQuery = useQuery({
     queryKey: ["video-calibrated-track", selectedTrackId],
-    queryFn: ({ signal }) => getCalibratedTrackAnalytics(selectedTrackId, signal),
+    queryFn: ({ signal }) =>
+      getCalibratedTrackAnalytics(selectedTrackId, signal),
     enabled: Boolean(selectedTrackId && calibrationQuery.data),
   });
 
@@ -146,7 +162,11 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
     setSchoolStartFrame(0);
     setSchoolEndFrame(Math.max(0, (selectedVideo?.frame_count ?? 1) - 1));
     if (!cameraQuery.data && selectedVideo) {
-      const focalGuess = Math.max(selectedVideo.width_px, selectedVideo.height_px, 1);
+      const focalGuess = Math.max(
+        selectedVideo.width_px,
+        selectedVideo.height_px,
+        1,
+      );
       setCameraFx(focalGuess);
       setCameraFy(focalGuess);
       setCameraCx(selectedVideo.width_px / 2);
@@ -223,7 +243,9 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
         throw new Error("Select at least two tracks for schooling analysis");
       }
       if (schoolEndFrame < schoolStartFrame) {
-        throw new Error("Schooling end frame must be at or after the start frame");
+        throw new Error(
+          "Schooling end frame must be at or after the start frame",
+        );
       }
       return getSchoolingAnalytics(videoId, {
         track_ids: schoolTrackIds,
@@ -270,7 +292,10 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
       if (!cameraQuery.data) {
         throw new Error("Save camera intrinsics before 3D trajectory analysis");
       }
-      const samples = parseDepthSamples(depthSamplesText, tracksQuery.data ?? []);
+      const samples = parseDepthSamples(
+        depthSamplesText,
+        tracksQuery.data ?? [],
+      );
       const frameGap = maximumFrameGap.trim()
         ? Number.parseInt(maximumFrameGap, 10)
         : null;
@@ -307,12 +332,16 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
       <p className="eyebrow">Video science</p>
       <h3>Calibration, schooling, and 3D movement</h3>
       <p className="annotation-helper">
-        Convert pixel trajectories into physical distance and speed, quantify schooling,
-        and back-project verified metric depth samples into calibrated 3D fish trajectories.
+        Convert pixel trajectories into physical distance and speed, quantify
+        schooling, and back-project verified metric depth samples into
+        calibrated 3D fish trajectories.
       </p>
       <label>
         Video
-        <select value={videoId} onChange={(event) => setVideoId(event.target.value)}>
+        <select
+          value={videoId}
+          onChange={(event) => setVideoId(event.target.value)}
+        >
           {(videosQuery.data ?? []).map((video) => (
             <option key={video.id} value={video.id}>
               {video.original_filename}
@@ -327,7 +356,9 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
           Physical unit
           <select
             value={unit}
-            onChange={(event) => setUnit(event.target.value as VideoDistanceUnit)}
+            onChange={(event) =>
+              setUnit(event.target.value as VideoDistanceUnit)
+            }
           >
             <option value="mm">Millimeters</option>
             <option value="cm">Centimeters</option>
@@ -341,7 +372,9 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
             min={0.000001}
             step="any"
             value={referenceDistance}
-            onChange={(event) => setReferenceDistance(Number(event.target.value))}
+            onChange={(event) =>
+              setReferenceDistance(Number(event.target.value))
+            }
           />
         </label>
         <label>
@@ -356,7 +389,10 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
         </label>
         <label>
           Calibration method
-          <input value={method} onChange={(event) => setMethod(event.target.value)} />
+          <input
+            value={method}
+            onChange={(event) => setMethod(event.target.value)}
+          />
         </label>
         <label>
           Reference label
@@ -368,7 +404,10 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
         </label>
         <label>
           Notes
-          <textarea value={notes} onChange={(event) => setNotes(event.target.value)} />
+          <textarea
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+          />
         </label>
       </div>
       <div className="annotation-editor-inline-actions">
@@ -382,7 +421,9 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
         <button
           type="button"
           className="danger-ghost"
-          disabled={!videoId || !calibrationQuery.data || clearMutation.isPending}
+          disabled={
+            !videoId || !calibrationQuery.data || clearMutation.isPending
+          }
           onClick={() => clearMutation.mutate()}
         >
           Clear calibration
@@ -391,8 +432,10 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
       {calibrationQuery.data && (
         <p className="annotation-helper">
           Scale: {calibrationQuery.data.pixels_per_unit.toFixed(4)} px/
-          {calibrationQuery.data.unit} ({calibrationQuery.data.units_per_pixel.toFixed(6)}{" "}
-          {calibrationQuery.data.unit}/px), video revision {calibrationQuery.data.video_revision}.
+          {calibrationQuery.data.unit} (
+          {calibrationQuery.data.units_per_pixel.toFixed(6)}{" "}
+          {calibrationQuery.data.unit}/px), video revision{" "}
+          {calibrationQuery.data.video_revision}.
         </p>
       )}
 
@@ -406,7 +449,8 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
           <option value="">Select a track</option>
           {(tracksQuery.data ?? []).map((track) => (
             <option key={track.id} value={track.id}>
-              Track {track.track_number} — {classNames.get(track.label_class_id) ?? "Unknown class"}
+              Track {track.track_number} —{" "}
+              {classNames.get(track.label_class_id) ?? "Unknown class"}
             </option>
           ))}
         </select>
@@ -446,8 +490,8 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
 
       <h4>Group schooling analysis</h4>
       <p className="annotation-helper">
-        Polarization ranges from 0 (headings cancel) to 1 (fully aligned movement).
-        Distances and speeds use the saved video calibration.
+        Polarization ranges from 0 (headings cancel) to 1 (fully aligned
+        movement). Distances and speeds use the saved video calibration.
       </p>
       <div className="annotation-selection-list">
         {(tracksQuery.data ?? []).map((track) => (
@@ -462,7 +506,8 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
               }
             />
             <span>
-              Track {track.track_number} — {classNames.get(track.label_class_id) ?? "Unknown class"}
+              Track {track.track_number} —{" "}
+              {classNames.get(track.label_class_id) ?? "Unknown class"}
             </span>
           </label>
         ))}
@@ -496,7 +541,9 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
         }
         onClick={() => schoolingMutation.mutate()}
       >
-        {schoolingMutation.isPending ? "Calculating..." : "Calculate schooling metrics"}
+        {schoolingMutation.isPending
+          ? "Calculating..."
+          : "Calculate schooling metrics"}
       </button>
       {schoolingMutation.data && (
         <div className="annotation-selection-list">
@@ -550,10 +597,11 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
 
       <h4>Metric depth / 3D trajectories</h4>
       <p className="annotation-helper">
-        Use calibrated metric depth from stereo, RGB-D, or another validated metric source.
-        Relative Depth Anything values are not physical distances unless independently
-        calibrated. ReefVision combines each depth sample with the interpolated track center
-        and camera intrinsics to reconstruct X/Y/Z movement.
+        Use calibrated metric depth from stereo, RGB-D, or another validated
+        metric source. Relative Depth Anything values are not physical distances
+        unless independently calibrated. ReefVision combines each depth sample
+        with the interpolated track center and camera intrinsics to reconstruct
+        X/Y/Z movement.
       </p>
       <div className="annotation-selection-list">
         <label>
@@ -629,7 +677,8 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
       {cameraQuery.data && (
         <p className="annotation-helper">
           Saved intrinsics: fx {cameraQuery.data.fx_px.toFixed(2)}, fy{" "}
-          {cameraQuery.data.fy_px.toFixed(2)}, principal point ({cameraQuery.data.cx_px.toFixed(2)}, {" "}
+          {cameraQuery.data.fy_px.toFixed(2)}, principal point (
+          {cameraQuery.data.cx_px.toFixed(2)},{" "}
           {cameraQuery.data.cy_px.toFixed(2)}) px.
         </p>
       )}
@@ -637,7 +686,9 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
         Depth unit
         <select
           value={depthUnit}
-          onChange={(event) => setDepthUnit(event.target.value as VideoDistanceUnit)}
+          onChange={(event) =>
+            setDepthUnit(event.target.value as VideoDistanceUnit)
+          }
         >
           <option value="mm">Millimeters</option>
           <option value="cm">Centimeters</option>
@@ -654,8 +705,12 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
         />
       </label>
       <p className="annotation-helper">
-        The first column may be the visible track number or the full track ID. Confidence is
-        optional. Available tracks: {(tracksQuery.data ?? []).map((track) => track.track_number).join(", ") || "none"}.
+        The first column may be the visible track number or the full track ID.
+        Confidence is optional. Available tracks:{" "}
+        {(tracksQuery.data ?? [])
+          .map((track) => track.track_number)
+          .join(", ") || "none"}
+        .
       </p>
       <label>
         Maximum frame gap to bridge (optional)
@@ -682,25 +737,29 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
           {depthAnalyticsMutation.data.tracks.map((track) => (
             <div key={track.track_id} className="panel-card">
               <strong>
-                Track {track.track_number} — {classNames.get(track.label_class_id) ?? "Unknown class"}
+                Track {track.track_number} —{" "}
+                {classNames.get(track.label_class_id) ?? "Unknown class"}
               </strong>
               <dl className="metric-list">
                 <div>
                   <dt>3D path</dt>
                   <dd>
-                    {track.path_length_3d.toFixed(4)} {depthAnalyticsMutation.data.unit}
+                    {track.path_length_3d.toFixed(4)}{" "}
+                    {depthAnalyticsMutation.data.unit}
                   </dd>
                 </div>
                 <div>
                   <dt>3D displacement</dt>
                   <dd>
-                    {track.displacement_3d.toFixed(4)} {depthAnalyticsMutation.data.unit}
+                    {track.displacement_3d.toFixed(4)}{" "}
+                    {depthAnalyticsMutation.data.unit}
                   </dd>
                 </div>
                 <div>
                   <dt>Mean 3D speed</dt>
                   <dd>
-                    {track.mean_speed_3d_per_second.toFixed(4)} {depthAnalyticsMutation.data.unit}/s
+                    {track.mean_speed_3d_per_second.toFixed(4)}{" "}
+                    {depthAnalyticsMutation.data.unit}/s
                   </dd>
                 </div>
                 <div>
@@ -713,7 +772,8 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
                 <div>
                   <dt>Mean depth</dt>
                   <dd>
-                    {track.mean_depth.toFixed(4)} {depthAnalyticsMutation.data.unit}
+                    {track.mean_depth.toFixed(4)}{" "}
+                    {depthAnalyticsMutation.data.unit}
                   </dd>
                 </div>
                 <div>

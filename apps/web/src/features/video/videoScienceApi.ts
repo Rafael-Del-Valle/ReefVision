@@ -13,6 +13,8 @@ export interface VideoSpatialCalibration {
   method: string;
   reference_label: string | null;
   notes: string | null;
+  calibration_revision: number;
+  calibration_updated_at: string;
   video_revision: number;
 }
 
@@ -134,7 +136,10 @@ export interface VideoDepthTrackAnalytics {
   warnings: string[];
 }
 
-async function errorMessage(response: Response, fallback: string): Promise<string> {
+async function errorMessage(
+  response: Response,
+  fallback: string,
+): Promise<string> {
   try {
     const payload = (await response.json()) as { detail?: string };
     return typeof payload.detail === "string" ? payload.detail : fallback;
@@ -154,7 +159,10 @@ export async function getVideoCalibration(
   if (response.status === 404) return null;
   if (!response.ok) {
     throw new Error(
-      await errorMessage(response, `Calibration request failed with HTTP ${response.status}`),
+      await errorMessage(
+        response,
+        `Calibration request failed with HTTP ${response.status}`,
+      ),
     );
   }
   return (await response.json()) as VideoSpatialCalibration;
@@ -181,7 +189,10 @@ export async function setVideoCalibration(
   );
   if (!response.ok) {
     throw new Error(
-      await errorMessage(response, `Calibration update failed with HTTP ${response.status}`),
+      await errorMessage(
+        response,
+        `Calibration update failed with HTTP ${response.status}`,
+      ),
     );
   }
   return (await response.json()) as VideoSpatialCalibration;
@@ -194,7 +205,10 @@ export async function clearVideoCalibration(videoId: string): Promise<void> {
   );
   if (!response.ok) {
     throw new Error(
-      await errorMessage(response, `Calibration delete failed with HTTP ${response.status}`),
+      await errorMessage(
+        response,
+        `Calibration delete failed with HTTP ${response.status}`,
+      ),
     );
   }
 }
@@ -236,7 +250,10 @@ export async function getSchoolingAnalytics(
   );
   if (!response.ok) {
     throw new Error(
-      await errorMessage(response, `Schooling analytics failed with HTTP ${response.status}`),
+      await errorMessage(
+        response,
+        `Schooling analytics failed with HTTP ${response.status}`,
+      ),
     );
   }
   return (await response.json()) as SchoolingAnalytics;
@@ -292,7 +309,9 @@ export async function setVideoCameraIntrinsics(
   return (await response.json()) as VideoCameraIntrinsics;
 }
 
-export async function clearVideoCameraIntrinsics(videoId: string): Promise<void> {
+export async function clearVideoCameraIntrinsics(
+  videoId: string,
+): Promise<void> {
   const response = await fetch(
     `${getApiBaseUrl()}/videos/${encodeURIComponent(videoId)}/camera-intrinsics`,
     { method: "DELETE" },

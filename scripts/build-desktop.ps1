@@ -13,6 +13,57 @@ $NodeTools = Ensure-ReefVisionNodeTools
 $RustTools = Ensure-ReefVisionRustTools -Purpose "build the ReefVision desktop installer" -TargetTriple $TargetTriple
 Assert-ReefVisionPublicLockfile -NodeTools $NodeTools
 
+function Build-ReefVisionSplitCabinetMsi {
+    param([Parameter(Mandatory = $true)][string]$TargetTriple)
+
+    $ReleaseRoot = Join-Path $Root "apps\web\src-tauri\target\$TargetTriple\release"
+    $WixRoot = Join-Path $ReleaseRoot "wix\x64"
+    $WixSource = Join-Path $WixRoot "main.wxs"
+    $WixObject = Join-Path $WixRoot "main.wixobj"
+    $Locale = Join-Path $WixRoot "locale.wxl"
+    $InstallerDirectory = Join-Path $ReleaseRoot "bundle\msi"
+    $Installer = Join-Path $InstallerDirectory "ReefVision_1.7.0_x64_en-US.msi"
+    $WixTools = Join-Path $env:LOCALAPPDATA "tauri\WixTools314"
+    $Candle = Join-Path $WixTools "candle.exe"
+    $Light = Join-Path $WixTools "light.exe"
+
+    foreach ($requiredPath in @($WixSource, $Locale, $Candle, $Light)) {
+        if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
+            throw "Split-cabinet MSI fallback requires: $requiredPath"
+        }
+    }
+
+    $Source = Get-Content -LiteralPath $WixSource -Raw
+    $EmbeddedMedia = '<Media Id="1" Cabinet="app.cab" EmbedCab="yes" />'
+    $SplitMedia = '<MediaTemplate CabinetTemplate="rv{0}.cab" EmbedCab="no" MaximumUncompressedMediaSize="700" />'
+    if (-not $Source.Contains($EmbeddedMedia)) {
+        throw "Generated WiX source does not contain the expected single embedded cabinet definition."
+    }
+    Set-Content -LiteralPath $WixSource -Value $Source.Replace($EmbeddedMedia, $SplitMedia) -Encoding UTF8
+
+    New-Item -ItemType Directory -Path $InstallerDirectory -Force | Out-Null
+    Get-ChildItem -LiteralPath $InstallerDirectory -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Extension -in @('.msi', '.cab', '.wixpdb') } |
+        Remove-Item -Force
+
+    Write-Host "Rebuilding WiX source with split external cabinets..."
+    & $Candle -nologo -arch x64 $WixSource "-dSourceDir=$(Join-Path $ReleaseRoot 'ReefVision.exe')" -out $WixObject
+    if ($LASTEXITCODE -ne 0) {
+        throw "WiX candle.exe failed with exit code $LASTEXITCODE."
+    }
+
+    Write-Host "Linking split-cabinet ReefVision MSI..."
+    & $Light -nologo -ext WixUIExtension -ext WixUtilExtension -cultures:en-us -loc $Locale -out $Installer $WixObject
+    if ($LASTEXITCODE -ne 0) {
+        throw "WiX light.exe failed with exit code $LASTEXITCODE."
+    }
+
+    if (-not (Test-Path -LiteralPath $Installer -PathType Leaf)) {
+        throw "Split-cabinet WiX build did not produce the expected MSI: $Installer"
+    }
+    Write-Host "Split-cabinet MSI: $Installer" -ForegroundColor Green
+}
+
 $TauriConfigPath = Join-Path $Root "apps\web\src-tauri\tauri.conf.json"
 $TauriConfig = Get-Content -LiteralPath $TauriConfigPath -Raw | ConvertFrom-Json
 if ($TauriConfig.bundle.resources.'binaries/' -ne 'backend/') {
@@ -51,19 +102,40 @@ Write-Host "Bundling $($BundleMetadata.asset_count) verified checkpoints ($([mat
 & (Join-Path $PSScriptRoot "build-desktop-backend.ps1") -TargetTriple $TargetTriple
 
 Write-ReefVisionStep "Building the Tauri MSI installer"
-Invoke-ReefVisionNpm -NodeTools $NodeTools -Arguments @(
-    "--prefix",
-    "apps/web",
-    "run",
-    "desktop:build",
-    "--",
-    "--target",
-    $TargetTriple
-) -AdditionalPathEntries @(
-    (Split-Path -Parent $RustTools.Cargo)
-)
-
+$GeneratedWixDirectory = Join-Path $Root "apps\web\src-tauri\target\$TargetTriple\release\wix\x64"
 $InstallerDirectory = Join-Path $Root "apps\web\src-tauri\target\$TargetTriple\release\bundle\msi"
+foreach ($generatedPath in @(
+    (Join-Path $GeneratedWixDirectory "main.wxs"),
+    (Join-Path $GeneratedWixDirectory "main.wixobj")
+)) {
+    Remove-Item -LiteralPath $generatedPath -Force -ErrorAction SilentlyContinue
+}
+if (Test-Path -LiteralPath $InstallerDirectory -PathType Container) {
+    Get-ChildItem -LiteralPath $InstallerDirectory -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Extension -in @('.msi', '.cab', '.wixpdb') } |
+        Remove-Item -Force
+}
+try {
+    Invoke-ReefVisionNpm -NodeTools $NodeTools -Arguments @(
+        "--prefix",
+        "apps/web",
+        "run",
+        "desktop:build",
+        "--",
+        "--target",
+        $TargetTriple
+    ) -AdditionalPathEntries @(
+        (Split-Path -Parent $RustTools.Cargo)
+    )
+}
+catch {
+    if ($TargetTriple -ne "x86_64-pc-windows-msvc") {
+        throw
+    }
+    Write-Warning "Tauri's single embedded cabinet could not hold the release payload; retrying with split external cabinets."
+    Build-ReefVisionSplitCabinetMsi -TargetTriple $TargetTriple
+}
+
 $StagedCatalog = Join-Path $Root "apps\web\src-tauri\binaries\reefvision-api\_internal\config\model_catalog.json"
 if (-not (Test-Path $StagedCatalog -PathType Leaf)) {
     throw "Desktop packaging lost the required Model Hub catalog: $StagedCatalog"

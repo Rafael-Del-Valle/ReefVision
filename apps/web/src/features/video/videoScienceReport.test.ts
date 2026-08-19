@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { VideoTrackActivity } from "./videoActivityApi";
-import type { SchoolingAnalytics, VideoSpatialCalibration } from "./videoScienceApi";
+import type {
+  SchoolingAnalytics,
+  VideoSpatialCalibration,
+} from "./videoScienceApi";
 import {
   activityBoutsCsv,
   activityIntervalsCsv,
