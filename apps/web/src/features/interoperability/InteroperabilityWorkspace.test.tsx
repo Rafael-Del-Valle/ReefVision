@@ -46,6 +46,24 @@ function renderWorkspace() {
 describe("InteroperabilityWorkspace", () => {
   beforeEach(() => {
     vi.mocked(exchangeApi.getProjectExchangePackages).mockResolvedValue([]);
+    vi.mocked(exchangeApi.createProjectExchange).mockResolvedValue({
+      job_id: "job-1",
+      package: {
+        id: "package-1",
+        project_id: project.id,
+        job_id: "job-1",
+        direction: "export",
+        status: "queued",
+        format_version: "1.0",
+        manifest_json: {},
+        manifest_sha256: "",
+        archive_path: "",
+        options_json: {},
+        error_message: null,
+        created_at: "2026-08-18T00:00:00Z",
+        completed_at: null,
+      },
+    });
     vi.mocked(exchangeApi.inspectProjectExchange).mockResolvedValue({
       compatible: true,
       format_name: "reefvision-project-exchange",
@@ -55,6 +73,7 @@ describe("InteroperabilityWorkspace", () => {
       project_name: "Portable reef",
       section_counts: { images: 3, workflow_graphs: 2 },
       included_media_count: 3,
+      included_generated_artifact_count: 4,
       warnings: [],
       errors: [],
     });
@@ -65,6 +84,7 @@ describe("InteroperabilityWorkspace", () => {
       source_manifest_sha256: "a".repeat(64),
       imported_counts: { images: 3, workflow_graphs: 2 },
       copied_media_count: 3,
+      copied_generated_artifact_count: 4,
       warnings: [],
       package: {
         id: "package-imported",
@@ -84,7 +104,25 @@ describe("InteroperabilityWorkspace", () => {
     });
   });
 
-  it("inspects a package and imports it as a new project", async () => {
+  it("queues complete exchanges when generated artifacts are selected", async () => {
+    renderWorkspace();
+    fireEvent.click(
+      screen.getByLabelText(
+        "Include generated datasets, depth maps, previews, frames, and training artifacts",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create exchange ZIP" }));
+
+    await waitFor(() => {
+      expect(exchangeApi.createProjectExchange).toHaveBeenCalledWith(project.id, {
+        include_media: false,
+        include_model_weights: false,
+        include_generated_artifacts: true,
+      });
+    });
+  });
+
+  it("inspects a package and imports original plus generated files as a new project", async () => {
     const { container } = renderWorkspace();
     const file = new File(["exchange"], "reef.reefvision.zip", {
       type: "application/zip",
@@ -96,6 +134,7 @@ describe("InteroperabilityWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Inspect safely" }));
     expect(await screen.findByText("Portable reef")).toBeInTheDocument();
     expect(screen.getByText("Yes")).toBeInTheDocument();
+    expect(screen.getByText("Generated artifacts: 4")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Imported project name (optional)"), {
       target: { value: "Portable reef imported" },
@@ -114,6 +153,9 @@ describe("InteroperabilityWorkspace", () => {
     });
     expect(await screen.findByText("Portable reef imported")).toBeInTheDocument();
     expect(screen.getByText("portable-reef-imported")).toBeInTheDocument();
-    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("Copied original/model files")).toBeInTheDocument();
+    expect(screen.getByText("Restored generated artifacts")).toBeInTheDocument();
+    expect(screen.getAllByText("3").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("4").length).toBeGreaterThanOrEqual(1);
   });
 });
