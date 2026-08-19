@@ -6,11 +6,13 @@ from typing import Any, cast
 import pytest
 from pydantic import ValidationError as PydanticValidationError
 
+from reefvision.domain.errors import ValidationError
 from reefvision.jobs.classification_snapshot_integrity_runtime import (
     _current_verified_source_path,
 )
 from reefvision.jobs.classification_snapshot_training import _sample_payload
 from reefvision.schemas.active_learning_cycles import ActiveLearningDatasetRecordRequest
+from reefvision.schemas.classification import ClassificationInferenceRequest
 from reefvision.schemas.classification_datasets import ClassificationSnapshotTrainingRequest
 from reefvision.schemas.classification_evaluation import (
     ClassificationCalibrationBin,
@@ -27,7 +29,10 @@ from reefvision.services.classification_evaluation_metrics_runtime import (
     _cohen_kappa,
     _matthews_correlation_coefficient,
 )
-from reefvision.services.generalized_classification_jobs import _normalized_scope
+from reefvision.services.generalized_classification_jobs import (
+    _normalized_scope,
+    _require_snapshot_preprocessing_match,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 
 
@@ -54,10 +59,10 @@ def _snapshot_sample() -> SimpleNamespace:
     return sample
 
 
-def test_snapshot_training_request_defaults_to_single_label_ultralytics_shape() -> None:
+def test_snapshot_training_request_defaults_to_installed_ultralytics_yaml() -> None:
     request = ClassificationSnapshotTrainingRequest(run_name="reef-state")
 
-    assert request.architecture == "yolo11n-cls"
+    assert request.architecture == "yolo11-cls.yaml"
     assert request.epochs == 100
     assert request.precision == "amp"
     assert request.mask_background == "black"
@@ -128,6 +133,27 @@ def test_generalized_prediction_target_helpers_preserve_target_semantics() -> No
 def test_scope_normalization_keeps_legacy_annotation_models_compatible() -> None:
     assert _normalized_scope("annotation_crop") == "annotation"
     assert _normalized_scope("fragment") == "fragment"
+
+
+def test_snapshot_mask_classifier_requires_training_preprocessing_at_inference() -> None:
+    metadata: dict[str, object] = {
+        "minimum_crop_size_px": 20,
+        "padding_fraction": 0.1,
+        "mask_background": "black",
+    }
+    matching = ClassificationInferenceRequest(
+        model_id="model-1",
+        target_kind="mask",
+        mask_annotation_ids=["mask-1"],
+        minimum_crop_size_px=20,
+        padding_fraction=0.1,
+        mask_background="black",
+    )
+    changed = matching.model_copy(update={"padding_fraction": 0.2})
+
+    _require_snapshot_preprocessing_match(metadata, matching)
+    with pytest.raises(ValidationError, match="same crop padding"):
+        _require_snapshot_preprocessing_match(metadata, changed)
 
 
 def test_active_learning_dataset_record_requires_exactly_one_immutable_dataset() -> None:
