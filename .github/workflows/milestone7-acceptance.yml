@@ -11,7 +11,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
           cache: pip
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[dev]"
@@ -31,19 +31,39 @@ jobs:
             apps/api/reefvision/schemas/active_learning.py \
             apps/api/reefvision/services/active_learning_rounds.py \
             apps/api/reefvision/tests/test_active_learning_phase7.py
-      - name: Run Milestone 7 active learning tests
+      - name: Run Milestone 7 active-learning tests
         run: python -m pytest apps/api/reefvision/tests/test_active_learning_phase7.py -q
-      - name: Verify 0022 migration roundtrip
+      - name: Verify current migration graph roundtrip
         shell: bash
         run: |
           export REEFVISION_DATA_ROOT="$RUNNER_TEMP/reefvision-m7"
           mkdir -p "$REEFVISION_DATA_ROOT"
           python -m alembic -c apps/api/alembic.ini upgrade head
-          python -m alembic -c apps/api/alembic.ini downgrade 0021
+          python -m alembic -c apps/api/alembic.ini downgrade base
           python -m alembic -c apps/api/alembic.ini upgrade head
           python - <<'PY'
           from alembic.config import Config
           from alembic.script import ScriptDirectory
           scripts = ScriptDirectory.from_config(Config('apps/api/alembic.ini'))
-          assert scripts.get_heads() == ['0022'], scripts.get_heads()
+          heads = scripts.get_heads()
+          assert len(heads) == 1, f"Expected one canonical migration head, found {heads}"
+          print(f"Canonical migration head: {heads[0]}")
           PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+        working-directory: apps/web
+      - name: Format and type-check Active Learning workspace
+        working-directory: apps/web
+        run: |
+          npx prettier --check \
+            src/features/active-learning/ActiveLearningWorkspace.tsx \
+            src/features/active-learning/ActiveLearningWorkspace.test.tsx \
+            src/features/active-learning/activeLearningApi.ts
+          npm run typecheck
+      - name: Run Active Learning workspace tests
+        working-directory: apps/web
+        run: npx vitest run src/features/active-learning/ActiveLearningWorkspace.test.tsx --config vite.config.mjs --configLoader runner
