@@ -80,10 +80,15 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      - name: Upload Windows installer
+      # WiX deliberately emits external split cabinets for the multi-gigabyte offline
+      # model payload. The MSI is not a standalone installer, so every CAB must ship in
+      # the same downloadable artifact and remain beside the MSI during installation.
+      - name: Upload Windows installer bundle
         uses: actions/upload-artifact@v4
         with:
           name: ReefVision-Windows-Installer
-          path: apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+          path: |
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.cab
           if-no-files-found: error
           retention-days: 14
