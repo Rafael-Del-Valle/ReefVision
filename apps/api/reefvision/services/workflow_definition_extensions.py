@@ -45,6 +45,19 @@ def install_workflow_definition_extensions() -> None:
             model_tasks=measurement.model_tasks,
         )
 
+    # Active learning needs both model uncertainty and representation-space diversity.
+    # Predictions remain required; embeddings are optional so pure uncertainty strategies
+    # still work, while k-center/clustering/Pareto strategies can consume an embedding node
+    # directly without copying embedding IDs into JSON configuration.
+    active_learning = workflow_service.NODE_DEFINITIONS.get("active_learning")
+    if active_learning is not None and "embeddings" not in active_learning.inputs:
+        workflow_service.NODE_DEFINITIONS["active_learning"] = workflow_service._NodeDefinition(
+            display_name=active_learning.display_name,
+            inputs={**active_learning.inputs, "embeddings": ("embeddings", False)},
+            outputs=dict(active_learning.outputs),
+            model_tasks=active_learning.model_tasks,
+        )
+
     workflow_service.COMPATIBLE_SOURCE_TYPES.setdefault("artifact", set()).update(
         {"depth_maps", "embeddings", "artifact"}
     )
