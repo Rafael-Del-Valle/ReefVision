@@ -130,7 +130,7 @@ def install_workflow_definition_extensions() -> None:
     )
 
     if workflow_service.WorkflowService.validate is not _mode_aware_validate:
-        workflow_service.WorkflowService.validate = _mode_aware_validate
+        setattr(workflow_service.WorkflowService, "validate", _mode_aware_validate)
 
 
 install_workflow_definition_extensions()
