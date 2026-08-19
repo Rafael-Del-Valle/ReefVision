@@ -1,9 +1,9 @@
-"""Spatial calibration and group-level fish trajectory analytics."""
+"""Spatial calibration, group-level analytics, and depth-aware fish trajectories."""
 
 from __future__ import annotations
 
 from collections import defaultdict
-from math import hypot
+from math import dist, hypot
 from typing import Any
 
 from sqlalchemy import select
@@ -13,6 +13,12 @@ from reefvision.db.models import VideoAsset, VideoTrack
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.video_science import (
     CalibratedVideoTrackAnalyticsResponse,
+    VideoCameraIntrinsicsResponse,
+    VideoCameraIntrinsicsSetRequest,
+    VideoDepthTrack3DAnalytics,
+    VideoDepthTrackAnalyticsRequest,
+    VideoDepthTrackAnalyticsResponse,
+    VideoDepthTrackPoint3D,
     VideoSchoolingAnalyticsRequest,
     VideoSchoolingAnalyticsResponse,
     VideoSchoolingFrameMetrics,
@@ -23,6 +29,8 @@ from reefvision.services.video_tracks import VideoTrackService
 
 CALIBRATION_METADATA_KEY = "spatial_calibration"
 CALIBRATION_SCHEMA_VERSION = "video-spatial-calibration-0001"
+CAMERA_INTRINSICS_METADATA_KEY = "camera_intrinsics"
+CAMERA_INTRINSICS_SCHEMA_VERSION = "video-camera-intrinsics-0001"
 
 
 def _mean(values: list[float]) -> float:
@@ -164,7 +172,7 @@ class VideoScienceService:
         missing = [track_id for track_id in track_ids if track_id not in by_id]
         if missing:
             raise ValidationError(
-                "Schooling tracks must be active and belong to the selected video: "
+                "Tracks must be active and belong to the selected video: "
                 + ", ".join(missing)
             )
         return [by_id[track_id] for track_id in track_ids]
@@ -336,4 +344,188 @@ class VideoScienceService:
             distance_unit=calibration.unit,
             calibration=calibration,
             frames=frame_metrics,
+        )
+
+    @staticmethod
+    def _camera_intrinsics_from_video(video: VideoAsset) -> VideoCameraIntrinsicsResponse:
+        metadata = dict(video.metadata_json or {})
+        raw = metadata.get(CAMERA_INTRINSICS_METADATA_KEY)
+        if not isinstance(raw, dict):
+            raise NotFoundError("Video camera intrinsics have not been set")
+        try:
+            fx_px = float(raw["fx_px"])
+            fy_px = float(raw["fy_px"])
+            cx_px = float(raw["cx_px"])
+            cy_px = float(raw["cy_px"])
+            method = str(raw.get("method", "camera_calibration"))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValidationError("Stored video camera intrinsics are invalid") from exc
+        if fx_px <= 0 or fy_px <= 0:
+            raise ValidationError("Stored camera focal lengths must be positive")
+        return VideoCameraIntrinsicsResponse(
+            schema_version=CAMERA_INTRINSICS_SCHEMA_VERSION,
+            video_id=video.id,
+            fx_px=fx_px,
+            fy_px=fy_px,
+            cx_px=cx_px,
+            cy_px=cy_px,
+            method=method,
+            notes=str(raw["notes"]) if raw.get("notes") is not None else None,
+            video_revision=video.revision,
+        )
+
+    def set_camera_intrinsics(
+        self,
+        video_id: str,
+        payload: VideoCameraIntrinsicsSetRequest,
+    ) -> VideoCameraIntrinsicsResponse:
+        video = self._video(video_id)
+        metadata = dict(video.metadata_json or {})
+        metadata[CAMERA_INTRINSICS_METADATA_KEY] = {
+            "schema_version": CAMERA_INTRINSICS_SCHEMA_VERSION,
+            "fx_px": float(payload.fx_px),
+            "fy_px": float(payload.fy_px),
+            "cx_px": float(payload.cx_px),
+            "cy_px": float(payload.cy_px),
+            "method": payload.method,
+            "notes": payload.notes,
+        }
+        video.metadata_json = metadata
+        video.revision += 1
+        self.session.commit()
+        self.session.refresh(video)
+        return self._camera_intrinsics_from_video(video)
+
+    def get_camera_intrinsics(self, video_id: str) -> VideoCameraIntrinsicsResponse:
+        return self._camera_intrinsics_from_video(self._video(video_id))
+
+    def clear_camera_intrinsics(self, video_id: str) -> None:
+        video = self._video(video_id)
+        metadata = dict(video.metadata_json or {})
+        if CAMERA_INTRINSICS_METADATA_KEY not in metadata:
+            return
+        metadata.pop(CAMERA_INTRINSICS_METADATA_KEY, None)
+        video.metadata_json = metadata
+        video.revision += 1
+        self.session.commit()
+
+    def depth_track_analytics(
+        self,
+        video_id: str,
+        payload: VideoDepthTrackAnalyticsRequest,
+    ) -> VideoDepthTrackAnalyticsResponse:
+        video = self._video(video_id)
+        intrinsics = self.get_camera_intrinsics(video_id)
+        track_ids = list(dict.fromkeys(sample.track_id for sample in payload.samples))
+        tracks = self._selected_tracks(video_id, track_ids)
+        tracks_by_id = {track.id: track for track in tracks}
+        samples_by_track: dict[str, list[Any]] = defaultdict(list)
+        for sample in payload.samples:
+            if sample.frame >= video.frame_count:
+                raise ValidationError(
+                    f"Depth sample frame {sample.frame} exceeds video frame count"
+                )
+            samples_by_track[sample.track_id].append(sample)
+
+        results: list[VideoDepthTrack3DAnalytics] = []
+        warnings: list[str] = []
+        for track_id in track_ids:
+            track = tracks_by_id[track_id]
+            interpolation = self.track_service.interpolate(track_id)
+            centers = {
+                item.frame: (item.center_x, item.center_y) for item in interpolation.frames
+            }
+            ordered_samples = sorted(
+                samples_by_track[track_id],
+                key=lambda item: item.frame,
+            )
+            points: list[VideoDepthTrackPoint3D] = []
+            for sample in ordered_samples:
+                center = centers.get(sample.frame)
+                if center is None:
+                    raise ValidationError(
+                        f"Depth sample for track {track.track_number} at frame {sample.frame} "
+                        "falls outside the track trajectory"
+                    )
+                x = (center[0] - intrinsics.cx_px) * sample.depth / intrinsics.fx_px
+                y = (center[1] - intrinsics.cy_px) * sample.depth / intrinsics.fy_px
+                points.append(
+                    VideoDepthTrackPoint3D(
+                        frame=sample.frame,
+                        timestamp_seconds=sample.frame / video.fps,
+                        center_x_px=center[0],
+                        center_y_px=center[1],
+                        x=x,
+                        y=y,
+                        z=float(sample.depth),
+                        depth_confidence=sample.confidence,
+                    )
+                )
+
+            path_length = 0.0
+            valid_duration = 0.0
+            maximum_speed = 0.0
+            skipped_gap_count = 0
+            for first, second in zip(points, points[1:], strict=False):
+                frame_gap = second.frame - first.frame
+                if frame_gap <= 0:
+                    continue
+                if (
+                    payload.maximum_frame_gap is not None
+                    and frame_gap > payload.maximum_frame_gap
+                ):
+                    skipped_gap_count += 1
+                    continue
+                segment = dist(
+                    (first.x, first.y, first.z),
+                    (second.x, second.y, second.z),
+                )
+                seconds = frame_gap / video.fps
+                path_length += segment
+                valid_duration += seconds
+                maximum_speed = max(maximum_speed, segment / seconds)
+
+            first_point = points[0]
+            last_point = points[-1]
+            duration = (last_point.frame - first_point.frame) / video.fps
+            displacement = dist(
+                (first_point.x, first_point.y, first_point.z),
+                (last_point.x, last_point.y, last_point.z),
+            )
+            depths = [point.z for point in points]
+            if skipped_gap_count:
+                warnings.append(
+                    f"Track {track.track_number} skipped {skipped_gap_count} segment(s) "
+                    "that exceeded maximum_frame_gap."
+                )
+            results.append(
+                VideoDepthTrack3DAnalytics(
+                    track_id=track.id,
+                    track_number=track.track_number,
+                    label_class_id=track.label_class_id,
+                    observed_frame_count=len(points),
+                    first_frame=first_point.frame,
+                    last_frame=last_point.frame,
+                    duration_seconds=duration,
+                    path_length_3d=path_length,
+                    displacement_3d=displacement,
+                    mean_speed_3d_per_second=(
+                        path_length / valid_duration if valid_duration > 0 else 0.0
+                    ),
+                    maximum_speed_3d_per_second=maximum_speed,
+                    mean_depth=_mean(depths),
+                    minimum_depth=min(depths),
+                    maximum_depth=max(depths),
+                    skipped_gap_count=skipped_gap_count,
+                    points=points,
+                )
+            )
+
+        return VideoDepthTrackAnalyticsResponse(
+            schema_version="video-depth-track-analytics-0001",
+            video_id=video_id,
+            unit=payload.unit,
+            camera_intrinsics=intrinsics,
+            tracks=results,
+            warnings=warnings,
         )
