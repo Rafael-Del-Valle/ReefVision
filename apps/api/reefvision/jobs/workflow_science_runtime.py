@@ -1,23 +1,50 @@
-"""Wire scientific measurement and behavior services into fusion workflow execution.
+"""Wire full scientific services into fusion workflow execution.
 
-The original workflow runtime intentionally started with lightweight snapshot nodes.  The
-full 1.0 release requires those nodes to execute the same calibrated science services that
-are available elsewhere in ReefVision, rather than returning metadata-only placeholders.
+The first workflow runtime intentionally used lightweight snapshot nodes. The full 1.0
+release requires workflow nodes to execute the same calibrated measurement, behavior, and
+active-learning engines that are available elsewhere in ReefVision rather than returning
+metadata-only placeholders.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import asdict
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import get_settings
-from reefvision.db.models import ImageAsset, MaskAnnotation, WorkflowArtifact, WorkflowRun
+from reefvision.db.models import (
+    ImageAsset,
+    ImageEmbedding,
+    MaskAnnotation,
+    WorkflowArtifact,
+    WorkflowRun,
+)
 from reefvision.jobs import workflow_runs
+from reefvision.ml.active_learning_selection import (
+    SelectionCandidate,
+    SelectionStrategy,
+    select_candidates,
+)
 from reefvision.schemas.videos import VideoAnalyticsRequest
 from reefvision.services.mask_measurements import MaskMeasurementService
 from reefvision.services.video_behavior import VideoBehaviorAnalysisService
+
+_ACTIVE_LEARNING_STRATEGIES: set[str] = {
+    "uncertainty",
+    "least_confidence",
+    "margin",
+    "entropy",
+    "farthest_point",
+    "k_center",
+    "kmeans_representative",
+    "cluster_balanced",
+    "density_aware",
+    "pareto_uncertainty_diversity",
+    "ensemble_disagreement",
+}
 
 
 def _workflow_measurements(
@@ -41,9 +68,7 @@ def _workflow_measurements(
         if isinstance(configured, list)
         else []
     )
-    requested_mask_ids = list(
-        dict.fromkeys(configured_mask_ids or input_mask_ids)
-    )
+    requested_mask_ids = list(dict.fromkeys(configured_mask_ids or input_mask_ids))
 
     label_class_ids = configuration.get("label_class_ids")
     scientific_names = configuration.get("scientific_names")
@@ -165,8 +190,188 @@ def _workflow_behavior_analysis(
     }
 
 
-# Install the full-science handlers without duplicating the workflow scheduler.  Keeping
-# the replacement localized also makes it straightforward for validation tests to compare
-# the workflow outputs with the direct service APIs.
+def _float_sequence_map(configuration: dict[str, Any], key: str) -> dict[str, tuple[float, ...]]:
+    raw = configuration.get(key)
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, tuple[float, ...]] = {}
+    for candidate_id, values in raw.items():
+        if not isinstance(values, list):
+            continue
+        try:
+            result[str(candidate_id)] = tuple(float(value) for value in values)
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
+def _ensemble_map(
+    configuration: dict[str, Any],
+) -> dict[str, tuple[tuple[float, ...], ...]]:
+    raw = configuration.get("ensemble_probabilities")
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, tuple[tuple[float, ...], ...]] = {}
+    for candidate_id, members in raw.items():
+        if not isinstance(members, list):
+            continue
+        parsed: list[tuple[float, ...]] = []
+        for member in members:
+            if not isinstance(member, list):
+                parsed = []
+                break
+            try:
+                parsed.append(tuple(float(value) for value in member))
+            except (TypeError, ValueError):
+                parsed = []
+                break
+        if parsed:
+            result[str(candidate_id)] = tuple(parsed)
+    return result
+
+
+def _string_map(configuration: dict[str, Any], key: str) -> dict[str, str]:
+    raw = configuration.get(key)
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        str(candidate_id): str(value)
+        for candidate_id, value in raw.items()
+        if value is not None
+    }
+
+
+def _class_map(configuration: dict[str, Any]) -> dict[str, tuple[str, ...]]:
+    raw = configuration.get("class_ids")
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        str(candidate_id): tuple(str(value) for value in values)
+        for candidate_id, values in raw.items()
+        if isinstance(values, list)
+    }
+
+
+def _workflow_active_learning(
+    factory: sessionmaker[Session],
+    run: WorkflowRun,
+    configuration: dict[str, Any],
+    inputs: list[WorkflowArtifact],
+) -> workflow_runs.ArtifactOutputs:
+    """Execute the complete deterministic active-learning strategy registry."""
+
+    payloads = [workflow_runs._artifact_payload(item) for item in inputs]
+    image_ids = workflow_runs._list_values(payloads, "image_ids")
+    embedding_model_id = str(configuration.get("embedding_model_id", "")).strip()
+    if not embedding_model_id:
+        for payload in payloads:
+            value = payload.get("embedding_model_id")
+            if isinstance(value, str) and value.strip():
+                embedding_model_id = value.strip()
+                break
+    if not embedding_model_id:
+        raise RuntimeError("Active-learning nodes require embedding_model_id")
+
+    strategy_name = str(
+        configuration.get("strategy", "pareto_uncertainty_diversity")
+    ).strip()
+    if strategy_name not in _ACTIVE_LEARNING_STRATEGIES:
+        raise RuntimeError(f"Unsupported active-learning strategy: {strategy_name}")
+    strategy = cast(SelectionStrategy, strategy_name)
+
+    with factory() as session:
+        query = select(ImageEmbedding).where(
+            ImageEmbedding.project_id == run.project_id,
+            ImageEmbedding.embedding_model_id == embedding_model_id,
+            ImageEmbedding.status == "ready",
+        )
+        if image_ids:
+            query = query.where(ImageEmbedding.image_id.in_(image_ids))
+        embeddings = list(
+            session.scalars(query.order_by(ImageEmbedding.image_id, ImageEmbedding.created_at))
+        )
+
+    latest_by_image: dict[str, ImageEmbedding] = {}
+    for embedding in embeddings:
+        latest_by_image[embedding.image_id] = embedding
+    candidate_ids = image_ids or sorted(latest_by_image)
+
+    probabilities = _float_sequence_map(configuration, "probabilities")
+    ensemble_probabilities = _ensemble_map(configuration)
+    group_ids = _string_map(configuration, "group_ids")
+    fragment_ids = _string_map(configuration, "fragment_ids")
+    class_ids = _class_map(configuration)
+    raw_base_scores = configuration.get("base_scores")
+    base_scores = raw_base_scores if isinstance(raw_base_scores, dict) else {}
+    raw_manual_priority = configuration.get("manual_priority")
+    manual_priority = {
+        str(value) for value in raw_manual_priority
+    } if isinstance(raw_manual_priority, list) else set()
+
+    candidates = [
+        SelectionCandidate(
+            candidate_id=image_id,
+            embedding=(
+                tuple(float(value) for value in latest_by_image[image_id].vector_json)
+                if image_id in latest_by_image
+                else None
+            ),
+            probabilities=probabilities.get(image_id, ()),
+            ensemble_probabilities=ensemble_probabilities.get(image_id, ()),
+            base_score=float(base_scores.get(image_id, 0.0)),
+            group_id=group_ids.get(image_id),
+            fragment_id=fragment_ids.get(image_id),
+            class_ids=class_ids.get(image_id, ()),
+            manual_priority=image_id in manual_priority,
+            metadata={"embedding_model_id": embedding_model_id},
+        )
+        for image_id in candidate_ids
+    ]
+    results = select_candidates(
+        candidates,
+        budget=int(configuration.get("maximum_items", 100)),
+        strategy=strategy,
+        seed=int(configuration.get("seed", 0)),
+        group_limit=(
+            int(configuration["maximum_items_per_group"])
+            if configuration.get("maximum_items_per_group") is not None
+            else None
+        ),
+        fragment_limit=(
+            int(configuration["maximum_items_per_fragment"])
+            if configuration.get("maximum_items_per_fragment") is not None
+            else None
+        ),
+        uncertainty_weight=float(configuration.get("uncertainty_weight", 0.5)),
+        diversity_weight=float(configuration.get("diversity_weight", 0.3)),
+        density_weight=float(configuration.get("density_weight", 0.1)),
+        disagreement_weight=float(configuration.get("disagreement_weight", 0.1)),
+        base_score_weight=float(configuration.get("base_score_weight", 0.1)),
+        class_balance_weight=float(configuration.get("class_balance_weight", 0.1)),
+    )
+    serialized = [asdict(item) for item in results]
+    return {
+        "review_batch": (
+            "review_batch",
+            {
+                "embedding_model_id": embedding_model_id,
+                "strategy": strategy,
+                "candidate_count": len(candidates),
+                "selected_count": len(results),
+                "selected_image_ids": [item.candidate_id for item in results],
+                "items": serialized,
+                "provenance": {
+                    "selector": "reefvision.ml.active_learning_selection.select_candidates",
+                    "seed": int(configuration.get("seed", 0)),
+                },
+            },
+        )
+    }
+
+
+# Install the full handlers without duplicating the workflow scheduler. Keeping the
+# replacements localized also makes it straightforward for validation tests to compare
+# workflow outputs against the direct production services.
 workflow_runs._measurement_snapshot = _workflow_measurements
 workflow_runs._behavior_snapshot = _workflow_behavior_analysis
+workflow_runs._active_learning = _workflow_active_learning
