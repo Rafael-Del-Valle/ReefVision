@@ -1,0 +1,84 @@
+{
+  "schema_version": "reefvision-scale-assistant-validation-0001",
+  "unit": "mm",
+  "tolerance": {
+    "relative": 0.03,
+    "absolute": 0.1,
+    "scale_relative": 0.02
+  },
+  "cases": [
+    {
+      "name": "ruler-horizontal",
+      "method": "ruler",
+      "image": "REPLACE_WITH_REAL_RULER_IMAGE.png",
+      "image_sha256": "OPTIONAL_SHA256_OF_REAL_IMAGE",
+      "reference_length": 10.0,
+      "expected_distance_per_pixel": 0.05,
+      "orientation": "horizontal",
+      "roi": {
+        "x_min": 100.0,
+        "y_min": 900.0,
+        "x_max": 1800.0,
+        "y_max": 1200.0
+      },
+      "profile_name": "Fixed camera-rig scale"
+    },
+    {
+      "name": "aruco-oblique-plane",
+      "method": "aruco",
+      "image": "REPLACE_WITH_REAL_ARUCO_IMAGE.png",
+      "dictionary": "DICT_4X4_50",
+      "marker_length": 20.0,
+      "marker_id": 0,
+      "probe": {
+        "polygon": [
+          [500.0, 500.0],
+          [900.0, 520.0],
+          [880.0, 900.0],
+          [520.0, 880.0]
+        ],
+        "centerline": [
+          [550.0, 700.0],
+          [850.0, 710.0]
+        ],
+        "expected": {
+          "area": 400.0,
+          "perimeter": 80.0,
+          "centroid_x": 30.0,
+          "centroid_y": 25.0,
+          "centerline_length": 20.0
+        }
+      }
+    },
+    {
+      "name": "charuco-oblique-plane",
+      "method": "charuco",
+      "image": "REPLACE_WITH_REAL_CHARUCO_IMAGE.png",
+      "dictionary": "DICT_4X4_50",
+      "marker_length": 15.0,
+      "charuco_squares_x": 5,
+      "charuco_squares_y": 7,
+      "charuco_square_length": 20.0,
+      "probe": {
+        "polygon": [
+          [400.0, 400.0],
+          [1000.0, 430.0],
+          [960.0, 1050.0],
+          [440.0, 1010.0]
+        ],
+        "expected": {
+          "area": 800.0,
+          "perimeter": 120.0
+        }
+      }
+    },
+    {
+      "name": "same-rig-profile-reuse",
+      "method": "profile",
+      "source_case": "ruler-horizontal",
+      "image": "REPLACE_WITH_DIFFERENT_REAL_IMAGE_FROM_SAME_RIG.png",
+      "expected_distance_per_pixel": 0.05
+    }
+  ],
+  "notes": "Example structure only. Replace every placeholder path and expected value with independently measured real-image evidence. Polygon and centerline probe geometry must lie on the ArUco/ChArUco reference plane when perspective-corrected measurements are being validated. Profile reuse is valid only when camera, lens, focus, mount distance, image resolution, and measurement plane are unchanged."
+}
