@@ -41,7 +41,7 @@ class ClassificationDatasetPreviewResponse(BaseModel):
 
 class ClassificationTrainingRequest(ClassificationDatasetRequest):
     run_name: str = Field(default="classification-run", min_length=1, max_length=200)
-    architecture: str = Field(default="yolov8n-cls.yaml", min_length=1, max_length=200)
+    architecture: str = Field(default="yolov8-cls.yaml", min_length=1, max_length=200)
     initial_checkpoint_model_id: str | None = Field(default=None, max_length=36)
     epochs: int = Field(default=50, ge=1, le=10000)
     patience: int = Field(default=20, ge=0, le=10000)
