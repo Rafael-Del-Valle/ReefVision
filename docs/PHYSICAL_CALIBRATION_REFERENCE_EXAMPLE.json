@@ -1,0 +1,64 @@
+{
+  "schema_version": "reefvision-physical-calibration-validation-0001",
+  "video_sha256": "REPLACE_WITH_SHA256_OF_CALIBRATION_VIDEO",
+  "spatial_reference": {
+    "unit": "cm",
+    "reference_distance": 10.0,
+    "reference_pixels": 500.0,
+    "reference_label": "independently measured ruler or calibration target"
+  },
+  "track": {
+    "class_name": "Calibration target",
+    "keyframes": [
+      {
+        "frame": 0,
+        "bbox": [100.0, 100.0, 20.0, 20.0]
+      },
+      {
+        "frame": 10,
+        "bbox": [200.0, 100.0, 20.0, 20.0]
+      }
+    ],
+    "expected_2d": {
+      "path_length": 2.0,
+      "displacement": 2.0,
+      "mean_speed_per_second": 2.0,
+      "maximum_speed_per_second": 2.0
+    }
+  },
+  "camera_intrinsics": {
+    "fx_px": 1000.0,
+    "fy_px": 1000.0,
+    "cx_px": 320.0,
+    "cy_px": 240.0,
+    "method": "independent checkerboard or camera calibration"
+  },
+  "metric_depth": {
+    "is_metric": true,
+    "source": "stereo triangulation with calibrated baseline",
+    "unit": "m",
+    "samples": [
+      {
+        "frame": 0,
+        "depth": 2.0,
+        "confidence": 0.99
+      },
+      {
+        "frame": 10,
+        "depth": 2.0,
+        "confidence": 0.99
+      }
+    ],
+    "expected_3d": {
+      "path_length_3d": 0.2,
+      "displacement_3d": 0.2,
+      "mean_speed_3d_per_second": 0.2,
+      "mean_depth": 2.0
+    }
+  },
+  "tolerance": {
+    "relative": 0.02,
+    "absolute": 0.001
+  },
+  "notes": "Example only. Replace all geometry, expected values, hashes, intrinsics, and provenance with independently measured values from the validation setup. Do not use Depth Anything or any relative monocular depth output as metric_depth evidence."
+}
