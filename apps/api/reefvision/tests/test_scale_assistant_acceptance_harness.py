@@ -9,7 +9,11 @@ import pytest
 
 @pytest.fixture(scope="module")
 def harness():
-    path = Path(__file__).resolve().parents[4] / "scripts" / "acceptance_scale_assistant.py"
+    path = (
+        Path(__file__).resolve().parents[4]
+        / "scripts"
+        / "acceptance_scale_assistant.py"
+    )
     spec = importlib.util.spec_from_file_location("acceptance_scale_assistant", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -149,9 +153,12 @@ def test_measurement_error_accepts_relative_or_absolute_tolerance(harness) -> No
     assert outside["within_tolerance"] is False
 
 
-def test_harness_source_requires_researcher_ruler_reference_and_profile_confirmation() -> None:
+def test_harness_source_requires_researcher_ruler_reference_and_profile_confirmation(
+) -> None:
     source = (
-        Path(__file__).resolve().parents[4] / "scripts" / "acceptance_scale_assistant.py"
+        Path(__file__).resolve().parents[4]
+        / "scripts"
+        / "acceptance_scale_assistant.py"
     ).read_text(encoding="utf-8")
 
     assert 'candidate["unit_inferred"] is not False' in source
