@@ -1,10 +1,10 @@
 """Allow deterministic upstream cache reuse when a later workflow node fails.
 
 Human review intentionally creates a two-pass workflow: segmentation succeeds, measurement
-fails closed while proposals are pending, then the workflow is rerun after review. The base
-cache previously required the entire source run to have succeeded, which regenerated the
-reviewed proposals. This patch reuses artifacts only when that exact source node is recorded
-as succeeded, preserving deterministic cache safety while supporting review/resume flows.
+fails closed while proposals are pending, then the workflow is rerun after review. Cache
+reuse therefore preserves the exact cached artifact payload and checksum. Cache-hit
+provenance already lives in WorkflowRun.node_state_json; mutating the copied artifact payload
+would change downstream cache keys and incorrectly regenerate reviewed segmentation masks.
 """
 
 from __future__ import annotations
@@ -53,9 +53,35 @@ def _review_resumable_cached_outputs(
     ]
 
 
+def _stable_copy_cached_outputs(
+    session: Session,
+    *,
+    run: WorkflowRun,
+    node_id: str,
+    cached: list[WorkflowArtifact],
+) -> list[WorkflowArtifact]:
+    """Copy cached artifacts without altering semantic payload/checksum identity."""
+
+    return [
+        workflow_runs._save_artifact(
+            session,
+            run=run,
+            node_id=node_id,
+            port_name=artifact.port_name,
+            artifact_type=artifact.artifact_type,
+            payload=workflow_runs._artifact_payload(artifact),
+            managed_path=artifact.managed_path,
+            size_bytes=artifact.size_bytes,
+        )
+        for artifact in cached
+    ]
+
+
 def install_workflow_cache_runtime() -> None:
     if workflow_runs._cached_outputs is not _review_resumable_cached_outputs:
         workflow_runs._cached_outputs = _review_resumable_cached_outputs
+    if workflow_runs._copy_cached_outputs is not _stable_copy_cached_outputs:
+        workflow_runs._copy_cached_outputs = _stable_copy_cached_outputs
 
 
 install_workflow_cache_runtime()
