@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from reefvision.schemas.measurements import MaskMeasurementResponse
-from reefvision.services.mask_measurements import MaskMeasurementService as BaseMaskMeasurementService
+from reefvision.services.mask_measurements import (
+    MaskMeasurementService as BaseMaskMeasurementService,
+)
 
 
 class ScientificMaskMeasurementService(BaseMaskMeasurementService):
