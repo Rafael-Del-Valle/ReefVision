@@ -1,0 +1,415 @@
+"""Safe import-as-new-project for ReefVision 1.0 exchange packages."""
+
+from __future__ import annotations
+
+import json
+import shutil
+import zipfile
+from collections.abc import BinaryIO
+from datetime import datetime
+from pathlib import PurePosixPath
+from typing import Any
+from uuid import uuid4
+
+from sqlalchemy import DateTime
+from sqlalchemy.orm import Session
+
+from reefvision.config import Settings
+from reefvision.db.models import (
+    ActiveLearningRound,
+    Annotation,
+    ClassificationDataset,
+    ClassificationPrediction,
+    DatasetVersion,
+    DatasetVersionItem,
+    ExperimentRecord,
+    ImageAsset,
+    ImageLabel,
+    Job,
+    LabelClass,
+    MaskAnnotation,
+    ModelRegistration,
+    PredictionProposal,
+    ProjectExchangePackage,
+    QualityControlIssue,
+    QualityControlRun,
+    ReviewQueue,
+    ReviewQueueItem,
+    TrainingRun,
+    VideoAsset,
+    VideoTrack,
+    WorkflowArtifact,
+    WorkflowGraphRecord,
+    WorkflowNodeRun,
+    WorkflowRun,
+)
+from reefvision.domain.errors import ValidationError
+from reefvision.schemas.project_exchange import (
+    ProjectExchangeImportResponse,
+    ProjectExchangePackageResponse,
+)
+from reefvision.schemas.projects import ProjectCreate
+from reefvision.services.project_exchange_inspection import (
+    MANIFEST_NAME,
+    inspect_project_exchange,
+)
+from reefvision.services.projects import ProjectService
+from reefvision.storage.datasets import canonical_json_sha256
+from reefvision.storage.projects import resolve_managed_project_path
+
+
+SECTION_MODELS: dict[str, type[Any]] = {
+    "label_classes": LabelClass,
+    "images": ImageAsset,
+    "videos": VideoAsset,
+    "jobs": Job,
+    "dataset_versions": DatasetVersion,
+    "dataset_version_items": DatasetVersionItem,
+    "models": ModelRegistration,
+    "classification_datasets": ClassificationDataset,
+    "training_runs": TrainingRun,
+    "annotations": Annotation,
+    "mask_annotations": MaskAnnotation,
+    "image_labels": ImageLabel,
+    "prediction_proposals": PredictionProposal,
+    "classification_predictions": ClassificationPrediction,
+    "experiments": ExperimentRecord,
+    "quality_control_runs": QualityControlRun,
+    "quality_control_issues": QualityControlIssue,
+    "review_queues": ReviewQueue,
+    "review_queue_items": ReviewQueueItem,
+    "active_learning_rounds": ActiveLearningRound,
+    "video_tracks": VideoTrack,
+    "workflow_graphs": WorkflowGraphRecord,
+    "workflow_runs": WorkflowRun,
+    "workflow_node_runs": WorkflowNodeRun,
+    "workflow_artifacts": WorkflowArtifact,
+}
+
+# Parent objects appear before dependants. DatasetVersion's self-parent reference is
+# restored in a second pass after every version row exists.
+SECTION_ORDER = [
+    "label_classes",
+    "images",
+    "videos",
+    "jobs",
+    "dataset_versions",
+    "models",
+    "classification_datasets",
+    "dataset_version_items",
+    "training_runs",
+    "annotations",
+    "mask_annotations",
+    "image_labels",
+    "prediction_proposals",
+    "classification_predictions",
+    "experiments",
+    "quality_control_runs",
+    "quality_control_issues",
+    "review_queues",
+    "review_queue_items",
+    "active_learning_rounds",
+    "video_tracks",
+    "workflow_graphs",
+    "workflow_runs",
+    "workflow_node_runs",
+    "workflow_artifacts",
+]
+
+MEDIA_KIND_BY_SECTION = {
+    "images": "image",
+    "videos": "video",
+    "models": "model",
+}
+
+
+def _read_jsonl(archive: zipfile.ZipFile, member: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for line_number, raw in enumerate(archive.read(member).splitlines(), start=1):
+        if not raw.strip():
+            continue
+        value = json.loads(raw)
+        if not isinstance(value, dict):
+            raise ValidationError(
+                f"Exchange record {member} line {line_number} must be a JSON object"
+            )
+        rows.append(value)
+    return rows
+
+
+def _remap_json(value: Any, id_map: dict[str, str]) -> Any:
+    if isinstance(value, str):
+        return id_map.get(value, value)
+    if isinstance(value, list):
+        return [_remap_json(item, id_map) for item in value]
+    if isinstance(value, dict):
+        return {key: _remap_json(item, id_map) for key, item in value.items()}
+    return value
+
+
+def _coerce_row(model: type[Any], row: dict[str, Any], id_map: dict[str, str]) -> dict[str, Any]:
+    table = model.__table__
+    values = _remap_json(row, id_map)
+    converted: dict[str, Any] = {}
+    for column in table.columns:
+        if column.name not in values:
+            continue
+        value = values[column.name]
+        if value is not None and isinstance(column.type, DateTime) and isinstance(value, str):
+            value = datetime.fromisoformat(value)
+        converted[column.name] = value
+    return converted
+
+
+def _media_inventory(manifest: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
+    result: dict[tuple[str, str], dict[str, Any]] = {}
+    raw = manifest.get("media", [])
+    if not isinstance(raw, list):
+        return result
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        kind = item.get("kind")
+        record_id = item.get("record_id")
+        member = item.get("path")
+        if isinstance(kind, str) and isinstance(record_id, str) and isinstance(member, str):
+            result[(kind, record_id)] = item
+    return result
+
+
+def _copy_packaged_media(
+    *,
+    archive: zipfile.ZipFile,
+    descriptor: dict[str, Any],
+    settings: Settings,
+    storage_root: str,
+    kind: str,
+    new_id: str,
+) -> str:
+    member = str(descriptor["path"])
+    suffix = PurePosixPath(member).suffix.lower()
+    plural = {"image": "images", "video": "videos", "model": "models"}[kind]
+    relative = f"{storage_root}/exchange-import/{plural}/{new_id}{suffix}"
+    destination = resolve_managed_project_path(settings, relative)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with archive.open(member, "r") as source, destination.open("wb") as target:
+        shutil.copyfileobj(source, target)
+    return relative
+
+
+def import_project_exchange(
+    source: BinaryIO,
+    session: Session,
+    settings: Settings,
+    *,
+    project_name: str | None = None,
+) -> ProjectExchangeImportResponse:
+    """Import a compatible archive into a newly created project.
+
+    Source primary keys are never reused. Direct foreign keys and exact UUID values
+    embedded in JSON payloads are remapped to the corresponding imported records.
+    """
+
+    source.seek(0)
+    inspection = inspect_project_exchange(source)
+    if not inspection.compatible:
+        raise ValidationError("Exchange package failed inspection: " + "; ".join(inspection.errors))
+
+    source.seek(0)
+    with zipfile.ZipFile(source, "r") as archive:
+        manifest_value = json.loads(archive.read(MANIFEST_NAME))
+        if not isinstance(manifest_value, dict):
+            raise ValidationError("Exchange manifest must be a JSON object")
+        manifest: dict[str, Any] = manifest_value
+        sections_descriptor = manifest.get("sections", {})
+        if not isinstance(sections_descriptor, dict):
+            raise ValidationError("Exchange manifest sections are invalid")
+
+        source_project_rows: list[dict[str, Any]] = []
+        project_descriptor = sections_descriptor.get("project")
+        if isinstance(project_descriptor, dict):
+            member = project_descriptor.get("path")
+            if isinstance(member, str):
+                source_project_rows = _read_jsonl(archive, member)
+        if len(source_project_rows) != 1:
+            raise ValidationError("Exchange package must contain exactly one source project row")
+        source_project = source_project_rows[0]
+        old_project_id = str(source_project.get("id", ""))
+        if not old_project_id:
+            raise ValidationError("Exchange source project ID is missing")
+
+        requested_name = (
+            project_name.strip()
+            if project_name is not None and project_name.strip()
+            else str(source_project.get("name") or inspection.project_name or "Imported project")
+        )
+        project = ProjectService(session, settings).create_project(
+            ProjectCreate(
+                name=requested_name,
+                description=(
+                    str(source_project["description"])
+                    if source_project.get("description") is not None
+                    else None
+                ),
+                template="blank",
+            )
+        )
+        project.default_annotation_type = str(
+            source_project.get("default_annotation_type") or project.default_annotation_type
+        )
+        session.commit()
+        session.refresh(project)
+
+        section_rows: dict[str, list[dict[str, Any]]] = {}
+        for section_name, descriptor_value in sections_descriptor.items():
+            if section_name == "project" or not isinstance(descriptor_value, dict):
+                continue
+            member = descriptor_value.get("path")
+            if isinstance(member, str):
+                section_rows[section_name] = _read_jsonl(archive, member)
+
+        id_map: dict[str, str] = {old_project_id: project.id}
+        for section_name, rows in section_rows.items():
+            if section_name not in SECTION_MODELS:
+                continue
+            for row in rows:
+                old_id = row.get("id")
+                if isinstance(old_id, str) and old_id:
+                    id_map[old_id] = str(uuid4())
+
+        media = _media_inventory(manifest)
+        warnings = list(inspection.warnings)
+        imported_counts: dict[str, int] = {}
+        copied_media_count = 0
+        dataset_parent_links: list[tuple[DatasetVersion, str]] = []
+
+        try:
+            for section_name in SECTION_ORDER:
+                model = SECTION_MODELS[section_name]
+                rows = section_rows.get(section_name, [])
+                if not rows:
+                    imported_counts[section_name] = 0
+                    continue
+                created: list[Any] = []
+                for source_row in rows:
+                    row = dict(source_row)
+                    old_id = row.get("id")
+                    values = _coerce_row(model, row, id_map)
+                    if "project_id" in model.__table__.columns:
+                        values["project_id"] = project.id
+                    if isinstance(old_id, str) and "id" in model.__table__.columns:
+                        values["id"] = id_map[old_id]
+
+                    if section_name == "dataset_versions":
+                        old_parent = row.get("parent_version_id")
+                        if isinstance(old_parent, str) and old_parent:
+                            values["parent_version_id"] = None
+
+                    media_kind = MEDIA_KIND_BY_SECTION.get(section_name)
+                    if media_kind is not None and isinstance(old_id, str):
+                        descriptor = media.get((media_kind, old_id))
+                        if descriptor is not None:
+                            values["managed_path"] = _copy_packaged_media(
+                                archive=archive,
+                                descriptor=descriptor,
+                                settings=settings,
+                                storage_root=project.storage_root,
+                                kind=media_kind,
+                                new_id=id_map[old_id],
+                            )
+                            copied_media_count += 1
+                        elif "managed_path" in model.__table__.columns:
+                            source_name = str(
+                                row.get("original_filename")
+                                or row.get("source_filename")
+                                or old_id
+                            )
+                            suffix = PurePosixPath(source_name).suffix.lower()
+                            values["managed_path"] = (
+                                f"{project.storage_root}/exchange-import/missing/"
+                                f"{media_kind}s/{id_map[old_id]}{suffix}"
+                            )
+                            metadata = values.get("metadata_json")
+                            if isinstance(metadata, dict):
+                                values["metadata_json"] = {
+                                    **metadata,
+                                    "exchange_media_missing": True,
+                                    "exchange_source_record_id": old_id,
+                                }
+                            warnings.append(
+                                f"{media_kind.title()} media was not packaged for {source_name}; "
+                                "the imported record requires relinking before file-backed operations."
+                            )
+
+                    instance = model(**values)
+                    session.add(instance)
+                    created.append(instance)
+                    if section_name == "dataset_versions":
+                        old_parent = row.get("parent_version_id")
+                        if isinstance(old_parent, str) and old_parent:
+                            dataset_parent_links.append((instance, old_parent))
+                session.flush()
+                imported_counts[section_name] = len(created)
+
+            for version, old_parent_id in dataset_parent_links:
+                new_parent_id = id_map.get(old_parent_id)
+                if new_parent_id is not None:
+                    version.parent_version_id = new_parent_id
+            session.flush()
+
+            # Persist the source archive as import provenance inside the new project.
+            package_id = str(uuid4())
+            archive_relative = (
+                f"{project.storage_root}/exchanges/"
+                f"{package_id}.imported.reefvision.zip"
+            )
+            archive_destination = resolve_managed_project_path(settings, archive_relative)
+            archive_destination.parent.mkdir(parents=True, exist_ok=True)
+            source.seek(0)
+            with archive_destination.open("wb") as target:
+                shutil.copyfileobj(source, target)
+
+            manifest_sha256 = canonical_json_sha256(manifest)
+            package = ProjectExchangePackage(
+                id=package_id,
+                project_id=project.id,
+                direction="import",
+                status="complete",
+                format_version=str(manifest.get("format_version", "1.0")),
+                manifest_json=manifest,
+                manifest_sha256=manifest_sha256,
+                archive_path=archive_relative,
+                options_json={
+                    "source_project_id": old_project_id,
+                    "source_project_name": source_project.get("name"),
+                    "id_remapped": True,
+                    "copied_media_count": copied_media_count,
+                },
+                completed_at=datetime.now().astimezone(),
+            )
+            session.add(package)
+            session.commit()
+            session.refresh(project)
+            session.refresh(package)
+        except Exception:
+            session.rollback()
+            try:
+                doomed = session.get(type(project), project.id)
+                if doomed is not None:
+                    session.delete(doomed)
+                    session.commit()
+            finally:
+                project_root = resolve_managed_project_path(settings, project.storage_root)
+                shutil.rmtree(project_root, ignore_errors=True)
+            raise
+
+    return ProjectExchangeImportResponse(
+        project_id=project.id,
+        project_name=project.name,
+        project_slug=project.slug,
+        source_manifest_sha256=manifest_sha256,
+        imported_counts=imported_counts,
+        copied_media_count=copied_media_count,
+        warnings=list(dict.fromkeys(warnings)),
+        package=ProjectExchangePackageResponse.model_validate(package),
+    )
