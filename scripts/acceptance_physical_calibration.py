@@ -1,13 +1,14 @@
 """Validate ReefVision 2D scale and metric-depth analytics against known measurements.
 
-This harness is intentionally separate from the future automatic ruler/marker calibration
-feature. The caller supplies a real calibration video and an independently measured JSON
+The caller supplies a real calibration video and an independently measured JSON
 reference file. ReefVision stores the known-length spatial calibration, evaluates a
 verified track in physical units, stores independently obtained camera intrinsics, and
 runs metric-depth 3D trajectory analytics. The reported physical results are compared to
 external expected values using explicit tolerances and verified again after restart.
 
-Relative monocular Depth Anything output is not accepted as metric depth input here.
+This harness validates physical/metric video science independently of the image Scale
+Assistant. Relative monocular output, including Depth Anything output, is explicitly
+rejected as metric depth evidence.
 """
 
 from __future__ import annotations
@@ -66,6 +67,30 @@ def _finite_float(value: Any, *, name: str) -> float:
     return result
 
 
+def _normalize_metric_depth_provenance(metric_depth: dict[str, Any]) -> None:
+    if metric_depth.get("is_metric") is not True:
+        raise RuntimeError(
+            "metric_depth.is_metric must be true and backed by independent metric evidence"
+        )
+    source = str(metric_depth.get("source", "")).strip()
+    if not source:
+        raise RuntimeError("metric_depth.source must name the independent metric-depth source")
+    normalized = source.casefold().replace("_", " ").replace("-", " ")
+    forbidden = (
+        "depth anything",
+        "relative monocular",
+        "monocular relative",
+        "relative depth",
+    )
+    if any(token in normalized for token in forbidden):
+        raise RuntimeError(
+            "Relative monocular depth, including Depth Anything output, cannot be used as "
+            "metric-depth validation evidence"
+        )
+    metric_depth["source"] = source
+    metric_depth["is_metric"] = True
+
+
 def load_reference(path: Path) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -80,22 +105,26 @@ def load_reference(path: Path) -> dict[str, Any]:
     metric_depth = payload.get("metric_depth")
     if not all(isinstance(value, dict) for value in (spatial, track, intrinsics, metric_depth)):
         raise RuntimeError(
-            "Reference must define spatial_reference, track, camera_intrinsics, and metric_depth"
+            "Reference must define spatial_reference, track, camera_intrinsics, and "
+            "metric_depth"
         )
     spatial = dict(spatial)
     track = dict(track)
     intrinsics = dict(intrinsics)
     metric_depth = dict(metric_depth)
+    _normalize_metric_depth_provenance(metric_depth)
 
     spatial_unit = str(spatial.get("unit", ""))
     depth_unit = str(metric_depth.get("unit", ""))
     if spatial_unit not in SUPPORTED_UNITS or depth_unit not in SUPPORTED_UNITS:
         raise RuntimeError("Calibration units must be one of mm, cm, or m")
     spatial["reference_distance"] = _positive_float(
-        spatial.get("reference_distance"), name="spatial_reference.reference_distance"
+        spatial.get("reference_distance"),
+        name="spatial_reference.reference_distance",
     )
     spatial["reference_pixels"] = _positive_float(
-        spatial.get("reference_pixels"), name="spatial_reference.reference_pixels"
+        spatial.get("reference_pixels"),
+        name="spatial_reference.reference_pixels",
     )
 
     class_name = str(track.get("class_name", "Calibration target")).strip()
@@ -119,7 +148,9 @@ def load_reference(path: Path) -> dict[str, Any]:
             raise RuntimeError("track keyframe bbox must contain [x, y, width, height]")
         values = [_finite_float(value, name="track bbox value") for value in bbox]
         if frame < 0 or frame <= previous_frame or values[0] < 0 or values[1] < 0:
-            raise RuntimeError("Track frames must ascend and bbox origins must be nonnegative")
+            raise RuntimeError(
+                "Track frames must ascend and bbox origins must be nonnegative"
+            )
         if values[2] <= 0 or values[3] <= 0:
             raise RuntimeError("Track bbox width/height must be positive")
         previous_frame = frame
@@ -130,7 +161,10 @@ def load_reference(path: Path) -> dict[str, Any]:
     if not isinstance(expected_2d, dict):
         raise RuntimeError("track.expected_2d is required")
     for key in ("path_length", "displacement", "mean_speed_per_second"):
-        expected_2d[key] = _positive_float(expected_2d.get(key), name=f"expected_2d.{key}")
+        expected_2d[key] = _positive_float(
+            expected_2d.get(key),
+            name=f"expected_2d.{key}",
+        )
     if expected_2d.get("maximum_speed_per_second") is not None:
         expected_2d["maximum_speed_per_second"] = _positive_float(
             expected_2d["maximum_speed_per_second"],
@@ -138,15 +172,23 @@ def load_reference(path: Path) -> dict[str, Any]:
         )
 
     for key in ("fx_px", "fy_px"):
-        intrinsics[key] = _positive_float(intrinsics.get(key), name=f"camera_intrinsics.{key}")
+        intrinsics[key] = _positive_float(
+            intrinsics.get(key),
+            name=f"camera_intrinsics.{key}",
+        )
     for key in ("cx_px", "cy_px"):
-        intrinsics[key] = _finite_float(intrinsics.get(key), name=f"camera_intrinsics.{key}")
+        intrinsics[key] = _finite_float(
+            intrinsics.get(key),
+            name=f"camera_intrinsics.{key}",
+        )
 
     samples = metric_depth.get("samples")
     if not isinstance(samples, list) or len(samples) < 2:
         raise RuntimeError("metric_depth.samples requires at least two metric depth samples")
     normalized_samples: list[dict[str, Any]] = []
     seen_frames: set[int] = set()
+    first_track_frame = int(keyframes[0]["frame"])
+    last_track_frame = int(keyframes[-1]["frame"])
     for raw in samples:
         if not isinstance(raw, dict):
             raise RuntimeError("metric_depth sample must be an object")
@@ -156,32 +198,57 @@ def load_reference(path: Path) -> dict[str, Any]:
             raise RuntimeError("metric_depth sample frame must be an integer") from exc
         if frame < 0 or frame in seen_frames:
             raise RuntimeError("metric_depth sample frames must be unique and nonnegative")
+        if frame < first_track_frame or frame > last_track_frame:
+            raise RuntimeError(
+                "metric_depth samples must fall within the verified track frame range"
+            )
         seen_frames.add(frame)
         sample = {
             "frame": frame,
-            "depth": _positive_float(raw.get("depth"), name="metric_depth.sample.depth"),
+            "depth": _positive_float(
+                raw.get("depth"),
+                name="metric_depth.sample.depth",
+            ),
         }
         if raw.get("confidence") is not None:
             confidence = _finite_float(
-                raw.get("confidence"), name="metric_depth.sample.confidence"
+                raw.get("confidence"),
+                name="metric_depth.sample.confidence",
             )
             if not 0 <= confidence <= 1:
                 raise RuntimeError("metric depth confidence must be between 0 and 1")
             sample["confidence"] = confidence
         normalized_samples.append(sample)
-    metric_depth["samples"] = sorted(normalized_samples, key=lambda item: item["frame"])
+    metric_depth["samples"] = sorted(
+        normalized_samples,
+        key=lambda item: item["frame"],
+    )
 
     expected_3d = metric_depth.get("expected_3d")
     if not isinstance(expected_3d, dict):
         raise RuntimeError("metric_depth.expected_3d is required")
-    for key in ("path_length_3d", "displacement_3d", "mean_speed_3d_per_second", "mean_depth"):
-        expected_3d[key] = _positive_float(expected_3d.get(key), name=f"expected_3d.{key}")
+    for key in (
+        "path_length_3d",
+        "displacement_3d",
+        "mean_speed_3d_per_second",
+        "mean_depth",
+    ):
+        expected_3d[key] = _positive_float(
+            expected_3d.get(key),
+            name=f"expected_3d.{key}",
+        )
 
     tolerance = payload.get("tolerance", {})
     if not isinstance(tolerance, dict):
         raise RuntimeError("tolerance must be an object")
-    relative = _finite_float(tolerance.get("relative", 0.02), name="tolerance.relative")
-    absolute = _finite_float(tolerance.get("absolute", 0.0), name="tolerance.absolute")
+    relative = _finite_float(
+        tolerance.get("relative", 0.02),
+        name="tolerance.relative",
+    )
+    absolute = _finite_float(
+        tolerance.get("absolute", 0.0),
+        name="tolerance.absolute",
+    )
     if relative < 0 or absolute < 0:
         raise RuntimeError("Tolerances cannot be negative")
 
@@ -202,11 +269,18 @@ def load_reference(path: Path) -> dict[str, Any]:
 
 
 def measurement_error(
-    observed: float, expected: float, *, relative_tolerance: float, absolute_tolerance: float
+    observed: float,
+    expected: float,
+    *,
+    relative_tolerance: float,
+    absolute_tolerance: float,
 ) -> dict[str, Any]:
     absolute_error = abs(observed - expected)
     relative_error = absolute_error / abs(expected) if expected != 0 else math.inf
-    within = absolute_error <= max(absolute_tolerance, abs(expected) * relative_tolerance)
+    within = absolute_error <= max(
+        absolute_tolerance,
+        abs(expected) * relative_tolerance,
+    )
     return {
         "observed": observed,
         "expected": expected,
@@ -275,7 +349,10 @@ def main() -> int:
         project = require(
             client.post(
                 "/api/v1/projects",
-                json={"name": "Physical calibration validation", "template": "blank"},
+                json={
+                    "name": "Physical calibration validation",
+                    "template": "blank",
+                },
             ),
             201,
         )
@@ -333,14 +410,19 @@ def main() -> int:
                     "reference_distance": spatial["reference_distance"],
                     "reference_pixels": spatial["reference_pixels"],
                     "method": "independently_measured_known_length",
-                    "reference_label": str(spatial.get("reference_label", "known reference")),
+                    "reference_label": str(
+                        spatial.get("reference_label", "known reference")
+                    ),
                     "notes": reference.get("notes"),
                 },
             ),
             200,
         )
         calibrated = require(
-            client.get(f"/api/v1/video-tracks/{track['id']}/calibrated-analytics"), 200
+            client.get(
+                f"/api/v1/video-tracks/{track['id']}/calibrated-analytics"
+            ),
+            200,
         )
 
         intrinsics = reference["camera_intrinsics"]
@@ -352,7 +434,9 @@ def main() -> int:
                     "fy_px": intrinsics["fy_px"],
                     "cx_px": intrinsics["cx_px"],
                     "cy_px": intrinsics["cy_px"],
-                    "method": str(intrinsics.get("method", "independent_camera_calibration")),
+                    "method": str(
+                        intrinsics.get("method", "independent_camera_calibration")
+                    ),
                     "notes": reference.get("notes"),
                 },
             ),
@@ -362,7 +446,8 @@ def main() -> int:
         depth_payload = {
             "unit": depth["unit"],
             "samples": [
-                {"track_id": track["id"], **sample} for sample in depth["samples"]
+                {"track_id": track["id"], **sample}
+                for sample in depth["samples"]
             ],
         }
         if depth.get("maximum_frame_gap") is not None:
@@ -398,7 +483,12 @@ def main() -> int:
     comparisons_3d = _compare_mapping(
         depth_track,
         reference["metric_depth"]["expected_3d"],
-        ("path_length_3d", "displacement_3d", "mean_speed_3d_per_second", "mean_depth"),
+        (
+            "path_length_3d",
+            "displacement_3d",
+            "mean_speed_3d_per_second",
+            "mean_depth",
+        ),
         relative_tolerance=tolerance["relative"],
         absolute_tolerance=tolerance["absolute"],
     )
@@ -407,13 +497,18 @@ def main() -> int:
     restart_started = time.perf_counter()
     with TestClient(restart_app) as client:
         restart_calibration = require(
-            client.get(f"/api/v1/videos/{video['id']}/calibration"), 200
+            client.get(f"/api/v1/videos/{video['id']}/calibration"),
+            200,
         )
         restart_intrinsics = require(
-            client.get(f"/api/v1/videos/{video['id']}/camera-intrinsics"), 200
+            client.get(f"/api/v1/videos/{video['id']}/camera-intrinsics"),
+            200,
         )
         restart_calibrated = require(
-            client.get(f"/api/v1/video-tracks/{track['id']}/calibrated-analytics"), 200
+            client.get(
+                f"/api/v1/video-tracks/{track['id']}/calibrated-analytics"
+            ),
+            200,
         )
         restart_depth = require(
             client.post(
@@ -435,7 +530,8 @@ def main() -> int:
         and restart_intrinsics["fx_px"] == stored_intrinsics["fx_px"]
         and restart_intrinsics["fy_px"] == stored_intrinsics["fy_px"]
         and restart_calibrated["path_length"] == calibrated["path_length"]
-        and restart_depth["tracks"][0]["path_length_3d"] == depth_track["path_length_3d"]
+        and restart_depth["tracks"][0]["path_length_3d"]
+        == depth_track["path_length_3d"]
     )
     acceptance = "PASS" if all_within and restart_stable else "FAIL"
     report = {
@@ -469,6 +565,9 @@ def main() -> int:
         },
         "metric_depth_validation": {
             "relative_monocular_depth_is_metric": False,
+            "input_declared_metric": reference["metric_depth"]["is_metric"],
+            "input_source": reference["metric_depth"]["source"],
+            "unit": reference["metric_depth"]["unit"],
             "analytics": depth_analytics,
             "expected": reference["metric_depth"]["expected_3d"],
             "comparisons": comparisons_3d,
@@ -480,7 +579,8 @@ def main() -> int:
         "duration_seconds": time.perf_counter() - started,
     }
     (output / "report.json").write_text(
-        json.dumps(report, indent=2, default=str) + "\n", encoding="utf-8"
+        json.dumps(report, indent=2, default=str) + "\n",
+        encoding="utf-8",
     )
     print(json.dumps(report, indent=2, default=str))
     return 0 if acceptance == "PASS" else 1
