@@ -271,13 +271,35 @@ foreach ($Installer in $Installers) {
     $VerificationRoot = Join-Path `
         $Root `
         ".artifacts\msi-build-verification-$SafeInstallerName"
-    Write-ReefVisionStep "Verifying extracted MSI payload: $($Installer.Name)"
+
+    # The packaged Python runtime and offline model snapshots contain deeply nested paths.
+    # Administrative extraction beneath the already-deep repository path can exceed legacy
+    # Win32/MSI path limits even when the installer itself is valid. Extract under the
+    # shortest safe per-user temp path, then copy the compact reports back into .artifacts.
+    $ShortVerificationRoot = Join-Path `
+        ([IO.Path]::GetTempPath()) `
+        ("rv-msi-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
+    Write-ReefVisionStep (
+        "Verifying extracted MSI payload from short path: $($Installer.Name)"
+    )
     & $VerificationScript `
         -MsiPath $Installer.FullName `
-        -OutputDirectory $VerificationRoot
+        -OutputDirectory $ShortVerificationRoot
     if (-not $?) {
         throw "MSI payload verification failed: $($Installer.FullName)"
     }
+
+    New-Item -ItemType Directory -Path $VerificationRoot -Force | Out-Null
+    Get-ChildItem `
+        -LiteralPath $ShortVerificationRoot `
+        -File `
+        -ErrorAction Stop |
+        Where-Object { $_.Extension -in @('.json', '.log', '.txt') } |
+        Copy-Item -Destination $VerificationRoot -Force
+    Set-Content `
+        -LiteralPath (Join-Path $VerificationRoot "administrative-image-location.txt") `
+        -Value (Join-Path $ShortVerificationRoot "administrative-image") `
+        -Encoding utf8
 }
 
 Write-Host "Desktop installer output: $InstallerDirectory" -ForegroundColor Green
