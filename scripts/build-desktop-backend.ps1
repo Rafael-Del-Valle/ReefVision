@@ -111,7 +111,7 @@ $CollectedProviderPackages = @(
 $ProviderMetadataPackages = @(
     "numpy",
     "matplotlib",
-    "opencv-python",
+    "opencv-contrib-python",
     "pillow",
     "pyyaml",
     "requests",
@@ -266,9 +266,9 @@ $env:YOLO_CONFIG_DIR = $ResolvedProviderRuntimePath
 
 try {
     Write-ReefVisionStep "Checking pinned provider dependencies before packaging"
-    & $VenvPython -c "from pathlib import Path; from reefvision.ml.dependencies import configure_provider_runtime, require_all_implemented_providers_ready; configure_provider_runtime(data_dir=Path(r'$ResolvedProviderRuntimePath')); require_all_implemented_providers_ready()"
+    & $VenvPython -c "from pathlib import Path; from reefvision.desktop import require_scale_assistant_marker_runtime; from reefvision.ml.dependencies import configure_provider_runtime, require_all_implemented_providers_ready; configure_provider_runtime(data_dir=Path(r'$ResolvedProviderRuntimePath')); require_all_implemented_providers_ready(); require_scale_assistant_marker_runtime()"
     if ($LASTEXITCODE -ne 0) {
-        throw "Pinned provider dependency preflight failed. Rerun .\scripts\bootstrap.ps1."
+        throw "Pinned provider or Scale Assistant marker-runtime preflight failed. Rerun .\scripts\bootstrap.ps1."
     }
 
     Write-ReefVisionStep "Building the packaged FastAPI sidecar with PyInstaller"
