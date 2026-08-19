@@ -74,10 +74,16 @@ class MarkerCalibrationDetectRequest(BaseModel):
             self.charuco_squares_y,
             self.charuco_square_length,
         )
-        if self.kind == "charuco" and any(value is None for value in values):
-            raise ValueError(
-                "ChArUco calibration requires squares_x, squares_y, and square_length"
-            )
+        if self.kind == "charuco":
+            if any(value is None for value in values):
+                raise ValueError(
+                    "ChArUco calibration requires squares_x, squares_y, and square_length"
+                )
+            square_length = self.charuco_square_length
+            if square_length is not None and self.marker_length >= square_length:
+                raise ValueError(
+                    "ChArUco marker_length must be smaller than charuco_square_length"
+                )
         return self
 
 
