@@ -136,9 +136,9 @@ workflow_consensus.run_independent_segmentation_pipeline = run_pipeline_with_reg
 
 # Worker startup imports these modules for workflow definition/runtime extensions. Install
 # typed ports first, then the full science bridge. Depth-artifact enrichment wraps the base
-# depth node before downstream measurement wrappers. Ordering remains part of the contract:
-# behavior configuration precedes windowing; video 3D precedes the metric coral-surface
-# wrapper; canonical depth-source aliases load before both physical-depth workflows execute.
+# depth node before downstream measurement wrappers. Segmentation unification loads after
+# consensus has installed its inference wrapper; the review resolver loads last so all
+# scientific measurement modes fail closed on unreviewed mask proposals.
 from reefvision.services import (  # noqa: E402,F401
     workflow_definition_extensions as _workflow_definition_extensions,
 )
@@ -164,4 +164,10 @@ from reefvision.jobs import (  # noqa: E402,F401
 )
 from reefvision.jobs import (  # noqa: E402,F401
     workflow_metric_coral_surface_runtime as _workflow_metric_coral_surface_runtime,
+)
+from reefvision.jobs import (  # noqa: E402,F401
+    workflow_segmentation_runtime as _workflow_segmentation_runtime,
+)
+from reefvision.jobs import (  # noqa: E402,F401
+    workflow_segmentation_review_runtime as _workflow_segmentation_review_runtime,
 )
