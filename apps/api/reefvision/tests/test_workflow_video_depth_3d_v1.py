@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from reefvision.config import Settings
 from reefvision.db.models import ModelRegistration, WorkflowArtifact
+from reefvision.domain.errors import ValidationError
 from reefvision.services import video_assets as video_assets_module
 from reefvision.services.workflow_depth_3d import execute_video_depth_3d_adapter
 from reefvision.tests.test_annotations import create_project
