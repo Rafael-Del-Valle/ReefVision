@@ -85,6 +85,93 @@ def _intrinsics(metadata: dict[str, Any]) -> CameraIntrinsics | None:
         return None
 
 
+def _depth_source_kind(depth_map: DepthMap) -> str:
+    metadata = dict(depth_map.metadata_json or {})
+    explicit = metadata.get("depth_source_kind")
+    if isinstance(explicit, str) and explicit:
+        return explicit
+    if depth_map.provider_id == "luminance_relative":
+        return "relative_fixture"
+    if depth_map.provider_id == "depth_anything_v2_relative":
+        return "relative_monocular"
+    if depth_map.provider_id == "depth_anything_v2_metric":
+        return "metric_monocular_estimate"
+    return "relative_imported" if depth_map.depth_kind == "relative" else "imported_metric"
+
+
+def _point_row(
+    columns: NDArray[Any],
+    row_center: float,
+    depth: NDArray[Any],
+    intrinsics: CameraIntrinsics,
+) -> NDArray[Any]:
+    z = depth.astype(np.float64, copy=False)
+    x = (columns - float(intrinsics.cx_px)) * z / float(intrinsics.fx_px)
+    y = (row_center - float(intrinsics.cy_px)) * z / float(intrinsics.fy_px)
+    return np.stack((x, y, z), axis=-1)
+
+
+def _triangle_areas(
+    first: NDArray[Any],
+    second: NDArray[Any],
+    third: NDArray[Any],
+) -> NDArray[Any]:
+    return 0.5 * np.linalg.norm(np.cross(second - first, third - first), axis=-1)
+
+
+def _visible_surface_area(
+    values: NDArray[Any],
+    valid: NDArray[Any],
+    intrinsics: CameraIntrinsics,
+) -> tuple[float | None, int]:
+    """Triangulate the visible metric-depth surface inside the mask.
+
+    Only local triangles whose three vertices are finite, positive metric-depth mask pixels
+    are included. This estimates camera-visible surface geometry; it does not reconstruct
+    occluded or back-facing coral surfaces.
+    """
+
+    height, width = values.shape
+    if height < 2 or width < 2:
+        return None, 0
+    columns = np.arange(width, dtype=np.float64) + 0.5
+    area_sum = 0.0
+    triangle_count = 0
+    for row in range(height - 1):
+        top_valid = valid[row]
+        bottom_valid = valid[row + 1]
+        first_mask = top_valid[:-1] & top_valid[1:] & bottom_valid[:-1]
+        second_mask = bottom_valid[1:] & bottom_valid[:-1] & top_valid[1:]
+        if not np.any(first_mask) and not np.any(second_mask):
+            continue
+
+        top_depth = values[row].astype(np.float64, copy=False)
+        bottom_depth = values[row + 1].astype(np.float64, copy=False)
+        top_points = _point_row(columns, row + 0.5, top_depth, intrinsics)
+        bottom_points = _point_row(columns, row + 1.5, bottom_depth, intrinsics)
+
+        if np.any(first_mask):
+            areas = _triangle_areas(
+                top_points[:-1],
+                top_points[1:],
+                bottom_points[:-1],
+            )
+            selected = areas[first_mask]
+            area_sum += float(np.sum(selected))
+            triangle_count += int(selected.size)
+        if np.any(second_mask):
+            areas = _triangle_areas(
+                bottom_points[1:],
+                bottom_points[:-1],
+                top_points[1:],
+            )
+            selected = areas[second_mask]
+            area_sum += float(np.sum(selected))
+            triangle_count += int(selected.size)
+
+    return (area_sum if triangle_count else None), triangle_count
+
+
 class DepthMapService:
     def __init__(self, session: Session, settings: Settings) -> None:
         self.session = session
@@ -220,6 +307,7 @@ class DepthMapService:
         if request.camera_intrinsics is not None:
             metadata["camera_intrinsics"] = request.camera_intrinsics.model_dump(mode="json")
         metadata["source"] = "imported_values"
+        metadata["depth_source_kind"] = request.source_kind
         depth_map.model_checksum = request.model_checksum
         depth_map.unit = request.unit
         depth_map.managed_path = relative
@@ -276,7 +364,11 @@ class DepthMapService:
             expected_height=image.height_px,
         )
         region = _mask_array(self.settings, mask, image)
-        valid = region & np.isfinite(values)
+        finite = np.isfinite(values)
+        if depth_map.depth_kind == "metric":
+            valid = region & finite & (values > 0)
+        else:
+            valid = region & finite
         selected = values[valid]
         if selected.size == 0:
             raise ValidationError("The mask contains no valid depth pixels")
@@ -295,12 +387,23 @@ class DepthMapService:
             float(np.sum((selected / median) ** 2)) if median != 0 and np.isfinite(median) else None
         )
         warnings: list[str] = []
-        intrinsics = _intrinsics(dict(depth_map.metadata_json or {}))
+        metadata = dict(depth_map.metadata_json or {})
+        source_kind = _depth_source_kind(depth_map)
+        intrinsics = _intrinsics(metadata)
         metric_area = metric_width = metric_height = None
+        visible_surface_area_3d = None
+        surface_triangle_count = 0
         centroid_x = centroid_y = centroid_z = None
+        area_unit = None
+        physical_measurements_valid = False
         method = "relative_depth_region_statistics"
         if depth_map.depth_kind == "metric":
-            if intrinsics is None:
+            if not depth_map.unit:
+                warnings.append(
+                    "Metric depth lacks a physical unit, so physical dimensions and areas are "
+                    "suppressed until the depth source is assigned a valid unit."
+                )
+            elif intrinsics is None:
                 warnings.append(
                     "Metric depth is available, but physical area and dimensions require "
                     "camera intrinsics (fx, fy, cx, cy)."
@@ -316,36 +419,74 @@ class DepthMapService:
                 centroid_x = float(np.mean(x))
                 centroid_y = float(np.mean(y))
                 centroid_z = float(np.mean(z))
-                method = "metric_depth_pinhole_fronto_parallel_projection"
+                visible_surface_area_3d, surface_triangle_count = _visible_surface_area(
+                    values,
+                    valid,
+                    intrinsics,
+                )
+                area_unit = f"{depth_map.unit}^2"
+                physical_measurements_valid = True
+                method = "metric_depth_pinhole_projection_and_visible_surface_triangulation"
                 warnings.append(
-                    "Projected area assumes locally fronto-parallel pixels; strongly angled "
-                    "or curved surfaces require multi-view reconstruction for true surface area."
+                    "Projected area is the camera-facing pinhole projection of valid mask "
+                    "pixels; it is not surface area on a strongly angled or curved coral."
+                )
+                if visible_surface_area_3d is None:
+                    warnings.append(
+                        "The mask did not contain enough adjacent valid metric-depth pixels to "
+                        "triangulate a visible 3D surface."
+                    )
+                else:
+                    warnings.append(
+                        "Visible 3D surface area triangulates only the camera-visible depth "
+                        "surface. Occluded and back-facing coral surfaces are not reconstructed."
+                    )
+            if source_kind == "metric_monocular_estimate":
+                warnings.append(
+                    "Metric monocular depth is model-estimated. Validate scale and error against "
+                    "an independent physical reference before treating measurements as ground truth."
+                )
+            elif source_kind == "imported_metric":
+                warnings.append(
+                    "Imported metric depth has no sensor class beyond its supplied provenance; "
+                    "confirm the source calibration before quantitative scientific use."
                 )
         else:
+            if source_kind == "relative_fixture":
+                warnings.append(
+                    "This relative depth map is a deterministic fixture for workflow testing and "
+                    "must not be interpreted as scientific scene depth."
+                )
             warnings.append(
                 "Relative monocular depth supports ordering and normalized indices only; it "
-                "cannot produce absolute object dimensions without metric calibration."
+                "cannot produce absolute object dimensions or physical area without metric depth."
             )
         if selected.size < pixel_area:
             warnings.append(
-                f"{pixel_area - selected.size} mask pixels lacked finite depth and were excluded."
+                f"{pixel_area - selected.size} mask pixels lacked valid depth and were excluded."
             )
         return DepthAwareMaskMeasurementResponse(
             mask_annotation_id=mask.id,
             image_id=image.id,
             depth_map_id=depth_map.id,
             depth_kind=depth_map.depth_kind,
+            source_kind=source_kind,
             unit=depth_map.unit,
+            area_unit=area_unit,
             depth=depth_summary,
             pixel_area=pixel_area,
             depth_weighted_area_index=relative_index,
             metric_area=metric_area,
+            metric_projected_area=metric_area,
+            visible_surface_area_3d=visible_surface_area_3d,
+            surface_triangle_count=surface_triangle_count,
             metric_width=metric_width,
             metric_height=metric_height,
             centroid_x=centroid_x,
             centroid_y=centroid_y,
             centroid_z=centroid_z,
             camera_intrinsics=intrinsics,
+            physical_measurements_valid=physical_measurements_valid,
             method=method,
             warnings=warnings,
         )
