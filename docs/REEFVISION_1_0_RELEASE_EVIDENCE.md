@@ -6,9 +6,9 @@ This checklist separates software correctness, package readability, installed-Wi
 
 | Evidence | Status | Current evidence |
 | --- | --- | --- |
-| Backend lint and format | PASS | Local Ruff and Ruff format gate at `0771ca2` |
-| Backend strict typing | PASS | Local mypy gate at `0771ca2` |
-| Backend tests | PASS | 267 tests passed locally |
+| Backend lint and format | PASS | Local Ruff and Ruff format gate at `0771ca2`; focused recheck required after segmentation-prep changes |
+| Backend strict typing | PASS | Local mypy gate at `0771ca2`; focused recheck required after segmentation-prep changes |
+| Backend tests | PASS | 267 tests passed locally before segmentation-prep changes; focused recheck required |
 | Project Exchange and typed 3D regressions | PASS | Focused restart-safe exchange and 3D workflow tests passed locally |
 | Alembic round trip | PASS | Blank database upgrade to `0024`, downgrade to base, and re-upgrade passed |
 | Frontend format and typecheck | PASS | Local Prettier and TypeScript gates passed |
@@ -102,9 +102,10 @@ requires explicit train/validation/test polygon splits, preserves source image a
 label hashes in an isolated ReefVision data root, trains through the task-aware
 segmentation worker, registers the resulting segmenter, requires held-out polygon-mask
 proposals, accepts one through ReefVision's normal human-review path, and verifies both
-the registered model and accepted mask after application restart. This evidence row
-remains `NOT RUN` until a genuine biological polygon dataset and hardware execution
-produce a JSON report.
+the registered model and accepted mask after application restart. The segmentation
+exporter now uses paths relative to `data.yaml`, matching the portable contract already
+proven by real detection acceptance. This evidence row remains `NOT RUN` until a
+genuine biological polygon dataset and hardware execution produce a JSON report.
 
 Example future hardware run:
 
