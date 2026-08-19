@@ -31,7 +31,10 @@ def _pairs(tmp_path: Path, count: int) -> list[tuple[Path, Path]]:
     return values
 
 
-def test_partition_training_pool_is_deterministic_and_disjoint(harness, tmp_path: Path) -> None:
+def test_partition_training_pool_is_deterministic_and_disjoint(
+    harness,
+    tmp_path: Path,
+) -> None:
     pairs = _pairs(tmp_path, 10)
 
     seed_a, pool_a = harness.partition_training_pool(pairs, seed_size=4, seed=42)
@@ -72,3 +75,18 @@ def test_metric_summary_extracts_ultralytics_detection_metrics(harness) -> None:
         "map50_95": 0.3,
         "map50": 0.6,
     }
+
+
+def test_harness_scopes_production_acquisition_to_immutable_hidden_pool() -> None:
+    path = (
+        Path(__file__).resolve().parents[4]
+        / "scripts"
+        / "acceptance_active_learning_detection.py"
+    )
+    source = path.read_text(encoding="utf-8")
+
+    assert '"eligible_annotation_statuses": ["unannotated"]' in source
+    assert '"split_method": "manual"' in source
+    assert '"dataset_version_id": pool_version["id"]' in source
+    assert 'selection_manifest.get("dataset_version_id") != pool_version["id"]' in source
+    assert 'image_id not in pool_image_to_source for image_id in active_ids' in source
