@@ -3,9 +3,16 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError as PydanticValidationError
 
-from reefvision.schemas.measurements import MaskMeasurementResponse, MeasurementCalibrationUpdate
-from reefvision.services.mask_measurements import MaskMeasurementService as BaseMaskMeasurementService
-from reefvision.services.scientific_mask_measurements import ScientificMaskMeasurementService
+from reefvision.schemas.measurements import (
+    MaskMeasurementResponse,
+    MeasurementCalibrationUpdate,
+)
+from reefvision.services.mask_measurements import (
+    MaskMeasurementService as BaseMaskMeasurementService,
+)
+from reefvision.services.scientific_mask_measurements import (
+    ScientificMaskMeasurementService,
+)
 
 
 def _raster_response() -> MaskMeasurementResponse:
