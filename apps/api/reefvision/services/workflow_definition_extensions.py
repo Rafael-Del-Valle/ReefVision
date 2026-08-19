@@ -1,8 +1,67 @@
-"""Register workflow nodes and ports whose execution handlers already exist."""
+"""Register full-platform workflow ports and mode-aware validation rules."""
 
 from __future__ import annotations
 
+from reefvision.schemas.workflows import (
+    WorkflowValidationIssue,
+    WorkflowValidationRequest,
+    WorkflowValidationResponse,
+)
 from reefvision.services import workflows as workflow_service
+
+_ORIGINAL_VALIDATE = workflow_service.WorkflowService.validate
+
+
+def _issue_sort_key(issue: WorkflowValidationIssue) -> tuple[int, str, int, str]:
+    return (
+        0 if issue.severity == "error" else 1,
+        issue.node_id or "",
+        issue.edge_index if issue.edge_index is not None else -1,
+        issue.code,
+    )
+
+
+def _mode_aware_validate(
+    self: workflow_service.WorkflowService,
+    project_id: str,
+    request: WorkflowValidationRequest,
+) -> WorkflowValidationResponse:
+    """Restore mode-specific required inputs hidden by the shared measurement primitive."""
+
+    response = _ORIGINAL_VALIDATE(self, project_id, request)
+    issues = list(response.issues)
+    connected_ports: dict[str, set[str]] = {node.id: set() for node in request.nodes}
+    for edge in request.edges:
+        if edge.target_node_id in connected_ports:
+            connected_ports[edge.target_node_id].add(edge.target_port)
+
+    for node in request.nodes:
+        if node.node_type != "measurement":
+            continue
+        mode = str(node.configuration.get("measurement_mode", "coral_mask")).strip().casefold()
+        ports = connected_ports[node.id]
+        required_ports = ("video", "tracks") if mode == "video_depth_3d" else ("masks",)
+        for port_name in required_ports:
+            if port_name in ports:
+                continue
+            issues.append(
+                WorkflowValidationIssue(
+                    severity="error",
+                    code="measurement_mode_input_missing",
+                    node_id=node.id,
+                    message=(
+                        f"Scientific measurement mode {mode!r} requires input "
+                        f"{port_name!r} to be connected."
+                    ),
+                )
+            )
+
+    return response.model_copy(
+        update={
+            "valid": not any(issue.severity == "error" for issue in issues),
+            "issues": sorted(issues, key=_issue_sort_key),
+        }
+    )
 
 
 def install_workflow_definition_extensions() -> None:
@@ -34,9 +93,9 @@ def install_workflow_definition_extensions() -> None:
     )
 
     # The unified scientific measurement node supports coral masks plus optional aligned
-    # depth maps, and calibrated video-track 3D analysis. Individual runtime modes enforce
-    # their own required inputs so the graph can expose one stable measurement primitive
-    # instead of creating a second executor-specific node family.
+    # depth maps, and calibrated video-track 3D analysis. The generic ports are optional
+    # here because required inputs depend on measurement_mode; _mode_aware_validate restores
+    # the appropriate hard requirements before a workflow can execute.
     measurement = workflow_service.NODE_DEFINITIONS.get("measurement")
     if measurement is not None:
         measurement_inputs = dict(measurement.inputs)
@@ -69,6 +128,9 @@ def install_workflow_definition_extensions() -> None:
     workflow_service.COMPATIBLE_SOURCE_TYPES.setdefault("artifact", set()).update(
         {"depth_maps", "embeddings", "artifact"}
     )
+
+    if workflow_service.WorkflowService.validate is not _mode_aware_validate:
+        workflow_service.WorkflowService.validate = _mode_aware_validate
 
 
 install_workflow_definition_extensions()
