@@ -8,7 +8,7 @@ from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from reefvision.domain.errors import ValidationError
 from reefvision.ml.mask_tools import (
@@ -16,7 +16,6 @@ from reefvision.ml.mask_tools import (
     mask_iou,
     mask_to_rings,
     normalize_ring,
-    polygon_to_mask,
     raster_quality,
     remove_small_components,
     self_intersections,
@@ -98,6 +97,32 @@ def _schema_ring(points: list[tuple[float, float]]) -> list[GeometryPoint]:
     return [GeometryPoint(x=x, y=y) for x, y in points]
 
 
+def _pixel_center_polygon_mask(
+    polygon: PolygonGeometry,
+    *,
+    width: int,
+    height: int,
+) -> NDArray[np.bool_]:
+    """Rasterize continuous polygon boundaries by testing pixel-center occupancy.
+
+    ``mask_to_rings`` represents raster boundaries on the integer pixel-edge lattice.
+    Drawing those coordinates directly into a same-resolution PIL image uses inclusive
+    pixel-index semantics and adds an extra row/column on right and bottom edges.  A
+    two-times 1-bit canvas followed by nearest-neighbor center sampling gives the intended
+    half-open pixel-cell semantics while remaining implemented by Pillow's fast polygon
+    rasterizer.
+    """
+
+    canvas = Image.new("1", (width * 2, height * 2), 0)
+    draw = ImageDraw.Draw(canvas)
+    outer = [(point.x * 2.0, point.y * 2.0) for point in polygon.outer]
+    draw.polygon(outer, fill=1)
+    for hole in polygon.holes:
+        draw.polygon([(point.x * 2.0, point.y * 2.0) for point in hole], fill=0)
+    sampled = canvas.resize((width, height), resample=Image.Resampling.NEAREST)
+    return np.asarray(sampled, dtype=bool)
+
+
 def _polygon_mask(
     polygons: list[PolygonGeometry],
     *,
@@ -107,11 +132,12 @@ def _polygon_mask(
     _check_dimensions(width, height)
     result = np.zeros((height, width), dtype=bool)
     for polygon in polygons:
-        result |= polygon_to_mask(
-            _ring(polygon.outer),
+        # Rasterize each component independently before unioning it so a hole in one
+        # polygon cannot erase foreground contributed by an overlapping sibling polygon.
+        result |= _pixel_center_polygon_mask(
+            polygon,
             width=width,
             height=height,
-            holes=[_ring(hole) for hole in polygon.holes],
         )
     return np.asarray(result, dtype=bool)
 
