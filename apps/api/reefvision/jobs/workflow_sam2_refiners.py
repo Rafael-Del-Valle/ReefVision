@@ -135,14 +135,17 @@ def run_pipeline_with_registered_sam2(
 workflow_consensus.run_independent_segmentation_pipeline = run_pipeline_with_registered_sam2
 
 # Worker startup imports these modules for workflow definition/runtime extensions. Install
-# typed ports first, then the full science bridge, then wrappers that intentionally replace
-# its handlers. Ordering is part of the runtime contract: behavior configuration loads
-# before windowing; video 3D wraps the base measurement handler; canonical depth-source
-# aliases load before metric coral-surface mode wraps the combined measurement handler.
+# typed ports first, then the full science bridge. Depth-artifact enrichment wraps the base
+# depth node before downstream measurement wrappers. Ordering remains part of the contract:
+# behavior configuration precedes windowing; video 3D precedes the metric coral-surface
+# wrapper; canonical depth-source aliases load before both physical-depth workflows execute.
 from reefvision.services import (  # noqa: E402,F401
     workflow_definition_extensions as _workflow_definition_extensions,
 )
 from reefvision.jobs import workflow_science_runtime as _workflow_science_runtime  # noqa: E402,F401
+from reefvision.jobs import (  # noqa: E402,F401
+    workflow_depth_artifact_runtime as _workflow_depth_artifact_runtime,
+)
 from reefvision.jobs import workflow_behavior_runtime as _workflow_behavior_runtime  # noqa: E402,F401
 from reefvision.jobs import (  # noqa: E402,F401
     workflow_behavior_window_runtime as _workflow_behavior_window_runtime,
