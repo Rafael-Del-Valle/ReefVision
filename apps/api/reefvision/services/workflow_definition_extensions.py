@@ -33,14 +33,22 @@ def install_workflow_definition_extensions() -> None:
         ),
     )
 
-    # Full 1.0 measurements can combine a segmentation mask with an aligned depth map.
-    # Preserve the existing required mask and optional detection ports while adding a
-    # typed optional RGB-D input that can come directly from depth_estimation.
+    # The unified scientific measurement node supports coral masks plus optional aligned
+    # depth maps, and calibrated video-track 3D analysis. Individual runtime modes enforce
+    # their own required inputs so the graph can expose one stable measurement primitive
+    # instead of creating a second executor-specific node family.
     measurement = workflow_service.NODE_DEFINITIONS.get("measurement")
-    if measurement is not None and "depth_maps" not in measurement.inputs:
+    if measurement is not None:
+        measurement_inputs = dict(measurement.inputs)
+        if "masks" in measurement_inputs:
+            mask_type, _required = measurement_inputs["masks"]
+            measurement_inputs["masks"] = (mask_type, False)
+        measurement_inputs.setdefault("depth_maps", ("depth_maps", False))
+        measurement_inputs.setdefault("video", ("video", False))
+        measurement_inputs.setdefault("tracks", ("tracks", False))
         workflow_service.NODE_DEFINITIONS["measurement"] = workflow_service._NodeDefinition(
-            display_name=measurement.display_name,
-            inputs={**measurement.inputs, "depth_maps": ("depth_maps", False)},
+            display_name="Scientific measurement",
+            inputs=measurement_inputs,
             outputs=dict(measurement.outputs),
             model_tasks=measurement.model_tasks,
         )
