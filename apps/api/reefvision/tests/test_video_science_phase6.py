@@ -183,3 +183,117 @@ def test_calibration_can_be_cleared_and_schooling_requires_scale(
     cleared = client.delete(f"/api/v1/videos/{video['id']}/calibration")
     assert cleared.status_code == 204
     assert client.get(f"/api/v1/videos/{video['id']}/calibration").status_code == 404
+
+
+def test_metric_depth_samples_back_project_tracks_into_3d(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Depth-aware fish tracking")
+    video = _video(client, str(project["id"]), monkeypatch)
+    classes = cast(list[dict[str, object]], project["label_classes"])
+    track = _track(client, str(video["id"]), str(classes[0]["id"]), 0)
+
+    missing = client.post(
+        f"/api/v1/videos/{video['id']}/depth-track-analytics",
+        json={
+            "unit": "m",
+            "samples": [
+                {"track_id": track["id"], "frame": 0, "depth": 2.0},
+                {"track_id": track["id"], "frame": 2, "depth": 2.0},
+            ],
+        },
+    )
+    assert missing.status_code == 404
+
+    calibration = client.put(
+        f"/api/v1/videos/{video['id']}/camera-intrinsics",
+        json={
+            "fx_px": 100,
+            "fy_px": 100,
+            "cx_px": 5,
+            "cy_px": 5,
+            "method": "checkerboard",
+            "notes": "Synthetic pinhole calibration",
+        },
+    )
+    assert calibration.status_code == 200, calibration.text
+    intrinsics = calibration.json()
+    assert intrinsics["schema_version"] == "video-camera-intrinsics-0001"
+    assert intrinsics["fx_px"] == pytest.approx(100.0)
+
+    response = client.post(
+        f"/api/v1/videos/{video['id']}/depth-track-analytics",
+        json={
+            "unit": "m",
+            "samples": [
+                {
+                    "track_id": track["id"],
+                    "frame": 0,
+                    "depth": 2.0,
+                    "confidence": 0.99,
+                },
+                {
+                    "track_id": track["id"],
+                    "frame": 2,
+                    "depth": 2.0,
+                    "confidence": 0.98,
+                },
+            ],
+        },
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["schema_version"] == "video-depth-track-analytics-0001"
+    assert result["unit"] == "m"
+    assert len(result["tracks"]) == 1
+    analytics = result["tracks"][0]
+    assert analytics["observed_frame_count"] == 2
+    assert analytics["path_length_3d"] == pytest.approx(0.4)
+    assert analytics["displacement_3d"] == pytest.approx(0.4)
+    assert analytics["mean_speed_3d_per_second"] == pytest.approx(2.0)
+    assert analytics["maximum_speed_3d_per_second"] == pytest.approx(2.0)
+    assert analytics["mean_depth"] == pytest.approx(2.0)
+    assert analytics["points"][0]["x"] == pytest.approx(0.0)
+    assert analytics["points"][1]["x"] == pytest.approx(0.4)
+    assert analytics["points"][1]["z"] == pytest.approx(2.0)
+
+    fetched = client.get(f"/api/v1/videos/{video['id']}/camera-intrinsics")
+    assert fetched.status_code == 200
+    assert fetched.json()["method"] == "checkerboard"
+
+    cleared = client.delete(f"/api/v1/videos/{video['id']}/camera-intrinsics")
+    assert cleared.status_code == 204
+    assert (
+        client.get(f"/api/v1/videos/{video['id']}/camera-intrinsics").status_code
+        == 404
+    )
+
+
+def test_depth_track_samples_must_match_track_support(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Depth track validation")
+    video = _video(client, str(project["id"]), monkeypatch)
+    classes = cast(list[dict[str, object]], project["label_classes"])
+    track = _track(client, str(video["id"]), str(classes[0]["id"]), 0)
+
+    calibration = client.put(
+        f"/api/v1/videos/{video['id']}/camera-intrinsics",
+        json={"fx_px": 100, "fy_px": 100, "cx_px": 5, "cy_px": 5},
+    )
+    assert calibration.status_code == 200
+
+    response = client.post(
+        f"/api/v1/videos/{video['id']}/depth-track-analytics",
+        json={
+            "unit": "cm",
+            "samples": [
+                {"track_id": track["id"], "frame": 0, "depth": 20},
+                {"track_id": track["id"], "frame": 4, "depth": 20},
+            ],
+        },
+    )
+    assert response.status_code == 422, response.text
+    assert "outside the track trajectory" in response.json()["detail"]
