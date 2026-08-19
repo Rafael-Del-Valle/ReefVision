@@ -122,6 +122,13 @@ MEDIA_KIND_BY_SECTION = {
     "models": "model",
 }
 
+JSON_HASH_FIELDS: dict[type[Any], tuple[str, str]] = {
+    DatasetVersion: ("manifest_json", "manifest_sha256"),
+    ClassificationDataset: ("manifest_json", "manifest_sha256"),
+    WorkflowGraphRecord: ("graph_json", "graph_sha256"),
+    WorkflowArtifact: ("payload_json", "payload_sha256"),
+}
+
 
 def _read_jsonl(archive: zipfile.ZipFile, member: str) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
@@ -147,7 +154,11 @@ def _remap_json(value: Any, id_map: dict[str, str]) -> Any:
     return value
 
 
-def _coerce_row(model: type[Any], row: dict[str, Any], id_map: dict[str, str]) -> dict[str, Any]:
+def _coerce_row(
+    model: type[Any],
+    row: dict[str, Any],
+    id_map: dict[str, str],
+) -> dict[str, Any]:
     table = model.__table__
     values = _remap_json(row, id_map)
     converted: dict[str, Any] = {}
@@ -155,10 +166,39 @@ def _coerce_row(model: type[Any], row: dict[str, Any], id_map: dict[str, str]) -
         if column.name not in values:
             continue
         value = values[column.name]
-        if value is not None and isinstance(column.type, DateTime) and isinstance(value, str):
+        if (
+            value is not None
+            and isinstance(column.type, DateTime)
+            and isinstance(value, str)
+        ):
             value = datetime.fromisoformat(value)
         converted[column.name] = value
     return converted
+
+
+def _rewrite_project_paths(
+    values: dict[str, Any],
+    model: type[Any],
+    source_storage_root: str,
+    target_storage_root: str,
+) -> None:
+    prefix = source_storage_root.rstrip("/") + "/"
+    for column in model.__table__.columns:
+        if not column.name.endswith("_path"):
+            continue
+        value = values.get(column.name)
+        if isinstance(value, str) and value.startswith(prefix):
+            values[column.name] = target_storage_root.rstrip("/") + "/" + value[len(prefix) :]
+
+
+def _refresh_json_checksum(model: type[Any], values: dict[str, Any]) -> None:
+    fields = JSON_HASH_FIELDS.get(model)
+    if fields is None:
+        return
+    json_field, hash_field = fields
+    payload = values.get(json_field)
+    if isinstance(payload, (dict, list)):
+        values[hash_field] = canonical_json_sha256(payload)
 
 
 def _media_inventory(manifest: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
@@ -172,7 +212,11 @@ def _media_inventory(manifest: dict[str, Any]) -> dict[tuple[str, str], dict[str
         kind = item.get("kind")
         record_id = item.get("record_id")
         member = item.get("path")
-        if isinstance(kind, str) and isinstance(record_id, str) and isinstance(member, str):
+        if (
+            isinstance(kind, str)
+            and isinstance(record_id, str)
+            and isinstance(member, str)
+        ):
             result[(kind, record_id)] = item
     return result
 
@@ -213,7 +257,9 @@ def import_project_exchange(
     source.seek(0)
     inspection = inspect_project_exchange(source)
     if not inspection.compatible:
-        raise ValidationError("Exchange package failed inspection: " + "; ".join(inspection.errors))
+        raise ValidationError(
+            "Exchange package failed inspection: " + "; ".join(inspection.errors)
+        )
 
     source.seek(0)
     with zipfile.ZipFile(source, "r") as archive:
@@ -232,16 +278,23 @@ def import_project_exchange(
             if isinstance(member, str):
                 source_project_rows = _read_jsonl(archive, member)
         if len(source_project_rows) != 1:
-            raise ValidationError("Exchange package must contain exactly one source project row")
+            raise ValidationError(
+                "Exchange package must contain exactly one source project row"
+            )
         source_project = source_project_rows[0]
         old_project_id = str(source_project.get("id", ""))
         if not old_project_id:
             raise ValidationError("Exchange source project ID is missing")
+        source_storage_root = str(source_project.get("storage_root") or "")
 
         requested_name = (
             project_name.strip()
             if project_name is not None and project_name.strip()
-            else str(source_project.get("name") or inspection.project_name or "Imported project")
+            else str(
+                source_project.get("name")
+                or inspection.project_name
+                or "Imported project"
+            )
         )
         project = ProjectService(session, settings).create_project(
             ProjectCreate(
@@ -255,7 +308,8 @@ def import_project_exchange(
             )
         )
         project.default_annotation_type = str(
-            source_project.get("default_annotation_type") or project.default_annotation_type
+            source_project.get("default_annotation_type")
+            or project.default_annotation_type
         )
         session.commit()
         session.refresh(project)
@@ -282,6 +336,7 @@ def import_project_exchange(
         imported_counts: dict[str, int] = {}
         copied_media_count = 0
         dataset_parent_links: list[tuple[DatasetVersion, str]] = []
+        imported_graphs: dict[str, WorkflowGraphRecord] = {}
 
         try:
             for section_name in SECTION_ORDER:
@@ -295,15 +350,33 @@ def import_project_exchange(
                     row = dict(source_row)
                     old_id = row.get("id")
                     values = _coerce_row(model, row, id_map)
+                    _rewrite_project_paths(
+                        values,
+                        model,
+                        source_storage_root,
+                        project.storage_root,
+                    )
                     if "project_id" in model.__table__.columns:
                         values["project_id"] = project.id
                     if isinstance(old_id, str) and "id" in model.__table__.columns:
                         values["id"] = id_map[old_id]
 
+                    if section_name == "images":
+                        # Thumbnails are generated artifacts, not original media. Never
+                        # leave an imported image pointing into the source project tree.
+                        values["thumbnail_path"] = None
+
                     if section_name == "dataset_versions":
                         old_parent = row.get("parent_version_id")
                         if isinstance(old_parent, str) and old_parent:
                             values["parent_version_id"] = None
+
+                    if section_name == "workflow_runs":
+                        graph_id = values.get("workflow_graph_record_id")
+                        if isinstance(graph_id, str):
+                            graph = imported_graphs.get(graph_id)
+                            if graph is not None:
+                                values["graph_sha256"] = graph.graph_sha256
 
                     media_kind = MEDIA_KIND_BY_SECTION.get(section_name)
                     if media_kind is not None and isinstance(old_id, str):
@@ -337,10 +410,12 @@ def import_project_exchange(
                                     "exchange_source_record_id": old_id,
                                 }
                             warnings.append(
-                                f"{media_kind.title()} media was not packaged for {source_name}; "
-                                "the imported record requires relinking before file-backed operations."
+                                f"{media_kind.title()} media was not packaged for "
+                                f"{source_name}; the imported record requires relinking "
+                                "before file-backed operations."
                             )
 
+                    _refresh_json_checksum(model, values)
                     instance = model(**values)
                     session.add(instance)
                     created.append(instance)
@@ -348,6 +423,8 @@ def import_project_exchange(
                         old_parent = row.get("parent_version_id")
                         if isinstance(old_parent, str) and old_parent:
                             dataset_parent_links.append((instance, old_parent))
+                    if section_name == "workflow_graphs" and isinstance(old_id, str):
+                        imported_graphs[id_map[old_id]] = instance
                 session.flush()
                 imported_counts[section_name] = len(created)
 
@@ -363,7 +440,9 @@ def import_project_exchange(
                 f"{project.storage_root}/exchanges/"
                 f"{package_id}.imported.reefvision.zip"
             )
-            archive_destination = resolve_managed_project_path(settings, archive_relative)
+            archive_destination = resolve_managed_project_path(
+                settings, archive_relative
+            )
             archive_destination.parent.mkdir(parents=True, exist_ok=True)
             source.seek(0)
             with archive_destination.open("wb") as target:
@@ -399,7 +478,9 @@ def import_project_exchange(
                     session.delete(doomed)
                     session.commit()
             finally:
-                project_root = resolve_managed_project_path(settings, project.storage_root)
+                project_root = resolve_managed_project_path(
+                    settings, project.storage_root
+                )
                 shutil.rmtree(project_root, ignore_errors=True)
             raise
 
