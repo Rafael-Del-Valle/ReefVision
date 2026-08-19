@@ -176,11 +176,14 @@ def test_workflow_pauses_at_review_and_resumes_without_rerunning_upstream(
     project, run_id, job_id = _queue_seeded_review_run(client)
     app = cast(FastAPI, client.app)
 
-    assert process_workflow_run_job(
-        app.state.settings,
-        app.state.session_factory,
-        job_id,
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            job_id,
+        )
+        is True
+    )
 
     paused = client.get(f"/api/v1/workflow-runs/{run_id}")
     assert paused.status_code == 200, paused.text
@@ -197,11 +200,14 @@ def test_workflow_pauses_at_review_and_resumes_without_rerunning_upstream(
     assert resumed.status_code == 202, resumed.text
     assert resumed.json()["status"] == "queued"
 
-    assert process_workflow_run_job(
-        app.state.settings,
-        app.state.session_factory,
-        job_id,
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            job_id,
+        )
+        is True
+    )
 
     finished = client.get(f"/api/v1/workflow-runs/{run_id}")
     assert finished.status_code == 200, finished.text
@@ -221,11 +227,14 @@ def test_workflow_pauses_at_review_and_resumes_without_rerunning_upstream(
 def test_waiting_for_review_workflow_can_be_cancelled(client: TestClient) -> None:
     _, run_id, job_id = _queue_seeded_review_run(client)
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings,
-        app.state.session_factory,
-        job_id,
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            job_id,
+        )
+        is True
+    )
 
     cancelled = client.post(f"/api/v1/jobs/{job_id}/cancel")
     assert cancelled.status_code == 200, cancelled.text

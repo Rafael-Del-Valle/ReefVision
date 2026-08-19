@@ -18,11 +18,7 @@ def process_project_exchange_export_job(
 ) -> bool:
     with factory() as session:
         job = session.get(Job, job_id)
-        if (
-            job is None
-            or job.job_type != "project_exchange_export"
-            or job.status != "queued"
-        ):
+        if job is None or job.job_type != "project_exchange_export" or job.status != "queued":
             return False
         package_id = str(job.request_json.get("package_id", ""))
         package = session.get(ProjectExchangePackage, package_id)
@@ -40,9 +36,7 @@ def process_project_exchange_export_job(
 
     try:
         with factory() as session:
-            package_response = ProjectExchangeV1Service(session, settings).build_export(
-                package_id
-            )
+            package_response = ProjectExchangeV1Service(session, settings).build_export(package_id)
         with factory() as session:
             job = session.get(Job, job_id)
             if job is None:

@@ -75,7 +75,8 @@ class VideoTrackingBenchmarkService:
         job = self.session.get(Job, candidate.source_job_id)
         if job is None or job.job_type != "video_tracking":
             raise ValidationError(
-                f"Tracking job {candidate.source_job_id} does not exist or is not a video-tracking job"
+                f"Tracking job {candidate.source_job_id} does not exist or is not a "
+                "video-tracking job"
             )
         request = dict(job.request_json or {})
         if str(request.get("video_id", "")) != video_id:

@@ -73,7 +73,9 @@ def create_workflow_dataset_version(
         raise ValidationError("Create Dataset Version received a foreign project reference")
     for reviewed in reviewed_payloads or []:
         if reviewed.get("project_id") != project_id:
-            raise ValidationError("Create Dataset Version received reviewed data from another project")
+            raise ValidationError(
+                "Create Dataset Version received reviewed data from another project"
+            )
 
     parent_version_id: str | None = None
     if parent_dataset_payload is not None:
@@ -84,7 +86,9 @@ def create_workflow_dataset_version(
             raise ValidationError("Parent dataset artifact is missing its version identifier")
         parent = session.get(DatasetVersion, parent_version_id)
         if parent is None or parent.project_id != project_id or parent.status != "complete":
-            raise ValidationError("Parent dataset version must be complete and belong to this project")
+            raise ValidationError(
+                "Parent dataset version must be complete and belong to this project"
+            )
 
     creator = _workflow_creator(run_id, node_run_id)
     existing = session.scalar(
@@ -113,9 +117,7 @@ def create_workflow_dataset_version(
 
     raw_reuse_parent = parameters.get("reuse_parent_assignments")
     reuse_parent = (
-        parent_version_id is not None
-        if raw_reuse_parent is None
-        else bool(raw_reuse_parent)
+        parent_version_id is not None if raw_reuse_parent is None else bool(raw_reuse_parent)
     )
     if reuse_parent and parent_version_id is None:
         raise ValidationError("Split reuse requires a parent dataset version")
@@ -128,9 +130,7 @@ def create_workflow_dataset_version(
         split_method=str(parameters.get("split_method") or "random"),
         requested_ratios=requested_ratios,
         split_seed=(
-            int(parameters["split_seed"])
-            if parameters.get("split_seed") is not None
-            else 42
+            int(parameters["split_seed"]) if parameters.get("split_seed") is not None else 42
         ),
         reuse_parent_assignments=reuse_parent,
         manual_assignments=[],

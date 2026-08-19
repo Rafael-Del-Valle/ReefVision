@@ -303,9 +303,7 @@ def _extract_provider_result(provider: str, response: dict[str, Any]) -> dict[st
 
 
 def _usage_metadata(provider: str, response: dict[str, Any]) -> dict[str, Any]:
-    if provider == "openai":
-        usage = response.get("usage")
-    elif provider == "anthropic":
+    if provider == "openai" or provider == "anthropic":
         usage = response.get("usage")
     else:
         usage = response.get("usage_metadata") or response.get("usageMetadata")
@@ -339,9 +337,7 @@ def _normalize_detections(
         if class_definition is None or not isinstance(box, list) or len(box) != 4:
             continue
         try:
-            y_min, x_min, y_max, x_max = [
-                min(max(float(value), 0.0), 1000.0) for value in box
-            ]
+            y_min, x_min, y_max, x_max = [min(max(float(value), 0.0), 1000.0) for value in box]
         except (TypeError, ValueError):
             continue
         if x_max <= x_min or y_max <= y_min:
@@ -437,9 +433,7 @@ def run_vlm_detection(
             try:
                 error_payload = response.json()
                 message = str(
-                    error_payload.get("error")
-                    or error_payload.get("message")
-                    or "HTTP error"
+                    error_payload.get("error") or error_payload.get("message") or "HTTP error"
                 )
             except (ValueError, AttributeError):
                 message = response.text[:500] or "HTTP error"

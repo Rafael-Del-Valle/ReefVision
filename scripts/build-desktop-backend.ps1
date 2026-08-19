@@ -138,6 +138,56 @@ $OptionalBundledTorchPatterns = @(
     "nvJitLink*.dll",
     "*.lib"
 )
+$PackagingDebrisDirectoryNames = @(
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    "tests",
+    "test"
+)
+$PackagingDebrisFilePatterns = @(
+    "*.pyc",
+    "*.pyo"
+)
+
+function Remove-ReefVisionPackagingDebris {
+    param([Parameter(Mandatory = $true)][string]$BundlePath)
+
+    $RemovedDirectories = 0
+    $RemovedFiles = 0
+    foreach ($DirectoryName in $PackagingDebrisDirectoryNames) {
+        $Directories = @(Get-ChildItem -LiteralPath $BundlePath -Directory -Recurse -Force |
+            Where-Object { $_.Name -ieq $DirectoryName } |
+            Sort-Object { $_.FullName.Length } -Descending)
+        foreach ($Directory in $Directories) {
+            if (Test-Path -LiteralPath $Directory.FullName -PathType Container) {
+                Remove-Item -LiteralPath $Directory.FullName -Recurse -Force
+                $RemovedDirectories += 1
+            }
+        }
+    }
+    foreach ($Pattern in $PackagingDebrisFilePatterns) {
+        $Files = @(Get-ChildItem -LiteralPath $BundlePath -File -Recurse -Force -Filter $Pattern)
+        foreach ($File in $Files) {
+            Remove-Item -LiteralPath $File.FullName -Force
+            $RemovedFiles += 1
+        }
+    }
+    Write-Host (
+        "Removed $RemovedDirectories development/test/cache directories and " +
+        "$RemovedFiles bytecode files from the packaged runtime."
+    ) -ForegroundColor DarkGray
+
+    $RemainingDebris = @(Get-ChildItem -LiteralPath $BundlePath -Recurse -Force |
+        Where-Object {
+            ($_.PSIsContainer -and $_.Name -in $PackagingDebrisDirectoryNames) -or
+            (-not $_.PSIsContainer -and $_.Extension -in @(".pyc", ".pyo"))
+        })
+    if ($RemainingDebris.Count -gt 0) {
+        throw "Packaged runtime still contains development/test/cache debris: $($RemainingDebris[0].FullName)"
+    }
+}
 
 foreach ($path in @($DistPath, $WorkPath, $SpecPath, $BinariesPath, $ProviderRuntimePath)) {
     New-Item -ItemType Directory -Path $path -Force | Out-Null
@@ -259,6 +309,7 @@ $PyInstallerCatalog = Join-Path $SourceBundle "_internal\config\model_catalog.js
 Assert-ReefVisionModelCatalog -Path $PyInstallerCatalog
 
 Write-ReefVisionStep "Trimming packaged desktop runtime to the supported installed-app footprint"
+Remove-ReefVisionPackagingDebris -BundlePath $SourceBundle
 $TorchLibPath = Join-Path $SourceBundle "_internal\torch\lib"
 if (Test-Path $TorchLibPath -PathType Container) {
     foreach ($pattern in $OptionalBundledTorchPatterns) {

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import itertools
 from collections import defaultdict
+from datetime import UTC, datetime
 from math import dist, hypot
 from typing import Any
 
@@ -80,11 +82,11 @@ class VideoScienceService:
             units_per_pixel=1.0 / pixels_per_unit,
             method=method,
             reference_label=(
-                str(raw["reference_label"])
-                if raw.get("reference_label") is not None
-                else None
+                str(raw["reference_label"]) if raw.get("reference_label") is not None else None
             ),
             notes=str(raw["notes"]) if raw.get("notes") is not None else None,
+            calibration_revision=int(raw.get("calibration_revision", 1)),
+            calibration_updated_at=datetime.fromisoformat(str(raw["calibration_updated_at"])),
             video_revision=video.revision,
         )
 
@@ -95,6 +97,10 @@ class VideoScienceService:
     ) -> VideoSpatialCalibrationResponse:
         video = self._video(video_id)
         metadata: dict[str, Any] = dict(video.metadata_json or {})
+        previous = metadata.get(CALIBRATION_METADATA_KEY)
+        previous_revision = (
+            int(previous.get("calibration_revision", 0)) if isinstance(previous, dict) else 0
+        )
         metadata[CALIBRATION_METADATA_KEY] = {
             "schema_version": CALIBRATION_SCHEMA_VERSION,
             "unit": payload.unit,
@@ -104,6 +110,8 @@ class VideoScienceService:
             "method": payload.method,
             "reference_label": payload.reference_label,
             "notes": payload.notes,
+            "calibration_revision": previous_revision + 1,
+            "calibration_updated_at": datetime.now(UTC).isoformat(),
         }
         video.metadata_json = metadata
         video.revision += 1
@@ -151,9 +159,7 @@ class VideoScienceService:
             distance_unit=calibration.unit,
             path_length=analytics.path_length_pixels / divisor,
             mean_speed_per_second=analytics.mean_speed_pixels_per_second / divisor,
-            maximum_speed_per_second=(
-                analytics.maximum_speed_pixels_per_second / divisor
-            ),
+            maximum_speed_per_second=(analytics.maximum_speed_pixels_per_second / divisor),
             displacement=analytics.displacement_pixels / divisor,
             calibration=calibration,
         )
@@ -172,8 +178,7 @@ class VideoScienceService:
         missing = [track_id for track_id in track_ids if track_id not in by_id]
         if missing:
             raise ValidationError(
-                "Tracks must be active and belong to the selected video: "
-                + ", ".join(missing)
+                "Tracks must be active and belong to the selected video: " + ", ".join(missing)
             )
         return [by_id[track_id] for track_id in track_ids]
 
@@ -221,9 +226,7 @@ class VideoScienceService:
         tracks = self._selected_tracks(video_id, payload.track_ids)
         start_frame = payload.start_frame if payload.start_frame is not None else 0
         end_frame = (
-            payload.end_frame
-            if payload.end_frame is not None
-            else max(0, video.frame_count - 1)
+            payload.end_frame if payload.end_frame is not None else max(0, video.frame_count - 1)
         )
         if start_frame >= video.frame_count or end_frame >= video.frame_count:
             raise ValidationError("Schooling frame range cannot exceed the source video")
@@ -315,9 +318,7 @@ class VideoScienceService:
             end_frame=end_frame,
             trajectory_policy="configured_track_interpolation",
             frames_evaluated=len(frame_metrics),
-            mean_group_size=_mean(
-                [float(item.active_track_count) for item in frame_metrics]
-            ),
+            mean_group_size=_mean([float(item.active_track_count) for item in frame_metrics]),
             mean_pairwise_distance_pixels=_mean(
                 [item.mean_pairwise_distance_pixels for item in frame_metrics]
             ),
@@ -327,9 +328,7 @@ class VideoScienceService:
             mean_distance_to_centroid_pixels=_mean(
                 [item.mean_distance_to_centroid_pixels for item in frame_metrics]
             ),
-            mean_pairwise_distance=_mean(
-                [item.mean_pairwise_distance for item in frame_metrics]
-            ),
+            mean_pairwise_distance=_mean([item.mean_pairwise_distance for item in frame_metrics]),
             mean_nearest_neighbor_distance=_mean(
                 [item.mean_nearest_neighbor_distance for item in frame_metrics]
             ),
@@ -337,9 +336,7 @@ class VideoScienceService:
                 [item.mean_distance_to_centroid for item in frame_metrics]
             ),
             mean_speed_pixels_per_second=mean_speed_px,
-            mean_speed_per_second=(
-                mean_speed_px / divisor if mean_speed_px is not None else None
-            ),
+            mean_speed_per_second=(mean_speed_px / divisor if mean_speed_px is not None else None),
             mean_polarization=_optional_mean(polarization_values),
             distance_unit=calibration.unit,
             calibration=calibration,
@@ -432,9 +429,7 @@ class VideoScienceService:
         for track_id in track_ids:
             track = tracks_by_id[track_id]
             interpolation = self.track_service.interpolate(track_id)
-            centers = {
-                item.frame: (item.center_x, item.center_y) for item in interpolation.frames
-            }
+            centers = {item.frame: (item.center_x, item.center_y) for item in interpolation.frames}
             ordered_samples = sorted(
                 samples_by_track[track_id],
                 key=lambda item: item.frame,
@@ -466,14 +461,11 @@ class VideoScienceService:
             valid_duration = 0.0
             maximum_speed = 0.0
             skipped_gap_count = 0
-            for first, second in zip(points, points[1:], strict=False):
+            for first, second in itertools.pairwise(points):
                 frame_gap = second.frame - first.frame
                 if frame_gap <= 0:
                     continue
-                if (
-                    payload.maximum_frame_gap is not None
-                    and frame_gap > payload.maximum_frame_gap
-                ):
+                if payload.maximum_frame_gap is not None and frame_gap > payload.maximum_frame_gap:
                     skipped_gap_count += 1
                     continue
                 segment = dist(

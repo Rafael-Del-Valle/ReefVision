@@ -83,7 +83,9 @@ class AssistPrediction:
 
 class DetectionProvider(Protocol):
     provider_name: str
-    provider_version: str
+
+    @property
+    def provider_version(self) -> str: ...
 
     def inspect_model(self, model_path: Path) -> DetectionModelMetadata: ...
 
@@ -98,7 +100,9 @@ class DetectionProvider(Protocol):
 
 class AnnotationAssistProvider(Protocol):
     provider_name: str
-    provider_version: str
+
+    @property
+    def provider_version(self) -> str: ...
 
     def inspect_model(self, model_path: Path) -> AssistModelMetadata: ...
 

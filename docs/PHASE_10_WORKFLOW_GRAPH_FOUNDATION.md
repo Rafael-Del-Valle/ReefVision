@@ -122,7 +122,7 @@ The desktop ships reusable graph patterns including:
 - Parent workflow cancellation propagates to linked child jobs.
 - Project Exchange preserves workflow graphs, runs, node runs, and file-backed artifacts with integrity checks.
 
-## CoralVision 1.0 acceptance boundary
+## ReefVision 1.0 acceptance boundary
 
 The workflow feature is considered software-complete only when the current 1.0 branch passes repository-wide backend/frontend tests, migration validation, packaged Windows acceptance, restart/project round-trip checks, and representative end-to-end scientific workflows. Real checkpoint and biological validation remain required for claims about model or tracking accuracy; synthetic tests establish software behavior, not scientific performance.
 
@@ -140,6 +140,12 @@ The 1.0 release gate must exercise at least these end-to-end journeys:
 10. Project Exchange export → import as a new project → restart → preserved video calibration and camera intrinsics → remapped tracks, workflows, and artifacts → reproducible calibrated 3D analysis using only imported IDs
 
 ## Remaining release validation
+
+### Automated software acceptance
+
+The unified ReefVision 1.0 workflow runs backend lint, formatting, typing, unit and scientific workflow tests, canonical migration round-trip validation, frontend formatting/typing/unit/E2E/build checks, and Windows MSI build plus administrative extraction and packaged-sidecar self-test.
+
+### Scientific, hardware, and clean-machine release evidence
 
 The current implementation still requires execution of the complete gate on functioning CI/Windows runners and representative data. In particular:
 

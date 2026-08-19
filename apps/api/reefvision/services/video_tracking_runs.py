@@ -32,9 +32,7 @@ class VideoTrackingRunService:
             )
         )
         jobs = [
-            job
-            for job in jobs
-            if str(dict(job.request_json or {}).get("video_id", "")) == video_id
+            job for job in jobs if str(dict(job.request_json or {}).get("video_id", "")) == video_id
         ]
         if not jobs:
             return []
@@ -80,9 +78,7 @@ class VideoTrackingRunService:
                     track_count=track_counts[job.id],
                     observation_count=observation_counts[job.id],
                     unmapped_labels=(
-                        [str(item) for item in unmapped]
-                        if isinstance(unmapped, list)
-                        else []
+                        [str(item) for item in unmapped] if isinstance(unmapped, list) else []
                     ),
                     error_message=job.error_message,
                     created_at=job.created_at,

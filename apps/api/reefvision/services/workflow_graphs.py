@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict, deque
+from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -29,6 +30,16 @@ from reefvision.services.workflow_vlm import SUPPORTED_VLM_PROVIDERS
 
 SUPPORTED_GRAPH_SCHEMA = "workflow-graph-0001"
 _WORKFLOW_TRAINING_TASKS = {"detect", "segment", "semantic_segment"}
+
+
+def install_workflow_node_registry(
+    registry: Callable[[], dict[str, WorkflowNodeDefinitionResponse]],
+) -> None:
+    """Install an extended node registry for validation and planning."""
+
+    global workflow_node_registry
+    workflow_node_registry = registry
+
 
 _MODEL_PURPOSES_BY_NODE: dict[str, set[str]] = {
     "detection_inference": {"detector"},
@@ -477,12 +488,15 @@ class WorkflowGraphService:
             if len(model_edges) != 1:
                 continue
             source_node = nodes.get(model_edges[0].source_node_id)
+            if source_node is not None and source_node.node_type == "register_trained_model":
+                continue
             if source_node is None or source_node.node_type != "registered_model_source":
                 issues.append(
                     self._issue(
                         "error",
                         "model_source_required",
-                        "Model input must come from a Registered Model source node",
+                        "Model input must come from a registered-model source or training "
+                        "registration node",
                         node_id=node.node_id,
                     )
                 )

@@ -1,4 +1,4 @@
-"""CoralVision 1.0 import extensions for complete portable project state."""
+"""ReefVision 1.0 import extensions for complete portable project state."""
 
 from __future__ import annotations
 

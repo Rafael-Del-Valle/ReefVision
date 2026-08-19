@@ -42,8 +42,10 @@ def inspect_transformers_bundle(bundle_path: Path) -> tuple[dict[str, object], s
     try:
         with zipfile.ZipFile(bundle_path) as archive:
             members = _validated_members(archive)
-            files = {member.filename.replace("\\", "/") for member in members if not member.is_dir()}
-            roots = [None]
+            files = {
+                member.filename.replace("\\", "/") for member in members if not member.is_dir()
+            }
+            roots: list[str | None] = [None]
             roots.extend(
                 sorted(
                     {
@@ -69,9 +71,7 @@ def inspect_transformers_bundle(bundle_path: Path) -> tuple[dict[str, object], s
                 else f"{selected_root}/preprocessor_config.json"
             )
             if processor_name not in files:
-                raise ValidationError(
-                    "The model bundle is missing preprocessor_config.json"
-                )
+                raise ValidationError("The model bundle is missing preprocessor_config.json")
             weight_candidates = [
                 name
                 for name in files

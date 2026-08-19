@@ -114,9 +114,7 @@ class WorkflowNodeRun(Base):
 
 class WorkflowArtifact(Base):
     __tablename__ = "workflow_artifacts"
-    __table_args__ = (
-        Index("ix_workflow_artifacts_run_type", "workflow_run_id", "data_type"),
-    )
+    __table_args__ = (Index("ix_workflow_artifacts_run_type", "workflow_run_id", "data_type"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     workflow_run_id: Mapped[str] = mapped_column(

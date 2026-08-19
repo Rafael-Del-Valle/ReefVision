@@ -32,7 +32,6 @@ from reefvision.services.mask_aware_dataset_versions import MaskAwareDatasetVers
 from reefvision.services.review_queues import ReviewQueueService
 from reefvision.storage.datasets import canonical_json_sha256
 
-
 _STRATEGY_WEIGHTS: dict[str, ReviewScoreWeights] = {
     "hybrid": ReviewScoreWeights(),
     "uncertainty": ReviewScoreWeights(
@@ -133,9 +132,7 @@ class ActiveLearningRoundService:
         if not item_ids:
             return []
         items = list(
-            self.session.scalars(
-                select(ReviewQueueItem).where(ReviewQueueItem.id.in_(item_ids))
-            )
+            self.session.scalars(select(ReviewQueueItem).where(ReviewQueueItem.id.in_(item_ids)))
         )
         by_id = {item.id: item for item in items}
         return [by_id[item_id] for item_id in item_ids if item_id in by_id]
@@ -323,9 +320,7 @@ class ActiveLearningRoundService:
 
         completed_image_ids = list(dict.fromkeys(item.image_id for item in completed_items))
         images = list(
-            self.session.scalars(
-                select(ImageAsset).where(ImageAsset.id.in_(completed_image_ids))
-            )
+            self.session.scalars(select(ImageAsset).where(ImageAsset.id.in_(completed_image_ids)))
         )
         images_by_id = {image.id: image for image in images}
         missing_ids = [image_id for image_id in completed_image_ids if image_id not in images_by_id]
@@ -375,7 +370,9 @@ class ActiveLearningRoundService:
             return ActiveLearningRoundResponse.model_validate(round_record)
         feedback = self.feedback(round_id)
         if feedback.pending_count or feedback.in_progress_count:
-            raise ConflictError("Complete or skip every selected review item before closing the round")
+            raise ConflictError(
+                "Complete or skip every selected review item before closing the round"
+            )
 
         items = self._selected_items(round_record)
         completed_items = [item for item in items if item.review_state == "completed"]

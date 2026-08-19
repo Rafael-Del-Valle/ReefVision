@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import zipfile
@@ -237,7 +238,10 @@ class ClassificationDatasetService:
                                     continue
                                 sample_image = rgb.crop(bounds)
                                 crop_bounds = list(bounds)
-                            sample_image.save(destination, format="JPEG", quality=95)
+                            save_target = str(destination.resolve())
+                            if os.name == "nt" and not save_target.startswith("\\\\?\\"):
+                                save_target = "\\\\?\\" + save_target
+                            sample_image.save(save_target, format="JPEG", quality=95)
                             relative_sample = destination.relative_to(output_root).as_posix()
                             class_counts[class_id] += 1
                             samples.append(

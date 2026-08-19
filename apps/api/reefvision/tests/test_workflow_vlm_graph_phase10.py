@@ -77,8 +77,7 @@ def test_vlm_graph_rejects_unknown_provider_and_foreign_class(client: TestClient
     assert unsupported.status_code == 200, unsupported.text
     assert unsupported.json()["valid"] is False
     assert any(
-        issue["code"] == "unsupported_vlm_provider"
-        for issue in unsupported.json()["issues"]
+        issue["code"] == "unsupported_vlm_provider" for issue in unsupported.json()["issues"]
     )
 
     foreign = client.post(
@@ -87,6 +86,4 @@ def test_vlm_graph_rejects_unknown_provider_and_foreign_class(client: TestClient
     )
     assert foreign.status_code == 200, foreign.text
     assert foreign.json()["valid"] is False
-    assert any(
-        issue["code"] == "vlm_class_scope_mismatch" for issue in foreign.json()["issues"]
-    )
+    assert any(issue["code"] == "vlm_class_scope_mismatch" for issue in foreign.json()["issues"])

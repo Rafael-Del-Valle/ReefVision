@@ -2,9 +2,9 @@
 
 from fastapi import APIRouter
 
-from reefvision.api.routes.annotation_imports import router as annotation_imports_router
 from reefvision.api.routes.active_learning import router as active_learning_router
 from reefvision.api.routes.advanced_providers import router as advanced_providers_router
+from reefvision.api.routes.annotation_imports import router as annotation_imports_router
 from reefvision.api.routes.annotations import router as annotations_router
 from reefvision.api.routes.assist import router as assist_router
 from reefvision.api.routes.backups import router as backups_router

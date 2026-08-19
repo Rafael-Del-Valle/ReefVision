@@ -193,6 +193,4 @@ def test_workflow_validation_checks_model_purpose(client: TestClient) -> None:
     )
     assert response.status_code == 200, response.text
     assert response.json()["valid"] is False
-    assert any(
-        item["code"] == "model_purpose_mismatch" for item in response.json()["issues"]
-    )
+    assert any(item["code"] == "model_purpose_mismatch" for item in response.json()["issues"])

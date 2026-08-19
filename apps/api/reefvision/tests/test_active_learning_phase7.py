@@ -223,33 +223,23 @@ def test_completed_review_creates_idempotent_feedback_dataset(
     completed = client.post(f"/api/v1/review-queue-items/{item_id}/complete")
     assert completed.status_code == 200, completed.text
 
-    feedback = client.get(
-        f"/api/v1/active-learning-rounds/{round_record['id']}/feedback"
-    )
+    feedback = client.get(f"/api/v1/active-learning-rounds/{round_record['id']}/feedback")
     assert feedback.status_code == 200, feedback.text
     assert feedback.json()["completed_count"] == 1
     assert feedback.json()["completion_fraction"] == 1.0
     assert feedback.json()["feedback_dataset_version_id"] is None
 
-    premature = client.post(
-        f"/api/v1/active-learning-rounds/{round_record['id']}/complete"
-    )
+    premature = client.post(f"/api/v1/active-learning-rounds/{round_record['id']}/complete")
     assert premature.status_code == 409, premature.text
     assert "marked reviewed" in premature.json()["detail"].lower()
 
     _mark_image_reviewed(client, project, low_confidence_image)
-    finalized = client.post(
-        f"/api/v1/active-learning-rounds/{round_record['id']}/complete"
-    )
+    finalized = client.post(f"/api/v1/active-learning-rounds/{round_record['id']}/complete")
     assert finalized.status_code == 200, finalized.text
     finalized_payload = finalized.json()
     assert finalized_payload["status"] == "complete"
-    feedback_dataset_id = finalized_payload["feedback_summary_json"][
-        "feedback_dataset_version_id"
-    ]
-    manifest_sha256 = finalized_payload["feedback_summary_json"][
-        "feedback_manifest_sha256"
-    ]
+    feedback_dataset_id = finalized_payload["feedback_summary_json"]["feedback_dataset_version_id"]
+    manifest_sha256 = finalized_payload["feedback_summary_json"]["feedback_manifest_sha256"]
     assert len(feedback_dataset_id) == 36
     assert len(manifest_sha256) == 64
     assert finalized_payload["feedback_summary_json"]["completed_image_ids"] == [
@@ -268,27 +258,21 @@ def test_completed_review_creates_idempotent_feedback_dataset(
     assert feedback_version["annotation_count"] == 1
     assert feedback_version["manifest_sha256"] == manifest_sha256
 
-    refreshed_feedback = client.get(
-        f"/api/v1/active-learning-rounds/{round_record['id']}/feedback"
-    )
+    refreshed_feedback = client.get(f"/api/v1/active-learning-rounds/{round_record['id']}/feedback")
     assert refreshed_feedback.status_code == 200, refreshed_feedback.text
     assert refreshed_feedback.json()["feedback_dataset_version_id"] == feedback_dataset_id
     assert refreshed_feedback.json()["feedback_manifest_sha256"] == manifest_sha256
 
-    repeated = client.post(
-        f"/api/v1/active-learning-rounds/{round_record['id']}/complete"
-    )
+    repeated = client.post(f"/api/v1/active-learning-rounds/{round_record['id']}/complete")
     assert repeated.status_code == 200, repeated.text
     assert repeated.json()["feedback_summary_json"]["feedback_dataset_version_id"] == (
         feedback_dataset_id
     )
-    versions_after_repeat = client.get(
-        f"/api/v1/projects/{project['id']}/dataset-versions"
-    )
+    versions_after_repeat = client.get(f"/api/v1/projects/{project['id']}/dataset-versions")
     assert versions_after_repeat.status_code == 200, versions_after_repeat.text
-    assert sum(
-        version["id"] == feedback_dataset_id for version in versions_after_repeat.json()
-    ) == 1
+    assert (
+        sum(version["id"] == feedback_dataset_id for version in versions_after_repeat.json()) == 1
+    )
 
 
 def test_active_learning_rejects_foreign_models(client: TestClient) -> None:
@@ -304,4 +288,4 @@ def test_active_learning_rejects_foreign_models(client: TestClient) -> None:
             "model_ids": ["00000000-0000-0000-0000-000000000000"],
         },
     )
-    assert response.status_code == 422
+    assert response.status_code == 400

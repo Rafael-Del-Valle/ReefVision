@@ -70,9 +70,7 @@ def test_reefvision_json_export_import_preserves_track_semantics_and_provenance(
     video = _video(client, str(project["id"]), monkeypatch)
     source = _track(client, str(video["id"]), _first_class(project))
 
-    exported = client.get(
-        f"/api/v1/videos/{video['id']}/tracks/export?format=reefvision_json"
-    )
+    exported = client.get(f"/api/v1/videos/{video['id']}/tracks/export?format=reefvision_json")
     assert exported.status_code == 200, exported.text
     assert exported.headers["content-type"].startswith("application/json")
     assert exported.headers["x-reefvision-track-format"] == "reefvision_json"
@@ -129,9 +127,7 @@ def test_reefvision_csv_export_import_round_trip(
     video = _video(client, str(project["id"]), monkeypatch)
     source = _track(client, str(video["id"]), _first_class(project))
 
-    exported = client.get(
-        f"/api/v1/videos/{video['id']}/tracks/export?format=reefvision_csv"
-    )
+    exported = client.get(f"/api/v1/videos/{video['id']}/tracks/export?format=reefvision_csv")
     assert exported.status_code == 200, exported.text
     assert exported.headers["content-type"].startswith("text/csv")
     lines = exported.text.strip().splitlines()
@@ -183,7 +179,7 @@ def test_mot_export_import_converts_one_based_coordinates_and_requires_class(
         f"/api/v1/videos/{video['id']}/tracks/import?format=mot_csv",
         files={"file": ("gt.txt", io.BytesIO(exported.content), "text/plain")},
     )
-    assert missing_class.status_code == 422
+    assert missing_class.status_code == 400
 
     imported = client.post(
         (
@@ -204,9 +200,10 @@ def test_mot_export_import_converts_one_based_coordinates_and_requires_class(
     assert restored["status"] == "draft"
     assert restored["interpolation"] == "linear"
     assert restored["keyframes_json"] == source["keyframes_json"]
-    assert restored["metadata_json"]["exchange_import"]["original_track_number"] == source[
-        "track_number"
-    ]
+    assert (
+        restored["metadata_json"]["exchange_import"]["original_track_number"]
+        == source["track_number"]
+    )
 
 
 def test_json_import_is_transactional_when_later_track_is_invalid(
@@ -216,9 +213,7 @@ def test_json_import_is_transactional_when_later_track_is_invalid(
     project = create_project(client, "Transactional track exchange")
     video = _video(client, str(project["id"]), monkeypatch)
     source = _track(client, str(video["id"]), _first_class(project))
-    exported = client.get(
-        f"/api/v1/videos/{video['id']}/tracks/export?format=reefvision_json"
-    )
+    exported = client.get(f"/api/v1/videos/{video['id']}/tracks/export?format=reefvision_json")
     document = exported.json()
     invalid = json.loads(json.dumps(document["tracks"][0]))
     invalid["original_track_id"] = "invalid-second-track"
@@ -235,7 +230,7 @@ def test_json_import_is_transactional_when_later_track_is_invalid(
             )
         },
     )
-    assert imported.status_code == 422
+    assert imported.status_code == 400
 
     tracks = client.get(f"/api/v1/videos/{video['id']}/tracks")
     assert tracks.status_code == 200

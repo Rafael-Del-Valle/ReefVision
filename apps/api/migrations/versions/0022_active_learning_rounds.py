@@ -40,9 +40,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["dataset_version_id"], ["dataset_versions.id"], ondelete="SET NULL"
         ),
-        sa.ForeignKeyConstraint(
-            ["review_queue_id"], ["review_queues.id"], ondelete="RESTRICT"
-        ),
+        sa.ForeignKeyConstraint(["review_queue_id"], ["review_queues.id"], ondelete="RESTRICT"),
         sa.UniqueConstraint(
             "project_id", "selection_sha256", name="uq_active_learning_round_selection"
         ),
@@ -60,10 +58,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "ix_active_learning_rounds_status_created", table_name="active_learning_rounds"
-    )
-    op.drop_index(
-        "ix_active_learning_rounds_project_created", table_name="active_learning_rounds"
-    )
+    op.drop_index("ix_active_learning_rounds_status_created", table_name="active_learning_rounds")
+    op.drop_index("ix_active_learning_rounds_project_created", table_name="active_learning_rounds")
     op.drop_table("active_learning_rounds")

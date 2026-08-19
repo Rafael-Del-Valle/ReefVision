@@ -22,6 +22,7 @@ from reefvision.schemas.video_track_exchange import (
     VideoTrackImportResponse,
 )
 from reefvision.schemas.videos import VideoTrackKeyframe
+from reefvision.services.video_track_csv_validation import validate_reefvision_track_csv_shape
 
 
 @dataclass(frozen=True)
@@ -120,9 +121,7 @@ class VideoTrackExchangeService:
                         label_class_id=track.label_class_id,
                         label_class_name=label_class.name,
                         geometry_kind="bbox",
-                        interpolation=(
-                            "hold" if track.interpolation == "hold" else "linear"
-                        ),
+                        interpolation=("hold" if track.interpolation == "hold" else "linear"),
                         status=track.status,
                         keyframes=self._keyframes(track),
                         original_source_model_id=track.source_model_id,
@@ -201,11 +200,11 @@ class VideoTrackExchangeService:
 
         if exchange_format == "mot_csv":
             output = io.StringIO(newline="")
-            writer = csv.writer(output, lineterminator="\n")
+            row_writer = csv.writer(output, lineterminator="\n")
             for track in tracks:
                 for keyframe in self._keyframes(track):
                     x, y, width, height = keyframe.bbox
-                    writer.writerow(
+                    row_writer.writerow(
                         [
                             keyframe.frame + 1,
                             track.track_number,
@@ -275,9 +274,7 @@ class VideoTrackExchangeService:
             raise ValidationError(f"Track import exceeds {cls.MAX_TRACKS} tracks")
         observations = sum(len(track.keyframes) for track in tracks)
         if observations > cls.MAX_OBSERVATIONS:
-            raise ValidationError(
-                f"Track import exceeds {cls.MAX_OBSERVATIONS} observations"
-            )
+            raise ValidationError(f"Track import exceeds {cls.MAX_OBSERVATIONS} observations")
 
     def _parse_json(
         self,
@@ -299,7 +296,8 @@ class VideoTrackExchangeService:
         warnings: list[str] = []
         if document.source_video_sha256 and document.source_video_sha256 != video.sha256:
             warnings.append(
-                "Source video SHA-256 differs from the target video; dimensions and frame count matched."
+                "Source video SHA-256 differs from the target video; dimensions and frame count "
+                "matched."
             )
         if abs(document.fps - video.fps) > 1e-6:
             warnings.append(
@@ -345,9 +343,7 @@ class VideoTrackExchangeService:
         try:
             parsed = int(value)
         except (TypeError, ValueError) as exc:
-            raise ValidationError(
-                f"Invalid integer {field!r} at CSV row {row_number}"
-            ) from exc
+            raise ValidationError(f"Invalid integer {field!r} at CSV row {row_number}") from exc
         return parsed
 
     @staticmethod
@@ -355,9 +351,7 @@ class VideoTrackExchangeService:
         try:
             parsed = float(value)
         except (TypeError, ValueError) as exc:
-            raise ValidationError(
-                f"Invalid number {field!r} at CSV row {row_number}"
-            ) from exc
+            raise ValidationError(f"Invalid number {field!r} at CSV row {row_number}") from exc
         return parsed
 
     def _parse_reefvision_csv(
@@ -366,6 +360,7 @@ class VideoTrackExchangeService:
         content: str,
         classes: list[LabelClass],
     ) -> tuple[list[_ImportedTrack], list[str]]:
+        validate_reefvision_track_csv_shape(content)
         reader = csv.DictReader(io.StringIO(content))
         self._required_csv_columns(
             reader,
@@ -469,9 +464,7 @@ class VideoTrackExchangeService:
                     keyframes=keyframes,
                     original_track_id=first.get("source_track_id", "").strip() or None,
                     original_track_number=original_number,
-                    original_source_model_id=(
-                        first.get("source_model_id", "").strip() or None
-                    ),
+                    original_source_model_id=(first.get("source_model_id", "").strip() or None),
                     original_source_job_id=first.get("source_job_id", "").strip() or None,
                     metadata={},
                 )
@@ -494,9 +487,7 @@ class VideoTrackExchangeService:
             if not row or all(not value.strip() for value in row):
                 continue
             if len(row) < 6:
-                raise ValidationError(
-                    f"MOT row {row_number} requires at least 6 columns"
-                )
+                raise ValidationError(f"MOT row {row_number} requires at least 6 columns")
             frame_1based = self._parse_int(row[0].strip(), "frame", row_number)
             track_number = self._parse_int(row[1].strip(), "track_id", row_number)
             if frame_1based < 1 or track_number < 1:
@@ -539,8 +530,10 @@ class VideoTrackExchangeService:
                 )
             )
         return tracks, [
-            "MOT has no ReefVision class metadata; the requested class was applied to every imported track.",
-            "MOT frame and left/top coordinates were converted from 1-based to ReefVision 0-based coordinates.",
+            "MOT has no ReefVision class metadata; the requested class was applied to every "
+            "imported track.",
+            "MOT frame and left/top coordinates were converted from 1-based to ReefVision "
+            "0-based coordinates.",
             "MOT imports are created with draft status and no model/job foreign-key linkage.",
         ]
 
@@ -572,9 +565,7 @@ class VideoTrackExchangeService:
         next_number = (
             int(
                 self.session.scalar(
-                    select(func.max(VideoTrack.track_number)).where(
-                        VideoTrack.video_id == video_id
-                    )
+                    select(func.max(VideoTrack.track_number)).where(VideoTrack.video_id == video_id)
                 )
                 or 0
             )

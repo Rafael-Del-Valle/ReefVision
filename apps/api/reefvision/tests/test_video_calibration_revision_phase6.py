@@ -53,9 +53,7 @@ def test_calibration_revision_and_timestamp_are_monotonic_and_reopenable(
     reopened = client.get(f"/api/v1/videos/{video_id}/calibration")
     assert reopened.status_code == 200, reopened.text
     assert reopened.json()["calibration_revision"] == 1
-    assert reopened.json()["calibration_updated_at"] == first_payload[
-        "calibration_updated_at"
-    ]
+    assert reopened.json()["calibration_updated_at"] == first_payload["calibration_updated_at"]
 
     second = client.put(
         f"/api/v1/videos/{video_id}/calibration",

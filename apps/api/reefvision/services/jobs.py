@@ -1,5 +1,7 @@
 """Job status and retry services."""
 
+from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -50,7 +52,7 @@ class JobService:
         run: WorkflowRun,
         parent_job_id: str,
         *,
-        now,
+        now: datetime,
     ) -> dict[str, int]:
         counts = {"cancelled": 0, "cancel_requested": 0}
         for child in self._workflow_child_jobs(run, parent_job_id):
@@ -185,9 +187,7 @@ class JobService:
                     "child_job_cancellation": child_cancellation,
                 }
         else:
-            raise ConflictError(
-                "Only queued, running, or waiting-for-review jobs can be cancelled"
-            )
+            raise ConflictError("Only queued, running, or waiting-for-review jobs can be cancelled")
         self.session.commit()
         self.session.refresh(job)
         return job

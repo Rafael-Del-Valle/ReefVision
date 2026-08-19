@@ -41,7 +41,8 @@ class _Cluster:
 
 
 def _box_from_detection(raw: dict[str, Any]) -> tuple[float, float, float, float]:
-    box = raw.get("box") if isinstance(raw.get("box"), dict) else raw
+    raw_box = raw.get("box")
+    box: dict[str, Any] = raw_box if isinstance(raw_box, dict) else raw
     try:
         x_min = float(box["x_min"])
         y_min = float(box["y_min"])
@@ -77,8 +78,14 @@ def _aggregate_box(
 ) -> tuple[tuple[float, float, float, float], bool]:
     boxes = [member.box for member in members]
     if strategy == "mean":
+        mean_box = (
+            sum(box[0] for box in boxes) / len(boxes),
+            sum(box[1] for box in boxes) / len(boxes),
+            sum(box[2] for box in boxes) / len(boxes),
+            sum(box[3] for box in boxes) / len(boxes),
+        )
         return (
-            tuple(sum(box[index] for box in boxes) / len(boxes) for index in range(4)),
+            mean_box,
             False,
         )
     if strategy == "union":
@@ -100,7 +107,12 @@ def _aggregate_box(
         )
         if intersection[2] > intersection[0] and intersection[3] > intersection[1]:
             return intersection, False
-        mean_box = tuple(sum(box[index] for box in boxes) / len(boxes) for index in range(4))
+        mean_box = (
+            sum(box[0] for box in boxes) / len(boxes),
+            sum(box[1] for box in boxes) / len(boxes),
+            sum(box[2] for box in boxes) / len(boxes),
+            sum(box[3] for box in boxes) / len(boxes),
+        )
         return mean_box, True
     raise ValidationError("Consensus box_strategy must be mean, intersection, or union")
 
@@ -259,9 +271,7 @@ def build_detection_consensus(
             "mean_confidence": round(
                 sum(member.confidence for member in members) / len(members), 6
             ),
-            "minimum_pairwise_iou": (
-                round(min(pairwise_ious), 6) if pairwise_ious else None
-            ),
+            "minimum_pairwise_iou": (round(min(pairwise_ious), 6) if pairwise_ious else None),
             "box": {
                 "x_min": representative[0],
                 "y_min": representative[1],

@@ -50,9 +50,7 @@ def _input_artifacts(session: Session, node_run: WorkflowNodeRun) -> list[Workfl
     if not artifact_ids:
         return []
     artifacts = list(
-        session.scalars(
-            select(WorkflowArtifact).where(WorkflowArtifact.id.in_(artifact_ids))
-        )
+        session.scalars(select(WorkflowArtifact).where(WorkflowArtifact.id.in_(artifact_ids)))
     )
     by_id = {artifact.id: artifact for artifact in artifacts}
     return [by_id[artifact_id] for artifact_id in artifact_ids if artifact_id in by_id]
@@ -66,9 +64,7 @@ def _pending_review_count(session: Session, artifacts: list[WorkflowArtifact]) -
         if artifact.data_type in {"detection_proposals", "mask_proposals"}:
             proposal_ids.update(str(value) for value in payload.get("proposal_ids", []))
         elif artifact.data_type == "classification_predictions":
-            classification_ids.update(
-                str(value) for value in payload.get("prediction_ids", [])
-            )
+            classification_ids.update(str(value) for value in payload.get("prediction_ids", []))
 
     pending = 0
     if proposal_ids:
@@ -185,9 +181,7 @@ def resume_review_gate(
     artifacts = _input_artifacts(session, node_run)
     pending_count = _pending_review_count(session, artifacts)
     if pending_count:
-        raise ValidationError(
-            f"{pending_count} model prediction(s) are still pending review"
-        )
+        raise ValidationError(f"{pending_count} model prediction(s) are still pending review")
 
     auto_label_result = (
         _auto_label_post_review(

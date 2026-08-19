@@ -41,9 +41,7 @@ def test_project_exchange_export_and_inspection(
         payload["job_id"],
     )
 
-    package_response = client.get(
-        f"/api/v1/exchange-packages/{payload['package']['id']}"
-    )
+    package_response = client.get(f"/api/v1/exchange-packages/{payload['package']['id']}")
     assert package_response.status_code == 200, package_response.text
     package = package_response.json()
     assert package["status"] == "complete"
@@ -108,9 +106,7 @@ def test_project_exchange_metadata_only_warns_about_relinking(
         app.state.session_factory,
         payload["job_id"],
     )
-    package = client.get(
-        f"/api/v1/exchange-packages/{payload['package']['id']}"
-    ).json()
+    package = client.get(f"/api/v1/exchange-packages/{payload['package']['id']}").json()
     archive_path = test_settings.resolved_data_dir / Path(package["archive_path"])
 
     inspected = client.post(
@@ -119,6 +115,4 @@ def test_project_exchange_metadata_only_warns_about_relinking(
     )
     assert inspected.status_code == 200, inspected.text
     assert inspected.json()["compatible"] is True
-    assert any(
-        "relinking" in message.lower() for message in inspected.json()["warnings"]
-    )
+    assert any("relinking" in message.lower() for message in inspected.json()["warnings"])

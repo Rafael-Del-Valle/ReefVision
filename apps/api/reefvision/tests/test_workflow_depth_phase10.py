@@ -91,9 +91,7 @@ class FakeDepthProvider:
         numpy.save(depth_path, depth, allow_pickle=False)
         if self.fail:
             raise RuntimeError("synthetic depth failure")
-        preview = ((depth - depth.min()) / (depth.max() - depth.min()) * 65535).astype(
-            "uint16"
-        )
+        preview = ((depth - depth.min()) / (depth.max() - depth.min()) * 65535).astype("uint16")
         Image.fromarray(preview).save(preview_path, format="PNG")
         return DepthPrediction(
             width=100,
@@ -324,6 +322,4 @@ def test_relative_depth_node_plans_and_rejects_wrong_model_purpose(
     )
     assert invalid.status_code == 200, invalid.text
     assert invalid.json()["valid"] is False
-    assert any(
-        issue["code"] == "model_purpose_mismatch" for issue in invalid.json()["issues"]
-    )
+    assert any(issue["code"] == "model_purpose_mismatch" for issue in invalid.json()["issues"])

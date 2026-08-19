@@ -29,11 +29,11 @@ def _dataset_fixture(client: TestClient) -> tuple[dict[str, Any], dict[str, Any]
         color=(30, 90, 60),
     )
     image_id = str(imported["successful"][0]["image_id"])
-    update_image(client, image_id, group_key="fragment-a", annotation_status="reviewed")
+    updated = update_image(client, image_id, group_key="fragment-a", annotation_status="reviewed")
     save_annotations(
         client,
         image_id,
-        base_revision=0,
+        base_revision=int(updated["annotation_revision"]),
         annotation_status="reviewed",
         annotations=[
             {
@@ -217,7 +217,7 @@ def test_dataset_v2_can_feed_training_in_one_executable_graph(client: TestClient
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
         plan = WorkflowGraphService(session).plan(str(project["id"]), graph)
-    assert plan.valid is True
+    assert plan.valid is True, plan.issues
     assert plan.executable is True
     assert [step.node_type for step in plan.steps] == [
         "project_source",
@@ -230,7 +230,7 @@ def test_dataset_v2_can_feed_training_in_one_executable_graph(client: TestClient
 
 
 def test_dataset_version_create_registry_accepts_reviewed_results(client: TestClient) -> None:
-    project, _parent, _image_id = _dataset_fixture(client)
+    _project, _parent, _image_id = _dataset_fixture(client)
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
         definition = WorkflowGraphService(session).registry["dataset_version_create"]

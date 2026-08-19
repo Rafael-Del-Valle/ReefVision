@@ -80,14 +80,17 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             optional_parameters={"split": None},
             execution_state="executable_source",
             executable=True,
-            implementation_notes=["The selected version must be complete and belong to the project."],
+            implementation_notes=[
+                "The selected version must be complete and belong to the project."
+            ],
         ),
         WorkflowNodeDefinitionResponse(
             node_type="dataset_version_create",
             display_name="Create Dataset Version",
             category="training",
             description=(
-                "Freeze current reviewed annotations, masks, and measurements into a new immutable dataset version."
+                "Freeze current reviewed annotations, masks, and measurements into a new "
+                "immutable dataset version."
             ),
             input_ports=[
                 _input("project", "Project", "project_reference"),
@@ -124,10 +127,14 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             execution_state="executable_training",
             executable=True,
             implementation_notes=[
-                "Uses the same measurement-aware, mask-aware immutable snapshot service as the Dataset workspace.",
-                "Reviewed inputs establish execution order; canonical project state is frozen only after those review nodes complete.",
-                "A workflow-run/node identity makes retries idempotent instead of creating duplicate dataset versions.",
-                "Parent split assignments are reused by default when a parent dataset is connected."
+                "Uses the same measurement-aware, mask-aware immutable snapshot service as the "
+                "Dataset workspace.",
+                "Reviewed inputs establish execution order; canonical project state is frozen "
+                "only after those review nodes complete.",
+                "A workflow-run/node identity makes retries idempotent instead of creating "
+                "duplicate dataset versions.",
+                "Parent split assignments are reused by default when a parent dataset is "
+                "connected.",
             ],
         ),
         WorkflowNodeDefinitionResponse(
@@ -207,7 +214,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             executable=True,
             implementation_notes=[
                 "Cloud inference is disabled by default and requires explicit runtime opt-in.",
-                "API credentials come only from protected environment settings and are not artifacts.",
+                "API credentials come only from protected environment settings and are not "
+                "artifacts.",
                 "VLM confidence is treated as uncalibrated vote-only evidence.",
             ],
         ),
@@ -260,7 +268,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             execution_state="executable_inference",
             executable=True,
             implementation_notes=[
-                "Reuses the production instance/semantic inference processor and persists child-job provenance."
+                "Reuses the production instance/semantic inference processor and persists "
+                "child-job provenance."
             ],
         ),
         WorkflowNodeDefinitionResponse(
@@ -288,11 +297,14 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             display_name="Classification Dataset",
             category="training",
             description=(
-                "Materialize a whole-image or crop classification dataset from an immutable dataset version."
+                "Materialize a whole-image or crop classification dataset from an immutable "
+                "dataset version."
             ),
             input_ports=[_input("dataset", "Dataset Version", "dataset_version")],
             output_ports=[
-                _output("classification_dataset", "Classification Dataset", "classification_dataset")
+                _output(
+                    "classification_dataset", "Classification Dataset", "classification_dataset"
+                )
             ],
             required_parameters=[],
             optional_parameters={
@@ -330,8 +342,9 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             execution_state="executable_training",
             executable=True,
             implementation_notes=[
-                "Reuses the production classification_training job inline to avoid nested-worker deadlock.",
-                "The production job registers the trained classifier automatically."
+                "Reuses the production classification_training job inline to avoid nested-worker "
+                "deadlock.",
+                "The production job registers the trained classifier automatically.",
             ],
         ),
         WorkflowNodeDefinitionResponse(
@@ -374,7 +387,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             implementation_notes=[
                 "Uses the existing Training workspace preflight and task-aware production worker.",
                 "Supported tasks are detect, segment, and semantic_segment.",
-                "An optional registered detector or segmenter seeds retraining without creating a separate retrain code path.",
+                "An optional registered detector or segmenter seeds retraining without creating "
+                "a separate retrain code path.",
                 "Semantic nnU-Net training currently starts from scratch.",
             ],
         ),
@@ -383,7 +397,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             display_name="Register Trained Model",
             category="training",
             description=(
-                "Register a completed workflow training checkpoint in ReefVision's normal model registry."
+                "Register a completed workflow training checkpoint in ReefVision's normal model "
+                "registry."
             ),
             input_ports=[_input("training", "Training Result", "training_result")],
             output_ports=[_output("model", "Registered Model", "model_reference")],
@@ -392,8 +407,10 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             execution_state="executable_training",
             executable=True,
             implementation_notes=[
-                "Preserves dataset, split, experiment, architecture, provider, and checkpoint lineage.",
-                "The resulting model_reference can feed normal inference or later retraining nodes."
+                "Preserves dataset, split, experiment, architecture, provider, and checkpoint "
+                "lineage.",
+                "The resulting model_reference can feed normal inference or later retraining "
+                "nodes.",
             ],
         ),
         WorkflowNodeDefinitionResponse(
@@ -415,7 +432,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             execution_state="pausable_review_gate",
             executable=True,
             implementation_notes=[
-                "Execution persists a waiting-for-review state and resumes without rerunning completed nodes."
+                "Execution persists a waiting-for-review state and resumes without rerunning "
+                "completed nodes."
             ],
         ),
         WorkflowNodeDefinitionResponse(
@@ -437,7 +455,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             executable=True,
             implementation_notes=[
                 "Uses the provider-neutral AnnotationAssistProvider box-prompt interface.",
-                "Outputs remain pending PredictionProposals until the Mask Review Gate approves them.",
+                "Outputs remain pending PredictionProposals until the Mask Review Gate approves "
+                "them.",
                 "Works with Segment Anything and registered local SAM2 bundles.",
             ],
         ),
@@ -453,9 +472,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 _input("images", "Images", "image_collection"),
                 _input("model", "Depth Model", "model_reference"),
             ],
-            output_ports=[
-                _output("depth_maps", "Relative Depth Maps", "relative_depth_maps")
-            ],
+            output_ports=[_output("depth_maps", "Relative Depth Maps", "relative_depth_maps")],
             required_parameters=[],
             optional_parameters={"device": "auto"},
             execution_state="executable_depth",
@@ -463,7 +480,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             implementation_notes=[
                 "Depth Anything V2 outputs are relative monocular depth, not metric distance.",
                 "Artifacts persist float32 .npy data, 16-bit PNG previews, and checksums.",
-                "metric_units remains null unless a future calibrated conversion node is added."
+                "metric_units remains null unless a future calibrated conversion node is added.",
             ],
         ),
         WorkflowNodeDefinitionResponse(
@@ -478,7 +495,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             execution_state="pausable_review_gate",
             executable=True,
             implementation_notes=[
-                "Execution persists a waiting-for-review state and resumes after all proposals are reviewed."
+                "Execution persists a waiting-for-review state and resumes after all proposals "
+                "are reviewed."
             ],
         ),
         WorkflowNodeDefinitionResponse(
@@ -486,16 +504,15 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             display_name="Classification Review Gate",
             category="human_review",
             description="Pause until classification predictions are reviewed.",
-            input_ports=[
-                _input("predictions", "Class Predictions", "classification_predictions")
-            ],
+            input_ports=[_input("predictions", "Class Predictions", "classification_predictions")],
             output_ports=[_output("labels", "Reviewed Labels", "reviewed_labels")],
             required_parameters=[],
             optional_parameters={},
             execution_state="pausable_review_gate",
             executable=True,
             implementation_notes=[
-                "Execution persists a waiting-for-review state and resumes after classification review."
+                "Execution persists a waiting-for-review state and resumes after classification "
+                "review."
             ],
         ),
         WorkflowNodeDefinitionResponse(
@@ -541,7 +558,9 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             node_type="project_exchange_export",
             display_name="Project Exchange Export",
             category="exports",
-            description="Create a checksummed ReefVision exchange package inline in the workflow run.",
+            description=(
+                "Create a checksummed ReefVision exchange package inline in the workflow run."
+            ),
             input_ports=[_input("project", "Project", "project_reference")],
             output_ports=[_output("package", "Exchange Package", "project_exchange_package")],
             required_parameters=[],

@@ -291,9 +291,7 @@ def ensure_disagreement_active_learning_round(
         )
     )
     by_image = {
-        image_id: items
-        for image_id, items in by_image.items()
-        if image_id in valid_image_ids
+        image_id: items for image_id, items in by_image.items() if image_id in valid_image_ids
     }
     if not by_image:
         return None
@@ -352,9 +350,7 @@ def ensure_disagreement_active_learning_round(
     ranked: list[tuple[float, str, ReviewQueueItem]] = []
     for image_id, image_detections in by_image.items():
         disagreement_count = len(image_detections)
-        votes_missing = max(
-            int(item.get("votes_missing", 1) or 1) for item in image_detections
-        )
+        votes_missing = max(int(item.get("votes_missing", 1) or 1) for item in image_detections)
         required_votes = max(
             int(item.get("required_votes", payload.get("required_votes", 1)) or 1)
             for item in image_detections
@@ -364,18 +360,12 @@ def ensure_disagreement_active_learning_round(
         score = round(
             min(
                 100.0,
-                70.0
-                + (20.0 * severity)
-                + min(10.0, 2.0 * disagreement_count),
+                70.0 + (20.0 * severity) + min(10.0, 2.0 * disagreement_count),
             ),
             2,
         )
         class_ids = sorted(
-            {
-                str(item["label_class_id"])
-                for item in image_detections
-                if item.get("label_class_id")
-            }
+            {str(item["label_class_id"]) for item in image_detections if item.get("label_class_id")}
         )
         reason = (
             f"Consensus disagreement: {disagreement_count} detection cluster(s) did not meet "

@@ -1,11 +1,11 @@
-name: CoralVision 1.0 Acceptance
+name: ReefVision 1.0 Acceptance
 
 on:
   pull_request:
   workflow_dispatch:
 
 concurrency:
-  group: coralvision-1-0-${{ github.event.pull_request.number || github.ref }}
+  group: reefvision-1-0-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -48,8 +48,9 @@ jobs:
       - name: Verify canonical migration roundtrip
         shell: bash
         run: |
-          export REEFVISION_DATA_ROOT="$RUNNER_TEMP/coralvision-1-0-migrations"
-          mkdir -p "$REEFVISION_DATA_ROOT"
+          export REEFVISION_DATA_ROOT="$RUNNER_TEMP/reefvision-1-0-migrations"
+          export REEFVISION_DATA_DIR="$REEFVISION_DATA_ROOT"
+          mkdir -p "$REEFVISION_DATA_DIR"
           python -m alembic -c apps/api/alembic.ini upgrade head
           python - <<'PY'
           from alembic.config import Config
@@ -112,14 +113,14 @@ jobs:
       - name: Bootstrap desktop build environment
         shell: pwsh
         run: .\scripts\bootstrap.ps1
-      - name: Build and verify CoralVision MSI
+      - name: Build and verify ReefVision MSI
         shell: pwsh
         run: .\scripts\build-desktop.ps1 -TargetTriple x86_64-pc-windows-msvc
       - name: Upload MSI verification diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coralvision-1.0-msi-diagnostics
+          name: reefvision-1.0-msi-diagnostics
           if-no-files-found: warn
           path: |
             apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/**
@@ -128,12 +129,12 @@ jobs:
       - name: Upload release-validated Windows installer
         uses: actions/upload-artifact@v4
         with:
-          name: coralvision-1.0-windows-msi
+          name: reefvision-1.0-windows-msi
           if-no-files-found: error
           path: apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/**
 
   release-gate:
-    name: CoralVision 1.0 software gate
+    name: ReefVision 1.0 software gate
     runs-on: ubuntu-latest
     needs:
       - backend-and-science
@@ -141,5 +142,5 @@ jobs:
       - windows-installer
     steps:
       - run: |
-          echo "CoralVision 1.0 automated software acceptance passed."
+          echo "ReefVision 1.0 automated software acceptance passed."
           echo "Representative biological/scientific validation and clean-machine manual acceptance remain separate evidence requirements."

@@ -118,9 +118,7 @@ def create_workflow_training_result(
 
     task = str(parameters.get("task") or "detect").strip()
     if task not in SUPPORTED_WORKFLOW_TRAINING_TASKS:
-        raise ValidationError(
-            "Model Training task must be detect, segment, or semantic_segment"
-        )
+        raise ValidationError("Model Training task must be detect, segment, or semantic_segment")
     catalog_model_id = str(parameters.get("catalog_model_id") or "").strip() or None
     initial_model = _initial_model(
         session,
@@ -170,9 +168,7 @@ def create_workflow_training_result(
         device=str(parameters.get("device") or "auto"),
         precision=str(parameters.get("precision") or "fp32"),
         random_seed=(
-            int(parameters["random_seed"])
-            if parameters.get("random_seed") is not None
-            else None
+            int(parameters["random_seed"]) if parameters.get("random_seed") is not None else None
         ),
         tiling_config=_dict_parameter(parameters, "tiling_config"),
         training_config=_dict_parameter(parameters, "training_config"),

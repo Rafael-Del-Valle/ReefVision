@@ -73,7 +73,7 @@ def test_duplicate_header_csv_is_rejected_before_any_track_is_created(
         f"/api/v1/videos/{video['id']}/tracks/import?format=reefvision_csv",
         files={"file": ("bad.csv", io.BytesIO(content.encode()), "text/csv")},
     )
-    assert response.status_code == 422, response.text
+    assert response.status_code == 400, response.text
     assert "duplicate headers" in response.text
 
     tracks = client.get(f"/api/v1/videos/{video['id']}/tracks")
@@ -104,6 +104,6 @@ def test_overflow_csv_row_is_rejected_before_semantic_parser(
         f"/api/v1/videos/{video['id']}/tracks/import?format=reefvision_csv",
         files={"file": ("overflow.csv", io.BytesIO(content.encode()), "text/csv")},
     )
-    assert response.status_code == 422, response.text
+    assert response.status_code == 400, response.text
     assert "expected 14" in response.text
     assert client.get(f"/api/v1/videos/{video['id']}/tracks").json() == []

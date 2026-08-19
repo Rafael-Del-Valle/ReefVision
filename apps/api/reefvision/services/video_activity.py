@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass
 from math import hypot
 
@@ -62,9 +63,7 @@ class VideoActivityService:
 
         first_available = frames[0].frame
         last_available = frames[-1].frame
-        start_frame = (
-            payload.start_frame if payload.start_frame is not None else first_available
-        )
+        start_frame = payload.start_frame if payload.start_frame is not None else first_available
         end_frame = payload.end_frame if payload.end_frame is not None else last_available
         if start_frame < first_available or end_frame > last_available:
             raise ValidationError(
@@ -80,7 +79,7 @@ class VideoActivityService:
         pixels_per_unit = calibration.pixels_per_unit
         threshold_px_per_second = payload.speed_threshold_per_second * pixels_per_unit
         intervals: list[_Interval] = []
-        for first, second in zip(selected, selected[1:], strict=False):
+        for first, second in itertools.pairwise(selected):
             duration = second.timestamp_seconds - first.timestamp_seconds
             if duration <= 0:
                 raise ValidationError("Interpolated trajectory timestamps must increase")
@@ -101,7 +100,7 @@ class VideoActivityService:
                     distance=distance_px / pixels_per_unit,
                     speed_pixels_per_second=speed_px,
                     speed_per_second=speed,
-                    active=speed >= payload.speed_threshold_per_second,
+                    active=speed > payload.speed_threshold_per_second,
                 )
             )
 
@@ -117,11 +116,7 @@ class VideoActivityService:
             for active, group in raw_bouts:
                 duration = sum(item.duration_seconds for item in group)
                 retained_states.extend(
-                    [
-                        active
-                        and duration >= payload.minimum_active_bout_seconds
-                    ]
-                    * len(group)
+                    [active and duration >= payload.minimum_active_bout_seconds] * len(group)
                 )
             intervals = [
                 _Interval(
@@ -154,9 +149,7 @@ class VideoActivityService:
             bouts.append(self._bout(current_state, current))
 
         evaluated_seconds = sum(item.duration_seconds for item in intervals)
-        active_seconds = sum(
-            item.duration_seconds for item in intervals if item.active
-        )
+        active_seconds = sum(item.duration_seconds for item in intervals if item.active)
         rest_seconds = evaluated_seconds - active_seconds
         active_bouts = [item for item in bouts if item.state == "active"]
         rest_bouts = [item for item in bouts if item.state == "rest"]
@@ -182,17 +175,11 @@ class VideoActivityService:
             active_fraction=(active_seconds / evaluated_seconds),
             active_bout_count=len(active_bouts),
             rest_bout_count=len(rest_bouts),
-            mean_active_bout_seconds=_mean(
-                [item.duration_seconds for item in active_bouts]
-            ),
+            mean_active_bout_seconds=_mean([item.duration_seconds for item in active_bouts]),
             maximum_active_bout_seconds=(
-                max(item.duration_seconds for item in active_bouts)
-                if active_bouts
-                else None
+                max(item.duration_seconds for item in active_bouts) if active_bouts else None
             ),
-            mean_rest_bout_seconds=_mean(
-                [item.duration_seconds for item in rest_bouts]
-            ),
+            mean_rest_bout_seconds=_mean([item.duration_seconds for item in rest_bouts]),
             mean_active_speed_per_second=_mean(active_speeds),
             maximum_speed_per_second=max(all_speeds) if all_speeds else None,
             calibration=calibration,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 from itertools import pairwise
 from math import hypot
 
@@ -138,7 +139,7 @@ class VideoTrackService:
         self.session.commit()
 
     @staticmethod
-    def _keyframes(track: VideoTrack) -> list[VideoTrackKeyframe]:
+    def _keyframes(track: VideoTrack) -> builtins.list[VideoTrackKeyframe]:
         try:
             return [VideoTrackKeyframe.model_validate(item) for item in track.keyframes_json]
         except ValueError as exc:

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from PIL import Image
 
@@ -29,7 +30,9 @@ class DepthModelMetadata:
 
 class DepthRegistrationProvider(Protocol):
     provider_name: str
-    provider_version: str
+
+    @property
+    def provider_version(self) -> str: ...
 
     def inspect_model(self, model_path: Path) -> DepthModelMetadata: ...
 
@@ -62,9 +65,7 @@ def _is_depth_anything_config(config: dict[str, object]) -> bool:
     model_type = str(config.get("model_type") or "").casefold()
     architectures = config.get("architectures")
     architecture_names = (
-        [str(item).casefold() for item in architectures]
-        if isinstance(architectures, list)
-        else []
+        [str(item).casefold() for item in architectures] if isinstance(architectures, list) else []
     )
     return "depth_anything" in model_type or any(
         "depthanything" in item.replace("_", "") for item in architecture_names
@@ -113,13 +114,13 @@ class TransformersDepthAnythingV2Provider:
             from transformers import AutoImageProcessor, AutoModelForDepthEstimation
         except Exception as exc:  # pragma: no cover - optional provider pack
             raise ValidationError(
-                "Depth Anything V2 requires the optional Transformers provider pack: "
-                f"{exc}"
+                f"Depth Anything V2 requires the optional Transformers provider pack: {exc}"
             ) from exc
         model_root = extracted_transformers_bundle(model_path)
         resolved_device = _torch_device_name(device)
         try:
-            processor = AutoImageProcessor.from_pretrained(
+            load_processor = cast(Callable[..., Any], AutoImageProcessor.from_pretrained)
+            processor = load_processor(
                 model_root,
                 local_files_only=True,
             )
@@ -179,9 +180,7 @@ class TransformersDepthAnythingV2Provider:
         numpy.save(relative_depth_path, depth, allow_pickle=False)
         span = maximum - minimum
         normalized = (
-            numpy.zeros_like(depth, dtype="float32")
-            if span <= 0
-            else (depth - minimum) / span
+            numpy.zeros_like(depth, dtype="float32") if span <= 0 else (depth - minimum) / span
         )
         preview_pixels = (normalized * 65535.0).clip(0, 65535).astype("uint16")
         preview = Image.fromarray(preview_pixels)

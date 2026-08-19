@@ -1,4 +1,4 @@
-"""CoralVision 1.0 workflow-node registry extensions."""
+"""ReefVision 1.0 workflow-node registry extensions."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ register_video_depth_3d_adapter()
 
 
 def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
-    """Return the M10 registry plus CoralVision 1.0 completion nodes."""
+    """Return the M10 registry plus ReefVision 1.0 completion nodes."""
 
     registry = dict(base_workflow_node_registry())
     registry["video_depth_3d_analytics"] = WorkflowNodeDefinitionResponse(

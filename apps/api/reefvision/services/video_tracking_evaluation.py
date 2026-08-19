@@ -12,10 +12,10 @@ from sqlalchemy.orm import Session
 from reefvision.db.models import VideoAsset, VideoTrack
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.videos import (
-    VideoTrackKeyframe,
     VideoTrackingEvaluationPerTrack,
     VideoTrackingEvaluationRequest,
     VideoTrackingEvaluationResponse,
+    VideoTrackKeyframe,
 )
 from reefvision.services.video_tracks import VideoTrackService
 
@@ -192,9 +192,7 @@ class VideoTrackingEvaluationService:
                 continue
             used_truth.add(truth.track_id)
             used_predictions.add(prediction.track_id)
-            matches.append(
-                (truth, prediction, overlap, _center_error(truth.bbox, prediction.bbox))
-            )
+            matches.append((truth, prediction, overlap, _center_error(truth.bbox, prediction.bbox)))
 
         candidates: list[tuple[float, str, str, _Observation, _Observation]] = []
         for truth in ground_truth:
@@ -208,7 +206,9 @@ class VideoTrackingEvaluationService:
                 overlap = _iou(truth.bbox, prediction.bbox)
                 if overlap < iou_threshold:
                     continue
-                candidates.append((-overlap, truth.track_id, prediction.track_id, truth, prediction))
+                candidates.append(
+                    (-overlap, truth.track_id, prediction.track_id, truth, prediction)
+                )
         candidates.sort(key=lambda item: (item[0], item[1], item[2]))
 
         for negative_iou, _truth_id, _prediction_id, truth, prediction in candidates:
@@ -235,7 +235,9 @@ class VideoTrackingEvaluationService:
         if start_frame >= video.frame_count or end_frame >= video.frame_count:
             raise ValidationError("Evaluation frame range cannot exceed the source video")
         if end_frame < start_frame:
-            raise ValidationError("Evaluation end_frame must be greater than or equal to start_frame")
+            raise ValidationError(
+                "Evaluation end_frame must be greater than or equal to start_frame"
+            )
 
         truth_tracks = self._tracks(
             video_id,
@@ -311,9 +313,7 @@ class VideoTrackingEvaluationService:
                 matched_state.append(match is not None)
                 if match is not None:
                     prediction_id, overlap, center_error = match
-                    matched_rows.append(
-                        (observation.frame, prediction_id, overlap, center_error)
-                    )
+                    matched_rows.append((observation.frame, prediction_id, overlap, center_error))
 
             switches = 0
             previous_prediction_id: str | None = None
@@ -364,9 +364,10 @@ class VideoTrackingEvaluationService:
             track.id for track in prediction_tracks if track.id not in matched_prediction_tracks
         )
         false_positive_tracks = len(false_positive_prediction_track_ids)
-        mota = 1.0 - (
-            missed_observations + false_positive_observations + id_switches_total
-        ) / truth_count
+        mota = (
+            1.0
+            - (missed_observations + false_positive_observations + id_switches_total) / truth_count
+        )
 
         return VideoTrackingEvaluationResponse(
             schema_version="video-tracking-evaluation-0001",
@@ -394,9 +395,7 @@ class VideoTrackingEvaluationService:
             fragmentations=fragmentations_total,
             mean_iou=(sum(all_ious) / len(all_ious)) if all_ious else None,
             mean_center_error_pixels=(
-                sum(all_center_errors) / len(all_center_errors)
-                if all_center_errors
-                else None
+                sum(all_center_errors) / len(all_center_errors) if all_center_errors else None
             ),
             mota=mota,
             per_track=per_track,

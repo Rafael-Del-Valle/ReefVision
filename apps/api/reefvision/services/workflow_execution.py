@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from sqlalchemy import func, select
@@ -88,6 +88,11 @@ class WorkflowExecutionService:
         self.session = session
         self.settings = settings
         self.graphs = WorkflowGraphService(session)
+
+    def _required_settings(self) -> Settings:
+        if self.settings is None:
+            raise ValidationError("Workflow execution requires application settings")
+        return self.settings
 
     def _project(self, project_id: str) -> Project:
         project = self.session.get(Project, project_id)
@@ -272,12 +277,15 @@ class WorkflowExecutionService:
             raise ValidationError(f"Workflow node is not executable: {step.node_type}")
         handler = getattr(self, f"_execute_{step.node_type}", None)
         if handler is not None:
-            return handler(
-                project_id=project_id,
-                run_id=run_id,
-                node_run=node_run,
-                parameters=step.parameters,
-                inputs=inputs,
+            return cast(
+                list[WorkflowArtifactSpec],
+                handler(
+                    project_id=project_id,
+                    run_id=run_id,
+                    node_run=node_run,
+                    parameters=step.parameters,
+                    inputs=inputs,
+                ),
             )
         if step.node_type in RUNTIME_ADAPTER_NODE_TYPES:
             runtime_parameters = {
@@ -444,12 +452,10 @@ class WorkflowExecutionService:
     ) -> list[WorkflowArtifactSpec]:
         project_payload = self._single_payload(inputs, "project")
         parent_payload = self._optional_payload(inputs, "parent_dataset")
-        reviewed_payloads = [
-            dict(artifact.payload_json) for artifact in inputs.get("reviewed", [])
-        ]
+        reviewed_payloads = [dict(artifact.payload_json) for artifact in inputs.get("reviewed", [])]
         result = create_workflow_dataset_version(
             self.session,
-            self.settings,
+            self._required_settings(),
             project_id=project_id,
             run_id=run_id,
             node_run_id=node_run.id,
@@ -557,7 +563,7 @@ class WorkflowExecutionService:
 
         bind = self.session.get_bind()
         factory = sessionmaker(bind=bind, expire_on_commit=False)
-        process_inference_job(self.settings, factory, child_job_id)
+        process_inference_job(self._required_settings(), factory, child_job_id)
         self.session.expire_all()
         completed_job = self.session.get(Job, child_job_id)
         if completed_job is None or completed_job.status != "succeeded":
@@ -631,7 +637,9 @@ class WorkflowExecutionService:
         for artifact in prediction_artifacts:
             payload = dict(artifact.payload_json)
             if payload.get("project_id") != project_id:
-                raise ValidationError("Detection Consensus received predictions from another project")
+                raise ValidationError(
+                    "Detection Consensus received predictions from another project"
+                )
             payload.setdefault("source_id", artifact.id)
             sources.append(payload)
         result = build_detection_consensus(
@@ -685,7 +693,7 @@ class WorkflowExecutionService:
         dataset_payload = self._single_payload(inputs, "dataset")
         result = materialize_workflow_classification_dataset(
             self.session,
-            self.settings,
+            self._required_settings(),
             project_id=project_id,
             dataset_payload=dataset_payload,
             parameters=parameters,
@@ -710,7 +718,7 @@ class WorkflowExecutionService:
         dataset_payload = self._single_payload(inputs, "classification_dataset")
         result = train_workflow_classifier(
             self.session,
-            self.settings,
+            self._required_settings(),
             project_id=project_id,
             dataset_payload=dataset_payload,
             parameters=parameters,
@@ -738,7 +746,7 @@ class WorkflowExecutionService:
         initial_model_payload = self._optional_payload(inputs, "initial_model")
         result = create_workflow_training_result(
             self.session,
-            self.settings,
+            self._required_settings(),
             project_id=project_id,
             dataset_payload=dataset_payload,
             parameters=parameters,
@@ -765,7 +773,7 @@ class WorkflowExecutionService:
         training_payload = self._single_payload(inputs, "training")
         result = register_workflow_trained_model(
             self.session,
-            self.settings,
+            self._required_settings(),
             project_id=project_id,
             training_payload=training_payload,
             parameters=parameters,
@@ -835,9 +843,7 @@ class WorkflowExecutionService:
         if image_ids:
             statement = statement.where(MaskAnnotation.image_id.in_(image_ids))
         masks = list(
-            self.session.scalars(
-                statement.order_by(MaskAnnotation.created_at, MaskAnnotation.id)
-            )
+            self.session.scalars(statement.order_by(MaskAnnotation.created_at, MaskAnnotation.id))
         )
         return [
             WorkflowArtifactSpec(
@@ -885,7 +891,9 @@ class WorkflowExecutionService:
         )
         self.session.add(package)
         self.session.commit()
-        result = ProjectExchangeService(self.session, self.settings).build_export(package.id)
+        result = ProjectExchangeService(self.session, self._required_settings()).build_export(
+            package.id
+        )
         return [
             WorkflowArtifactSpec(
                 port_id="package",
@@ -923,14 +931,20 @@ class WorkflowExecutionService:
         return artifact
 
     def run_counts(self, run_id: str) -> dict[str, int]:
-        total_nodes = self.session.scalar(
-            select(func.count(WorkflowNodeRun.id)).where(
-                WorkflowNodeRun.workflow_run_id == run_id
+        total_nodes = (
+            self.session.scalar(
+                select(func.count(WorkflowNodeRun.id)).where(
+                    WorkflowNodeRun.workflow_run_id == run_id
+                )
             )
-        ) or 0
-        artifacts = self.session.scalar(
-            select(func.count(WorkflowArtifact.id)).where(
-                WorkflowArtifact.workflow_run_id == run_id
+            or 0
+        )
+        artifacts = (
+            self.session.scalar(
+                select(func.count(WorkflowArtifact.id)).where(
+                    WorkflowArtifact.workflow_run_id == run_id
+                )
             )
-        ) or 0
+            or 0
+        )
         return {"node_count": int(total_nodes), "artifact_count": int(artifacts)}

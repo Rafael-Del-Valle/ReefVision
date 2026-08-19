@@ -79,9 +79,7 @@ class VideoOccupancyService:
         tracks = self._tracks(video_id, payload.track_ids)
         start_frame = payload.start_frame if payload.start_frame is not None else 0
         end_frame = (
-            payload.end_frame
-            if payload.end_frame is not None
-            else max(0, video.frame_count - 1)
+            payload.end_frame if payload.end_frame is not None else max(0, video.frame_count - 1)
         )
         if start_frame >= video.frame_count or end_frame >= video.frame_count:
             raise ValidationError("Occupancy frame range cannot exceed the source video")
@@ -152,8 +150,8 @@ class VideoOccupancyService:
         for track_id in payload.track_ids:
             items = by_track.get(track_id, [])
             counts: dict[tuple[int, int], int] = defaultdict(int)
-            for item in items:
-                counts[(item.row, item.column)] += 1
+            for observation in items:
+                counts[(observation.row, observation.column)] += 1
             most_occupied = (
                 min(
                     counts,

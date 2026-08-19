@@ -45,10 +45,12 @@ _PROFILES: tuple[_AdvancedProviderProfile, ...] = (
         required_packages=("segment-anything", "torch", "torchvision"),
         recommended_devices=("cuda", "cpu"),
         known_limitations=(
-            "Current implementation uses original SAM image embeddings and does not propagate masks through video.",
+            "Current implementation uses original SAM image embeddings and does not "
+            "propagate masks through video.",
         ),
         integration_notes=(
-            "prompt_type must identify box, click, or brush prompting; the prompt geometry remains in the existing assist-session request.",
+            "prompt_type must identify box, click, or brush prompting; the prompt geometry "
+            "remains in the existing assist-session request.",
         ),
     ),
     _AdvancedProviderProfile(
@@ -71,7 +73,8 @@ _PROFILES: tuple[_AdvancedProviderProfile, ...] = (
             "No pinned Transformers provider pack or reviewed adapter is currently shipped.",
         ),
         integration_notes=(
-            "Future results must enter the normal prediction-proposal review flow with prompt and checkpoint provenance.",
+            "Future results must enter the normal prediction-proposal review flow with prompt "
+            "and checkpoint provenance.",
         ),
     ),
     _AdvancedProviderProfile(
@@ -92,7 +95,8 @@ _PROFILES: tuple[_AdvancedProviderProfile, ...] = (
         recommended_devices=("cuda", "cpu"),
         known_limitations=("No ReefVision adapter or pinned desktop package exists yet.",),
         integration_notes=(
-            "Example-guided requests must preserve the example image checksum in proposal provenance.",
+            "Example-guided requests must preserve the example image checksum in proposal "
+            "provenance.",
         ),
     ),
     _AdvancedProviderProfile(
@@ -114,7 +118,9 @@ _PROFILES: tuple[_AdvancedProviderProfile, ...] = (
         required_packages=("transformers", "accelerate", "safetensors"),
         recommended_devices=("cuda", "cpu"),
         known_limitations=("No pinned or security-reviewed Florence-2 runtime exists yet.",),
-        integration_notes=("Generated text must remain advisory and must never alter class labels automatically.",),
+        integration_notes=(
+            "Generated text must remain advisory and must never alter class labels automatically.",
+        ),
     ),
     _AdvancedProviderProfile(
         provider_id="sam2",
@@ -133,10 +139,12 @@ _PROFILES: tuple[_AdvancedProviderProfile, ...] = (
         required_packages=("torch", "torchvision", "sam2"),
         recommended_devices=("cuda",),
         known_limitations=(
-            "Windows desktop packaging, checkpoint validation, and long-video memory behavior are not verified.",
+            "Windows desktop packaging, checkpoint validation, and long-video memory behavior "
+            "are not verified.",
         ),
         integration_notes=(
-            "Video outputs must remain editable proposals and use source-frame coordinates compatible with Phase 6 tracks.",
+            "Video outputs must remain editable proposals and use source-frame coordinates "
+            "compatible with Phase 6 tracks.",
         ),
     ),
     _AdvancedProviderProfile(
@@ -150,7 +158,9 @@ _PROFILES: tuple[_AdvancedProviderProfile, ...] = (
         required_packages=("torch", "torchvision"),
         recommended_devices=("cpu", "cuda"),
         known_limitations=("No pinned package or checkpoint inspector exists yet.",),
-        integration_notes=("The adapter should implement the same image-prompt contract as original SAM.",),
+        integration_notes=(
+            "The adapter should implement the same image-prompt contract as original SAM.",
+        ),
     ),
     _AdvancedProviderProfile(
         provider_id="fastsam",
@@ -162,8 +172,14 @@ _PROFILES: tuple[_AdvancedProviderProfile, ...] = (
         required_model_extensions=(".pt",),
         required_packages=("ultralytics",),
         recommended_devices=("cuda", "cpu"),
-        known_limitations=("The installed Ultralytics package is present, but ReefVision has no reviewed FastSAM adapter.",),
-        integration_notes=("Do not route FastSAM through the detector provider without task-specific result validation.",),
+        known_limitations=(
+            "The installed Ultralytics package is present, but ReefVision has no reviewed "
+            "FastSAM adapter.",
+        ),
+        integration_notes=(
+            "Do not route FastSAM through the detector provider without task-specific result "
+            "validation.",
+        ),
     ),
     _AdvancedProviderProfile(
         provider_id="depth_anything_v2",
@@ -182,8 +198,10 @@ _PROFILES: tuple[_AdvancedProviderProfile, ...] = (
             "No ReefVision checkpoint inspector, tiling policy, or packaged adapter exists yet.",
         ),
         integration_notes=(
-            "Depth outputs should be stored as immutable float arrays with source-image checksum and model provenance.",
-            "Depth must not be converted to coral surface area until a separate calibration and geometry model is selected.",
+            "Depth outputs should be stored as immutable float arrays with source-image checksum "
+            "and model provenance.",
+            "Depth must not be converted to coral surface area until a separate calibration and "
+            "geometry model is selected.",
         ),
     ),
 )
@@ -208,9 +226,7 @@ class AdvancedProviderService:
         return profile
 
     def manifests(self) -> list[AdvancedProviderManifestResponse]:
-        descriptors = {
-            item.provider_id: item for item in list_model_providers(self.settings)
-        }
+        descriptors = {item.provider_id: item for item in list_model_providers(self.settings)}
         results: list[AdvancedProviderManifestResponse] = []
         for profile in _PROFILES:
             descriptor = descriptors.get(profile.provider_id)
@@ -274,9 +290,7 @@ class AdvancedProviderService:
             or request.prompt_fields[field] in (None, "", [], {})
         ]
         if missing_fields:
-            blockers.append(
-                "Missing required prompt fields: " + ", ".join(missing_fields)
-            )
+            blockers.append("Missing required prompt fields: " + ", ".join(missing_fields))
 
         selected_model_id: str | None = None
         if profile.model_required:
@@ -288,7 +302,8 @@ class AdvancedProviderService:
                     blockers.append("Selected model does not belong to this project")
                 elif model.provider_name != provider_id:
                     blockers.append(
-                        f"Selected model is registered for provider {model.provider_name}, not {provider_id}"
+                        "Selected model is registered for provider "
+                        f"{model.provider_name}, not {provider_id}"
                     )
                 else:
                     selected_model_id = model.id

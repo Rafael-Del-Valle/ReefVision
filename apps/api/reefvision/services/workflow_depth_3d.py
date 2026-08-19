@@ -1,4 +1,4 @@
-"""CoralVision 1.0 workflow adapter for calibrated 3D video trajectories."""
+"""ReefVision 1.0 workflow adapter for calibrated 3D video trajectories."""
 
 from __future__ import annotations
 

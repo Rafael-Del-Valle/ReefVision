@@ -15,7 +15,7 @@ from reefvision.db.models import (
     WorkflowNodeRun,
     WorkflowRun,
 )
-from reefvision.schemas.workflow_graphs import WorkflowGraphRequest
+from reefvision.schemas.workflow_graphs import WorkflowGraphRequest, WorkflowPlanInputBinding
 from reefvision.services.workflow_execution import WorkflowExecutionService
 from reefvision.services.workflow_graphs import WorkflowGraphService
 from reefvision.services.workflow_review import WorkflowReviewRequired
@@ -147,15 +147,15 @@ def _input_artifacts(
     *,
     run_id: str,
     step_node_id: str,
-    bindings: list[object],
+    bindings: list[WorkflowPlanInputBinding],
 ) -> tuple[dict[str, list[WorkflowArtifact]], list[str]]:
     inputs: dict[str, list[WorkflowArtifact]] = {}
     artifact_ids: list[str] = []
     for binding in bindings:
-        target_port_id = str(getattr(binding, "target_port_id"))
-        source_node_id = str(getattr(binding, "source_node_id"))
-        source_port_id = str(getattr(binding, "source_port_id"))
-        expected_type = str(getattr(binding, "data_type"))
+        target_port_id = str(binding.target_port_id)
+        source_node_id = str(binding.source_node_id)
+        source_port_id = str(binding.source_port_id)
+        expected_type = str(binding.data_type)
         producer = session.scalar(
             select(WorkflowNodeRun).where(
                 WorkflowNodeRun.workflow_run_id == run_id,
@@ -163,9 +163,7 @@ def _input_artifacts(
             )
         )
         if producer is None or producer.status != "succeeded":
-            raise RuntimeError(
-                f"Node {step_node_id} requires unfinished producer {source_node_id}"
-            )
+            raise RuntimeError(f"Node {step_node_id} requires unfinished producer {source_node_id}")
         artifact = session.scalar(
             select(WorkflowArtifact).where(
                 WorkflowArtifact.workflow_run_id == run_id,

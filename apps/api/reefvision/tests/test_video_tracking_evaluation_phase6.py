@@ -176,4 +176,4 @@ def test_tracking_evaluation_rejects_invalid_track_sets(
             "end_frame": 99,
         },
     )
-    assert outside_range.status_code == 422
+    assert outside_range.status_code == 400

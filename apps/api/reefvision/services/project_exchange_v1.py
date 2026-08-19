@@ -1,4 +1,4 @@
-"""CoralVision 1.0 project-exchange extensions.
+"""ReefVision 1.0 project-exchange extensions.
 
 The Phase 9 exporter predates executable workflow graphs. This subclass keeps the
 stable archive builder while extending the record inventory with the provenance
@@ -9,16 +9,20 @@ from __future__ import annotations
 
 import json
 import zipfile
+from collections.abc import Mapping, Sequence
 from hashlib import sha256
 from pathlib import Path
+from typing import Protocol, cast
 
 from sqlalchemy import select
 
+from reefvision.db.base import Base
 from reefvision.db.models import (
     AnnotationEvent,
     ClassOperation,
     ClassVisibilityPreference,
     ExportRecord,
+    ImageAsset,
     Job,
     MaskAnnotationEvent,
     Project,
@@ -35,6 +39,10 @@ from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
 
+class _IdentifiedRecord(Protocol):
+    id: str
+
+
 def _file_sha256(path: Path) -> str:
     digest = sha256()
     with path.open("rb") as stream:
@@ -43,26 +51,19 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _parent_first_review_queues(records: list[object]) -> list[object]:
+def _parent_first_review_queues(records: Sequence[Base]) -> list[Base]:
     """Order regenerated review queues after the queue they reference."""
 
-    by_id = {
-        str(getattr(record, "id")): record
-        for record in records
-        if getattr(record, "id", None) is not None
-    }
+    by_id = {str(cast(_IdentifiedRecord, record).id): record for record in records}
     remaining = set(by_id)
     emitted: set[str] = set()
-    ordered: list[object] = []
+    ordered: list[Base] = []
     while remaining:
         ready = sorted(
             record_id
             for record_id in remaining
-            if not isinstance(
-                getattr(by_id[record_id], "regenerated_from_queue_id", None), str
-            )
-            or getattr(by_id[record_id], "regenerated_from_queue_id", None)
-            not in remaining
+            if not isinstance(getattr(by_id[record_id], "regenerated_from_queue_id", None), str)
+            or getattr(by_id[record_id], "regenerated_from_queue_id", None) not in remaining
         )
         if not ready:
             # A cycle would be invalid queue provenance. Preserve deterministic output
@@ -78,16 +79,14 @@ def _parent_first_review_queues(records: list[object]) -> list[object]:
 class ProjectExchangeV1Service(ProjectExchangeService):
     """Project exchange service with executable-workflow provenance included."""
 
-    def _records(self, project: Project) -> dict[str, list[object]]:
+    def _records(self, project: Project) -> dict[str, Sequence[Base]]:
         sections = super()._records(project)
         review_queues = sections.get("review_queues")
         if review_queues:
             sections["review_queues"] = _parent_first_review_queues(review_queues)
-        image_ids = [str(item.id) for item in sections.get("images", [])]
+        image_ids = [item.id for item in cast(Sequence[ImageAsset], sections.get("images", []))]
         workflow_runs = list(
-            self.session.scalars(
-                select(WorkflowRun).where(WorkflowRun.project_id == project.id)
-            )
+            self.session.scalars(select(WorkflowRun).where(WorkflowRun.project_id == project.id))
         )
         workflow_run_ids = [item.id for item in workflow_runs]
         workflow_node_runs = (
@@ -113,9 +112,7 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         mask_annotation_events = (
             list(
                 self.session.scalars(
-                    select(MaskAnnotationEvent).where(
-                        MaskAnnotationEvent.image_id.in_(image_ids)
-                    )
+                    select(MaskAnnotationEvent).where(MaskAnnotationEvent.image_id.in_(image_ids))
                 )
             )
             if image_ids
@@ -189,7 +186,7 @@ class ProjectExchangeV1Service(ProjectExchangeService):
     def _generated_artifacts(
         self,
         project: Project,
-        records: dict[str, list[object]],
+        records: Mapping[str, Sequence[Base]],
     ) -> list[tuple[dict[str, object], Path]]:
         if not records:
             return []
@@ -248,20 +245,20 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         temporary = archive_path.with_suffix(archive_path.suffix + ".manifest.part")
         temporary.unlink(missing_ok=True)
         try:
-            with zipfile.ZipFile(archive_path, "r") as source_archive:
-                with zipfile.ZipFile(
-                    temporary, "w", compression=zipfile.ZIP_DEFLATED
-                ) as target_archive:
-                    for info in source_archive.infolist():
-                        if info.filename == MANIFEST_NAME:
-                            continue
-                        target_archive.writestr(info, source_archive.read(info.filename))
-                    for descriptor, source_path in generated:
-                        target_archive.write(source_path, arcname=str(descriptor["path"]))
-                    target_archive.writestr(
-                        MANIFEST_NAME,
-                        json.dumps(manifest, indent=2, sort_keys=True).encode("utf-8"),
-                    )
+            with (
+                zipfile.ZipFile(archive_path, "r") as source_archive,
+                zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED) as target_archive,
+            ):
+                for info in source_archive.infolist():
+                    if info.filename == MANIFEST_NAME:
+                        continue
+                    target_archive.writestr(info, source_archive.read(info.filename))
+                for descriptor, source_path in generated:
+                    target_archive.write(source_path, arcname=str(descriptor["path"]))
+                target_archive.writestr(
+                    MANIFEST_NAME,
+                    json.dumps(manifest, indent=2, sort_keys=True).encode("utf-8"),
+                )
             temporary.replace(archive_path)
         except Exception:
             temporary.unlink(missing_ok=True)

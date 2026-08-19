@@ -94,5 +94,5 @@ def test_non_sam2_transformers_bundle_is_rejected_by_registration(
         data={"purpose": "assist", "provider_name": "sam2"},
         files={"file": ("not-sam2.zip", buffer.getvalue(), "application/zip")},
     )
-    assert response.status_code == 422, response.text
+    assert response.status_code == 400, response.text
     assert "does not declare a SAM2 architecture" in response.text

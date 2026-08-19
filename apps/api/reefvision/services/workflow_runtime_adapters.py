@@ -298,8 +298,7 @@ def _vlm_detection(
     provider = str(parameters.get("provider") or "").strip().lower()
     model = str(parameters.get("model") or "").strip()
     prompt = str(
-        parameters.get("prompt")
-        or "Detect every visible instance of the selected classes."
+        parameters.get("prompt") or "Detect every visible instance of the selected classes."
     ).strip()
     requested_class_ids = [str(value) for value in parameters.get("label_class_ids", [])]
     if not requested_class_ids:
@@ -395,9 +394,7 @@ def _vlm_detection(
                 "provider_name": provider,
                 "provider_model": model,
                 "image_ids": image_ids,
-                "image_sha256": {
-                    image_id: images_by_id[image_id].sha256 for image_id in image_ids
-                },
+                "image_sha256": {image_id: images_by_id[image_id].sha256 for image_id in image_ids},
                 "label_class_ids": requested_class_ids,
                 "prompt": prompt,
                 "prompt_sha256": prompt_sha256,
@@ -484,9 +481,7 @@ def _review_gate(
                 },
             )
         accepted = [
-            item
-            for item in proposals
-            if item.review_status in {"accepted", "edited_and_accepted"}
+            item for item in proposals if item.review_status in {"accepted", "edited_and_accepted"}
         ]
         reviewed_payload.update(
             {
@@ -526,16 +521,16 @@ def _review_gate(
                     "pending_prediction_ids": pending,
                 },
             )
-        accepted = [item for item in predictions if item.status == "accepted"]
+        classification_accepted = [item for item in predictions if item.status == "accepted"]
         reviewed_payload.update(
             {
-                "accepted_prediction_ids": [item.id for item in accepted],
+                "accepted_prediction_ids": [item.id for item in classification_accepted],
                 "rejected_prediction_ids": [
                     item.id for item in predictions if item.status == "rejected"
                 ],
                 "image_label_ids": [
                     item.accepted_image_label_id
-                    for item in accepted
+                    for item in classification_accepted
                     if item.accepted_image_label_id is not None
                 ],
             }
@@ -688,9 +683,7 @@ def _mask_measurements(
         raise ValidationError("Mask Measurements received masks from another project")
     mask_ids = [str(value) for value in mask_payload.get("mask_annotation_ids", [])]
     measurement_service = MaskMeasurementService(session, settings)
-    rows = [
-        measurement_service.measure(mask_id).model_dump(mode="json") for mask_id in mask_ids
-    ]
+    rows = [measurement_service.measure(mask_id).model_dump(mode="json") for mask_id in mask_ids]
     return [
         {
             "port_id": "measurements",

@@ -258,7 +258,7 @@ def test_benchmark_rejects_wrong_video_and_incomplete_tracking_jobs(
             ],
         },
     )
-    assert wrong_video.status_code == 422
+    assert wrong_video.status_code == 400
 
     incomplete = client.post(
         f"/api/v1/videos/{first_video['id']}/tracking-benchmark",
@@ -270,4 +270,4 @@ def test_benchmark_rejects_wrong_video_and_incomplete_tracking_jobs(
             ],
         },
     )
-    assert incomplete.status_code == 422
+    assert incomplete.status_code == 400

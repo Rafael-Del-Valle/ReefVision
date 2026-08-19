@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import shutil
+from collections.abc import Callable
 from hashlib import sha256
 from pathlib import Path
-from typing import Callable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -137,7 +137,7 @@ def create_depth_map_artifacts(
                 raise ValidationError("Depth provider did not write its relative-depth array")
             if preview_path is not None and not preview_path.is_file():
                 raise ValidationError("Depth provider declared a missing preview image")
-            output = {
+            output: dict[str, object] = {
                 "image_id": image.id,
                 "source_image_sha256": image.sha256,
                 "model_id": model.id,

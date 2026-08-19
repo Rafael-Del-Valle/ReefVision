@@ -143,9 +143,10 @@ def test_workflow_materializes_classification_dataset_and_trains_registered_mode
         assert model_payload["model_id"] == "workflow-classifier-model"
         assert model_payload["purpose"] == "classifier"
         assert model_payload["task"] == "classify"
-        assert model_payload["classification_dataset_id"] == dataset_payload[
-            "classification_dataset_id"
-        ]
+        assert (
+            model_payload["classification_dataset_id"]
+            == dataset_payload["classification_dataset_id"]
+        )
         assert model_payload["metrics"]["accuracy"] == 0.95
         assert model_payload["registered_from_workflow"] is True
 

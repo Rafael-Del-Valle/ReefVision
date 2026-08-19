@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, FiniteFloat, model_validator
@@ -29,6 +30,8 @@ class VideoSpatialCalibrationResponse(BaseModel):
     method: str
     reference_label: str | None
     notes: str | None
+    calibration_revision: int = Field(ge=1)
+    calibration_updated_at: datetime
     video_revision: int
 
 

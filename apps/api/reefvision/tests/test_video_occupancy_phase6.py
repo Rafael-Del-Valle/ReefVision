@@ -93,9 +93,7 @@ def test_two_tracks_occupy_expected_grid_cells_and_fish_seconds(
     assert lower_right["dwell_seconds"] == pytest.approx(0.3)
     assert cells[(0, 1)]["observation_count"] == 0
     assert cells[(1, 0)]["observation_count"] == 0
-    assert sum(item["observation_fraction"] for item in result["cells"]) == pytest.approx(
-        1.0
-    )
+    assert sum(item["observation_fraction"] for item in result["cells"]) == pytest.approx(1.0)
 
     per_track = {item["track_id"]: item for item in result["per_track"]}
     assert per_track[first["id"]]["observation_count"] == 3
@@ -132,5 +130,5 @@ def test_occupancy_rejects_frame_range_without_selected_track_observations(
             "end_frame": 4,
         },
     )
-    assert response.status_code == 422
+    assert response.status_code == 400
     assert "no observations" in response.text

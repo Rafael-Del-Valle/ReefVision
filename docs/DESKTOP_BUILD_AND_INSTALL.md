@@ -2,7 +2,7 @@
 
 ## Scope
 
-This guide covers the current ReefVision desktop shell, sidecar build, NSIS packaging path, checksum verification, and common Windows-specific build pitfalls.
+This guide covers the current ReefVision desktop shell, sidecar build, MSI packaging path, verification, and common Windows-specific build pitfalls.
 
 ## Prerequisites
 
@@ -40,22 +40,24 @@ The build script:
 - checks the public npm lockfile policy;
 - builds the PyInstaller sidecar;
 - stages the sidecar into `apps/web/src-tauri/binaries`;
-- runs `tauri build --bundles nsis`; and
-- writes the installer beneath `apps/web/src-tauri/target/<target-triple>/release/bundle/nsis/`.
+- removes dependency test trees, bytecode, and development caches from the staged runtime;
+- preserves the complete required CPU/GPU provider runtime and scientific resources;
+- runs `tauri build --bundles msi`; and
+- verifies the MSI through administrative extraction and a packaged-backend self-test.
 
 ## Installer location and checksum
 
 After a successful Windows build, the expected installer directory is:
 
 ```text
-apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/
+apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/
 ```
 
 Generate a SHA-256 checksum with:
 
 ```powershell
 Get-FileHash `
-  apps\web\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis\*.exe `
+  apps\web\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\msi\*.msi `
   -Algorithm SHA256
 ```
 
@@ -66,18 +68,22 @@ Record the installer filename, version, and checksum in the milestone report or 
 Before claiming upgrade safety:
 
 1. Install the previous ReefVision desktop version.
-2. Create or open a real project.
+2. Create or open a project using isolated test data.
 3. Confirm projects, managed images, models, dataset versions, QC runs, and review queues exist.
 4. Install the new NSIS package over the old version.
 5. Reopen the application and verify the same data is intact.
 
-The installer should preserve user data because ReefVision stores active data in the Tauri per-user application-data directory rather than the installation directory.
+Never run upgrade or uninstall acceptance against a personal ReefVision installation or real user data. The installer should preserve user data because ReefVision stores active data in the Tauri per-user application-data directory rather than the installation directory.
+
+Administrative extraction proves package readability, required-file presence, migration startup, and packaged-backend self-test behavior. It is not a substitute for clean-machine evidence. Before ReefVision 1.0 release, record a safe VM or disposable-machine test covering clean install, first launch, restart, upgrade over the previous release, uninstall, and preservation of an isolated project/data directory.
 
 ## Common Windows packaging issues
 
-### `failed creating mmap`
+### Installer staging failures
 
-NSIS can fail with a message similar to:
+Large scientific runtimes can fail MSI extraction when unnecessary dependency test/cache trees create excessive file counts and deeply nested paths. The backend staging script removes `tests`, `test`, `__pycache__`, `.pyc`, `.pyo`, and development cache directories after PyInstaller collection. It does not remove PyTorch/CUDA or other implemented-provider runtime libraries.
+
+An older NSIS build can fail with a message similar to:
 
 ```text
 failed creating mmap of "...\\reefvision-api-x86_64-pc-windows-msvc.exe"

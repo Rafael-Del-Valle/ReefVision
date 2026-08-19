@@ -96,9 +96,7 @@ class ModelService:
             return TransformersDepthAnythingV2Provider()
         return provider_for_registration(purpose, settings=self.settings)
 
-    def _provider_for_registration(
-        self, purpose: str, provider_name: str
-    ) -> RegistrationProvider:
+    def _provider_for_registration(self, purpose: str, provider_name: str) -> RegistrationProvider:
         normalized = provider_name.strip().casefold()
         if purpose == "assist" and normalized == "sam2":
             return TransformersSam2AssistProvider()

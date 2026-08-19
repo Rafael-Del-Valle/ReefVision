@@ -147,7 +147,5 @@ def test_tracking_runs_include_zero_output_jobs_and_active_track_counts(
 
 
 def test_tracking_runs_reject_unknown_video(client: TestClient) -> None:
-    response = client.get(
-        "/api/v1/videos/00000000-0000-0000-0000-000000000000/tracking-runs"
-    )
+    response = client.get("/api/v1/videos/00000000-0000-0000-0000-000000000000/tracking-runs")
     assert response.status_code == 404

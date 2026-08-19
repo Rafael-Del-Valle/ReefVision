@@ -5,10 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import zipfile
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from datetime import date, datetime
 from pathlib import Path, PurePosixPath
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, cast
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from reefvision import __version__
 from reefvision.config import Settings
+from reefvision.db.base import Base
 from reefvision.db.models import (
     ActiveLearningRound,
     Annotation,
@@ -64,7 +65,7 @@ def _json_value(value: object) -> object:
     return value
 
 
-def _row(instance: object) -> dict[str, object]:
+def _row(instance: Base) -> dict[str, object]:
     table = instance.__table__
     return {column.name: _json_value(getattr(instance, column.name)) for column in table.columns}
 
@@ -163,7 +164,7 @@ class ProjectExchangeService:
             raise NotFoundError("Project exchange archive is missing")
         return path
 
-    def _records(self, project: Project) -> dict[str, list[object]]:
+    def _records(self, project: Project) -> dict[str, Sequence[Base]]:
         image_ids = list(
             self.session.scalars(select(ImageAsset.id).where(ImageAsset.project_id == project.id))
         )
@@ -175,7 +176,7 @@ class ProjectExchangeService:
                 select(DatasetVersion.id).where(DatasetVersion.project_id == project.id)
             )
         )
-        sections: dict[str, list[object]] = {
+        sections: dict[str, Sequence[Base]] = {
             "project": [project],
             "label_classes": list(
                 self.session.scalars(select(LabelClass).where(LabelClass.project_id == project.id))
@@ -313,7 +314,7 @@ class ProjectExchangeService:
                     }
 
                 if include_media:
-                    for image in sections["images"]:
+                    for image in cast(Sequence[ImageAsset], sections["images"]):
                         source = resolve_managed_project_path(self.settings, image.managed_path)
                         if not source.is_file():
                             raise ValidationError(
@@ -330,7 +331,7 @@ class ProjectExchangeService:
                                 "size_bytes": source.stat().st_size,
                             }
                         )
-                    for video in sections["videos"]:
+                    for video in cast(Sequence[VideoAsset], sections["videos"]):
                         source = resolve_managed_project_path(self.settings, video.managed_path)
                         if not source.is_file():
                             raise ValidationError(
@@ -349,7 +350,7 @@ class ProjectExchangeService:
                         )
 
                 if include_model_weights:
-                    for model in sections["models"]:
+                    for model in cast(Sequence[ModelRegistration], sections["models"]):
                         source = resolve_managed_project_path(self.settings, model.managed_path)
                         if not source.is_file():
                             raise ValidationError(f"Managed model is missing: {model.display_name}")

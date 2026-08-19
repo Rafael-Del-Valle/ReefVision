@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
+from reefvision.schemas.video_activity import VideoTrackActivityRequest, VideoTrackActivityResponse
+from reefvision.schemas.video_occupancy import VideoOccupancyRequest, VideoOccupancyResponse
 from reefvision.schemas.video_science import (
     CalibratedVideoTrackAnalyticsResponse,
     VideoCameraIntrinsicsResponse,
@@ -19,10 +21,36 @@ from reefvision.schemas.video_science import (
     VideoSpatialCalibrationResponse,
     VideoSpatialCalibrationSetRequest,
 )
+from reefvision.services.video_activity import VideoActivityService
+from reefvision.services.video_occupancy import VideoOccupancyService
 from reefvision.services.video_science import VideoScienceService
 
 router = APIRouter(tags=["video-science"])
 DbSession = Annotated[Session, Depends(get_db_session)]
+
+
+@router.post(
+    "/video-tracks/{track_id}/activity-analytics",
+    response_model=VideoTrackActivityResponse,
+)
+def activity_analytics(
+    track_id: str,
+    payload: VideoTrackActivityRequest,
+    session: DbSession,
+) -> VideoTrackActivityResponse:
+    return VideoActivityService(session).analyze(track_id, payload)
+
+
+@router.post(
+    "/videos/{video_id}/occupancy-analytics",
+    response_model=VideoOccupancyResponse,
+)
+def occupancy_analytics(
+    video_id: str,
+    payload: VideoOccupancyRequest,
+    session: DbSession,
+) -> VideoOccupancyResponse:
+    return VideoOccupancyService(session).analyze(video_id, payload)
 
 
 @router.get(

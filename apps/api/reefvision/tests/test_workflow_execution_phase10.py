@@ -80,6 +80,7 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         project["id"],
         filename="workflow-second.png",
         relative_path="workflow/second.png",
+        size=(81, 60),
     )
     image_ids = {
         str(first["successful"][0]["image_id"]),
@@ -102,11 +103,14 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
     assert run["job_id"]
 
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings,
-        app.state.session_factory,
-        str(run["job_id"]),
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(run["job_id"]),
+        )
+        is True
+    )
 
     detail = client.get(f"/api/v1/workflow-runs/{run['id']}")
     assert detail.status_code == 200, detail.text
@@ -204,17 +208,18 @@ def test_workflow_export_node_builds_project_exchange_artifact(
     saved = _save_graph(client, project["id"], graph)
     run = _queue_run(client, project["id"], saved["id"])
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings,
-        app.state.session_factory,
-        str(run["job_id"]),
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(run["job_id"]),
+        )
+        is True
+    )
 
     detail = client.get(f"/api/v1/workflow-runs/{run['id']}").json()
     artifact = next(
-        item
-        for item in detail["artifacts"]
-        if item["data_type"] == "project_exchange_package"
+        item for item in detail["artifacts"] if item["data_type"] == "project_exchange_package"
     )
     package_id = str(artifact["payload_json"]["package_id"])
     with app.state.session_factory() as session:

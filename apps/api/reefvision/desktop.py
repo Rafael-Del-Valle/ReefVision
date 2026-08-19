@@ -132,9 +132,7 @@ def apply_desktop_environment(options: DesktopLaunchOptions) -> None:
     os.environ["REEFVISION_API_PORT"] = str(options.port)
     os.environ["REEFVISION_DATA_DIR"] = str(options.data_dir)
     os.environ["REEFVISION_SAFE_MODE"] = "true" if options.safe_mode else "false"
-    os.environ["REEFVISION_BACKGROUND_WORKER_ENABLED"] = (
-        "false" if options.safe_mode else "true"
-    )
+    os.environ["REEFVISION_BACKGROUND_WORKER_ENABLED"] = "false" if options.safe_mode else "true"
     clear_settings_cache()
 
 

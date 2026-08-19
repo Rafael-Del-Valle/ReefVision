@@ -69,11 +69,7 @@ def test_openai_vlm_uses_structured_output_and_normalizes_pixels(
         assert body["store"] is False
         assert body["text"]["format"]["type"] == "json_schema"
         assert body["input"][0]["content"][1]["type"] == "input_image"
-        output = {
-            "detections": [
-                {"label_class_id": "class-open", "box_2d": [100, 200, 500, 600]}
-            ]
-        }
+        output = {"detections": [{"label_class_id": "class-open", "box_2d": [100, 200, 500, 600]}]}
         return httpx.Response(
             200,
             json={
@@ -82,9 +78,7 @@ def test_openai_vlm_uses_structured_output_and_normalizes_pixels(
                 "output": [
                     {
                         "type": "message",
-                        "content": [
-                            {"type": "output_text", "text": json.dumps(output)}
-                        ],
+                        "content": [{"type": "output_text", "text": json.dumps(output)}],
                     }
                 ],
             },
@@ -236,9 +230,11 @@ def test_provider_failure_is_not_treated_as_model_disagreement(
     def handler(_: httpx.Request) -> httpx.Response:
         return httpx.Response(429, json={"error": {"message": "rate limited"}})
 
-    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        with pytest.raises(CloudVlmProviderError) as exc_info:
-            _run(_settings(tmp_path, "openai"), "openai", client, classes)
+    with (
+        httpx.Client(transport=httpx.MockTransport(handler)) as client,
+        pytest.raises(CloudVlmProviderError) as exc_info,
+    ):
+        _run(_settings(tmp_path, "openai"), "openai", client, classes)
 
     assert exc_info.value.provider == "openai"
     assert exc_info.value.status_code == 429

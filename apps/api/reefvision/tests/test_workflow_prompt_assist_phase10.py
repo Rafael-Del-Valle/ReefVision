@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, cast
+from uuid import uuid4
 
 import numpy
 from fastapi import FastAPI
@@ -87,6 +88,7 @@ def _seed_reviewed_boxes(
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
         annotation = Annotation(
+            id=str(uuid4()),
             image_id=image_id,
             label_class_id=class_id,
             x_min=10.0,

@@ -33,7 +33,9 @@ def _csv(header: list[str], rows: list[list[str]]) -> str:
 
 
 def test_track_csv_shape_accepts_only_canonical_export_shape() -> None:
-    validate_reefvision_track_csv_shape([].__class__ and _csv(list(REEFVISION_TRACK_CSV_COLUMNS), [_row()]))
+    validate_reefvision_track_csv_shape(
+        [].__class__ and _csv(list(REEFVISION_TRACK_CSV_COLUMNS), [_row()])
+    )
 
 
 @pytest.mark.parametrize(
@@ -50,7 +52,11 @@ def test_track_csv_shape_accepts_only_canonical_export_shape() -> None:
             "unsupported columns",
         ),
         (
-            [REEFVISION_TRACK_CSV_COLUMNS[1], REEFVISION_TRACK_CSV_COLUMNS[0], *REEFVISION_TRACK_CSV_COLUMNS[2:]],
+            [
+                REEFVISION_TRACK_CSV_COLUMNS[1],
+                REEFVISION_TRACK_CSV_COLUMNS[0],
+                *REEFVISION_TRACK_CSV_COLUMNS[2:],
+            ],
             _row(),
             "canonical export order",
         ),

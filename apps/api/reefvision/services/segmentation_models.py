@@ -10,9 +10,7 @@ from sqlalchemy import select
 from reefvision.db.models import ExperimentRecord, Job, TrainingRun
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.ml.providers import (
-    AnnotationAssistProvider,
     DetectionModelMetadata,
-    DetectionProvider,
     UltralyticsDetectionProvider,
 )
 from reefvision.schemas.jobs import JobResponse
@@ -21,7 +19,7 @@ from reefvision.schemas.models import (
     ModelRegistrationResponse,
     RegisterModelFromRunRequest,
 )
-from reefvision.services.models import ModelService, _humanize_catalog_family
+from reefvision.services.models import ModelService, RegistrationProvider, _humanize_catalog_family
 from reefvision.storage.projects import resolve_managed_project_path
 
 
@@ -50,7 +48,7 @@ class SegmentationModelService(ModelService):
     def _provider_for_purpose(
         self,
         purpose: str,
-    ) -> DetectionProvider | AnnotationAssistProvider:
+    ) -> RegistrationProvider:
         if purpose == "segmenter":
             return UltralyticsSegmentationRegistrationProvider()
         return super()._provider_for_purpose(purpose)
@@ -59,7 +57,7 @@ class SegmentationModelService(ModelService):
         self,
         purpose: str,
         provider_name: str,
-    ) -> DetectionProvider | AnnotationAssistProvider:
+    ) -> RegistrationProvider:
         if purpose == "segmenter":
             if provider_name.strip().casefold() != "ultralytics":
                 raise ValidationError(f"Unsupported segmentation provider: {provider_name}")

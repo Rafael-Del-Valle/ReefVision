@@ -97,17 +97,11 @@ def test_metric_depth_3d_node_is_discoverable_and_typed_in_workflow_graph(
 
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     assert registry.status_code == 200, registry.text
-    node = next(
-        item
-        for item in registry.json()
-        if item["node_type"] == "video_depth_3d_analytics"
-    )
+    node = next(item for item in registry.json() if item["node_type"] == "video_depth_3d_analytics")
     assert node["executable"] is True
     assert node["input_ports"][0]["accepted_types"] == ["video_reference"]
     assert node["input_ports"][1]["accepted_types"] == ["video_tracks"]
-    assert node["output_ports"][0]["accepted_types"] == [
-        "video_3d_trajectories"
-    ]
+    assert node["output_ports"][0]["accepted_types"] == ["video_3d_trajectories"]
     assert "depth_samples" in node["required_parameters"]
 
     graph = {
@@ -202,13 +196,9 @@ def test_metric_depth_3d_node_is_discoverable_and_typed_in_workflow_graph(
     assert plan.status_code == 200, plan.text
     assert plan.json()["valid"] is True
     assert plan.json()["executable"] is True
-    depth_step = next(
-        item for item in plan.json()["steps"] if item["node_id"] == "depth3d"
-    )
+    depth_step = next(item for item in plan.json()["steps"] if item["node_id"] == "depth3d")
     assert depth_step["executable"] is True
-    assert depth_step["output_types"]["trajectories"] == [
-        "video_3d_trajectories"
-    ]
+    assert depth_step["output_types"]["trajectories"] == ["video_3d_trajectories"]
 
 
 def test_metric_depth_3d_adapter_executes_existing_video_science_geometry(
@@ -323,18 +313,20 @@ def test_metric_depth_3d_adapter_rejects_depth_for_track_outside_input_artifact(
             }
         ),
     )
-    with app.state.session_factory() as session:
-        with pytest.raises(ValidationError, match="incoming video_tracks"):
-            execute_video_depth_3d_adapter(
-                session,
-                test_settings,
-                str(project["id"]),
-                {
-                    "unit": "m",
-                    "depth_samples": [
-                        {"track_number": 999, "frame": 0, "depth": 2.0},
-                        {"track_number": 999, "frame": 2, "depth": 2.0},
-                    ],
-                },
-                {"video": [video_artifact], "tracks": [tracks_artifact]},
-            )
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="incoming video_tracks"),
+    ):
+        execute_video_depth_3d_adapter(
+            session,
+            test_settings,
+            str(project["id"]),
+            {
+                "unit": "m",
+                "depth_samples": [
+                    {"track_number": 999, "frame": 0, "depth": 2.0},
+                    {"track_number": 999, "frame": 2, "depth": 2.0},
+                ],
+            },
+            {"video": [video_artifact], "tracks": [tracks_artifact]},
+        )

@@ -245,11 +245,14 @@ def test_reviewed_consensus_materializes_annotation_and_routes_disagreement(
         _seed_valid_consensus_review(client)
     )
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings,
-        app.state.session_factory,
-        job_id,
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            job_id,
+        )
+        is True
+    )
 
     paused = client.get(f"/api/v1/workflow-runs/{run_id}").json()
     review_node = next(node for node in paused["nodes"] if node["node_id"] == "review")
@@ -289,9 +292,7 @@ def test_reviewed_consensus_materializes_annotation_and_routes_disagreement(
 
         rounds = list(
             session.scalars(
-                select(ActiveLearningRound).where(
-                    ActiveLearningRound.project_id == project["id"]
-                )
+                select(ActiveLearningRound).where(ActiveLearningRound.project_id == project["id"])
             )
         )
         assert len(rounds) == 1

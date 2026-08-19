@@ -43,13 +43,7 @@ def validate_reefvision_track_csv_shape(content: str) -> None:
     normalized_header = [value.strip() for value in header]
     if any(not value for value in normalized_header):
         raise ValidationError("ReefVision track CSV headers must not be blank")
-    duplicates = sorted(
-        {
-            name
-            for name in normalized_header
-            if normalized_header.count(name) > 1
-        }
-    )
+    duplicates = sorted({name for name in normalized_header if normalized_header.count(name) > 1})
     if duplicates:
         raise ValidationError(
             "ReefVision track CSV contains duplicate headers: " + ", ".join(duplicates)
@@ -67,9 +61,7 @@ def validate_reefvision_track_csv_shape(content: str) -> None:
             "ReefVision track CSV contains unsupported columns: " + ", ".join(unexpected)
         )
     if normalized_header != expected:
-        raise ValidationError(
-            "ReefVision track CSV columns must use the canonical export order"
-        )
+        raise ValidationError("ReefVision track CSV columns must use the canonical export order")
 
     expected_width = len(expected)
     for row_number, row in enumerate(reader, start=2):

@@ -30,7 +30,9 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
-        sa.UniqueConstraint("project_id", "graph_key", "revision", name="uq_workflow_graph_revision"),
+        sa.UniqueConstraint(
+            "project_id", "graph_key", "revision", name="uq_workflow_graph_revision"
+        ),
     )
     op.create_index(
         "ix_workflow_graph_records_project_key",

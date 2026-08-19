@@ -39,9 +39,7 @@ def _is_sam2_config(config: dict[str, object]) -> bool:
     model_type = str(config.get("model_type") or "").casefold()
     architectures = config.get("architectures")
     architecture_names = (
-        [str(item).casefold() for item in architectures]
-        if isinstance(architectures, list)
-        else []
+        [str(item).casefold() for item in architectures] if isinstance(architectures, list) else []
     )
     return model_type == "sam2" or any("sam2" in item for item in architecture_names)
 
@@ -88,7 +86,7 @@ class TransformersSam2AssistProvider:
             from transformers import Sam2Model, Sam2Processor
         except Exception as exc:  # pragma: no cover - depends on optional provider pack
             raise ValidationError(
-                "SAM2 requires the optional Transformers provider pack: " f"{exc}"
+                f"SAM2 requires the optional Transformers provider pack: {exc}"
             ) from exc
         model_root = extracted_transformers_bundle(model_path)
         resolved_device = _torch_device_name(device)
