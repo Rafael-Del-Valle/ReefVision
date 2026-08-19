@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import zipfile
+from hashlib import sha256
+from pathlib import Path
 
 from sqlalchemy import select
 
@@ -25,6 +27,14 @@ from reefvision.schemas.project_exchange import ProjectExchangePackageResponse
 from reefvision.services.project_exchange import MANIFEST_NAME, ProjectExchangeService
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
+
+
+def _file_sha256(path: Path) -> str:
+    digest = sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 class ProjectExchangeV1Service(ProjectExchangeService):
@@ -88,12 +98,57 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         )
         return sections
 
+    def _generated_artifacts(
+        self,
+        project: Project,
+        records: dict[str, list[object]],
+    ) -> list[tuple[dict[str, object], Path]]:
+        if not records:
+            return []
+        original_paths: set[str] = set()
+        for section_name in ("images", "videos", "models"):
+            for record in records.get(section_name, []):
+                managed_path = getattr(record, "managed_path", None)
+                if isinstance(managed_path, str):
+                    original_paths.add(managed_path)
+
+        project_root = resolve_managed_project_path(self.settings, project.storage_root)
+        exchange_prefix = project.storage_root.rstrip("/") + "/exchanges/"
+        generated: list[tuple[dict[str, object], Path]] = []
+        for path in sorted(
+            (candidate for candidate in project_root.rglob("*") if candidate.is_file()),
+            key=lambda item: item.as_posix(),
+        ):
+            relative_to_data = path.relative_to(self.settings.resolved_data_dir).as_posix()
+            if relative_to_data in original_paths:
+                continue
+            if relative_to_data.startswith(exchange_prefix):
+                continue
+            relative_to_project = path.relative_to(project_root).as_posix()
+            descriptor: dict[str, object] = {
+                "kind": "generated",
+                "source_relative_path": relative_to_project,
+                "path": f"generated/{relative_to_project}",
+                "sha256": _file_sha256(path),
+                "size_bytes": path.stat().st_size,
+            }
+            generated.append((descriptor, path))
+        return generated
+
     def build_export(self, package_id: str) -> ProjectExchangePackageResponse:
-        """Build the base archive, then advertise the 1.0 round-trip import policy."""
+        """Build a complete 1.0 archive and advertise its safe round-trip policy."""
 
         super().build_export(package_id)
         package = self._package(package_id)
+        project = self._project(package.project_id)
         manifest = dict(package.manifest_json)
+        records = self._records(project)
+        generated = (
+            self._generated_artifacts(project, records)
+            if bool(package.options_json.get("include_generated_artifacts", False))
+            else []
+        )
+        manifest["generated_artifacts"] = [descriptor for descriptor, _ in generated]
         manifest["import_policy"] = {
             "mode": "import_as_new_project",
             "id_remapping_required": True,
@@ -113,6 +168,8 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                         if info.filename == MANIFEST_NAME:
                             continue
                         target_archive.writestr(info, source_archive.read(info.filename))
+                    for descriptor, source_path in generated:
+                        target_archive.write(source_path, arcname=str(descriptor["path"]))
                     target_archive.writestr(
                         MANIFEST_NAME,
                         json.dumps(manifest, indent=2, sort_keys=True).encode("utf-8"),
