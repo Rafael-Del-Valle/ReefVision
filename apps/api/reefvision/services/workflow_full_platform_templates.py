@@ -245,7 +245,8 @@ def configurable_fish_behavior_template() -> WorkflowTemplate:
         description=(
             "Track fish, calculate trajectory and calibrated kinematic metrics, evaluate "
             "activity, zones, heatmaps, wall distance, and schooling statistics for the exact "
-            "connected track set, then export the provenance-preserving result."
+            "connected track set and optional inclusive frame/time window, then export the "
+            "provenance-preserving result."
         ),
         workflow=WorkflowValidationRequest(
             name="Configurable fish behavior analysis",
@@ -270,6 +271,10 @@ def configurable_fish_behavior_template() -> WorkflowTemplate:
                         "zones": [],
                         "heatmap_bins_x": 20,
                         "heatmap_bins_y": 20,
+                        "start_frame": None,
+                        "end_frame": None,
+                        "start_time_seconds": None,
+                        "end_time_seconds": None,
                         "persist_result": True,
                     },
                 ),
