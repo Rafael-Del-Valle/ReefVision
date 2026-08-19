@@ -35,6 +35,12 @@ from reefvision.schemas.measurements import (
     MeasurementFilterResponse,
     MeasurementPoint,
 )
+from reefvision.services.calibration_geometry import (
+    polygon_measurements_float,
+    transform_point,
+    transform_points,
+    transformed_centerline_length,
+)
 from reefvision.storage.projects import resolve_managed_project_path
 
 Point = tuple[float, float]
@@ -154,7 +160,10 @@ def _raster_measurements(
 
 
 def _centerline_length(points: list[MeasurementPoint]) -> float:
-    return sum(hypot(second.x - first.x, second.y - first.y) for first, second in pairwise(points))
+    return sum(
+        hypot(second.x - first.x, second.y - first.y)
+        for first, second in pairwise(points)
+    )
 
 
 def _normalized(values: list[str] | None) -> list[str]:
@@ -275,9 +284,13 @@ class MaskMeasurementService:
             centerline_points=points,
             centerline_length_pixels=_centerline_length(points),
             surface_model=surface_model,
-            depth_value=float(depth_value) if isinstance(depth_value, (int, float)) else None,
+            depth_value=float(depth_value)
+            if isinstance(depth_value, (int, float))
+            else None,
             diameter_value=(
-                float(diameter_value) if isinstance(diameter_value, (int, float)) else None
+                float(diameter_value)
+                if isinstance(diameter_value, (int, float))
+                else None
             ),
             notes=str(notes) if isinstance(notes, str) else None,
         )
@@ -297,7 +310,10 @@ class MaskMeasurementService:
         points = payload.centerline_points
         if any(point.x > image.width_px or point.y > image.height_px for point in points):
             raise ValidationError("Centerline points cannot extend outside the image bounds")
-        if any(first.x == second.x and first.y == second.y for first, second in pairwise(points)):
+        if any(
+            first.x == second.x and first.y == second.y
+            for first, second in pairwise(points)
+        ):
             raise ValidationError("Centerlines cannot contain consecutive duplicate points")
 
         new_measurement = {
@@ -379,9 +395,13 @@ class MaskMeasurementService:
             if not mask.mask_path:
                 raise ValidationError("Raster mask content is missing")
             managed_path = resolve_managed_project_path(self.settings, mask.mask_path)
-            area, perimeter, centroid_x, centroid_y, raster = _raster_measurements(managed_path)
+            area, perimeter, centroid_x, centroid_y, raster = _raster_measurements(
+                managed_path
+            )
         else:
-            raise ValidationError(f"Measurements are not supported for {mask.geometry_kind} masks")
+            raise ValidationError(
+                f"Measurements are not supported for {mask.geometry_kind} masks"
+            )
 
         normalized_label_ids = set(_normalized(label_class_ids))
         normalized_scientific = set(_normalized(scientific_names))
@@ -389,7 +409,10 @@ class MaskMeasurementService:
         statement = (
             select(Annotation)
             .options(selectinload(Annotation.label_class))
-            .where(Annotation.image_id == mask.image_id, Annotation.deleted_at.is_(None))
+            .where(
+                Annotation.image_id == mask.image_id,
+                Annotation.deleted_at.is_(None),
+            )
             .order_by(Annotation.created_at, Annotation.id)
         )
         contained_box_count = 0
@@ -417,15 +440,49 @@ class MaskMeasurementService:
         profile = self._profile(mask)
         calibration = self._calibration_payload(image)
         scale = calibration.distance_per_pixel if calibration is not None else None
-        area_physical = area * scale * scale if scale is not None else None
-        perimeter_physical = perimeter * scale if scale is not None else None
         tle_pixels = profile.centerline_length_pixels
-        tle_physical = tle_pixels * scale if scale is not None else None
+        area_physical: float | None = None
+        perimeter_physical: float | None = None
+        centroid_x_physical: float | None = None
+        centroid_y_physical: float | None = None
+        tle_physical: float | None = None
+        perspective_corrected = False
+        if calibration is not None:
+            homography = calibration.perspective_homography
+            if homography is not None and polygon is not None:
+                transformed_polygon = transform_points(homography, polygon)
+                (
+                    area_physical,
+                    perimeter_physical,
+                    centroid_x_physical,
+                    centroid_y_physical,
+                ) = polygon_measurements_float(transformed_polygon)
+                tle_physical = transformed_centerline_length(
+                    homography, profile.centerline_points
+                )
+                perspective_corrected = True
+            elif scale is not None:
+                area_physical = area * scale * scale
+                perimeter_physical = perimeter * scale
+                centroid_x_physical = centroid_x * scale
+                centroid_y_physical = centroid_y * scale
+                tle_physical = tle_pixels * scale
+                if homography is not None:
+                    # Raster masks cannot be transformed exactly without resampling every
+                    # mask pixel. Keep the scalar calibration and disclose the fallback.
+                    centroid_x_physical, centroid_y_physical = transform_point(
+                        homography, (centroid_x, centroid_y)
+                    )
+
         surface_area: float | None = None
         assumptions: list[str] = []
         if calibration is not None and profile.surface_model == "extruded":
             depth = profile.depth_value or calibration.default_depth
-            if depth is not None and area_physical is not None and perimeter_physical is not None:
+            if (
+                depth is not None
+                and area_physical is not None
+                and perimeter_physical is not None
+            ):
                 surface_area = 2.0 * area_physical + perimeter_physical * depth
                 assumptions = [
                     "Mask is treated as a closed planar extrusion",
@@ -433,8 +490,15 @@ class MaskMeasurementService:
                 ]
             else:
                 assumptions = ["Extruded surface area requires a positive depth value"]
-        elif calibration is not None and profile.surface_model == "cylindrical_centerline":
-            if tle_physical is not None and tle_physical > 0 and area_physical is not None:
+        elif (
+            calibration is not None
+            and profile.surface_model == "cylindrical_centerline"
+        ):
+            if (
+                tle_physical is not None
+                and tle_physical > 0
+                and area_physical is not None
+            ):
                 diameter = profile.diameter_value or area_physical / tle_physical
                 surface_area = pi * diameter * tle_physical
                 assumptions = [
@@ -469,7 +533,9 @@ class MaskMeasurementService:
             x_max=float(x_max),
             y_max=float(y_max),
             contained_box_count=contained_box_count,
-            contained_box_density_per_1000_pixels=(contained_box_count / area * 1000.0),
+            contained_box_density_per_1000_pixels=(
+                contained_box_count / area * 1000.0
+            ),
             filters=MeasurementFilterResponse(
                 label_class_ids=sorted(normalized_label_ids),
                 scientific_names=sorted(normalized_scientific),
@@ -480,8 +546,8 @@ class MaskMeasurementService:
             distance_per_pixel=scale,
             area_physical=area_physical,
             perimeter_physical=perimeter_physical,
-            centroid_x_physical=centroid_x * scale if scale is not None else None,
-            centroid_y_physical=centroid_y * scale if scale is not None else None,
+            centroid_x_physical=centroid_x_physical,
+            centroid_y_physical=centroid_y_physical,
             contained_box_density_per_square_unit=density_square_unit,
             centerline_points=profile.centerline_points,
             total_linear_extension_pixels=tle_pixels,
@@ -489,6 +555,14 @@ class MaskMeasurementService:
             surface_area_model=profile.surface_model,
             surface_area_physical=surface_area,
             surface_area_assumptions=assumptions,
+            perspective_corrected=perspective_corrected,
+            calibration_source=calibration.source if calibration is not None else None,
+            calibration_confidence=(
+                calibration.confidence if calibration is not None else None
+            ),
+            calibration_profile_name=(
+                calibration.profile_name if calibration is not None else None
+            ),
         )
 
     def measure_project(
@@ -508,7 +582,11 @@ class MaskMeasurementService:
                 MaskAnnotation.deleted_at.is_(None),
                 MaskAnnotation.status == "verified",
             )
-            .order_by(ImageAsset.created_at, MaskAnnotation.created_at, MaskAnnotation.id)
+            .order_by(
+                ImageAsset.created_at,
+                MaskAnnotation.created_at,
+                MaskAnnotation.id,
+            )
         )
         return [
             self.measure(
@@ -547,6 +625,10 @@ class MaskMeasurementService:
             "total_linear_extension_physical": item.total_linear_extension_physical,
             "surface_area_model": item.surface_area_model,
             "surface_area_physical": item.surface_area_physical,
+            "perspective_corrected": item.perspective_corrected,
+            "calibration_source": item.calibration_source or "",
+            "calibration_confidence": item.calibration_confidence,
+            "calibration_profile_name": item.calibration_profile_name or "",
         }
 
     def csv_export(self, project_id: str) -> bytes:
@@ -565,6 +647,10 @@ class MaskMeasurementService:
                 "distance_per_pixel",
                 "density_per_square_unit",
                 "surface_area_model",
+                "perspective_corrected",
+                "calibration_source",
+                "calibration_confidence",
+                "calibration_profile_name",
             ]
         writer = csv.DictWriter(stream, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
@@ -589,14 +675,18 @@ class MaskMeasurementService:
                     float(item.contained_box_count),
                     item.contained_box_density_per_1000_pixels,
                     item.area_physical if item.area_physical is not None else nan,
-                    item.perimeter_physical if item.perimeter_physical is not None else nan,
+                    item.perimeter_physical
+                    if item.perimeter_physical is not None
+                    else nan,
                     item.total_linear_extension_pixels,
                     (
                         item.total_linear_extension_physical
                         if item.total_linear_extension_physical is not None
                         else nan
                     ),
-                    item.surface_area_physical if item.surface_area_physical is not None else nan,
+                    item.surface_area_physical
+                    if item.surface_area_physical is not None
+                    else nan,
                 ]
             )
             row_metadata.append(
@@ -607,6 +697,10 @@ class MaskMeasurementService:
                     "geometry_kind": item.geometry_kind,
                     "physical_unit": item.physical_unit,
                     "surface_area_model": item.surface_area_model,
+                    "perspective_corrected": item.perspective_corrected,
+                    "calibration_source": item.calibration_source,
+                    "calibration_confidence": item.calibration_confidence,
+                    "calibration_profile_name": item.calibration_profile_name,
                 }
             )
         output = io.BytesIO()
