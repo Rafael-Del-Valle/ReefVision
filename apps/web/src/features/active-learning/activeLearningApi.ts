@@ -6,6 +6,17 @@ export type ActiveLearningStrategy =
   | "rare_class"
   | "quality";
 
+export interface ActiveLearningSelectionItem {
+  image_id: string;
+  queue_item_id: string;
+  rank_position: number;
+  score: number;
+  input_checksum: string;
+  reason_summary: string | null;
+  score_breakdown?: Array<Record<string, unknown>>;
+  signal_values?: Record<string, unknown>;
+}
+
 export interface ActiveLearningRoundRecord {
   id: string;
   project_id: string;
@@ -36,6 +47,8 @@ export interface ActiveLearningFeedback {
   skipped_count: number;
   completion_fraction: number;
   prediction_review_counts: Record<string, number>;
+  feedback_dataset_version_id: string | null;
+  feedback_manifest_sha256: string | null;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -57,6 +70,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(message);
   }
   return (await response.json()) as T;
+}
+
+export function activeLearningSelectionItems(
+  round: ActiveLearningRoundRecord | undefined,
+): ActiveLearningSelectionItem[] {
+  if (!round) return [];
+  const items = round.selection_manifest_json.items;
+  if (!Array.isArray(items)) return [];
+  return items.filter((item): item is ActiveLearningSelectionItem => {
+    if (!item || typeof item !== "object") return false;
+    const record = item as Record<string, unknown>;
+    return (
+      typeof record.image_id === "string" &&
+      typeof record.queue_item_id === "string" &&
+      typeof record.rank_position === "number" &&
+      typeof record.score === "number"
+    );
+  });
 }
 
 export function getActiveLearningRounds(
