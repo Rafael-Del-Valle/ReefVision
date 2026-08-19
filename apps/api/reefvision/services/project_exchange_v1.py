@@ -43,11 +43,46 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _parent_first_review_queues(records: list[object]) -> list[object]:
+    """Order regenerated review queues after the queue they reference."""
+
+    by_id = {
+        str(getattr(record, "id")): record
+        for record in records
+        if getattr(record, "id", None) is not None
+    }
+    remaining = set(by_id)
+    emitted: set[str] = set()
+    ordered: list[object] = []
+    while remaining:
+        ready = sorted(
+            record_id
+            for record_id in remaining
+            if not isinstance(
+                getattr(by_id[record_id], "regenerated_from_queue_id", None), str
+            )
+            or getattr(by_id[record_id], "regenerated_from_queue_id", None)
+            not in remaining
+        )
+        if not ready:
+            # A cycle would be invalid queue provenance. Preserve deterministic output
+            # so inspection/import can surface the database problem rather than loop.
+            ready = sorted(remaining)
+        for record_id in ready:
+            ordered.append(by_id[record_id])
+            emitted.add(record_id)
+            remaining.remove(record_id)
+    return ordered
+
+
 class ProjectExchangeV1Service(ProjectExchangeService):
     """Project exchange service with executable-workflow provenance included."""
 
     def _records(self, project: Project) -> dict[str, list[object]]:
         sections = super()._records(project)
+        review_queues = sections.get("review_queues")
+        if review_queues:
+            sections["review_queues"] = _parent_first_review_queues(review_queues)
         image_ids = [str(item.id) for item in sections.get("images", [])]
         workflow_runs = list(
             self.session.scalars(
