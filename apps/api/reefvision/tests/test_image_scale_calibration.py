@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw
 
+from reefvision.services.image_scale_calibration import _candidate_bands
 from reefvision.tests.test_annotations import create_project, import_one
 
 
@@ -38,7 +39,11 @@ def _import_bytes(
     return str(response.json()["successful"][0]["image_id"])
 
 
-def _save_polygon_mask(client: TestClient, project: dict[str, Any], image_id: str) -> str:
+def _save_polygon_mask(
+    client: TestClient,
+    project: dict[str, Any],
+    image_id: str,
+) -> str:
     mask_id = "aa30d3f3-f9d2-47d9-bbbe-1bb9ad75a5a2"
     response = client.put(
         f"/api/v1/images/{image_id}/annotations",
@@ -63,6 +68,14 @@ def _save_polygon_mask(client: TestClient, project: dict[str, Any], image_id: st
     )
     assert response.status_code == 200, response.text
     return mask_id
+
+
+def test_small_image_candidate_bands_stay_inside_image_bounds() -> None:
+    bands = _candidate_bands(12, 10, "auto")
+
+    assert bands
+    assert all(0 <= band.x_min < band.x_max <= 12 for band in bands)
+    assert all(0 <= band.y_min < band.y_max <= 10 for band in bands)
 
 
 def test_ruler_detection_estimates_pixels_but_never_infers_units(
@@ -101,7 +114,12 @@ def test_calibration_profile_requires_confirmation_and_matching_resolution(
     project = create_project(client, "Calibration profile reuse")
     source = import_one(client, project["id"], filename="source.png", size=(100, 80))
     target = import_one(client, project["id"], filename="target.png", size=(100, 80))
-    mismatch = import_one(client, project["id"], filename="mismatch.png", size=(120, 80))
+    mismatch = import_one(
+        client,
+        project["id"],
+        filename="mismatch.png",
+        size=(120, 80),
+    )
     source_id = source["successful"][0]["image_id"]
     target_id = target["successful"][0]["image_id"]
     mismatch_id = mismatch["successful"][0]["image_id"]
@@ -195,7 +213,10 @@ def test_polygon_measurements_use_perspective_homography_in_physical_plane(
         f"/api/v1/mask-annotations/{mask_id}/measurement-profile",
         json={
             "base_revision": 1,
-            "centerline_points": [{"x": 10, "y": 15}, {"x": 30, "y": 15}],
+            "centerline_points": [
+                {"x": 10, "y": 15},
+                {"x": 30, "y": 15},
+            ],
             "surface_model": "none",
         },
     )
