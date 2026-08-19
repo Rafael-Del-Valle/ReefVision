@@ -13,6 +13,11 @@ from reefvision.schemas.classification_evaluation import (
 from reefvision.services.classification_evaluation import (
     ClassificationEvaluationService,
 )
+from reefvision.services.classification_evaluation_metrics_runtime import (
+    install_classification_evaluation_metrics_runtime,
+)
+
+install_classification_evaluation_metrics_runtime()
 
 router = APIRouter(tags=["classification-evaluation"])
 DbSession = Annotated[Session, Depends(get_db_session)]
