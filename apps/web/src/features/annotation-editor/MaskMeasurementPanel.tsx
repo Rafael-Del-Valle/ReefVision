@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
+import { CalibrationAssistant } from "./CalibrationAssistant";
 import {
   clearMeasurementCalibration,
   getMaskMeasurementProfile,
@@ -9,6 +10,7 @@ import {
   measurementExportUrl,
   updateMaskMeasurementProfile,
   updateMeasurementCalibration,
+  type MeasurementCalibration,
   type SurfaceModelKind,
 } from "./maskMeasurementsApi";
 import type { EditorMaskAnnotation } from "./types";
@@ -67,6 +69,7 @@ export function MaskMeasurementPanel({
     refetchOnWindowFocus: false,
     retry: false,
   });
+
   const profileQuery = useQuery({
     queryKey: ["mask-measurement-profile", selectedMask?.id ?? null],
     queryFn: ({ signal }) => {
@@ -111,6 +114,7 @@ export function MaskMeasurementPanel({
     }),
     [classFilter, speciesFilter, stateFilter],
   );
+
   const measurementsQuery = useQuery({
     queryKey: [
       "mask-measurements",
@@ -129,6 +133,14 @@ export function MaskMeasurementPanel({
     retry: false,
   });
 
+  async function acceptCalibration(calibration: MeasurementCalibration) {
+    queryClient.setQueryData(
+      ["measurement-calibration", imageId],
+      calibration,
+    );
+    await queryClient.invalidateQueries({ queryKey: ["mask-measurements"] });
+  }
+
   const calibrationMutation = useMutation({
     mutationFn: async () => {
       const scale = optionalNumber(distancePerPixel);
@@ -143,14 +155,9 @@ export function MaskMeasurementPanel({
         default_depth: optionalNumber(defaultDepth),
       });
     },
-    onSuccess: async (calibration) => {
-      queryClient.setQueryData(
-        ["measurement-calibration", imageId],
-        calibration,
-      );
-      await queryClient.invalidateQueries({ queryKey: ["mask-measurements"] });
-    },
+    onSuccess: acceptCalibration,
   });
+
   const clearCalibrationMutation = useMutation({
     mutationFn: () => clearMeasurementCalibration(imageId),
     onSuccess: async () => {
@@ -158,6 +165,7 @@ export function MaskMeasurementPanel({
       await queryClient.invalidateQueries({ queryKey: ["mask-measurements"] });
     },
   });
+
   const profileMutation = useMutation({
     mutationFn: async () => {
       if (!selectedMask || !profileQuery.data) {
@@ -243,6 +251,19 @@ export function MaskMeasurementPanel({
 
       <details>
         <summary>Image calibration</summary>
+        <details>
+          <summary>Scale Assistant</summary>
+          <CalibrationAssistant
+            projectId={projectId}
+            imageId={imageId}
+            defaultUnit={unit}
+            onApplied={acceptCalibration}
+          />
+        </details>
+        <p className="annotation-helper">
+          Manual calibration remains available as the fallback and for known
+          image scales that do not use a visible reference.
+        </p>
         <label>
           Distance per pixel
           <input
@@ -293,14 +314,31 @@ export function MaskMeasurementPanel({
             Clear
           </button>
         </div>
-        {(calibrationMutation.error ??
-          clearCalibrationMutation.error) instanceof Error && (
+        {(calibrationMutation.error ?? clearCalibrationMutation.error) instanceof
+          Error && (
           <p className="form-error">
-            {
-              (calibrationMutation.error ?? clearCalibrationMutation.error)
-                ?.message
-            }
+            {(calibrationMutation.error ?? clearCalibrationMutation.error)?.message}
           </p>
+        )}
+        {calibrationQuery.data && (
+          <ul className="system-details">
+            <li>Source: {calibrationQuery.data.source}</li>
+            {calibrationQuery.data.confidence != null && (
+              <li>
+                Calibration confidence:{" "}
+                {Math.round(calibrationQuery.data.confidence * 100)}%
+              </li>
+            )}
+            {calibrationQuery.data.profile_name && (
+              <li>Profile: {calibrationQuery.data.profile_name}</li>
+            )}
+            {calibrationQuery.data.perspective_homography && (
+              <li>
+                Perspective correction is available on the accepted reference
+                plane.
+              </li>
+            )}
+          </ul>
         )}
       </details>
 
@@ -441,8 +479,7 @@ export function MaskMeasurementPanel({
             <strong>Perimeter</strong>
             <span>
               {measurement.perimeter_pixels.toFixed(2)} px
-              {measurement.perimeter_physical != null &&
-              measurement.physical_unit
+              {measurement.perimeter_physical != null && measurement.physical_unit
                 ? ` | ${measurement.perimeter_physical.toFixed(4)} ${measurement.physical_unit}`
                 : ""}
             </span>
@@ -488,12 +525,17 @@ export function MaskMeasurementPanel({
                 : ""}
             </span>
           </div>
+          {measurement.perspective_corrected && (
+            <p className="annotation-helper">
+              Physical polygon/centerline measurements are perspective-corrected
+              on the accepted calibration plane.
+            </p>
+          )}
           {measurement.surface_area_model !== "none" && (
             <div className="annotation-selection-row">
               <strong>Surface-area estimate</strong>
               <span>
-                {measurement.surface_area_physical != null &&
-                measurement.physical_unit
+                {measurement.surface_area_physical != null && measurement.physical_unit
                   ? `${measurement.surface_area_physical.toFixed(4)} ${measurement.physical_unit}²`
                   : "Unavailable"}
               </span>
