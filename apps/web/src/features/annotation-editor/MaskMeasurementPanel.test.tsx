@@ -6,15 +6,20 @@ import {
   getMaskMeasurementProfile,
   getMaskMeasurements,
   getMeasurementCalibration,
+  getMeasurementCalibrationProfiles,
 } from "./maskMeasurementsApi";
 import { MaskMeasurementPanel } from "./MaskMeasurementPanel";
 import type { EditorMaskAnnotation } from "./types";
 
 vi.mock("./maskMeasurementsApi", () => ({
+  applyMeasurementCalibrationProfile: vi.fn(),
   clearMeasurementCalibration: vi.fn(),
+  detectMarkerCalibration: vi.fn(),
+  detectRulerCalibration: vi.fn(),
   getMaskMeasurementProfile: vi.fn(),
   getMaskMeasurements: vi.fn(),
   getMeasurementCalibration: vi.fn(),
+  getMeasurementCalibrationProfiles: vi.fn(),
   measurementExportUrl: vi.fn(
     (projectId: string, format: string) => `/exports/${projectId}/${format}`,
   ),
@@ -73,7 +78,9 @@ describe("MaskMeasurementPanel", () => {
     vi.mocked(getMaskMeasurements).mockReset();
     vi.mocked(getMeasurementCalibration).mockReset();
     vi.mocked(getMaskMeasurementProfile).mockReset();
+    vi.mocked(getMeasurementCalibrationProfiles).mockReset();
     vi.mocked(getMeasurementCalibration).mockResolvedValue(null);
+    vi.mocked(getMeasurementCalibrationProfiles).mockResolvedValue([]);
     vi.mocked(getMaskMeasurementProfile).mockResolvedValue({
       mask_annotation_id: selectedMask.id,
       image_id: "image-1",
@@ -122,6 +129,10 @@ describe("MaskMeasurementPanel", () => {
       surface_area_model: "none",
       surface_area_physical: null,
       surface_area_assumptions: [],
+      perspective_corrected: false,
+      calibration_source: null,
+      calibration_confidence: null,
+      calibration_profile_name: null,
     });
 
     renderPanel([selectedMask]);
@@ -141,6 +152,14 @@ describe("MaskMeasurementPanel", () => {
       },
       expect.any(AbortSignal),
     );
+  });
+
+  it("exposes the Scale Assistant without removing manual calibration", async () => {
+    renderPanel([selectedMask]);
+
+    expect(screen.getByText("Scale Assistant")).toBeInTheDocument();
+    expect(screen.getByText("Distance per pixel")).toBeInTheDocument();
+    expect(await screen.findByText("Detect ruler spacing")).toBeInTheDocument();
   });
 
   it("waits for unsaved edits before requesting measurements", () => {
