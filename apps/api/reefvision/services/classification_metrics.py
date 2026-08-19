@@ -77,7 +77,12 @@ def _class_curve(
                 false_negative += 1
         true_positive_rate = _safe_divide(true_positive, positives)
         false_positive_rate = _safe_divide(false_positive, negatives)
-        precision = _safe_divide(true_positive, true_positive + false_positive)
+        predicted_positive = true_positive + false_positive
+        precision = (
+            true_positive / predicted_positive
+            if predicted_positive
+            else 1.0
+        )
         recall = _safe_divide(true_positive, true_positive + false_negative)
         f1 = _safe_divide(2.0 * precision * recall, precision + recall)
         if best_f1 is None or f1 > best_f1 or (
@@ -161,6 +166,7 @@ def _temperature_calibration(
     if not observations or len(classes) < 2:
         return None, None
     eps = 1e-12
+    class_index = {class_id: index for index, class_id in enumerate(classes)}
 
     def nll(temperature: float) -> float:
         total = 0.0
@@ -173,16 +179,15 @@ def _temperature_calibration(
             maximum = max(logits)
             exponentials = [exp(value - maximum) for value in logits]
             denominator = sum(exponentials)
-            true_index = classes.index(observation.actual_label_class_id)
+            true_index = class_index[observation.actual_label_class_id]
             probability = exponentials[true_index] / denominator
             total -= log(max(eps, probability))
         return total / len(observations)
 
-    # Deterministic logarithmic search is sufficient for post-hoc reporting and avoids a
-    # heavyweight optimizer dependency in the packaged desktop runtime.
+    # Deterministic logarithmic search avoids a heavyweight optimizer dependency in the
+    # packaged desktop runtime while remaining reproducible across systems.
     candidates = [0.05 * (100.0 ** (index / 199.0)) for index in range(200)]
-    scored = [(nll(value), value) for value in candidates]
-    best_nll, best_temperature = min(scored)
+    best_nll, best_temperature = min((nll(value), value) for value in candidates)
     return best_temperature, best_nll
 
 
@@ -241,7 +246,9 @@ def build_classification_evaluation(
     classes = {
         item.actual_label_class_id for item in rows
     } | {item.predicted_label_class_id for item in rows}
+    probability_classes = set(classes)
     for item in rows:
+        probability_classes.update(item.probabilities_by_class_id)
         key = (item.actual_label_class_id, item.predicted_label_class_id)
         confusion[key] = confusion.get(key, 0) + 1
     ordered_classes = sorted(classes)
@@ -346,7 +353,7 @@ def build_classification_evaluation(
             usable += 1
             ranked = sorted(
                 item.probabilities_by_class_id,
-                key=item.probabilities_by_class_id.get,
+                key=lambda class_id: item.probabilities_by_class_id[class_id],
                 reverse=True,
             )[:raw_k]
             hits += item.actual_label_class_id in ranked
@@ -360,7 +367,10 @@ def build_classification_evaluation(
     top_label_brier = (
         mean((item.confidence - float(item.correct)) ** 2 for item in rows) if rows else None
     )
-    temperature, temperature_nll = _temperature_calibration(rows, ordered_classes)
+    temperature, temperature_nll = _temperature_calibration(
+        rows,
+        sorted(probability_classes),
+    )
     return ClassificationEvaluationResponse(
         project_id=project_id,
         model_id=model_id,
