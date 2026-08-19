@@ -47,6 +47,7 @@ class ProjectExchangeInspectionResponse(BaseModel):
     project_name: str | None
     section_counts: dict[str, int]
     included_media_count: int
+    included_generated_artifact_count: int = 0
     warnings: list[str]
     errors: list[str]
 
@@ -58,5 +59,6 @@ class ProjectExchangeImportResponse(BaseModel):
     source_manifest_sha256: str
     imported_counts: dict[str, int]
     copied_media_count: int
+    copied_generated_artifact_count: int = 0
     warnings: list[str]
     package: ProjectExchangePackageResponse
