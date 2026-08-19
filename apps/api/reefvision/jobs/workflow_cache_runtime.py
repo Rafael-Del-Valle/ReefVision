@@ -63,18 +63,19 @@ def _review_resumable_cached_outputs(
     node_id: str,
     cache_key: str,
 ) -> list[WorkflowArtifact]:
-    rows = list(
-        session.execute(
-            select(WorkflowArtifact, WorkflowRun)
-            .join(WorkflowRun, WorkflowRun.id == WorkflowArtifact.workflow_run_id)
-            .where(
-                WorkflowRun.project_id == run.project_id,
-                WorkflowArtifact.node_id == node_id,
-                WorkflowRun.status.in_(("succeeded", "failed")),
-            )
-            .order_by(WorkflowArtifact.created_at.desc(), WorkflowArtifact.id.desc())
+    result = session.execute(
+        select(WorkflowArtifact, WorkflowRun)
+        .join(WorkflowRun, WorkflowRun.id == WorkflowArtifact.workflow_run_id)
+        .where(
+            WorkflowRun.project_id == run.project_id,
+            WorkflowArtifact.node_id == node_id,
+            WorkflowRun.status.in_(("succeeded", "failed")),
         )
+        .order_by(WorkflowArtifact.created_at.desc(), WorkflowArtifact.id.desc())
     )
+    rows: list[tuple[WorkflowArtifact, WorkflowRun]] = [
+        (artifact, source_run) for artifact, source_run in result
+    ]
     return _select_cached_source_artifacts(
         rows,
         current_run_id=run.id,
