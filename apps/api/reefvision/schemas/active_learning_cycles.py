@@ -56,7 +56,20 @@ class ActiveLearningReviewProgressRequest(BaseModel):
 
 
 class ActiveLearningDatasetRecordRequest(BaseModel):
-    dataset_version_id: str = Field(min_length=1, max_length=36)
+    dataset_version_id: str | None = Field(default=None, max_length=36)
+    classification_dataset_snapshot_id: str | None = Field(default=None, max_length=36)
+
+    @model_validator(mode="after")
+    def exactly_one_dataset(self) -> ActiveLearningDatasetRecordRequest:
+        selected = int(bool(self.dataset_version_id)) + int(
+            bool(self.classification_dataset_snapshot_id)
+        )
+        if selected != 1:
+            raise ValueError(
+                "Choose exactly one immutable dataset: dataset_version_id or "
+                "classification_dataset_snapshot_id"
+            )
+        return self
 
 
 class ActiveLearningTrainingRecordRequest(BaseModel):
@@ -70,6 +83,8 @@ class ActiveLearningEvaluationRequest(BaseModel):
     candidate_model_id: str | None = Field(default=None, max_length=36)
     baseline_dataset_version_id: str | None = Field(default=None, max_length=36)
     candidate_dataset_version_id: str | None = Field(default=None, max_length=36)
+    baseline_classification_snapshot_id: str | None = Field(default=None, max_length=36)
+    candidate_classification_snapshot_id: str | None = Field(default=None, max_length=36)
     baseline_metric_schema_id: str | None = Field(default=None, max_length=200)
     candidate_metric_schema_id: str | None = Field(default=None, max_length=200)
 
@@ -102,6 +117,7 @@ class ActiveLearningCycleResponse(BaseModel):
     candidate_model_id: str | None
     promoted_model_id: str | None
     dataset_version_id: str | None
+    classification_dataset_snapshot_id: str | None = None
     training_run_id: str | None
     review_queue_id: str | None
     embedding_provider_id: str | None = None
