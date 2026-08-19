@@ -27,6 +27,7 @@ from reefvision.api.routes.raster_edits import router as raster_edits_router
 from reefvision.api.routes.review_queues import router as review_queues_router
 from reefvision.api.routes.system import router as system_router
 from reefvision.api.routes.training import router as training_router
+from reefvision.api.routes.video_science import router as video_science_router
 from reefvision.api.routes.videos import router as videos_router
 from reefvision.api.routes.workflow_graphs import router as workflow_graphs_router
 
@@ -37,6 +38,7 @@ api_router.include_router(system_router)
 api_router.include_router(training_router)
 api_router.include_router(classification_router)
 api_router.include_router(videos_router)
+api_router.include_router(video_science_router)
 api_router.include_router(backups_router)
 api_router.include_router(projects_router)
 api_router.include_router(project_exchange_router)
