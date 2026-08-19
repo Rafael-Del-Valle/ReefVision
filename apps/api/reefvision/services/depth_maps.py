@@ -111,24 +111,18 @@ def _point_row(
     return np.stack((x, y, z), axis=-1)
 
 
-def _triangle_areas(
-    first: NDArray[Any],
-    second: NDArray[Any],
-    third: NDArray[Any],
-) -> NDArray[Any]:
-    return 0.5 * np.linalg.norm(np.cross(second - first, third - first), axis=-1)
-
-
 def _visible_surface_area(
     values: NDArray[Any],
     valid: NDArray[Any],
     intrinsics: CameraIntrinsics,
 ) -> tuple[float | None, int]:
-    """Triangulate the visible metric-depth surface inside the mask.
+    """Estimate camera-visible 3D surface area from local camera-space tangents.
 
-    Only local triangles whose three vertices are finite, positive metric-depth mask pixels
-    are included. This estimates camera-visible surface geometry; it does not reconstruct
-    occluded or back-facing coral surfaces.
+    Each valid mask pixel contributes one local surface element when it has at least one
+    valid horizontal and vertical neighbor. Central differences are used when both neighbors
+    exist and one-sided differences are used at mask/image boundaries. This preserves the
+    correct footprint for a flat plane while allowing sloped/curved depth surfaces to have
+    larger visible area. Hidden and back-facing surfaces are never inferred.
     """
 
     height, width = values.shape
@@ -136,40 +130,77 @@ def _visible_surface_area(
         return None, 0
     columns = np.arange(width, dtype=np.float64) + 0.5
     area_sum = 0.0
-    triangle_count = 0
-    for row in range(height - 1):
-        top_valid = valid[row]
-        bottom_valid = valid[row + 1]
-        first_mask = top_valid[:-1] & top_valid[1:] & bottom_valid[:-1]
-        second_mask = bottom_valid[1:] & bottom_valid[:-1] & top_valid[1:]
-        if not np.any(first_mask) and not np.any(second_mask):
+    patch_count = 0
+
+    for row in range(height):
+        current_valid = valid[row]
+        if not np.any(current_valid):
             continue
+        current_points = _point_row(columns, row + 0.5, values[row], intrinsics)
+        previous_valid = valid[row - 1] if row > 0 else np.zeros(width, dtype=bool)
+        next_valid = valid[row + 1] if row + 1 < height else np.zeros(width, dtype=bool)
+        previous_points = (
+            _point_row(columns, row - 0.5, values[row - 1], intrinsics)
+            if row > 0
+            else current_points
+        )
+        next_points = (
+            _point_row(columns, row + 1.5, values[row + 1], intrinsics)
+            if row + 1 < height
+            else current_points
+        )
 
-        top_depth = values[row].astype(np.float64, copy=False)
-        bottom_depth = values[row + 1].astype(np.float64, copy=False)
-        top_points = _point_row(columns, row + 0.5, top_depth, intrinsics)
-        bottom_points = _point_row(columns, row + 1.5, bottom_depth, intrinsics)
+        left_valid = np.zeros(width, dtype=bool)
+        right_valid = np.zeros(width, dtype=bool)
+        left_valid[1:] = current_valid[:-1]
+        right_valid[:-1] = current_valid[1:]
 
-        if np.any(first_mask):
-            areas = _triangle_areas(
-                top_points[:-1],
-                top_points[1:],
-                bottom_points[:-1],
-            )
-            selected = areas[first_mask]
-            area_sum += float(np.sum(selected))
-            triangle_count += int(selected.size)
-        if np.any(second_mask):
-            areas = _triangle_areas(
-                bottom_points[1:],
-                bottom_points[:-1],
-                top_points[1:],
-            )
-            selected = areas[second_mask]
-            area_sum += float(np.sum(selected))
-            triangle_count += int(selected.size)
+        horizontal = np.zeros((width, 3), dtype=np.float64)
+        has_horizontal = np.zeros(width, dtype=bool)
+        both_horizontal = current_valid & left_valid & right_valid
+        if np.any(both_horizontal):
+            horizontal[both_horizontal] = (
+                current_points[np.flatnonzero(both_horizontal) + 1]
+                - current_points[np.flatnonzero(both_horizontal) - 1]
+            ) / 2.0
+            has_horizontal |= both_horizontal
+        right_only = current_valid & right_valid & ~both_horizontal
+        if np.any(right_only):
+            indices = np.flatnonzero(right_only)
+            horizontal[indices] = current_points[indices + 1] - current_points[indices]
+            has_horizontal |= right_only
+        left_only = current_valid & left_valid & ~both_horizontal & ~right_only
+        if np.any(left_only):
+            indices = np.flatnonzero(left_only)
+            horizontal[indices] = current_points[indices] - current_points[indices - 1]
+            has_horizontal |= left_only
 
-    return (area_sum if triangle_count else None), triangle_count
+        vertical = np.zeros((width, 3), dtype=np.float64)
+        has_vertical = np.zeros(width, dtype=bool)
+        both_vertical = current_valid & previous_valid & next_valid
+        if np.any(both_vertical):
+            vertical[both_vertical] = (
+                next_points[both_vertical] - previous_points[both_vertical]
+            ) / 2.0
+            has_vertical |= both_vertical
+        next_only = current_valid & next_valid & ~both_vertical
+        if np.any(next_only):
+            vertical[next_only] = next_points[next_only] - current_points[next_only]
+            has_vertical |= next_only
+        previous_only = current_valid & previous_valid & ~both_vertical & ~next_only
+        if np.any(previous_only):
+            vertical[previous_only] = current_points[previous_only] - previous_points[previous_only]
+            has_vertical |= previous_only
+
+        usable = current_valid & has_horizontal & has_vertical
+        if not np.any(usable):
+            continue
+        areas = np.linalg.norm(np.cross(horizontal[usable], vertical[usable]), axis=-1)
+        finite_areas = areas[np.isfinite(areas) & (areas > 0)]
+        area_sum += float(np.sum(finite_areas))
+        patch_count += int(finite_areas.size)
+
+    return (area_sum if patch_count else None), patch_count
 
 
 class DepthMapService:
@@ -392,7 +423,7 @@ class DepthMapService:
         intrinsics = _intrinsics(metadata)
         metric_area = metric_width = metric_height = None
         visible_surface_area_3d = None
-        surface_triangle_count = 0
+        surface_patch_count = 0
         centroid_x = centroid_y = centroid_z = None
         area_unit = None
         physical_measurements_valid = False
@@ -419,27 +450,28 @@ class DepthMapService:
                 centroid_x = float(np.mean(x))
                 centroid_y = float(np.mean(y))
                 centroid_z = float(np.mean(z))
-                visible_surface_area_3d, surface_triangle_count = _visible_surface_area(
+                visible_surface_area_3d, surface_patch_count = _visible_surface_area(
                     values,
                     valid,
                     intrinsics,
                 )
                 area_unit = f"{depth_map.unit}^2"
                 physical_measurements_valid = True
-                method = "metric_depth_pinhole_projection_and_visible_surface_triangulation"
+                method = "metric_depth_pinhole_projection_and_visible_surface_differential"
                 warnings.append(
                     "Projected area is the camera-facing pinhole projection of valid mask "
                     "pixels; it is not surface area on a strongly angled or curved coral."
                 )
                 if visible_surface_area_3d is None:
                     warnings.append(
-                        "The mask did not contain enough adjacent valid metric-depth pixels to "
-                        "triangulate a visible 3D surface."
+                        "The mask did not contain enough neighboring valid metric-depth pixels "
+                        "to estimate a camera-visible 3D surface."
                     )
                 else:
                     warnings.append(
-                        "Visible 3D surface area triangulates only the camera-visible depth "
-                        "surface. Occluded and back-facing coral surfaces are not reconstructed."
+                        "Visible 3D surface area estimates only the camera-visible depth surface "
+                        "from local 3D tangents. Occluded and back-facing coral surfaces are not "
+                        "reconstructed."
                     )
             if source_kind == "metric_monocular_estimate":
                 warnings.append(
@@ -479,7 +511,7 @@ class DepthMapService:
             metric_area=metric_area,
             metric_projected_area=metric_area,
             visible_surface_area_3d=visible_surface_area_3d,
-            surface_triangle_count=surface_triangle_count,
+            surface_patch_count=surface_patch_count,
             metric_width=metric_width,
             metric_height=metric_height,
             centroid_x=centroid_x,
