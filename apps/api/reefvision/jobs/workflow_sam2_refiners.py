@@ -136,13 +136,17 @@ workflow_consensus.run_independent_segmentation_pipeline = run_pipeline_with_reg
 
 # Worker startup imports these modules for workflow definition/runtime extensions. Install
 # typed ports first, then the full science bridge, then wrappers that intentionally replace
-# its handlers. This ordering is part of the runtime contract: behavior, probability-only
-# Active Learning, and calibrated 3D measurement must be installed after the science bridge.
+# its handlers. This ordering is part of the runtime contract: behavior configuration loads
+# before its frame/time window extension; probability-only Active Learning and calibrated
+# 3D measurement also install after the science bridge.
 from reefvision.services import (  # noqa: E402,F401
     workflow_definition_extensions as _workflow_definition_extensions,
 )
 from reefvision.jobs import workflow_science_runtime as _workflow_science_runtime  # noqa: E402,F401
 from reefvision.jobs import workflow_behavior_runtime as _workflow_behavior_runtime  # noqa: E402,F401
+from reefvision.jobs import (  # noqa: E402,F401
+    workflow_behavior_window_runtime as _workflow_behavior_window_runtime,
+)
 from reefvision.jobs import (  # noqa: E402,F401
     workflow_active_learning_runtime as _workflow_active_learning_runtime,
 )
