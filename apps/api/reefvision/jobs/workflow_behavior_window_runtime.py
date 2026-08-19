@@ -9,12 +9,14 @@ represented the requested interval.
 from __future__ import annotations
 
 import math
-from itertools import pairwise
 from statistics import mean
 from typing import Any
 
-from reefvision.db.models import VideoAsset
+from sqlalchemy.orm import Session, sessionmaker
+
+from reefvision.db.models import VideoAsset, WorkflowArtifact, WorkflowRun
 from reefvision.jobs import workflow_behavior_runtime, workflow_runs
+from reefvision.schemas.videos import VideoAnalyticsRequest
 
 _ORIGINAL_BEHAVIOR_REQUEST = workflow_behavior_runtime._behavior_request
 _ORIGINAL_BEHAVIOR_SNAPSHOT = workflow_behavior_runtime._configurable_behavior_snapshot
@@ -342,13 +344,17 @@ def _window_aware_behavior_request(
     configuration: dict[str, Any],
     *,
     persist_result: bool,
-):
+) -> VideoAnalyticsRequest:
     if _has_window(configuration):
         persist_result = False
     return _ORIGINAL_BEHAVIOR_REQUEST(configuration, persist_result=persist_result)
 
 
-def _windowed_behavior_snapshot(factory, run, inputs):
+def _windowed_behavior_snapshot(
+    factory: sessionmaker[Session],
+    run: WorkflowRun,
+    inputs: list[WorkflowArtifact],
+) -> workflow_runs.ArtifactOutputs:
     configuration = workflow_behavior_runtime._current_node_configuration(factory, run)
     if not _has_window(configuration):
         return _ORIGINAL_BEHAVIOR_SNAPSHOT(factory, run, inputs)
@@ -435,7 +441,7 @@ def _windowed_behavior_snapshot(factory, run, inputs):
                 selected_ids,
                 _window_aware_behavior_request(configuration, persist_result=False),
             )
-            source_revisions = []
+            source_revisions: list[dict[str, Any]] = []
             observed_by_track = {
                 str(track["track_id"]): int(track["persisted_observation_count"])
                 for track in windowed_tracks
