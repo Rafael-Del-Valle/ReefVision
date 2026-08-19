@@ -5,9 +5,15 @@ fails closed while proposals are pending, then the workflow is rerun after revie
 reuse therefore preserves the exact cached artifact payload and checksum. Cache-hit
 provenance already lives in WorkflowRun.node_state_json; mutating the copied artifact payload
 would change downstream cache keys and incorrectly regenerate reviewed segmentation masks.
+
+Cache lookup also chooses one newest eligible source run. Mixing outputs from multiple
+historical runs can duplicate the same node/port in the destination run and violate the
+workflow artifact uniqueness contract.
 """
 
 from __future__ import annotations
+
+from collections.abc import Iterable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -23,6 +29,31 @@ def _node_cache_eligible(source_run: WorkflowRun, node_id: str) -> bool:
         return False
     raw_state = dict(source_run.node_state_json or {}).get(node_id)
     return isinstance(raw_state, dict) and raw_state.get("status") == "succeeded"
+
+
+def _select_cached_source_artifacts(
+    rows: Iterable[tuple[WorkflowArtifact, WorkflowRun]],
+    *,
+    current_run_id: str,
+    node_id: str,
+    cache_key: str,
+) -> list[WorkflowArtifact]:
+    """Select the complete output set from one newest eligible source run."""
+
+    matches = [
+        (artifact, source_run)
+        for artifact, source_run in rows
+        if source_run.id != current_run_id
+        and _node_cache_eligible(source_run, node_id)
+        and workflow_runs._artifact_payload(artifact).get("_cache_key") == cache_key
+    ]
+    if not matches:
+        return []
+    source_run_id = matches[0][1].id
+    return sorted(
+        [artifact for artifact, source_run in matches if source_run.id == source_run_id],
+        key=lambda artifact: artifact.port_name,
+    )
 
 
 def _review_resumable_cached_outputs(
@@ -41,16 +72,15 @@ def _review_resumable_cached_outputs(
                 WorkflowArtifact.node_id == node_id,
                 WorkflowRun.status.in_(("succeeded", "failed")),
             )
-            .order_by(WorkflowArtifact.created_at.desc())
+            .order_by(WorkflowArtifact.created_at.desc(), WorkflowArtifact.id.desc())
         )
     )
-    return [
-        artifact
-        for artifact, source_run in rows
-        if source_run.id != run.id
-        and _node_cache_eligible(source_run, node_id)
-        and workflow_runs._artifact_payload(artifact).get("_cache_key") == cache_key
-    ]
+    return _select_cached_source_artifacts(
+        rows,
+        current_run_id=run.id,
+        node_id=node_id,
+        cache_key=cache_key,
+    )
 
 
 def _stable_copy_cached_outputs(
