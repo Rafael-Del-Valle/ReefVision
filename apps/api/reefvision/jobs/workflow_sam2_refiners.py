@@ -135,12 +135,16 @@ def run_pipeline_with_registered_sam2(
 workflow_consensus.run_independent_segmentation_pipeline = run_pipeline_with_registered_sam2
 
 # Worker startup imports these modules for workflow definition/runtime extensions. Install
-# typed ports first, then the full science bridge. Depth-artifact enrichment wraps the base
-# depth node before downstream measurement wrappers. Segmentation unification loads after
-# consensus has installed its inference wrapper; the review resolver loads last so all
-# scientific measurement modes fail closed on unreviewed mask proposals.
+# typed ports first, then the full science bridge. The segmentation-catalog patch loads
+# during process import so the later advanced-provider patch composes on top of the accurate
+# SAM/SAM2/MobileSAM/FastSAM capability surface. Segmentation unification loads after
+# consensus; the review resolver loads last so scientific measurement fails closed on
+# unreviewed mask proposals.
 from reefvision.services import (  # noqa: E402,F401
     workflow_definition_extensions as _workflow_definition_extensions,
+)
+from reefvision.ml import (  # noqa: E402,F401
+    segmentation_catalog_runtime as _segmentation_catalog_runtime,
 )
 from reefvision.jobs import workflow_science_runtime as _workflow_science_runtime  # noqa: E402,F401
 from reefvision.jobs import (  # noqa: E402,F401
