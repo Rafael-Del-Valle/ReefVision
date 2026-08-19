@@ -199,7 +199,7 @@ class DepthAwareMaskMeasurementResponse(BaseModel):
     metric_area: float | None
     metric_projected_area: float | None = None
     visible_surface_area_3d: float | None = None
-    surface_triangle_count: int = 0
+    surface_patch_count: int = 0
     metric_width: float | None
     metric_height: float | None
     centroid_x: float | None
