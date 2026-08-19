@@ -1,7 +1,10 @@
 import io
 import os
+import sys
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 from reefvision.config import clear_settings_cache
 from reefvision.desktop import (
@@ -9,6 +12,7 @@ from reefvision.desktop import (
     build_settings,
     parse_args,
     project_root,
+    require_scale_assistant_marker_runtime,
     resolve_alembic_paths,
     resolve_server_port,
     watch_shutdown_stream,
@@ -76,6 +80,23 @@ def test_parse_args_enables_packaged_self_test_without_starting_server() -> None
     assert options.run_migrations is True
     assert options.data_dir == Path("C:/reefvision-self-test")
     assert options.log_file == Path("C:/reefvision-self-test.log")
+
+
+def test_scale_assistant_marker_runtime_accepts_opencv_contrib(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "cv2", SimpleNamespace(aruco=SimpleNamespace()))
+
+    require_scale_assistant_marker_runtime()
+
+
+def test_scale_assistant_marker_runtime_rejects_base_opencv(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "cv2", SimpleNamespace())
+
+    with pytest.raises(RuntimeError, match="opencv-contrib"):
+        require_scale_assistant_marker_runtime()
 
 
 def test_resolve_server_port_reads_ephemeral_listener() -> None:
