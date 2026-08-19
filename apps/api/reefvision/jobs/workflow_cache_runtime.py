@@ -53,4 +53,9 @@ def _review_resumable_cached_outputs(
     ]
 
 
-workflow_runs._cached_outputs = _review_resumable_cached_outputs
+def install_workflow_cache_runtime() -> None:
+    if workflow_runs._cached_outputs is not _review_resumable_cached_outputs:
+        workflow_runs._cached_outputs = _review_resumable_cached_outputs
+
+
+install_workflow_cache_runtime()
