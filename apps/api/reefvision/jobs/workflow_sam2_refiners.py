@@ -134,10 +134,11 @@ def run_pipeline_with_registered_sam2(
 
 workflow_consensus.run_independent_segmentation_pipeline = run_pipeline_with_registered_sam2
 
-# Worker startup imports these modules for workflow runtime extensions. Import the full
-# science bridge first, then probability inference/selection, then calibrated 3D video
-# measurement. The final module wraps the shared scientific measurement handler instead of
-# introducing a second workflow executor.
+# Worker startup imports these modules for workflow definition/runtime extensions. Install
+# typed ports and mode-aware validation first, then the full science bridge,
+# probability inference/selection, and calibrated 3D video measurement. The final module
+# wraps the shared scientific measurement handler instead of introducing a second executor.
+from reefvision.services import workflow_definition_extensions as _workflow_definition_extensions  # noqa: E402,F401
 from reefvision.jobs import workflow_science_runtime as _workflow_science_runtime  # noqa: E402,F401
 from reefvision.jobs import workflow_active_learning_runtime as _workflow_active_learning_runtime  # noqa: E402,F401
 from reefvision.jobs import workflow_probability_only_active_learning as _workflow_probability_only_active_learning  # noqa: E402,F401
