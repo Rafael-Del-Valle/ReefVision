@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -28,6 +28,38 @@ class ClassificationDatasetCreateRequest(BaseModel):
     ratios: ClassificationDatasetRatios = Field(default_factory=ClassificationDatasetRatios)
     require_verified_masks: bool = True
     created_by: str = Field(default="local_user", min_length=1, max_length=100)
+
+
+class ClassificationSnapshotTrainingRequest(BaseModel):
+    """Launch single-label Ultralytics training from an immutable classification snapshot."""
+
+    run_name: str = Field(min_length=1, max_length=200)
+    architecture: str = Field(default="yolo11n-cls", min_length=1, max_length=200)
+    initial_checkpoint_model_id: str | None = Field(default=None, max_length=36)
+    epochs: int = Field(default=100, ge=1, le=10000)
+    patience: int = Field(default=30, ge=0, le=10000)
+    batch: int = Field(default=16, ge=1, le=4096)
+    imgsz: int = Field(default=224, ge=32, le=4096)
+    device: str = Field(default="auto", min_length=1, max_length=60)
+    precision: Literal["fp32", "amp"] = "amp"
+    random_seed: int | None = None
+    minimum_crop_size_px: int = Field(default=10, ge=1, le=8192)
+    padding_fraction: float = Field(default=0.0, ge=0.0, le=2.0)
+    mask_background: Literal["keep", "black"] = "black"
+    notes: str | None = Field(default=None, max_length=5000)
+
+
+class ClassificationSnapshotTrainingResponse(BaseModel):
+    training_run_id: str
+    job_id: str
+    project_id: str
+    snapshot_id: str
+    snapshot_manifest_sha256: str
+    split_manifest_sha256: str
+    target_kind: str
+    label_set_id: str
+    cardinality: str
+    status: str
 
 
 class ClassificationDatasetSnapshotResponse(BaseModel):
