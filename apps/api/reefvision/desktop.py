@@ -58,8 +58,9 @@ def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
         "--self-test",
         action="store_true",
         help=(
-            "Validate packaged migrations, ML provider imports, and FastAPI/OpenAPI "
-            "construction, then exit without starting the API server"
+            "Validate packaged migrations, ML provider imports, Scale Assistant marker "
+            "runtime, and FastAPI/OpenAPI construction, then exit without starting the "
+            "API server"
         ),
     )
     namespace = parser.parse_args(argv)
@@ -199,6 +200,22 @@ def run_pending_migrations(settings: Settings) -> None:
     command.upgrade(config, "head")
 
 
+def require_scale_assistant_marker_runtime() -> None:
+    """Require the packaged OpenCV contrib marker module used by Scale Assistant."""
+
+    try:
+        import cv2
+    except ImportError as exc:
+        raise RuntimeError(
+            "Packaged ReefVision is missing OpenCV required by Scale Assistant"
+        ) from exc
+    if not hasattr(cv2, "aruco"):
+        raise RuntimeError(
+            "Packaged OpenCV does not expose cv2.aruco; ReefVision requires the "
+            "opencv-contrib runtime for ArUco/ChArUco Scale Assistant calibration"
+        )
+
+
 def run_self_test(settings: Settings) -> int:
     """Exercise packaged resources and providers without opening a server socket."""
 
@@ -216,6 +233,7 @@ def run_self_test(settings: Settings) -> int:
     provider_runtime = settings.resolved_data_dir / "provider-runtime-self-test"
     configure_provider_runtime(data_dir=provider_runtime)
     require_all_implemented_providers_ready()
+    require_scale_assistant_marker_runtime()
 
     from reefvision.main import create_app
 
