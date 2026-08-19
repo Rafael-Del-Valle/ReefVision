@@ -3,6 +3,7 @@ from reefvision.services.workflow_definition_extensions import (
 )
 from reefvision.services.workflow_full_platform_templates import (
     classification_uncertainty_review_template,
+    configurable_fish_behavior_template,
     depth_aware_coral_measurement_template,
 )
 from reefvision.services.workflows import NODE_DEFINITIONS
@@ -46,5 +47,26 @@ def test_depth_aware_measurement_template_connects_depth_maps_to_measurement() -
         and edge.source_port == "depth_maps"
         and edge.target_node_id == "measure"
         and edge.target_port == "depth_maps"
+        for edge in template.workflow.edges
+    )
+
+
+def test_configurable_behavior_template_exposes_research_controls() -> None:
+    template = configurable_fish_behavior_template()
+    nodes = {node.id: node for node in template.workflow.nodes}
+    configuration = nodes["behavior"].configuration
+
+    assert nodes["behavior"].node_type == "behavior_analysis"
+    assert configuration["sampling"] == "interpolated"
+    assert configuration["heatmap_bins_x"] == 20
+    assert configuration["heatmap_bins_y"] == 20
+    assert configuration["include_saved_zones"] is True
+    assert configuration["zones"] == []
+    assert "activity_speed_threshold_pixels_per_second" in configuration
+    assert any(
+        edge.source_node_id == "track"
+        and edge.source_port == "tracks"
+        and edge.target_node_id == "behavior"
+        and edge.target_port == "tracks"
         for edge in template.workflow.edges
     )
