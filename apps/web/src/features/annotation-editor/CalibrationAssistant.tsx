@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   applyMeasurementCalibrationProfile,
@@ -57,6 +57,16 @@ export function CalibrationAssistant({
   const [selectedProfileImageId, setSelectedProfileImageId] = useState("");
   const [confirmSameSetup, setConfirmSameSetup] = useState(false);
 
+  useEffect(() => {
+    setUnit(defaultUnit || "mm");
+    setProfileName("");
+    setRulerReferenceLength("");
+    setRulerCandidate(null);
+    setMarkerCandidate(null);
+    setSelectedProfileImageId("");
+    setConfirmSameSetup(false);
+  }, [defaultUnit, imageId]);
+
   const profilesQuery = useQuery({
     queryKey: ["measurement-calibration-profiles", projectId],
     queryFn: ({ signal }) => getMeasurementCalibrationProfiles(projectId, signal),
@@ -80,7 +90,9 @@ export function CalibrationAssistant({
 
   const rulerApplyMutation = useMutation({
     mutationFn: async () => {
-      if (!rulerCandidate) throw new Error("Detect a ruler candidate first");
+      if (!rulerCandidate || rulerCandidate.image_id !== imageId) {
+        throw new Error("Detect a ruler candidate for the current image first");
+      }
       const referenceLength = positiveNumber(
         rulerReferenceLength,
         "Known ruler interval",
@@ -146,7 +158,9 @@ export function CalibrationAssistant({
 
   const markerApplyMutation = useMutation({
     mutationFn: async () => {
-      if (!markerCandidate) throw new Error("Detect a marker candidate first");
+      if (!markerCandidate || markerCandidate.image_id !== imageId) {
+        throw new Error("Detect a marker candidate for the current image first");
+      }
       return updateMeasurementCalibration(imageId, {
         ...markerCandidate.calibration,
         profile_name: profileName.trim() || null,
