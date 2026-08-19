@@ -138,8 +138,16 @@ workflow_consensus.run_independent_segmentation_pipeline = run_pipeline_with_reg
 # typed ports and mode-aware validation first, then the full science bridge,
 # probability inference/selection, and calibrated 3D video measurement. The final module
 # wraps the shared scientific measurement handler instead of introducing a second executor.
-from reefvision.services import workflow_definition_extensions as _workflow_definition_extensions  # noqa: E402,F401
+from reefvision.jobs import (  # noqa: E402
+    workflow_active_learning_runtime as _workflow_active_learning_runtime,
+)
+from reefvision.jobs import (  # noqa: E402
+    workflow_probability_only_active_learning as _workflow_probability_only_active_learning,
+)
 from reefvision.jobs import workflow_science_runtime as _workflow_science_runtime  # noqa: E402,F401
-from reefvision.jobs import workflow_active_learning_runtime as _workflow_active_learning_runtime  # noqa: E402,F401
-from reefvision.jobs import workflow_probability_only_active_learning as _workflow_probability_only_active_learning  # noqa: E402,F401
-from reefvision.jobs import workflow_video_depth_3d_runtime as _workflow_video_depth_3d_runtime  # noqa: E402,F401
+from reefvision.jobs import (  # noqa: E402
+    workflow_video_depth_3d_runtime as _workflow_video_depth_3d_runtime,
+)
+from reefvision.services import (  # noqa: E402
+    workflow_definition_extensions as _workflow_definition_extensions,
+)
