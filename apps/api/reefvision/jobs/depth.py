@@ -15,6 +15,16 @@ from reefvision.storage.depth_maps import write_depth_map
 from reefvision.storage.projects import resolve_managed_project_path
 
 
+def _generated_depth_source_kind(provider_id: str, depth_kind: str) -> str:
+    if provider_id == "luminance_relative":
+        return "relative_fixture"
+    if provider_id == "depth_anything_v2_relative":
+        return "relative_monocular"
+    if provider_id == "depth_anything_v2_metric":
+        return "metric_monocular_estimate"
+    return "relative_imported" if depth_kind == "relative" else "imported_metric"
+
+
 def process_depth_map_job(
     settings: Settings,
     factory: sessionmaker[Session],
@@ -36,6 +46,7 @@ def process_depth_map_job(
         provider_id = str(request["provider_id"])
         model_id = str(request["model_id"])
         depth_kind = str(request["depth_kind"])
+        depth_source_kind = _generated_depth_source_kind(provider_id, depth_kind)
         with factory() as session:
             image = session.get(ImageAsset, image_id)
             project = session.get(Project, image.project_id) if image is not None else None
@@ -119,6 +130,7 @@ def process_depth_map_job(
                 **runtime_metadata,
                 "source_image_sha256": image.sha256,
                 "generation_request": request,
+                "depth_source_kind": depth_source_kind,
             }
             camera_intrinsics = request.get("camera_intrinsics")
             if isinstance(camera_intrinsics, dict):
@@ -132,6 +144,7 @@ def process_depth_map_job(
                 "stage": "completed",
                 "depth_map_id": depth_map.id,
                 "depth_kind": depth_kind,
+                "depth_source_kind": depth_source_kind,
                 "minimum_depth": depth_map.minimum_depth,
                 "maximum_depth": depth_map.maximum_depth,
                 "median_depth": depth_map.median_depth,
