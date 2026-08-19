@@ -11,7 +11,9 @@ import {
   listClassificationDatasetSnapshots,
   listClassificationLabelSets,
   listPendingClassificationPredictions,
+  trainClassificationDatasetSnapshot,
   updateClassificationLabelSet,
+  type ClassificationDatasetSnapshot,
   type ClassificationLabelSet,
 } from "./classificationManagementApi";
 
@@ -126,6 +128,19 @@ export function ClassificationManagementPanel({ project }: { project: Project })
     },
   });
 
+  const trainSnapshot = useMutation({
+    mutationFn: (snapshot: ClassificationDatasetSnapshot) =>
+      trainClassificationDatasetSnapshot(project.id, snapshot.id, {
+        run_name: `${snapshot.name} classifier`,
+      }),
+    onSuccess: (result, snapshot) => {
+      setMessage(
+        `${snapshot.name} training queued as run ${result.training_run_id.slice(0, 8)}…`,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["training_runs"] });
+    },
+  });
+
   const datasetLabelSets = useMemo(
     () =>
       labelSets.data?.filter((item) =>
@@ -168,7 +183,8 @@ export function ClassificationManagementPanel({ project }: { project: Project })
     comparison.error ??
     saveLabelSet.error ??
     bulkReview.error ??
-    createSnapshot.error;
+    createSnapshot.error ??
+    trainSnapshot.error;
 
   return (
     <section className="dashboard-panel">
@@ -427,17 +443,34 @@ export function ClassificationManagementPanel({ project }: { project: Project })
             {createSnapshot.isPending ? "Freezing..." : "Create immutable snapshot"}
           </button>
           <div className="dashboard-list">
-            {snapshots.data?.map((item) => (
-              <div key={item.id} className="dashboard-row">
-                <div>
-                  <strong>{item.name}</strong>
-                  <p>
-                    {item.target_kind} · {item.cardinality} · {item.sample_count} samples
-                  </p>
-                  <small>{item.manifest_sha256.slice(0, 16)}…</small>
+            {snapshots.data?.map((item) => {
+              const trainable = item.cardinality === "single" && item.class_count >= 2;
+              return (
+                <div key={item.id} className="dashboard-row">
+                  <div>
+                    <strong>{item.name}</strong>
+                    <p>
+                      {item.target_kind} · {item.cardinality} · {item.sample_count} samples
+                    </p>
+                    <small>{item.manifest_sha256.slice(0, 16)}…</small>
+                    {!trainable && (
+                      <small>
+                        Multi-label or single-class snapshots remain exportable, but this
+                        Ultralytics training path requires at least two single-label classes.
+                      </small>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={!trainable || trainSnapshot.isPending}
+                    onClick={() => trainSnapshot.mutate(item)}
+                  >
+                    {trainSnapshot.isPending ? "Queueing..." : "Train classifier"}
+                  </button>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </article>
       </div>
