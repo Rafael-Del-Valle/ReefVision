@@ -77,6 +77,17 @@ Never run upgrade or uninstall acceptance against a personal ReefVision installa
 
 Administrative extraction proves package readability, required-file presence, migration startup, and packaged-backend self-test behavior. It is not a substitute for clean-machine evidence. Before ReefVision 1.0 release, record a safe VM or disposable-machine test covering clean install, first launch, restart, upgrade over the previous release, uninstall, and preservation of an isolated project/data directory.
 
+Use the guarded clean-install harness on that disposable machine:
+
+```powershell
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\acceptance-windows-clean-install.ps1 `
+  -InstallerPath .\apps\web\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\msi\ReefVision_1.7.0_x64_en-US.msi `
+  -AcceptanceRoot C:\reefvision-disposable-acceptance `
+  -DisposableTest
+```
+
+The harness refuses to run without the explicit disposable-test switch, refuses normal ReefVision app-data and repository paths, refuses machines with an existing ReefVision registration, and only removes its own marked run directory. Supply `-PreviousInstallerPath` and `-PreviousInstallerSupportsIsolatedAcceptance` for an older MSI that implements the same marker-gated data-root contract; otherwise upgrade is recorded as `SKIPPED — previous installer not supplied`. See `docs/REEFVISION_1_0_RELEASE_EVIDENCE.md` for the evidence matrix.
+
 ## Common Windows packaging issues
 
 ### Installer staging failures

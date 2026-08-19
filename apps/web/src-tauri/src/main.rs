@@ -30,6 +30,9 @@ const BACKEND_GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 const BACKEND_FORCE_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 const BACKEND_SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const DEV_DATA_DIR_ENV: &str = "REEFVISION_DESKTOP_DATA_DIR";
+const ACCEPTANCE_MODE_ENV: &str = "REEFVISION_WINDOWS_ACCEPTANCE";
+const ACCEPTANCE_DATA_DIR_ENV: &str = "REEFVISION_ACCEPTANCE_DATA_DIR";
+const ACCEPTANCE_MARKER: &str = ".reefvision-clean-install-acceptance";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -206,7 +209,39 @@ fn desktop_dev_fallback_data_dir() -> std::io::Result<PathBuf> {
     Ok(workspace_root()?.join(".desktop").join("dev-data"))
 }
 
+fn acceptance_data_dir_from_environment() -> std::io::Result<Option<PathBuf>> {
+    if std::env::var_os(ACCEPTANCE_MODE_ENV).as_deref() != Some(OsStr::new("1")) {
+        return Ok(None);
+    }
+
+    let data_dir = std::env::var_os(ACCEPTANCE_DATA_DIR_ENV).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("{ACCEPTANCE_DATA_DIR_ENV} is required in acceptance mode"),
+        )
+    })?;
+    let data_dir = PathBuf::from(data_dir);
+    if !data_dir.is_absolute() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("{ACCEPTANCE_DATA_DIR_ENV} must be an absolute path"),
+        ));
+    }
+    if !data_dir.join(ACCEPTANCE_MARKER).is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!("Acceptance data directory is missing the required {ACCEPTANCE_MARKER} marker"),
+        ));
+    }
+    ensure_directory(&data_dir)?;
+    Ok(Some(data_dir))
+}
+
 fn resolve_desktop_data_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
+    if let Some(data_dir) = acceptance_data_dir_from_environment()? {
+        return Ok(data_dir);
+    }
+
     if cfg!(debug_assertions) {
         if let Some(override_path) = std::env::var_os(DEV_DATA_DIR_ENV) {
             let override_path = PathBuf::from(override_path);
@@ -713,5 +748,25 @@ mod tests {
             fallback,
             workspace_root().unwrap().join(".desktop").join("dev-data")
         );
+    }
+
+    #[test]
+    fn acceptance_data_dir_requires_explicit_mode_path_and_marker() {
+        let token = format!("reefvision-acceptance-{}", std::process::id());
+        let data_dir = std::env::temp_dir().join(token);
+        fs::create_dir_all(&data_dir).unwrap();
+        std::env::set_var(ACCEPTANCE_MODE_ENV, "1");
+        std::env::set_var(ACCEPTANCE_DATA_DIR_ENV, &data_dir);
+
+        assert!(acceptance_data_dir_from_environment().is_err());
+        fs::write(data_dir.join(ACCEPTANCE_MARKER), b"acceptance-only\n").unwrap();
+        assert_eq!(
+            acceptance_data_dir_from_environment().unwrap(),
+            Some(data_dir.clone())
+        );
+
+        std::env::remove_var(ACCEPTANCE_MODE_ENV);
+        std::env::remove_var(ACCEPTANCE_DATA_DIR_ENV);
+        fs::remove_dir_all(data_dir).unwrap();
     }
 }
