@@ -16,6 +16,9 @@ from reefvision.jobs.advanced_ultralytics_training import (
     _execute_tuning,
     _execute_validation,
 )
+from reefvision.jobs.classification_snapshot_integrity_runtime import (
+    install_snapshot_integrity_runtime,
+)
 from reefvision.jobs.classification_snapshot_training import (
     process_snapshot_classification_training_job,
 )
@@ -28,6 +31,8 @@ from reefvision.ml.semantic_segmentation import SEMANTIC_SEGMENTATION_TASK
 from reefvision.ml.training_devices import resolve_training_device
 from reefvision.ml.ultralytics_tuning import normalize_tuning_config
 from reefvision.storage.projects import resolve_managed_project_path
+
+install_snapshot_integrity_runtime()
 
 # The stable task workers resolve their device at launch time. Replace only their
 # module-local training resolver; inference and Prompt Assist retain stricter
