@@ -49,3 +49,14 @@ class ProjectExchangeInspectionResponse(BaseModel):
     included_media_count: int
     warnings: list[str]
     errors: list[str]
+
+
+class ProjectExchangeImportResponse(BaseModel):
+    project_id: str
+    project_name: str
+    project_slug: str
+    source_manifest_sha256: str
+    imported_counts: dict[str, int]
+    copied_media_count: int
+    warnings: list[str]
+    package: ProjectExchangePackageResponse
