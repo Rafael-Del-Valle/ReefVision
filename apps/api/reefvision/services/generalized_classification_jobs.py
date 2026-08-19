@@ -21,6 +21,32 @@ def _normalized_scope(value: object) -> str:
     return scope
 
 
+def _require_snapshot_preprocessing_match(
+    model_metadata: dict[str, object],
+    request: ClassificationInferenceRequest,
+) -> None:
+    if request.target_kind not in {"mask", "fragment"}:
+        return
+    trained_minimum = int(model_metadata.get("minimum_crop_size_px", 10))
+    trained_padding = float(model_metadata.get("padding_fraction", 0.0))
+    trained_background = str(model_metadata.get("mask_background", "black"))
+    if request.minimum_crop_size_px != trained_minimum:
+        raise ValidationError(
+            "Snapshot-derived classifiers must use the same minimum crop size used during "
+            f"training ({trained_minimum}px)"
+        )
+    if abs(request.padding_fraction - trained_padding) > 1e-12:
+        raise ValidationError(
+            "Snapshot-derived classifiers must use the same crop padding used during training "
+            f"({trained_padding})"
+        )
+    if request.mask_background != trained_background:
+        raise ValidationError(
+            "Snapshot-derived classifiers must use the same mask background used during training "
+            f"({trained_background!r})"
+        )
+
+
 class GeneralizedClassificationJobService:
     def __init__(self, session: Session, settings: Settings) -> None:
         self.session = session
@@ -75,6 +101,8 @@ class GeneralizedClassificationJobService:
                 f"This classifier was trained for classification label set {trained_label_set!r}; "
                 f"requested {request.label_set!r}"
             )
+        if scope_locked:
+            _require_snapshot_preprocessing_match(model_metadata, request)
 
         requested_images = list(dict.fromkeys(request.image_ids))
         images = (
@@ -151,6 +179,7 @@ class GeneralizedClassificationJobService:
                 "trained_classification_scope": trained_scope or None,
                 "trained_classification_label_set": trained_label_set or None,
                 "classification_scope_locked": scope_locked,
+                "preprocessing_locked": scope_locked,
             },
         )
         self.session.add(job)
