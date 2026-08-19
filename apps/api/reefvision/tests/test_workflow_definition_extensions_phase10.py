@@ -31,3 +31,17 @@ def test_executable_depth_embedding_filter_and_rgbd_measurement_nodes_are_expose
         "data_type": "depth_maps",
         "required": False,
     }
+
+    active_learning_inputs = {
+        item["name"]: item for item in definitions["active_learning"]["inputs"]
+    }
+    assert active_learning_inputs["predictions"] == {
+        "name": "predictions",
+        "data_type": "predictions",
+        "required": True,
+    }
+    assert active_learning_inputs["embeddings"] == {
+        "name": "embeddings",
+        "data_type": "embeddings",
+        "required": False,
+    }
