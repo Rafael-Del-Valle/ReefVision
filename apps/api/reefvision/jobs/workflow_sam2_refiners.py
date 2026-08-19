@@ -137,8 +137,8 @@ workflow_consensus.run_independent_segmentation_pipeline = run_pipeline_with_reg
 # Worker startup imports these modules for workflow definition/runtime extensions. Install
 # typed ports first, then the full science bridge, then wrappers that intentionally replace
 # its handlers. Ordering is part of the runtime contract: behavior configuration loads
-# before windowing; video 3D wraps the base measurement handler; metric coral-surface mode
-# wraps that combined handler last so all measurement modes remain reachable.
+# before windowing; video 3D wraps the base measurement handler; canonical depth-source
+# aliases load before metric coral-surface mode wraps the combined measurement handler.
 from reefvision.services import (  # noqa: E402,F401
     workflow_definition_extensions as _workflow_definition_extensions,
 )
@@ -155,6 +155,9 @@ from reefvision.jobs import (  # noqa: E402,F401
 )
 from reefvision.jobs import (  # noqa: E402,F401
     workflow_video_depth_3d_runtime as _workflow_video_depth_3d_runtime,
+)
+from reefvision.jobs import (  # noqa: E402,F401
+    workflow_depth_source_compat as _workflow_depth_source_compat,
 )
 from reefvision.jobs import (  # noqa: E402,F401
     workflow_metric_coral_surface_runtime as _workflow_metric_coral_surface_runtime,
