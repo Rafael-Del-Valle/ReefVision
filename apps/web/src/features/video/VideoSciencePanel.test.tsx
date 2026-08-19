@@ -201,6 +201,6 @@ describe("VideoSciencePanel", () => {
       });
     });
     expect(await screen.findByText("0.4000 m")).toBeInTheDocument();
-    expect(screen.getByText("2.0000 m/s")).toBeInTheDocument();
+    expect(screen.getAllByText("2.0000 m/s")).toHaveLength(2);
   });
 });
