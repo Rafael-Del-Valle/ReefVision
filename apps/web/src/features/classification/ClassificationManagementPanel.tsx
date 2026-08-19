@@ -1,13 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
-import type { Project } from "../../api/client";
+import { getModels, type Project } from "../../api/client";
 import {
   bulkReviewClassificationPredictions,
   classificationScientificDownloadUrl,
   compareClassificationModels,
   createClassificationDatasetSnapshot,
   createClassificationLabelSet,
+  evaluateClassificationDatasetSnapshot,
   listClassificationDatasetSnapshots,
   listClassificationLabelSets,
   listPendingClassificationPredictions,
@@ -40,6 +41,7 @@ export function ClassificationManagementPanel({ project }: { project: Project })
   const [comparisonTask, setComparisonTask] = useState("");
   const [snapshotName, setSnapshotName] = useState("");
   const [snapshotLabelSetId, setSnapshotLabelSetId] = useState("");
+  const [evaluationModelId, setEvaluationModelId] = useState("");
   const [message, setMessage] = useState<string | null>(null);
 
   const labelSets = useQuery({
@@ -55,6 +57,10 @@ export function ClassificationManagementPanel({ project }: { project: Project })
     queryKey: ["classification_dataset_snapshots", project.id],
     queryFn: ({ signal }) =>
       listClassificationDatasetSnapshots(project.id, signal),
+  });
+  const classifiers = useQuery({
+    queryKey: ["classification_registered_models", project.id],
+    queryFn: ({ signal }) => getModels(project.id, "classifier", signal),
   });
   const comparison = useQuery({
     queryKey: ["classification_model_comparison", project.id, comparisonTask],
@@ -141,6 +147,23 @@ export function ClassificationManagementPanel({ project }: { project: Project })
     },
   });
 
+  const evaluateSnapshot = useMutation({
+    mutationFn: (snapshot: ClassificationDatasetSnapshot) =>
+      evaluateClassificationDatasetSnapshot(project.id, snapshot.id, {
+        model_id: evaluationModelId,
+        split: "test",
+        calibration_bin_count: 10,
+        top_k_values: [1, 3, 5],
+        include_curves: true,
+      }),
+    onSuccess: (result, snapshot) => {
+      setMessage(
+        `${snapshot.name} test-split evaluation queued as job ${result.job_id.slice(0, 8)}… for ${result.sample_count} frozen samples.`,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+    },
+  });
+
   const datasetLabelSets = useMemo(
     () =>
       labelSets.data?.filter((item) =>
@@ -180,11 +203,13 @@ export function ClassificationManagementPanel({ project }: { project: Project })
     labelSets.error ??
     predictions.error ??
     snapshots.error ??
+    classifiers.error ??
     comparison.error ??
     saveLabelSet.error ??
     bulkReview.error ??
     createSnapshot.error ??
-    trainSnapshot.error;
+    trainSnapshot.error ??
+    evaluateSnapshot.error;
 
   return (
     <section className="dashboard-panel">
@@ -409,7 +434,7 @@ export function ClassificationManagementPanel({ project }: { project: Project })
 
         <article className="dashboard-card">
           <p className="eyebrow">Immutable training dataset</p>
-          <h4>Freeze reviewed targets</h4>
+          <h4>Freeze, train, and test reviewed targets</h4>
           <label>
             Dataset name
             <input
@@ -442,6 +467,20 @@ export function ClassificationManagementPanel({ project }: { project: Project })
           >
             {createSnapshot.isPending ? "Freezing..." : "Create immutable snapshot"}
           </button>
+          <label>
+            Registered classifier for held-out evaluation
+            <select
+              value={evaluationModelId}
+              onChange={(event) => setEvaluationModelId(event.target.value)}
+            >
+              <option value="">Choose a classifier</option>
+              {classifiers.data?.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.display_name}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="dashboard-list">
             {snapshots.data?.map((item) => {
               const trainable = item.cardinality === "single" && item.class_count >= 2;
@@ -456,18 +495,32 @@ export function ClassificationManagementPanel({ project }: { project: Project })
                     {!trainable && (
                       <small>
                         Multi-label or single-class snapshots remain exportable, but this
-                        Ultralytics training path requires at least two single-label classes.
+                        Ultralytics training/evaluation path requires at least two single-label classes.
                       </small>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    className="secondary"
-                    disabled={!trainable || trainSnapshot.isPending}
-                    onClick={() => trainSnapshot.mutate(item)}
-                  >
-                    {trainSnapshot.isPending ? "Queueing..." : "Train classifier"}
-                  </button>
+                  <div className="version-actions">
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={!trainable || trainSnapshot.isPending}
+                      onClick={() => trainSnapshot.mutate(item)}
+                    >
+                      {trainSnapshot.isPending ? "Queueing..." : "Train classifier"}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={
+                        !trainable ||
+                        !evaluationModelId ||
+                        evaluateSnapshot.isPending
+                      }
+                      onClick={() => evaluateSnapshot.mutate(item)}
+                    >
+                      {evaluateSnapshot.isPending ? "Queueing..." : "Evaluate test split"}
+                    </button>
+                  </div>
                 </div>
               );
             })}
