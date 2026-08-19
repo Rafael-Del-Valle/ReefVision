@@ -8,7 +8,11 @@ import pytest
 
 @pytest.fixture(scope="module")
 def harness():
-    path = Path(__file__).resolve().parents[4] / "scripts" / "acceptance_coral_segmentation.py"
+    path = (
+        Path(__file__).resolve().parents[4]
+        / "scripts"
+        / "acceptance_coral_segmentation.py"
+    )
     spec = importlib.util.spec_from_file_location("acceptance_coral_segmentation", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
