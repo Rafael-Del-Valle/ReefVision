@@ -16,7 +16,7 @@ from typing import Any
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import get_settings
-from reefvision.db.models import WorkflowArtifact, WorkflowRevision, WorkflowRun
+from reefvision.db.models import VideoAsset, WorkflowArtifact, WorkflowRevision, WorkflowRun
 from reefvision.jobs import workflow_runs
 from reefvision.schemas.videos import VideoAnalyticsRequest
 from reefvision.services.video_behavior import VideoBehaviorAnalysisService
@@ -45,7 +45,11 @@ def _current_node_configuration(
     return {}
 
 
-def _behavior_request(configuration: dict[str, Any], *, persist_result: bool) -> VideoAnalyticsRequest:
+def _behavior_request(
+    configuration: dict[str, Any],
+    *,
+    persist_result: bool,
+) -> VideoAnalyticsRequest:
     payload: dict[str, Any] = {
         "include_saved_zones": bool(configuration.get("include_saved_zones", True)),
         "heatmap_bins_x": int(configuration.get("heatmap_bins_x", 20)),
@@ -65,6 +69,13 @@ def _behavior_request(configuration: dict[str, Any], *, persist_result: bool) ->
         raise RuntimeError(f"Invalid behavior-analysis configuration: {exc}") from exc
 
 
+def _declared_track_ids(payload: dict[str, Any]) -> set[str]:
+    raw = payload.get("track_ids")
+    if not isinstance(raw, list):
+        return set()
+    return {str(track_id) for track_id in raw}
+
+
 def _selected_track_ids(
     payloads: list[dict[str, Any]],
     configuration: dict[str, Any],
@@ -77,12 +88,9 @@ def _selected_track_ids(
     """
 
     scope_declared = any("track_ids" in payload for payload in payloads)
-    connected = {
-        str(track_id)
-        for payload in payloads
-        for track_id in payload.get("track_ids", [])
-        if isinstance(payload.get("track_ids"), list)
-    }
+    connected: set[str] = set()
+    for payload in payloads:
+        connected.update(_declared_track_ids(payload))
     configured_raw = configuration.get("track_ids")
     if configured_raw is None:
         return (connected if scope_declared else None), scope_declared
@@ -106,12 +114,6 @@ def _filtered_aggregates(
         for track in analysis.get("tracks", [])
         if isinstance(track, dict) and str(track.get("track_id")) in selected_ids
     ]
-    found_ids = {str(track["track_id"]) for track in tracks}
-    missing = sorted(selected_ids - found_ids)
-    if missing:
-        raise RuntimeError(
-            "One or more connected behavior-analysis tracks are unavailable: " + ", ".join(missing)
-        )
 
     centers_by_frame: dict[int, list[tuple[float, float]]] = defaultdict(list)
     timestamps_by_frame: dict[int, list[float]] = defaultdict(list)
@@ -121,9 +123,6 @@ def _filtered_aggregates(
 
     video_width = 0.0
     video_height = 0.0
-    # The response does not duplicate source dimensions, but normalized heatmap placement
-    # can be recovered from the configured bin indices only when dimensions are known.
-    # Workflow provenance therefore accepts optional dimensions injected by the caller.
     source_dimensions = analysis.get("_source_dimensions")
     if isinstance(source_dimensions, dict):
         video_width = float(source_dimensions.get("width_px", 0.0))
@@ -134,7 +133,12 @@ def _filtered_aggregates(
     for track in tracks:
         raw_trajectory = track.get("trajectory", [])
         trajectory = [item for item in raw_trajectory if isinstance(item, dict)]
-        trajectory.sort(key=lambda item: (int(item["frame_index"]), float(item["timestamp_seconds"])))
+        trajectory.sort(
+            key=lambda item: (
+                int(item["frame_index"]),
+                float(item["timestamp_seconds"]),
+            )
+        )
         previous: dict[str, Any] | None = None
         for sample in trajectory:
             frame_index = int(sample["frame_index"])
@@ -211,12 +215,16 @@ def _filtered_aggregates(
         )
 
         def scaled(value: float | None) -> float | None:
-            return value * distance_per_pixel if value is not None and distance_per_pixel else None
+            if value is None or distance_per_pixel is None:
+                return None
+            return value * distance_per_pixel
 
         school_by_frame.append(
             {
                 "frame_index": frame_index,
-                "timestamp_seconds": mean(frame_timestamps) if frame_timestamps else frame_index / fps,
+                "timestamp_seconds": (
+                    mean(frame_timestamps) if frame_timestamps else frame_index / fps
+                ),
                 "active_track_count": len(centers),
                 "school_centroid_x_pixels": centroid_x,
                 "school_centroid_y_pixels": centroid_y,
@@ -257,6 +265,14 @@ def _filtered_aggregates(
     return analysis
 
 
+def _analysis_track_ids(analysis: dict[str, Any]) -> set[str]:
+    return {
+        str(track["track_id"])
+        for track in analysis.get("tracks", [])
+        if isinstance(track, dict) and track.get("track_id") is not None
+    }
+
+
 def _configurable_behavior_snapshot(
     factory: sessionmaker[Session],
     run: WorkflowRun,
@@ -265,25 +281,25 @@ def _configurable_behavior_snapshot(
     configuration = _current_node_configuration(factory, run)
     payloads = [workflow_runs._artifact_payload(item) for item in inputs]
     video_ids = workflow_runs._list_values(payloads, "video_ids")
+    if not video_ids:
+        raise RuntimeError("Behavior analysis requires a video-bearing tracks artifact")
     selected_ids, track_scope_declared = _selected_track_ids(payloads, configuration)
     persist_requested = bool(configuration.get("persist_result", True))
-    # A persisted service analysis must never claim the statistics of a broader track set
-    # when a workflow requested a subset. Subset analyses remain immutable workflow
-    # artifacts and can be exported with exact selection provenance.
     request = _behavior_request(
         configuration,
         persist_result=persist_requested and not track_scope_declared,
     )
     settings = get_settings()
     analyses: list[dict[str, Any]] = []
+    resolved_selected_ids: set[str] = set()
     with factory() as session:
         service = VideoBehaviorAnalysisService(session, settings)
-        from reefvision.db.models import VideoAsset
-
         for video_id in video_ids:
             video = session.get(VideoAsset, video_id)
             if video is None or video.project_id != run.project_id:
-                raise RuntimeError("Behavior workflow video is missing from the workflow project")
+                raise RuntimeError(
+                    "Behavior workflow video is missing from the workflow project"
+                )
             response = service.analytics(video_id, request)
             analysis = response.model_dump(mode="json")
             analysis["_source_dimensions"] = {
@@ -291,7 +307,14 @@ def _configurable_behavior_snapshot(
                 "height_px": video.height_px,
             }
             if selected_ids is not None:
-                analysis = _filtered_aggregates(analysis, selected_ids, request)
+                available_ids = _analysis_track_ids(analysis)
+                selected_for_video = selected_ids & available_ids
+                resolved_selected_ids.update(selected_for_video)
+                analysis = _filtered_aggregates(
+                    analysis,
+                    selected_for_video,
+                    request,
+                )
                 analysis["analysis_id"] = None
                 analysis.setdefault("warnings", []).append(
                     "Workflow behavior statistics were restricted to the connected track set; "
@@ -309,11 +332,21 @@ def _configurable_behavior_snapshot(
                 "activity_speed_threshold_pixels_per_second": (
                     request.activity_speed_threshold_pixels_per_second
                 ),
-                "requested_track_ids": sorted(selected_ids) if selected_ids is not None else None,
+                "requested_track_ids": (
+                    sorted(selected_ids) if selected_ids is not None else None
+                ),
                 "persist_result_requested": persist_requested,
                 "persisted_service_result": request.persist_result,
             }
             analyses.append(analysis)
+
+    if selected_ids is not None:
+        missing_ids = sorted(selected_ids - resolved_selected_ids)
+        if missing_ids:
+            raise RuntimeError(
+                "One or more connected behavior-analysis tracks are unavailable: "
+                + ", ".join(missing_ids)
+            )
 
     track_ids = list(
         dict.fromkeys(
@@ -340,7 +373,9 @@ def _configurable_behavior_snapshot(
                 "measurement_engine": "video_behavior",
                 "calibration_aware": True,
                 "track_scope": (
-                    "connected_tracks" if selected_ids is not None else "all_active_video_tracks"
+                    "connected_tracks"
+                    if selected_ids is not None
+                    else "all_active_video_tracks"
                 ),
             },
         )
