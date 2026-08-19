@@ -89,6 +89,17 @@ class ActiveLearningEvaluationRequest(BaseModel):
     candidate_metric_schema_id: str | None = Field(default=None, max_length=200)
 
 
+class ActiveLearningClassificationEvaluationJobsRequest(BaseModel):
+    baseline_evaluation_job_id: str = Field(min_length=1, max_length=36)
+    candidate_evaluation_job_id: str = Field(min_length=1, max_length=36)
+
+    @model_validator(mode="after")
+    def distinct_jobs(self) -> ActiveLearningClassificationEvaluationJobsRequest:
+        if self.baseline_evaluation_job_id == self.candidate_evaluation_job_id:
+            raise ValueError("Baseline and candidate evaluation jobs must be distinct")
+        return self
+
+
 class PromotionGateResult(BaseModel):
     metric: str
     operator: ComparisonOperator
