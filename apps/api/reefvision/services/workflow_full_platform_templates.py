@@ -1,7 +1,8 @@
 """Feature-complete CoralVision 1.0 workflow templates.
 
-These templates exercise the advanced runtime paths added after the original Phase 10
-planner: probability-only Active Learning and depth-aware coral measurements.
+These templates exercise advanced runtime paths added after the original Phase 10 planner:
+probability-only Active Learning, depth-aware coral measurements, and calibrated metric 3D
+fish trajectories.
 """
 
 from __future__ import annotations
@@ -160,8 +161,84 @@ def depth_aware_coral_measurement_template() -> WorkflowTemplate:
     )
 
 
+def calibrated_3d_fish_trajectory_template() -> WorkflowTemplate:
+    """Track fish and calculate physically calibrated XYZ trajectories."""
+
+    return WorkflowTemplate(
+        template_id="calibrated-3d-fish-trajectories",
+        name="Calibrated 3D fish trajectories",
+        description=(
+            "Track fish in a managed video, combine track centers with calibrated metric "
+            "RGB-D/stereo depth samples and camera intrinsics, calculate XYZ trajectory "
+            "metrics, and export a provenance-preserving scientific artifact."
+        ),
+        workflow=WorkflowValidationRequest(
+            name="Calibrated 3D fish trajectories",
+            nodes=[
+                WorkflowNode(id="video", node_type="video_input"),
+                WorkflowNode(
+                    id="track",
+                    node_type="tracker",
+                    configuration={
+                        "model_id": "<select-detector>",
+                        "tracker": "bytetrack",
+                    },
+                ),
+                WorkflowNode(
+                    id="measure3d",
+                    node_type="measurement",
+                    configuration={
+                        "measurement_mode": "video_depth_3d",
+                        "depth_source_kind": "metric_rgbd",
+                        "unit": "m",
+                        "camera_intrinsics": {
+                            "fx": "<set-fx-pixels>",
+                            "fy": "<set-fy-pixels>",
+                            "cx": "<set-cx-pixels>",
+                            "cy": "<set-cy-pixels>",
+                        },
+                        "depth_samples": [],
+                    },
+                ),
+                WorkflowNode(
+                    id="export",
+                    node_type="export",
+                    configuration={"format": "json"},
+                ),
+            ],
+            edges=[
+                WorkflowEdge(
+                    source_node_id="video",
+                    source_port="video",
+                    target_node_id="track",
+                    target_port="video",
+                ),
+                WorkflowEdge(
+                    source_node_id="video",
+                    source_port="video",
+                    target_node_id="measure3d",
+                    target_port="video",
+                ),
+                WorkflowEdge(
+                    source_node_id="track",
+                    source_port="tracks",
+                    target_node_id="measure3d",
+                    target_port="tracks",
+                ),
+                WorkflowEdge(
+                    source_node_id="measure3d",
+                    source_port="measurements",
+                    target_node_id="export",
+                    target_port="artifact",
+                ),
+            ],
+        ),
+    )
+
+
 def full_platform_templates() -> list[WorkflowTemplate]:
     return [
         classification_uncertainty_review_template(),
         depth_aware_coral_measurement_template(),
+        calibrated_3d_fish_trajectory_template(),
     ]
