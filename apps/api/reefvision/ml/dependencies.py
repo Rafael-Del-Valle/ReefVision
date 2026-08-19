@@ -93,7 +93,11 @@ IMPLEMENTED_PROVIDER_SPECS: tuple[ProviderRuntimeSpec, ...] = (
         packages=(
             ProviderPackageRequirement("numpy", "2.2.6"),
             ProviderPackageRequirement("matplotlib", "3.10.7"),
-            ProviderPackageRequirement("opencv-python", "4.12.0.88", import_name="cv2"),
+            ProviderPackageRequirement(
+                "opencv-contrib-python",
+                "4.12.0.88",
+                import_name="cv2",
+            ),
             ProviderPackageRequirement("pillow", "12.0.0", import_name="PIL"),
             ProviderPackageRequirement("pyyaml", "6.0.3", import_name="yaml"),
             ProviderPackageRequirement("requests", "2.32.5"),
@@ -117,10 +121,18 @@ IMPLEMENTED_PROVIDER_SPECS: tuple[ProviderRuntimeSpec, ...] = (
         tested_cuda="12.1",
         packages=(
             ProviderPackageRequirement("numpy", "2.2.6"),
-            ProviderPackageRequirement("opencv-python", "4.12.0.88", import_name="cv2"),
+            ProviderPackageRequirement(
+                "opencv-contrib-python",
+                "4.12.0.88",
+                import_name="cv2",
+            ),
             ProviderPackageRequirement("torch", "2.5.1+cu121"),
             ProviderPackageRequirement("torchvision", "0.20.1+cu121"),
-            ProviderPackageRequirement("segment-anything", "1.0", import_name="segment_anything"),
+            ProviderPackageRequirement(
+                "segment-anything",
+                "1.0",
+                import_name="segment_anything",
+            ),
         ),
     ),
 )
