@@ -11,6 +11,14 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
+from reefvision.schemas.image_calibration import (
+    ApplyCalibrationProfileRequest,
+    CalibrationProfileResponse,
+    MarkerCalibrationCandidate,
+    MarkerCalibrationDetectRequest,
+    RulerCalibrationCandidate,
+    RulerCalibrationDetectRequest,
+)
 from reefvision.schemas.measurements import (
     MaskMeasurementProfileResponse,
     MaskMeasurementProfileUpdate,
@@ -19,6 +27,7 @@ from reefvision.schemas.measurements import (
     MeasurementCalibrationUpdate,
     ProjectMeasurementSummaryResponse,
 )
+from reefvision.services.image_scale_calibration import ImageScaleCalibrationService
 from reefvision.services.mask_measurements import MaskMeasurementService
 from reefvision.services.measurement_analytics import MeasurementAnalyticsService
 
@@ -29,6 +38,11 @@ DbSession = Annotated[Session, Depends(get_db_session)]
 def service(request: Request, session: Session) -> MaskMeasurementService:
     settings: Settings = request.app.state.settings
     return MaskMeasurementService(session, settings)
+
+
+def calibration_service(request: Request, session: Session) -> ImageScaleCalibrationService:
+    settings: Settings = request.app.state.settings
+    return ImageScaleCalibrationService(session, settings)
 
 
 def analytics_service(request: Request, session: Session) -> MeasurementAnalyticsService:
@@ -58,7 +72,61 @@ def update_measurement_calibration(
     request: Request,
     session: DbSession,
 ) -> MeasurementCalibrationResponse:
-    return service(request, session).update_calibration(image_id, payload)
+    prepared = calibration_service(request, session).prepare_saved_calibration(
+        image_id, payload
+    )
+    return service(request, session).update_calibration(image_id, prepared)
+
+
+@router.post(
+    "/images/{image_id}/measurement-calibration/ruler-detect",
+    response_model=RulerCalibrationCandidate,
+)
+def detect_ruler_calibration(
+    image_id: str,
+    payload: RulerCalibrationDetectRequest,
+    request: Request,
+    session: DbSession,
+) -> RulerCalibrationCandidate:
+    return calibration_service(request, session).detect_ruler(image_id, payload)
+
+
+@router.post(
+    "/images/{image_id}/measurement-calibration/marker-detect",
+    response_model=MarkerCalibrationCandidate,
+)
+def detect_marker_calibration(
+    image_id: str,
+    payload: MarkerCalibrationDetectRequest,
+    request: Request,
+    session: DbSession,
+) -> MarkerCalibrationCandidate:
+    return calibration_service(request, session).detect_marker(image_id, payload)
+
+
+@router.get(
+    "/projects/{project_id}/measurement-calibration-profiles",
+    response_model=list[CalibrationProfileResponse],
+)
+def list_measurement_calibration_profiles(
+    project_id: str,
+    request: Request,
+    session: DbSession,
+) -> list[CalibrationProfileResponse]:
+    return calibration_service(request, session).profiles(project_id)
+
+
+@router.post(
+    "/images/{image_id}/measurement-calibration/apply-profile",
+    response_model=MeasurementCalibrationResponse,
+)
+def apply_measurement_calibration_profile(
+    image_id: str,
+    payload: ApplyCalibrationProfileRequest,
+    request: Request,
+    session: DbSession,
+) -> MeasurementCalibrationResponse:
+    return calibration_service(request, session).apply_profile(image_id, payload)
 
 
 @router.delete(
