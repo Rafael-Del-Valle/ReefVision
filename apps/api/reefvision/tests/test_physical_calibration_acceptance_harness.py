@@ -48,6 +48,8 @@ def _reference_payload() -> dict[str, object]:
             "cy_px": 240.0,
         },
         "metric_depth": {
+            "is_metric": True,
+            "source": "stereo triangulation with calibrated baseline",
             "unit": "m",
             "samples": [
                 {"frame": 0, "depth": 2.0},
@@ -64,38 +66,100 @@ def _reference_payload() -> dict[str, object]:
     }
 
 
-def test_reference_parser_requires_explicit_metric_measurements(harness, tmp_path: Path) -> None:
+def _write_reference(tmp_path: Path, payload: dict[str, object]) -> Path:
     path = tmp_path / "reference.json"
-    path.write_text(json.dumps(_reference_payload()), encoding="utf-8")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
 
-    payload = harness.load_reference(path)
+
+def test_reference_parser_requires_explicit_metric_measurements(
+    harness,
+    tmp_path: Path,
+) -> None:
+    payload = harness.load_reference(_write_reference(tmp_path, _reference_payload()))
 
     assert payload["spatial_reference"]["unit"] == "cm"
     assert payload["metric_depth"]["unit"] == "m"
+    assert payload["metric_depth"]["is_metric"] is True
+    assert payload["metric_depth"]["source"] == (
+        "stereo triangulation with calibrated baseline"
+    )
     assert payload["metric_depth"]["samples"][0]["depth"] == 2.0
 
 
-def test_reference_parser_rejects_nonpositive_reference_distance(
-    harness, tmp_path: Path
+def test_reference_parser_rejects_missing_metric_declaration(
+    harness,
+    tmp_path: Path,
 ) -> None:
     payload = _reference_payload()
-    payload["spatial_reference"]["reference_distance"] = 0
-    path = tmp_path / "reference.json"
-    path.write_text(json.dumps(payload), encoding="utf-8")
+    metric_depth = dict(payload["metric_depth"])
+    metric_depth.pop("is_metric")
+    payload["metric_depth"] = metric_depth
+
+    with pytest.raises(RuntimeError, match="is_metric must be true"):
+        harness.load_reference(_write_reference(tmp_path, payload))
+
+
+def test_reference_parser_rejects_relative_monocular_metric_claim(
+    harness,
+    tmp_path: Path,
+) -> None:
+    payload = _reference_payload()
+    metric_depth = dict(payload["metric_depth"])
+    metric_depth["source"] = "Depth Anything V2 relative monocular depth"
+    payload["metric_depth"] = metric_depth
+
+    with pytest.raises(RuntimeError, match="cannot be used as metric-depth"):
+        harness.load_reference(_write_reference(tmp_path, payload))
+
+
+def test_reference_parser_rejects_depth_samples_outside_track_range(
+    harness,
+    tmp_path: Path,
+) -> None:
+    payload = _reference_payload()
+    metric_depth = dict(payload["metric_depth"])
+    metric_depth["samples"] = [
+        {"frame": 0, "depth": 2.0},
+        {"frame": 11, "depth": 2.0},
+    ]
+    payload["metric_depth"] = metric_depth
+
+    with pytest.raises(RuntimeError, match="verified track frame range"):
+        harness.load_reference(_write_reference(tmp_path, payload))
+
+
+def test_reference_parser_rejects_nonpositive_reference_distance(
+    harness,
+    tmp_path: Path,
+) -> None:
+    payload = _reference_payload()
+    spatial_reference = dict(payload["spatial_reference"])
+    spatial_reference["reference_distance"] = 0
+    payload["spatial_reference"] = spatial_reference
 
     with pytest.raises(RuntimeError, match="finite and positive"):
-        harness.load_reference(path)
+        harness.load_reference(_write_reference(tmp_path, payload))
 
 
 def test_measurement_error_applies_relative_or_absolute_tolerance(harness) -> None:
     within_relative = harness.measurement_error(
-        10.1, 10.0, relative_tolerance=0.02, absolute_tolerance=0.0
+        10.1,
+        10.0,
+        relative_tolerance=0.02,
+        absolute_tolerance=0.0,
     )
     within_absolute = harness.measurement_error(
-        0.03, 0.02, relative_tolerance=0.0, absolute_tolerance=0.02
+        0.03,
+        0.02,
+        relative_tolerance=0.0,
+        absolute_tolerance=0.02,
     )
     outside = harness.measurement_error(
-        10.3, 10.0, relative_tolerance=0.02, absolute_tolerance=0.0
+        10.3,
+        10.0,
+        relative_tolerance=0.02,
+        absolute_tolerance=0.0,
     )
 
     assert within_relative["within_tolerance"] is True
