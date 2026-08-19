@@ -14,6 +14,13 @@ from reefvision.schemas.jobs import JobResponse
 from reefvision.storage.projects import resolve_managed_project_path
 
 
+def _normalized_scope(value: object) -> str:
+    scope = str(value or "").strip().casefold()
+    if scope == "annotation_crop":
+        return "annotation"
+    return scope
+
+
 class GeneralizedClassificationJobService:
     def __init__(self, session: Session, settings: Settings) -> None:
         self.session = session
@@ -42,6 +49,32 @@ class GeneralizedClassificationJobService:
         checkpoint = resolve_managed_project_path(self.settings, model.managed_path)
         if not checkpoint.is_file():
             raise ValidationError("The registered classifier checkpoint is missing")
+
+        model_metadata = dict(model.metadata_json or {})
+        class_map = dict(model.class_map_json or {})
+        scope_locked = bool(
+            model_metadata.get("classification_scope_locked")
+            or class_map.get("classification_scope_locked")
+        )
+        trained_scope = _normalized_scope(
+            model_metadata.get("classification_scope")
+            or class_map.get("classification_scope")
+        )
+        if scope_locked and trained_scope and trained_scope != request.target_kind:
+            raise ValidationError(
+                f"This classifier is locked to {trained_scope!r} targets because that is the "
+                f"immutable target kind it was trained on; requested {request.target_kind!r}"
+            )
+        trained_label_set = str(
+            model_metadata.get("classification_label_set_key")
+            or class_map.get("classification_label_set_key")
+            or ""
+        ).strip()
+        if scope_locked and trained_label_set and trained_label_set != request.label_set:
+            raise ValidationError(
+                f"This classifier was trained for classification label set {trained_label_set!r}; "
+                f"requested {request.label_set!r}"
+            )
 
         requested_images = list(dict.fromkeys(request.image_ids))
         images = (
@@ -115,6 +148,9 @@ class GeneralizedClassificationJobService:
                 "mask_annotation_ids": requested_masks,
                 "model_task": CLASSIFICATION_TASK,
                 "model_checksum": model.sha256,
+                "trained_classification_scope": trained_scope or None,
+                "trained_classification_label_set": trained_label_set or None,
+                "classification_scope_locked": scope_locked,
             },
         )
         self.session.add(job)
