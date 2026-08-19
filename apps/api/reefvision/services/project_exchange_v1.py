@@ -45,7 +45,12 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         sections.update(
             {
                 "jobs": list(
-                    self.session.scalars(select(Job).where(Job.project_id == project.id))
+                    self.session.scalars(
+                        select(Job).where(
+                            Job.project_id == project.id,
+                            Job.job_type != "project_exchange_export",
+                        )
+                    )
                 ),
                 "workflow_graphs": list(
                     self.session.scalars(
