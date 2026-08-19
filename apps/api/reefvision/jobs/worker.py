@@ -15,6 +15,9 @@ from reefvision.config import Settings
 from reefvision.db.models import BackupRecord, ImageAsset, Job, QualityControlRun
 from reefvision.jobs.backups import process_backup_job
 from reefvision.jobs.classification_inference import process_classification_inference_job
+from reefvision.jobs.classification_snapshot_evaluation import (
+    process_classification_snapshot_evaluation_job,
+)
 from reefvision.jobs.depth import process_depth_map_job
 from reefvision.jobs.diagnostics import process_diagnostics_job
 from reefvision.jobs.export import process_export_job
@@ -140,6 +143,7 @@ def process_next_thumbnail_job(
             "thumbnail": process_thumbnail_job,
             "inference": process_inference_job,
             "classification_inference": process_classification_inference_job,
+            "classification_snapshot_evaluation": process_classification_snapshot_evaluation_job,
             "export": process_export_job,
             "qc": process_quality_control_job,
             "backup": process_backup_job,
@@ -181,7 +185,7 @@ def process_next_thumbnail_job(
         LOGGER.exception(
             "Background job failed unexpectedly",
             extra={
-                "event_id": "background_job_unexpected_failure",
+                "event_id": "background_worker_unexpected_failure",
                 "component": "background_worker",
                 "job_id": job_id,
                 "job_type": job_type,
