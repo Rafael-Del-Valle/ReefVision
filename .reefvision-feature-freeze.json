@@ -2,17 +2,18 @@
   "schema": "reefvision-feature-freeze-v1",
   "baseline_sha": "f52a90afeffda0f59df93c9dc5998f22a99b53c1",
   "started_at": "2026-07-23",
-  "reason": "Stabilize PR #8 through complete validation, Windows packaging, coral journey, provider consensus, and external interchange acceptance before adding new production modules.",
-  "allowed_new_paths": [
-    "apps/api/reefvision/api/routes/storage_settings.py",
-    "apps/web/src/features/system/StorageSettingsOverlay.tsx"
-  ],
+  "lifted_at": "2026-08-18",
+  "status": "lifted_for_full_1_0",
+  "reason": "The 1.0 release scope now explicitly includes the complete ReefVision platform, including classification, active learning, Prompt Assist/providers, video tracking and behavior analysis, depth/RGB-D workflows, interoperability, and fusion workflows. Production development is reopened on feat/1.0-full-platform while release validation remains mandatory.",
+  "allowed_new_paths": [],
   "allowed_new_prefixes": [
     ".github/",
     "docs/",
     "scripts/",
-    "apps/api/reefvision/tests/",
-    "apps/api/reefvision/testing/",
+    "apps/api/migrations/versions/",
+    "apps/api/reefvision/",
+    "apps/web/src/",
+    "apps/web/src-tauri/src/",
     "apps/web/tests/"
   ],
   "allowed_new_suffixes": [
@@ -21,17 +22,12 @@
     ".spec.ts",
     ".spec.tsx"
   ],
-  "blocked_new_prefixes": [
-    "apps/api/migrations/versions/",
-    "apps/api/reefvision/",
-    "apps/web/src/",
-    "apps/web/src-tauri/src/"
-  ],
+  "blocked_new_prefixes": [],
   "notes": [
-    "Existing production files may be modified to fix validation, safety, packaging, interoperability, or usability defects.",
-    "New tests, documentation, validation scripts, and CI repairs remain allowed.",
-    "The two exact storage-settings modules are a disk-capacity stabilization exception and do not reopen general feature development.",
-    "New migrations and all other new production modules remain blocked until the release-candidate exit criteria pass.",
-    "The independent article branches remain compound until the freeze is explicitly lifted."
+    "The stabilization freeze is intentionally lifted for the full 1.0 implementation branch.",
+    "All major capabilities previously planned for later releases are now required for 1.0.",
+    "New production modules and migrations are allowed when they directly advance the 1.0 scope.",
+    "Release claims remain prohibited until backend, frontend, migration, scientific-validation, provider-acceptance, workflow, video, interoperability, packaging, and clean-machine gates pass.",
+    "The branch must preserve provenance, immutable dataset/version behavior, review-before-accept safety, and calibrated-science warnings while features are completed."
   ]
 }
