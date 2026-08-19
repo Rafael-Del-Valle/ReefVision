@@ -86,7 +86,7 @@ def _resolve_image_dir(source: Path, payload: dict[str, Any], key: str) -> Path 
     if isinstance(raw, list):
         if len(raw) != 1:
             raise RuntimeError(
-                f"Acceptance currently requires one image directory for split {key}; got {len(raw)}"
+                f"Acceptance requires one image directory for split {key}; got {len(raw)}"
             )
         raw = raw[0]
     if not isinstance(raw, str):
@@ -227,7 +227,9 @@ def main() -> int:
     source_records: list[dict[str, Any]] = []
     image_counts: dict[str, int] = {}
     polygon_counts: dict[str, int] = {}
-    image_ids: dict[str, list[str]] = {value: [] for value in REEFVISION_SPLITS.values()}
+    image_ids: dict[str, list[str]] = {
+        value: [] for value in REEFVISION_SPLITS.values()
+    }
 
     project: dict[str, Any]
     version: dict[str, Any]
@@ -257,8 +259,7 @@ def main() -> int:
                         "display_order": class_index,
                         "name": name,
                         "description": (
-                            "Imported from real YOLO polygon segmentation "
-                            "acceptance dataset"
+                            "Imported from real YOLO polygon segmentation acceptance dataset"
                         ),
                         "display_color": "#4C9A8A",
                     },
@@ -295,7 +296,8 @@ def main() -> int:
                             "label_class_id": class_ids[class_index],
                             "geometry_kind": "polygon",
                             "points": [
-                                {"x": x * width, "y": y * height} for x, y in normalized
+                                {"x": x * width, "y": y * height}
+                                for x, y in normalized
                             ],
                         }
                     )
@@ -449,7 +451,8 @@ def main() -> int:
         )
         if registered.get("purpose") != "segmenter":
             raise RuntimeError(
-                f"Segmentation run registered unexpected model purpose: {registered.get('purpose')}"
+                "Segmentation run registered unexpected model purpose: "
+                f"{registered.get('purpose')}"
             )
 
         inference_started = time.perf_counter()
