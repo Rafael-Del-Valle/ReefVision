@@ -1,4 +1,4 @@
-"""CoralVision 1.0 import extensions for portable training and generated state."""
+"""CoralVision 1.0 import extensions for complete portable project state."""
 
 from __future__ import annotations
 
@@ -6,21 +6,55 @@ import shutil
 import zipfile
 from collections.abc import BinaryIO
 from pathlib import PurePosixPath
+from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.db.models import Project, ProjectExchangePackage, TrainingDraft
+from reefvision.db.models import (
+    AnnotationEvent,
+    ClassOperation,
+    ClassVisibilityPreference,
+    ExportRecord,
+    MaskAnnotationEvent,
+    Project,
+    ProjectClassVisibilityDefault,
+    ProjectExchangePackage,
+    TrainingDraft,
+)
 from reefvision.schemas.project_exchange import ProjectExchangeImportResponse
 from reefvision.services import project_exchange_import as base_import
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
 
+def _insert_after(section_name: str, after: str) -> None:
+    if section_name in base_import.SECTION_ORDER:
+        return
+    index = base_import.SECTION_ORDER.index(after)
+    base_import.SECTION_ORDER.insert(index + 1, section_name)
+
+
 def _register_v1_sections() -> None:
-    base_import.SECTION_MODELS["training_drafts"] = TrainingDraft
-    if "training_drafts" not in base_import.SECTION_ORDER:
-        model_index = base_import.SECTION_ORDER.index("models")
-        base_import.SECTION_ORDER.insert(model_index + 1, "training_drafts")
+    base_import.SECTION_MODELS.update(
+        {
+            "training_drafts": TrainingDraft,
+            "annotation_events": AnnotationEvent,
+            "mask_annotation_events": MaskAnnotationEvent,
+            "project_class_visibility_defaults": ProjectClassVisibilityDefault,
+            "class_visibility_preferences": ClassVisibilityPreference,
+            "class_operations": ClassOperation,
+            "exports": ExportRecord,
+        }
+    )
+    _insert_after("project_class_visibility_defaults", "label_classes")
+    _insert_after("class_visibility_preferences", "project_class_visibility_defaults")
+    _insert_after("class_operations", "class_visibility_preferences")
+    _insert_after("training_drafts", "models")
+    _insert_after("exports", "dataset_version_items")
+    _insert_after("annotation_events", "annotations")
+    _insert_after("mask_annotation_events", "mask_annotations")
 
 
 def _safe_relative_path(value: str) -> bool:
@@ -66,6 +100,58 @@ def _restore_generated_artifacts(
     return copied
 
 
+def _operation_checksum(operation: ClassOperation) -> str:
+    plan: dict[str, Any] = dict(operation.plan_json or {})
+
+    def records(key: str) -> list[dict[str, object]]:
+        raw = plan.get(key, [])
+        if not isinstance(raw, list):
+            return []
+        return [
+            {
+                "key": str(item.get("key", "")),
+                "record_ids": list(item.get("record_ids", [])),
+            }
+            for item in raw
+            if isinstance(item, dict)
+        ]
+
+    raw_impacts = plan.get("compatibility_impacts", [])
+    impacts = [
+        {
+            "key": str(item.get("key", "")),
+            "status": str(item.get("status", "")),
+            "record_ids": list(item.get("record_ids", [])),
+        }
+        for item in raw_impacts
+        if isinstance(item, dict)
+    ] if isinstance(raw_impacts, list) else []
+    payload = {
+        "operation_type": operation.operation_type,
+        "project_id": operation.project_id,
+        "source_class_id": operation.source_class_id,
+        "target_class_id": operation.target_class_id,
+        "mutable_records": records("mutable_records"),
+        "protected_records": records("protected_records"),
+        "blocking_records": records("blocking_records"),
+        "compatibility_impacts": impacts,
+        "warnings": list(plan.get("warnings", [])),
+        "blockers": list(plan.get("blockers", [])),
+    }
+    return canonical_json_sha256(payload)
+
+
+def _refresh_class_operation_checksums(session: Session, project_id: str) -> None:
+    operations = list(
+        session.scalars(
+            select(ClassOperation).where(ClassOperation.project_id == project_id)
+        )
+    )
+    for operation in operations:
+        operation.preview_checksum = _operation_checksum(operation)
+    session.flush()
+
+
 def import_project_exchange_v1(
     source: BinaryIO,
     session: Session,
@@ -87,6 +173,7 @@ def import_project_exchange_v1(
         raise RuntimeError("Imported project disappeared before artifact restoration")
 
     try:
+        _refresh_class_operation_checksums(session, project.id)
         copied_generated = _restore_generated_artifacts(
             source,
             project=project,
