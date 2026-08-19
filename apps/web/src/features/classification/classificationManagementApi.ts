@@ -82,6 +82,18 @@ export interface ClassificationSnapshotTrainingResponse {
   status: string;
 }
 
+export interface ClassificationSnapshotEvaluationQueueResponse {
+  job_id: string;
+  project_id: string;
+  snapshot_id: string;
+  snapshot_manifest_sha256: string;
+  model_id: string;
+  model_checksum: string;
+  split: string;
+  sample_count: number;
+  status: string;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (init?.body) headers.set("Content-Type", "application/json");
@@ -196,6 +208,17 @@ export function trainClassificationDatasetSnapshot(
 ) {
   return request<ClassificationSnapshotTrainingResponse>(
     `/projects/${projectId}/classification-dataset-snapshots/${snapshotId}/training-runs`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export function evaluateClassificationDatasetSnapshot(
+  projectId: string,
+  snapshotId: string,
+  payload: Record<string, unknown>,
+) {
+  return request<ClassificationSnapshotEvaluationQueueResponse>(
+    `/projects/${projectId}/classification-dataset-snapshots/${snapshotId}/evaluations`,
     { method: "POST", body: JSON.stringify(payload) },
   );
 }
