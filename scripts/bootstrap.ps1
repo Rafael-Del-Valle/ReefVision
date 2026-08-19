@@ -59,10 +59,25 @@ $ProviderRequirementsPath = Join-Path $Root $ProviderRequirementsFile
 if (-not (Test-Path $ProviderRequirementsPath -PathType Leaf)) {
     throw "Pinned provider dependency file not found: $ProviderRequirementsFile"
 }
+$ProviderRequirementsContent = Get-Content -LiteralPath $ProviderRequirementsPath -Raw
+if ($ProviderRequirementsContent -match '(?m)^\s*opencv-contrib-python(?:\s|[=<>!~])') {
+    Write-ReefVisionStep "Removing conflicting base/headless OpenCV distributions"
+    & $VenvPython -m pip uninstall -y opencv-python opencv-python-headless opencv-contrib-python-headless
+    if ($LASTEXITCODE -ne 0) {
+        throw "Conflicting OpenCV distribution cleanup failed."
+    }
+}
+
 Write-ReefVisionStep "Installing pinned model-provider dependencies"
 & $VenvPython -m pip install -r $ProviderRequirementsPath
 if ($LASTEXITCODE -ne 0) {
     throw "Pinned model-provider dependency installation failed."
+}
+
+Write-ReefVisionStep "Verifying ReefVision Scale Assistant marker runtime"
+& $VenvPython -c "from reefvision.desktop import require_scale_assistant_marker_runtime; require_scale_assistant_marker_runtime(); print('Scale Assistant marker runtime OK')"
+if ($LASTEXITCODE -ne 0) {
+    throw "Scale Assistant marker runtime verification failed. Ensure the provider requirements install opencv-contrib-python."
 }
 
 Write-ReefVisionStep "Installing ReefVision web dependencies"
