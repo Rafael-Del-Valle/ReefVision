@@ -229,12 +229,39 @@ class PublicActiveLearningCycleService(ActiveLearningCycleService):
                 "dataset-version comparison ids"
             )
         response = super().evaluate_and_promote(cycle_id, request)
+        cycle = self._cycle(cycle_id)
+        compatibility_message = (
+            "Baseline and candidate classifier metrics were declared against the same complete "
+            "immutable classification snapshot."
+        )
+        cycle.promotion_result_json = {
+            **dict(cycle.promotion_result_json or {}),
+            "baseline_classification_snapshot_id": baseline_snapshot_id,
+            "candidate_classification_snapshot_id": candidate_snapshot_id,
+            "classification_evaluation_snapshot_manifest_sha256": (
+                evaluation_snapshot.manifest_sha256
+            ),
+        }
+        cycle.warnings_json = list(
+            dict.fromkeys([*list(cycle.warnings_json or []), compatibility_message])
+        )
+        cycle.history_json = [
+            *list(cycle.history_json or []),
+            _event(
+                "classification_promotion_dataset_bound",
+                baseline_classification_snapshot_id=baseline_snapshot_id,
+                candidate_classification_snapshot_id=candidate_snapshot_id,
+                snapshot_manifest_sha256=evaluation_snapshot.manifest_sha256,
+            ),
+        ]
+        self.session.commit()
+        self.session.refresh(cycle)
         return response.model_copy(
             update={
+                "cycle": self._response(cycle),
                 "compatibility_warnings": [
                     *response.compatibility_warnings,
-                    "Baseline and candidate classifier metrics were declared against the same "
-                    "complete immutable classification snapshot.",
-                ]
+                    compatibility_message,
+                ],
             }
         )
