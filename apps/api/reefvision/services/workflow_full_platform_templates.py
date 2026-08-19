@@ -169,8 +169,8 @@ def metric_coral_visible_surface_template() -> WorkflowTemplate:
         name="Metric 3D coral visible surface",
         description=(
             "Generate aligned metric depth, segment coral, calculate physical dimensions, "
-            "camera-facing projected area, and triangulated camera-visible 3D surface area. "
-            "Hidden and back-facing coral surface is explicitly not reconstructed."
+            "camera-facing projected area, and local camera-visible 3D surface area. Hidden "
+            "and back-facing coral surface is explicitly not reconstructed."
         ),
         workflow=WorkflowValidationRequest(
             name="Metric 3D coral visible surface",
@@ -282,7 +282,7 @@ def calibrated_3d_fish_trajectory_template() -> WorkflowTemplate:
                     node_type="measurement",
                     configuration={
                         "measurement_mode": "video_depth_3d",
-                        "depth_source_kind": "metric_rgbd",
+                        "depth_source_kind": "rgbd_metric",
                         "unit": "m",
                         "camera_intrinsics": {
                             "fx": "<set-fx-pixels>",
