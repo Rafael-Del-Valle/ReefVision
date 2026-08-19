@@ -40,7 +40,12 @@ def _mode_aware_validate(
             continue
         mode = str(node.configuration.get("measurement_mode", "coral_mask")).strip().casefold()
         ports = connected_ports[node.id]
-        required_ports = ("video", "tracks") if mode == "video_depth_3d" else ("masks",)
+        if mode == "video_depth_3d":
+            required_ports = ("video", "tracks")
+        elif mode == "coral_metric_surface":
+            required_ports = ("masks", "depth_maps")
+        else:
+            required_ports = ("masks",)
         for port_name in required_ports:
             if port_name in ports:
                 continue
