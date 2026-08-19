@@ -10,6 +10,10 @@ from sqlalchemy.orm import Session
 from reefvision.api.dependencies import get_db_session
 from reefvision.schemas.video_science import (
     CalibratedVideoTrackAnalyticsResponse,
+    VideoCameraIntrinsicsResponse,
+    VideoCameraIntrinsicsSetRequest,
+    VideoDepthTrackAnalyticsRequest,
+    VideoDepthTrackAnalyticsResponse,
     VideoSchoolingAnalyticsRequest,
     VideoSchoolingAnalyticsResponse,
     VideoSpatialCalibrationResponse,
@@ -74,3 +78,47 @@ def schooling_analytics(
     session: DbSession,
 ) -> VideoSchoolingAnalyticsResponse:
     return VideoScienceService(session).schooling_analytics(video_id, payload)
+
+
+@router.get(
+    "/videos/{video_id}/camera-intrinsics",
+    response_model=VideoCameraIntrinsicsResponse,
+)
+def get_video_camera_intrinsics(
+    video_id: str,
+    session: DbSession,
+) -> VideoCameraIntrinsicsResponse:
+    return VideoScienceService(session).get_camera_intrinsics(video_id)
+
+
+@router.put(
+    "/videos/{video_id}/camera-intrinsics",
+    response_model=VideoCameraIntrinsicsResponse,
+)
+def set_video_camera_intrinsics(
+    video_id: str,
+    payload: VideoCameraIntrinsicsSetRequest,
+    session: DbSession,
+) -> VideoCameraIntrinsicsResponse:
+    return VideoScienceService(session).set_camera_intrinsics(video_id, payload)
+
+
+@router.delete(
+    "/videos/{video_id}/camera-intrinsics",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def clear_video_camera_intrinsics(video_id: str, session: DbSession) -> Response:
+    VideoScienceService(session).clear_camera_intrinsics(video_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/videos/{video_id}/depth-track-analytics",
+    response_model=VideoDepthTrackAnalyticsResponse,
+)
+def depth_track_analytics(
+    video_id: str,
+    payload: VideoDepthTrackAnalyticsRequest,
+    session: DbSession,
+) -> VideoDepthTrackAnalyticsResponse:
+    return VideoScienceService(session).depth_track_analytics(video_id, payload)
