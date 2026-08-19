@@ -32,6 +32,8 @@ jobs:
         run: |
           python -m pytest \
             apps/api/reefvision/tests/test_active_learning_phase7.py \
+            apps/api/reefvision/tests/test_project_exchange_phase9.py \
+            apps/api/reefvision/tests/test_project_exchange_roundtrip_v1.py \
             apps/api/reefvision/tests/test_workflow_graphs_phase10.py \
             apps/api/reefvision/tests/test_workflow_execution_phase10.py \
             apps/api/reefvision/tests/test_workflow_training_phase10.py \
