@@ -315,6 +315,9 @@ def test_dataset_export_uses_frozen_snapshot_after_current_edits(
     assert len(label_files) == 1
     label_lines = label_files[0].read_text(encoding="utf-8").splitlines()
     assert label_lines == ["0 0.25000000 0.25000000 0.25000000 0.33333333"]
+    data_yaml = (export_root / "data.yaml").read_text(encoding="utf-8")
+    assert "path:" not in data_yaml
+    assert "train: images/train" in data_yaml
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["items"][0]["annotation_count"] == 1

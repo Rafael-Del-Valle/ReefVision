@@ -158,7 +158,6 @@ def write_yolo_detection_export(
         split_counts[item.split] += 1
 
     yaml_lines = [
-        "path: .",
         "train: images/train",
         "val: images/validation",
         "test: images/test",

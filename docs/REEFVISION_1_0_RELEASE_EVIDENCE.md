@@ -59,7 +59,7 @@ Add `-PreviousInstallerPath C:\path\to\previous\ReefVision.msi -PreviousInstalle
 
 | Evidence | Status | Current evidence |
 | --- | --- | --- |
-| Coral detection training and inference | NOT RUN | Biological validation remains outstanding |
+| Coral detection training and inference | PASS | 16 real APAL coral-ova images and 305 YOLO boxes; YOLO11 nano, 2 CUDA epochs, registered checkpoint, 96 held-out pending proposals, and restart inference |
 | Coral segmentation training and inference | NOT RUN | Biological validation remains outstanding |
 | Coral classification training and inference | NOT RUN | Biological validation remains outstanding |
 | SAM2 CPU | PASS | Verified `sam2_b.pt` executed through production Smart Mask provider on CPU |
@@ -84,5 +84,16 @@ Depth Anything used official model `depth-anything/Depth-Anything-V2-Small-hf` a
 revision `5426e4f0f36572d16453bbda7a8389317b1bef99`. ReefVision verified all three
 managed snapshot files (99,175,385 bytes total). CPU load plus inference took 11.885
 seconds; CUDA load plus inference took 0.660 seconds and peaked at 207,890,944 bytes.
+
+Coral detection acceptance used the local APAL `InitialModel` dataset: 11 train,
+3 validation, and 2 test images (205/60/40 boxes), all 3840×2160, with the `Egg`
+class. ReefVision trained YOLO11 nano from scratch for two epochs on the RTX 4060
+in 39.096 seconds, peaking at 401,026,560 allocated CUDA bytes. The deliberately
+bounded run reported precision, recall, mAP50, and mAP50-95 of 0; this is a software
+execution PASS, not a scientific-performance claim. The registered model produced
+96 pending proposals on two held-out images at the recorded 0.001 smoke threshold
+and loaded successfully in a fresh application instance. Full hashes, lineage,
+configuration, metrics, and IDs are in
+`.artifacts/coral-detection-acceptance-20260819-170915/report.json`.
 
 Synthetic software tests do not establish biological accuracy, tracking quality, calibration accuracy, or hardware-provider readiness.
