@@ -6,9 +6,9 @@ This checklist separates software correctness, package readability, installed-Wi
 
 | Evidence | Status | Current evidence |
 | --- | --- | --- |
-| Backend lint and format | PASS | Local Ruff and Ruff format gate at `0771ca2`; focused recheck required after segmentation-prep changes |
-| Backend strict typing | PASS | Local mypy gate at `0771ca2`; focused recheck required after segmentation-prep changes |
-| Backend tests | PASS | 267 tests passed locally before segmentation-prep changes; focused recheck required |
+| Backend lint and format | PASS | Local Ruff and Ruff format gate at `0771ca2`; focused recheck required after segmentation/classification preparation changes |
+| Backend strict typing | PASS | Local mypy gate at `0771ca2`; focused recheck required after segmentation/classification preparation changes |
+| Backend tests | PASS | 267 tests passed locally before segmentation/classification preparation changes; focused recheck required |
 | Project Exchange and typed 3D regressions | PASS | Focused restart-safe exchange and 3D workflow tests passed locally |
 | Alembic round trip | PASS | Blank database upgrade to `0024`, downgrade to base, and re-upgrade passed |
 | Frontend format and typecheck | PASS | Local Prettier and TypeScript gates passed |
@@ -61,7 +61,7 @@ Add `-PreviousInstallerPath C:\path\to\previous\ReefVision.msi -PreviousInstalle
 | --- | --- | --- |
 | Coral detection training and inference | PASS | 16 real APAL coral-ova images and 305 YOLO boxes; YOLO11 nano, 2 CUDA epochs, registered checkpoint, 96 held-out pending proposals, and restart inference |
 | Coral segmentation training and inference | NOT RUN | Real-data harness prepared; requires a genuine YOLO polygon coral dataset and hardware execution |
-| Coral classification training and inference | NOT RUN | Biological validation remains outstanding |
+| Coral classification training and inference | NOT RUN | Real-data whole-image harness prepared; requires a genuine biological train/val/test class-folder dataset and hardware execution |
 | SAM2 CPU | PASS | Verified `sam2_b.pt` executed through production Smart Mask provider on CPU |
 | SAM2 CUDA | PASS | Verified `sam2_b.pt` executed on RTX 4060 Laptop GPU with no CPU fallback |
 | Depth Anything CPU | PASS | Verified Depth Anything V2 Small snapshot executed through the production provider on CPU |
@@ -107,13 +107,34 @@ exporter now uses paths relative to `data.yaml`, matching the portable contract 
 proven by real detection acceptance. This evidence row remains `NOT RUN` until a
 genuine biological polygon dataset and hardware execution produce a JSON report.
 
-Example future hardware run:
+Example future segmentation hardware run:
 
 ```powershell
 .\.venv\Scripts\python.exe .\scripts\acceptance_coral_segmentation.py `
   --dataset C:\path\to\real-coral-yolo-segmentation `
   --output .\.artifacts\coral-segmentation-acceptance-<timestamp> `
   --biological-context "Real coral imagery with manually verified polygon masks"
+```
+
+Real biological whole-image classification acceptance is prepared in
+`scripts/acceptance_coral_classification.py`. It requires explicit
+`train/<class>`, `val/<class>`, and `test/<class>` directories with at least two
+classes represented in every split. The harness creates human-verified image labels
+in a dedicated ground-truth label set, freezes an immutable ReefVision dataset,
+materializes the production classification dataset, trains and automatically registers
+a classifier, runs held-out top-k inference, records held-out top-1 accuracy as evidence,
+reviews one prediction into a separate model-review label set so the ground truth is not
+overwritten, and verifies the model and reviewed label after application restart. The
+classification row remains `NOT RUN` until real biological data and hardware execution
+produce a JSON report.
+
+Example future classification hardware run:
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\acceptance_coral_classification.py `
+  --dataset C:\path\to\real-biological-classification `
+  --output .\.artifacts\coral-classification-acceptance-<timestamp> `
+  --biological-context "Real biological imagery with manually verified image-level classes"
 ```
 
 Synthetic software tests do not establish biological accuracy, tracking quality, calibration accuracy, or hardware-provider readiness.
