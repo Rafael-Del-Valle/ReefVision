@@ -20,6 +20,7 @@ export function InteroperabilityWorkspace({
   const queryClient = useQueryClient();
   const [includeMedia, setIncludeMedia] = useState(false);
   const [includeModelWeights, setIncludeModelWeights] = useState(false);
+  const [includeGeneratedArtifacts, setIncludeGeneratedArtifacts] = useState(false);
   const [inspectionFile, setInspectionFile] = useState<File | null>(null);
   const [importProjectName, setImportProjectName] = useState("");
 
@@ -33,7 +34,7 @@ export function InteroperabilityWorkspace({
       createProjectExchange(project.id, {
         include_media: includeMedia,
         include_model_weights: includeModelWeights,
-        include_generated_artifacts: false,
+        include_generated_artifacts: includeGeneratedArtifacts,
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
@@ -96,9 +97,18 @@ export function InteroperabilityWorkspace({
             />
             Include registered model weights
           </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={includeGeneratedArtifacts}
+              onChange={(event) => setIncludeGeneratedArtifacts(event.target.checked)}
+            />
+            Include generated datasets, depth maps, previews, frames, and training artifacts
+          </label>
           <p>
-            Model weights are excluded by default because they can be large and
-            may have separate redistribution licenses.
+            Original media, model weights, and generated artifacts are independent
+            opt-ins because complete scientific projects can be much larger than their
+            metadata alone. Model weights may also have separate redistribution licenses.
           </p>
           <button
             type="button"
@@ -138,7 +148,10 @@ export function InteroperabilityWorkspace({
               </p>
               <p>Project: {inspectMutation.data.project_name ?? "Unknown"}</p>
               <p>Format: {inspectMutation.data.format_version ?? "Unknown"}</p>
-              <p>Packaged files: {inspectMutation.data.included_media_count}</p>
+              <p>Original/model files: {inspectMutation.data.included_media_count}</p>
+              <p>
+                Generated artifacts: {inspectMutation.data.included_generated_artifact_count}
+              </p>
               {inspectMutation.data.warnings.length > 0 && (
                 <ul>
                   {inspectMutation.data.warnings.map((warning) => (
@@ -165,8 +178,9 @@ export function InteroperabilityWorkspace({
               </label>
               <p className="annotation-helper">
                 Import always creates a new managed project. Source UUIDs are remapped,
-                exact ID references inside workflow/provenance JSON are remapped, and
-                packaged media is copied into the new project storage tree.
+                exact ID references inside workflow/provenance JSON are remapped, packaged
+                media is copied into the new project storage tree, and included generated
+                artifacts are restored to their managed project-relative paths.
               </p>
               <button
                 type="button"
@@ -200,8 +214,12 @@ export function InteroperabilityWorkspace({
                 <code>{importMutation.data.project_slug}</code>
               </div>
               <div className="annotation-selection-row">
-                <strong>Copied media</strong>
+                <strong>Copied original/model files</strong>
                 <span>{importMutation.data.copied_media_count}</span>
+              </div>
+              <div className="annotation-selection-row">
+                <strong>Restored generated artifacts</strong>
+                <span>{importMutation.data.copied_generated_artifact_count}</span>
               </div>
               <div className="annotation-selection-row">
                 <strong>Source manifest</strong>
