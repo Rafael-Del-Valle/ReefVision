@@ -29,6 +29,17 @@ export interface ProjectExchangeInspection {
   errors: string[];
 }
 
+export interface ProjectExchangeImportResult {
+  project_id: string;
+  project_name: string;
+  project_slug: string;
+  source_manifest_sha256: string;
+  imported_counts: Record<string, number>;
+  copied_media_count: number;
+  warnings: string[];
+  package: ProjectExchangePackageRecord;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
@@ -87,6 +98,19 @@ export function inspectProjectExchange(
   const form = new FormData();
   form.append("file", file);
   return request<ProjectExchangeInspection>("/exchange-packages/inspect", {
+    method: "POST",
+    body: form,
+  });
+}
+
+export function importProjectExchange(
+  file: File,
+  projectName?: string,
+): Promise<ProjectExchangeImportResult> {
+  const form = new FormData();
+  form.append("file", file);
+  if (projectName?.trim()) form.append("project_name", projectName.trim());
+  return request<ProjectExchangeImportResult>("/exchange-packages/import", {
     method: "POST",
     body: form,
   });
