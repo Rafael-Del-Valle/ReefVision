@@ -28,16 +28,16 @@ from reefvision.schemas.measurements import (
     ProjectMeasurementSummaryResponse,
 )
 from reefvision.services.image_scale_calibration import ImageScaleCalibrationService
-from reefvision.services.mask_measurements import MaskMeasurementService
 from reefvision.services.measurement_analytics import MeasurementAnalyticsService
+from reefvision.services.scientific_mask_measurements import ScientificMaskMeasurementService
 
 router = APIRouter(tags=["measurements"])
 DbSession = Annotated[Session, Depends(get_db_session)]
 
 
-def service(request: Request, session: Session) -> MaskMeasurementService:
+def service(request: Request, session: Session) -> ScientificMaskMeasurementService:
     settings: Settings = request.app.state.settings
-    return MaskMeasurementService(session, settings)
+    return ScientificMaskMeasurementService(session, settings)
 
 
 def calibration_service(request: Request, session: Session) -> ImageScaleCalibrationService:
