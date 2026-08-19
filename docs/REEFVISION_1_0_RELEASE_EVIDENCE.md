@@ -1,31 +1,58 @@
 # ReefVision 1.0 Release Evidence
 
-This checklist separates software correctness, package readability, installed-Windows behavior, and scientific validation. `PASS` means evidence has actually been produced; it does not transfer between categories.
+This checklist separates software correctness, package readability, installed-Windows behavior, and scientific validation. `PASS` means evidence has actually been produced for the code/package under discussion; old evidence is retained as baseline context but is not promoted to the current head after relevant code or dependency changes.
 
 ## Automated software gate
 
 | Evidence | Status | Current evidence |
 | --- | --- | --- |
-| Backend lint and format | PASS | Local Ruff and Ruff format gate at `0771ca2`; focused recheck required after segmentation/classification preparation changes |
-| Backend strict typing | PASS | Local mypy gate at `0771ca2`; focused recheck required after segmentation/classification preparation changes |
-| Backend tests | PASS | 267 tests passed locally before segmentation/classification preparation changes; focused recheck required |
-| Project Exchange and typed 3D regressions | PASS | Focused restart-safe exchange and 3D workflow tests passed locally |
-| Alembic round trip | PASS | Blank database upgrade to `0024`, downgrade to base, and re-upgrade passed |
-| Frontend format and typecheck | PASS | Local Prettier and TypeScript gates passed |
-| Frontend unit tests | PASS | 89 tests passed locally |
-| Frontend Chromium E2E | PASS | 7 tests passed locally |
-| Frontend production build | PASS | Vite production build passed locally |
-| Hosted GitHub Actions | BLOCKED | Jobs receive no runner because of the repository/account billing or spending-limit restriction |
+| Backend lint and format | RECHECK REQUIRED | A complete local Ruff/Ruff-format gate passed before the segmentation/classification/tracking/Active-Learning/Scale-Assistant preparation. The current head adds calibration services, schemas, tests, and acceptance harnesses and has not yet received the full local gate. |
+| Backend strict typing | RECHECK REQUIRED | A complete local mypy gate passed before the current release-evidence and Scale Assistant changes. Re-run strict typing on the current head. |
+| Backend tests | RECHECK REQUIRED | 267 tests passed on the earlier release-hardening baseline. New Scale Assistant, Project Exchange, packaged-runtime, segmentation/classification/tracking/Active-Learning, and calibration tests have since been added. |
+| Project Exchange and typed 3D regressions | BASELINE PASS / RECHECK REQUIRED | Restart-safe exchange and calibrated 3D workflow regressions passed on the earlier baseline. A new Scale Assistant calibration/profile round-trip regression now also requires execution. |
+| Alembic round trip | BASELINE PASS / RECHECK REQUIRED | Blank database upgrade to `0024`, downgrade to base, and re-upgrade passed on the earlier baseline. No new database migration was required for image-scale calibration because accepted calibration/profile metadata lives on `ImageAsset.metadata_json`; rerun the migration gate on the current head. |
+| Frontend format and typecheck | RECHECK REQUIRED | The previous frontend passed Prettier and TypeScript. The current head now includes the Scale Assistant UI/API and new tests, so the frontend gate must be rerun. |
+| Frontend unit tests | RECHECK REQUIRED | 89 tests passed on the earlier baseline. New Scale Assistant review and stale-image safety tests have been added since then. |
+| Frontend Chromium E2E | BASELINE PASS / RECHECK REQUIRED | 7 E2E tests passed on the earlier baseline; rerun after current UI changes. |
+| Frontend production build | BASELINE PASS / RECHECK REQUIRED | Vite production build passed on the earlier baseline; rerun on the current head. |
+| Hosted GitHub Actions | BLOCKED | Jobs receive no runner because of the repository/account billing or spending-limit restriction. No hosted result should be inferred for the current head. |
+
+### Current-head local software gate
+
+Use the ReefVision Python 3.12 virtual environment, not the global Anaconda Python:
+
+```powershell
+.\.venv\Scripts\python.exe -m ruff check apps/api
+.\.venv\Scripts\python.exe -m ruff format --check apps/api
+.\.venv\Scripts\python.exe -m mypy apps/api/reefvision
+.\.venv\Scripts\python.exe -m pytest apps/api/reefvision/tests -q
+
+npm --prefix apps/web run format:check
+npm --prefix apps/web run typecheck
+npm --prefix apps/web test -- --run
+npm --prefix apps/web run build
+```
+
+Also execute the focused Scale Assistant regressions before release:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest `
+  apps/api/reefvision/tests/test_image_scale_calibration.py `
+  apps/api/reefvision/tests/test_scale_calibration_contract.py `
+  apps/api/reefvision/tests/test_image_scale_project_exchange_v1.py -q
+```
 
 ## MSI package verification
 
+The last verified MSI predates the current Scale Assistant packaging change. ReefVision now pins `opencv-contrib-python==4.12.0.88` instead of base `opencv-python` so the desktop package can expose `cv2.aruco`, and the packaged sidecar self-test now fails if that module is absent. Therefore the old MSI remains useful baseline evidence but is not current-head package evidence.
+
 | Evidence | Status | Current evidence |
 | --- | --- | --- |
-| Windows MSI build | PASS | `ReefVision_1.7.0_x64_en-US.msi` plus eight nonempty external cabinets |
-| Administrative extraction | PASS | 18,924 files extracted; longest path 184 characters; Error 1304 not reproduced |
-| Required packaged resources | PASS | Desktop executable, sidecar, catalog, Alembic config, 25 migrations, and bundled-model manifest verified |
-| Packaged backend self-test | PASS | Provider imports, OpenAPI construction, and migrated SQLite creation passed |
-| Clean-install harness unit tests | PASS | 11 path-safety, command, report, skip, failure, and cleanup-boundary assertions passed |
+| Windows MSI build | REBUILD REQUIRED | Earlier `ReefVision_1.7.0_x64_en-US.msi` plus eight nonempty external cabinets built successfully, but it predates the contrib/runtime change. |
+| Administrative extraction | BASELINE PASS / RECHECK REQUIRED | Earlier package extracted 18,924 files; longest path 184 characters; Error 1304 was not reproduced. Repeat after the current package rebuild. |
+| Required packaged resources | RECHECK REQUIRED | Desktop executable, sidecar, catalog, Alembic config, migrations, and bundled-model manifest were verified previously. Current package must additionally pass the Scale Assistant `cv2.aruco` self-test. |
+| Packaged backend self-test | RECHECK REQUIRED | The self-test now validates provider imports, OpenAPI construction, migrations, and the OpenCV-contrib ArUco runtime. The current package has not yet been rebuilt/run. |
+| Clean-install harness unit tests | BASELINE PASS / RECHECK REQUIRED | 11 path-safety, command, report, skip, failure, and cleanup-boundary assertions passed previously; rerun on current head. |
 
 Administrative extraction is not clean installation evidence.
 
@@ -35,8 +62,8 @@ Run `scripts/acceptance-windows-clean-install.ps1` only from an elevated PowerSh
 
 | Evidence | Status | Required evidence |
 | --- | --- | --- |
-| Clean MSI install and shortcuts | NOT RUN | Disposable-machine harness report |
-| First desktop launch and backend startup | NOT RUN | Isolated acceptance data root, migrated database, responsive packaged API |
+| Clean MSI install and shortcuts | NOT RUN | Disposable-machine harness report from the rebuilt current-head installer |
+| First desktop launch and backend startup | NOT RUN | Isolated acceptance data root, migrated database, responsive packaged API, and successful packaged self-test |
 | Project/image/annotation creation | NOT RUN | Synthetic image and durable IDs in harness report |
 | Restart and persistence | NOT RUN | Same project, image, and annotation after desktop restart |
 | Project Exchange export | NOT RUN | Nonempty inspectable archive with manifest |
@@ -44,7 +71,7 @@ Run `scripts/acceptance-windows-clean-install.ps1` only from an elevated PowerSh
 | Uninstall | NOT RUN | Binaries, shortcuts, and registration removed |
 | User-data retention after uninstall | NOT RUN | Isolated acceptance data remains after uninstall |
 
-Example current-release run:
+Example current-release run after rebuilding the MSI:
 
 ```powershell
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\acceptance-windows-clean-install.ps1 `
@@ -59,19 +86,24 @@ Add `-PreviousInstallerPath C:\path\to\previous\ReefVision.msi -PreviousInstalle
 
 | Evidence | Status | Current evidence |
 | --- | --- | --- |
-| Coral detection training and inference | PASS | 16 real APAL coral-ova images and 305 YOLO boxes; YOLO11 nano, 2 CUDA epochs, registered checkpoint, 96 held-out pending proposals, and restart inference |
-| Coral segmentation training and inference | NOT RUN | Real-data harness prepared; requires a genuine YOLO polygon coral dataset and hardware execution |
-| Coral classification training and inference | NOT RUN | Real-data whole-image harness prepared; requires a genuine biological train/val/test class-folder dataset and hardware execution |
-| SAM2 CPU | PASS | Verified `sam2_b.pt` executed through production Smart Mask provider on CPU |
-| SAM2 CUDA | PASS | Verified `sam2_b.pt` executed on RTX 4060 Laptop GPU with no CPU fallback |
-| Depth Anything CPU | PASS | Verified Depth Anything V2 Small snapshot executed through the production provider on CPU |
-| Depth Anything CUDA | PASS | Verified Depth Anything V2 Small snapshot executed on RTX 4060 Laptop GPU with no CPU fallback |
-| Unavailable-device recovery | PASS | Production device resolver rejected `cuda:99` without fallback |
-| CUDA out-of-memory recovery | NOT RUN | No explicit production recovery contract; unsafe real OOM was not attempted |
-| ByteTrack benchmark against scored footage | NOT RUN | Scored-footage validation remains outstanding |
-| BoT-SORT benchmark against scored footage | NOT RUN | Scored-footage validation remains outstanding |
-| Active Learning equal-budget comparison | NOT RUN | Scientific comparison remains outstanding |
-| Physical and metric-depth calibration validation | NOT RUN | Calibration validation remains outstanding |
+| Coral detection training and inference | PASS | 16 real APAL coral-ova images and 305 YOLO boxes; YOLO11 nano, 2 CUDA epochs, registered checkpoint, 96 held-out pending proposals, and restart inference. This proves software execution, not biological performance. |
+| Coral segmentation training and inference | NOT RUN | Real-data harness prepared; requires a genuine YOLO polygon coral dataset and hardware execution. |
+| Coral classification training and inference | NOT RUN | Real-data whole-image harness prepared; requires a genuine biological `train/val/test/<class>` dataset and hardware execution. |
+| SAM2 CPU | PASS | Verified `sam2_b.pt` executed through production Smart Mask provider on CPU. |
+| SAM2 CUDA | PASS | Verified `sam2_b.pt` executed on RTX 4060 Laptop GPU with no CPU fallback. |
+| Depth Anything CPU | PASS | Verified Depth Anything V2 Small snapshot executed through the production provider on CPU. |
+| Depth Anything CUDA | PASS | Verified Depth Anything V2 Small snapshot executed on RTX 4060 Laptop GPU with no CPU fallback. |
+| Unavailable-device recovery | PASS | Production device resolver rejected `cuda:99` without fallback. |
+| CUDA out-of-memory recovery | NOT RUN | No explicit production recovery contract; unsafe real OOM was not attempted. |
+| ByteTrack benchmark against scored footage | NOT RUN | Production comparison harness is prepared for real video plus manually scored bounding-box tracks. |
+| BoT-SORT benchmark against scored footage | NOT RUN | Same shared-detector/scored-footage harness will evaluate the production BoT-SORT path. |
+| Active Learning equal-budget comparison | NOT RUN | Production uncertainty acquisition versus deterministic random sampling at the identical annotation budget is prepared. Active Learning is not required to win for software correctness. |
+| Physical and metric-depth calibration validation | NOT RUN | Known-distance 2D and independently supplied metric-depth 3D validation harness is prepared. Relative monocular depth is never accepted as metric evidence. |
+| Scale Assistant ruler accuracy | NOT RUN | Software detector/regression coverage exists; real rulers with independently known spacing must quantify scale error across orientation, lighting, image resolution, and perspective. |
+| Scale Assistant ArUco/ChArUco accuracy | NOT RUN | Current provider stack now requests OpenCV contrib and the package self-test requires `cv2.aruco`; real printed references must still validate scale/homography error. |
+| Perspective-corrected coral measurement accuracy | NOT RUN | Validate polygon area/perimeter/TLE on independent planar targets at known oblique views. Raster masks intentionally remain scalar unless a future workflow explicitly resamples them. |
+| Camera/setup profile repeatability | NOT RUN | Validate repeated same-setup images and deliberate setup changes; reuse requires exact resolution plus explicit researcher confirmation. |
+| Scale Assistant Project Exchange round trip | TEST PREPARED | Regression verifies source calibration homography/provenance, remapped profile-source image IDs, scalar-only reused profiles, and independence of the imported project. Execute in the current-head backend gate. |
 
 Hardware evidence generated 2026-08-19 on Windows 11 with PyTorch 2.5.1+cu121,
 Transformers 4.57.2, and an NVIDIA GeForce RTX 4060 Laptop GPU (8 GiB VRAM):
@@ -96,6 +128,8 @@ and loaded successfully in a fresh application instance. Full hashes, lineage,
 configuration, metrics, and IDs are in
 `.artifacts/coral-detection-acceptance-20260819-170915/report.json`.
 
+## Prepared real-data acceptance harnesses
+
 Real coral instance-segmentation acceptance is prepared in
 `scripts/acceptance_coral_segmentation.py`. The harness refuses box-only YOLO labels,
 requires explicit train/validation/test polygon splits, preserves source image and
@@ -103,38 +137,32 @@ label hashes in an isolated ReefVision data root, trains through the task-aware
 segmentation worker, registers the resulting segmenter, requires held-out polygon-mask
 proposals, accepts one through ReefVision's normal human-review path, and verifies both
 the registered model and accepted mask after application restart. The segmentation
-exporter now uses paths relative to `data.yaml`, matching the portable contract already
-proven by real detection acceptance. This evidence row remains `NOT RUN` until a
-genuine biological polygon dataset and hardware execution produce a JSON report.
-
-Example future segmentation hardware run:
-
-```powershell
-.\.venv\Scripts\python.exe .\scripts\acceptance_coral_segmentation.py `
-  --dataset C:\path\to\real-coral-yolo-segmentation `
-  --output .\.artifacts\coral-segmentation-acceptance-<timestamp> `
-  --biological-context "Real coral imagery with manually verified polygon masks"
-```
+exporter uses paths relative to `data.yaml`, matching the portable contract already
+proven by real detection acceptance.
 
 Real biological whole-image classification acceptance is prepared in
 `scripts/acceptance_coral_classification.py`. It requires explicit
 `train/<class>`, `val/<class>`, and `test/<class>` directories with at least two
-classes represented in every split. The harness creates human-verified image labels
-in a dedicated ground-truth label set, freezes an immutable ReefVision dataset,
-materializes the production classification dataset, trains and automatically registers
-a classifier, runs held-out top-k inference, records held-out top-1 accuracy as evidence,
-reviews one prediction into a separate model-review label set so the ground truth is not
-overwritten, and verifies the model and reviewed label after application restart. The
-classification row remains `NOT RUN` until real biological data and hardware execution
-produce a JSON report.
+classes represented in every split. It freezes human ground truth in a dedicated label
+set, trains and registers a production classifier, runs held-out top-k inference, records
+held-out top-1 accuracy, reviews one prediction into a separate model-review label set,
+and verifies restart persistence.
 
-Example future classification hardware run:
+Real fish-tracking comparison is prepared in `scripts/acceptance_fish_tracking.py`.
+The same registered detector checkpoint and thresholds are used for production ByteTrack
+and BoT-SORT jobs, and both are evaluated against the same manually scored track truth.
 
-```powershell
-.\.venv\Scripts\python.exe .\scripts\acceptance_coral_classification.py `
-  --dataset C:\path\to\real-biological-classification `
-  --output .\.artifacts\coral-classification-acceptance-<timestamp> `
-  --biological-context "Real biological imagery with manually verified image-level classes"
-```
+The equal-budget detection Active Learning experiment is prepared in
+`scripts/acceptance_active_learning_detection.py`. It compares the production
+`uncertainty` acquisition path with deterministic random sampling using the identical
+annotation budget, then retrains both arms independently against the same held-out test
+set. The observed metric delta is evidence; a positive delta is not a software-pass
+requirement.
 
-Synthetic software tests do not establish biological accuracy, tracking quality, calibration accuracy, or hardware-provider readiness.
+Known-distance/metric-depth validation is prepared in
+`scripts/acceptance_physical_calibration.py`. It compares calibrated 2D track analytics
+and camera-intrinsics plus externally supplied metric-depth 3D analytics with independent
+expected values under explicit tolerances and verifies persistence after restart.
+
+Synthetic software tests do not establish biological accuracy, tracking quality,
+calibration accuracy, or hardware-provider readiness.
