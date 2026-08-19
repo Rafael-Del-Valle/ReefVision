@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import get_settings
 from reefvision.db.models import (
+    DepthMap,
     ImageAsset,
     ImageEmbedding,
     MaskAnnotation,
@@ -29,6 +30,7 @@ from reefvision.ml.active_learning_selection import (
     select_candidates,
 )
 from reefvision.schemas.videos import VideoAnalyticsRequest
+from reefvision.services.depth_maps import DepthMapService
 from reefvision.services.mask_measurements import MaskMeasurementService
 from reefvision.services.video_behavior import VideoBehaviorAnalysisService
 
@@ -53,7 +55,7 @@ def _workflow_measurements(
     configuration: dict[str, Any],
     inputs: list[WorkflowArtifact],
 ) -> workflow_runs.ArtifactOutputs:
-    """Calculate live coral measurements for masks selected by a workflow node."""
+    """Calculate live 2D/calibrated and optional depth-aware coral measurements."""
 
     payloads = [workflow_runs._artifact_payload(item) for item in inputs]
     image_ids = workflow_runs._list_values(payloads, "image_ids")
@@ -62,13 +64,23 @@ def _workflow_measurements(
         "mask_annotation_ids",
         "mask_ids",
     )
-    configured = configuration.get("mask_annotation_ids")
+    input_depth_map_ids = workflow_runs._list_values(payloads, "depth_map_ids")
+
+    configured_masks = configuration.get("mask_annotation_ids")
     configured_mask_ids = (
-        [str(value) for value in configured]
-        if isinstance(configured, list)
+        [str(value) for value in configured_masks]
+        if isinstance(configured_masks, list)
         else []
     )
     requested_mask_ids = list(dict.fromkeys(configured_mask_ids or input_mask_ids))
+
+    configured_depth = configuration.get("depth_map_ids")
+    configured_depth_ids = (
+        [str(value) for value in configured_depth]
+        if isinstance(configured_depth, list)
+        else []
+    )
+    requested_depth_ids = list(dict.fromkeys(configured_depth_ids or input_depth_map_ids))
 
     label_class_ids = configuration.get("label_class_ids")
     scientific_names = configuration.get("scientific_names")
@@ -106,16 +118,43 @@ def _workflow_measurements(
         mask_ids = list(
             session.scalars(query.order_by(MaskAnnotation.image_id, MaskAnnotation.id))
         )
-        service = MaskMeasurementService(session, settings)
-        measurements = [
-            service.measure(
+
+        depth_by_image: dict[str, str] = {}
+        if requested_depth_ids:
+            depth_maps = list(
+                session.scalars(
+                    select(DepthMap)
+                    .where(
+                        DepthMap.project_id == run.project_id,
+                        DepthMap.id.in_(requested_depth_ids),
+                    )
+                    .order_by(DepthMap.created_at, DepthMap.id)
+                )
+            )
+            # If more than one aligned map is supplied for an image, the most recently
+            # ordered map wins deterministically. Workflows can pin one ID in config when
+            # a specific provider/depth kind is scientifically required.
+            depth_by_image = {item.image_id: item.id for item in depth_maps}
+
+        measurement_service = MaskMeasurementService(session, settings)
+        depth_service = DepthMapService(session, settings)
+        measurements: list[dict[str, Any]] = []
+        for mask_id in mask_ids:
+            measurement = measurement_service.measure(
                 mask_id,
                 label_class_ids=resolved_label_class_ids,
                 scientific_names=resolved_scientific_names,
                 state_names=resolved_state_names,
             ).model_dump(mode="json")
-            for mask_id in mask_ids
-        ]
+            depth_map_id = depth_by_image.get(str(measurement["image_id"]))
+            if depth_map_id is not None:
+                measurement["depth_measurement"] = depth_service.measure_mask(
+                    mask_id,
+                    depth_map_id=depth_map_id,
+                ).model_dump(mode="json")
+            else:
+                measurement["depth_measurement"] = None
+            measurements.append(measurement)
 
     return {
         "measurements": (
@@ -125,10 +164,12 @@ def _workflow_measurements(
                     dict.fromkeys(str(item["image_id"]) for item in measurements)
                 ),
                 "mask_annotation_ids": mask_ids,
+                "depth_map_ids": requested_depth_ids,
                 "measurement_count": len(measurements),
                 "measurements": measurements,
-                "measurement_engine": "mask_measurements",
+                "measurement_engine": "mask_measurements+depth_maps",
                 "calibration_aware": True,
+                "depth_aware": bool(requested_depth_ids),
                 "filters": {
                     "label_class_ids": resolved_label_class_ids or [],
                     "scientific_names": resolved_scientific_names or [],
@@ -304,29 +345,37 @@ def _workflow_active_learning(
     raw_base_scores = configuration.get("base_scores")
     base_scores = raw_base_scores if isinstance(raw_base_scores, dict) else {}
     raw_manual_priority = configuration.get("manual_priority")
-    manual_priority = {
-        str(value) for value in raw_manual_priority
-    } if isinstance(raw_manual_priority, list) else set()
+    manual_priority = (
+        {str(value) for value in raw_manual_priority}
+        if isinstance(raw_manual_priority, list)
+        else set()
+    )
 
-    candidates = [
-        SelectionCandidate(
-            candidate_id=image_id,
-            embedding=(
-                tuple(float(value) for value in latest_by_image[image_id].vector_json)
-                if image_id in latest_by_image
-                else None
-            ),
-            probabilities=probabilities.get(image_id, ()),
-            ensemble_probabilities=ensemble_probabilities.get(image_id, ()),
-            base_score=float(base_scores.get(image_id, 0.0)),
-            group_id=group_ids.get(image_id),
-            fragment_id=fragment_ids.get(image_id),
-            class_ids=class_ids.get(image_id, ()),
-            manual_priority=image_id in manual_priority,
-            metadata={"embedding_model_id": embedding_model_id},
+    candidates: list[SelectionCandidate] = []
+    for image_id in candidate_ids:
+        try:
+            base_score = float(base_scores.get(image_id, 0.0))
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError(f"Invalid base score for active-learning candidate {image_id}") from exc
+        candidates.append(
+            SelectionCandidate(
+                candidate_id=image_id,
+                embedding=(
+                    tuple(float(value) for value in latest_by_image[image_id].vector_json)
+                    if image_id in latest_by_image
+                    else None
+                ),
+                probabilities=probabilities.get(image_id, ()),
+                ensemble_probabilities=ensemble_probabilities.get(image_id, ()),
+                base_score=base_score,
+                group_id=group_ids.get(image_id),
+                fragment_id=fragment_ids.get(image_id),
+                class_ids=class_ids.get(image_id, ()),
+                manual_priority=image_id in manual_priority,
+                metadata={"embedding_model_id": embedding_model_id},
+            )
         )
-        for image_id in candidate_ids
-    ]
+
     results = select_candidates(
         candidates,
         budget=int(configuration.get("maximum_items", 100)),
