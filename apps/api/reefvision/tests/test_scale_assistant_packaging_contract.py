@@ -19,7 +19,9 @@ def test_windows_provider_stack_uses_only_opencv_contrib_distribution() -> None:
     assert "opencv-contrib-python==4.12.0.88" in active_lines
     assert not any(line.startswith("opencv-python") for line in active_lines)
     assert not any(line.startswith("opencv-python-headless") for line in active_lines)
-    assert not any(line.startswith("opencv-contrib-python-headless") for line in active_lines)
+    assert not any(
+        line.startswith("opencv-contrib-python-headless") for line in active_lines
+    )
 
 
 def test_bootstrap_resets_shared_cv2_namespace_before_pinned_install() -> None:
