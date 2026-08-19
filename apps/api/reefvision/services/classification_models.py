@@ -69,6 +69,14 @@ class ClassificationModelService(SemanticModelService):
         )
         artifact = dict(run.artifact_manifest_json)
         mode = str(artifact.get("classification_mode", "multiclass"))
+        snapshot_id = str(artifact.get("classification_dataset_snapshot_id") or "") or None
+        scope = str(
+            artifact.get("classification_scope")
+            or ("annotation" if run.dataset_version_id is not None else "unknown")
+        )
+        label_set_id = str(artifact.get("classification_label_set_id") or "") or None
+        label_set_key = str(artifact.get("classification_label_set_key") or "") or None
+        cardinality = str(artifact.get("classification_cardinality") or "single")
         manifest_relative = str(artifact.get("dataset_manifest_path") or "")
         if not manifest_relative:
             raise ValidationError("Classification run is missing its dataset manifest")
@@ -97,9 +105,18 @@ class ClassificationModelService(SemanticModelService):
                 "source_split_manifest_sha256": run.split_manifest_sha256,
                 "source_metrics": dict(run.metrics_json),
                 "classification_mode": mode,
-                "classification_scope": "annotation_crop",
+                "classification_scope": scope,
+                "classification_scope_locked": snapshot_id is not None,
+                "classification_dataset_snapshot_id": snapshot_id,
+                "classification_snapshot_manifest_sha256": (
+                    run.dataset_manifest_sha256 if snapshot_id is not None else None
+                ),
+                "classification_label_set_id": label_set_id,
+                "classification_label_set_key": label_set_key,
+                "classification_cardinality": cardinality,
                 "minimum_crop_size_px": int(artifact.get("minimum_crop_size_px", 10)),
                 "padding_fraction": float(artifact.get("padding_fraction", 0.0)),
+                "mask_background": str(artifact.get("mask_background", "keep")),
             },
         )
         model = self.session.get(ModelRegistration, response.id)
@@ -115,6 +132,12 @@ class ClassificationModelService(SemanticModelService):
             "labels": labels,
             "mapping": mapping,
             "classification_mode": mode,
+            "classification_scope": scope,
+            "classification_scope_locked": snapshot_id is not None,
+            "classification_dataset_snapshot_id": snapshot_id,
+            "classification_label_set_id": label_set_id,
+            "classification_label_set_key": label_set_key,
+            "classification_cardinality": cardinality,
             "state_labels": [label for label in labels if label in {"open", "closed"}],
             "dataset_class_map": raw_class_map,
         }
