@@ -30,6 +30,9 @@ from reefvision.api.routes.training import router as training_router
 from reefvision.api.routes.video_science import router as video_science_router
 from reefvision.api.routes.videos import router as videos_router
 from reefvision.api.routes.workflow_graphs import router as workflow_graphs_router
+from reefvision.services.workflow_v1_install import install_workflow_v1_extensions
+
+install_workflow_v1_extensions()
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health_router)
