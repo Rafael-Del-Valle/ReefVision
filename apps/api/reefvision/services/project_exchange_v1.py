@@ -15,8 +15,14 @@ from pathlib import Path
 from sqlalchemy import select
 
 from reefvision.db.models import (
+    AnnotationEvent,
+    ClassOperation,
+    ClassVisibilityPreference,
+    ExportRecord,
     Job,
+    MaskAnnotationEvent,
     Project,
+    ProjectClassVisibilityDefault,
     TrainingDraft,
     WorkflowArtifact,
     WorkflowGraphRecord,
@@ -42,6 +48,7 @@ class ProjectExchangeV1Service(ProjectExchangeService):
 
     def _records(self, project: Project) -> dict[str, list[object]]:
         sections = super()._records(project)
+        image_ids = [str(item.id) for item in sections.get("images", [])]
         workflow_runs = list(
             self.session.scalars(
                 select(WorkflowRun).where(WorkflowRun.project_id == project.id)
@@ -59,6 +66,26 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             if workflow_run_ids
             else []
         )
+        annotation_events = (
+            list(
+                self.session.scalars(
+                    select(AnnotationEvent).where(AnnotationEvent.image_id.in_(image_ids))
+                )
+            )
+            if image_ids
+            else []
+        )
+        mask_annotation_events = (
+            list(
+                self.session.scalars(
+                    select(MaskAnnotationEvent).where(
+                        MaskAnnotationEvent.image_id.in_(image_ids)
+                    )
+                )
+            )
+            if image_ids
+            else []
+        )
         sections.update(
             {
                 "jobs": list(
@@ -72,6 +99,32 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                 "training_drafts": list(
                     self.session.scalars(
                         select(TrainingDraft).where(TrainingDraft.project_id == project.id)
+                    )
+                ),
+                "annotation_events": annotation_events,
+                "mask_annotation_events": mask_annotation_events,
+                "project_class_visibility_defaults": list(
+                    self.session.scalars(
+                        select(ProjectClassVisibilityDefault).where(
+                            ProjectClassVisibilityDefault.project_id == project.id
+                        )
+                    )
+                ),
+                "class_visibility_preferences": list(
+                    self.session.scalars(
+                        select(ClassVisibilityPreference).where(
+                            ClassVisibilityPreference.project_id == project.id
+                        )
+                    )
+                ),
+                "class_operations": list(
+                    self.session.scalars(
+                        select(ClassOperation).where(ClassOperation.project_id == project.id)
+                    )
+                ),
+                "exports": list(
+                    self.session.scalars(
+                        select(ExportRecord).where(ExportRecord.project_id == project.id)
                     )
                 ),
                 "workflow_graphs": list(
