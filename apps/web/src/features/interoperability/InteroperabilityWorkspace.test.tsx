@@ -111,14 +111,19 @@ describe("InteroperabilityWorkspace", () => {
         "Include generated datasets, depth maps, previews, frames, and training artifacts",
       ),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Create exchange ZIP" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create exchange ZIP" }),
+    );
 
     await waitFor(() => {
-      expect(exchangeApi.createProjectExchange).toHaveBeenCalledWith(project.id, {
-        include_media: false,
-        include_model_weights: false,
-        include_generated_artifacts: true,
-      });
+      expect(exchangeApi.createProjectExchange).toHaveBeenCalledWith(
+        project.id,
+        {
+          include_media: false,
+          include_model_weights: false,
+          include_generated_artifacts: true,
+        },
+      );
     });
   });
 
@@ -127,18 +132,24 @@ describe("InteroperabilityWorkspace", () => {
     const file = new File(["exchange"], "reef.reefvision.zip", {
       type: "application/zip",
     });
-    const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]');
+    const fileInput =
+      container.querySelector<HTMLInputElement>('input[type="file"]');
     expect(fileInput).not.toBeNull();
     fireEvent.change(fileInput!, { target: { files: [file] } });
 
     fireEvent.click(screen.getByRole("button", { name: "Inspect safely" }));
-    expect(await screen.findByText("Portable reef")).toBeInTheDocument();
+    expect(
+      await screen.findByPlaceholderText("Portable reef"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Yes")).toBeInTheDocument();
     expect(screen.getByText("Generated artifacts: 4")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Imported project name (optional)"), {
-      target: { value: "Portable reef imported" },
-    });
+    fireEvent.change(
+      screen.getByLabelText("Imported project name (optional)"),
+      {
+        target: { value: "Portable reef imported" },
+      },
+    );
     const importButton = screen.getByRole("button", {
       name: "Import as new project",
     });
@@ -151,10 +162,14 @@ describe("InteroperabilityWorkspace", () => {
         "Portable reef imported",
       );
     });
-    expect(await screen.findByText("Portable reef imported")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Portable reef imported"),
+    ).toBeInTheDocument();
     expect(screen.getByText("portable-reef-imported")).toBeInTheDocument();
     expect(screen.getByText("Copied original/model files")).toBeInTheDocument();
-    expect(screen.getByText("Restored generated artifacts")).toBeInTheDocument();
+    expect(
+      screen.getByText("Restored generated artifacts"),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("3").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("4").length).toBeGreaterThanOrEqual(1);
   });

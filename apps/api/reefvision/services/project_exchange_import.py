@@ -5,10 +5,9 @@ from __future__ import annotations
 import json
 import shutil
 import zipfile
-from collections.abc import BinaryIO
 from datetime import datetime
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, BinaryIO
 from uuid import uuid4
 
 from sqlalchemy import DateTime
@@ -56,7 +55,6 @@ from reefvision.services.project_exchange_inspection import (
 from reefvision.services.projects import ProjectService
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
-
 
 SECTION_MODELS: dict[str, type[Any]] = {
     "label_classes": LabelClass,
@@ -166,11 +164,7 @@ def _coerce_row(
         if column.name not in values:
             continue
         value = values[column.name]
-        if (
-            value is not None
-            and isinstance(column.type, DateTime)
-            and isinstance(value, str)
-        ):
+        if value is not None and isinstance(column.type, DateTime) and isinstance(value, str):
             value = datetime.fromisoformat(value)
         converted[column.name] = value
     return converted
@@ -212,11 +206,7 @@ def _media_inventory(manifest: dict[str, Any]) -> dict[tuple[str, str], dict[str
         kind = item.get("kind")
         record_id = item.get("record_id")
         member = item.get("path")
-        if (
-            isinstance(kind, str)
-            and isinstance(record_id, str)
-            and isinstance(member, str)
-        ):
+        if isinstance(kind, str) and isinstance(record_id, str) and isinstance(member, str):
             result[(kind, record_id)] = item
     return result
 
@@ -257,9 +247,7 @@ def import_project_exchange(
     source.seek(0)
     inspection = inspect_project_exchange(source)
     if not inspection.compatible:
-        raise ValidationError(
-            "Exchange package failed inspection: " + "; ".join(inspection.errors)
-        )
+        raise ValidationError("Exchange package failed inspection: " + "; ".join(inspection.errors))
 
     source.seek(0)
     with zipfile.ZipFile(source, "r") as archive:
@@ -278,9 +266,7 @@ def import_project_exchange(
             if isinstance(member, str):
                 source_project_rows = _read_jsonl(archive, member)
         if len(source_project_rows) != 1:
-            raise ValidationError(
-                "Exchange package must contain exactly one source project row"
-            )
+            raise ValidationError("Exchange package must contain exactly one source project row")
         source_project = source_project_rows[0]
         old_project_id = str(source_project.get("id", ""))
         if not old_project_id:
@@ -290,11 +276,7 @@ def import_project_exchange(
         requested_name = (
             project_name.strip()
             if project_name is not None and project_name.strip()
-            else str(
-                source_project.get("name")
-                or inspection.project_name
-                or "Imported project"
-            )
+            else str(source_project.get("name") or inspection.project_name or "Imported project")
         )
         project = ProjectService(session, settings).create_project(
             ProjectCreate(
@@ -308,8 +290,7 @@ def import_project_exchange(
             )
         )
         project.default_annotation_type = str(
-            source_project.get("default_annotation_type")
-            or project.default_annotation_type
+            source_project.get("default_annotation_type") or project.default_annotation_type
         )
         session.commit()
         session.refresh(project)
@@ -393,9 +374,7 @@ def import_project_exchange(
                             copied_media_count += 1
                         elif "managed_path" in model.__table__.columns:
                             source_name = str(
-                                row.get("original_filename")
-                                or row.get("source_filename")
-                                or old_id
+                                row.get("original_filename") or row.get("source_filename") or old_id
                             )
                             suffix = PurePosixPath(source_name).suffix.lower()
                             values["managed_path"] = (
@@ -437,12 +416,9 @@ def import_project_exchange(
             # Persist the source archive as import provenance inside the new project.
             package_id = str(uuid4())
             archive_relative = (
-                f"{project.storage_root}/exchanges/"
-                f"{package_id}.imported.reefvision.zip"
+                f"{project.storage_root}/exchanges/{package_id}.imported.reefvision.zip"
             )
-            archive_destination = resolve_managed_project_path(
-                settings, archive_relative
-            )
+            archive_destination = resolve_managed_project_path(settings, archive_relative)
             archive_destination.parent.mkdir(parents=True, exist_ok=True)
             source.seek(0)
             with archive_destination.open("wb") as target:
@@ -478,9 +454,7 @@ def import_project_exchange(
                     session.delete(doomed)
                     session.commit()
             finally:
-                project_root = resolve_managed_project_path(
-                    settings, project.storage_root
-                )
+                project_root = resolve_managed_project_path(settings, project.storage_root)
                 shutil.rmtree(project_root, ignore_errors=True)
             raise
 

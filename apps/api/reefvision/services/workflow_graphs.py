@@ -46,7 +46,9 @@ _ACTIONS: dict[str, str] = {
     "dataset_version_create": (
         "Freeze current reviewed project state into a new immutable dataset version."
     ),
-    "registered_model_source": "Resolve one registered project model and verify its checkpoint metadata.",
+    "registered_model_source": (
+        "Resolve one registered project model and verify its checkpoint metadata."
+    ),
     "project_video_source": "Resolve one managed source video.",
     "verified_masks_source": "Read existing non-deleted verified mask annotations.",
     "detection_inference": "Run the existing detector inference operation for the resolved images.",
@@ -75,6 +77,9 @@ _ACTIONS: dict[str, str] = {
     "classification_review_gate": "Pause until class predictions are reviewed by a human.",
     "mask_measurements": "Calculate Phase 4 measurements and create the selected table export.",
     "video_tracking": "Run existing detector-plus-tracker video tracking.",
+    "video_depth_3d_analytics": (
+        "Reconstruct calibrated metric 3D trajectories from video tracks and depth samples."
+    ),
     "project_exchange_export": "Build a Phase 9 checksummed project exchange export inline.",
 }
 
@@ -258,7 +263,8 @@ class WorkflowGraphService:
                 self._issue(
                     "warning",
                     "training_catalog_architecture_override",
-                    "catalog_model_id resolves its own architecture; the explicit architecture may be ignored",
+                    "catalog_model_id resolves its own architecture; the explicit "
+                    "architecture may be ignored",
                     node_id=node_id,
                 )
             )
@@ -396,12 +402,8 @@ class WorkflowGraphService:
             target_definition = definitions.get(target.node_id)
             if source_definition is None or target_definition is None:
                 continue
-            source_port = self._port_map(source_definition, inputs=False).get(
-                edge.source_port_id
-            )
-            target_port = self._port_map(target_definition, inputs=True).get(
-                edge.target_port_id
-            )
+            source_port = self._port_map(source_definition, inputs=False).get(edge.source_port_id)
+            target_port = self._port_map(target_definition, inputs=True).get(edge.target_port_id)
             if source_port is None:
                 issues.append(
                     self._issue(
@@ -487,19 +489,22 @@ class WorkflowGraphService:
                 continue
             model_id = str(source_node.parameters.get("model_id", ""))
             model = self.session.get(ModelRegistration, model_id) if model_id else None
-            if model is not None and model.project_id == project_id:
-                if model.purpose not in accepted_purposes:
-                    issues.append(
-                        self._issue(
-                            "error",
-                            "model_purpose_mismatch",
-                            (
-                                f"{node.node_type} requires model purpose "
-                                f"{sorted(accepted_purposes)}, found {model.purpose}"
-                            ),
-                            node_id=node.node_id,
-                        )
+            if (
+                model is not None
+                and model.project_id == project_id
+                and model.purpose not in accepted_purposes
+            ):
+                issues.append(
+                    self._issue(
+                        "error",
+                        "model_purpose_mismatch",
+                        (
+                            f"{node.node_type} requires model purpose "
+                            f"{sorted(accepted_purposes)}, found {model.purpose}"
+                        ),
+                        node_id=node.node_id,
                     )
+                )
 
         queue = deque(sorted(node_id for node_id, degree in indegree.items() if degree == 0))
         topological_order: list[str] = []
@@ -565,9 +570,9 @@ class WorkflowGraphService:
             }
             bindings: list[WorkflowPlanInputBinding] = []
             for edge in sorted(edge_by_target.get(node_id, []), key=lambda item: item.edge_id):
-                source_port = self._port_map(
-                    source_definitions[edge.edge_id], inputs=False
-                )[edge.source_port_id]
+                source_port = self._port_map(source_definitions[edge.edge_id], inputs=False)[
+                    edge.source_port_id
+                ]
                 target_port = self._port_map(definition, inputs=True)[edge.target_port_id]
                 data_type = next(
                     item

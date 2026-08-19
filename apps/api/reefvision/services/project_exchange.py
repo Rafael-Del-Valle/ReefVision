@@ -5,10 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import zipfile
-from collections.abc import BinaryIO, Iterable
+from collections.abc import Iterable
 from datetime import date, datetime
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, BinaryIO
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -65,11 +65,8 @@ def _json_value(value: object) -> object:
 
 
 def _row(instance: object) -> dict[str, object]:
-    table = getattr(instance, "__table__")
-    return {
-        column.name: _json_value(getattr(instance, column.name))
-        for column in table.columns
-    }
+    table = instance.__table__
+    return {column.name: _json_value(getattr(instance, column.name)) for column in table.columns}
 
 
 def _jsonl_bytes(rows: Iterable[dict[str, object]]) -> bytes:
@@ -181,30 +178,28 @@ class ProjectExchangeService:
         sections: dict[str, list[object]] = {
             "project": [project],
             "label_classes": list(
-                self.session.scalars(
-                    select(LabelClass).where(LabelClass.project_id == project.id)
-                )
+                self.session.scalars(select(LabelClass).where(LabelClass.project_id == project.id))
             ),
             "images": list(
-                self.session.scalars(
-                    select(ImageAsset).where(ImageAsset.project_id == project.id)
-                )
+                self.session.scalars(select(ImageAsset).where(ImageAsset.project_id == project.id))
             ),
             "annotations": list(
-                self.session.scalars(
-                    select(Annotation).where(Annotation.image_id.in_(image_ids))
-                )
-            ) if image_ids else [],
+                self.session.scalars(select(Annotation).where(Annotation.image_id.in_(image_ids)))
+            )
+            if image_ids
+            else [],
             "mask_annotations": list(
                 self.session.scalars(
                     select(MaskAnnotation).where(MaskAnnotation.image_id.in_(image_ids))
                 )
-            ) if image_ids else [],
+            )
+            if image_ids
+            else [],
             "image_labels": list(
-                self.session.scalars(
-                    select(ImageLabel).where(ImageLabel.image_id.in_(image_ids))
-                )
-            ) if image_ids else [],
+                self.session.scalars(select(ImageLabel).where(ImageLabel.image_id.in_(image_ids)))
+            )
+            if image_ids
+            else [],
             "prediction_proposals": list(
                 self.session.scalars(
                     select(PredictionProposal).where(PredictionProposal.project_id == project.id)
@@ -225,15 +220,13 @@ class ProjectExchangeService:
                 )
             ),
             "videos": list(
-                self.session.scalars(
-                    select(VideoAsset).where(VideoAsset.project_id == project.id)
-                )
+                self.session.scalars(select(VideoAsset).where(VideoAsset.project_id == project.id))
             ),
             "video_tracks": list(
-                self.session.scalars(
-                    select(VideoTrack).where(VideoTrack.video_id.in_(video_ids))
-                )
-            ) if video_ids else [],
+                self.session.scalars(select(VideoTrack).where(VideoTrack.video_id.in_(video_ids)))
+            )
+            if video_ids
+            else [],
             "dataset_versions": list(
                 self.session.scalars(
                     select(DatasetVersion).where(DatasetVersion.project_id == project.id)
@@ -245,7 +238,9 @@ class ProjectExchangeService:
                         DatasetVersionItem.dataset_version_id.in_(version_ids)
                     )
                 )
-            ) if version_ids else [],
+            )
+            if version_ids
+            else [],
             "models": list(
                 self.session.scalars(
                     select(ModelRegistration).where(ModelRegistration.project_id == project.id)
@@ -283,9 +278,7 @@ class ProjectExchangeService:
             ),
             "active_learning_rounds": list(
                 self.session.scalars(
-                    select(ActiveLearningRound).where(
-                        ActiveLearningRound.project_id == project.id
-                    )
+                    select(ActiveLearningRound).where(ActiveLearningRound.project_id == project.id)
                 )
             ),
         }
@@ -359,9 +352,7 @@ class ProjectExchangeService:
                     for model in sections["models"]:
                         source = resolve_managed_project_path(self.settings, model.managed_path)
                         if not source.is_file():
-                            raise ValidationError(
-                                f"Managed model is missing: {model.display_name}"
-                            )
+                            raise ValidationError(f"Managed model is missing: {model.display_name}")
                         member = f"models/{model.id}{source.suffix.lower()}"
                         archive.write(source, member)
                         media_manifest.append(
@@ -392,9 +383,7 @@ class ProjectExchangeService:
                         "existing_projects_must_not_be_overwritten": True,
                     },
                 }
-                manifest_bytes = json.dumps(
-                    manifest, indent=2, sort_keys=True
-                ).encode("utf-8")
+                manifest_bytes = json.dumps(manifest, indent=2, sort_keys=True).encode("utf-8")
                 archive.writestr(MANIFEST_NAME, manifest_bytes)
             temporary.replace(archive_path)
             package.status = "complete"
@@ -471,7 +460,8 @@ class ProjectExchangeService:
                         errors.append(f"Section row count failed: {name}")
                 if not manifest.get("media"):
                     warnings.append(
-                        "Package does not include original media; import would require relinking files"
+                        "Package does not include original media; import would require "
+                        "relinking files"
                     )
         except (zipfile.BadZipFile, json.JSONDecodeError, OSError) as exc:
             errors.append(f"Archive could not be inspected: {exc}")

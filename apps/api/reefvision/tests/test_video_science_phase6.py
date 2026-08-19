@@ -86,9 +86,7 @@ def test_calibration_converts_track_metrics_to_physical_units(
     assert scale["units_per_pixel"] == pytest.approx(0.1)
     assert scale["unit"] == "cm"
 
-    analytics = client.get(
-        f"/api/v1/video-tracks/{track['id']}/calibrated-analytics"
-    )
+    analytics = client.get(f"/api/v1/video-tracks/{track['id']}/calibrated-analytics")
     assert analytics.status_code == 200, analytics.text
     result = analytics.json()
     assert result["path_length_pixels"] == pytest.approx(20.0)
@@ -264,10 +262,7 @@ def test_metric_depth_samples_back_project_tracks_into_3d(
 
     cleared = client.delete(f"/api/v1/videos/{video['id']}/camera-intrinsics")
     assert cleared.status_code == 204
-    assert (
-        client.get(f"/api/v1/videos/{video['id']}/camera-intrinsics").status_code
-        == 404
-    )
+    assert client.get(f"/api/v1/videos/{video['id']}/camera-intrinsics").status_code == 404
 
 
 def test_depth_track_samples_must_match_track_support(
@@ -295,5 +290,5 @@ def test_depth_track_samples_must_match_track_support(
             ],
         },
     )
-    assert response.status_code == 422, response.text
+    assert response.status_code == 400, response.text
     assert "outside the track trajectory" in response.json()["detail"]

@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import shutil
 import zipfile
-from collections.abc import BinaryIO
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, BinaryIO
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -84,21 +83,16 @@ def _restore_generated_artifacts(
             if not isinstance(descriptor_value, dict):
                 raise ValueError(f"Generated artifact descriptor {index} is invalid")
             member = str(descriptor_value.get("path", ""))
-            source_relative_path = str(
-                descriptor_value.get("source_relative_path", "")
-            )
-            if not _safe_relative_path(member) or not _safe_relative_path(
-                source_relative_path
-            ):
+            source_relative_path = str(descriptor_value.get("source_relative_path", ""))
+            if not _safe_relative_path(member) or not _safe_relative_path(source_relative_path):
                 raise ValueError(f"Generated artifact path {index} is unsafe")
-            destination_relative = (
-                f"{project.storage_root.rstrip('/')}/{source_relative_path}"
-            )
+            destination_relative = f"{project.storage_root.rstrip('/')}/{source_relative_path}"
             destination = resolve_managed_project_path(settings, destination_relative)
             destination.parent.mkdir(parents=True, exist_ok=True)
-            with archive.open(member, "r") as archive_stream, destination.open(
-                "wb"
-            ) as output_stream:
+            with (
+                archive.open(member, "r") as archive_stream,
+                destination.open("wb") as output_stream,
+            ):
                 shutil.copyfileobj(archive_stream, output_stream)
             copied += 1
     return copied
@@ -151,9 +145,7 @@ def _operation_checksum(operation: ClassOperation) -> str:
 
 def _refresh_class_operation_checksums(session: Session, project_id: str) -> None:
     operations = list(
-        session.scalars(
-            select(ClassOperation).where(ClassOperation.project_id == project_id)
-        )
+        session.scalars(select(ClassOperation).where(ClassOperation.project_id == project_id))
     )
     for operation in operations:
         operation.preview_checksum = _operation_checksum(operation)
@@ -161,13 +153,9 @@ def _refresh_class_operation_checksums(session: Session, project_id: str) -> Non
 
 
 def _refresh_review_queue_checksums(session: Session, project_id: str) -> None:
-    queues = list(
-        session.scalars(select(ReviewQueue).where(ReviewQueue.project_id == project_id))
-    )
+    queues = list(session.scalars(select(ReviewQueue).where(ReviewQueue.project_id == project_id)))
     items = list(
-        session.scalars(
-            select(ReviewQueueItem).where(ReviewQueueItem.project_id == project_id)
-        )
+        session.scalars(select(ReviewQueueItem).where(ReviewQueueItem.project_id == project_id))
     )
     items_by_queue: dict[str, list[ReviewQueueItem]] = {}
     for item in items:
@@ -230,9 +218,7 @@ def _refresh_active_learning_checksums(session: Session, project_id: str) -> Non
         )
     )
     queue_items = list(
-        session.scalars(
-            select(ReviewQueueItem).where(ReviewQueueItem.project_id == project_id)
-        )
+        session.scalars(select(ReviewQueueItem).where(ReviewQueueItem.project_id == project_id))
     )
     items_by_id = {item.id: item for item in queue_items}
 
@@ -248,9 +234,7 @@ def _refresh_active_learning_checksums(session: Session, project_id: str) -> Non
                 item = dict(raw_item)
                 queue_item_id = item.get("queue_item_id")
                 queue_item = (
-                    items_by_id.get(queue_item_id)
-                    if isinstance(queue_item_id, str)
-                    else None
+                    items_by_id.get(queue_item_id) if isinstance(queue_item_id, str) else None
                 )
                 if queue_item is not None:
                     item["input_checksum"] = queue_item.input_checksum
@@ -298,9 +282,7 @@ def _refresh_active_learning_checksums(session: Session, project_id: str) -> Non
         if isinstance(feedback_dataset_id, str):
             feedback_dataset = session.get(DatasetVersion, feedback_dataset_id)
             if feedback_dataset is not None:
-                feedback_summary["feedback_manifest_sha256"] = (
-                    feedback_dataset.manifest_sha256
-                )
+                feedback_summary["feedback_manifest_sha256"] = feedback_dataset.manifest_sha256
         round_record.feedback_summary_json = feedback_summary
     session.flush()
 

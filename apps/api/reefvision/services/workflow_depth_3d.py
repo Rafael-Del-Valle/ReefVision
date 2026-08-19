@@ -38,7 +38,7 @@ def _track_identity_maps(
     for raw in raw_tracks:
         if not isinstance(raw, dict):
             continue
-        track_id = raw.get("id")
+        track_id = raw.get("track_id") or raw.get("id")
         track_number = raw.get("track_number")
         if isinstance(track_id, str) and track_id:
             track_ids.add(track_id)
@@ -74,7 +74,8 @@ def _resolve_depth_samples(
                 track_id = track_ids_by_number.get(int(track_number.strip()))
         if not isinstance(track_id, str) or track_id not in allowed_track_ids:
             raise ValidationError(
-                f"Depth sample {index} must reference a track from the incoming video_tracks artifact"
+                f"Depth sample {index} must reference a track from the incoming "
+                "video_tracks artifact"
             )
         sample.pop("track_number", None)
         sample["track_id"] = track_id

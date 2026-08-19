@@ -6,9 +6,8 @@ import hashlib
 import json
 import zipfile
 from collections import Counter
-from collections.abc import BinaryIO
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, BinaryIO
 
 from reefvision.schemas.project_exchange import ProjectExchangeInspectionResponse
 from reefvision.storage.datasets import canonical_json_sha256
@@ -84,9 +83,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
         with zipfile.ZipFile(source, "r") as archive:
             infos = archive.infolist()
             names = [item.filename for item in infos]
-            duplicates = sorted(
-                name for name, count in Counter(names).items() if count > 1
-            )
+            duplicates = sorted(name for name, count in Counter(names).items() if count > 1)
             if len(infos) > MAX_ARCHIVE_FILES:
                 errors.append("Archive contains too many files")
             if sum(item.file_size for item in infos) > MAX_EXPANDED_BYTES:
@@ -147,9 +144,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                     try:
                         json.loads(line)
                     except json.JSONDecodeError:
-                        errors.append(
-                            f"Section JSON is invalid: {name} line {line_number}"
-                        )
+                        errors.append(f"Section JSON is invalid: {name} line {line_number}")
                         break
 
             media = _validate_file_inventory(
@@ -163,7 +158,8 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
             included_media_count = len(media)
             if not media:
                 warnings.append(
-                    "Package does not include original media; imported records may require relinking files"
+                    "Package does not include original media; imported records may require "
+                    "relinking files"
                 )
 
             generated = _validate_file_inventory(
@@ -185,9 +181,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
         format_version=str(manifest.get("format_version")) if manifest else None,
         application_version=str(manifest.get("application_version")) if manifest else None,
         manifest_sha256=canonical_json_sha256(manifest) if manifest else None,
-        project_name=(
-            str(project_value.get("name")) if isinstance(project_value, dict) else None
-        ),
+        project_name=(str(project_value.get("name")) if isinstance(project_value, dict) else None),
         section_counts=section_counts,
         included_media_count=included_media_count,
         included_generated_artifact_count=included_generated_artifact_count,

@@ -8,7 +8,8 @@ import * as videoApi from "./videoApi";
 import * as scienceApi from "./videoScienceApi";
 
 vi.mock("./videoApi", async () => {
-  const actual = await vi.importActual<typeof import("./videoApi")>("./videoApi");
+  const actual =
+    await vi.importActual<typeof import("./videoApi")>("./videoApi");
   return {
     ...actual,
     getVideos: vi.fn(),
@@ -18,7 +19,9 @@ vi.mock("./videoApi", async () => {
 
 vi.mock("./videoScienceApi", async () => {
   const actual =
-    await vi.importActual<typeof import("./videoScienceApi")>("./videoScienceApi");
+    await vi.importActual<typeof import("./videoScienceApi")>(
+      "./videoScienceApi",
+    );
   return {
     ...actual,
     getVideoCalibration: vi.fn(),
@@ -168,11 +171,17 @@ describe("VideoSciencePanel", () => {
     expect(
       await screen.findByText("Calibration, schooling, and 3D movement"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Metric depth / 3D trajectories")).toBeInTheDocument();
     expect(
-      screen.getByText(/Relative Depth Anything values are not physical distances/),
+      screen.getByText("Metric depth / 3D trajectories"),
     ).toBeInTheDocument();
-    expect(await screen.findByText(/Saved intrinsics: fx 100\.00/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Relative Depth Anything values are not physical distances/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Saved intrinsics: fx 100\.00/),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Calculate 3D trajectories" }),
     ).toBeEnabled();
@@ -188,19 +197,26 @@ describe("VideoSciencePanel", () => {
         value: "track,frame,depth,confidence\n1,0,2.0,0.99\n1,2,2.0,0.98",
       },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Calculate 3D trajectories" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Calculate 3D trajectories" }),
+    );
 
     await waitFor(() => {
-      expect(scienceApi.getDepthTrackAnalytics).toHaveBeenCalledWith("video-1", {
-        unit: "m",
-        samples: [
-          { track_id: "track-1", frame: 0, depth: 2, confidence: 0.99 },
-          { track_id: "track-1", frame: 2, depth: 2, confidence: 0.98 },
-        ],
-        maximum_frame_gap: null,
-      });
+      expect(scienceApi.getDepthTrackAnalytics).toHaveBeenCalledWith(
+        "video-1",
+        {
+          unit: "m",
+          samples: [
+            { track_id: "track-1", frame: 0, depth: 2, confidence: 0.99 },
+            { track_id: "track-1", frame: 2, depth: 2, confidence: 0.98 },
+          ],
+          maximum_frame_gap: null,
+        },
+      );
     });
-    expect(await screen.findByText("0.4000 m")).toBeInTheDocument();
+    expect(screen.getByText("3D path")).toBeInTheDocument();
+    expect(screen.getByText("3D displacement")).toBeInTheDocument();
+    expect(await screen.findAllByText("0.4000 m")).toHaveLength(2);
     expect(screen.getAllByText("2.0000 m/s")).toHaveLength(2);
   });
 });

@@ -88,6 +88,7 @@ Review gates pause a workflow. Predictions remain proposals until a human comple
 - detection/classification/mask evaluation
 - same-dataset Model v1 vs Model v2 comparison
 - video tracking
+- calibrated metric-depth reconstruction into typed `video_3d_trajectories` artifacts
 
 ### Active learning and interchange
 
@@ -135,7 +136,8 @@ The 1.0 release gate must exercise at least these end-to-end journeys:
 6. detection → Prompt Assist/SAM2 → mask review → measurements
 7. local/cloud multi-model consensus with explicit disagreement review
 8. depth inference and depth-aware analysis where appropriate calibration/depth inputs exist
-9. Project Exchange export → new-project import → restart → workflow/artifact integrity verification
+9. calibrated video → verified tracks → metric depth → `video_3d_trajectories`
+10. Project Exchange export → import as a new project → restart → preserved video calibration and camera intrinsics → remapped tracks, workflows, and artifacts → reproducible calibrated 3D analysis using only imported IDs
 
 ## Remaining release validation
 
