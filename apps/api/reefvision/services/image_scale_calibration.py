@@ -42,12 +42,17 @@ def _percentile(values: list[float], fraction: float) -> float:
 
 
 def _interval_stats(positions: list[float]) -> tuple[float, float, list[float]] | None:
-    spacings = [second - first for first, second in zip(positions, positions[1:], strict=False)]
+    spacings = [
+        second - first
+        for first, second in zip(positions, positions[1:], strict=False)
+    ]
     spacings = [value for value in spacings if value > 1.5]
     if len(spacings) < 2:
         return None
     initial = median(spacings)
-    filtered = [value for value in spacings if initial * 0.55 <= value <= initial * 1.6]
+    filtered = [
+        value for value in spacings if initial * 0.55 <= value <= initial * 1.6
+    ]
     if len(filtered) < 2:
         return None
     interval = median(filtered)
@@ -56,7 +61,10 @@ def _interval_stats(positions: list[float]) -> tuple[float, float, list[float]] 
     return interval, cv, filtered
 
 
-def _projection_profile(image: Image.Image, orientation: Literal["horizontal", "vertical"]) -> list[float]:
+def _projection_profile(
+    image: Image.Image,
+    orientation: Literal["horizontal", "vertical"],
+) -> list[float]:
     width, height = image.size
     pixels = image.load()
     if orientation == "horizontal":
@@ -65,7 +73,11 @@ def _projection_profile(image: Image.Image, orientation: Literal["horizontal", "
         step = max(1, height // 320)
         return [
             sum(
-                abs(2 * int(pixels[x, y]) - int(pixels[x - 1, y]) - int(pixels[x + 1, y]))
+                abs(
+                    2 * int(pixels[x, y])
+                    - int(pixels[x - 1, y])
+                    - int(pixels[x + 1, y])
+                )
                 for y in range(0, height, step)
             )
             for x in range(1, width - 1)
@@ -75,7 +87,11 @@ def _projection_profile(image: Image.Image, orientation: Literal["horizontal", "
     step = max(1, width // 320)
     return [
         sum(
-            abs(2 * int(pixels[x, y]) - int(pixels[x, y - 1]) - int(pixels[x, y + 1]))
+            abs(
+                2 * int(pixels[x, y])
+                - int(pixels[x, y - 1])
+                - int(pixels[x, y + 1])
+            )
             for x in range(0, width, step)
         )
         for y in range(1, height - 1)
@@ -92,7 +108,11 @@ def _peak_positions(profile: list[float]) -> tuple[list[int], list[float], float
     raw: list[tuple[int, float]] = []
     for index in range(1, len(profile) - 1):
         value = profile[index]
-        if value >= threshold and value >= profile[index - 1] and value >= profile[index + 1]:
+        if (
+            value >= threshold
+            and value >= profile[index - 1]
+            and value >= profile[index + 1]
+        ):
             raw.append((index + 1, value))
     if not raw:
         return [], [], 0.0
@@ -105,7 +125,8 @@ def _peak_positions(profile: list[float]) -> tuple[list[int], list[float], float
                 merged[-1] = (position, score)
         else:
             merged.append((position, score))
-    prominence = max(0.0, (sum(score for _, score in merged) / len(merged) - baseline) / (6 * mad))
+    average_peak = sum(score for _, score in merged) / len(merged)
+    prominence = max(0.0, (average_peak - baseline) / (6 * mad))
     return [position for position, _ in merged], [score for _, score in merged], prominence
 
 
@@ -147,7 +168,11 @@ def _analyze_ruler_crop(
     ]
     major_interval: float | None = None
     major_stats = _interval_stats(strong_positions)
-    if major_stats is not None and major_stats[0] >= interval * 1.5 and major_stats[1] <= 0.35:
+    if (
+        major_stats is not None
+        and major_stats[0] >= interval * 1.5
+        and major_stats[1] <= 0.35
+    ):
         major_interval = major_stats[0]
 
     regularity = max(0.0, 1.0 - min(1.0, cv / 0.35))
@@ -161,12 +186,19 @@ def _analyze_ruler_crop(
     axis_origin = roi.x_min if orientation == "horizontal" else roi.y_min
     absolute_positions = [axis_origin + value for value in scaled_positions]
     warnings = [
-        "The detector estimates repeating ruler ticks only; it does not infer mm, cm, or another physical interval."
+        "The detector estimates repeating ruler ticks only; it does not infer mm, cm, "
+        "or another physical interval."
     ]
     if confidence < 0.7:
-        warnings.append("Low-confidence ruler candidate; review the detected interval before applying calibration.")
+        warnings.append(
+            "Low-confidence ruler candidate; review the detected interval before "
+            "applying calibration."
+        )
     if not roi_supplied:
-        warnings.append("No ruler ROI was supplied; the detector selected the strongest periodic image band.")
+        warnings.append(
+            "No ruler ROI was supplied; the detector selected the strongest periodic "
+            "image band."
+        )
     return {
         "orientation": orientation,
         "roi": roi,
@@ -182,16 +214,32 @@ def _analyze_ruler_crop(
 
 def _candidate_bands(width: int, height: int, orientation: str) -> list[CalibrationRoi]:
     bands: list[CalibrationRoi] = []
+    if width <= 0 or height <= 0:
+        return bands
     if orientation in {"auto", "horizontal"}:
-        band_height = max(24.0, height * 0.24)
+        band_height = min(float(height), max(5.0, height * 0.24))
         for fraction in (0.0, 0.19, 0.38, 0.57, 0.76):
-            y_min = min(height - band_height, height * fraction)
-            bands.append(CalibrationRoi(x_min=0, y_min=y_min, x_max=width, y_max=y_min + band_height))
+            y_min = max(0.0, min(height - band_height, height * fraction))
+            bands.append(
+                CalibrationRoi(
+                    x_min=0,
+                    y_min=y_min,
+                    x_max=width,
+                    y_max=min(float(height), y_min + band_height),
+                )
+            )
     if orientation in {"auto", "vertical"}:
-        band_width = max(24.0, width * 0.24)
+        band_width = min(float(width), max(5.0, width * 0.24))
         for fraction in (0.0, 0.19, 0.38, 0.57, 0.76):
-            x_min = min(width - band_width, width * fraction)
-            bands.append(CalibrationRoi(x_min=x_min, y_min=0, x_max=x_min + band_width, y_max=height))
+            x_min = max(0.0, min(width - band_width, width * fraction))
+            bands.append(
+                CalibrationRoi(
+                    x_min=x_min,
+                    y_min=0,
+                    x_max=min(float(width), x_min + band_width),
+                    y_max=height,
+                )
+            )
     return bands
 
 
@@ -256,7 +304,9 @@ class ImageScaleCalibrationService:
             for roi in _candidate_bands(width, height, payload.orientation):
                 crop = source.crop((roi.x_min, roi.y_min, roi.x_max, roi.y_max))
                 orientation: Literal["horizontal", "vertical"] = (
-                    "horizontal" if roi.x_min == 0 and roi.x_max == width else "vertical"
+                    "horizontal"
+                    if roi.x_min == 0 and roi.x_max == width
+                    else "vertical"
                 )
                 candidate = _analyze_ruler_crop(
                     crop,
@@ -268,7 +318,8 @@ class ImageScaleCalibrationService:
                     candidates.append(candidate)
         if not candidates:
             raise ValidationError(
-                "No sufficiently periodic ruler tick candidate was detected; select a ruler ROI or use manual calibration"
+                "No sufficiently periodic ruler tick candidate was detected; select a "
+                "ruler ROI or use manual calibration"
             )
         best = max(candidates, key=lambda item: float(item["confidence"]))
         return RulerCalibrationCandidate(image_id=image_asset.id, **best)
@@ -276,15 +327,17 @@ class ImageScaleCalibrationService:
     @staticmethod
     def _aruco_module() -> tuple[Any, Any]:
         try:
-            import cv2  # type: ignore[import-not-found]
-            import numpy as np  # type: ignore[import-not-found]
+            import cv2
+            import numpy as np
         except ImportError as exc:
             raise ValidationError(
-                "ArUco/ChArUco calibration requires an OpenCV build with the aruco module"
+                "ArUco/ChArUco calibration requires an OpenCV build with the aruco "
+                "module"
             ) from exc
         if not hasattr(cv2, "aruco"):
             raise ValidationError(
-                "This OpenCV runtime does not include cv2.aruco; install/use an opencv-contrib runtime to enable marker calibration"
+                "This OpenCV runtime does not include cv2.aruco; install/use an "
+                "opencv-contrib runtime to enable marker calibration"
             )
         return cv2, np
 
@@ -324,12 +377,16 @@ class ImageScaleCalibrationService:
             id_values = [int(value) for value in ids.flatten()]
             if payload.marker_id is not None:
                 if payload.marker_id not in id_values:
-                    raise ValidationError(f"Requested ArUco marker id {payload.marker_id} was not detected")
+                    raise ValidationError(
+                        f"Requested ArUco marker id {payload.marker_id} was not detected"
+                    )
                 index = id_values.index(payload.marker_id)
             else:
                 index = max(
                     range(len(corners)),
-                    key=lambda item: float(cv2.contourArea(corners[item].reshape(4, 2))),
+                    key=lambda item: float(
+                        cv2.contourArea(corners[item].reshape(4, 2))
+                    ),
                 )
             marker_id = id_values[index]
             points = corners[index].reshape(4, 2).astype("float32")
@@ -342,7 +399,9 @@ class ImageScaleCalibrationService:
             ]
             mean_side = sum(side_pixels) / 4.0
             if mean_side <= 1:
-                raise ValidationError("Detected ArUco marker is too small for calibration")
+                raise ValidationError(
+                    "Detected ArUco marker is too small for calibration"
+                )
             side_cv = pstdev(side_pixels) / mean_side
             target = np.array(
                 [
@@ -366,7 +425,8 @@ class ImageScaleCalibrationService:
                 perspective_homography=_homography_list(homography),
                 reference_plane_only=True,
                 notes=(
-                    "ArUco homography maps image pixels to physical coordinates on the marker plane only."
+                    "ArUco homography maps image pixels to physical coordinates on the "
+                    "marker plane only."
                 ),
             )
             return MarkerCalibrationCandidate(
@@ -376,9 +436,12 @@ class ImageScaleCalibrationService:
                 detected_corner_count=4,
                 confidence=confidence,
                 calibration=calibration,
-                corners_pixels=[[float(value) for value in point] for point in points],
+                corners_pixels=[
+                    [float(value) for value in point] for point in points
+                ],
                 warnings=[
-                    "Perspective correction is valid only for objects lying on the marker reference plane."
+                    "Perspective correction is valid only for objects lying on the "
+                    "marker reference plane."
                 ],
             )
 
@@ -387,17 +450,33 @@ class ImageScaleCalibrationService:
         square_length = float(payload.charuco_square_length or 0)
         try:
             board = cv2.aruco.CharucoBoard(
-                (squares_x, squares_y), square_length, payload.marker_length, dictionary
+                (squares_x, squares_y),
+                square_length,
+                payload.marker_length,
+                dictionary,
             )
         except TypeError:
             board = cv2.aruco.CharucoBoard_create(
-                squares_x, squares_y, square_length, payload.marker_length, dictionary
+                squares_x,
+                squares_y,
+                square_length,
+                payload.marker_length,
+                dictionary,
             )
         _count, charuco_corners, charuco_ids = cv2.aruco.interpolateCornersCharuco(
-            corners, ids, frame, board
+            corners,
+            ids,
+            frame,
+            board,
         )
-        if charuco_ids is None or charuco_corners is None or len(charuco_ids) < 4:
-            raise ValidationError("ChArUco calibration requires at least four detected chessboard corners")
+        if (
+            charuco_ids is None
+            or charuco_corners is None
+            or len(charuco_ids) < 4
+        ):
+            raise ValidationError(
+                "ChArUco calibration requires at least four detected chessboard corners"
+            )
         if hasattr(board, "getChessboardCorners"):
             board_corners = board.getChessboardCorners()
         else:
@@ -405,7 +484,10 @@ class ImageScaleCalibrationService:
         ids_flat = [int(value) for value in charuco_ids.flatten()]
         image_points = charuco_corners.reshape(-1, 2).astype("float32")
         physical_points = np.array(
-            [[float(board_corners[index][0]), float(board_corners[index][1])] for index in ids_flat],
+            [
+                [float(board_corners[index][0]), float(board_corners[index][1])]
+                for index in ids_flat
+            ],
             dtype=np.float32,
         )
         homography, inliers = cv2.findHomography(image_points, physical_points, 0)
@@ -418,7 +500,11 @@ class ImageScaleCalibrationService:
                     float(physical_points[second][0] - physical_points[first][0]),
                     float(physical_points[second][1] - physical_points[first][1]),
                 )
-                if not math.isclose(physical_distance, square_length, rel_tol=0.08):
+                if not math.isclose(
+                    physical_distance,
+                    square_length,
+                    rel_tol=0.08,
+                ):
                     continue
                 pixel_distance = math.hypot(
                     float(image_points[second][0] - image_points[first][0]),
@@ -427,9 +513,14 @@ class ImageScaleCalibrationService:
                 if pixel_distance > 1:
                     interval_scales.append(physical_distance / pixel_distance)
         if not interval_scales:
-            raise ValidationError("Detected ChArUco corners do not contain an adjacent square interval")
+            raise ValidationError(
+                "Detected ChArUco corners do not contain an adjacent square interval"
+            )
         distance_per_pixel = median(interval_scales)
-        projected = cv2.perspectiveTransform(image_points.reshape(-1, 1, 2), homography).reshape(-1, 2)
+        projected = cv2.perspectiveTransform(
+            image_points.reshape(-1, 1, 2),
+            homography,
+        ).reshape(-1, 2)
         errors = [
             math.hypot(
                 float(projected[index][0] - physical_points[index][0]),
@@ -437,13 +528,23 @@ class ImageScaleCalibrationService:
             )
             for index in range(len(projected))
         ]
-        reprojection_ratio = (sum(errors) / len(errors)) / max(square_length, 1e-12)
+        reprojection_ratio = (sum(errors) / len(errors)) / max(
+            square_length,
+            1e-12,
+        )
         inlier_ratio = (
-            float(inliers.sum()) / len(inliers) if inliers is not None and len(inliers) else 1.0
+            float(inliers.sum()) / len(inliers)
+            if inliers is not None and len(inliers)
+            else 1.0
         )
         confidence = max(
             0.0,
-            min(0.99, min(1.0, len(ids_flat) / 12.0) * inlier_ratio * (1.0 - min(1.0, reprojection_ratio))),
+            min(
+                0.99,
+                min(1.0, len(ids_flat) / 12.0)
+                * inlier_ratio
+                * (1.0 - min(1.0, reprojection_ratio)),
+            ),
         )
         calibration = MeasurementCalibrationUpdate(
             distance_per_pixel=distance_per_pixel,
@@ -456,7 +557,8 @@ class ImageScaleCalibrationService:
             perspective_homography=_homography_list(homography),
             reference_plane_only=True,
             notes=(
-                "ChArUco homography maps image pixels to physical coordinates on the board plane only."
+                "ChArUco homography maps image pixels to physical coordinates on the "
+                "board plane only."
             ),
         )
         return MarkerCalibrationCandidate(
@@ -466,9 +568,12 @@ class ImageScaleCalibrationService:
             detected_corner_count=len(ids_flat),
             confidence=confidence,
             calibration=calibration,
-            corners_pixels=[[float(value) for value in point] for point in image_points],
+            corners_pixels=[
+                [float(value) for value in point] for point in image_points
+            ],
             warnings=[
-                "Perspective correction is valid only for objects lying on the ChArUco board plane."
+                "Perspective correction is valid only for objects lying on the "
+                "ChArUco board plane."
             ],
         )
 
@@ -522,7 +627,9 @@ class ImageScaleCalibrationService:
             signature_data = signature.model_dump()
             signature_data["width_px"] = image.width_px
             signature_data["height_px"] = image.height_px
-            data["camera_signature"] = CalibrationCameraSignature(**signature_data).model_dump()
+            data["camera_signature"] = CalibrationCameraSignature(
+                **signature_data
+            ).model_dump()
         return MeasurementCalibrationUpdate.model_validate(data)
 
     def apply_profile(
@@ -532,29 +639,45 @@ class ImageScaleCalibrationService:
     ) -> MeasurementCalibrationResponse:
         if not payload.confirm_same_setup:
             raise ValidationError(
-                "Applying a calibration profile requires explicit confirmation that camera, lens, focus, and subject-plane distance are unchanged"
+                "Applying a calibration profile requires explicit confirmation that "
+                "camera, lens, focus, and subject-plane distance are unchanged"
             )
         target = self._image(image_id)
         source = self._image(payload.source_image_id)
         if source.project_id != target.project_id:
-            raise ValidationError("Calibration profiles cannot be reused across projects")
+            raise ValidationError(
+                "Calibration profiles cannot be reused across projects"
+            )
         if source.id == target.id:
-            raise ValidationError("Target image already owns the selected calibration profile")
+            raise ValidationError(
+                "Target image already owns the selected calibration profile"
+            )
         raw = dict(source.metadata_json or {}).get(MEASUREMENT_CALIBRATION_KEY)
         if not isinstance(raw, dict):
-            raise ValidationError("Selected profile source image does not have a calibration")
+            raise ValidationError(
+                "Selected profile source image does not have a calibration"
+            )
         try:
             calibration = MeasurementCalibrationUpdate.model_validate(raw)
         except ValueError as exc:
             raise ValidationError("Selected calibration profile is invalid") from exc
         if not calibration.profile_name:
-            raise ValidationError("Selected calibration is not saved as a reusable profile")
+            raise ValidationError(
+                "Selected calibration is not saved as a reusable profile"
+            )
         signature = calibration.camera_signature
-        expected_width = signature.width_px if signature and signature.width_px else source.width_px
-        expected_height = signature.height_px if signature and signature.height_px else source.height_px
+        expected_width = (
+            signature.width_px if signature and signature.width_px else source.width_px
+        )
+        expected_height = (
+            signature.height_px
+            if signature and signature.height_px
+            else source.height_px
+        )
         if target.width_px != expected_width or target.height_px != expected_height:
             raise ValidationError(
-                "Calibration profile resolution does not match the target image; recalibrate instead of rescaling the profile"
+                "Calibration profile resolution does not match the target image; "
+                "recalibrate instead of rescaling the profile"
             )
         copied = calibration.model_dump(mode="json")
         copied.update(
