@@ -1,6 +1,7 @@
 param(
     [ValidateSet("x86_64-pc-windows-msvc", "i686-pc-windows-msvc", "aarch64-pc-windows-msvc")]
-    [string]$TargetTriple = "x86_64-pc-windows-msvc"
+    [string]$TargetTriple = "x86_64-pc-windows-msvc",
+    [switch]$SkipMsiVerification
 )
 
 $ErrorActionPreference = "Stop"
@@ -72,3 +73,16 @@ if ($Installers.Count -eq 0) {
     throw "Tauri did not produce an MSI installer in $InstallerDirectory"
 }
 Write-Host "Desktop installer output: $InstallerDirectory" -ForegroundColor Green
+
+if (-not $SkipMsiVerification) {
+    Write-ReefVisionStep "Verifying the Windows MSI and packaged backend"
+    & (Join-Path $PSScriptRoot "verify-windows-msi.ps1") `
+        -TargetTriple $TargetTriple `
+        -InstallerDirectory $InstallerDirectory
+    if ($LASTEXITCODE -ne 0) {
+        throw "Windows MSI verification failed with exit code $LASTEXITCODE."
+    }
+}
+else {
+    Write-Warning "MSI verification was explicitly skipped. This build is not release-validated."
+}
