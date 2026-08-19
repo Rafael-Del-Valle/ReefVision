@@ -1,14 +1,15 @@
 """Allow deterministic upstream cache reuse when a later workflow node fails.
 
 Human review intentionally creates a two-pass workflow: segmentation succeeds, measurement
-fails closed while proposals are pending, then the workflow is rerun after review. Cache
-reuse therefore preserves the exact cached artifact payload and checksum. Cache-hit
-provenance already lives in WorkflowRun.node_state_json; mutating the copied artifact payload
-would change downstream cache keys and incorrectly regenerate reviewed segmentation masks.
+fails closed while proposals are pending, then the workflow is rerun after review. Expensive
+upstream detector/segmenter artifacts are stable and reusable, but review-dependent scientific
+measurements are deliberately recalculated so later review changes or accepted-mask edits are
+never hidden behind a stale measurement cache.
 
-Cache lookup also chooses one newest eligible source run. Mixing outputs from multiple
-historical runs can duplicate the same node/port in the destination run and violate the
-workflow artifact uniqueness contract.
+Cache reuse preserves the exact cached artifact payload and checksum. Cache-hit provenance
+already lives in WorkflowRun.node_state_json; mutating copied payloads would change downstream
+cache keys and incorrectly regenerate reviewed segmentation masks. Lookup chooses one newest
+eligible source run so outputs from separate historical runs are never mixed.
 """
 
 from __future__ import annotations
@@ -31,6 +32,15 @@ def _node_cache_eligible(source_run: WorkflowRun, node_id: str) -> bool:
     return isinstance(raw_state, dict) and raw_state.get("status") == "succeeded"
 
 
+def _artifact_cache_eligible(artifact: WorkflowArtifact) -> bool:
+    payload = workflow_runs._artifact_payload(artifact)
+    # These outputs depend on mutable human review/accepted-mask state that is intentionally
+    # not part of the upstream Segmenter artifact checksum. Always recompute them.
+    if artifact.artifact_type == "measurements" and "segmentation_review" in payload:
+        return False
+    return True
+
+
 def _select_cached_source_artifacts(
     rows: Iterable[tuple[WorkflowArtifact, WorkflowRun]],
     *,
@@ -45,6 +55,7 @@ def _select_cached_source_artifacts(
         for artifact, source_run in rows
         if source_run.id != current_run_id
         and _node_cache_eligible(source_run, node_id)
+        and _artifact_cache_eligible(artifact)
         and workflow_runs._artifact_payload(artifact).get("_cache_key") == cache_key
     ]
     if not matches:
@@ -74,7 +85,7 @@ def _review_resumable_cached_outputs(
         .order_by(WorkflowArtifact.created_at.desc(), WorkflowArtifact.id.desc())
     )
     rows: list[tuple[WorkflowArtifact, WorkflowRun]] = [
-        (artifact, source_run) for artifact, source_run in result
+        (artifact, source_run) for artifact, source_run in result.tuples()
     ]
     return _select_cached_source_artifacts(
         rows,
