@@ -19,4 +19,9 @@ def _dynamic_assist_provider(provider_name: str) -> Any:
     return provider_hub.assist_provider_for_name(provider_name)
 
 
-workflow_segmentation_runtime._assist_provider = _dynamic_assist_provider
+def install_segmentation_provider_runtime() -> None:
+    if workflow_segmentation_runtime._assist_provider is not _dynamic_assist_provider:
+        workflow_segmentation_runtime._assist_provider = _dynamic_assist_provider
+
+
+install_segmentation_provider_runtime()
