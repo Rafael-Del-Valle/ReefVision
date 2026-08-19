@@ -27,6 +27,14 @@ function positiveNumber(value: string, label: string): number {
   return parsed;
 }
 
+function positiveInteger(value: string, label: string): number {
+  const parsed = positiveNumber(value, label);
+  if (!Number.isInteger(parsed)) {
+    throw new Error(`${label} must be a whole number`);
+  }
+  return parsed;
+}
+
 function formatConfidence(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
@@ -133,6 +141,19 @@ export function CalibrationAssistant({
       ) {
         throw new Error("Marker ID must be a non-negative integer");
       }
+      const squareLength =
+        markerKind === "charuco"
+          ? positiveNumber(charucoSquareLength, "ChArUco square length")
+          : null;
+      if (
+        markerKind === "charuco" &&
+        squareLength != null &&
+        physicalMarkerLength >= squareLength
+      ) {
+        throw new Error(
+          "ChArUco marker side length must be smaller than the square length",
+        );
+      }
       return detectMarkerCalibration(imageId, {
         kind: markerKind,
         unit: unit.trim(),
@@ -141,16 +162,13 @@ export function CalibrationAssistant({
         marker_id: parsedMarkerId,
         charuco_squares_x:
           markerKind === "charuco"
-            ? positiveNumber(charucoSquaresX, "ChArUco squares X")
+            ? positiveInteger(charucoSquaresX, "ChArUco squares X")
             : null,
         charuco_squares_y:
           markerKind === "charuco"
-            ? positiveNumber(charucoSquaresY, "ChArUco squares Y")
+            ? positiveInteger(charucoSquaresY, "ChArUco squares Y")
             : null,
-        charuco_square_length:
-          markerKind === "charuco"
-            ? positiveNumber(charucoSquareLength, "ChArUco square length")
-            : null,
+        charuco_square_length: squareLength,
       });
     },
     onSuccess: setMarkerCandidate,
@@ -342,7 +360,7 @@ export function CalibrationAssistant({
               ChArUco squares X
               <input
                 type="number"
-                min="2"
+                min="3"
                 step="1"
                 value={charucoSquaresX}
                 onChange={(event) => setCharucoSquaresX(event.target.value)}
@@ -352,7 +370,7 @@ export function CalibrationAssistant({
               ChArUco squares Y
               <input
                 type="number"
-                min="2"
+                min="3"
                 step="1"
                 value={charucoSquaresY}
                 onChange={(event) => setCharucoSquaresY(event.target.value)}
@@ -431,7 +449,9 @@ export function CalibrationAssistant({
                     key={profile.source_image_id}
                     value={profile.source_image_id}
                   >
-                    {profile.profile_name} — {profile.distance_per_pixel.toPrecision(5)} {profile.unit}/px ({profile.width_px}×{profile.height_px})
+                    {profile.profile_name} —{" "}
+                    {profile.distance_per_pixel.toPrecision(5)} {profile.unit}/px (
+                    {profile.width_px}×{profile.height_px})
                   </option>
                 ))}
               </select>
