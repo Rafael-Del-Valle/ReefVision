@@ -135,9 +135,10 @@ def run_pipeline_with_registered_sam2(
 workflow_consensus.run_independent_segmentation_pipeline = run_pipeline_with_registered_sam2
 
 # Worker startup imports these modules for workflow runtime extensions. Import the full
-# science bridge first, then probability inference, then the probability-only selector so
-# pure uncertainty strategies do not require an embedding model while diversity-aware
-# strategies retain the stricter science-runtime requirement.
+# science bridge first, then probability inference/selection, then calibrated 3D video
+# measurement. The final module wraps the shared scientific measurement handler instead of
+# introducing a second workflow executor.
 from reefvision.jobs import workflow_science_runtime as _workflow_science_runtime  # noqa: E402,F401
 from reefvision.jobs import workflow_active_learning_runtime as _workflow_active_learning_runtime  # noqa: E402,F401
 from reefvision.jobs import workflow_probability_only_active_learning as _workflow_probability_only_active_learning  # noqa: E402,F401
+from reefvision.jobs import workflow_video_depth_3d_runtime as _workflow_video_depth_3d_runtime  # noqa: E402,F401
