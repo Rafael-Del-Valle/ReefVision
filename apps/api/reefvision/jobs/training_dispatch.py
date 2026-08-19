@@ -16,6 +16,9 @@ from reefvision.jobs.advanced_ultralytics_training import (
     _execute_tuning,
     _execute_validation,
 )
+from reefvision.jobs.classification_snapshot_training import (
+    process_snapshot_classification_training_job,
+)
 from reefvision.jobs.classification_training import process_classification_training_job
 from reefvision.jobs.segmentation_training import process_segmentation_training_job
 from reefvision.jobs.semantic_training import process_semantic_training_job
@@ -151,11 +154,14 @@ def process_task_aware_training_job(
         if run is None:
             return process_training_job(settings, factory, job_id)
         task = run.task
+        training_config = dict(run.training_config_json or {})
 
     if task in {"detect", "segment"}:
         return _process_ultralytics_training(settings, factory, job_id, run_id, task)
     if task == SEMANTIC_SEGMENTATION_TASK:
         return process_semantic_training_job(settings, factory, job_id)
     if task == CLASSIFICATION_TASK:
+        if training_config.get("classification_dataset_snapshot_id"):
+            return process_snapshot_classification_training_job(settings, factory, job_id)
         return process_classification_training_job(settings, factory, job_id)
     return process_training_job(settings, factory, job_id)
