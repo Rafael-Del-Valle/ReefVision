@@ -60,18 +60,36 @@ if (-not (Test-Path $ProviderRequirementsPath -PathType Leaf)) {
     throw "Pinned provider dependency file not found: $ProviderRequirementsFile"
 }
 $ProviderRequirementsContent = Get-Content -LiteralPath $ProviderRequirementsPath -Raw
-if ($ProviderRequirementsContent -match '(?m)^\s*opencv-contrib-python(?:\s|[=<>!~])') {
-    Write-ReefVisionStep "Removing conflicting base/headless OpenCV distributions"
-    & $VenvPython -m pip uninstall -y opencv-python opencv-python-headless opencv-contrib-python-headless
+$UsesOpenCvContrib = $ProviderRequirementsContent -match '(?m)^\s*opencv-contrib-python(?:\s|[=<>!~])'
+if ($UsesOpenCvContrib) {
+    Write-ReefVisionStep "Resetting OpenCV to the single supported contrib distribution"
+    # Ultralytics declares opencv-python as a dependency, but OpenCV's base and contrib
+    # wheels own the same cv2 namespace and must not coexist. The normal dev install above
+    # resolves every transitive dependency first. Remove every OpenCV wheel variant here,
+    # then install the fully pinned provider file with dependency resolution disabled so
+    # Ultralytics cannot pull the base wheel back in.
+    & $VenvPython -m pip uninstall -y opencv-python opencv-python-headless opencv-contrib-python opencv-contrib-python-headless
     if ($LASTEXITCODE -ne 0) {
-        throw "Conflicting OpenCV distribution cleanup failed."
+        throw "OpenCV distribution reset failed."
     }
 }
 
 Write-ReefVisionStep "Installing pinned model-provider dependencies"
-& $VenvPython -m pip install -r $ProviderRequirementsPath
+if ($UsesOpenCvContrib) {
+    & $VenvPython -m pip install --no-deps -r $ProviderRequirementsPath
+} else {
+    & $VenvPython -m pip install -r $ProviderRequirementsPath
+}
 if ($LASTEXITCODE -ne 0) {
     throw "Pinned model-provider dependency installation failed."
+}
+
+if ($UsesOpenCvContrib) {
+    Write-ReefVisionStep "Verifying a single OpenCV contrib distribution owns cv2"
+    & $VenvPython -c "import importlib.metadata as m; names={d.metadata.get('Name','').lower() for d in m.distributions()}; conflicts=sorted(names & {'opencv-python','opencv-python-headless','opencv-contrib-python-headless'}); assert 'opencv-contrib-python' in names, 'opencv-contrib-python is not installed'; assert not conflicts, f'conflicting OpenCV distributions installed: {conflicts}'; print('OpenCV distribution ownership OK')"
+    if ($LASTEXITCODE -ne 0) {
+        throw "OpenCV distribution ownership verification failed. Rerun setup in a clean .venv if the conflict persists."
+    }
 }
 
 Write-ReefVisionStep "Verifying ReefVision Scale Assistant marker runtime"
