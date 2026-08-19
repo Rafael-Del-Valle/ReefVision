@@ -15,6 +15,7 @@ import {
   type EditableWorkflow,
   WorkflowGraphEditor,
 } from "./WorkflowGraphEditor";
+import { WorkflowPersistencePanel } from "./WorkflowPersistencePanel";
 
 const blankWorkflow = JSON.stringify(
   {
@@ -280,6 +281,19 @@ export function WorkflowDashboard({ project }: { project: Project }) {
           </div>
 
           <div className="dashboard-main">
+            {parsedWorkflow.workflow && (
+              <WorkflowPersistencePanel
+                projectId={project.id}
+                workflow={parsedWorkflow.workflow}
+                onLoadWorkflow={(workflow) => {
+                  setWorkflowJson(JSON.stringify(workflow, null, 2));
+                  setSelectedTemplateId("");
+                  setParseError(null);
+                  validation.reset();
+                }}
+              />
+            )}
+
             <article className="dashboard-card">
               <div className="section-heading">
                 <div>
