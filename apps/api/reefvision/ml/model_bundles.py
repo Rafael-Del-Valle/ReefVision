@@ -34,11 +34,35 @@ def _validated_members(archive: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
     return members
 
 
+def _inspect_transformers_directory(model_path: Path) -> dict[str, object]:
+    config_path = model_path / "config.json"
+    if not config_path.is_file():
+        raise ValidationError("The model directory is missing config.json")
+    if not (model_path / "preprocessor_config.json").is_file():
+        raise ValidationError("The model directory is missing preprocessor_config.json")
+    if not any(model_path.glob("*.safetensors")) and not any(model_path.glob("*.bin")):
+        raise ValidationError(
+            "The model directory is missing Transformers model weights (.safetensors or .bin)"
+        )
+    try:
+        raw = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValidationError("The model directory config.json is invalid") from exc
+    if not isinstance(raw, dict):
+        raise ValidationError("The model directory config.json must contain an object")
+    return raw
+
+
 def inspect_transformers_bundle(bundle_path: Path) -> tuple[dict[str, object], str | None]:
-    """Validate a Transformers-style zip and return config plus its optional root prefix."""
+    """Validate a managed Transformers directory or ZIP and return its config."""
+
+    if bundle_path.is_dir():
+        return _inspect_transformers_directory(bundle_path), None
 
     if bundle_path.suffix.lower() != ".zip" or not bundle_path.is_file():
-        raise ValidationError("Transformers model providers require a managed .zip model bundle")
+        raise ValidationError(
+            "Transformers model providers require a managed model directory or .zip bundle"
+        )
     try:
         with zipfile.ZipFile(bundle_path) as archive:
             members = _validated_members(archive)
@@ -94,6 +118,9 @@ def inspect_transformers_bundle(bundle_path: Path) -> tuple[dict[str, object], s
 def extracted_transformers_bundle(bundle_path: Path) -> Path:
     """Extract a validated immutable bundle beside the managed archive and reuse it."""
 
+    if bundle_path.is_dir():
+        inspect_transformers_bundle(bundle_path)
+        return bundle_path
     _, root_prefix = inspect_transformers_bundle(bundle_path)
     extraction_root = bundle_path.parent / f".{bundle_path.stem}.bundle"
     marker = extraction_root / ".reefvision-ready"

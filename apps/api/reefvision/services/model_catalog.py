@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -220,13 +221,24 @@ def _task_allowed_for_workflow(task: CatalogTask, workflow: CatalogWorkflow | No
 
 
 def _installed_provider_version(provider_id: str) -> str | None:
-    distribution = {"ultralytics": "ultralytics"}.get(provider_id)
+    distribution = {
+        "ultralytics": "ultralytics",
+        "depth_anything_v2": "transformers",
+    }.get(provider_id)
     if distribution is None:
         return None
     try:
         return version(distribution)
     except PackageNotFoundError:
         return None
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 class ModelCatalogService:
@@ -309,28 +321,96 @@ class ModelCatalogService:
         if record is not None and entry.expected_files:
             expected = entry.expected_files[0]
             path = catalog_asset_path(self.settings, entry.catalog_id, expected.filename)
+            record_files = record.get("files")
+            records_by_name = (
+                {str(item.get("filename")): item for item in record_files if isinstance(item, dict)}
+                if isinstance(record_files, list)
+                else {str(record.get("filename")): record}
+            )
+            missing = next(
+                (
+                    item
+                    for item in entry.expected_files
+                    if not catalog_asset_path(
+                        self.settings, entry.catalog_id, item.filename
+                    ).is_file()
+                ),
+                None,
+            )
+            wrong_size = next(
+                (
+                    item
+                    for item in entry.expected_files
+                    if catalog_asset_path(self.settings, entry.catalog_id, item.filename).is_file()
+                    and catalog_asset_path(self.settings, entry.catalog_id, item.filename)
+                    .stat()
+                    .st_size
+                    != item.size_bytes
+                ),
+                None,
+            )
+            wrong_manifest = next(
+                (
+                    item
+                    for item in entry.expected_files
+                    if not isinstance(records_by_name.get(item.filename), dict)
+                    or records_by_name[item.filename].get("sha256") != item.sha256
+                    or records_by_name[item.filename].get("size_bytes") != item.size_bytes
+                ),
+                None,
+            )
+            wrong_checksum = next(
+                (
+                    item
+                    for item in entry.expected_files
+                    if catalog_asset_path(self.settings, entry.catalog_id, item.filename).is_file()
+                    and catalog_asset_path(self.settings, entry.catalog_id, item.filename)
+                    .stat()
+                    .st_size
+                    == item.size_bytes
+                    and _file_sha256(
+                        catalog_asset_path(self.settings, entry.catalog_id, item.filename)
+                    )
+                    != item.sha256
+                ),
+                None,
+            )
             updates.update(
                 installed_asset_id=f"catalog_model:{entry.catalog_id}",
-                installed_path=relative_catalog_asset_path(self.settings, path),
+                installed_path=relative_catalog_asset_path(
+                    self.settings,
+                    path if len(entry.expected_files) == 1 else path.parent,
+                ),
                 installed_checksum=str(record.get("sha256") or "") or None,
             )
-            if not path.is_file():
-                updates.update(
-                    installation_state="Corrupted",
-                    installation_reason="The managed checkpoint is missing from application data.",
-                )
-            elif path.stat().st_size != expected.size_bytes:
+            if missing is not None:
                 updates.update(
                     installation_state="Corrupted",
                     installation_reason=(
-                        "The managed checkpoint size no longer matches the catalog."
+                        f"The managed model file {missing.filename} is missing "
+                        "from application data."
                     ),
                 )
-            elif record.get("sha256") != expected.sha256:
+            elif wrong_size is not None:
                 updates.update(
-                    installation_state="Update Available",
+                    installation_state="Corrupted",
                     installation_reason=(
-                        "The catalog checksum changed; reinstall the managed checkpoint."
+                        f"The managed model file {wrong_size.filename} size no "
+                        "longer matches the catalog."
+                    ),
+                )
+            elif wrong_manifest is not None:
+                updates.update(
+                    installation_state="Corrupted",
+                    installation_reason=(
+                        "The managed model file manifest is incomplete or invalid."
+                    ),
+                )
+            elif wrong_checksum is not None:
+                updates.update(
+                    installation_state="Corrupted",
+                    installation_reason=(
+                        f"The managed model file {wrong_checksum.filename} checksum is invalid."
                     ),
                 )
             else:

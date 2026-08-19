@@ -64,8 +64,8 @@ Add `-PreviousInstallerPath C:\path\to\previous\ReefVision.msi -PreviousInstalle
 | Coral classification training and inference | NOT RUN | Biological validation remains outstanding |
 | SAM2 CPU | PASS | Verified `sam2_b.pt` executed through production Smart Mask provider on CPU |
 | SAM2 CUDA | PASS | Verified `sam2_b.pt` executed on RTX 4060 Laptop GPU with no CPU fallback |
-| Depth Anything CPU | BLOCKED | No verified Depth Anything V2 checkpoint is cataloged or staged |
-| Depth Anything CUDA | BLOCKED | No verified Depth Anything V2 checkpoint is cataloged or staged |
+| Depth Anything CPU | PASS | Verified Depth Anything V2 Small snapshot executed through the production provider on CPU |
+| Depth Anything CUDA | PASS | Verified Depth Anything V2 Small snapshot executed on RTX 4060 Laptop GPU with no CPU fallback |
 | Unavailable-device recovery | PASS | Production device resolver rejected `cuda:99` without fallback |
 | CUDA out-of-memory recovery | NOT RUN | No explicit production recovery contract; unsafe real OOM was not attempted |
 | ByteTrack benchmark against scored footage | NOT RUN | Scored-footage validation remains outstanding |
@@ -75,9 +75,14 @@ Add `-PreviousInstallerPath C:\path\to\previous\ReefVision.msi -PreviousInstalle
 
 Hardware evidence generated 2026-08-19 on Windows 11 with PyTorch 2.5.1+cu121,
 Transformers 4.57.2, and an NVIDIA GeForce RTX 4060 Laptop GPU (8 GiB VRAM):
-`.artifacts/model-provider-acceptance-20260819T200343Z/report.json`. The deterministic
+`.artifacts/model-provider-acceptance-20260819T202023Z/report.json`. The deterministic
 synthetic input establishes provider and hardware execution only, not biological accuracy.
 Depth Anything remains relative monocular depth and is not metric physical depth unless
 separately calibrated.
+
+Depth Anything used official model `depth-anything/Depth-Anything-V2-Small-hf` at
+revision `5426e4f0f36572d16453bbda7a8389317b1bef99`. ReefVision verified all three
+managed snapshot files (99,175,385 bytes total). CPU load plus inference took 11.885
+seconds; CUDA load plus inference took 0.660 seconds and peaked at 207,890,944 bytes.
 
 Synthetic software tests do not establish biological accuracy, tracking quality, calibration accuracy, or hardware-provider readiness.

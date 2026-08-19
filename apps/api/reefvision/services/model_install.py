@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ from reefvision.db.models import Job
 from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.model_catalog import (
+    CatalogExpectedFile,
     CatalogReadinessResponse,
     CatalogVerifyResponse,
 )
@@ -25,6 +27,16 @@ from reefvision.storage.catalog_models import (
     remove_catalog_manifest_record,
     write_catalog_manifest_record,
 )
+
+
+def _sha256_and_size(path: Path) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    size = 0
+    with path.open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+            size += len(chunk)
+    return digest.hexdigest(), size
 
 
 class ModelInstallService:
@@ -97,25 +109,45 @@ class ModelInstallService:
                 verified=entry.installation_state == "Ready",
                 reason=entry.installation_reason,
             )
-        expected = entry.expected_files[0]
-        path = catalog_asset_path(self.settings, catalog_id, expected.filename)
-        if not path.is_file():
+        missing = next(
+            (
+                expected
+                for expected in entry.expected_files
+                if not catalog_asset_path(self.settings, catalog_id, expected.filename).is_file()
+            ),
+            None,
+        )
+        first = entry.expected_files[0]
+        first_path = catalog_asset_path(self.settings, catalog_id, first.filename)
+        if missing is not None:
             return CatalogVerifyResponse(
                 catalog_id=catalog_id,
                 installation_state="Corrupted",
                 verified=False,
-                expected_checksum=expected.sha256,
-                path=relative_catalog_asset_path(self.settings, path),
-                reason="The managed checkpoint is missing.",
+                expected_checksum=missing.sha256,
+                path=relative_catalog_asset_path(
+                    self.settings,
+                    catalog_asset_path(self.settings, catalog_id, missing.filename),
+                ),
+                reason=f"The managed model file {missing.filename} is missing.",
             )
-        digest = hashlib.sha256()
-        size = 0
-        with path.open("rb") as source:
-            while chunk := source.read(1024 * 1024):
-                digest.update(chunk)
-                size += len(chunk)
-        actual = digest.hexdigest()
-        verified = size == expected.size_bytes and actual == expected.sha256
+        records: list[dict[str, object]] = []
+        invalid: tuple[CatalogExpectedFile, str, int] | None = None
+        for expected in entry.expected_files:
+            path = catalog_asset_path(self.settings, catalog_id, expected.filename)
+            actual, size = _sha256_and_size(path)
+            records.append(
+                {
+                    "filename": expected.filename,
+                    "relative_path": relative_catalog_asset_path(self.settings, path),
+                    "sha256": actual,
+                    "size_bytes": size,
+                }
+            )
+            if size != expected.size_bytes or actual != expected.sha256:
+                invalid = (expected, actual, size)
+                break
+        verified = invalid is None
         if verified:
             previous = catalog_manifest_record(self.settings, catalog_id) or {}
             write_catalog_manifest_record(
@@ -123,20 +155,28 @@ class ModelInstallService:
                 catalog_id,
                 {
                     **previous,
-                    "filename": expected.filename,
-                    "relative_path": relative_catalog_asset_path(self.settings, path),
-                    "sha256": actual,
-                    "size_bytes": size,
+                    "filename": first.filename,
+                    "relative_path": relative_catalog_asset_path(
+                        self.settings,
+                        first_path if len(records) == 1 else first_path.parent,
+                    ),
+                    "sha256": first.sha256 if len(records) == 1 else None,
+                    "size_bytes": sum(item.size_bytes for item in entry.expected_files),
+                    "files": records,
                     "verified_at": datetime.now(UTC).isoformat(),
                 },
             )
+        failed_expected = invalid[0] if invalid else None
         return CatalogVerifyResponse(
             catalog_id=catalog_id,
             installation_state="Ready" if verified else "Corrupted",
             verified=verified,
-            expected_checksum=expected.sha256,
-            actual_checksum=actual,
-            path=relative_catalog_asset_path(self.settings, path),
+            expected_checksum=failed_expected.sha256 if failed_expected else None,
+            actual_checksum=invalid[1] if invalid else None,
+            path=relative_catalog_asset_path(
+                self.settings,
+                first_path if len(records) == 1 else first_path.parent,
+            ),
             reason=None if verified else "Managed checkpoint checksum or size is invalid.",
         )
 
@@ -152,9 +192,13 @@ class ModelInstallService:
     def readiness(self, project_id: str, catalog_id: str) -> CatalogReadinessResponse:
         entry = self.catalog.get_project_catalog_item(project_id, catalog_id)
         installed_provider_version: str | None = None
-        if entry.provider_id == "ultralytics":
+        distribution = {
+            "ultralytics": "ultralytics",
+            "depth_anything_v2": "transformers",
+        }.get(entry.provider_id)
+        if distribution is not None:
             try:
-                installed_provider_version = version("ultralytics")
+                installed_provider_version = version(distribution)
             except PackageNotFoundError:
                 installed_provider_version = None
         return CatalogReadinessResponse(

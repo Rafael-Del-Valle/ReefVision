@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
 import urllib.request
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
@@ -103,15 +104,7 @@ def process_model_install_job(
             job.completed_at = datetime.now(UTC)
             session.commit()
             return False
-        if len(entry.expected_files) != 1:
-            job.status = "failed"
-            job.error_message = (
-                "The current installer requires exactly one declared checkpoint file"
-            )
-            job.completed_at = datetime.now(UTC)
-            session.commit()
-            return False
-        expected = entry.expected_files[0]
+        expected_files = entry.expected_files
 
         # A model install can be offered to both the long-lived worker and the
         # request-triggered fallback thread. Claim it atomically so only one
@@ -125,8 +118,8 @@ def process_model_install_job(
                     status="running",
                     started_at=datetime.now(UTC),
                     error_message=None,
-                    progress_total=expected.size_bytes,
-                    result_json={"stage": "downloading", "filename": expected.filename},
+                    progress_total=entry.expected_size or 0,
+                    result_json={"stage": "downloading", "files_total": len(expected_files)},
                 )
             ),
         )
@@ -136,72 +129,104 @@ def process_model_install_job(
         session.commit()
 
     directories = catalog_model_directories(settings)
-    temporary = directories["temporary_downloads"] / f"{job_id}-{expected.filename}.part"
-    destination = catalog_asset_path(settings, catalog_id, expected.filename)
-    temporary.unlink(missing_ok=True)
-    digest = hashlib.sha256()
-    downloaded = 0
+    temporary_root = directories["temporary_downloads"] / job_id
+    destinations = [
+        catalog_asset_path(settings, catalog_id, expected.filename) for expected in expected_files
+    ]
+    shutil.rmtree(temporary_root, ignore_errors=True)
+    temporary_root.mkdir(parents=True, exist_ok=False)
+    downloaded_total = 0
+    verified_files: list[dict[str, object]] = []
     try:
-        request = urllib.request.Request(
-            expected.source_url,
-            headers={"User-Agent": f"ReefVision/{entry.provider_version} model-installer"},
-        )
-        with (
-            urllib.request.urlopen(request, timeout=30) as response,
-            temporary.open("xb") as output,
-        ):
-            while chunk := response.read(CHUNK_SIZE):
-                if _cancel_requested(factory, job_id):
-                    _cancel(factory, job_id)
-                    return False
-                output.write(chunk)
-                digest.update(chunk)
-                downloaded += len(chunk)
-                _set_job(
-                    factory,
-                    job_id,
-                    stage="downloading",
-                    progress=downloaded,
-                    result={"bytes_downloaded": downloaded},
+        for file_index, expected in enumerate(expected_files, start=1):
+            temporary = temporary_root / expected.filename
+            digest = hashlib.sha256()
+            downloaded = 0
+            request = urllib.request.Request(
+                expected.source_url,
+                headers={"User-Agent": f"ReefVision/{entry.provider_version} model-installer"},
+            )
+            with (
+                urllib.request.urlopen(request, timeout=30) as response,
+                temporary.open("xb") as output,
+            ):
+                while chunk := response.read(CHUNK_SIZE):
+                    if _cancel_requested(factory, job_id):
+                        _cancel(factory, job_id)
+                        return False
+                    output.write(chunk)
+                    digest.update(chunk)
+                    downloaded += len(chunk)
+                    downloaded_total += len(chunk)
+                    _set_job(
+                        factory,
+                        job_id,
+                        stage="downloading",
+                        progress=downloaded_total,
+                        result={
+                            "bytes_downloaded": downloaded_total,
+                            "file_index": file_index,
+                            "filename": expected.filename,
+                        },
+                    )
+                output.flush()
+                os.fsync(output.fileno())
+            _set_job(factory, job_id, stage="verifying", progress=downloaded_total)
+            actual_sha256 = digest.hexdigest()
+            if downloaded != expected.size_bytes:
+                raise RuntimeError(
+                    f"Downloaded size mismatch for {expected.filename}: "
+                    f"expected {expected.size_bytes}, received {downloaded}"
                 )
-            output.flush()
-            os.fsync(output.fileno())
-
-        _set_job(factory, job_id, stage="verifying", progress=downloaded)
-        if _cancel_requested(factory, job_id):
-            _cancel(factory, job_id)
-            return False
-        actual_sha256 = digest.hexdigest()
-        if downloaded != expected.size_bytes:
-            raise RuntimeError(
-                f"Downloaded size mismatch: expected {expected.size_bytes}, received {downloaded}"
-            )
-        if actual_sha256 != expected.sha256:
-            raise RuntimeError(
-                f"Checksum mismatch: expected {expected.sha256}, received {actual_sha256}"
+            if actual_sha256 != expected.sha256:
+                raise RuntimeError(
+                    f"Checksum mismatch for {expected.filename}: "
+                    f"expected {expected.sha256}, received {actual_sha256}"
+                )
+            verified_files.append(
+                {
+                    "filename": expected.filename,
+                    "sha256": actual_sha256,
+                    "size_bytes": downloaded,
+                    "source_url": expected.source_url,
+                    "revision": expected.revision,
+                }
             )
 
-        _set_job(factory, job_id, stage="finalizing", progress=downloaded)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.unlink(missing_ok=True)
-        os.replace(temporary, destination)
+        _set_job(factory, job_id, stage="finalizing", progress=downloaded_total)
+        for expected, destination in zip(expected_files, destinations, strict=True):
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.unlink(missing_ok=True)
+            os.replace(temporary_root / expected.filename, destination)
         provider_version: str | None
         try:
-            provider_version = (
-                version("ultralytics") if entry.provider_id == "ultralytics" else None
-            )
+            distribution = {
+                "ultralytics": "ultralytics",
+                "depth_anything_v2": "transformers",
+            }.get(entry.provider_id)
+            provider_version = version(distribution) if distribution else None
         except PackageNotFoundError:
             provider_version = None
         write_catalog_manifest_record(
             settings,
             catalog_id,
             {
-                "filename": expected.filename,
-                "relative_path": relative_catalog_asset_path(settings, destination),
-                "sha256": actual_sha256,
-                "size_bytes": downloaded,
-                "source_url": expected.source_url,
-                "revision": expected.revision,
+                "filename": expected_files[0].filename,
+                "relative_path": relative_catalog_asset_path(
+                    settings,
+                    destinations[0] if len(destinations) == 1 else destinations[0].parent,
+                ),
+                "sha256": verified_files[0]["sha256"] if len(verified_files) == 1 else None,
+                "size_bytes": downloaded_total,
+                "files": [
+                    {
+                        **record,
+                        "relative_path": relative_catalog_asset_path(settings, destination),
+                    }
+                    for record, destination in zip(verified_files, destinations, strict=True)
+                ],
+                "source_url": (expected_files[0].source_url if len(expected_files) == 1 else None),
+                "revision": expected_files[0].revision,
                 "provider_id": entry.provider_id,
                 "provider_version": provider_version,
                 "verified_at": datetime.now(UTC).isoformat(),
@@ -213,22 +238,26 @@ def process_model_install_job(
             job_id,
             status="succeeded",
             stage=final_stage,
-            progress=downloaded,
+            progress=downloaded_total,
             completed=True,
             result={
                 "catalog_id": catalog_id,
                 "asset_id": f"catalog_model:{catalog_id}",
-                "relative_path": relative_catalog_asset_path(settings, destination),
-                "sha256": actual_sha256,
-                "size_bytes": downloaded,
+                "relative_path": relative_catalog_asset_path(
+                    settings,
+                    destinations[0] if len(destinations) == 1 else destinations[0].parent,
+                ),
+                "files": verified_files,
+                "sha256": verified_files[0]["sha256"] if len(verified_files) == 1 else None,
+                "size_bytes": downloaded_total,
                 "provider_version": provider_version,
             },
         )
         return True
     except Exception as exc:
-        temporary.unlink(missing_ok=True)
-        destination.unlink(missing_ok=True)
+        for destination in destinations:
+            destination.unlink(missing_ok=True)
         _fail(factory, job_id, str(exc))
         return False
     finally:
-        temporary.unlink(missing_ok=True)
+        shutil.rmtree(temporary_root, ignore_errors=True)

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -41,3 +43,39 @@ def test_depth_acceptance_invariant_is_explicit() -> None:
         Path(__file__).resolve().parents[4] / "scripts" / "acceptance-model-providers.py"
     ).read_text(encoding="utf-8")
     assert '"relative_monocular_depth_is_metric": False' in source
+
+
+def test_verified_directory_asset_requires_every_manifest_file(harness, tmp_path: Path) -> None:
+    root = tmp_path / "models" / "catalog-models" / "depth"
+    root.mkdir(parents=True)
+    payload = b"verified"
+    model_file = root / "config.json"
+    model_file.write_bytes(payload)
+    manifest = root.parent / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "assets": {
+                    "depth": {
+                        "relative_path": "models/catalog-models/depth",
+                        "files": [
+                            {
+                                "relative_path": "models/catalog-models/depth/config.json",
+                                "size_bytes": len(payload),
+                                "sha256": hashlib.sha256(payload).hexdigest(),
+                            }
+                        ],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    path, _, error = harness.load_verified_catalog_asset(tmp_path, "depth")
+    assert path == root
+    assert error is None
+
+    model_file.unlink()
+    path, _, error = harness.load_verified_catalog_asset(tmp_path, "depth")
+    assert path is None
+    assert "missing" in str(error)

@@ -20,9 +20,9 @@ def test_source_catalog_is_schema_v2_and_contains_required_models() -> None:
     assert path.name == "model_catalog.json"
     assert payload["schema_version"] == 2
     assert payload["catalog_version"] == "2.0.0"
-    assert len(payload["models"]) == 40
+    assert len(payload["models"]) == 41
     ids = {entry["catalog_id"] for entry in payload["models"]}
-    assert len(ids) == 40
+    assert len(ids) == 41
     assert {
         "ultralytics/yolo11/detect/n",
         "ultralytics/yolo11/detect/s",
@@ -64,7 +64,7 @@ def test_project_model_catalog_returns_all_definitions(client: TestClient) -> No
     payload = response.json()
     assert payload["schema_version"] == 2
     assert payload["rejected_entries"] == 0
-    assert len(payload["models"]) == 40
+    assert len(payload["models"]) == 41
     yolo_models = {
         item["catalog_id"]: item
         for item in payload["models"]
@@ -92,7 +92,7 @@ def test_missing_provider_does_not_hide_entries(
     yolo11x = next(
         item for item in payload["models"] if item["catalog_id"] == "ultralytics/yolo11/detect/x"
     )
-    assert len(payload["models"]) == 40
+    assert len(payload["models"]) == 41
     assert yolo11x["installation_state"] == "Provider Required"
 
 
@@ -123,7 +123,7 @@ def test_invalid_entry_is_reported_without_rejecting_catalog(
     model_catalog_service.clear_model_catalog_cache()
     try:
         catalog = model_catalog_service._load_static_model_catalog()
-        assert len(catalog.models) == 39
+        assert len(catalog.models) == 40
         assert catalog.rejected_entries == 1
         assert catalog.validation_warnings
     finally:

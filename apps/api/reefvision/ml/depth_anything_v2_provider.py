@@ -102,7 +102,11 @@ class TransformersDepthAnythingV2Provider:
                 "automatic_downloads_disabled": True,
                 "explicit_checkpoint_required": True,
                 "registered_execution_runtime": "pytorch",
-                "bundle_format": "transformers_zip_v1",
+                "bundle_format": (
+                    "transformers_managed_snapshot_v1"
+                    if model_path.is_dir()
+                    else "transformers_zip_v1"
+                ),
                 "depth_kind": "relative",
                 "metric_depth": False,
             },

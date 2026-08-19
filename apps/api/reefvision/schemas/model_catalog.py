@@ -23,6 +23,7 @@ CatalogTask = Literal[
     "track",
     "caption",
     "phrase_grounding",
+    "relative_depth",
 ]
 CatalogInstallationState = Literal[
     "Available",
@@ -79,9 +80,18 @@ class CatalogExpectedFile(BaseModel):
     def validate_trusted_file(self) -> CatalogExpectedFile:
         if "/" in self.filename or "\\" in self.filename:
             raise ValueError("expected filenames must not contain path separators")
-        if not self.source_url.startswith(
+        approved_ultralytics = self.source_url.startswith(
             "https://github.com/ultralytics/assets/releases/download/"
-        ):
+        )
+        approved_depth_anything = (
+            self.source_url.startswith(
+                "https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf/resolve/"
+            )
+            and len(self.revision) == 40
+            and all(character in "0123456789abcdef" for character in self.revision.lower())
+            and self.source_url.endswith(f"/{self.revision}/{self.filename}")
+        )
+        if not (approved_ultralytics or approved_depth_anything):
             raise ValueError("catalog downloads must use an approved HTTPS source")
         if self.source_url.rsplit("/", 1)[-1] != self.filename:
             raise ValueError("download URL filename must match the expected filename")

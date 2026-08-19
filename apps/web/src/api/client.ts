@@ -395,7 +395,8 @@ export type ModelCatalogTask =
   | "video_propagation"
   | "track"
   | "caption"
-  | "phrase_grounding";
+  | "phrase_grounding"
+  | "relative_depth";
 
 export type ModelCatalogInstallationState =
   | "Available"

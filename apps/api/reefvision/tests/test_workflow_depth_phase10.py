@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from reefvision.db.models import Job, ModelRegistration
 from reefvision.ml.advanced_provider_contracts import DepthPrediction
+from reefvision.ml.depth_anything_v2_provider import TransformersDepthAnythingV2Provider
 from reefvision.services.workflow_depth import create_depth_map_artifacts
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project, import_one
@@ -38,6 +39,17 @@ def _depth_bundle_bytes() -> bytes:
         )
         archive.writestr("model.safetensors", b"synthetic-depth-weight-placeholder")
     return buffer.getvalue()
+
+
+def test_depth_provider_accepts_managed_transformers_directory(tmp_path: Path) -> None:
+    model_root = tmp_path / "depth-model"
+    model_root.mkdir()
+    with zipfile.ZipFile(io.BytesIO(_depth_bundle_bytes())) as archive:
+        archive.extractall(model_root)
+    metadata = TransformersDepthAnythingV2Provider().inspect_model(model_root)
+    assert metadata.task == "relative_depth"
+    assert metadata.metadata["metric_depth"] is False
+    assert metadata.metadata["bundle_format"] == "transformers_managed_snapshot_v1"
 
 
 def _register_depth_model(client: TestClient, project_id: str) -> dict[str, Any]:

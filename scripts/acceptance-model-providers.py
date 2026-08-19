@@ -76,6 +76,28 @@ def load_verified_catalog_asset(
         path.relative_to(data_dir.resolve())
     except ValueError:
         return None, record, "Managed asset path escapes the ReefVision data directory"
+    files = record.get("files")
+    if isinstance(files, list):
+        if not path.is_dir() or not files:
+            return None, record, f"Managed model directory is missing or incomplete: {path}"
+        for item in files:
+            if not isinstance(item, dict):
+                return None, record, "Managed model file manifest is incomplete"
+            relative_file = item.get("relative_path")
+            if not isinstance(relative_file, str):
+                return None, record, "Managed model file has no relative_path"
+            file_path = (data_dir / relative_file).resolve()
+            try:
+                file_path.relative_to(path)
+            except ValueError:
+                return None, record, "Managed model file escapes its verified directory"
+            if not file_path.is_file():
+                return None, record, f"Managed model file is missing: {file_path}"
+            if file_path.stat().st_size != item.get("size_bytes"):
+                return None, record, f"Managed model file size is invalid: {file_path.name}"
+            if sha256_file(file_path) != item.get("sha256"):
+                return None, record, f"Managed model file checksum is invalid: {file_path.name}"
+        return path, record, None
     if not path.is_file():
         return None, record, f"Managed checkpoint is missing: {path}"
     expected_size = record.get("size_bytes")
@@ -98,6 +120,8 @@ def checkpoint_identity(
         "size_bytes": record.get("size_bytes"),
         "provider_version": record.get("provider_version"),
         "source_url": record.get("source_url"),
+        "revision": record.get("revision"),
+        "files": record.get("files"),
     }
 
 
@@ -222,7 +246,6 @@ def depth_infer(input_path: Path, output_dir: Path, device: str) -> Callable[[An
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", type=Path, default=default_data_dir())
-    parser.add_argument("--depth-checkpoint", type=Path)
     parser.add_argument("--output-root", type=Path, default=REPOSITORY_ROOT / ".artifacts")
     args = parser.parse_args()
 
@@ -303,24 +326,13 @@ def main() -> int:
             )
         )
 
-    depth_path = args.depth_checkpoint.resolve() if args.depth_checkpoint else None
-    depth_record: dict[str, Any] = {}
-    depth_error: str | None = None
-    if depth_path is None:
-        depth_error = (
-            "No verified Depth Anything V2 checkpoint is cataloged or staged; "
-            "pass a verified local Transformers ZIP with --depth-checkpoint"
-        )
-    elif not depth_path.is_file():
-        depth_error = f"Depth checkpoint is missing: {depth_path}"
-    else:
-        depth_record = {
-            "sha256": sha256_file(depth_path),
-            "size_bytes": depth_path.stat().st_size,
-            "provider_version": package_version("transformers"),
-        }
+    depth_path, depth_record, depth_error = load_verified_catalog_asset(
+        args.data_dir.resolve(), "transformers/depth_anything_v2/small"
+    )
     report["models"]["depth_anything_v2"] = checkpoint_identity(
-        catalog_id=None, path=depth_path, record=depth_record
+        catalog_id="transformers/depth_anything_v2/small",
+        path=depth_path,
+        record=depth_record,
     )
     if depth_error or depth_path is None:
         blocked = result(

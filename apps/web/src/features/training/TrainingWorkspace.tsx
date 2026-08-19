@@ -60,6 +60,7 @@ const taskLabels: Record<ModelCatalogTask, string> = {
   track: "Multi-object tracking",
   caption: "Captioning",
   phrase_grounding: "Phrase grounding",
+  relative_depth: "Relative monocular depth",
 };
 
 const sizeSortOrder = [

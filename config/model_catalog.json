@@ -2217,6 +2217,105 @@
       "availability": "unavailable"
     },
     {
+      "catalog_id": "transformers/depth_anything_v2/small",
+      "display_name": "Depth Anything V2 Small",
+      "display_summary": "Official Depth Anything V2 Small relative monocular-depth model pinned for verified offline Transformers inference.",
+      "category": "pretrained_catalog",
+      "provider": "depth_anything_v2",
+      "provider_version": "4.57.2",
+      "architecture_family": "Depth Anything V2",
+      "model_variant": "relative_depth",
+      "model_size": "small",
+      "task": "relative_depth",
+      "trainable": false,
+      "inference": true,
+      "video_compatibility": false,
+      "prompt_assist_compatibility": false,
+      "tiling_compatibility": false,
+      "tuning_compatibility": false,
+      "checkpoint_identifier": "depth-anything/Depth-Anything-V2-Small-hf@5426e4f0f36572d16453bbda7a8389317b1bef99",
+      "checkpoint_source": "trusted_huggingface_revision",
+      "expected_checksum": null,
+      "expected_file_size": 99175385,
+      "model_weight_license": "Apache-2.0; see the official Depth Anything V2 Small Hugging Face model card.",
+      "package_license": "Transformers and model dependencies retain their respective upstream licenses.",
+      "required_provider_pack": null,
+      "required_package_versions": [
+        "transformers==4.57.2",
+        "torch==2.5.1+cu121",
+        "safetensors==0.6.2"
+      ],
+      "supported_runtime": [
+        "pytorch"
+      ],
+      "supported_devices": [
+        "cpu",
+        "cuda"
+      ],
+      "supported_precision": [
+        "fp32"
+      ],
+      "expected_input_size": {
+        "width": 518,
+        "height": 518
+      },
+      "minimum_recommended_ram_gb": 8.0,
+      "minimum_recommended_vram_gb": 4.0,
+      "desktop_package_status": "optional_local_model_pack",
+      "clean_machine_verification_status": "source_runtime_validation_required",
+      "deprecation_status": "active",
+      "replacement_model_id": null,
+      "known_limitations": [
+        "Predictions are relative monocular depth, not calibrated metric physical distance.",
+        "Metric 3D trajectories require separately calibrated metric depth samples."
+      ],
+      "installation_state": "Not Installed",
+      "installation_reason": "Install the verified model snapshot through ReefVision Model Hub.",
+      "advanced_only": false,
+      "requires_confirmation": true,
+      "selection_kind": "managed_catalog_model",
+      "architecture_reference": null,
+      "resolved_model_id": null,
+      "provider_id": "depth_anything_v2",
+      "architecture": "Depth Anything V2",
+      "variant": "small",
+      "inference_supported": true,
+      "download_source_type": "trusted_huggingface_revision",
+      "expected_files": [
+        {
+          "filename": "config.json",
+          "source_url": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf/resolve/5426e4f0f36572d16453bbda7a8389317b1bef99/config.json",
+          "revision": "5426e4f0f36572d16453bbda7a8389317b1bef99",
+          "sha256": "c56698d3643dde1f83ea2212759e6b31a22b8f827246a36dd007ee8a22b3ff75",
+          "size_bytes": 950
+        },
+        {
+          "filename": "preprocessor_config.json",
+          "source_url": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf/resolve/5426e4f0f36572d16453bbda7a8389317b1bef99/preprocessor_config.json",
+          "revision": "5426e4f0f36572d16453bbda7a8389317b1bef99",
+          "sha256": "d41175c0d889477ca8fc67191e540faef14baf6275157b3fdecf78469e6bbf84",
+          "size_bytes": 775
+        },
+        {
+          "filename": "model.safetensors",
+          "source_url": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf/resolve/5426e4f0f36572d16453bbda7a8389317b1bef99/model.safetensors",
+          "revision": "5426e4f0f36572d16453bbda7a8389317b1bef99",
+          "sha256": "3152477ce0d8d6978d76b995120de97cb5b928701fd0f817769f59e249a16b70",
+          "size_bytes": 99173660
+        }
+      ],
+      "expected_size": 99175385,
+      "license_summary": "Official Apache-2.0 Depth Anything V2 Small Transformers checkpoint.",
+      "provider_pack_id": null,
+      "recommended_ram": 8.0,
+      "recommended_vram": 4.0,
+      "supported_runtimes": [
+        "pytorch"
+      ],
+      "desktop_support": "optional_local_model_pack",
+      "availability": "available"
+    },
+    {
       "catalog_id": "sam/original/vit_b",
       "display_name": "SAM ViT-B",
       "display_summary": "Interactive masking catalog stub for future validated official SAM checkpoint packaging.",
