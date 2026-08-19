@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -14,6 +15,32 @@ class MeasurementPoint(BaseModel):
     y: float = Field(ge=0)
 
 
+class CalibrationCameraSignature(BaseModel):
+    """Optional setup metadata used to make calibration-profile reuse explicit."""
+
+    width_px: int | None = Field(default=None, gt=0)
+    height_px: int | None = Field(default=None, gt=0)
+    camera_make: str | None = Field(default=None, max_length=100)
+    camera_model: str | None = Field(default=None, max_length=150)
+    lens_model: str | None = Field(default=None, max_length=150)
+    focal_length_mm: float | None = Field(default=None, gt=0)
+    capture_distance: float | None = Field(default=None, gt=0)
+    setup_notes: str | None = Field(default=None, max_length=500)
+
+    @field_validator(
+        "camera_make",
+        "camera_model",
+        "lens_model",
+        "setup_notes",
+    )
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+
 class MeasurementCalibrationUpdate(BaseModel):
     distance_per_pixel: float = Field(gt=0)
     unit: str = Field(min_length=1, max_length=32)
@@ -22,6 +49,13 @@ class MeasurementCalibrationUpdate(BaseModel):
     reference_pixel_length: float | None = Field(default=None, gt=0)
     default_depth: float | None = Field(default=None, gt=0)
     notes: str | None = Field(default=None, max_length=1000)
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    detector: str | None = Field(default=None, max_length=100)
+    profile_name: str | None = Field(default=None, max_length=150)
+    profile_source_image_id: str | None = Field(default=None, max_length=36)
+    camera_signature: CalibrationCameraSignature | None = None
+    perspective_homography: list[list[float]] | None = None
+    reference_plane_only: bool = True
 
     @field_validator("unit", "source")
     @classmethod
@@ -31,7 +65,7 @@ class MeasurementCalibrationUpdate(BaseModel):
             raise ValueError("Calibration text fields cannot be blank")
         return stripped
 
-    @field_validator("notes")
+    @field_validator("notes", "detector", "profile_name")
     @classmethod
     def normalize_optional_text(cls, value: str | None) -> str | None:
         if value is None:
@@ -45,6 +79,14 @@ class MeasurementCalibrationUpdate(BaseModel):
             raise ValueError(
                 "reference_length and reference_pixel_length must be supplied together"
             )
+        matrix = self.perspective_homography
+        if matrix is not None:
+            if len(matrix) != 3 or any(len(row) != 3 for row in matrix):
+                raise ValueError("perspective_homography must be a 3x3 matrix")
+            if any(not math.isfinite(float(value)) for row in matrix for value in row):
+                raise ValueError("perspective_homography values must be finite")
+            if all(abs(float(value)) < 1e-15 for value in matrix[2]):
+                raise ValueError("perspective_homography has an invalid projective row")
         return self
 
 
@@ -126,6 +168,10 @@ class MaskMeasurementResponse(BaseModel):
     surface_area_model: SurfaceModelKind = "none"
     surface_area_physical: float | None = Field(default=None, ge=0)
     surface_area_assumptions: list[str] = Field(default_factory=list)
+    perspective_corrected: bool = False
+    calibration_source: str | None = None
+    calibration_confidence: float | None = Field(default=None, ge=0, le=1)
+    calibration_profile_name: str | None = None
 
 
 class MeasurementAggregateGroupResponse(BaseModel):
