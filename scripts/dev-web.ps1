@@ -1,12 +1,13 @@
 $ErrorActionPreference = "Stop"
-$Root = Split-Path -Parent $PSScriptRoot
-Set-Location $Root
 
-. (Join-Path $PSScriptRoot "lib\node-tools.ps1")
-$NodeTools = Ensure-ReefVisionNodeTools
+throw @"
+Standalone browser mode has been retired. ReefVision is a desktop application.
 
-if (-not (Test-Path "apps\web\node_modules" -PathType Container)) {
-    throw "Web dependencies are not installed. Run .\scripts\bootstrap.ps1 first."
-}
+Use:
+  powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev-desktop.ps1
 
-Invoke-ReefVisionNpm -NodeTools $NodeTools -Arguments @("--prefix", "apps/web", "run", "dev")
+For low-level UI debugging only, the internal Vite server is still available through:
+  npm.cmd --prefix apps/web run ui:dev
+
+The internal UI server is not a supported ReefVision runtime and will not connect to a manually managed browser API.
+"@
