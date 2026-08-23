@@ -5,6 +5,7 @@ import { App } from "./App";
 import { AppProviders } from "./app/providers";
 import { initializeRuntime } from "./runtime";
 import { renderStartupError } from "./startup";
+import "./styles/clarity-overhaul.css";
 
 const rootElement = (() => {
   const element = document.getElementById("root");
