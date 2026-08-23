@@ -12,11 +12,8 @@ declare global {
   }
 }
 
-const defaultApiBaseUrl =
-  import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
-
 const runtimeState: DesktopContext & { initialized: boolean } = {
-  apiBaseUrl: defaultApiBaseUrl,
+  apiBaseUrl: "",
   dataDir: "",
   desktopMode: false,
   initialized: false,
@@ -26,6 +23,13 @@ let initialization: Promise<void> | null = null;
 
 function isTauriEnvironment(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+function browserRuntimeError(): Error {
+  return new Error(
+    "ReefVision is a desktop application and cannot run as a standalone browser app. " +
+      "Launch ReefVision with the installed Windows application or use the desktop development command.",
+  );
 }
 
 function desktopStartupError(apiBaseUrl: string): Error {
@@ -66,13 +70,15 @@ export async function initializeRuntime(): Promise<void> {
   }
 
   initialization = (async () => {
-    if (isTauriEnvironment()) {
-      const context = await invoke<DesktopContext>("desktop_context");
-      await waitForApiHealth(context.apiBaseUrl);
-      runtimeState.apiBaseUrl = context.apiBaseUrl;
-      runtimeState.dataDir = context.dataDir;
-      runtimeState.desktopMode = context.desktopMode;
+    if (!isTauriEnvironment()) {
+      throw browserRuntimeError();
     }
+
+    const context = await invoke<DesktopContext>("desktop_context");
+    await waitForApiHealth(context.apiBaseUrl);
+    runtimeState.apiBaseUrl = context.apiBaseUrl;
+    runtimeState.dataDir = context.dataDir;
+    runtimeState.desktopMode = context.desktopMode;
     runtimeState.initialized = true;
   })();
 
@@ -97,7 +103,7 @@ export function getRuntimeContext(): DesktopContext {
 }
 
 export function resetRuntimeForTests(): void {
-  runtimeState.apiBaseUrl = defaultApiBaseUrl;
+  runtimeState.apiBaseUrl = "";
   runtimeState.dataDir = "";
   runtimeState.desktopMode = false;
   runtimeState.initialized = false;
