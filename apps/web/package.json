@@ -4,8 +4,10 @@
   "version": "1.6.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --config vite.config.mjs --configLoader runner",
+    "dev": "tauri dev",
+    "ui:dev": "vite --config vite.config.mjs --configLoader runner",
     "build": "tsc -b && vite build --config vite.config.mjs --configLoader runner",
+    "ui:build": "tsc -b && vite build --config vite.config.mjs --configLoader runner",
     "preview": "vite preview --config vite.config.mjs --configLoader runner",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build --bundles nsis",
@@ -15,7 +17,7 @@
     "test:watch": "vitest --config vite.config.mjs --configLoader runner",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test:e2e": "npm run build && playwright test"
+    "test:e2e": "npm run ui:build && playwright test"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
