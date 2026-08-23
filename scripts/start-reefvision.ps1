@@ -29,10 +29,11 @@ Usage:
   start-reefvision --diagnostics
   start-reefvision --configure-repo PATH
   start-reefvision --dev
-  start-reefvision --web-dev
   start-reefvision --api-only
   start-reefvision --no-wait
   start-reefvision --verbose
+
+ReefVision is a desktop application. Standalone browser mode is retired.
 "@
 }
 
@@ -43,7 +44,6 @@ $safeMode = $false
 $showLogs = $false
 $runDiagnostics = $false
 $devMode = $false
-$webDevMode = $false
 $apiOnly = $false
 $noWait = $false
 $verbose = $false
@@ -58,7 +58,9 @@ for ($index = 0; $index -lt $Arguments.Count; $index += 1) {
         "--logs" { $showLogs = $true }
         "--diagnostics" { $runDiagnostics = $true }
         "--dev" { $devMode = $true }
-        "--web-dev" { $webDevMode = $true }
+        "--web-dev" {
+            throw "Standalone browser mode has been retired. Use start-reefvision --dev for the full desktop application."
+        }
         "--api-only" { $apiOnly = $true }
         "--no-wait" { $noWait = $true }
         "--verbose" { $verbose = $true }
@@ -83,12 +85,12 @@ if ($showHelp) {
 if ($configureRepoPath) {
     $resolved = Set-ReefVisionRepoPath -RepoPath $configureRepoPath
     Write-ReefVisionCommandNote "Configured ReefVision repository: $resolved"
-    if (-not ($showStatus -or $devMode -or $webDevMode -or $apiOnly)) {
+    if (-not ($showStatus -or $devMode -or $apiOnly)) {
         exit 0
     }
 }
 
-$selectedDevModes = @($devMode, $webDevMode, $apiOnly) | Where-Object { $_ }
+$selectedDevModes = @($devMode, $apiOnly) | Where-Object { $_ }
 if (@($selectedDevModes).Count -gt 1) {
     throw "Choose only one development mode at a time."
 }
@@ -98,7 +100,7 @@ if ($verbose -and $repoPath) {
     Write-ReefVisionCommandNote "Repository path: $repoPath"
 }
 
-if ($devMode -or $webDevMode -or $apiOnly) {
+if ($devMode -or $apiOnly) {
     if ($null -eq $repoPath) {
         throw "A ReefVision repository is required for development modes. Run start-reefvision --configure-repo PATH first."
     }
@@ -116,36 +118,15 @@ if ($devMode -or $webDevMode -or $apiOnly) {
         exit 0
     }
 
-    if ($devMode) {
-        Start-Process -FilePath "powershell.exe" -WindowStyle Normal -ArgumentList @(
-            "-NoProfile",
-            "-NoExit",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            (Join-Path $repoPath "scripts\dev-desktop.ps1")
-        )
-        Write-ReefVisionCommandNote "Started ReefVision desktop development mode."
-        exit 0
-    }
-
     Start-Process -FilePath "powershell.exe" -WindowStyle Normal -ArgumentList @(
         "-NoProfile",
         "-NoExit",
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        (Join-Path $repoPath "scripts\dev-api.ps1")
+        (Join-Path $repoPath "scripts\dev-desktop.ps1")
     )
-    Start-Process -FilePath "powershell.exe" -WindowStyle Normal -ArgumentList @(
-        "-NoProfile",
-        "-NoExit",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        (Join-Path $repoPath "scripts\dev-web.ps1")
-    )
-    Write-ReefVisionCommandNote "Started ReefVision browser development mode."
+    Write-ReefVisionCommandNote "Started ReefVision desktop development mode. The local API is managed automatically by the desktop application."
     exit 0
 }
 
