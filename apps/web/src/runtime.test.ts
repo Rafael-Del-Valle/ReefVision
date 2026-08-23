@@ -32,10 +32,11 @@ describe("runtime", () => {
     vi.useRealTimers();
   });
 
-  it("keeps the browser API base URL outside Tauri", async () => {
-    await initializeRuntime();
-
-    expect(getApiBaseUrl()).toBe("http://127.0.0.1:8000/api/v1");
+  it("rejects standalone browser runtime", async () => {
+    await expect(initializeRuntime()).rejects.toThrow(
+      "ReefVision is a desktop application",
+    );
+    expect(getApiBaseUrl()).toBe("");
     expect(getRuntimeContext().desktopMode).toBe(false);
   });
 
