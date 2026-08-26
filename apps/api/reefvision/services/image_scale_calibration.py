@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import math
+from itertools import pairwise
 from statistics import median, pstdev
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from PIL import Image, UnidentifiedImageError
 from sqlalchemy import select
@@ -21,6 +22,8 @@ from reefvision.schemas.image_calibration import (
     MarkerCalibrationDetectRequest,
     RulerCalibrationCandidate,
     RulerCalibrationDetectRequest,
+    ScaleBarCalibrationCandidate,
+    ScaleBarCalibrationDetectRequest,
 )
 from reefvision.schemas.measurements import (
     CalibrationCameraSignature,
@@ -42,17 +45,12 @@ def _percentile(values: list[float], fraction: float) -> float:
 
 
 def _interval_stats(positions: list[float]) -> tuple[float, float, list[float]] | None:
-    spacings = [
-        second - first
-        for first, second in zip(positions, positions[1:], strict=False)
-    ]
+    spacings = [second - first for first, second in pairwise(positions)]
     spacings = [value for value in spacings if value > 1.5]
     if len(spacings) < 2:
         return None
     initial = median(spacings)
-    filtered = [
-        value for value in spacings if initial * 0.55 <= value <= initial * 1.6
-    ]
+    filtered = [value for value in spacings if initial * 0.55 <= value <= initial * 1.6]
     if len(filtered) < 2:
         return None
     interval = median(filtered)
@@ -66,18 +64,14 @@ def _projection_profile(
     orientation: Literal["horizontal", "vertical"],
 ) -> list[float]:
     width, height = image.size
-    pixels = image.load()
+    pixels: Any = image.load()
     if orientation == "horizontal":
         if width < 5:
             return []
         step = max(1, height // 320)
         return [
             sum(
-                abs(
-                    2 * int(pixels[x, y])
-                    - int(pixels[x - 1, y])
-                    - int(pixels[x + 1, y])
-                )
+                abs(2 * int(pixels[x, y]) - int(pixels[x - 1, y]) - int(pixels[x + 1, y]))
                 for y in range(0, height, step)
             )
             for x in range(1, width - 1)
@@ -87,11 +81,7 @@ def _projection_profile(
     step = max(1, width // 320)
     return [
         sum(
-            abs(
-                2 * int(pixels[x, y])
-                - int(pixels[x, y - 1])
-                - int(pixels[x, y + 1])
-            )
+            abs(2 * int(pixels[x, y]) - int(pixels[x, y - 1]) - int(pixels[x, y + 1]))
             for x in range(0, width, step)
         )
         for y in range(1, height - 1)
@@ -108,16 +98,12 @@ def _peak_positions(profile: list[float]) -> tuple[list[int], list[float], float
     raw: list[tuple[int, float]] = []
     for index in range(1, len(profile) - 1):
         value = profile[index]
-        if (
-            value >= threshold
-            and value >= profile[index - 1]
-            and value >= profile[index + 1]
-        ):
+        if value >= threshold and value >= profile[index - 1] and value >= profile[index + 1]:
             raw.append((index + 1, value))
     if not raw:
         return [], [], 0.0
 
-    minimum_gap = max(2, len(profile) // 600)
+    minimum_gap = max(3, len(profile) // 600)
     merged: list[tuple[int, float]] = []
     for position, score in raw:
         if merged and position - merged[-1][0] <= minimum_gap:
@@ -168,11 +154,7 @@ def _analyze_ruler_crop(
     ]
     major_interval: float | None = None
     major_stats = _interval_stats(strong_positions)
-    if (
-        major_stats is not None
-        and major_stats[0] >= interval * 1.5
-        and major_stats[1] <= 0.35
-    ):
+    if major_stats is not None and major_stats[0] >= interval * 1.5 and major_stats[1] <= 0.35:
         major_interval = major_stats[0]
 
     regularity = max(0.0, 1.0 - min(1.0, cv / 0.35))
@@ -196,8 +178,7 @@ def _analyze_ruler_crop(
         )
     if not roi_supplied:
         warnings.append(
-            "No ruler ROI was supplied; the detector selected the strongest periodic "
-            "image band."
+            "No ruler ROI was supplied; the detector selected the strongest periodic image band."
         )
     return {
         "orientation": orientation,
@@ -243,6 +224,224 @@ def _candidate_bands(width: int, height: int, orientation: str) -> list[Calibrat
     return bands
 
 
+def _longest_true_run(mask: list[bool]) -> tuple[int, int]:
+    best_start = 0
+    best_end = 0
+    start: int | None = None
+    for index, active in enumerate([*mask, False]):
+        if active and start is None:
+            start = index
+            continue
+        if active or start is None:
+            continue
+        if index - start > best_end - best_start:
+            best_start = start
+            best_end = index
+        start = None
+    return best_start, best_end
+
+
+def _scale_bar_mask(
+    values: list[int],
+    *,
+    polarity: Literal["dark", "light"],
+    background: float,
+    low: int,
+    high: int,
+) -> list[bool]:
+    if polarity == "dark":
+        threshold = background - max(28.0, (background - low) * 0.30)
+        return [value <= threshold for value in values]
+    threshold = background + max(28.0, (high - background) * 0.30)
+    return [value >= threshold for value in values]
+
+
+def _analyze_scale_bar_crop(
+    crop: Image.Image,
+    *,
+    orientation: Literal["horizontal", "vertical"],
+    roi: CalibrationRoi,
+    roi_supplied: bool,
+) -> dict[str, Any] | None:
+    original_width, original_height = crop.size
+    analysis = crop.convert("L")
+    if max(analysis.size) > MAX_ANALYSIS_DIMENSION:
+        ratio = MAX_ANALYSIS_DIMENSION / max(analysis.size)
+        analysis = analysis.resize(
+            (
+                max(5, round(analysis.width * ratio)),
+                max(5, round(analysis.height * ratio)),
+            )
+        )
+    width, height = analysis.size
+    scale_x = original_width / width
+    scale_y = original_height / height
+    pixels: Any = analysis.load()
+    low_raw, high_raw = cast(tuple[int, int], analysis.getextrema())
+    low = int(low_raw)
+    high = int(high_raw)
+
+    sample_step = max(1, round(math.sqrt(max(1, width * height) / 50_000)))
+    samples = [
+        int(pixels[x, y])
+        for y in range(0, height, sample_step)
+        for x in range(0, width, sample_step)
+    ]
+    if not samples:
+        return None
+    background = float(median(samples))
+    polarities: list[Literal["dark", "light"]] = []
+    if background - low >= 28:
+        polarities.append("dark")
+    if high - background >= 28:
+        polarities.append("light")
+    if not polarities:
+        return None
+
+    axis_length = width if orientation == "horizontal" else height
+    cross_length = height if orientation == "horizontal" else width
+    minimum_length = max(12, round(axis_length * 0.05))
+    maximum_thickness = max(12, round(cross_length * 0.12))
+    candidates: list[dict[str, Any]] = []
+
+    for cross_index in range(cross_length):
+        if orientation == "horizontal":
+            values = [int(pixels[axis_index, cross_index]) for axis_index in range(width)]
+        else:
+            values = [int(pixels[cross_index, axis_index]) for axis_index in range(height)]
+
+        for polarity in polarities:
+            mask = _scale_bar_mask(
+                values,
+                polarity=polarity,
+                background=background,
+                low=low,
+                high=high,
+            )
+            axis_start, axis_end = _longest_true_run(mask)
+            run_length = axis_end - axis_start
+            if run_length < minimum_length:
+                continue
+
+            cross_min = cross_index
+            cross_max = cross_index
+            for direction in (-1, 1):
+                neighbor = cross_index + direction
+                while 0 <= neighbor < cross_length:
+                    if orientation == "horizontal":
+                        neighbor_values = [
+                            int(pixels[axis_index, neighbor])
+                            for axis_index in range(axis_start, axis_end)
+                        ]
+                    else:
+                        neighbor_values = [
+                            int(pixels[neighbor, axis_index])
+                            for axis_index in range(axis_start, axis_end)
+                        ]
+                    neighbor_mask = _scale_bar_mask(
+                        neighbor_values,
+                        polarity=polarity,
+                        background=background,
+                        low=low,
+                        high=high,
+                    )
+                    active_fraction = sum(neighbor_mask) / max(1, len(neighbor_mask))
+                    if active_fraction < 0.65:
+                        break
+                    cross_min = min(cross_min, neighbor)
+                    cross_max = max(cross_max, neighbor)
+                    neighbor += direction
+
+            thickness = cross_max - cross_min + 1
+            if thickness > maximum_thickness:
+                continue
+            aspect_ratio = run_length / max(1, thickness)
+            if aspect_ratio < 5.0:
+                continue
+
+            segment_values: list[int] = []
+            if orientation == "horizontal":
+                for y in range(cross_min, cross_max + 1):
+                    segment_values.extend(int(pixels[x, y]) for x in range(axis_start, axis_end))
+            else:
+                for x in range(cross_min, cross_max + 1):
+                    segment_values.extend(int(pixels[x, y]) for y in range(axis_start, axis_end))
+            segment_mask = _scale_bar_mask(
+                segment_values,
+                polarity=polarity,
+                background=background,
+                low=low,
+                high=high,
+            )
+            continuity = sum(segment_mask) / max(1, len(segment_mask))
+            segment_mean = sum(segment_values) / max(1, len(segment_values))
+            contrast_score = min(1.0, abs(segment_mean - background) / 100.0)
+            aspect_score = min(1.0, aspect_ratio / 20.0)
+            length_score = min(
+                1.0,
+                run_length / max(float(minimum_length), axis_length * 0.25),
+            )
+            confidence = (
+                0.35 * continuity
+                + 0.30 * contrast_score
+                + 0.20 * aspect_score
+                + 0.15 * length_score
+            )
+            if not roi_supplied:
+                confidence *= 0.90
+            confidence = min(0.98, max(0.0, confidence))
+
+            if orientation == "horizontal":
+                center_cross = ((cross_min + cross_max) / 2.0) * scale_y
+                start = (roi.x_min + axis_start * scale_x, roi.y_min + center_cross)
+                end = (roi.x_min + axis_end * scale_x, roi.y_min + center_cross)
+                physical_length_pixels = run_length * scale_x
+                physical_thickness_pixels = thickness * scale_y
+            else:
+                center_cross = ((cross_min + cross_max) / 2.0) * scale_x
+                start = (roi.x_min + center_cross, roi.y_min + axis_start * scale_y)
+                end = (roi.x_min + center_cross, roi.y_min + axis_end * scale_y)
+                physical_length_pixels = run_length * scale_y
+                physical_thickness_pixels = thickness * scale_x
+
+            warnings = [
+                "Scale-bar geometry was detected automatically, but the physical label "
+                "has not been interpreted; confirm the reference length and unit before "
+                "applying calibration.",
+                "A scalar scale is valid only when the scale bar and measured specimen "
+                "lie in the same measurement plane.",
+            ]
+            if confidence < 0.7:
+                warnings.append(
+                    "Low-confidence scale-bar candidate; verify the detected endpoints "
+                    "before applying calibration."
+                )
+            if not roi_supplied:
+                warnings.append(
+                    "No scale-bar ROI was supplied; the detector searched image bands "
+                    "and selected the strongest bar-like candidate."
+                )
+            candidates.append(
+                {
+                    "orientation": orientation,
+                    "roi": roi,
+                    "bar_start_pixels": start,
+                    "bar_end_pixels": end,
+                    "bar_length_pixels": physical_length_pixels,
+                    "bar_thickness_pixels": physical_thickness_pixels,
+                    "polarity": polarity,
+                    "continuity_score": continuity,
+                    "contrast_score": contrast_score,
+                    "confidence": confidence,
+                    "warnings": warnings,
+                }
+            )
+
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: float(item["confidence"]))
+
+
 def _homography_list(matrix: Any) -> list[list[float]]:
     return [[float(matrix[row, column]) for column in range(3)] for row in range(3)]
 
@@ -268,7 +467,7 @@ class ImageScaleCalibrationService:
         try:
             with Image.open(self._image_path(image)) as source:
                 source.load()
-                return source.convert("RGB")
+                return cast(Image.Image, source.convert("RGB"))
         except (OSError, UnidentifiedImageError) as exc:
             raise ValidationError("Managed image could not be read for calibration") from exc
 
@@ -286,15 +485,15 @@ class ImageScaleCalibrationService:
             if roi.x_max > width or roi.y_max > height:
                 raise ValidationError("Calibration ROI cannot extend outside the image")
             crop = source.crop((roi.x_min, roi.y_min, roi.x_max, roi.y_max))
-            orientations = (
+            orientations: tuple[Literal["horizontal", "vertical"], ...] = (
                 ("horizontal", "vertical")
                 if payload.orientation == "auto"
                 else (payload.orientation,)
             )
-            for orientation in orientations:
+            for candidate_orientation in orientations:
                 candidate = _analyze_ruler_crop(
                     crop,
-                    orientation=orientation,
+                    orientation=candidate_orientation,
                     roi=roi,
                     roi_supplied=True,
                 )
@@ -303,14 +502,12 @@ class ImageScaleCalibrationService:
         else:
             for roi in _candidate_bands(width, height, payload.orientation):
                 crop = source.crop((roi.x_min, roi.y_min, roi.x_max, roi.y_max))
-                orientation: Literal["horizontal", "vertical"] = (
-                    "horizontal"
-                    if roi.x_min == 0 and roi.x_max == width
-                    else "vertical"
+                band_orientation: Literal["horizontal", "vertical"] = (
+                    "horizontal" if roi.x_min == 0 and roi.x_max == width else "vertical"
                 )
                 candidate = _analyze_ruler_crop(
                     crop,
-                    orientation=orientation,
+                    orientation=band_orientation,
                     roi=roi,
                     roi_supplied=False,
                 )
@@ -324,6 +521,56 @@ class ImageScaleCalibrationService:
         best = max(candidates, key=lambda item: float(item["confidence"]))
         return RulerCalibrationCandidate(image_id=image_asset.id, **best)
 
+    def detect_scale_bar(
+        self,
+        image_id: str,
+        payload: ScaleBarCalibrationDetectRequest,
+    ) -> ScaleBarCalibrationCandidate:
+        image_asset = self._image(image_id)
+        source = self._open_image(image_asset)
+        width, height = source.size
+        candidates: list[dict[str, Any]] = []
+        if payload.roi is not None:
+            roi = payload.roi
+            if roi.x_max > width or roi.y_max > height:
+                raise ValidationError("Calibration ROI cannot extend outside the image")
+            crop = source.crop((roi.x_min, roi.y_min, roi.x_max, roi.y_max))
+            orientations: tuple[Literal["horizontal", "vertical"], ...] = (
+                ("horizontal", "vertical")
+                if payload.orientation == "auto"
+                else (payload.orientation,)
+            )
+            for candidate_orientation in orientations:
+                candidate = _analyze_scale_bar_crop(
+                    crop,
+                    orientation=candidate_orientation,
+                    roi=roi,
+                    roi_supplied=True,
+                )
+                if candidate is not None:
+                    candidates.append(candidate)
+        else:
+            for roi in _candidate_bands(width, height, payload.orientation):
+                crop = source.crop((roi.x_min, roi.y_min, roi.x_max, roi.y_max))
+                band_orientation: Literal["horizontal", "vertical"] = (
+                    "horizontal" if roi.x_min == 0 and roi.x_max == width else "vertical"
+                )
+                candidate = _analyze_scale_bar_crop(
+                    crop,
+                    orientation=band_orientation,
+                    roi=roi,
+                    roi_supplied=False,
+                )
+                if candidate is not None:
+                    candidates.append(candidate)
+        if not candidates:
+            raise ValidationError(
+                "No sufficiently continuous scale-bar candidate was detected; select a "
+                "scale-bar ROI or use manual calibration"
+            )
+        best = max(candidates, key=lambda item: float(item["confidence"]))
+        return ScaleBarCalibrationCandidate(image_id=image_asset.id, **best)
+
     @staticmethod
     def _aruco_module() -> tuple[Any, Any]:
         try:
@@ -331,8 +578,7 @@ class ImageScaleCalibrationService:
             import numpy as np
         except ImportError as exc:
             raise ValidationError(
-                "ArUco/ChArUco calibration requires an OpenCV build with the aruco "
-                "module"
+                "ArUco/ChArUco calibration requires an OpenCV build with the aruco module"
             ) from exc
         if not hasattr(cv2, "aruco"):
             raise ValidationError(
@@ -384,9 +630,7 @@ class ImageScaleCalibrationService:
             else:
                 index = max(
                     range(len(corners)),
-                    key=lambda item: float(
-                        cv2.contourArea(corners[item].reshape(4, 2))
-                    ),
+                    key=lambda item: float(cv2.contourArea(corners[item].reshape(4, 2))),
                 )
             marker_id = id_values[index]
             points = corners[index].reshape(4, 2).astype("float32")
@@ -399,9 +643,7 @@ class ImageScaleCalibrationService:
             ]
             mean_side = sum(side_pixels) / 4.0
             if mean_side <= 1:
-                raise ValidationError(
-                    "Detected ArUco marker is too small for calibration"
-                )
+                raise ValidationError("Detected ArUco marker is too small for calibration")
             side_cv = pstdev(side_pixels) / mean_side
             target = np.array(
                 [
@@ -436,9 +678,7 @@ class ImageScaleCalibrationService:
                 detected_corner_count=4,
                 confidence=confidence,
                 calibration=calibration,
-                corners_pixels=[
-                    [float(value) for value in point] for point in points
-                ],
+                corners_pixels=[[float(value) for value in point] for point in points],
                 warnings=[
                     "Perspective correction is valid only for objects lying on the "
                     "marker reference plane."
@@ -469,11 +709,7 @@ class ImageScaleCalibrationService:
             frame,
             board,
         )
-        if (
-            charuco_ids is None
-            or charuco_corners is None
-            or len(charuco_ids) < 4
-        ):
+        if charuco_ids is None or charuco_corners is None or len(charuco_ids) < 4:
             raise ValidationError(
                 "ChArUco calibration requires at least four detected chessboard corners"
             )
@@ -533,9 +769,7 @@ class ImageScaleCalibrationService:
             1e-12,
         )
         inlier_ratio = (
-            float(inliers.sum()) / len(inliers)
-            if inliers is not None and len(inliers)
-            else 1.0
+            float(inliers.sum()) / len(inliers) if inliers is not None and len(inliers) else 1.0
         )
         confidence = max(
             0.0,
@@ -568,12 +802,9 @@ class ImageScaleCalibrationService:
             detected_corner_count=len(ids_flat),
             confidence=confidence,
             calibration=calibration,
-            corners_pixels=[
-                [float(value) for value in point] for point in image_points
-            ],
+            corners_pixels=[[float(value) for value in point] for point in image_points],
             warnings=[
-                "Perspective correction is valid only for objects lying on the "
-                "ChArUco board plane."
+                "Perspective correction is valid only for objects lying on the ChArUco board plane."
             ],
         )
 
@@ -627,9 +858,7 @@ class ImageScaleCalibrationService:
             signature_data = signature.model_dump()
             signature_data["width_px"] = image.width_px
             signature_data["height_px"] = image.height_px
-            data["camera_signature"] = CalibrationCameraSignature(
-                **signature_data
-            ).model_dump()
+            data["camera_signature"] = CalibrationCameraSignature(**signature_data).model_dump()
         return MeasurementCalibrationUpdate.model_validate(data)
 
     def apply_profile(
@@ -645,34 +874,22 @@ class ImageScaleCalibrationService:
         target = self._image(image_id)
         source = self._image(payload.source_image_id)
         if source.project_id != target.project_id:
-            raise ValidationError(
-                "Calibration profiles cannot be reused across projects"
-            )
+            raise ValidationError("Calibration profiles cannot be reused across projects")
         if source.id == target.id:
-            raise ValidationError(
-                "Target image already owns the selected calibration profile"
-            )
+            raise ValidationError("Target image already owns the selected calibration profile")
         raw = dict(source.metadata_json or {}).get(MEASUREMENT_CALIBRATION_KEY)
         if not isinstance(raw, dict):
-            raise ValidationError(
-                "Selected profile source image does not have a calibration"
-            )
+            raise ValidationError("Selected profile source image does not have a calibration")
         try:
             calibration = MeasurementCalibrationUpdate.model_validate(raw)
         except ValueError as exc:
             raise ValidationError("Selected calibration profile is invalid") from exc
         if not calibration.profile_name:
-            raise ValidationError(
-                "Selected calibration is not saved as a reusable profile"
-            )
+            raise ValidationError("Selected calibration is not saved as a reusable profile")
         signature = calibration.camera_signature
-        expected_width = (
-            signature.width_px if signature and signature.width_px else source.width_px
-        )
+        expected_width = signature.width_px if signature and signature.width_px else source.width_px
         expected_height = (
-            signature.height_px
-            if signature and signature.height_px
-            else source.height_px
+            signature.height_px if signature and signature.height_px else source.height_px
         )
         if target.width_px != expected_width or target.height_px != expected_height:
             raise ValidationError(

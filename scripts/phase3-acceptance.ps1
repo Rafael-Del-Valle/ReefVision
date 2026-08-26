@@ -69,7 +69,7 @@ if (-not $SkipBuild) {
 }
 
 $releaseExecutable = Join-Path $Root "apps\web\src-tauri\target\x86_64-pc-windows-msvc\release\reefvision-desktop.exe"
-$installer = Join-Path $Root "apps\web\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\msi\ReefVision_1.7.0_x64_en-US.msi"
+$installer = Join-Path $Root "apps\web\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\msi\ReefVision_1.0.0_x64_en-US.msi"
 
 if (-not (Test-Path $releaseExecutable -PathType Leaf)) {
     throw "Packaged ReefVision executable was not found: $releaseExecutable"

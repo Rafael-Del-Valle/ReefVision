@@ -76,6 +76,5 @@ def transformed_centerline_length(matrix: Homography, points: list[MeasurementPo
         return 0.0
     transformed = transform_points(matrix, [(point.x, point.y) for point in points])
     return sum(
-        hypot(second[0] - first[0], second[1] - first[1])
-        for first, second in pairwise(transformed)
+        hypot(second[0] - first[0], second[1] - first[1]) for first, second in pairwise(transformed)
     )

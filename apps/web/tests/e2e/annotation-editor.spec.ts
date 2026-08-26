@@ -309,7 +309,7 @@ test("stores source-image coordinates correctly after zooming and reloads saved 
 
   const { start, end, sourceStart, sourceEnd } = geometry;
 
-  await page.getByRole("button", { name: "Box (B)" }).click();
+  await page.getByRole("button", { name: "Box tool" }).click();
   await expect(page.getByTestId("annotation-canvas")).toHaveClass(/tool-box/);
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
@@ -499,7 +499,7 @@ test("keeps unsaved boxes visible after a failed save and allows retry", async (
   await mountBuiltApp(page);
   await page.getByRole("button", { name: /CPT Coral Study/ }).click();
   await page.getByRole("button", { name: "Annotate" }).click();
-  await page.getByRole("button", { name: "Box (B)" }).click();
+  await page.getByRole("button", { name: "Box tool" }).click();
   await expect(page.getByTestId("annotation-canvas")).toHaveClass(/tool-box/);
 
   const geometry = await page

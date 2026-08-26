@@ -1,6 +1,6 @@
 # ReefVision
 
-ReefVision is a local-first scientific image-annotation and computer-vision platform. The current `1.4.0` line focuses on coral-polyp bounding-box annotation, trusted local model registration, model-assisted review, a unified model-provider catalog, prompt-assisted proposal segmentation, immutable dataset versions, leakage-aware splitting, explainable annotation quality control, deterministic review prioritization, and Milestone 8 backup or recovery and release-hardening foundations.
+ReefVision is a local-first scientific image-annotation and computer-vision platform. The current `1.0.0` release line focuses on coral-polyp bounding-box annotation, trusted local model registration, model-assisted review, a unified model-provider catalog, prompt-assisted proposal segmentation, immutable dataset versions, leakage-aware splitting, explainable annotation quality control, deterministic review prioritization, and backup or recovery and release-hardening foundations.
 
 The repository currently includes the application foundation, project and class management, managed image importing, thumbnail jobs, a searchable project gallery, manual bounding-box annotation, model registration, detector-driven prediction proposals, review tooling, and a Tauri-based Windows desktop shell that packages the existing frontend and backend together.
 
@@ -29,7 +29,7 @@ The repository currently includes the application foundation, project and class 
 - Create managed backups, verify them, restore them into new managed recovery locations, and export redacted diagnostics bundles from the `System status` view.
 - Reopen a first-run onboarding guide from the top bar or `System status`.
 - Archive projects without deleting their records or files.
-- Build an NSIS-targeted Windows desktop installer that bundles the existing React frontend and a PyInstaller-frozen FastAPI sidecar.
+- Build a Windows MSI desktop installer that bundles the existing React frontend and a PyInstaller-frozen FastAPI sidecar.
 
 ## Repository layout
 
@@ -106,7 +106,7 @@ To create a managed backup, verify one, restore into a new recovery folder, or e
 
 ## Desktop packaging
 
-ReefVision Milestone 2.5 adds a Tauri 2 desktop shell in `apps/web/src-tauri` that bundles the existing Vite frontend and launches the FastAPI backend as a PyInstaller sidecar executable. The intended Windows distribution target is an NSIS installer. The desktop shell uses a per-user application-data directory, surfaces a retryable startup error when the backend does not come up cleanly, prevents competing desktop instances, focuses the existing window on a second launch, and waits for a loopback-only backend health check before rendering the dashboard.
+ReefVision uses a Tauri 2 desktop shell in `apps/web/src-tauri` that bundles the existing Vite frontend and launches the FastAPI backend as a PyInstaller sidecar executable. The Windows distribution target is an MSI installer with external cabinet payloads. The desktop shell uses a per-user application-data directory, surfaces a retryable startup error when the backend does not come up cleanly, prevents competing desktop instances, focuses the existing window on a second launch, and waits for a loopback-only backend health check before rendering the dashboard.
 
 ### Desktop development shell
 
@@ -127,23 +127,23 @@ The desktop build script:
 - checks the public npm lockfile policy;
 - builds the backend sidecar with PyInstaller;
 - bundles the desktop app with Tauri; and
-- emits an NSIS installer under `apps/web/src-tauri/target/<target-triple>/release/bundle/nsis/`.
+- emits an MSI plus its required `rv*.cab` payload files under `apps/web/src-tauri/target/<target-triple>/release/bundle/msi/`.
 
-Close any running packaged ReefVision app, smoke-install copy, or sidecar executable before rebuilding the installer. On Windows, NSIS can fail with a `failed creating mmap` error if the staged `reefvision-api-*.exe` is still locked by a running process.
+Close any running packaged ReefVision app, smoke-install copy, or sidecar executable before rebuilding the installer so staged binaries are not locked by a running process.
 
 Building the installer requires a local Rust toolchain plus the Visual Studio 2022 MSVC C++ toolchain (`Desktop development with C++`, `MSVC v143 - VS 2022 C++ x64/x86 build tools`, and a Windows SDK). End users of the finished installer do not need Python, Node.js, Rust, or a terminal.
 
-Desktop build, installer, and upgrade notes now live in [docs/DESKTOP_BUILD_AND_INSTALL.md](/C:/Users/rafae/Documents/ReefVision/reefvision/docs/DESKTOP_BUILD_AND_INSTALL.md).
+Desktop build, installer, and upgrade notes now live in [docs/DESKTOP_BUILD_AND_INSTALL.md](docs/DESKTOP_BUILD_AND_INSTALL.md).
 
 ## Milestone 7 docs
 
-- [Quality Control Guide](/C:/Users/rafae/Documents/ReefVision/reefvision/docs/QUALITY_CONTROL_GUIDE.md)
-- [Quality Control Rule Reference](/C:/Users/rafae/Documents/ReefVision/reefvision/docs/QUALITY_CONTROL_RULE_REFERENCE.md)
-- [Quality Control Threshold Reference](/C:/Users/rafae/Documents/ReefVision/reefvision/docs/QUALITY_CONTROL_THRESHOLDS.md)
-- [Review Queue Guide](/C:/Users/rafae/Documents/ReefVision/reefvision/docs/REVIEW_QUEUE_GUIDE.md)
-- [Review Prioritization Formula](/C:/Users/rafae/Documents/ReefVision/reefvision/docs/REVIEW_PRIORITIZATION_FORMULA.md)
-- [Prioritization vs Calibrated Uncertainty](/C:/Users/rafae/Documents/ReefVision/reefvision/docs/PRIORITIZATION_VS_CALIBRATED_UNCERTAINTY.md)
-- [Desktop Build and Installation](/C:/Users/rafae/Documents/ReefVision/reefvision/docs/DESKTOP_BUILD_AND_INSTALL.md)
+- [Quality Control Guide](docs/QUALITY_CONTROL_GUIDE.md)
+- [Quality Control Rule Reference](docs/QUALITY_CONTROL_RULE_REFERENCE.md)
+- [Quality Control Threshold Reference](docs/QUALITY_CONTROL_THRESHOLDS.md)
+- [Review Queue Guide](docs/REVIEW_QUEUE_GUIDE.md)
+- [Review Prioritization Formula](docs/REVIEW_PRIORITIZATION_FORMULA.md)
+- [Prioritization vs Calibrated Uncertainty](docs/PRIORITIZATION_VS_CALIBRATED_UNCERTAINTY.md)
+- [Desktop Build and Installation](docs/DESKTOP_BUILD_AND_INSTALL.md)
 
 ## Backend checks
 

@@ -3,6 +3,9 @@
 from fastapi import APIRouter
 
 from reefvision.api.routes.active_learning import router as active_learning_router
+from reefvision.api.routes.advanced_provider_execution import (
+    router as advanced_provider_execution_router,
+)
 from reefvision.api.routes.advanced_providers import router as advanced_providers_router
 from reefvision.api.routes.annotation_imports import router as annotation_imports_router
 from reefvision.api.routes.annotations import router as annotations_router
@@ -25,6 +28,7 @@ from reefvision.api.routes.projects import router as projects_router
 from reefvision.api.routes.quality_control import router as quality_control_router
 from reefvision.api.routes.raster_edits import router as raster_edits_router
 from reefvision.api.routes.review_queues import router as review_queues_router
+from reefvision.api.routes.scale_label_ocr import router as scale_label_ocr_router
 from reefvision.api.routes.system import router as system_router
 from reefvision.api.routes.training import router as training_router
 from reefvision.api.routes.video_science import router as video_science_router
@@ -52,6 +56,7 @@ api_router.include_router(annotation_imports_router)
 api_router.include_router(annotations_router)
 api_router.include_router(raster_edits_router)
 api_router.include_router(measurements_router)
+api_router.include_router(scale_label_ocr_router)
 api_router.include_router(dataset_versions_router)
 api_router.include_router(jobs_router)
 api_router.include_router(model_catalog_router)
@@ -62,4 +67,5 @@ api_router.include_router(quality_control_router)
 api_router.include_router(review_queues_router)
 api_router.include_router(active_learning_router)
 api_router.include_router(advanced_providers_router)
+api_router.include_router(advanced_provider_execution_router)
 api_router.include_router(workflow_graphs_router)

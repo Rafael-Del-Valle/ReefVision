@@ -24,6 +24,7 @@ CatalogTask = Literal[
     "caption",
     "phrase_grounding",
     "relative_depth",
+    "metric_video_depth",
 ]
 CatalogInstallationState = Literal[
     "Available",
@@ -208,7 +209,20 @@ class ModelCatalogEntryResponse(BaseModel):
         if self.selection_kind == "builtin_architecture" and not self.architecture_reference:
             raise ValueError("builtin_architecture entries require architecture_reference")
         if self.selection_kind == "managed_catalog_model" and not self.expected_files:
-            raise ValueError("managed_catalog_model entries require expected_files")
+            if self.download_source_type != "huggingface_pinned_revision":
+                raise ValueError(
+                    "managed_catalog_model entries require expected_files unless "
+                    "they use the pinned Hugging Face snapshot runtime"
+                )
+            if not self.checkpoint_identifier or "@" not in self.checkpoint_identifier:
+                raise ValueError(
+                    "pinned Hugging Face managed models require a revision-pinned "
+                    "checkpoint_identifier"
+                )
+            if self.expected_checksum is None:
+                raise ValueError("pinned Hugging Face managed models require expected_checksum")
+            if not self.provider_pack_id:
+                raise ValueError("pinned Hugging Face managed models require provider_pack_id")
         if self.selection_kind == "registered_model" and not self.resolved_model_id:
             raise ValueError("registered_model entries require resolved_model_id")
         if self.selection_kind == "planned_unavailable" and self.availability != "unavailable":

@@ -344,7 +344,17 @@ describe("AnnotationEditor", () => {
     });
     stubCanvasRect();
 
-    await userEvent.click(screen.getByRole("button", { name: "Box (B)" }));
+    expect(
+      screen.getByRole("listbox", { name: "Objects" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("prediction-inspector-slot")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Pan tool" }));
+    expect(screen.getByRole("button", { name: "Pan tool" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Box tool" }));
     fireEvent.pointerDown(screen.getByTestId("annotation-annotation-1"), {
       clientX: 0,
       clientY: 0,
@@ -412,13 +422,13 @@ describe("AnnotationEditor", () => {
     });
     stubCanvasRect();
 
-    await userEvent.click(screen.getByRole("button", { name: "Box (B)" }));
+    await userEvent.click(screen.getByRole("button", { name: "Box tool" }));
     fireEvent.pointerDown(screen.getByTestId("annotation-annotation-1"), {
       clientX: 0,
       clientY: 0,
       button: 0,
     });
-    await userEvent.click(screen.getByRole("button", { name: "Select (V)" }));
+    await userEvent.click(screen.getByRole("button", { name: "Select tool" }));
     await userEvent.click(screen.getByTestId("class-tool-2"));
 
     const panel = within(selectionPanel());
@@ -506,6 +516,69 @@ describe("AnnotationEditor", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByTestId(`prediction-row-${pendingProposal.id}`),
+    ).toBeInTheDocument();
+  });
+
+  it("opens a synchronized prediction inspector with crop, confidence, provenance, and review navigation", async () => {
+    const secondProposal = {
+      ...pendingProposal,
+      id: "proposal-2",
+      predicted_label: "Muricea Open",
+      label_class_id: "class-2",
+      confidence: 0.42,
+      x_min: 600,
+      x_max: 760,
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse(session);
+      }
+      if (
+        url.includes(`/images/${session.image.id}/prediction-proposals`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse({
+          items: [pendingProposal, secondProposal],
+          counts: { pending: 2 },
+        });
+      }
+      const shared = handleDefaultEditorRequests(url, init);
+      if (shared) return shared;
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderEditor();
+    await userEvent.click(
+      await screen.findByTestId(`prediction-row-${secondProposal.id}`),
+    );
+
+    const inspector = screen.getByRole("region", {
+      name: "Prediction Inspector",
+    });
+    expect(
+      within(inspector).getAllByText("Muricea Open").length,
+    ).toBeGreaterThan(0);
+    expect(within(inspector).getByText("0.42")).toBeInTheDocument();
+    expect(
+      within(inspector).getByText(/no calibrated probability/i),
+    ).toBeInTheDocument();
+    expect(
+      within(inspector).getByRole("img", { name: /crop of Muricea Open/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(inspector).getByText("Prediction 1 of 2"),
+    ).toBeInTheDocument();
+
+    await userEvent.keyboard("j");
+    expect(
+      within(inspector).getAllByText("Muricea Closed").length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(inspector).getByText("Prediction 2 of 2"),
     ).toBeInTheDocument();
   });
 

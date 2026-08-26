@@ -24,6 +24,7 @@ from reefvision.jobs.quality_control import process_quality_control_job
 from reefvision.jobs.restores import process_restore_job
 from reefvision.jobs.training_dispatch import process_task_aware_training_job
 from reefvision.jobs.video import process_video_extract_job
+from reefvision.jobs.video_metric_depth import process_video_metric_depth_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.repositories.jobs import JobRepository
@@ -143,6 +144,8 @@ def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session
             return process_video_extract_job(settings, factory, job_id)
         if job_type == "video_tracking":
             return process_video_tracking_job(settings, factory, job_id)
+        if job_type == "video_metric_depth_3d":
+            return process_video_metric_depth_job(settings, factory, job_id)
         if job_type == "project_exchange_export":
             return process_project_exchange_export_job(settings, factory, job_id)
         if job_type == "workflow_run":

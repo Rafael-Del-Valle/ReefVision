@@ -21,6 +21,7 @@ JobType = Literal[
     "model_install",
     "video_extract",
     "video_tracking",
+    "video_metric_depth_3d",
     "advanced_depth",
     "project_exchange_export",
     "workflow_run",

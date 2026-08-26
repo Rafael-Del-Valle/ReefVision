@@ -1,6 +1,6 @@
 import type { AnnotationRecord, AnnotationStatus } from "../../api/client";
 
-export type EditorTool = "select" | "box" | "polygon";
+export type EditorTool = "select" | "pan" | "box" | "polygon" | "rotated_box";
 
 export interface Point {
   x: number;
@@ -41,7 +41,7 @@ export interface MaskAnnotationRecord {
 export interface EditorMaskAnnotation {
   id: string;
   label_class_id: string | null;
-  geometry_kind: "polygon" | "raster_mask" | string;
+  geometry_kind: "polygon" | "rotated_box" | "raster_mask" | string;
   points: Point[] | null;
   mask_path: string | null;
   x_min: number | null;

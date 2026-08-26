@@ -11,7 +11,7 @@ def test_advanced_provider_manifests_are_explicit(client: TestClient) -> None:
     manifests = {item["provider_id"]: item for item in response.json()}
 
     assert manifests["segment_anything"]["execution_supported"] is True
-    assert manifests["sam2"]["execution_supported"] is False
+    assert manifests["sam2"]["execution_supported"] is True
     assert manifests["depth_anything_v2"]["execution_supported"] is False
     assert manifests["depth_anything_v2"]["output_contracts_by_task"]["relative_depth"] == [
         "relative_depth_array",

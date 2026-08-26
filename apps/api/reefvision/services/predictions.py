@@ -207,6 +207,7 @@ class PredictionService:
         proposal.reviewer_action_at = _utc_now()
         proposal.accepted_annotation_id = annotation.id
         proposal.provenance_json = {
+            **(proposal.provenance_json or {}),
             "accepted_box": {
                 "x_min": x_min,
                 "y_min": y_min,

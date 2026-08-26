@@ -71,7 +71,7 @@ export function InteroperabilityWorkspace({
     <section className="feature-workspace">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Phase 9</p>
+          <p className="eyebrow">Project exchange</p>
           <h3>Project interoperability</h3>
           <p>
             Export a versioned, checksummed ReefVision package, inspect it

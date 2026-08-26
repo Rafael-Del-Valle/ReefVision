@@ -22,7 +22,7 @@ function Build-ReefVisionSplitCabinetMsi {
     $WixObject = Join-Path $WixRoot "main.wixobj"
     $Locale = Join-Path $WixRoot "locale.wxl"
     $InstallerDirectory = Join-Path $ReleaseRoot "bundle\msi"
-    $Installer = Join-Path $InstallerDirectory "ReefVision_1.7.0_x64_en-US.msi"
+    $Installer = Join-Path $InstallerDirectory "ReefVision_1.0.0_x64_en-US.msi"
     $WixTools = Join-Path $env:LOCALAPPDATA "tauri\WixTools314"
     $Candle = Join-Path $WixTools "candle.exe"
     $Light = Join-Path $WixTools "light.exe"

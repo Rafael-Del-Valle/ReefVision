@@ -8,6 +8,7 @@ import {
   type Project,
 } from "../../api/client";
 import { RasterBrushLayer } from "./RasterBrushLayer";
+import { RasterFillLayer } from "./RasterFillLayer";
 import {
   editRasterMask,
   rasterMaskContentUrl,
@@ -42,6 +43,7 @@ export function RasterMaskWorkspace({
   const [activeClassId, setActiveClassId] = useState<string | null>(null);
   const [mode, setMode] = useState<RasterEditMode>("paint");
   const [brushRadius, setBrushRadius] = useState(12);
+  const [fillTolerance, setFillTolerance] = useState(24);
 
   const sessionQuery = useQuery({
     queryKey: ["annotation-session", imageId],
@@ -104,6 +106,7 @@ export function RasterMaskWorkspace({
         label_class_id: activeClassId,
         mode,
         brush_radius: brushRadius,
+        fill_tolerance: fillTolerance,
         strokes: [{ points }],
       });
     },
@@ -206,18 +209,44 @@ export function RasterMaskWorkspace({
               >
                 Erase
               </button>
-            </div>
-            <label>
-              Brush radius: {brushRadius}px
-              <input
-                type="range"
-                min="1"
-                max="128"
-                value={brushRadius}
+              <button
+                type="button"
+                className={mode === "fill" ? "active" : "secondary"}
                 disabled={editMutation.isPending}
-                onChange={(event) => setBrushRadius(Number(event.target.value))}
-              />
-            </label>
+                onClick={() => setMode("fill")}
+              >
+                Fill
+              </button>
+            </div>
+            {mode === "fill" ? (
+              <label>
+                Fill color tolerance: {fillTolerance}
+                <input
+                  type="range"
+                  min="0"
+                  max="96"
+                  value={fillTolerance}
+                  disabled={editMutation.isPending}
+                  onChange={(event) =>
+                    setFillTolerance(Number(event.target.value))
+                  }
+                />
+              </label>
+            ) : (
+              <label>
+                Brush radius: {brushRadius}px
+                <input
+                  type="range"
+                  min="1"
+                  max="128"
+                  value={brushRadius}
+                  disabled={editMutation.isPending}
+                  onChange={(event) =>
+                    setBrushRadius(Number(event.target.value))
+                  }
+                />
+              </label>
+            )}
             <p className="annotation-helper">
               Strokes update the selected raster layer. Use Create another mask
               only when you intentionally want a separate layer.
@@ -358,14 +387,23 @@ export function RasterMaskWorkspace({
                   }}
                 />
               )}
-              <RasterBrushLayer
-                width={image.width_px}
-                height={image.height_px}
-                mode={mode}
-                brushRadius={brushRadius}
-                disabled={editMutation.isPending || activeClassId === null}
-                onStroke={(points) => editMutation.mutate(points)}
-              />
+              {mode === "fill" ? (
+                <RasterFillLayer
+                  width={image.width_px}
+                  height={image.height_px}
+                  disabled={editMutation.isPending || activeClassId === null}
+                  onFill={(point) => editMutation.mutate([point])}
+                />
+              ) : (
+                <RasterBrushLayer
+                  width={image.width_px}
+                  height={image.height_px}
+                  mode={mode}
+                  brushRadius={brushRadius}
+                  disabled={editMutation.isPending || activeClassId === null}
+                  onStroke={(points) => editMutation.mutate(points)}
+                />
+              )}
             </div>
           </div>
         </section>

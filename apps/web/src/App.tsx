@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
 
 import {
   archiveProject,
@@ -13,6 +13,8 @@ import {
   type ReviewQueueItem,
 } from "./api/client";
 import { ActiveLearningWorkspace } from "./features/active-learning/ActiveLearningWorkspace";
+import { AdvancedProviderWorkspace } from "./features/advanced-providers/AdvancedProviderWorkspace";
+import { ReefVisionAssistant } from "./features/assistant/ReefVisionAssistant";
 import { EnhancedAnnotationEditor } from "./features/annotation-editor/EnhancedAnnotationEditor";
 import { ClassManagerPanel } from "./features/classes/ClassManagerPanel";
 import { ClassificationWorkspace } from "./features/classification/ClassificationWorkspace";
@@ -26,6 +28,15 @@ import { SystemPanel } from "./features/system/SystemPanel";
 import { TrainingWorkspace } from "./features/training/TrainingWorkspace";
 import { VideoTrackExchangePanel } from "./features/video/VideoTrackExchangePanel";
 import { VideoTrackingWorkspace } from "./features/video/VideoTrackingWorkspace";
+import { WorkflowGraphWorkspace } from "./features/workflow-graphs/WorkflowGraphWorkspace";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+} from "./components/ui/AsyncState";
+import { StatusBadge } from "./components/ui/StatusBadge";
+import { WorkspaceShell } from "./components/ui/WorkspaceShell";
+import "./styles/design-system.css";
 import "./styles/app.css";
 
 interface AnnotationLaunchState {
@@ -48,9 +59,119 @@ type ProjectView =
   | "classes"
   | "quality_control"
   | "review_queue"
+  | "advanced_providers"
+  | "workflows"
   | "system";
 
 const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.6.0";
+
+type ProjectTab = Exclude<ProjectView, "system">;
+
+const PROJECT_NAV_GROUPS: Array<{
+  id: string;
+  label: string;
+  description: string;
+  items: Array<{ id: ProjectTab; label: string; description: string }>;
+}> = [
+  {
+    id: "data",
+    label: "Data & annotation",
+    description:
+      "Import, annotate, organize classes, and freeze reproducible datasets.",
+    items: [
+      {
+        id: "gallery",
+        label: "Images & annotation",
+        description:
+          "Browse imagery, run inference, and open the annotation editor.",
+      },
+      {
+        id: "versions",
+        label: "Dataset versions",
+        description:
+          "Create immutable snapshots, splits, comparisons, and exports.",
+      },
+      {
+        id: "classes",
+        label: "Classes",
+        description:
+          "Manage project labels, display colors, order, and activity.",
+      },
+    ],
+  },
+  {
+    id: "models",
+    label: "Models & AI",
+    description: "Train, run, register, and inspect computer-vision providers.",
+    items: [
+      {
+        id: "models",
+        label: "Model Hub",
+        description: "Manage verified pretrained and project-specific models.",
+      },
+      {
+        id: "training",
+        label: "Training",
+        description: "Launch and inspect reproducible model-training runs.",
+      },
+      {
+        id: "classification",
+        label: "Classification",
+        description: "Train and run image-level classification workflows.",
+      },
+      {
+        id: "active_learning",
+        label: "Active learning",
+        description: "Prioritize informative samples for human annotation.",
+      },
+      {
+        id: "advanced_providers",
+        label: "Advanced providers",
+        description:
+          "Use prompt, segmentation, depth, OCR, and VLM provider tools.",
+      },
+    ],
+  },
+  {
+    id: "review",
+    label: "Review",
+    description:
+      "Find annotation issues and direct review time where it matters.",
+    items: [
+      {
+        id: "quality_control",
+        label: "Quality control",
+        description: "Run explainable project or dataset-version QC checks.",
+      },
+      {
+        id: "review_queue",
+        label: "Review queue",
+        description:
+          "Work through ranked human-review items and model proposals.",
+      },
+    ],
+  },
+  {
+    id: "automation",
+    label: "Video & automation",
+    description:
+      "Analyze temporal data and compose reusable scientific workflows.",
+    items: [
+      {
+        id: "video",
+        label: "Video & tracking",
+        description:
+          "Track organisms, inspect activity and occupancy, and exchange tracks.",
+      },
+      {
+        id: "workflows",
+        label: "Workflow builder",
+        description:
+          "Visually connect typed analysis nodes, validate, save, and run.",
+      },
+    ],
+  },
+];
 
 export function App() {
   const queryClient = useQueryClient();
@@ -130,21 +251,38 @@ export function App() {
     setShowOnboarding(false);
   }
 
-  const projectTabs: Array<{
-    id: Exclude<ProjectView, "system">;
-    label: string;
-  }> = [
-    { id: "gallery", label: "Images" },
-    { id: "versions", label: "Versions" },
-    { id: "training", label: "Training" },
-    { id: "classification", label: "Classification" },
-    { id: "video", label: "Video Tracking" },
-    { id: "active_learning", label: "Active Learning" },
-    { id: "models", label: "Models" },
-    { id: "quality_control", label: "Quality Control" },
-    { id: "review_queue", label: "Review Queue" },
-    { id: "classes", label: "Classes" },
-  ];
+  function handleTabKeys<T extends string>(
+    event: KeyboardEvent<HTMLButtonElement>,
+    values: readonly T[],
+    current: T,
+    select: (value: T) => void,
+  ) {
+    const keyOffset =
+      event.key === "ArrowRight" || event.key === "ArrowDown"
+        ? 1
+        : event.key === "ArrowLeft" || event.key === "ArrowUp"
+          ? -1
+          : 0;
+    let targetIndex = values.indexOf(current);
+    if (event.key === "Home") targetIndex = 0;
+    else if (event.key === "End") targetIndex = values.length - 1;
+    else if (keyOffset)
+      targetIndex = (targetIndex + keyOffset + values.length) % values.length;
+    else return;
+    event.preventDefault();
+    select(values[targetIndex]);
+    const tablist = event.currentTarget.closest('[role="tablist"]');
+    requestAnimationFrame(() => {
+      tablist?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
+    });
+  }
+
+  const activeProjectGroup = PROJECT_NAV_GROUPS.find((group) =>
+    group.items.some((item) => item.id === activeView),
+  );
+  const activeProjectItem = activeProjectGroup?.items.find(
+    (item) => item.id === activeView,
+  );
 
   return (
     <main className="app-shell">
@@ -162,12 +300,22 @@ export function App() {
             Help and onboarding
           </button>
           <div className="api-status" aria-live="polite">
-            <span
-              className={`status-dot ${health.isSuccess ? "online" : ""}`}
+            <StatusBadge
+              status={
+                health.isPending
+                  ? "pending"
+                  : health.isError
+                    ? "unavailable"
+                    : "ready"
+              }
+              label={
+                health.isPending
+                  ? "Connecting"
+                  : health.isError
+                    ? "Service unavailable"
+                    : `Local service ${health.data?.version}`
+              }
             />
-            {health.isPending && "Checking API..."}
-            {health.isError && "API unavailable"}
-            {health.data && `Local API ${health.data.version}`}
           </div>
         </div>
       </header>
@@ -184,18 +332,30 @@ export function App() {
             </button>
           </div>
 
-          {projectSummaries.isPending && <p>Loading projects...</p>}
+          {projectSummaries.isPending && (
+            <LoadingState
+              title="Loading projects"
+              description="Finding your local ReefVision projects."
+            />
+          )}
           {projectSummaries.error && (
-            <p className="form-error">{projectSummaries.error.message}</p>
+            <ErrorState
+              title="Projects could not be loaded"
+              message="ReefVision could not connect to its local service."
+              error={projectSummaries.error}
+              onRetry={() => void projectSummaries.refetch()}
+            />
           )}
           {projectSummaries.data?.length === 0 && (
-            <div className="empty-state">
-              <h3>No projects yet</h3>
-              <p>
-                Create a project to establish its class map and managed research
-                directory.
-              </p>
-            </div>
+            <EmptyState
+              title="No projects yet"
+              description="Create a project to begin organizing images, annotations, and datasets."
+              action={
+                <button type="button" onClick={() => setShowCreate(true)}>
+                  Create project
+                </button>
+              }
+            />
           )}
           <div className="project-list">
             <button
@@ -208,8 +368,8 @@ export function App() {
               }}
             >
               <strong>System status</strong>
-              <span>Version, schema, compatibility, and logs</span>
-              <small>Milestone 8 foundations</small>
+              <span>Application health, backups, and diagnostics</span>
+              <small>Local ReefVision service</small>
             </button>
             {projectSummaries.data?.map((project: ProjectSummary) => (
               <button
@@ -223,8 +383,12 @@ export function App() {
                 }}
               >
                 <strong>{project.name}</strong>
-                <span>{project.active_label_class_count} active classes</span>
-                <small>{project.slug}</small>
+                <span>{project.description || "No description"}</span>
+                <small>
+                  {project.active_label_class_count} active{" "}
+                  {project.active_label_class_count === 1 ? "class" : "classes"}{" "}
+                  · Updated {new Date(project.updated_at).toLocaleDateString()}
+                </small>
               </button>
             ))}
           </div>
@@ -235,41 +399,71 @@ export function App() {
             <SystemPanel onOpenOnboarding={() => setShowOnboarding(true)} />
           )}
           {!selectedProjectId && activeView !== "system" && (
-            <div className="welcome-panel">
-              <p className="eyebrow">Local-first research data</p>
-              <h2>Select a project</h2>
-              <p>
-                Select a project to import marine imagery, organize related
-                samples, and manage stable annotation classes.
-              </p>
-            </div>
+            <WorkspaceShell
+              eyebrow="Local-first scientific workspace"
+              title="Welcome to ReefVision"
+              description="Open a research project to manage imagery, annotations, models, review, and reproducible datasets."
+              actions={
+                <button type="button" onClick={() => setShowCreate(true)}>
+                  Create project
+                </button>
+              }
+            >
+              <div className="dashboard-intro-grid">
+                <article>
+                  <h3>Keep research organized</h3>
+                  <p>
+                    Projects keep source imagery, stable classes, and scientific
+                    provenance together on this computer.
+                  </p>
+                </article>
+                <article>
+                  <h3>Work with confidence</h3>
+                  <p>
+                    Predictions remain separate from verified annotations until
+                    a researcher explicitly accepts them.
+                  </p>
+                </article>
+                <article>
+                  <h3>Build reproducible datasets</h3>
+                  <p>
+                    Create immutable dataset versions without changing original
+                    source images.
+                  </p>
+                </article>
+              </div>
+            </WorkspaceShell>
           )}
           {selectedProjectId &&
             !selectedProject &&
             selectedProjectQuery.isPending && (
-              <div className="welcome-panel">
-                <p className="eyebrow">Opening project</p>
-                <h2>{selectedProjectSummary?.name ?? "Loading project"}</h2>
-                <p>Loading classes, settings, and workspace details.</p>
-              </div>
+              <LoadingState
+                title={`Opening ${selectedProjectSummary?.name ?? "project"}`}
+                description="Loading classes, settings, and workspace details."
+              />
             )}
           {selectedProjectId && selectedProjectQuery.error && (
-            <div className="welcome-panel">
-              <p className="eyebrow">Project unavailable</p>
-              <h2>{selectedProjectSummary?.name ?? "Project"}</h2>
-              <p className="form-error">{selectedProjectQuery.error.message}</p>
-            </div>
+            <ErrorState
+              title="The requested project could not be loaded"
+              message={`${selectedProjectSummary?.name ?? "This project"} is currently unavailable.`}
+              error={selectedProjectQuery.error}
+              onRetry={() => void selectedProjectQuery.refetch()}
+              onBack={() => setSelectedProjectId(null)}
+            />
           )}
           {selectedProject && activeView !== "system" && (
             <div>
               <div className="project-header">
                 <div>
-                  <p className="eyebrow">Project settings</p>
+                  <p className="eyebrow">Open project</p>
                   <h2>{selectedProject.name}</h2>
                   <p>
                     {selectedProject.description || "No project description."}
                   </p>
-                  <code>{selectedProject.storage_root}</code>
+                  <details className="project-details">
+                    <summary>Project details</summary>
+                    <code>{selectedProject.storage_root}</code>
+                  </details>
                 </div>
                 <button
                   type="button"
@@ -284,24 +478,86 @@ export function App() {
                 </button>
               </div>
 
-              <div
-                className="project-tabs"
-                role="tablist"
-                aria-label="Project sections"
+              <nav
+                className="project-navigation"
+                aria-label="Project workspace navigation"
               >
-                {projectTabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={activeView === tab.id}
-                    className={activeView === tab.id ? "active" : "secondary"}
-                    onClick={() => setActiveView(tab.id)}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
+                <div
+                  className="project-nav-groups"
+                  role="tablist"
+                  aria-label="Workspace groups"
+                >
+                  {PROJECT_NAV_GROUPS.map((group) => {
+                    const selected = group.id === activeProjectGroup?.id;
+                    return (
+                      <button
+                        key={group.id}
+                        type="button"
+                        role="tab"
+                        aria-label={group.label}
+                        aria-selected={selected}
+                        tabIndex={selected ? 0 : -1}
+                        className={selected ? "active" : "secondary"}
+                        onClick={() => setActiveView(group.items[0].id)}
+                        onKeyDown={(event) =>
+                          handleTabKeys(
+                            event,
+                            PROJECT_NAV_GROUPS.map((value) => value.id),
+                            activeProjectGroup?.id ?? PROJECT_NAV_GROUPS[0].id,
+                            (groupId) => {
+                              const next = PROJECT_NAV_GROUPS.find(
+                                (value) => value.id === groupId,
+                              );
+                              if (next) setActiveView(next.items[0].id);
+                            },
+                          )
+                        }
+                      >
+                        <strong>{group.label}</strong>
+                        <span>{group.description}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div
+                  className="project-nav-items"
+                  role="tablist"
+                  aria-label={activeProjectGroup?.label ?? "Project sections"}
+                >
+                  {activeProjectGroup?.items.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeView === item.id}
+                      tabIndex={activeView === item.id ? 0 : -1}
+                      className={
+                        activeView === item.id ? "active" : "secondary"
+                      }
+                      onClick={() => setActiveView(item.id)}
+                      onKeyDown={(event) =>
+                        handleTabKeys(
+                          event,
+                          activeProjectGroup.items.map((value) => value.id),
+                          activeView as ProjectTab,
+                          setActiveView,
+                        )
+                      }
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+                {activeProjectItem && (
+                  <div className="workspace-context" aria-live="polite">
+                    <div>
+                      <p className="eyebrow">{activeProjectGroup?.label}</p>
+                      <h3>{activeProjectItem.label}</h3>
+                    </div>
+                    <p>{activeProjectItem.description}</p>
+                  </div>
+                )}
+              </nav>
 
               {activeView === "gallery" && (
                 <Gallery
@@ -319,6 +575,12 @@ export function App() {
               )}
               {activeView === "classification" && (
                 <ClassificationWorkspace project={selectedProject} />
+              )}
+              {activeView === "advanced_providers" && (
+                <AdvancedProviderWorkspace project={selectedProject} />
+              )}
+              {activeView === "workflows" && (
+                <WorkflowGraphWorkspace project={selectedProject} />
               )}
               {activeView === "video" && (
                 <>
@@ -388,6 +650,13 @@ export function App() {
         </section>
       </section>
 
+      {selectedProject && !editorLaunch && (
+        <ReefVisionAssistant
+          project={selectedProject}
+          activeView={activeView}
+          onNavigate={(view) => setActiveView(view as ProjectView)}
+        />
+      )}
       {showCreate && (
         <div className="modal-backdrop" role="presentation">
           <section
@@ -401,6 +670,7 @@ export function App() {
               <button
                 type="button"
                 className="icon-button"
+                aria-label="Close create-project dialog"
                 onClick={() => setShowCreate(false)}
               >
                 Close

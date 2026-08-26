@@ -136,6 +136,21 @@ describe("Gallery", () => {
 
     renderGallery(onOpenAnnotation);
     await screen.findByText("swiftia-01.png");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Select all visible" }),
+    );
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+    expect(screen.getByLabelText("Select image")).toBeChecked();
+    await userEvent.type(
+      screen.getByPlaceholderText("Search filenames"),
+      "swiftia",
+    );
+    await waitFor(() =>
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("filename=swiftia"),
+        expect.any(Object),
+      ),
+    );
     await userEvent.click(screen.getByRole("button", { name: "Annotate" }));
 
     expect(onOpenAnnotation).toHaveBeenCalledWith("image-1");
@@ -178,7 +193,7 @@ describe("Gallery", () => {
     });
 
     renderGallery();
-    await screen.findByText("No matching images");
+    await screen.findByText("No images yet");
     const file = new File(["image bytes"], "coral.png", { type: "image/png" });
     await userEvent.upload(screen.getByLabelText("Import files"), file);
 

@@ -9,13 +9,9 @@ import pytest
 @pytest.fixture(scope="module")
 def harness():
     path = (
-        Path(__file__).resolve().parents[4]
-        / "scripts"
-        / "acceptance_active_learning_detection.py"
+        Path(__file__).resolve().parents[4] / "scripts" / "acceptance_active_learning_detection.py"
     )
-    spec = importlib.util.spec_from_file_location(
-        "acceptance_active_learning_detection", path
-    )
+    spec = importlib.util.spec_from_file_location("acceptance_active_learning_detection", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -79,9 +75,7 @@ def test_metric_summary_extracts_ultralytics_detection_metrics(harness) -> None:
 
 def test_harness_scopes_production_acquisition_to_immutable_hidden_pool() -> None:
     path = (
-        Path(__file__).resolve().parents[4]
-        / "scripts"
-        / "acceptance_active_learning_detection.py"
+        Path(__file__).resolve().parents[4] / "scripts" / "acceptance_active_learning_detection.py"
     )
     source = path.read_text(encoding="utf-8")
 
@@ -89,4 +83,4 @@ def test_harness_scopes_production_acquisition_to_immutable_hidden_pool() -> Non
     assert '"split_method": "manual"' in source
     assert '"dataset_version_id": pool_version["id"]' in source
     assert 'selection_manifest.get("dataset_version_id") != pool_version["id"]' in source
-    assert 'image_id not in pool_image_to_source for image_id in active_ids' in source
+    assert "image_id not in pool_image_to_source for image_id in active_ids" in source

@@ -24,9 +24,12 @@ import {
   type TrainingDraft,
   type TrainingDraftSummary,
   type TrainingPreflight,
+  type TrainingRun,
+  type TuningTrial,
   updateTrainingDraft,
 } from "../../api/client";
 import { TaskCapabilityMatrix } from "./TaskCapabilityMatrix";
+import { TrainingRunDetail } from "./TrainingRunDetail";
 
 type TrainingSection =
   | "new_run"
@@ -61,6 +64,7 @@ const taskLabels: Record<ModelCatalogTask, string> = {
   caption: "Captioning",
   phrase_grounding: "Phrase grounding",
   relative_depth: "Relative monocular depth",
+  metric_video_depth: "Metric video depth",
 };
 
 const sizeSortOrder = [
@@ -286,6 +290,9 @@ export function TrainingWorkspace({
     }>;
   } | null>(null);
   const [compareSelection, setCompareSelection] = useState<string[]>([]);
+  const [selectedRunId, setSelectedRunId] = useState("");
+  const [runStatusFilter, setRunStatusFilter] = useState("");
+  const [runSort, setRunSort] = useState("newest");
   const [compareWarnings, setCompareWarnings] = useState<string[]>([]);
   const [draftSaveState, setDraftSaveState] = useState<
     "saved" | "unsaved" | "saving" | "error"
@@ -317,7 +324,7 @@ export function TrainingWorkspace({
   const models = useQuery({
     queryKey: ["models", project.id, "detector"],
     queryFn: ({ signal }) => getModels(project.id, "detector", signal),
-    enabled: activeSection === "models",
+    enabled: activeSection === "models" || activeSection === "runs",
   });
   const runs = useQuery({
     queryKey: ["training_runs", project.id],
@@ -507,6 +514,44 @@ export function TrainingWorkspace({
       );
       setDraftSaveState("saved");
       setDraftSaveMessage(null);
+      setActiveSection("new_run");
+    },
+  });
+
+  const applyTuningMutation = useMutation({
+    mutationFn: ({ run, trial }: { run: TrainingRun; trial: TuningTrial }) =>
+      createTrainingDraft(project.id, {
+        name: `${run.run_name} best trial`,
+        run_name: `${run.run_name}-best-${trial.trial_number}`,
+        notes: `Derived from tuning run ${run.id}, best trial ${trial.trial_number}.`,
+        dataset_version_id: run.dataset_version_id,
+        task: run.task,
+        catalog_model_id: run.catalog_model_id,
+        provider_id: run.provider_id,
+        architecture: run.architecture,
+        initial_checkpoint_source: run.initial_checkpoint_source as
+          "scratch" | "registered_model" | "managed_catalog",
+        initial_checkpoint_model_id: run.initial_checkpoint_model_id,
+        device: run.device,
+        precision: run.precision,
+        random_seed: run.random_seed,
+        tiling_config: run.tiling_config,
+        training_config: { ...run.training_config, ...trial.hyperparameters },
+        tuning_config: {
+          mode: "disabled",
+          derived_from_tuning_run_id: run.id,
+          derived_from_trial_number: trial.trial_number,
+        },
+        evaluation_config: run.evaluation_config,
+        resource_limits: run.resource_limits,
+      }),
+    onSuccess: (created) => {
+      setSelectedDraftId(created.id);
+      queryClient.setQueryData(["training_draft", created.id], created);
+      queryClient.setQueryData<TrainingDraftSummary[]>(
+        ["training_draft_summaries", project.id],
+        (current) => [toDraftSummary(created), ...(current ?? [])],
+      );
       setActiveSection("new_run");
     },
   });
@@ -806,11 +851,21 @@ export function TrainingWorkspace({
     patchDraft({ [configKey]: { ...current, [key]: value } });
   }
 
-  const metricsPreview = useMemo(() => {
-    const run =
-      runs.data?.find((item) => item.status === "running") ?? runs.data?.[0];
-    return run ? Object.entries(run.metrics).slice(0, 6) : [];
-  }, [runs.data]);
+  const visibleRuns = useMemo(() => {
+    const filtered = (runs.data ?? []).filter(
+      (run) => !runStatusFilter || run.status === runStatusFilter,
+    );
+    return [...filtered].sort((left, right) => {
+      const delta =
+        new Date(right.created_at).getTime() -
+        new Date(left.created_at).getTime();
+      return runSort === "oldest" ? -delta : delta;
+    });
+  }, [runSort, runStatusFilter, runs.data]);
+  const selectedRun =
+    visibleRuns.find((run) => run.id === selectedRunId) ??
+    visibleRuns[0] ??
+    null;
 
   const registeredRunModels = useMemo(() => {
     const mapped = new Map<string, ModelRegistration>();
@@ -1216,7 +1271,7 @@ export function TrainingWorkspace({
                   </article>
 
                   <article className="system-card">
-                    <h4>Execution</h4>
+                    <h4>Review and start</h4>
                     <label>
                       Device
                       <select
@@ -1242,6 +1297,92 @@ export function TrainingWorkspace({
                         <option value="amp">AMP</option>
                       </select>
                     </label>
+                    <div
+                      className="annotation-selection-list"
+                      aria-label="Training configuration review"
+                    >
+                      <div className="annotation-selection-row">
+                        <strong>Dataset</strong>
+                        <span>
+                          {selectedVersion?.name ??
+                            "Select an immutable dataset version"}
+                        </span>
+                      </div>
+                      <div className="annotation-selection-row">
+                        <strong>Task</strong>
+                        <span>
+                          {taskLabel(
+                            selectedCatalogEntry?.task ?? selectedDraft.task,
+                          )}
+                        </span>
+                      </div>
+                      <div className="annotation-selection-row">
+                        <strong>Model</strong>
+                        <span>
+                          {selectedCatalogEntry?.display_name ??
+                            selectedDraft.architecture ??
+                            "Select a model"}
+                        </span>
+                      </div>
+                      <div className="annotation-selection-row">
+                        <strong>Epochs</strong>
+                        <span>
+                          {String(
+                            asRecord(selectedDraft.training_config).epochs ??
+                              "Provider default",
+                          )}
+                        </span>
+                      </div>
+                      <div className="annotation-selection-row">
+                        <strong>Image size</strong>
+                        <span>
+                          {String(
+                            asRecord(selectedDraft.training_config).imgsz ??
+                              "Provider default",
+                          )}
+                        </span>
+                      </div>
+                      <div className="annotation-selection-row">
+                        <strong>Batch</strong>
+                        <span>
+                          {String(
+                            asRecord(selectedDraft.training_config).batch ??
+                              "Provider default",
+                          )}
+                        </span>
+                      </div>
+                      <div className="annotation-selection-row">
+                        <strong>Seed</strong>
+                        <span>
+                          {selectedDraft.random_seed ?? "Provider default"}
+                        </span>
+                      </div>
+                    </div>
+                    <details>
+                      <summary>Hardware and resource assessment</summary>
+                      {preflight?.resource_snapshot &&
+                      Object.keys(preflight.resource_snapshot).length > 0 ? (
+                        <dl className="training-provenance-list">
+                          {Object.entries(preflight.resource_snapshot).map(
+                            ([key, value]) => (
+                              <div key={key}>
+                                <dt>{metricLabel(key)}</dt>
+                                <dd>
+                                  {typeof value === "object"
+                                    ? JSON.stringify(value)
+                                    : String(value)}
+                                </dd>
+                              </div>
+                            ),
+                          )}
+                        </dl>
+                      ) : (
+                        <p className="system-subtle">
+                          Run preflight to inspect available hardware.
+                          ReefVision does not make an exact VRAM-fit guarantee.
+                        </p>
+                      )}
+                    </details>
                     <button
                       type="button"
                       onClick={() => launchRunMutation.mutate()}
@@ -1252,7 +1393,7 @@ export function TrainingWorkspace({
                     >
                       {launchRunMutation.isPending
                         ? "Queueing..."
-                        : "Launch background run"}
+                        : "Start training"}
                     </button>
                     {launchRunMutation.error && (
                       <p className="form-error">
@@ -1692,6 +1833,9 @@ export function TrainingWorkspace({
               {activeSection === "tune" && (
                 <div className="training-card-grid">
                   <article className="system-card">
+                    <p className="eyebrow">
+                      Dataset → Model → Search Space → Trial Settings → Tune
+                    </p>
                     <h4>Tuning strategy</h4>
                     <label>
                       Mode
@@ -1709,16 +1853,109 @@ export function TrainingWorkspace({
                         }
                       >
                         <option value="disabled">Disabled</option>
-                        <option value="manual">Manual trial set</option>
-                        <option value="grid">Grid search</option>
                         <option value="random">Random search</option>
                       </select>
                     </label>
+                    <div className="training-form-grid">
+                      <label>
+                        Maximum trials
+                        <input
+                          type="number"
+                          min="1"
+                          max="1000"
+                          value={numberValue(
+                            asRecord(selectedDraft.tuning_config).max_trials,
+                            20,
+                          )}
+                          onChange={(event) =>
+                            patchConfig(
+                              "tuning_config",
+                              "max_trials",
+                              Number(event.target.value),
+                            )
+                          }
+                        />
+                      </label>
+                      <label>
+                        Epochs per trial
+                        <input
+                          type="number"
+                          min="1"
+                          max="1000"
+                          value={numberValue(
+                            asRecord(selectedDraft.tuning_config)
+                              .epochs_per_trial,
+                            10,
+                          )}
+                          onChange={(event) =>
+                            patchConfig(
+                              "tuning_config",
+                              "epochs_per_trial",
+                              Number(event.target.value),
+                            )
+                          }
+                        />
+                      </label>
+                      <label>
+                        Patience (trials)
+                        <input
+                          type="number"
+                          min="0"
+                          max="1000"
+                          value={numberValue(
+                            asRecord(selectedDraft.tuning_config).patience,
+                            10,
+                          )}
+                          onChange={(event) =>
+                            patchConfig(
+                              "tuning_config",
+                              "patience",
+                              Number(event.target.value),
+                            )
+                          }
+                        />
+                      </label>
+                      <label>
+                        Seed
+                        <input
+                          type="number"
+                          value={selectedDraft.random_seed ?? 0}
+                          onChange={(event) =>
+                            patchDraft({
+                              random_seed: Number(event.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                    </div>
+                    <div className="editor-message">
+                      <strong>Fitness being optimized</strong>
+                      <p>
+                        Ultralytics detection fitness uses the provider-recorded
+                        fitness value (normally weighted toward mAP50–95). The
+                        exact definition is persisted with results.
+                      </p>
+                    </div>
+                  </article>
+                  <article className="system-card">
+                    <h4>Search space</h4>
                     <p className="system-subtle">
-                      Tuning configuration is persisted in drafts today, but
-                      launching tuning runs is still blocked in this foundation
-                      slice.
+                      Recommended provider-supported ranges are persisted
+                      exactly at launch. Custom range editing is available in
+                      the effective tuning JSON below.
                     </p>
+                    <pre className="json-block">
+                      {JSON.stringify(
+                        asRecord(selectedDraft.tuning_config).search_space ?? {
+                          lr0: { min: 0.00001, max: 0.1, enabled: true },
+                          momentum: { min: 0.6, max: 0.98, enabled: true },
+                          weight_decay: { min: 0, max: 0.001, enabled: true },
+                          mosaic: { min: 0, max: 1, enabled: true },
+                        },
+                        null,
+                        2,
+                      )}
+                    </pre>
                   </article>
                 </div>
               )}
@@ -1726,15 +1963,55 @@ export function TrainingWorkspace({
               {activeSection === "runs" && (
                 <div className="training-card-grid">
                   <article className="system-card">
-                    <h4>Active and recent runs</h4>
+                    <div className="section-heading">
+                      <div>
+                        <p className="eyebrow">History</p>
+                        <h4>Active and completed runs</h4>
+                      </div>
+                      <span>{visibleRuns.length} shown</span>
+                    </div>
+                    <div className="training-run-filters">
+                      <label>
+                        Status
+                        <select
+                          value={runStatusFilter}
+                          onChange={(event) =>
+                            setRunStatusFilter(event.target.value)
+                          }
+                        >
+                          <option value="">All states</option>
+                          <option value="queued">Queued</option>
+                          <option value="training">Training</option>
+                          <option value="tuning">Tuning</option>
+                          <option value="completed">Completed</option>
+                          <option value="failed">Failed</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                      </label>
+                      <label>
+                        Order
+                        <select
+                          value={runSort}
+                          onChange={(event) => setRunSort(event.target.value)}
+                        >
+                          <option value="newest">Newest first</option>
+                          <option value="oldest">Oldest first</option>
+                        </select>
+                      </label>
+                    </div>
                     {!runs.data?.length && (
                       <p className="system-subtle">
                         No training runs have been launched yet.
                       </p>
                     )}
                     <div className="training-run-list">
-                      {runs.data?.map((run) => (
-                        <div key={run.id} className="system-record-card">
+                      {visibleRuns.map((run) => (
+                        <button
+                          key={run.id}
+                          type="button"
+                          className={`system-record-card training-run-card ${selectedRun?.id === run.id ? "selected" : ""}`}
+                          onClick={() => setSelectedRunId(run.id)}
+                        >
                           <div className="section-heading">
                             <div>
                               <strong>{run.run_name}</strong>
@@ -1750,59 +2027,57 @@ export function TrainingWorkspace({
                             Progress {run.progress_epoch}/
                             {run.progress_total_epochs}
                           </small>
-                          {run.result_checkpoint_path && (
-                            <small>
-                              Best checkpoint: {run.result_checkpoint_path}
-                            </small>
-                          )}
+                          <progress
+                            value={run.progress_epoch}
+                            max={Math.max(run.progress_total_epochs, 1)}
+                            aria-label={`${run.run_name} progress`}
+                          />
                           {run.error_message && (
                             <p className="form-error">{run.error_message}</p>
                           )}
-                          <div className="image-card-actions">
-                            <button
-                              type="button"
-                              className="secondary"
-                              onClick={() =>
-                                setSelectedDraftId(run.draft_id ?? "")
-                              }
-                              disabled={!run.draft_id}
-                            >
-                              Open draft
-                            </button>
-                            {(run.status === "queued" ||
-                              run.status === "running" ||
-                              run.status === "cancel_requested") && (
-                              <button
-                                type="button"
-                                className="danger-ghost"
-                                onClick={() => cancelRunMutation.mutate(run.id)}
-                              >
-                                Cancel
-                              </button>
-                            )}
-                          </div>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </article>
-
-                  <article className="system-card">
-                    <h4>Live metric preview</h4>
-                    {!metricsPreview.length && (
+                  {selectedRun ? (
+                    <TrainingRunDetail
+                      run={selectedRun}
+                      registeredName={
+                        registeredRunModels.get(selectedRun.id)?.display_name
+                      }
+                      registering={
+                        registerRunModelMutation.isPending &&
+                        registerRunModelMutation.variables?.runId ===
+                          selectedRun.id
+                      }
+                      onCancel={() => {
+                        if (
+                          window.confirm(
+                            `Cancel training run ${selectedRun.run_name}? Safely written artifacts will be retained.`,
+                          )
+                        )
+                          cancelRunMutation.mutate(selectedRun.id);
+                      }}
+                      onRegister={() =>
+                        registerRunModelMutation.mutate({
+                          runId: selectedRun.id,
+                          displayName: `${selectedRun.run_name} best`,
+                          notes: selectedRun.notes ?? undefined,
+                        })
+                      }
+                      onApplyBest={(trial) =>
+                        applyTuningMutation.mutate({ run: selectedRun, trial })
+                      }
+                    />
+                  ) : (
+                    <article className="system-card">
+                      <h4>Run detail</h4>
                       <p className="system-subtle">
-                        Metrics appear here as soon as a running job reports
-                        progress.
+                        Select a run to inspect progress, metrics, checkpoints,
+                        artifacts, and provenance.
                       </p>
-                    )}
-                    <div className="training-metric-grid">
-                      {metricsPreview.map(([key, value]) => (
-                        <div key={key} className="version-split-card">
-                          <strong>{metricLabel(key)}</strong>
-                          <span>{String(value)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </article>
+                    </article>
+                  )}
                 </div>
               )}
 

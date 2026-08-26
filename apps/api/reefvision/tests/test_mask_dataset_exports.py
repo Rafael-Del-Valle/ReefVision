@@ -151,8 +151,7 @@ def test_yolo_segmentation_export_uses_frozen_polygon_snapshot(
     label_files = sorted(output_root.glob("labels/*/*.txt"))
     assert len(label_files) == 1
     assert label_files[0].read_text(encoding="utf-8") == (
-        "0 0.10000000 0.10000000 0.50000000 0.10000000 "
-        "0.50000000 0.50000000 0.10000000 0.50000000"
+        "0 0.10000000 0.10000000 0.50000000 0.10000000 0.50000000 0.50000000 0.10000000 0.50000000"
     )
     data_yaml = (output_root / "data.yaml").read_text(encoding="utf-8")
     assert "path:" not in data_yaml

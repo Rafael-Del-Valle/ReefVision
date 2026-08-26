@@ -26,6 +26,7 @@ from reefvision.ml.ultralytics_registry import (
     ultralytics_training_registry,
     validate_ultralytics_training_configuration,
 )
+from reefvision.ml.ultralytics_tuning import effective_search_space
 from reefvision.repositories.dataset_versions import DatasetVersionRepository
 from reefvision.repositories.jobs import JobRepository
 from reefvision.repositories.models import ModelRepository
@@ -53,6 +54,7 @@ from reefvision.schemas.training import (
 from reefvision.services.model_catalog import ModelCatalogService
 from reefvision.snapshot_cache import get_cached_snapshot
 from reefvision.storage.datasets import canonical_json_sha256
+from reefvision.storage.projects import resolve_managed_project_path
 
 TRAINABLE_PROVIDER_ID = "ultralytics"
 TRAINING_TASKS = ("detect",)
@@ -78,7 +80,14 @@ DEFAULT_TRAINING_CONFIG: dict[str, Any] = {
     "val": True,
     "plots": True,
 }
-DEFAULT_TUNING_CONFIG: dict[str, Any] = {"mode": "disabled"}
+DEFAULT_TUNING_CONFIG: dict[str, Any] = {
+    "mode": "disabled",
+    "preset": "recommended",
+    "max_trials": 20,
+    "epochs_per_trial": 10,
+    "patience": 10,
+    "search_space": {},
+}
 DEFAULT_EVALUATION_CONFIG: dict[str, Any] = {
     "split": "validation",
     "conf": 0.25,
@@ -143,7 +152,8 @@ class TrainingService:
     def list_providers(self) -> list[TrainingProviderResponse]:
         warning = (
             "This Training foundation currently supports only Ultralytics object detection. "
-            "Segmentation, tuning execution, and non-Ultralytics training remain blocked."
+            "Tuning is local and sequential; segmentation and non-Ultralytics tuning "
+            "remain blocked."
         )
         return [
             TrainingProviderResponse(
@@ -153,7 +163,7 @@ class TrainingService:
                 supported_tasks=list(TRAINING_TASKS),
                 supported_precision_modes=list(TRAINING_PRECISIONS),
                 supports_tiling=False,
-                supports_tuning=False,
+                supports_tuning=True,
                 supports_packaged_desktop=True,
                 warning=warning,
                 architectures=self._cached_ultralytics_detect_architectures(),
@@ -390,10 +400,19 @@ class TrainingService:
 
         tuning_config = self._merged_tuning_config(payload.tuning_config)
         if tuning_config.get("mode", "disabled") != "disabled":
-            blockers.append(
-                "Tuning configuration can be saved in this slice, but tuning execution "
-                "is not implemented yet"
-            )
+            try:
+                max_trials = int(tuning_config.get("max_trials", 20))
+                trial_epochs = int(tuning_config.get("epochs_per_trial", 10))
+                patience = int(tuning_config.get("patience", 10))
+                if not 1 <= max_trials <= 1000:
+                    raise ValueError("Maximum trials must be between 1 and 1,000")
+                if not 1 <= trial_epochs <= 1000:
+                    raise ValueError("Epochs per trial must be between 1 and 1,000")
+                if not 0 <= patience <= max_trials:
+                    raise ValueError("Tuning patience must be between 0 and maximum trials")
+                effective_search_space(tuning_config)
+            except (TypeError, ValueError) as exc:
+                blockers.append(str(exc))
 
         tiling_config = self._merged_tiling_config(payload.tiling_config)
         tiling_estimate = (
@@ -514,8 +533,14 @@ class TrainingService:
             draft_snapshot_json=self._draft_response(draft).model_dump(mode="json"),
             status="queued",
             stage="queued",
-            progress_total_epochs=int(
-                dict(draft.training_config_json).get("epochs", DEFAULT_TRAINING_CONFIG["epochs"])
+            progress_total_epochs=(
+                int(dict(draft.tuning_config_json).get("max_trials", 20))
+                if dict(draft.tuning_config_json).get("mode", "disabled") != "disabled"
+                else int(
+                    dict(draft.training_config_json).get(
+                        "epochs", DEFAULT_TRAINING_CONFIG["epochs"]
+                    )
+                )
             ),
             warnings_json=list(preflight.warnings),
         )
@@ -542,6 +567,23 @@ class TrainingService:
 
     def get_run(self, run_id: str) -> TrainingRunResponse:
         return self._run_response(self._run(run_id))
+
+    def artifact_file(self, run_id: str, artifact_index: int) -> Path:
+        run = self._run(run_id)
+        artifacts = run.artifact_manifest_json.get("artifacts", [])
+        if (
+            not isinstance(artifacts, list)
+            or artifact_index < 0
+            or artifact_index >= len(artifacts)
+        ):
+            raise NotFoundError("Training artifact not found")
+        artifact = artifacts[artifact_index]
+        if not isinstance(artifact, dict) or not isinstance(artifact.get("relative_path"), str):
+            raise NotFoundError("Training artifact metadata is unavailable")
+        path = resolve_managed_project_path(self.settings, artifact["relative_path"])
+        if not path.is_file():
+            raise NotFoundError("Training artifact file is unavailable")
+        return path
 
     def cancel_run(self, run_id: str) -> TrainingRunResponse:
         run = self._run(run_id)

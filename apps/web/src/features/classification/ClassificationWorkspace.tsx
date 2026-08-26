@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
 import { imageThumbnailUrl, type Project } from "../../api/client";
+import { StatusBadge } from "../../components/ui/StatusBadge";
 import {
   createClassificationDataset,
   createClassificationInferenceJob,
@@ -186,8 +187,38 @@ export function ClassificationWorkspace({
 
   return (
     <div className="management-grid" data-testid="classification-workspace">
+      <section className="management-card workspace-guide-card classification-overview">
+        <div>
+          <p className="eyebrow">Classification</p>
+          <h2>Classify and review images</h2>
+          <p className="muted-copy">
+            Assign image-level labels, create a reproducible dataset, train a
+            classifier, and review its ranked suggestions before they become
+            accepted research labels.
+          </p>
+        </div>
+        <div
+          className="workspace-guide compact"
+          aria-label="Classification workflow"
+        >
+          {[
+            ["1", "Label", "Choose image-level classes."],
+            ["2", "Prepare", "Create a versioned dataset."],
+            ["3", "Train", "Fit a classification model."],
+            ["4", "Review", "Accept or reject suggestions."],
+          ].map(([number, title, description]) => (
+            <div className="workspace-guide-step" key={number}>
+              <span>{number}</span>
+              <div>
+                <strong>{title}</strong>
+                <small>{description}</small>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
       <section className="management-card">
-        <p className="eyebrow">Phase 5</p>
+        <p className="eyebrow">Research workflow</p>
         <h3>Image classification labels</h3>
         <label>
           Image
@@ -216,7 +247,7 @@ export function ClassificationWorkspace({
             style={{ width: "100%", maxHeight: 280, objectFit: "contain" }}
           />
         )}
-        <div className="annotation-class-list">
+        <div className="annotation-class-list" aria-label="Image-level classes">
           {project.label_classes.map((labelClass) => (
             <label key={labelClass.id} className="annotation-class-row">
               <input
@@ -241,6 +272,12 @@ export function ClassificationWorkspace({
         >
           {labelMutation.isPending ? "Saving..." : "Save image labels"}
         </button>
+        {!imagesQuery.isPending &&
+          (imagesQuery.data?.items.length ?? 0) === 0 && (
+            <p className="muted-copy">
+              Import images before assigning classification labels.
+            </p>
+          )}
       </section>
 
       <section className="management-card">
@@ -307,11 +344,15 @@ export function ClassificationWorkspace({
           </select>
         </label>
         <label>
-          Architecture
-          <input
+          Model size
+          <select
             value={architecture}
             onChange={(event) => setArchitecture(event.target.value)}
-          />
+          >
+            <option value="yolo11n-cls.pt">Nano — fastest</option>
+            <option value="yolo11s-cls.pt">Small — balanced</option>
+            <option value="yolo11m-cls.pt">Medium — higher capacity</option>
+          </select>
         </label>
         <label>
           Epochs
@@ -332,10 +373,16 @@ export function ClassificationWorkspace({
             : "Launch classification training"}
         </button>
         {trainingMutation.data && (
-          <p className="annotation-helper">
-            Job {trainingMutation.data.id.slice(0, 8)} queued. Completed
-            checkpoints are registered automatically.
-          </p>
+          <div className="annotation-helper" role="status">
+            <p>
+              Training queued. Completed checkpoints are registered
+              automatically.
+            </p>
+            <details className="advanced-disclosure">
+              <summary>Technical details</summary>
+              Job reference: <code>{trainingMutation.data.id.slice(0, 8)}</code>
+            </details>
+          </div>
         )}
       </section>
 
@@ -374,7 +421,7 @@ export function ClassificationWorkspace({
                 {classNames[prediction.label_class_id] ?? "Unknown"}{" "}
                 {(prediction.confidence * 100).toFixed(1)}%
               </span>
-              <span>{prediction.status}</span>
+              <StatusBadge status={prediction.status} />
               {prediction.status === "pending" && (
                 <div className="annotation-editor-inline-actions">
                   <button
@@ -405,6 +452,13 @@ export function ClassificationWorkspace({
             </div>
           ))}
         </div>
+        {!predictionsQuery.isPending &&
+          (predictionsQuery.data?.length ?? 0) === 0 && (
+            <p className="muted-copy">
+              Select an image and classifier, then run classification to see
+              ranked suggestions.
+            </p>
+          )}
       </section>
 
       {error instanceof Error && <p className="form-error">{error.message}</p>}

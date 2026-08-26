@@ -1,5 +1,5 @@
+import { getJob, type JobRecord } from "../../api/client";
 import { getApiBaseUrl } from "../../runtime";
-
 export type VideoDistanceUnit = "mm" | "cm" | "m";
 
 export interface VideoSpatialCalibration {
@@ -134,6 +134,82 @@ export interface VideoDepthTrackAnalytics {
   camera_intrinsics: VideoCameraIntrinsics;
   tracks: VideoDepthTrack3DAnalytics[];
   warnings: string[];
+}
+
+export interface MetricVideoDepth3DGroupFrame {
+  frame: number;
+  timestamp_seconds: number;
+  individual_count: number;
+  centroid_x: number;
+  centroid_y: number;
+  centroid_z: number;
+  mean_nearest_neighbor_distance: number | null;
+  mean_pairwise_distance: number | null;
+  bounding_box_volume: number;
+}
+
+export interface Scientific3DCalibrationValidation {
+  schema_version: "scientific-3d-calibration-validation-0001";
+  validated_at: string;
+  video_id: string;
+  job_id: string;
+  reference_source: string;
+  reference_method: string;
+  setup_description: string;
+  relative_tolerance: number;
+  absolute_tolerance_m: number;
+  sample_count: number;
+  distinct_frame_count: number;
+  reference_depth_span_m: number;
+  mean_absolute_error_m: number;
+  mean_relative_error: number;
+  maximum_relative_error: number;
+  rmse_m: number;
+  mean_signed_error_m: number;
+  all_samples_within_tolerance: boolean;
+  coverage_qualified: boolean;
+  qualified: boolean;
+  depth_correction_applied: boolean;
+}
+
+export interface MetricVideoDepth3DResult {
+  schema_version: "video-metric-depth-3d-job-0001";
+  stage: "complete";
+  project_id: string;
+  video_id: string;
+  provider_id: string;
+  provider_version: string;
+  model_repo: string;
+  model_revision: string;
+  model_sha256: string | null;
+  source_commit: string | null;
+  device: string;
+  input_size_requested: number;
+  input_size_used: number;
+  max_res: number;
+  depth_tier: "model_estimated_metric" | "calibrated_metric";
+  physical_measurement_claim_allowed: false;
+  underwater_validation_required: true;
+  depth_stack_path: string;
+  depth_stack_sha256: string;
+  depth_stack_shape: number[];
+  calibration_validation?: Scientific3DCalibrationValidation;
+  depth_preview?: {
+    display_min_m: number;
+    display_max_m: number;
+    scaling: string;
+    invalid_pixels: string;
+    colorization_only: boolean;
+  };
+  decoded_frame_count: number;
+  metric_depth_sample_count: number;
+  skipped_depth_observations: number;
+  source_track_ids: string[];
+  analyzed_track_ids: string[];
+  analytics: VideoDepthTrackAnalytics;
+  group_3d_frames: MetricVideoDepth3DGroupFrame[];
+  warnings: string[];
+  scientific_provenance: Record<string, unknown>;
 }
 
 async function errorMessage(
@@ -351,4 +427,96 @@ export async function getDepthTrackAnalytics(
     );
   }
   return (await response.json()) as VideoDepthTrackAnalytics;
+}
+export async function createMetricDepth3DJob(
+  videoId: string,
+  payload: {
+    track_ids: string[];
+    device: string;
+    input_size: number;
+    max_res: number;
+    core_fraction: number;
+    minimum_valid_fraction: number;
+    maximum_frame_gap?: number | null;
+    allow_model_download: boolean;
+    allow_resolution_fallback: boolean;
+  },
+): Promise<JobRecord> {
+  const response = await fetch(
+    `${getApiBaseUrl()}/videos/${encodeURIComponent(videoId)}/metric-depth-3d-jobs`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(
+      await errorMessage(
+        response,
+        `Automatic Scientific 3D queue failed with HTTP ${response.status}`,
+      ),
+    );
+  }
+  return (await response.json()) as JobRecord;
+}
+
+export function getMetricDepth3DJob(
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<JobRecord> {
+  return getJob(jobId, signal);
+}
+
+export function metricDepth3DPreviewUrl(
+  videoId: string,
+  jobId: string,
+  frame: number,
+): string {
+  const base = getApiBaseUrl();
+  return (
+    `${base}/videos/${encodeURIComponent(videoId)}` +
+    `/metric-depth-3d-jobs/${encodeURIComponent(jobId)}` +
+    `/depth-preview?frame=${encodeURIComponent(String(frame))}`
+  );
+}
+
+export async function validateMetricDepth3DCalibration(
+  videoId: string,
+  jobId: string,
+  payload: {
+    reference_source: string;
+    reference_method: string;
+    setup_description: string;
+    reference_samples: Array<{
+      track_id: string;
+      frame: number;
+      expected_depth_m: number;
+    }>;
+    relative_tolerance: number;
+    absolute_tolerance_m: number;
+    independent_reference_confirmed: boolean;
+    same_optical_setup_confirmed: boolean;
+    underwater_environment_confirmed: boolean;
+    notes?: string | null;
+  },
+): Promise<MetricVideoDepth3DResult> {
+  const response = await fetch(
+    `${getApiBaseUrl()}/videos/${encodeURIComponent(videoId)}` +
+      `/metric-depth-3d-jobs/${encodeURIComponent(jobId)}/calibration-validation`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(
+      await errorMessage(
+        response,
+        `Scientific 3D calibration validation failed with HTTP ${response.status}`,
+      ),
+    );
+  }
+  return (await response.json()) as MetricVideoDepth3DResult;
 }

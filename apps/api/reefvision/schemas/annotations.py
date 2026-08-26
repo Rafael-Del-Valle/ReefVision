@@ -81,7 +81,7 @@ class MaskAnnotationResponse(BaseModel):
 class MaskAnnotationDraft(BaseModel):
     id: str = Field(min_length=1, max_length=36)
     label_class_id: str = Field(min_length=1, max_length=36)
-    geometry_kind: Literal["polygon"] = "polygon"
+    geometry_kind: Literal["polygon", "rotated_box"] = "polygon"
     points: list[PolygonPoint] = Field(min_length=3, max_length=100_000)
 
     @field_validator("points")
@@ -94,6 +94,12 @@ class MaskAnnotationDraft(BaseModel):
         if len(unique) < 3:
             raise ValueError("Polygon masks require at least three unique points")
         return value
+
+    @model_validator(mode="after")
+    def validate_geometry_point_count(self) -> MaskAnnotationDraft:
+        if self.geometry_kind == "rotated_box" and len(self.points) != 4:
+            raise ValueError("Rotated boxes require exactly four corner points")
+        return self
 
 
 class AnnotationCountResponse(BaseModel):

@@ -197,7 +197,7 @@ export function ReviewQueueDashboard({
     <section className="dashboard-panel">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Milestone 7</p>
+          <p className="eyebrow">Guided review</p>
           <h3>Review Queue</h3>
           <span>{queues.data?.length ?? 0} historical queues</span>
         </div>

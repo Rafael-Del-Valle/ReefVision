@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reefvision"
-version = "1.7.0"
+version = "1.0.0"
 description = "Local-first scientific image annotation and computer vision platform"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -14,6 +14,7 @@ dependencies = [
   "alembic>=1.14,<2",
   "fastapi>=0.139,<1",
   "httpx>=0.28,<1",
+  "openpyxl>=3.1,<4",
   "pydantic-settings>=2.7,<3",
   "pillow>=11,<13",
   "python-multipart>=0.0.20,<1",
@@ -35,6 +36,7 @@ dev = [
   "ruff>=0.9,<1",
   "scikit-image>=0.24,<1",
   "types-networkx>=3.2,<4",
+  "types-openpyxl>=3.1,<4",
   "types-PyYAML>=6.0,<7",
 ]
 advanced = [
@@ -88,6 +90,7 @@ module = [
   "boto3",
   "boto3.*",
   "cv2",
+  "huggingface_hub",
   "psutil",
   "segment_anything",
   "segment_anything.*",

@@ -1,0 +1,8 @@
+# ReefVision optional Transformers provider stack
+# Used by Scale Assistant OCR, SAM 2 image assist, Grounding DINO, and VLM workflows.
+# Installing these packages never downloads model weights.
+transformers==4.57.2
+huggingface-hub==0.36.0
+tokenizers==0.22.1
+safetensors==0.7.0
+sentencepiece==0.2.1

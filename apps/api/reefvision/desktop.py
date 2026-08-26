@@ -229,11 +229,15 @@ def run_self_test(settings: Settings) -> int:
         configure_provider_runtime,
         require_all_implemented_providers_ready,
     )
+    from reefvision.ml.video_depth_anything import (
+        _source_root as resolve_video_depth_anything_source,
+    )
 
     provider_runtime = settings.resolved_data_dir / "provider-runtime-self-test"
     configure_provider_runtime(data_dir=provider_runtime)
     require_all_implemented_providers_ready()
     require_scale_assistant_marker_runtime()
+    resolve_video_depth_anything_source(settings)
 
     from reefvision.main import create_app
 

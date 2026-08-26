@@ -142,3 +142,108 @@ def test_corrupt_bundled_checkpoint_is_rejected(
         entry.expected_files[0].filename,
     )
     assert not destination.exists()
+
+
+def test_multifile_bundled_model_is_seeded(
+    client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    original_catalog = _load_static_model_catalog()
+    original = next(
+        entry
+        for entry in original_catalog.models
+        if entry.catalog_id == "transformers/depth_anything_v2/small"
+    )
+    payloads = {
+        "config.json": b'{"model_type":"depth_anything"}',
+        "preprocessor_config.json": b'{"do_resize":true}',
+        "model.safetensors": b"tiny-depth-weights",
+    }
+    expected_files = [
+        CatalogExpectedFile(
+            filename=filename,
+            source_url=(
+                "https://huggingface.co/depth-anything/"
+                "Depth-Anything-V2-Small-hf/resolve/"
+                f"{original.expected_files[0].revision}/{filename}"
+            ),
+            revision=original.expected_files[0].revision,
+            sha256=hashlib.sha256(payload).hexdigest(),
+            size_bytes=len(payload),
+        )
+        for filename, payload in payloads.items()
+    ]
+    entry = original.model_copy(
+        update={
+            "availability": "available",
+            "expected_files": expected_files,
+            "expected_size": sum(len(payload) for payload in payloads.values()),
+            "expected_checksum": None,
+            "expected_file_size": None,
+        }
+    )
+    catalog = ModelCatalogResponse(
+        schema_version=2,
+        catalog_version="test-bundle",
+        models=[entry],
+    )
+    monkeypatch.setattr(bundled_models, "_load_static_model_catalog", lambda: catalog)
+
+    bundle_root = tmp_path / "bundle-multifile"
+    file_records = []
+    total_size = 0
+    for expected in entry.expected_files:
+        payload = payloads[expected.filename]
+        relative_path = f"{entry.catalog_id}/{expected.filename}"
+        checkpoint = bundle_root / relative_path
+        checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        checkpoint.write_bytes(payload)
+        file_records.append(
+            {
+                "filename": expected.filename,
+                "relative_path": relative_path,
+                "sha256": expected.sha256,
+                "size_bytes": expected.size_bytes,
+                "revision": expected.revision,
+            }
+        )
+        total_size += expected.size_bytes
+    (bundle_root / "manifest.json").write_text(
+        json.dumps(
+            {
+                "manifest_version": 1,
+                "catalog_version": "test-bundle",
+                "asset_count": 1,
+                "total_size_bytes": total_size,
+                "assets": {
+                    entry.catalog_id: {
+                        "catalog_id": entry.catalog_id,
+                        "filename": entry.expected_files[0].filename,
+                        "relative_path": entry.catalog_id,
+                        "sha256": None,
+                        "size_bytes": total_size,
+                        "files": file_records,
+                        "provider_version": entry.provider_version,
+                        "revision": entry.expected_files[0].revision,
+                    }
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("REEFVISION_BUNDLED_MODELS_DIR", str(bundle_root))
+
+    installed, warnings = bundled_models.install_bundled_catalog_models(client.app.state.settings)
+
+    assert warnings == []
+    assert installed == [entry.catalog_id]
+    for expected in entry.expected_files:
+        destination = catalog_asset_path(
+            client.app.state.settings, entry.catalog_id, expected.filename
+        )
+        assert destination.read_bytes() == payloads[expected.filename]
+    record = catalog_manifest_record(client.app.state.settings, entry.catalog_id)
+    assert record is not None
+    assert record["sha256"] is None
+    assert len(record["files"]) == 3

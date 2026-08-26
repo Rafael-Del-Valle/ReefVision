@@ -88,12 +88,9 @@ class MeasurementCalibrationUpdate(BaseModel):
             if all(abs(float(value)) < 1e-15 for value in matrix[2]):
                 raise ValueError("perspective_homography has an invalid projective row")
             determinant = (
-                matrix[0][0]
-                * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1])
-                - matrix[0][1]
-                * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0])
-                + matrix[0][2]
-                * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0])
+                matrix[0][0] * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1])
+                - matrix[0][1] * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0])
+                + matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0])
             )
             if not math.isfinite(float(determinant)) or abs(float(determinant)) < 1e-15:
                 raise ValueError("perspective_homography must be invertible")

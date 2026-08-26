@@ -84,6 +84,23 @@ if ($LASTEXITCODE -ne 0) {
     throw "Pinned model-provider dependency installation failed."
 }
 
+$AdvancedProviderRequirementsPath = Join-Path $Root "requirements/advanced-providers-windows-py312.txt"
+if (-not (Test-Path $AdvancedProviderRequirementsPath -PathType Leaf)) {
+    throw "Pinned advanced-provider dependency file not found: $AdvancedProviderRequirementsPath"
+}
+Write-ReefVisionStep "Installing pinned optional AI provider dependencies"
+# Runtime packages only. Model weights remain explicit opt-in downloads.
+& $VenvPython -m pip install -r $AdvancedProviderRequirementsPath
+if ($LASTEXITCODE -ne 0) {
+    throw "Pinned advanced-provider dependency installation failed."
+}
+
+Write-ReefVisionStep "Verifying optional AI provider runtime"
+& $VenvPython -c "import importlib.metadata as m; expected={'transformers':'4.57.2','huggingface-hub':'0.36.0','tokenizers':'0.22.1','safetensors':'0.7.0','sentencepiece':'0.2.1'}; actual={k:m.version(k) for k in expected}; bad={k:(expected[k],actual[k]) for k in expected if actual[k] != expected[k]}; assert not bad, f'advanced provider version mismatch: {bad}'; import transformers, huggingface_hub, tokenizers, safetensors, sentencepiece; print('Advanced provider runtime OK:', actual)"
+if ($LASTEXITCODE -ne 0) {
+    throw "Advanced provider runtime verification failed."
+}
+
 if ($UsesOpenCvContrib) {
     Write-ReefVisionStep "Verifying a single OpenCV contrib distribution owns cv2"
     & $VenvPython -c "import importlib.metadata as m; names={d.metadata.get('Name','').lower() for d in m.distributions()}; conflicts=sorted(names & {'opencv-python','opencv-python-headless','opencv-contrib-python-headless'}); assert 'opencv-contrib-python' in names, 'opencv-contrib-python is not installed'; assert not conflicts, f'conflicting OpenCV distributions installed: {conflicts}'; print('OpenCV distribution ownership OK')"

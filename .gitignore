@@ -39,6 +39,9 @@ Thumbs.db
 build/
 dist/
 .desktop/
+.artifacts/
+.tmp/
+release-artifacts/
 
 # ReefVision generated runtime files
 .runtime/

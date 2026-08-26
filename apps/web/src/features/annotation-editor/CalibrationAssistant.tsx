@@ -5,11 +5,14 @@ import {
   applyMeasurementCalibrationProfile,
   detectMarkerCalibration,
   detectRulerCalibration,
+  detectScaleLabelOcr,
+  detectScaleBarCalibration,
   getMeasurementCalibrationProfiles,
   updateMeasurementCalibration,
   type MeasurementCalibration,
   type MarkerCalibrationCandidate,
   type RulerCalibrationCandidate,
+  type ScaleBarCalibrationCandidate,
 } from "./maskMeasurementsApi";
 
 interface CalibrationAssistantProps {
@@ -53,6 +56,12 @@ export function CalibrationAssistant({
   >("auto");
   const [rulerCandidate, setRulerCandidate] =
     useState<RulerCalibrationCandidate | null>(null);
+  const [scaleBarReferenceLength, setScaleBarReferenceLength] = useState("");
+  const [scaleBarOrientation, setScaleBarOrientation] = useState<
+    "auto" | "horizontal" | "vertical"
+  >("auto");
+  const [scaleBarCandidate, setScaleBarCandidate] =
+    useState<ScaleBarCalibrationCandidate | null>(null);
   const [markerKind, setMarkerKind] = useState<"aruco" | "charuco">("aruco");
   const [markerLength, setMarkerLength] = useState("");
   const [markerId, setMarkerId] = useState("");
@@ -64,20 +73,27 @@ export function CalibrationAssistant({
     useState<MarkerCalibrationCandidate | null>(null);
   const [selectedProfileImageId, setSelectedProfileImageId] = useState("");
   const [confirmSameSetup, setConfirmSameSetup] = useState(false);
+  const [ocrCandidate, setOcrCandidate] = useState<Awaited<
+    ReturnType<typeof detectScaleLabelOcr>
+  > | null>(null);
 
   useEffect(() => {
     setUnit(defaultUnit || "mm");
     setProfileName("");
     setRulerReferenceLength("");
     setRulerCandidate(null);
+    setScaleBarReferenceLength("");
+    setScaleBarCandidate(null);
     setMarkerCandidate(null);
     setSelectedProfileImageId("");
     setConfirmSameSetup(false);
+    setOcrCandidate(null);
   }, [defaultUnit, imageId]);
 
   const profilesQuery = useQuery({
     queryKey: ["measurement-calibration-profiles", projectId],
-    queryFn: ({ signal }) => getMeasurementCalibrationProfiles(projectId, signal),
+    queryFn: ({ signal }) =>
+      getMeasurementCalibrationProfiles(projectId, signal),
     retry: false,
     refetchOnWindowFocus: false,
   });
@@ -89,6 +105,14 @@ export function CalibrationAssistant({
       ),
     [imageId, profilesQuery.data],
   );
+
+  const ocrMutation = useMutation({
+    mutationFn: () =>
+      detectScaleLabelOcr(imageId, {
+        allow_model_download: false,
+      }),
+    onSuccess: setOcrCandidate,
+  });
 
   const rulerDetectMutation = useMutation({
     mutationFn: () =>
@@ -119,6 +143,45 @@ export function CalibrationAssistant({
         reference_plane_only: false,
         notes:
           "Automatic ruler tick spacing was reviewed by the researcher; the physical interval and unit were supplied manually.",
+      });
+    },
+    onSuccess: async (calibration) => {
+      await onApplied(calibration);
+      await profilesQuery.refetch();
+    },
+  });
+
+  const scaleBarDetectMutation = useMutation({
+    mutationFn: () =>
+      detectScaleBarCalibration(imageId, { orientation: scaleBarOrientation }),
+    onSuccess: setScaleBarCandidate,
+  });
+
+  const scaleBarApplyMutation = useMutation({
+    mutationFn: async () => {
+      if (!scaleBarCandidate || scaleBarCandidate.image_id !== imageId) {
+        throw new Error(
+          "Detect a scale-bar candidate for the current image first",
+        );
+      }
+      const referenceLength = positiveNumber(
+        scaleBarReferenceLength,
+        "Known scale-bar length",
+      );
+      if (!unit.trim()) throw new Error("A physical unit is required");
+      return updateMeasurementCalibration(imageId, {
+        distance_per_pixel:
+          referenceLength / scaleBarCandidate.bar_length_pixels,
+        unit: unit.trim(),
+        source: "automatic_scale_bar",
+        reference_length: referenceLength,
+        reference_pixel_length: scaleBarCandidate.bar_length_pixels,
+        confidence: scaleBarCandidate.confidence,
+        detector: "reefvision-scale-bar-geometry-v1",
+        profile_name: profileName.trim() || null,
+        reference_plane_only: false,
+        notes:
+          "Automatic scale-bar geometry was reviewed by the researcher; the physical bar length and unit were supplied manually.",
       });
     },
     onSuccess: async (calibration) => {
@@ -177,7 +240,9 @@ export function CalibrationAssistant({
   const markerApplyMutation = useMutation({
     mutationFn: async () => {
       if (!markerCandidate || markerCandidate.image_id !== imageId) {
-        throw new Error("Detect a marker candidate for the current image first");
+        throw new Error(
+          "Detect a marker candidate for the current image first",
+        );
       }
       return updateMeasurementCalibration(imageId, {
         ...markerCandidate.calibration,
@@ -209,8 +274,11 @@ export function CalibrationAssistant({
   });
 
   const currentError =
+    ocrMutation.error ??
     rulerDetectMutation.error ??
     rulerApplyMutation.error ??
+    scaleBarDetectMutation.error ??
+    scaleBarApplyMutation.error ??
     markerDetectMutation.error ??
     markerApplyMutation.error ??
     profileApplyMutation.error ??
@@ -219,8 +287,8 @@ export function CalibrationAssistant({
   return (
     <div data-testid="calibration-assistant">
       <p className="annotation-helper">
-        Scale Assistant proposes calibration evidence but keeps the researcher in
-        control. Ruler detection never guesses the physical unit or interval.
+        Scale Assistant proposes calibration evidence but keeps the researcher
+        in control. Ruler detection never guesses the physical unit or interval.
       </p>
 
       <label>
@@ -239,6 +307,66 @@ export function CalibrationAssistant({
           placeholder="Camera stand at fixed distance"
         />
       </label>
+
+      <details>
+        <summary>Read a printed scale label with OCR</summary>
+        <p className="annotation-helper">
+          TrOCR proposes printed text such as 500 µm or 10 mm. ReefVision never
+          applies OCR-derived calibration automatically; confirm the result
+          first.
+        </p>
+        <p className="annotation-helper">
+          TrOCR is managed in Models &amp; AI → Model Hub. Scale Assistant uses
+          the verified installed checkpoint and never downloads a separate copy.
+        </p>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => ocrMutation.mutate()}
+          disabled={ocrMutation.isPending}
+        >
+          {ocrMutation.isPending ? "Reading…" : "Read scale label"}
+        </button>
+        {ocrCandidate && (
+          <>
+            <div className="annotation-selection-row">
+              <strong>OCR text</strong>
+              <span>{ocrCandidate.raw_text || "No text recognized"}</span>
+            </div>
+            {ocrCandidate.parsed_value != null &&
+              ocrCandidate.normalized_unit && (
+                <>
+                  <div className="annotation-selection-row">
+                    <strong>Proposed physical scale</strong>
+                    <span>
+                      {ocrCandidate.parsed_value} {ocrCandidate.normalized_unit}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setUnit(ocrCandidate.normalized_unit ?? unit);
+                      setRulerReferenceLength(
+                        String(ocrCandidate.parsed_value),
+                      );
+                      setScaleBarReferenceLength(
+                        String(ocrCandidate.parsed_value),
+                      );
+                    }}
+                  >
+                    Use as reviewed scale value
+                  </button>
+                </>
+              )}
+            {ocrCandidate.warnings.map((warning) => (
+              <p className="annotation-helper" key={warning}>
+                {warning}
+              </p>
+            ))}
+          </>
+        )}
+      </details>
 
       <details>
         <summary>Detect ruler spacing</summary>
@@ -286,7 +414,9 @@ export function CalibrationAssistant({
                 min="0"
                 step="any"
                 value={rulerReferenceLength}
-                onChange={(event) => setRulerReferenceLength(event.target.value)}
+                onChange={(event) =>
+                  setRulerReferenceLength(event.target.value)
+                }
                 placeholder="10"
               />
             </label>
@@ -306,6 +436,87 @@ export function CalibrationAssistant({
               {rulerApplyMutation.isPending
                 ? "Applying..."
                 : "Apply reviewed ruler scale"}
+            </button>
+          </>
+        )}
+      </details>
+
+      <details>
+        <summary>Detect digital scale bar</summary>
+        <p className="annotation-helper">
+          ReefVision detects a high-contrast bar and measures its pixel length.
+          Confirm the printed physical value before applying it as calibration.
+        </p>
+        <label>
+          Scale-bar orientation
+          <select
+            value={scaleBarOrientation}
+            onChange={(event) =>
+              setScaleBarOrientation(
+                event.target.value as "auto" | "horizontal" | "vertical",
+              )
+            }
+          >
+            <option value="auto">Auto</option>
+            <option value="horizontal">Horizontal</option>
+            <option value="vertical">Vertical</option>
+          </select>
+        </label>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => scaleBarDetectMutation.mutate()}
+          disabled={scaleBarDetectMutation.isPending}
+        >
+          {scaleBarDetectMutation.isPending
+            ? "Detecting..."
+            : "Detect scale bar"}
+        </button>
+        {scaleBarCandidate && (
+          <>
+            <div className="annotation-selection-row">
+              <strong>Detected bar length</strong>
+              <span>{scaleBarCandidate.bar_length_pixels.toFixed(3)} px</span>
+            </div>
+            <div className="annotation-selection-row">
+              <strong>Detected thickness</strong>
+              <span>
+                {scaleBarCandidate.bar_thickness_pixels.toFixed(3)} px
+              </span>
+            </div>
+            <div className="annotation-selection-row">
+              <strong>Confidence</strong>
+              <span>{formatConfidence(scaleBarCandidate.confidence)}</span>
+            </div>
+            <label>
+              Known physical length printed for this scale bar
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={scaleBarReferenceLength}
+                onChange={(event) =>
+                  setScaleBarReferenceLength(event.target.value)
+                }
+                placeholder="10"
+              />
+            </label>
+            {scaleBarCandidate.warnings.length > 0 && (
+              <ul className="system-details">
+                {scaleBarCandidate.warnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            )}
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => scaleBarApplyMutation.mutate()}
+              disabled={scaleBarApplyMutation.isPending}
+            >
+              {scaleBarApplyMutation.isPending
+                ? "Applying..."
+                : "Apply reviewed scale bar"}
             </button>
           </>
         )}
@@ -450,8 +661,8 @@ export function CalibrationAssistant({
                     value={profile.source_image_id}
                   >
                     {profile.profile_name} —{" "}
-                    {profile.distance_per_pixel.toPrecision(5)} {profile.unit}/px (
-                    {profile.width_px}×{profile.height_px})
+                    {profile.distance_per_pixel.toPrecision(5)} {profile.unit}
+                    /px ({profile.width_px}×{profile.height_px})
                   </option>
                 ))}
               </select>

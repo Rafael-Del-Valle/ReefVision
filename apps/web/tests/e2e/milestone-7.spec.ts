@@ -267,9 +267,39 @@ test("quality-control workflow opens the flagged image and returns to the QC das
     if (url.pathname.endsWith(`/images/${baseImage.id}/prediction-proposals`)) {
       await route.fulfill({
         json: {
-          items: [],
+          items: [
+            {
+              id: "queue-proposal-1",
+              project_id: project.id,
+              image_id: baseImage.id,
+              model_id: "model-1",
+              model_display_name: "Queue detector",
+              inference_job_id: "inference-job-1",
+              model_checksum: "c".repeat(64),
+              label_class_id: project.label_classes[0].id,
+              predicted_label: project.label_classes[0].name,
+              predicted_index: 0,
+              confidence: 0.37,
+              geometry_kind: "bounding_box",
+              polygon_json: null,
+              mask_path: null,
+              mask_content_sha256: null,
+              x_min: 100,
+              y_min: 100,
+              x_max: 260,
+              y_max: 250,
+              review_status: "pending",
+              was_edited: false,
+              reviewer_action_at: null,
+              accepted_annotation_id: null,
+              accepted_mask_annotation_id: null,
+              inference_settings_json: { confidence_threshold: 0.25 },
+              provenance_json: { provider_name: "ultralytics" },
+              created_at: "2026-07-08T00:00:00Z",
+            },
+          ],
           counts: {
-            pending: 0,
+            pending: 1,
             accepted: 0,
             rejected: 0,
             edited_and_accepted: 0,
@@ -290,7 +320,8 @@ test("quality-control workflow opens the flagged image and returns to the QC das
 
   await mountBuiltApp(page);
   await page.getByRole("button", { name: /CPT Coral Study/ }).click();
-  await page.getByRole("tab", { name: "Quality Control" }).click();
+  await page.getByRole("tab", { name: "Review" }).click();
+  await page.getByRole("tab", { name: "Quality control" }).click();
   await page.getByRole("button", { name: "Run quality control" }).click();
 
   await expect(
@@ -312,7 +343,7 @@ test("quality-control workflow opens the flagged image and returns to the QC das
 
   await page.getByRole("button", { name: "Back to Quality Control" }).click();
   await expect(
-    page.getByRole("heading", { name: "Quality Control" }),
+    page.getByRole("heading", { name: "Quality Control", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText("Exact duplicate bounding boxes").last(),
@@ -325,6 +356,35 @@ test("review-queue workflow preserves score context and item state transitions",
   let queueCreated = false;
   let itemState: "pending" | "in_progress" = "pending";
   let startedAt: string | null = null;
+  const queueProposal = {
+    id: "queue-proposal-1",
+    project_id: project.id,
+    image_id: baseImage.id,
+    model_id: "model-1",
+    model_display_name: "Queue detector",
+    inference_job_id: "inference-job-1",
+    model_checksum: "c".repeat(64),
+    label_class_id: project.label_classes[0].id,
+    predicted_label: project.label_classes[0].name,
+    predicted_index: 0,
+    confidence: 0.37,
+    geometry_kind: "bounding_box",
+    polygon_json: null,
+    mask_path: null,
+    mask_content_sha256: null,
+    x_min: 100,
+    y_min: 100,
+    x_max: 260,
+    y_max: 250,
+    review_status: "pending",
+    was_edited: false,
+    reviewer_action_at: null,
+    accepted_annotation_id: null,
+    accepted_mask_annotation_id: null,
+    inference_settings_json: { confidence_threshold: 0.25 },
+    provenance_json: { provider_name: "ultralytics" },
+    created_at: "2026-07-08T00:00:00Z",
+  };
 
   const run = {
     id: "qc-run-1",
@@ -527,9 +587,9 @@ test("review-queue workflow preserves score context and item state transitions",
     if (url.pathname.endsWith(`/images/${baseImage.id}/prediction-proposals`)) {
       await route.fulfill({
         json: {
-          items: [],
+          items: [queueProposal],
           counts: {
-            pending: 0,
+            pending: 1,
             accepted: 0,
             rejected: 0,
             edited_and_accepted: 0,
@@ -550,7 +610,8 @@ test("review-queue workflow preserves score context and item state transitions",
 
   await mountBuiltApp(page);
   await page.getByRole("button", { name: /CPT Coral Study/ }).click();
-  await page.getByRole("tab", { name: "Review Queue" }).click();
+  await page.getByRole("tab", { name: "Review" }).click();
+  await page.getByRole("tab", { name: "Review queue" }).click();
   await page.getByRole("button", { name: "Generate queue" }).click();
 
   await expect(page.getByText("Rank #1")).toBeVisible();
@@ -565,10 +626,17 @@ test("review-queue workflow preserves score context and item state transitions",
     page.getByRole("button", { name: "Back to Review Queue" }),
   ).toBeVisible();
   await expect(page.getByText(/Review score 82\.40/)).toBeVisible();
+  await page.getByTestId("prediction-row-queue-proposal-1").click();
+  await expect(
+    page.getByRole("region", { name: "Prediction Inspector" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("meter", { name: "Raw model confidence 0.37" }),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "Back to Review Queue" }).click();
   await expect(
-    page.getByRole("heading", { name: "Review Queue" }),
+    page.getByRole("heading", { name: "Review Queue", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("Rank #1")).toBeVisible();
 });

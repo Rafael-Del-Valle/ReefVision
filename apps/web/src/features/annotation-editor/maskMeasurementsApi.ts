@@ -80,6 +80,30 @@ export interface RulerCalibrationCandidate {
   warnings: string[];
 }
 
+export interface ScaleBarCalibrationDetectRequest {
+  roi?: CalibrationRoi | null;
+  orientation?: "auto" | "horizontal" | "vertical";
+}
+
+export interface ScaleBarCalibrationCandidate {
+  image_id: string;
+  method: "automatic_scale_bar";
+  orientation: "horizontal" | "vertical";
+  roi: CalibrationRoi;
+  bar_start_pixels: [number, number];
+  bar_end_pixels: [number, number];
+  bar_length_pixels: number;
+  bar_thickness_pixels: number;
+  polarity: "dark" | "light";
+  continuity_score: number;
+  contrast_score: number;
+  confidence: number;
+  label_text: string | null;
+  unit_inferred: false;
+  reference_length_required: true;
+  warnings: string[];
+}
+
 export interface MarkerCalibrationDetectRequest {
   kind: "aruco" | "charuco";
   unit: string;
@@ -281,6 +305,24 @@ export async function detectRulerCalibration(
   return (await response.json()) as RulerCalibrationCandidate;
 }
 
+export async function detectScaleBarCalibration(
+  imageId: string,
+  payload: ScaleBarCalibrationDetectRequest,
+): Promise<ScaleBarCalibrationCandidate> {
+  const response = await fetch(
+    `${getApiBaseUrl()}/images/${encodeURIComponent(imageId)}/measurement-calibration/scale-bar-detect`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) {
+    throw await apiError(response, "Automatic scale-bar detection failed");
+  }
+  return (await response.json()) as ScaleBarCalibrationCandidate;
+}
+
 export async function detectMarkerCalibration(
   imageId: string,
   payload: MarkerCalibrationDetectRequest,
@@ -380,4 +422,47 @@ export function measurementExportUrl(
   format: "csv" | "numpy",
 ): string {
   return `${getApiBaseUrl()}/projects/${encodeURIComponent(projectId)}/measurement-export?format=${format}`;
+}
+
+export interface ScaleLabelOcrCandidate {
+  image_id: string;
+  raw_text: string;
+  parsed_value: number | null;
+  parsed_unit: string | null;
+  normalized_unit: string | null;
+  roi: { x_min: number; y_min: number; x_max: number; y_max: number };
+  confidence: number;
+  confidence_kind: string;
+  model_id: string;
+  model_revision: string;
+  warnings: string[];
+  requires_researcher_confirmation: boolean;
+}
+
+export async function detectScaleLabelOcr(
+  imageId: string,
+  payload: {
+    roi?: { x_min: number; y_min: number; x_max: number; y_max: number } | null;
+    allow_model_download?: boolean;
+  },
+): Promise<ScaleLabelOcrCandidate> {
+  const response = await fetch(
+    `${getApiBaseUrl()}/images/${encodeURIComponent(imageId)}/scale-label-ocr`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) {
+    let message = `Scale label OCR failed with HTTP ${response.status}`;
+    try {
+      const body = (await response.json()) as { detail?: string };
+      if (body.detail) message = body.detail;
+    } catch {
+      // Preserve the HTTP fallback.
+    }
+    throw new Error(message);
+  }
+  return (await response.json()) as ScaleLabelOcrCandidate;
 }

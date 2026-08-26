@@ -15,6 +15,7 @@ from reefvision.schemas.advanced_providers import (
     AdvancedProviderPreflightRequest,
     AdvancedProviderPreflightResponse,
 )
+from reefvision.services.advanced_provider_execution import optional_provider_runtime_status
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,7 +57,7 @@ _PROFILES: tuple[_AdvancedProviderProfile, ...] = (
     _AdvancedProviderProfile(
         provider_id="grounding_dino",
         display_name="Grounding DINO",
-        execution_supported=False,
+        execution_supported=True,
         supported_tasks=("open_vocabulary_detect", "phrase_grounding"),
         prompt_fields_by_task={
             "open_vocabulary_detect": ("image_id", "text_prompts", "confidence"),
@@ -67,15 +68,16 @@ _PROFILES: tuple[_AdvancedProviderProfile, ...] = (
             "phrase_grounding": ("prediction_proposals", "bounding_boxes", "phrases"),
         },
         required_model_extensions=(".safetensors", ".bin"),
-        required_packages=("transformers", "accelerate", "safetensors"),
+        required_packages=("transformers", "torch", "safetensors"),
         recommended_devices=("cuda", "cpu"),
         known_limitations=(
-            "No pinned Transformers provider pack or reviewed adapter is currently shipped.",
+            "The pinned model is downloaded only after explicit user approval "
+            "and remains local to ReefVision application data.",
         ),
         integration_notes=(
-            "Future results must enter the normal prediction-proposal review flow with prompt "
-            "and checkpoint provenance.",
+            "Results are advisory proposals and preserve prompt/model provenance for human review.",
         ),
+        model_required=False,
     ),
     _AdvancedProviderProfile(
         provider_id="owlv2",
@@ -125,27 +127,78 @@ _PROFILES: tuple[_AdvancedProviderProfile, ...] = (
     _AdvancedProviderProfile(
         provider_id="sam2",
         display_name="SAM 2",
-        execution_supported=False,
-        supported_tasks=("assist_segmentation", "video_propagation"),
+        execution_supported=True,
+        supported_tasks=("assist_segmentation",),
         prompt_fields_by_task={
-            "assist_segmentation": ("image_id", "prompt_type"),
-            "video_propagation": ("video_id", "seed_frame", "seed_masks"),
+            "assist_segmentation": ("image_id", "box"),
         },
         output_contracts_by_task={
-            "assist_segmentation": ("mask_candidate",),
+            "assist_segmentation": ("prediction_proposals", "mask_candidate"),
             "video_propagation": ("frame_mask_proposals", "object_ids"),
         },
-        required_model_extensions=(".pt", ".pth"),
-        required_packages=("torch", "torchvision", "sam2"),
-        recommended_devices=("cuda",),
+        required_model_extensions=(".safetensors",),
+        required_packages=("transformers", "torch", "torchvision", "safetensors"),
+        recommended_devices=("cuda", "cpu"),
         known_limitations=(
-            "Windows desktop packaging, checkpoint validation, and long-video memory behavior "
-            "are not verified.",
+            "Image prompting is enabled through the pinned Transformers runtime; "
+            "long-video SAM 2 propagation remains a separate acceptance target.",
         ),
         integration_notes=(
-            "Video outputs must remain editable proposals and use source-frame coordinates "
-            "compatible with Phase 6 tracks.",
+            "Image masks remain editable proposals and require researcher "
+            "review before acceptance.",
         ),
+        model_required=False,
+    ),
+    _AdvancedProviderProfile(
+        provider_id="smolvlm",
+        display_name="SmolVLM 256M Instruct",
+        execution_supported=True,
+        supported_tasks=("caption", "visual_question"),
+        prompt_fields_by_task={
+            "caption": ("image_id", "prompt"),
+            "visual_question": ("image_id", "prompt"),
+        },
+        output_contracts_by_task={
+            "caption": ("text",),
+            "visual_question": ("text",),
+        },
+        required_model_extensions=(".safetensors",),
+        required_packages=("transformers", "torch", "safetensors"),
+        recommended_devices=("cuda", "cpu"),
+        known_limitations=(
+            "Generated text is advisory and is never converted into verified labels automatically.",
+        ),
+        integration_notes=(
+            "Use the VLM for descriptions and questions, not unattended scientific conclusions.",
+        ),
+        model_required=False,
+    ),
+    _AdvancedProviderProfile(
+        provider_id="nnunet",
+        display_name="nnU-Net v2",
+        execution_supported=True,
+        supported_tasks=("semantic_segment",),
+        prompt_fields_by_task={
+            "semantic_segment": (
+                "input_folder",
+                "output_folder",
+                "dataset",
+                "configuration",
+            )
+        },
+        output_contracts_by_task={"semantic_segment": ("prediction_folder",)},
+        required_model_extensions=(),
+        required_packages=("nnunetv2",),
+        recommended_devices=("cuda", "cpu"),
+        known_limitations=(
+            "nnU-Net remains an optional provider pack and requires its "
+            "upstream data/result environment variables.",
+        ),
+        integration_notes=(
+            "Predicted segmentation files remain external artifacts until "
+            "reviewed and imported into ReefVision.",
+        ),
+        model_required=False,
     ),
     _AdvancedProviderProfile(
         provider_id="mobilesam",
@@ -230,7 +283,11 @@ class AdvancedProviderService:
         results: list[AdvancedProviderManifestResponse] = []
         for profile in _PROFILES:
             descriptor = descriptors.get(profile.provider_id)
-            maturity = descriptor.availability_status if descriptor else "not_registered"
+            if profile.provider_id in {"grounding_dino", "sam2", "smolvlm", "nnunet"}:
+                runtime = optional_provider_runtime_status(self.settings, profile.provider_id)
+                maturity = "ready" if runtime.get("ready") else "available_on_demand"
+            else:
+                maturity = descriptor.availability_status if descriptor else "not_registered"
             results.append(
                 AdvancedProviderManifestResponse(
                     provider_id=profile.provider_id,
@@ -268,12 +325,33 @@ class AdvancedProviderService:
             item.provider_id: item for item in list_model_providers(self.settings, refresh=True)
         }
         descriptor = descriptors.get(provider_id)
-        availability_status = descriptor.availability_status if descriptor else "not_registered"
+        optional_provider = provider_id in {"grounding_dino", "sam2", "smolvlm", "nnunet"}
+        runtime = (
+            optional_provider_runtime_status(self.settings, provider_id)
+            if optional_provider
+            else None
+        )
+        availability_status = (
+            "ready"
+            if runtime and runtime.get("ready")
+            else "available_on_demand"
+            if optional_provider
+            else descriptor.availability_status
+            if descriptor
+            else "not_registered"
+        )
         blockers: list[str] = []
         warnings: list[str] = list(profile.known_limitations)
         if not profile.execution_supported:
             blockers.append("No reviewed ReefVision execution adapter is enabled for this provider")
-        if descriptor is None:
+        if optional_provider:
+            if provider_id == "nnunet" and runtime and not runtime.get("ready"):
+                blockers.append(str(runtime.get("reason") or "nnU-Net runtime is not ready"))
+            elif runtime and not runtime.get("ready") and not request.allow_model_download:
+                blockers.append(
+                    "Optional model is not cached. Enable explicit model download for this action."
+                )
+        elif descriptor is None:
             blockers.append("The provider is not registered in the main provider hub")
         elif descriptor.availability_status != "ready":
             blockers.append(

@@ -52,8 +52,11 @@ TASKS: tuple[TaskCapability, ...] = (
         ("nnunetv2", "custom_pytorch"),
         True,
         True,
-        "foundation",
-        "Requires dense-mask dataset versions.",
+        "ready",
+        (
+            "Dense-mask dataset versions, nnU-Net v2 training, packaged model "
+            "registration, inference, and human-reviewed raster proposals are implemented."
+        ),
     ),
     TaskCapability(
         "classify",
@@ -63,8 +66,11 @@ TASKS: tuple[TaskCapability, ...] = (
         ("ultralytics", "custom_pytorch"),
         True,
         True,
-        "foundation",
-        "Requires image-level label persistence and folder export.",
+        "ready",
+        (
+            "Image-level labels, immutable classification datasets, training, "
+            "inference, and researcher-reviewed predictions are implemented."
+        ),
     ),
     TaskCapability(
         "track",
@@ -74,8 +80,11 @@ TASKS: tuple[TaskCapability, ...] = (
         ("ultralytics", "bytetrack", "botsort"),
         False,
         True,
-        "foundation",
-        "Detector plus tracker; identity annotations are separate from training.",
+        "ready",
+        (
+            "Detector-plus-tracker execution, editable tracks, interpolation, "
+            "analytics, benchmarking, and provenance are implemented."
+        ),
     ),
     TaskCapability(
         "video_annotate",
@@ -84,9 +93,12 @@ TASKS: tuple[TaskCapability, ...] = (
         ("bbox_track", "mask_track", "keyframe"),
         ("reefvision",),
         False,
-        False,
-        "foundation",
-        "Requires frame timeline, interpolation, and track persistence.",
+        True,
+        "ready",
+        (
+            "Managed videos, manual keyframes, linear interpolation, verified "
+            "track persistence, and science analytics are implemented."
+        ),
     ),
     TaskCapability(
         "depth",

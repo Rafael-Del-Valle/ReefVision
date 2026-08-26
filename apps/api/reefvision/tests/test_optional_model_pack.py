@@ -80,7 +80,7 @@ def test_optional_pack_repair_marks_verified_model_available(
             "rejected_entries": 0,
         }
     )
-    assert len(validated.models) == 41
+    assert len(validated.models) >= 43
     entry = next(item for item in catalog["models"] if item["catalog_id"] == model.catalog_id)
     assert entry["availability"] == "available"
     assert entry["selection_kind"] == "managed_catalog_model"

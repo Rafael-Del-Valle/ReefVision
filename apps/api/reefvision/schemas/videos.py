@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, FiniteFloat, field_validator, model_validator
 
 TrackInterpolation = Literal["linear", "hold"]
 TrackGeometryKind = Literal["bbox"]
@@ -145,6 +145,26 @@ class VideoTrackingCreateRequest(BaseModel):
     iou: float = Field(default=0.5, ge=0, le=1)
     device: str = Field(default="auto", min_length=1, max_length=60)
     minimum_track_frames: int = Field(default=2, ge=1, le=1000000)
+
+
+class VideoMetricDepth3DCreateRequest(BaseModel):
+    track_ids: list[str] = Field(min_length=1, max_length=10000)
+    device: str = Field(default="auto", min_length=1, max_length=60)
+    input_size: int = Field(default=518, ge=196, le=1036)
+    max_res: int = Field(default=1280, ge=256, le=8192)
+    core_fraction: float = Field(default=0.6, gt=0, le=1)
+    minimum_valid_fraction: float = Field(default=0.25, ge=0, le=1)
+    maximum_frame_gap: int | None = Field(default=None, ge=1, le=100000)
+    allow_model_download: bool = False
+    allow_resolution_fallback: bool = True
+
+    @model_validator(mode="after")
+    def validate_scientific_3d_request(self) -> VideoMetricDepth3DCreateRequest:
+        if len(set(self.track_ids)) != len(self.track_ids):
+            raise ValueError("Scientific 3D track IDs must be unique")
+        if self.input_size % 14 != 0:
+            raise ValueError("Scientific 3D input_size must be a multiple of 14")
+        return self
 
 
 class VideoTrackingRunResponse(BaseModel):
@@ -304,3 +324,25 @@ class VideoTrackingBenchmarkResponse(BaseModel):
     iou_threshold: float
     class_aware: bool
     results: list[VideoTrackingBenchmarkResult]
+
+
+class Scientific3DCalibrationReferenceSample(BaseModel):
+    track_id: str = Field(min_length=1, max_length=100)
+    frame: int = Field(ge=0)
+    expected_depth_m: FiniteFloat = Field(gt=0)
+
+
+class Scientific3DCalibrationValidationRequest(BaseModel):
+    reference_source: str = Field(min_length=3, max_length=300)
+    reference_method: str = Field(min_length=3, max_length=120)
+    setup_description: str = Field(min_length=3, max_length=1000)
+    reference_samples: list[Scientific3DCalibrationReferenceSample] = Field(
+        min_length=5,
+        max_length=5000,
+    )
+    relative_tolerance: FiniteFloat = Field(default=0.05, ge=0, le=0.10)
+    absolute_tolerance_m: FiniteFloat = Field(default=0.02, ge=0, le=0.05)
+    independent_reference_confirmed: Literal[True]
+    same_optical_setup_confirmed: Literal[True]
+    underwater_environment_confirmed: Literal[True]
+    notes: str | None = Field(default=None, max_length=2000)

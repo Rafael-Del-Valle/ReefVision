@@ -13,6 +13,11 @@ from sqlalchemy.orm import Session
 from reefvision.config import Settings
 from reefvision.db.models import Job
 from reefvision.domain.errors import ConflictError, ValidationError
+from reefvision.ml.optional_transformers_runtime import (
+    OPTIONAL_MODEL_SPECS,
+    optional_model_status,
+    remove_optional_model_cache,
+)
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.model_catalog import (
     CatalogExpectedFile,
@@ -60,7 +65,7 @@ class ModelInstallService:
             raise ValidationError(
                 entry.installation_reason or "This model has no validated installer"
             )
-        if not entry.expected_files:
+        if not entry.expected_files and entry.provider_id not in OPTIONAL_MODEL_SPECS:
             raise ValidationError("Catalog entry is missing its trusted download manifest")
         if entry.installation_state == "Ready":
             raise ConflictError("This catalog model is already installed and ready")
@@ -102,6 +107,36 @@ class ModelInstallService:
 
     def verify(self, project_id: str, catalog_id: str) -> CatalogVerifyResponse:
         entry = self.catalog.get_project_catalog_item(project_id, catalog_id)
+        if entry.provider_id in OPTIONAL_MODEL_SPECS:
+            spec = OPTIONAL_MODEL_SPECS[entry.provider_id]
+            status = optional_model_status(self.settings, entry.provider_id)
+            path = Path(str(status["path"])) / spec.weight_filename
+            actual_checksum: str | None = None
+            verified = bool(status["verified"]) and path.is_file()
+            if path.is_file():
+                actual_checksum, _ = _sha256_and_size(path)
+                verified = verified and (
+                    spec.weight_sha256 is None or actual_checksum == spec.weight_sha256
+                )
+            state = (
+                "Ready"
+                if verified and status["transformers_version"]
+                else "Provider Required"
+                if verified
+                else "Corrupted"
+            )
+            return CatalogVerifyResponse(
+                catalog_id=catalog_id,
+                installation_state=state,
+                verified=verified,
+                expected_checksum=spec.weight_sha256,
+                actual_checksum=actual_checksum,
+                path=str(status["path"]) if status["cached"] else None,
+                reason=None
+                if verified
+                else status["reason"] or "Optional model verification failed.",
+            )
+
         if not entry.expected_files:
             return CatalogVerifyResponse(
                 catalog_id=catalog_id,
@@ -185,6 +220,9 @@ class ModelInstallService:
         active = self._active_job(project_id, catalog_id)
         if active is not None:
             raise ConflictError("Cancel the active installation before removing this model")
+        if entry.provider_id in OPTIONAL_MODEL_SPECS:
+            remove_optional_model_cache(self.settings, entry.provider_id)
+            return
         for expected in entry.expected_files:
             catalog_asset_path(self.settings, catalog_id, expected.filename).unlink(missing_ok=True)
         remove_catalog_manifest_record(self.settings, catalog_id)
@@ -195,6 +233,10 @@ class ModelInstallService:
         distribution = {
             "ultralytics": "ultralytics",
             "depth_anything_v2": "transformers",
+            "grounding_dino": "transformers",
+            "sam2": "transformers",
+            "smolvlm": "transformers",
+            "scale_label_ocr": "transformers",
         }.get(entry.provider_id)
         if distribution is not None:
             try:
@@ -208,9 +250,15 @@ class ModelInstallService:
             provider_id=entry.provider_id,
             provider_version=installed_provider_version,
             provider_ready=installed_provider_version is not None,
-            expected_files_valid=bool(entry.expected_files)
-            and all(
-                item.size_bytes > 0 and len(item.sha256) == 64 for item in entry.expected_files
+            expected_files_valid=(
+                entry.provider_id in OPTIONAL_MODEL_SPECS
+                or (
+                    bool(entry.expected_files)
+                    and all(
+                        item.size_bytes > 0 and len(item.sha256) == 64
+                        for item in entry.expected_files
+                    )
+                )
             ),
             checked_at=datetime.now(UTC),
         )

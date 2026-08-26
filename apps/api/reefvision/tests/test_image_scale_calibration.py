@@ -112,16 +112,33 @@ def test_calibration_profile_requires_confirmation_and_matching_resolution(
     client: TestClient,
 ) -> None:
     project = create_project(client, "Calibration profile reuse")
-    source = import_one(client, project["id"], filename="source.png", size=(100, 80))
-    target = import_one(client, project["id"], filename="target.png", size=(100, 80))
+    source = import_one(
+        client,
+        project["id"],
+        filename="source.png",
+        relative_path="calibration/source.png",
+        size=(100, 80),
+    )
+
+    # Use different image content at the same resolution so import
+    # deduplication does not collapse the source and target fixtures.
+    target_stream = BytesIO()
+    Image.new("RGB", (100, 80), (21, 90, 120)).save(target_stream, format="PNG")
+    target_id = _import_bytes(
+        client,
+        project["id"],
+        filename="target.png",
+        content=target_stream.getvalue(),
+    )
+
     mismatch = import_one(
         client,
         project["id"],
         filename="mismatch.png",
+        relative_path="calibration/mismatch.png",
         size=(120, 80),
     )
     source_id = source["successful"][0]["image_id"]
-    target_id = target["successful"][0]["image_id"]
     mismatch_id = mismatch["successful"][0]["image_id"]
 
     saved = client.put(
@@ -151,9 +168,7 @@ def test_calibration_profile_requires_confirmation_and_matching_resolution(
     assert saved.json()["camera_signature"]["width_px"] == 100
     assert saved.json()["camera_signature"]["height_px"] == 80
 
-    profiles = client.get(
-        f"/api/v1/projects/{project['id']}/measurement-calibration-profiles"
-    )
+    profiles = client.get(f"/api/v1/projects/{project['id']}/measurement-calibration-profiles")
     assert profiles.status_code == 200, profiles.text
     assert [item["profile_name"] for item in profiles.json()] == ["Canon coral rig"]
 

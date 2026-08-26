@@ -14,6 +14,8 @@ AdvancedProviderTask = Literal[
     "relative_depth",
     "caption",
     "phrase_grounding",
+    "visual_question",
+    "semantic_segment",
 ]
 
 
@@ -36,6 +38,7 @@ class AdvancedProviderPreflightRequest(BaseModel):
     task: AdvancedProviderTask
     device: str = Field(default="auto", min_length=1, max_length=30)
     model_id: str | None = Field(default=None, max_length=36)
+    allow_model_download: bool = False
     prompt_fields: dict[str, object] = Field(default_factory=dict)
 
 

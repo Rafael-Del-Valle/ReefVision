@@ -67,11 +67,57 @@ export function preflightAdvancedProvider(
     task: string;
     device: string;
     model_id?: string | null;
+    allow_model_download?: boolean;
     prompt_fields: Record<string, unknown>;
   },
 ): Promise<AdvancedProviderPreflight> {
   return request<AdvancedProviderPreflight>(
     `/projects/${encodeURIComponent(projectId)}/advanced-providers/${encodeURIComponent(providerId)}/preflight`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export interface AdvancedProviderExecution {
+  provider_id: string;
+  task: string;
+  status: string;
+  model_id: string | null;
+  model_revision: string | null;
+  result: Record<string, unknown>;
+  warnings: string[];
+}
+
+export interface AdvancedProviderImageOption {
+  id: string;
+  original_filename: string;
+  width_px: number;
+  height_px: number;
+}
+
+export async function listAdvancedProviderImages(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<AdvancedProviderImageOption[]> {
+  const page = await request<{
+    items: AdvancedProviderImageOption[];
+  }>(`/projects/${encodeURIComponent(projectId)}/images?page=1&page_size=100`, {
+    signal,
+  });
+  return page.items;
+}
+
+export function executeAdvancedProvider(
+  projectId: string,
+  providerId: string,
+  payload: {
+    task: string;
+    device: string;
+    allow_model_download: boolean;
+    prompt_fields: Record<string, unknown>;
+  },
+): Promise<AdvancedProviderExecution> {
+  return request<AdvancedProviderExecution>(
+    `/projects/${encodeURIComponent(projectId)}/advanced-providers/${encodeURIComponent(providerId)}/execute`,
     { method: "POST", body: JSON.stringify(payload) },
   );
 }

@@ -222,6 +222,10 @@ def test_inference_job_creates_pending_proposal_and_acceptance_records_provenanc
     assert payload["annotation"]["source_type"] == "accepted_prediction"
     assert payload["annotation"]["source_prediction_id"] == pending[0]["id"]
     assert payload["annotation"]["provenance_json"]["original_confidence"] == 0.91
+    for key, value in (pending[0]["provenance_json"] or {}).items():
+        assert payload["proposal"]["provenance_json"][key] == value
+    assert payload["proposal"]["confidence"] == pending[0]["confidence"]
+    assert payload["proposal"]["predicted_label"] == pending[0]["predicted_label"]
 
 
 def test_rejecting_a_prediction_does_not_create_an_annotation(

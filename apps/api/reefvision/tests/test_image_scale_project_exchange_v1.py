@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 from typing import cast
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from reefvision.config import Settings
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
@@ -24,15 +26,32 @@ def test_scale_calibration_round_trip_remaps_profile_source_and_preserves_homogr
         relative_path="calibration/source-reference.png",
         size=(100, 80),
     )
-    target_report = import_one(
-        client,
-        project["id"],
-        filename="target-coral.png",
-        relative_path="calibration/target-coral.png",
-        size=(100, 80),
+    # Keep the target at the same 100 x 80 resolution required for
+    # camera-profile reuse, but give it unique pixel content so image
+    # deduplication does not collapse the two fixtures.
+    target_stream = BytesIO()
+    Image.new("RGB", (100, 80), (21, 90, 120)).save(
+        target_stream,
+        format="PNG",
     )
+    target_report = client.post(
+        f"/api/v1/projects/{project['id']}/imports/images",
+        files=[
+            (
+                "files",
+                (
+                    "target-coral.png",
+                    target_stream.getvalue(),
+                    "application/octet-stream",
+                ),
+            )
+        ],
+        data={"relative_paths": "calibration/target-coral.png"},
+    )
+    assert target_report.status_code == 200, target_report.text
+
     source_image_id = str(source_report["successful"][0]["image_id"])
-    target_image_id = str(target_report["successful"][0]["image_id"])
+    target_image_id = str(target_report.json()["successful"][0]["image_id"])
 
     source_calibration = client.put(
         f"/api/v1/images/{source_image_id}/measurement-calibration",
@@ -91,9 +110,7 @@ def test_scale_calibration_round_trip_remaps_profile_source_and_preserves_homogr
         export_payload["job_id"],
     )
 
-    package_response = client.get(
-        f"/api/v1/exchange-packages/{export_payload['package']['id']}"
-    )
+    package_response = client.get(f"/api/v1/exchange-packages/{export_payload['package']['id']}")
     assert package_response.status_code == 200, package_response.text
     package = package_response.json()
     archive_path = test_settings.resolved_data_dir / Path(package["archive_path"])
@@ -117,17 +134,14 @@ def test_scale_calibration_round_trip_remaps_profile_source_and_preserves_homogr
     images_response = client.get(f"/api/v1/projects/{imported_project_id}/images")
     assert images_response.status_code == 200, images_response.text
     imported_images = {
-        str(item["original_filename"]): str(item["id"])
-        for item in images_response.json()["items"]
+        str(item["original_filename"]): str(item["id"]) for item in images_response.json()["items"]
     }
     imported_source_id = imported_images["source-reference.png"]
     imported_target_id = imported_images["target-coral.png"]
     assert imported_source_id != source_image_id
     assert imported_target_id != target_image_id
 
-    imported_source = client.get(
-        f"/api/v1/images/{imported_source_id}/measurement-calibration"
-    )
+    imported_source = client.get(f"/api/v1/images/{imported_source_id}/measurement-calibration")
     assert imported_source.status_code == 200, imported_source.text
     imported_source_payload = imported_source.json()
     assert imported_source_payload["source"] == "charuco"
@@ -141,9 +155,7 @@ def test_scale_calibration_round_trip_remaps_profile_source_and_preserves_homogr
     assert imported_source_payload["camera_signature"]["width_px"] == 100
     assert imported_source_payload["camera_signature"]["height_px"] == 80
 
-    imported_target = client.get(
-        f"/api/v1/images/{imported_target_id}/measurement-calibration"
-    )
+    imported_target = client.get(f"/api/v1/images/{imported_target_id}/measurement-calibration")
     assert imported_target.status_code == 200, imported_target.text
     imported_target_payload = imported_target.json()
     assert imported_target_payload["source"] == "camera_profile"
@@ -152,12 +164,8 @@ def test_scale_calibration_round_trip_remaps_profile_source_and_preserves_homogr
     assert imported_target_payload["perspective_homography"] is None
 
     # Imported project metadata must remain independent after the source project changes.
-    cleared_source = client.delete(
-        f"/api/v1/images/{source_image_id}/measurement-calibration"
-    )
+    cleared_source = client.delete(f"/api/v1/images/{source_image_id}/measurement-calibration")
     assert cleared_source.status_code == 204, cleared_source.text
-    still_imported = client.get(
-        f"/api/v1/images/{imported_source_id}/measurement-calibration"
-    )
+    still_imported = client.get(f"/api/v1/images/{imported_source_id}/measurement-calibration")
     assert still_imported.status_code == 200, still_imported.text
     assert still_imported.json()["profile_name"] == "Fixed coral camera rig"

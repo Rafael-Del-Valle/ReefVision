@@ -188,6 +188,7 @@ test("imports an image and updates leakage-group metadata", async ({
 
   await expect(page.getByText("1 files processed")).toBeVisible();
   await expect(page.getByText("swiftia-frame.png")).toBeVisible();
+  await page.getByText("Image details").click();
   await page.getByPlaceholder("e.g. source-image-001").fill("source-01");
   await page.getByLabel("Image status").selectOption("reviewed");
   await page.getByRole("button", { name: "Save metadata" }).click();

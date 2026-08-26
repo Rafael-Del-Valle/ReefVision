@@ -8,11 +8,7 @@ import pytest
 
 @pytest.fixture(scope="module")
 def harness():
-    path = (
-        Path(__file__).resolve().parents[4]
-        / "scripts"
-        / "acceptance_coral_classification.py"
-    )
+    path = Path(__file__).resolve().parents[4] / "scripts" / "acceptance_coral_classification.py"
     spec = importlib.util.spec_from_file_location("acceptance_coral_classification", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -47,9 +43,7 @@ def test_inspection_rejects_single_class_dataset(harness, tmp_path: Path) -> Non
         harness.inspect_classification_dataset(tmp_path)
 
 
-def test_inspection_rejects_class_missing_from_required_split(
-    harness, tmp_path: Path
-) -> None:
+def test_inspection_rejects_class_missing_from_required_split(harness, tmp_path: Path) -> None:
     _write_layout(tmp_path, ("Healthy", "Stressed"))
     for path in (tmp_path / "test" / "Stressed").iterdir():
         path.unlink()

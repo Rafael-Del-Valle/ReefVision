@@ -2,11 +2,11 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "ReefVision",
   "mainBinaryName": "ReefVision",
-  "version": "1.7.0",
+  "version": "1.0.0",
   "identifier": "org.reefvision.desktop",
   "build": {
-    "beforeDevCommand": "npm run dev -- --host 127.0.0.1 --port 5173",
-    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run ui:dev -- --host 127.0.0.1 --port 5173",
+    "beforeBuildCommand": "npm run ui:build",
     "devUrl": "http://127.0.0.1:5173",
     "frontendDist": "../dist"
   },
@@ -22,9 +22,7 @@
         "resizable": true
       }
     ],
-    "security": {
-      "csp": null
-    }
+    "security": { "csp": null }
   },
   "bundle": {
     "active": true,

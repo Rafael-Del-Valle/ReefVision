@@ -1,5 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import {
+  FormEvent,
+  KeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   cancelJob,
@@ -18,6 +25,13 @@ import {
   type ProjectImageListItem,
 } from "../../api/client";
 import { AnnotationImportControls } from "./AnnotationImportControls";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+} from "../../components/ui/AsyncState";
+import { StatusBadge } from "../../components/ui/StatusBadge";
+import { WorkspaceShell } from "../../components/ui/WorkspaceShell";
 
 const statuses: { value: AnnotationStatus | ""; label: string }[] = [
   { value: "", label: "All statuses" },
@@ -64,7 +78,19 @@ function ImageCard({
   });
 
   return (
-    <article className="image-card">
+    <article
+      className={`image-card ${selected ? "selected" : ""}`}
+      tabIndex={0}
+      aria-label={`${image.original_filename}, ${image.annotation_count} annotations, ${status}`}
+      onDoubleClick={() => onOpenAnnotation?.(image.id)}
+      onKeyDown={(event: KeyboardEvent<HTMLElement>) => {
+        if (event.key === "Enter") onOpenAnnotation?.(image.id);
+        if (event.key === " ") {
+          event.preventDefault();
+          onToggleSelected(image.id);
+        }
+      }}
+    >
       <div className="thumbnail-frame">
         {image.thumbnail_path && !thumbnailFailed ? (
           <img
@@ -81,54 +107,27 @@ function ImageCard({
         )}
       </div>
       <div className="image-card-body">
-        <div>
+        <div className="image-card-identity">
           <h4 title={image.original_filename}>{image.original_filename}</h4>
           <p>
             {image.width_px.toLocaleString()} x{" "}
             {image.height_px.toLocaleString()} px
           </p>
         </div>
-        <label className="annotation-class-visibility">
+        <label className="image-card-select">
           <input
             type="checkbox"
             checked={selected}
             onChange={() => onToggleSelected(image.id)}
           />
-          Selected for inference
+          Select image
         </label>
         <div className="image-card-topline">
           <span className="count-chip">
             {image.annotation_count} annotations
           </span>
-          <span className="count-chip secondary-chip">
-            Revision {image.annotation_revision}
-          </span>
+          <StatusBadge status={status} />
         </div>
-        <label>
-          Image status
-          <select
-            value={status}
-            onChange={(event) =>
-              setStatus(event.target.value as AnnotationStatus)
-            }
-          >
-            {statuses
-              .filter((item) => item.value)
-              .map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-          </select>
-        </label>
-        <label>
-          Group key
-          <input
-            value={groupKey}
-            placeholder="e.g. source-image-001"
-            onChange={(event) => setGroupKey(event.target.value)}
-          />
-        </label>
         <div className="image-card-actions">
           <button
             type="button"
@@ -137,6 +136,35 @@ function ImageCard({
           >
             Annotate
           </button>
+        </div>
+        <details className="image-card-details">
+          <summary>Image details</summary>
+          <label>
+            Image status
+            <select
+              value={status}
+              onChange={(event) =>
+                setStatus(event.target.value as AnnotationStatus)
+              }
+            >
+              {statuses
+                .filter((item) => item.value)
+                .map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <label>
+            Group key
+            <input
+              value={groupKey}
+              placeholder="e.g. source-image-001"
+              onChange={(event) => setGroupKey(event.target.value)}
+            />
+          </label>
+          <small>Annotation revision {image.annotation_revision}</small>
           <button
             type="button"
             className="secondary"
@@ -145,7 +173,7 @@ function ImageCard({
           >
             {update.isPending ? "Saving..." : "Save metadata"}
           </button>
-        </div>
+        </details>
         {update.error && <p className="form-error">{update.error.message}</p>}
       </div>
     </article>
@@ -198,6 +226,10 @@ export function Gallery({
   const [confidenceThreshold, setConfidenceThreshold] = useState("0.25");
   const [device, setDevice] = useState("cpu");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<
+    "filename" | "newest" | "oldest" | "annotations"
+  >("filename");
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     if (folderInput.current) {
@@ -306,17 +338,38 @@ export function Gallery({
   const selectedModel =
     detectorModels.data?.find((model) => model.id === selectedModelId) ?? null;
 
+  const visibleImages = useMemo(() => {
+    const items = [...(images.data?.items ?? [])];
+    return items.sort((left, right) => {
+      if (sortBy === "newest")
+        return Date.parse(right.updated_at) - Date.parse(left.updated_at);
+      if (sortBy === "oldest")
+        return Date.parse(left.updated_at) - Date.parse(right.updated_at);
+      if (sortBy === "annotations")
+        return right.annotation_count - left.annotation_count;
+      return left.original_filename.localeCompare(
+        right.original_filename,
+        undefined,
+        { numeric: true },
+      );
+    });
+  }, [images.data?.items, sortBy]);
+
+  function resetFilters() {
+    setFilenameDraft("");
+    setStatusDraft("");
+    setGroupDraft("");
+    setFilters({ filename: "", annotationStatus: "", groupKey: "" });
+    setPage(1);
+  }
+
   return (
-    <section className="gallery-panel">
-      <div className="section-heading gallery-heading">
-        <div>
-          <p className="eyebrow">Managed image library</p>
-          <h3>Project gallery</h3>
-          <span>
-            {images.data?.total ?? 0} indexed images | {selectedImageIds.length}{" "}
-            selected
-          </span>
-        </div>
+    <WorkspaceShell
+      className="gallery-panel"
+      eyebrow="Images & annotation"
+      title="Project gallery"
+      description={`Browse, select, and annotate imagery in ${project.name}.`}
+      actions={
         <div className="import-actions">
           <label className="button-label">
             Import files
@@ -340,103 +393,120 @@ export function Gallery({
             />
           </label>
         </div>
-      </div>
-
-      {importer.isPending && <p>Importing and validating images...</p>}
-      {importer.error && <p className="form-error">{importer.error.message}</p>}
+      }
+    >
+      {importer.isPending && (
+        <LoadingState
+          title="Importing images"
+          description="ReefVision is validating files, checking duplicates, and creating managed copies."
+        />
+      )}
+      {importer.error && (
+        <ErrorState
+          title="Images could not be imported"
+          message="ReefVision could not complete this import."
+          error={importer.error}
+        />
+      )}
       {report && <ImportSummary report={report} />}
 
-      <AnnotationImportControls projectId={project.id} />
-
-      <section className="annotation-sidebar-section">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Detector workflow</p>
-            <h3>Run local inference</h3>
+      <details
+        className="gallery-advanced"
+        open={showAdvanced}
+        onToggle={(event) => setShowAdvanced(event.currentTarget.open)}
+      >
+        <summary>Advanced import and model actions</summary>
+        <AnnotationImportControls projectId={project.id} />
+        <section className="annotation-sidebar-section">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Detector workflow</p>
+              <h3>Run local inference</h3>
+            </div>
+            <span>{detectorModels.data?.length ?? 0} detector models</span>
           </div>
-          <span>{detectorModels.data?.length ?? 0} detector models</span>
-        </div>
-        <label>
-          Detector model
-          <select
-            value={selectedModelId}
-            onChange={(event) => setSelectedModelId(event.target.value)}
-          >
-            {detectorModels.data?.length ? (
-              detectorModels.data.map((model: ModelRegistration) => (
-                <option key={model.id} value={model.id}>
-                  {model.display_name}
-                </option>
-              ))
-            ) : (
-              <option value="">No detector models registered</option>
-            )}
-          </select>
-        </label>
-        <label>
-          Confidence threshold
-          <input
-            type="number"
-            min="0"
-            max="1"
-            step="0.05"
-            value={confidenceThreshold}
-            onChange={(event) => setConfidenceThreshold(event.target.value)}
-          />
-        </label>
-        <label>
-          Device
-          <select
-            value={device}
-            onChange={(event) => setDevice(event.target.value)}
-          >
-            <option value="cpu">CPU</option>
-            <option value="auto">Auto</option>
-            <option value="cuda">CUDA</option>
-          </select>
-        </label>
-        <div className="annotation-editor-inline-actions">
-          <button
-            type="button"
-            disabled={
-              !selectedModel ||
-              selectedImageIds.length === 0 ||
-              inference.isPending ||
-              activeJob.data?.status === "running"
-            }
-            onClick={() => inference.mutate()}
-          >
-            {inference.isPending ? "Queueing..." : "Run detector"}
-          </button>
-          {activeJob.data &&
-            !["succeeded", "failed", "cancelled"].includes(
-              activeJob.data.status,
-            ) && (
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => cancelInference.mutate(activeJob.data.id)}
-              >
-                Cancel job
-              </button>
-            )}
-        </div>
-        {inference.error && (
-          <p className="form-error">{inference.error.message}</p>
-        )}
-        {cancelInference.error && (
-          <p className="form-error">{cancelInference.error.message}</p>
-        )}
-        {activeJob.data && (
-          <p>
-            Job {activeJob.data.status}: {activeJob.data.progress_current}/
-            {activeJob.data.progress_total} images
-          </p>
-        )}
-        {activeJob.data?.error_message && (
-          <p className="form-error">{activeJob.data.error_message}</p>
-        )}
-      </section>
+          <label>
+            Detector model
+            <select
+              value={selectedModelId}
+              onChange={(event) => setSelectedModelId(event.target.value)}
+            >
+              {detectorModels.data?.length ? (
+                detectorModels.data.map((model: ModelRegistration) => (
+                  <option key={model.id} value={model.id}>
+                    {model.display_name}
+                  </option>
+                ))
+              ) : (
+                <option value="">No detector models registered</option>
+              )}
+            </select>
+          </label>
+          <label>
+            Confidence threshold
+            <input
+              type="number"
+              min="0"
+              max="1"
+              step="0.05"
+              value={confidenceThreshold}
+              onChange={(event) => setConfidenceThreshold(event.target.value)}
+            />
+          </label>
+          <label>
+            Device
+            <select
+              value={device}
+              onChange={(event) => setDevice(event.target.value)}
+            >
+              <option value="cpu">CPU</option>
+              <option value="auto">Auto</option>
+              <option value="cuda">CUDA</option>
+            </select>
+          </label>
+          <div className="annotation-editor-inline-actions">
+            <button
+              type="button"
+              disabled={
+                !selectedModel ||
+                selectedImageIds.length === 0 ||
+                inference.isPending ||
+                activeJob.data?.status === "running"
+              }
+              onClick={() => inference.mutate()}
+            >
+              {inference.isPending ? "Queueing..." : "Run detector"}
+            </button>
+            {activeJob.data &&
+              !["succeeded", "failed", "cancelled"].includes(
+                activeJob.data.status,
+              ) && (
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => cancelInference.mutate(activeJob.data.id)}
+                >
+                  Cancel job
+                </button>
+              )}
+          </div>
+          {inference.error && (
+            <p className="form-error">{inference.error.message}</p>
+          )}
+          {cancelInference.error && (
+            <p className="form-error">{cancelInference.error.message}</p>
+          )}
+          {activeJob.data && (
+            <p>
+              Job {activeJob.data.status}: {activeJob.data.progress_current}/
+              {activeJob.data.progress_total} images
+            </p>
+          )}
+          {activeJob.data?.error_message && (
+            <p className="form-error">{activeJob.data.error_message}</p>
+          )}
+        </section>
+      </details>
 
       <form className="gallery-filters" onSubmit={applyFilters}>
         <label>
@@ -444,7 +514,12 @@ export function Gallery({
           <input
             value={filenameDraft}
             placeholder="Search filenames"
-            onChange={(event) => setFilenameDraft(event.target.value)}
+            onChange={(event) => {
+              const value = event.target.value;
+              setFilenameDraft(value);
+              setFilters((current) => ({ ...current, filename: value.trim() }));
+              setPage(1);
+            }}
           />
         </label>
         <label>
@@ -468,19 +543,76 @@ export function Gallery({
             onChange={(event) => setGroupDraft(event.target.value)}
           />
         </label>
+        <label>
+          Sort
+          <select
+            value={sortBy}
+            onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
+          >
+            <option value="filename">Filename</option>
+            <option value="newest">Newest updated</option>
+            <option value="oldest">Oldest updated</option>
+            <option value="annotations">Annotation count</option>
+          </select>
+        </label>
         <button type="submit">Apply filters</button>
+        <button type="button" className="secondary" onClick={resetFilters}>
+          Clear
+        </button>
       </form>
 
-      {images.isPending && <p>Loading gallery...</p>}
-      {images.error && <p className="form-error">{images.error.message}</p>}
+      <div className="gallery-selection-toolbar" aria-live="polite">
+        <strong>{selectedImageIds.length} selected</strong>
+        <button
+          type="button"
+          className="secondary"
+          disabled={visibleImages.length === 0}
+          onClick={() =>
+            setSelectedImageIds(visibleImages.map((image) => image.id))
+          }
+        >
+          Select all visible
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          disabled={selectedImageIds.length === 0}
+          onClick={() => setSelectedImageIds([])}
+        >
+          Clear selection
+        </button>
+      </div>
+
+      {images.isPending && (
+        <LoadingState
+          title="Loading images"
+          description="Preparing thumbnails and annotation status."
+        />
+      )}
+      {images.error && (
+        <ErrorState
+          title="Images could not be loaded"
+          message="ReefVision could not load this project's images."
+          error={images.error}
+          onRetry={() => void images.refetch()}
+        />
+      )}
       {images.data?.total === 0 && (
-        <div className="empty-state gallery-empty">
-          <h4>No matching images</h4>
-          <p>Import images or adjust the gallery filters.</p>
-        </div>
+        <EmptyState
+          title={
+            filters.filename || filters.annotationStatus || filters.groupKey
+              ? "No matching images"
+              : "No images yet"
+          }
+          description={
+            filters.filename || filters.annotationStatus || filters.groupKey
+              ? "Clear or adjust the gallery filters."
+              : "Import images to begin annotation."
+          }
+        />
       )}
       <div className="image-grid">
-        {images.data?.items.map((image) => (
+        {visibleImages.map((image) => (
           <ImageCard
             key={image.id}
             image={image}
@@ -514,6 +646,6 @@ export function Gallery({
           </button>
         </nav>
       )}
-    </section>
+    </WorkspaceShell>
   );
 }

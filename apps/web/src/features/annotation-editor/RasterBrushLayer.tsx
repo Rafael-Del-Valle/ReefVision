@@ -6,7 +6,7 @@ import type { Point } from "./types";
 interface RasterBrushLayerProps {
   width: number;
   height: number;
-  mode: RasterEditMode;
+  mode: Exclude<RasterEditMode, "fill">;
   brushRadius: number;
   disabled?: boolean;
   onStroke: (points: Point[]) => void;

@@ -435,7 +435,9 @@ export function PolygonMaskLayer({
               strokeWidth={selected ? 3 : 2}
               vectorEffect="non-scaling-stroke"
               style={{ cursor: tool === "select" ? "pointer" : "default" }}
-              onDoubleClick={(event) => insertVertex(event, mask)}
+              onDoubleClick={(event) => {
+                if (mask.geometry_kind === "polygon") insertVertex(event, mask);
+              }}
               onPointerDown={(event) => {
                 event.stopPropagation();
                 if (tool === "select") {
@@ -445,6 +447,7 @@ export function PolygonMaskLayer({
             />
             {selected &&
               tool === "select" &&
+              mask.geometry_kind === "polygon" &&
               mask.points.map((point, pointIndex) => (
                 <circle
                   key={`${mask.id}-${pointIndex}`}

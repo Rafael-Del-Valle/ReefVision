@@ -13,13 +13,9 @@ def test_implemented_providers_use_single_opencv_contrib_runtime() -> None:
 
     assert cv2_requirements
     assert all(
-        requirement.distribution_name == "opencv-contrib-python"
-        for requirement in cv2_requirements
+        requirement.distribution_name == "opencv-contrib-python" for requirement in cv2_requirements
     )
-    assert all(
-        requirement.required_version == "4.12.0.88"
-        for requirement in cv2_requirements
-    )
+    assert all(requirement.required_version == "4.12.0.88" for requirement in cv2_requirements)
 
 
 def test_implemented_provider_specs_do_not_require_conflicting_opencv_wheels() -> None:

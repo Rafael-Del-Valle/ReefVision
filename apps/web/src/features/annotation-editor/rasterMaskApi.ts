@@ -2,7 +2,7 @@ import { getApiBaseUrl } from "../../runtime";
 import type { ProjectImage } from "../../api/client";
 import type { MaskAnnotationRecord, Point } from "./types";
 
-export type RasterEditMode = "paint" | "erase";
+export type RasterEditMode = "paint" | "erase" | "fill";
 
 export interface RasterMaskEditPayload {
   base_revision: number;
@@ -10,6 +10,7 @@ export interface RasterMaskEditPayload {
   label_class_id: string;
   mode: RasterEditMode;
   brush_radius: number;
+  fill_tolerance?: number;
   strokes: Array<{ points: Point[] }>;
 }
 

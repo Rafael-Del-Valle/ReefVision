@@ -40,6 +40,7 @@ import {
   type PredictionProposal,
   type Project,
 } from "../../api/client";
+import { ErrorState, LoadingState } from "../../components/ui/AsyncState";
 import {
   annotationEditorReducer,
   initialAnnotationEditorState,
@@ -73,6 +74,10 @@ import {
   visibilitySourceLabel,
   type VisibilityScopeKey,
 } from "./classVisibility";
+import {
+  PredictionInspector,
+  type ReviewedPredictionGeometry,
+} from "./PredictionInspector";
 
 interface AnnotationEditorProps {
   project: Project;
@@ -266,6 +271,9 @@ export function AnnotationEditor({
   const [predictionClassFilter, setPredictionClassFilter] = useState("");
   const [predictionConfidenceFilter, setPredictionConfidenceFilter] =
     useState("0");
+  const [predictionStatusFilter, setPredictionStatusFilter] =
+    useState("pending");
+  const [predictionSort, setPredictionSort] = useState("confidence-asc");
   const [selectedPredictionIds, setSelectedPredictionIds] = useState<string[]>(
     [],
   );
@@ -276,6 +284,9 @@ export function AnnotationEditor({
   const [predictionClassOverrides, setPredictionClassOverrides] = useState<
     Record<string, string>
   >({});
+  const [predictionGeometryOverrides, setPredictionGeometryOverrides] =
+    useState<Record<string, ReviewedPredictionGeometry>>({});
+  const [objectFilter, setObjectFilter] = useState("");
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [fullImageLoaded, setFullImageLoaded] = useState(false);
   const [fullImageFailed, setFullImageFailed] = useState(false);
@@ -339,6 +350,7 @@ export function AnnotationEditor({
       predictionModelFilter,
       predictionClassFilter,
       predictionConfidenceFilter,
+      predictionStatusFilter,
     ],
     queryFn: ({ signal }) =>
       getPredictions(
@@ -347,7 +359,7 @@ export function AnnotationEditor({
           modelId: predictionModelFilter || undefined,
           labelClassId: predictionClassFilter || undefined,
           minConfidence: Number(predictionConfidenceFilter),
-          reviewStatus: "pending",
+          reviewStatus: predictionStatusFilter || undefined,
         },
         signal,
       ),
@@ -362,6 +374,7 @@ export function AnnotationEditor({
     dispatch({ type: "loadSession", session: sessionQuery.data });
     setHideAnnotations(false);
     setSelectedPredictionIds([]);
+    setPredictionGeometryOverrides({});
     setInteraction(null);
     setView(null);
   }, [sessionQuery.data]);
@@ -590,14 +603,6 @@ export function AnnotationEditor({
     [launchContext?.highlightPredictionIds],
   );
 
-  const selectedAnnotations = useMemo(
-    () =>
-      state.document.annotations.filter((annotation) =>
-        state.selectedIds.includes(annotation.id),
-      ),
-    [state.document.annotations, state.selectedIds],
-  );
-
   const renderedAnnotations = useMemo(() => {
     if (!imageSize) {
       return state.document.annotations;
@@ -654,7 +659,17 @@ export function AnnotationEditor({
   const dirty = isDirty(state);
   const canUndo = state.history.length > 0;
   const canRedo = state.future.length > 0;
-  const activeClassId = state.activeClassId ?? labelClasses[0]?.id ?? null;
+  const selectableLabelClasses = useMemo(
+    () => labelClasses.filter((labelClass) => labelClass.is_active !== false),
+    [labelClasses],
+  );
+  const activeClassId =
+    state.activeClassId &&
+    selectableLabelClasses.some(
+      (labelClass) => labelClass.id === state.activeClassId,
+    )
+      ? state.activeClassId
+      : (selectableLabelClasses[0]?.id ?? null);
   const activeClass =
     (activeClassId ? labelClassesById.get(activeClassId) : null) ?? null;
   const saveStatusText = saveStateLabel(state.saveState, state.saveMessage);
@@ -664,12 +679,24 @@ export function AnnotationEditor({
     if (!showPredictions) {
       return [];
     }
-    return (predictionQuery.data?.items ?? []).filter(
+    const filtered = (predictionQuery.data?.items ?? []).filter(
       (proposal) =>
         !proposal.label_class_id ||
         !predictionHiddenClassSet.has(proposal.label_class_id),
     );
-  }, [predictionHiddenClassSet, predictionQuery.data?.items, showPredictions]);
+    return [...filtered].sort((left, right) => {
+      if (predictionSort === "confidence-desc")
+        return right.confidence - left.confidence;
+      if (predictionSort === "class")
+        return left.predicted_label.localeCompare(right.predicted_label);
+      return left.confidence - right.confidence;
+    });
+  }, [
+    predictionHiddenClassSet,
+    predictionQuery.data?.items,
+    predictionSort,
+    showPredictions,
+  ]);
   const predictionCounts = showPredictions
     ? (predictionQuery.data?.counts ?? {})
     : {};
@@ -680,6 +707,18 @@ export function AnnotationEditor({
           (proposal) => proposal.id === selectedPredictionIds[0],
         ) ?? null)
       : null;
+  const selectedPredictionPosition = selectedPrediction
+    ? visiblePredictions.findIndex(
+        (proposal) => proposal.id === selectedPrediction.id,
+      )
+    : -1;
+  const selectPredictionAt = useCallback(
+    (index: number) => {
+      const proposal = visiblePredictions[index];
+      if (proposal) setSelectedPredictionIds([proposal.id]);
+    },
+    [visiblePredictions],
+  );
   const assistSourcePrediction =
     (assistSession?.source_prediction_id
       ? (allPredictions.find(
@@ -855,14 +894,32 @@ export function AnnotationEditor({
           predictionClassOverrides[proposal.id] ||
           proposal.label_class_id ||
           activeClassId,
+        ...(predictionGeometryOverrides[proposal.id] ?? {
+          x_min: proposal.x_min,
+          y_min: proposal.y_min,
+          x_max: proposal.x_max,
+          y_max: proposal.y_max,
+        }),
       }),
-    onSuccess: async () => {
+    onSuccess: async (_, proposal) => {
+      const oldIndex = visiblePredictions.findIndex(
+        (item) => item.id === proposal.id,
+      );
       await Promise.all([
         predictionQuery.refetch(),
         sessionQuery.refetch(),
         queryClient.invalidateQueries({ queryKey: ["images", project.id] }),
       ]);
-      setSelectedPredictionIds([]);
+      setSelectedPredictionIds(
+        visiblePredictions.filter((item) => item.id !== proposal.id)[oldIndex]
+          ?.id
+          ? [
+              visiblePredictions.filter((item) => item.id !== proposal.id)[
+                oldIndex
+              ].id,
+            ]
+          : [],
+      );
     },
   });
   const promptAssistMutation = useMutation({
@@ -931,9 +988,17 @@ export function AnnotationEditor({
   });
   const rejectPredictionMutation = useMutation({
     mutationFn: (proposalId: string) => rejectPrediction(proposalId),
-    onSuccess: async () => {
+    onSuccess: async (_, proposalId) => {
+      const oldIndex = visiblePredictions.findIndex(
+        (item) => item.id === proposalId,
+      );
       await predictionQuery.refetch();
-      setSelectedPredictionIds([]);
+      const remaining = visiblePredictions.filter(
+        (item) => item.id !== proposalId,
+      );
+      setSelectedPredictionIds(
+        remaining[oldIndex]?.id ? [remaining[oldIndex].id] : [],
+      );
     },
   });
   const bulkReviewMutation = useMutation({
@@ -1210,6 +1275,18 @@ export function AnnotationEditor({
       }
 
       switch (event.key.toLowerCase()) {
+        case "j":
+          if (selectedPredictionPosition >= 0) {
+            event.preventDefault();
+            selectPredictionAt(selectedPredictionPosition + 1);
+          }
+          break;
+        case "k":
+          if (selectedPredictionPosition >= 0) {
+            event.preventDefault();
+            selectPredictionAt(selectedPredictionPosition - 1);
+          }
+          break;
         case "b":
           event.preventDefault();
           dispatch({ type: "setTool", tool: "box" });
@@ -1217,6 +1294,10 @@ export function AnnotationEditor({
         case "v":
           event.preventDefault();
           dispatch({ type: "setTool", tool: "select" });
+          break;
+        case "p":
+          event.preventDefault();
+          dispatch({ type: "setTool", tool: "pan" });
           break;
         case "f":
           event.preventDefault();
@@ -1266,6 +1347,8 @@ export function AnnotationEditor({
     fitToScreen,
     flushPendingSave,
     labelClasses,
+    selectPredictionAt,
+    selectedPredictionPosition,
     sessionQuery.data?.next_image_id,
     sessionQuery.data?.previous_image_id,
   ]);
@@ -1434,11 +1517,9 @@ export function AnnotationEditor({
         !currentView ||
         !imageSize ||
         event.button === 1 ||
-        event.button === 2
+        event.button === 2 ||
+        state.tool === "pan"
       ) {
-        if (currentView && event.button !== 1 && event.button !== 2) {
-          return;
-        }
         if (currentView) {
           setInteraction({
             type: "panning",
@@ -1504,6 +1585,14 @@ export function AnnotationEditor({
         return;
       }
       if (event.button === 1 || event.button === 2) {
+        setInteraction({
+          type: "panning",
+          origin: { x: event.clientX, y: event.clientY },
+          initialView: currentView,
+        });
+        return;
+      }
+      if (state.tool === "pan") {
         setInteraction({
           type: "panning",
           origin: { x: event.clientX, y: event.clientY },
@@ -1588,35 +1677,27 @@ export function AnnotationEditor({
   );
 
   function togglePredictionSelection(proposalId: string) {
-    setSelectedPredictionIds((current) =>
-      current.includes(proposalId)
-        ? current.filter((item) => item !== proposalId)
-        : [...current, proposalId],
-    );
+    setSelectedPredictionIds([proposalId]);
   }
 
   if (sessionQuery.isPending || !sessionQuery.data || !imageSize) {
     return (
       <div className="annotation-editor-shell">
         <div className="annotation-editor-splash">
-          <h2>Loading annotation editor</h2>
-          <p>
-            {sessionQuery.error instanceof Error
-              ? sessionQuery.error.message
-              : "Preparing image and annotation data..."}
-          </p>
-          <div className="annotation-editor-splash-actions">
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => void sessionQuery.refetch()}
-            >
-              Retry
-            </button>
-            <button type="button" onClick={() => void handleClose()}>
-              {launchContext?.returnLabel ?? "Back to gallery"}
-            </button>
-          </div>
+          {sessionQuery.error ? (
+            <ErrorState
+              title="The annotation editor could not be loaded"
+              message="ReefVision could not load this image and its annotations."
+              error={sessionQuery.error}
+              onRetry={() => void sessionQuery.refetch()}
+              onBack={() => void handleClose()}
+            />
+          ) : (
+            <LoadingState
+              title="Loading annotation editor"
+              description="Preparing the image, classes, and saved annotations."
+            />
+          )}
         </div>
       </div>
     );
@@ -1668,20 +1749,6 @@ export function AnnotationEditor({
           )}
         </div>
         <div className="annotation-editor-actions">
-          <button
-            type="button"
-            className={state.tool === "select" ? "active" : "secondary"}
-            onClick={() => dispatch({ type: "setTool", tool: "select" })}
-          >
-            Select (V)
-          </button>
-          <button
-            type="button"
-            className={state.tool === "box" ? "active" : "secondary"}
-            onClick={() => dispatch({ type: "setTool", tool: "box" })}
-          >
-            Box (B)
-          </button>
           <button type="button" className="secondary" onClick={fitToScreen}>
             Fit (F)
           </button>
@@ -1713,7 +1780,47 @@ export function AnnotationEditor({
       </header>
 
       <div className="annotation-editor-body">
+        <aside className="annotation-tool-rail" aria-label="Annotation tools">
+          <button
+            type="button"
+            aria-label="Select tool"
+            title="Select and edit objects (V)"
+            aria-pressed={state.tool === "select"}
+            className={state.tool === "select" ? "active" : "secondary"}
+            onClick={() => dispatch({ type: "setTool", tool: "select" })}
+          >
+            <span aria-hidden="true">↖</span>
+            <small>Select</small>
+          </button>
+          <button
+            type="button"
+            aria-label="Pan tool"
+            title="Pan the image (P)"
+            aria-pressed={state.tool === "pan"}
+            className={state.tool === "pan" ? "active" : "secondary"}
+            onClick={() => dispatch({ type: "setTool", tool: "pan" })}
+          >
+            <span aria-hidden="true">✥</span>
+            <small>Pan</small>
+          </button>
+          <button
+            type="button"
+            aria-label="Box tool"
+            title="Draw bounding boxes (B)"
+            aria-pressed={state.tool === "box"}
+            className={state.tool === "box" ? "active" : "secondary"}
+            disabled={!activeClassId}
+            onClick={() => dispatch({ type: "setTool", tool: "box" })}
+          >
+            <span aria-hidden="true">□</span>
+            <small>Box</small>
+          </button>
+        </aside>
         <aside className="annotation-editor-sidebar">
+          <div className="annotation-inspector-heading">
+            <p className="eyebrow">Inspector</p>
+            <h3>Image annotations</h3>
+          </div>
           <section className="annotation-sidebar-section">
             <div className="section-heading">
               <div>
@@ -1831,15 +1938,54 @@ export function AnnotationEditor({
                 }
               />
             </label>
+            <label>
+              Review status
+              <select
+                value={predictionStatusFilter}
+                onChange={(event) =>
+                  setPredictionStatusFilter(event.target.value)
+                }
+              >
+                <option value="pending">Pending review</option>
+                <option value="accepted">Accepted</option>
+                <option value="edited_and_accepted">Edited and accepted</option>
+                <option value="rejected">Rejected</option>
+                <option value="">All states</option>
+              </select>
+            </label>
+            <label>
+              Sort predictions
+              <select
+                value={predictionSort}
+                onChange={(event) => setPredictionSort(event.target.value)}
+              >
+                <option value="confidence-asc">Lowest confidence first</option>
+                <option value="confidence-desc">
+                  Highest confidence first
+                </option>
+                <option value="class">Class</option>
+              </select>
+            </label>
             <div className="annotation-editor-inline-actions">
               <button
                 type="button"
                 className="secondary"
                 disabled={
                   visiblePredictions.length === 0 ||
+                  predictionStatusFilter !== "pending" ||
                   bulkReviewMutation.isPending
                 }
-                onClick={() => bulkReviewMutation.mutate("accept")}
+                onClick={() => {
+                  const count =
+                    selectedPredictionIds.length || visiblePredictions.length;
+                  if (
+                    window.confirm(
+                      `Accept ${count} pending predictions? Original model provenance will be preserved.`,
+                    )
+                  ) {
+                    bulkReviewMutation.mutate("accept");
+                  }
+                }}
               >
                 Accept visible
               </button>
@@ -1848,9 +1994,20 @@ export function AnnotationEditor({
                 className="secondary"
                 disabled={
                   visiblePredictions.length === 0 ||
+                  predictionStatusFilter !== "pending" ||
                   bulkReviewMutation.isPending
                 }
-                onClick={() => bulkReviewMutation.mutate("reject")}
+                onClick={() => {
+                  const count =
+                    selectedPredictionIds.length || visiblePredictions.length;
+                  if (
+                    window.confirm(
+                      `Reject ${count} pending predictions? The prediction records will be preserved.`,
+                    )
+                  ) {
+                    bulkReviewMutation.mutate("reject");
+                  }
+                }}
               >
                 Reject visible
               </button>
@@ -1892,55 +2049,8 @@ export function AnnotationEditor({
                       {proposal.confidence.toFixed(2)}
                     </strong>
                     <span>{proposal.model_display_name}</span>
-                    <label>
-                      Accept as
-                      <select
-                        value={
-                          predictionClassOverrides[proposal.id] ??
-                          proposal.label_class_id ??
-                          activeClassId ??
-                          ""
-                        }
-                        onChange={(event) =>
-                          setPredictionClassOverrides((current) => ({
-                            ...current,
-                            [proposal.id]: event.target.value,
-                          }))
-                        }
-                      >
-                        {labelClasses.map((labelClassOption) => (
-                          <option
-                            key={labelClassOption.id}
-                            value={labelClassOption.id}
-                          >
-                            {labelClassOption.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <div className="annotation-editor-inline-actions">
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          acceptPredictionMutation.mutate(proposal);
-                        }}
-                      >
-                        Accept
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          rejectPredictionMutation.mutate(proposal.id);
-                        }}
-                      >
-                        Reject
-                      </button>
-                    </div>
-                    {selected && <small>Selected for bulk review</small>}
+                    <span>{proposal.review_status.replaceAll("_", " ")}</span>
+                    {selected && <small>Selected for inspection</small>}
                   </div>
                 );
               })}
@@ -2078,6 +2188,34 @@ export function AnnotationEditor({
                 <h3>Annotation classes</h3>
               </div>
             </div>
+            <label className="annotation-active-class-control">
+              <span>Active annotation class</span>
+              <select
+                data-testid="active-annotation-class"
+                value={activeClassId ?? ""}
+                disabled={selectableLabelClasses.length === 0}
+                onChange={(event) => applyClassToSelection(event.target.value)}
+              >
+                {selectableLabelClasses.length === 0 ? (
+                  <option value="">No active classes available</option>
+                ) : (
+                  selectableLabelClasses.map((labelClass) => (
+                    <option key={labelClass.id} value={labelClass.id}>
+                      {labelClass.name}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+            {selectableLabelClasses.length === 0 && (
+              <div className="editor-message error" role="alert">
+                <p>
+                  This project has no active annotation classes. Open Data &
+                  annotation → Classes and create or reactivate a class before
+                  drawing annotations.
+                </p>
+              </div>
+            )}
             <div className="annotation-visibility-toolbar">
               <label>
                 <span>Visibility scope layer</span>
@@ -2226,7 +2364,13 @@ export function AnnotationEditor({
                       type="button"
                       className="annotation-class-button"
                       data-testid={`class-tool-${index + 1}`}
-                      onClick={() => applyClassToSelection(labelClass.id)}
+                      aria-pressed={active}
+                      disabled={labelClass.is_active === false}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        applyClassToSelection(labelClass.id);
+                      }}
                     >
                       <span
                         className="annotation-class-swatch"
@@ -2268,6 +2412,9 @@ export function AnnotationEditor({
             </ul>
             <p className="annotation-helper">
               Active class: {activeClass?.name ?? "None"}.
+              {!activeClass
+                ? " Drawing tools are disabled until an active class is available."
+                : ""}
               {canReassignSelection
                 ? " Selecting another class reassigns the current selection."
                 : state.tool === "box"
@@ -2336,24 +2483,147 @@ export function AnnotationEditor({
             >
               Delete selection
             </button>
-            <div className="annotation-selection-list">
-              {selectedAnnotations.length === 0 && <p>No boxes selected.</p>}
-              {selectedAnnotations.map((annotation) => {
-                const labelClass = labelClassesById.get(
-                  annotation.label_class_id,
-                );
-                return (
-                  <div key={annotation.id} className="annotation-selection-row">
-                    <strong>{labelClass?.name ?? "Unknown class"}</strong>
-                    <span>
-                      ({Math.round(annotation.x_min)},{" "}
-                      {Math.round(annotation.y_min)}) to (
-                      {Math.round(annotation.x_max)},{" "}
-                      {Math.round(annotation.y_max)})
-                    </span>
-                  </div>
-                );
-              })}
+            <label>
+              Find objects
+              <input
+                value={objectFilter}
+                placeholder="Filter by class"
+                onChange={(event) => setObjectFilter(event.target.value)}
+              />
+            </label>
+            <div
+              className="annotation-selection-list object-list"
+              role="listbox"
+              aria-label="Objects"
+            >
+              {state.document.annotations.length === 0 && (
+                <p>No box annotations yet.</p>
+              )}
+              {state.document.annotations
+                .filter((annotation) =>
+                  (labelClassesById.get(annotation.label_class_id)?.name ?? "")
+                    .toLowerCase()
+                    .includes(objectFilter.toLowerCase()),
+                )
+                .map((annotation, index) => {
+                  const labelClass = labelClassesById.get(
+                    annotation.label_class_id,
+                  );
+                  const selected = state.selectedIds.includes(annotation.id);
+                  return (
+                    <button
+                      key={annotation.id}
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      className={`annotation-selection-row object-row ${selected ? "selected" : ""}`}
+                      onClick={() => setSelection([annotation.id])}
+                    >
+                      <span className="object-index">{index + 1}</span>
+                      <span
+                        className="annotation-class-swatch"
+                        style={{
+                          backgroundColor:
+                            labelClass?.display_color ?? "#72dbc9",
+                        }}
+                      />
+                      <span>
+                        <strong>{labelClass?.name ?? "Unknown class"}</strong>
+                        <small>
+                          Bounding box ·{" "}
+                          {Math.round(annotation.x_max - annotation.x_min)} ×{" "}
+                          {Math.round(annotation.y_max - annotation.y_min)} px
+                        </small>
+                      </span>
+                    </button>
+                  );
+                })}
+            </div>
+            <div
+              className="prediction-inspector-slot"
+              data-testid="prediction-inspector-slot"
+            >
+              {selectedPrediction ? (
+                <PredictionInspector
+                  proposal={selectedPrediction}
+                  imageWidth={imageSize.width}
+                  imageHeight={imageSize.height}
+                  classes={labelClasses}
+                  reviewedClassId={
+                    predictionClassOverrides[selectedPrediction.id] ??
+                    selectedPrediction.label_class_id ??
+                    activeClassId ??
+                    ""
+                  }
+                  reviewedGeometry={
+                    predictionGeometryOverrides[selectedPrediction.id] ?? {
+                      x_min: selectedPrediction.x_min,
+                      y_min: selectedPrediction.y_min,
+                      x_max: selectedPrediction.x_max,
+                      y_max: selectedPrediction.y_max,
+                    }
+                  }
+                  position={selectedPredictionPosition + 1}
+                  total={visiblePredictions.length}
+                  busy={
+                    acceptPredictionMutation.isPending ||
+                    rejectPredictionMutation.isPending ||
+                    promptAssistMutation.isPending
+                  }
+                  error={
+                    (acceptPredictionMutation.error ??
+                      rejectPredictionMutation.error ??
+                      promptAssistMutation.error) as Error | null
+                  }
+                  onClassChange={(classId) =>
+                    setPredictionClassOverrides((current) => ({
+                      ...current,
+                      [selectedPrediction.id]: classId,
+                    }))
+                  }
+                  onGeometryChange={(geometry) =>
+                    setPredictionGeometryOverrides((current) => ({
+                      ...current,
+                      [selectedPrediction.id]: geometry,
+                    }))
+                  }
+                  onAccept={() =>
+                    acceptPredictionMutation.mutate(selectedPrediction)
+                  }
+                  onReject={() =>
+                    rejectPredictionMutation.mutate(selectedPrediction.id)
+                  }
+                  onPromptAssist={() =>
+                    promptAssistMutation.mutate(selectedPrediction)
+                  }
+                  onPrevious={() =>
+                    selectPredictionAt(selectedPredictionPosition - 1)
+                  }
+                  onNext={() =>
+                    selectPredictionAt(selectedPredictionPosition + 1)
+                  }
+                  onLocate={() => {
+                    const scale = resolvedView.scale;
+                    const centerX =
+                      (selectedPrediction.x_min + selectedPrediction.x_max) / 2;
+                    const centerY =
+                      (selectedPrediction.y_min + selectedPrediction.y_max) / 2;
+                    setView({
+                      scale,
+                      offsetX: containerSize.width / 2 - centerX * scale,
+                      offsetY: containerSize.height / 2 - centerY * scale,
+                    });
+                  }}
+                />
+              ) : (
+                <>
+                  <strong>Prediction Inspector</strong>
+                  <span>
+                    Select a model proposal to inspect its crop, confidence,
+                    geometry, and provenance.
+                  </span>
+                </>
+              )}
             </div>
           </section>
         </aside>
@@ -2386,7 +2656,7 @@ export function AnnotationEditor({
           <div className="annotation-canvas-frame" ref={viewportRef}>
             <svg
               ref={svgRef}
-              className={`annotation-canvas ${state.tool === "box" ? "tool-box" : "tool-select"}`}
+              className={`annotation-canvas tool-${state.tool}`}
               data-testid="annotation-canvas"
               onContextMenu={(event) => event.preventDefault()}
               onPointerDown={handleCanvasPointerDown}

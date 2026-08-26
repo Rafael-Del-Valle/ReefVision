@@ -18,6 +18,8 @@ from reefvision.schemas.image_calibration import (
     MarkerCalibrationDetectRequest,
     RulerCalibrationCandidate,
     RulerCalibrationDetectRequest,
+    ScaleBarCalibrationCandidate,
+    ScaleBarCalibrationDetectRequest,
 )
 from reefvision.schemas.measurements import (
     MaskMeasurementProfileResponse,
@@ -72,9 +74,7 @@ def update_measurement_calibration(
     request: Request,
     session: DbSession,
 ) -> MeasurementCalibrationResponse:
-    prepared = calibration_service(request, session).prepare_saved_calibration(
-        image_id, payload
-    )
+    prepared = calibration_service(request, session).prepare_saved_calibration(image_id, payload)
     return service(request, session).update_calibration(image_id, prepared)
 
 
@@ -89,6 +89,19 @@ def detect_ruler_calibration(
     session: DbSession,
 ) -> RulerCalibrationCandidate:
     return calibration_service(request, session).detect_ruler(image_id, payload)
+
+
+@router.post(
+    "/images/{image_id}/measurement-calibration/scale-bar-detect",
+    response_model=ScaleBarCalibrationCandidate,
+)
+def detect_scale_bar_calibration(
+    image_id: str,
+    payload: ScaleBarCalibrationDetectRequest,
+    request: Request,
+    session: DbSession,
+) -> ScaleBarCalibrationCandidate:
+    return calibration_service(request, session).detect_scale_bar(image_id, payload)
 
 
 @router.post(

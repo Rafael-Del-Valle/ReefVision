@@ -3,12 +3,18 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
 from reefvision.schemas.bootstrap import TrainingWorkspaceBootstrapResponse
 from reefvision.schemas.models import UltralyticsTrainingRegistryResponse
+from reefvision.schemas.results_packages import (
+    ResultsPackageOptions,
+    ResultsPackageResponse,
+    ResultsPackageVerificationResponse,
+)
 from reefvision.schemas.training import (
     ExperimentCompareRequest,
     ExperimentCompareResponse,
@@ -25,6 +31,7 @@ from reefvision.schemas.training import (
     TrainingTilingRequest,
 )
 from reefvision.services.bootstrap import BootstrapService
+from reefvision.services.results_packages import ResultsPackageService
 from reefvision.services.segmentation_catalog import SegmentationModelCatalogService
 from reefvision.services.semantic_training import SemanticTrainingService
 
@@ -42,6 +49,11 @@ def service(request: Request, session: Session) -> SemanticTrainingService:
 def bootstrap_service(request: Request, session: Session) -> BootstrapService:
     settings: Settings = request.app.state.settings
     return BootstrapService(session, settings)
+
+
+def results_package_service(request: Request, session: Session) -> ResultsPackageService:
+    settings: Settings = request.app.state.settings
+    return ResultsPackageService(session, settings)
 
 
 @router.get(
@@ -200,6 +212,57 @@ def get_training_run(
     session: DbSession,
 ) -> TrainingRunResponse:
     return service(request, session).get_run(run_id)
+
+
+@router.get("/training-runs/{run_id}/artifacts/{artifact_index}", response_class=FileResponse)
+def get_training_artifact(
+    run_id: str,
+    artifact_index: int,
+    request: Request,
+    session: DbSession,
+) -> FileResponse:
+    path = service(request, session).artifact_file(run_id, artifact_index)
+    return FileResponse(path, filename=path.name)
+
+
+@router.post(
+    "/training-runs/{run_id}/results-packages",
+    response_model=ResultsPackageResponse,
+)
+def create_results_package(
+    run_id: str,
+    payload: ResultsPackageOptions,
+    request: Request,
+    session: DbSession,
+) -> ResultsPackageResponse:
+    return results_package_service(request, session).create(run_id, payload)
+
+
+@router.get(
+    "/training-runs/{run_id}/results-packages/{archive_name}",
+    response_class=FileResponse,
+)
+def download_results_package(
+    run_id: str,
+    archive_name: str,
+    request: Request,
+    session: DbSession,
+) -> FileResponse:
+    path = results_package_service(request, session).archive(run_id, archive_name)
+    return FileResponse(path, filename=path.name, media_type="application/zip")
+
+
+@router.post(
+    "/training-runs/{run_id}/results-packages/{package_name}/verify",
+    response_model=ResultsPackageVerificationResponse,
+)
+def verify_results_package_route(
+    run_id: str,
+    package_name: str,
+    request: Request,
+    session: DbSession,
+) -> ResultsPackageVerificationResponse:
+    return results_package_service(request, session).verify(run_id, package_name)
 
 
 @router.post("/training-runs/{run_id}/cancel", response_model=TrainingRunResponse)

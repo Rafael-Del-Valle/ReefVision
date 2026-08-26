@@ -396,7 +396,8 @@ export type ModelCatalogTask =
   | "track"
   | "caption"
   | "phrase_grounding"
-  | "relative_depth";
+  | "relative_depth"
+  | "metric_video_depth";
 
 export type ModelCatalogInstallationState =
   | "Available"
@@ -690,6 +691,79 @@ export interface TrainingRun {
   started_at: string | null;
   completed_at: string | null;
   updated_at: string;
+}
+
+export interface TrainingArtifact {
+  name: string;
+  category: string;
+  relative_path: string;
+  size_bytes: number;
+  previewable: boolean;
+}
+
+export interface TuningTrial {
+  trial_number: number;
+  status: "completed" | "failed" | "cancelled" | "pruned" | string;
+  fitness: number | null;
+  metrics: Record<string, number>;
+  hyperparameters: Record<string, number | string | boolean>;
+  duration_seconds: number | null;
+  epoch_history: Array<Record<string, number>>;
+  artifacts: TrainingArtifact[];
+  native_values: Record<string, unknown>;
+  error_message?: string | null;
+}
+
+export interface TuningResults {
+  fitness_definition: string;
+  search_space: Record<string, unknown>;
+  max_trials: number | null;
+  epochs_per_trial: number | null;
+  patience: number | null;
+  trials: TuningTrial[];
+  best_trial_number: number | null;
+  best_hyperparameters: Record<string, number | string | boolean>;
+  stopped_early?: boolean;
+}
+
+export interface ResultsPackageOptions {
+  include_excel: boolean;
+  include_machine_data: boolean;
+  include_native_artifacts: boolean;
+  include_logs: boolean;
+  checkpoint_mode: "none" | "best" | "best_and_last" | "retained";
+}
+
+export interface ResultsPackageResult {
+  run_id: string;
+  package_type: "training" | "tuning";
+  package_name: string;
+  archive_name: string;
+  archive_size_bytes: number;
+  verification_status: "verified";
+  warnings: string[];
+  download_url: string;
+}
+
+export async function createResultsPackage(
+  runId: string,
+  options: ResultsPackageOptions,
+): Promise<ResultsPackageResult> {
+  return request<ResultsPackageResult>(
+    `/training-runs/${encodeURIComponent(runId)}/results-packages`,
+    { method: "POST", body: JSON.stringify(options) },
+  );
+}
+
+export function resultsPackageDownloadUrl(path: string): string {
+  return `${getApiBaseUrl()}${path}`;
+}
+
+export function trainingArtifactUrl(
+  runId: string,
+  artifactIndex: number,
+): string {
+  return `${getApiBaseUrl()}/training-runs/${encodeURIComponent(runId)}/artifacts/${artifactIndex}`;
 }
 
 export interface TrainingTilingPreviewTile {
@@ -1345,6 +1419,11 @@ export interface PredictionProposal {
   predicted_label: string;
   predicted_index: number | null;
   confidence: number;
+  geometry_kind?:
+    "bounding_box" | "rotated_box" | "polygon_mask" | "raster_mask" | string;
+  polygon_json?: number[][] | null;
+  mask_path?: string | null;
+  mask_content_sha256?: string | null;
   x_min: number;
   y_min: number;
   x_max: number;
@@ -1353,6 +1432,7 @@ export interface PredictionProposal {
   was_edited: boolean;
   reviewer_action_at: string | null;
   accepted_annotation_id: string | null;
+  accepted_mask_annotation_id?: string | null;
   inference_settings_json: Record<string, unknown>;
   provenance_json: Record<string, unknown> | null;
   created_at: string;
@@ -1502,6 +1582,10 @@ export function imageThumbnailUrl(imageId: string): string {
 
 export function imageContentUrl(imageId: string): string {
   return `${getApiBaseUrl()}/images/${imageId}/content`;
+}
+
+export function predictionMaskUrl(proposalId: string): string {
+  return `${getApiBaseUrl()}/prediction-proposals/${encodeURIComponent(proposalId)}/mask`;
 }
 
 export async function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
@@ -2746,10 +2830,12 @@ export async function acceptPrediction(
     y_min?: number;
     x_max?: number;
     y_max?: number;
+    polygon_json?: number[][];
   },
 ): Promise<{
   proposal: PredictionProposal;
   annotation: AnnotationRecord | null;
+  mask_annotation?: AnnotationRecord | null;
 }> {
   return request<{
     proposal: PredictionProposal;

@@ -12,7 +12,6 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
-
 * {
   box-sizing: border-box;
 }
@@ -1386,5 +1385,435 @@ textarea {
 
   .annotation-editor-actions button {
     flex: 1;
+  }
+}
+
+/* ReefVision 1.0 usability pass ------------------------------------------- */
+.project-navigation {
+  display: grid;
+  gap: 0.8rem;
+  margin: 1rem 0 1.4rem;
+}
+.project-nav-groups {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+.project-nav-groups > button {
+  min-height: 5.3rem;
+  display: grid;
+  gap: 0.25rem;
+  align-content: start;
+  text-align: left;
+  padding: 0.8rem 0.9rem;
+}
+.project-nav-groups > button strong {
+  font-size: 0.96rem;
+}
+.project-nav-groups > button span {
+  font-size: 0.76rem;
+  line-height: 1.35;
+  opacity: 0.72;
+  font-weight: 400;
+}
+.project-nav-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+.project-nav-items > button {
+  min-height: 2.5rem;
+}
+.workspace-context {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.42fr) minmax(260px, 1fr);
+  gap: 1rem;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(165, 230, 216, 0.16);
+  border-radius: 0.8rem;
+  background: rgba(7, 39, 46, 0.48);
+}
+.workspace-context h3,
+.workspace-context p {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.workspace-context > p {
+  line-height: 1.55;
+  opacity: 0.82;
+}
+.feature-workspace {
+  max-width: 1500px;
+  margin-inline: auto;
+}
+.feature-workspace > .section-heading {
+  margin-bottom: 1rem;
+}
+.feature-workspace .panel-card {
+  min-width: 0;
+}
+.feature-workspace details {
+  border-top: 1px solid rgba(165, 230, 216, 0.1);
+  padding: 0.55rem 0;
+}
+.feature-workspace details > summary {
+  cursor: pointer;
+  line-height: 1.45;
+}
+button,
+input,
+select,
+textarea,
+summary {
+  outline-offset: 3px;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: 2px solid #7fe0c8;
+}
+.annotation-editor-actions {
+  flex-wrap: wrap;
+}
+.annotation-editor-sidebar {
+  scrollbar-gutter: stable;
+}
+.annotation-helper {
+  line-height: 1.5;
+}
+@media (max-width: 1180px) {
+  .project-nav-groups {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .workspace-context {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 760px) {
+  .project-nav-groups {
+    grid-template-columns: 1fr;
+  }
+  .project-nav-groups > button {
+    min-height: auto;
+  }
+  .project-nav-items {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .project-nav-items > button {
+    width: 100%;
+  }
+}
+
+/* ReefVision guided-workspace polish ------------------------------------------ */
+.workspace-guide {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.workspace-guide.compact {
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  margin: 0;
+}
+
+.workspace-guide-card {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(240px, 0.7fr) minmax(480px, 1.3fr);
+  gap: 1rem;
+  align-items: center;
+}
+
+.workspace-guide-step {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: start;
+  min-width: 0;
+  padding: 0.7rem;
+  border: 1px solid rgba(165, 230, 216, 0.15);
+  border-radius: 0.75rem;
+  background: rgba(7, 39, 46, 0.42);
+}
+
+.workspace-guide-step > span {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: rgba(127, 224, 200, 0.16);
+  font-weight: 700;
+}
+
+.workspace-guide-step strong,
+.workspace-guide-step small {
+  display: block;
+}
+
+.workspace-guide-step small {
+  margin-top: 0.2rem;
+  line-height: 1.4;
+  opacity: 0.72;
+}
+
+.advanced-disclosure {
+  margin-bottom: 0.8rem;
+  padding: 0.65rem 0;
+}
+
+.advanced-disclosure > summary {
+  font-weight: 650;
+}
+
+.provider-result-json {
+  max-height: 28rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.78rem;
+}
+
+.provider-download-consent {
+  display: block;
+  padding: 0.7rem;
+  border: 1px solid rgba(235, 190, 90, 0.24);
+  border-radius: 0.7rem;
+  background: rgba(235, 190, 90, 0.06);
+}
+
+@media (max-width: 1100px) {
+  .workspace-guide,
+  .workspace-guide.compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace-guide-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .workspace-guide,
+  .workspace-guide.compact {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ReefVision Models & AI navigation revamp */
+.model-ai-workspace {
+  display: grid;
+  gap: 1rem;
+}
+
+.model-ai-header {
+  padding-bottom: 0.25rem;
+}
+
+.model-ai-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.model-ai-overview-card {
+  display: grid;
+  align-content: start;
+  gap: 0.3rem;
+  min-height: 8rem;
+  padding: 1rem;
+  text-align: left;
+  color: #dff5f1;
+  background: rgba(255, 255, 255, 0.035);
+  border-color: rgba(182, 238, 228, 0.16);
+}
+
+.model-ai-overview-card strong {
+  font-size: 1.45rem;
+  color: #f2fffc;
+}
+
+.model-ai-overview-card small {
+  color: #9dbdb8;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.model-ai-overview-label {
+  color: #80ddce;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.model-ai-jumpbar {
+  position: sticky;
+  top: 0.75rem;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding: 0.6rem;
+  border: 1px solid rgba(182, 238, 228, 0.14);
+  border-radius: 0.85rem;
+  background: rgba(3, 25, 30, 0.94);
+  backdrop-filter: blur(12px);
+}
+
+.model-ai-jumpbar button {
+  padding: 0.5rem 0.7rem;
+  color: #d8f1ec;
+  background: rgba(255, 255, 255, 0.045);
+  border-color: transparent;
+}
+
+.model-ai-jumpbar button:hover {
+  border-color: rgba(114, 219, 201, 0.45);
+  background: rgba(54, 181, 162, 0.12);
+}
+
+.model-ai-catalog-count {
+  margin: 0;
+  color: #9dbdb8;
+  font-size: 0.86rem;
+}
+
+.model-ai-catalog-section,
+#model-ai-project-models,
+#model-ai-custom-models,
+#model-ai-advanced {
+  scroll-margin-top: 5.5rem;
+}
+
+.model-ai-catalog-toolbar {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+  padding: 0.85rem;
+  border: 1px solid rgba(182, 238, 228, 0.12);
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.model-ai-search {
+  display: grid;
+  gap: 0.35rem;
+  color: #bad7d2;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.model-ai-search input {
+  width: 100%;
+}
+
+.model-ai-filter-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.model-ai-filter-tabs button {
+  padding: 0.45rem 0.7rem;
+}
+
+.model-ai-filter-tabs button[aria-pressed="true"] {
+  color: #04181c;
+  background: #72dbc9;
+  border-color: #56c6b4;
+}
+
+.model-ai-unavailable-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: fit-content;
+  color: #9dbdb8;
+  font-size: 0.82rem;
+}
+
+.model-ai-unavailable-toggle input {
+  margin: 0;
+}
+
+.model-ai-model-grid .image-card {
+  min-width: 0;
+}
+
+.model-ai-advanced-shell > summary,
+.model-ai-import-shell > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.25rem 0;
+}
+
+.model-ai-advanced-shell > summary::-webkit-details-marker,
+.model-ai-import-shell > summary::-webkit-details-marker {
+  display: none;
+}
+
+.model-ai-advanced-shell > summary > span {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.model-ai-advanced-shell > summary strong {
+  font-size: 1rem;
+}
+
+.model-ai-advanced-shell > summary small {
+  color: #9dbdb8;
+}
+
+.model-ai-advanced-shell > summary::after,
+.model-ai-import-shell > summary::after {
+  content: "Open";
+  float: right;
+  margin-top: -1.3rem;
+  color: #80ddce;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.model-ai-advanced-shell[open] > summary::after,
+.model-ai-import-shell[open] > summary::after {
+  content: "Close";
+}
+
+.model-ai-advanced-content {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.model-ai-advanced-content > .gallery-panel {
+  margin: 0;
+}
+
+@media (max-width: 1100px) {
+  .model-ai-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .model-ai-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .model-ai-jumpbar {
+    position: static;
+  }
+
+  .model-ai-jumpbar button {
+    flex: 1 1 calc(50% - 0.45rem);
   }
 }

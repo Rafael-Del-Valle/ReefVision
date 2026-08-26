@@ -56,6 +56,106 @@ def _draw_stroke(
         )
 
 
+def _source_color_within_tolerance(
+    pixel: tuple[int, int, int],
+    target: tuple[int, int, int],
+    tolerance: int,
+) -> bool:
+    return max(abs(int(pixel[index]) - int(target[index])) for index in range(3)) <= tolerance
+
+
+def _flood_fill_from_source(
+    mask: Image.Image,
+    source: Image.Image,
+    *,
+    seed_x: int,
+    seed_y: int,
+    tolerance: int,
+) -> int:
+    """Fill the contiguous source-image color region into the annotation mask."""
+    source_rgb = source.convert("RGB")
+    if source_rgb.size != mask.size:
+        raise ValidationError("Source image dimensions do not match the raster mask")
+
+    width, height = mask.size
+    if width <= 0 or height <= 0:
+        raise ValidationError("Cannot flood-fill an empty image")
+
+    seed_x = max(0, min(width - 1, int(seed_x)))
+    seed_y = max(0, min(height - 1, int(seed_y)))
+    source_pixels = source_rgb.load()
+    mask_pixels = mask.load()
+    if source_pixels is None or mask_pixels is None:
+        raise ValidationError("Image pixels could not be accessed for flood fill")
+
+    target = cast(tuple[int, int, int], source_pixels[seed_x, seed_y])
+    visited = bytearray(width * height)
+    pending: list[tuple[int, int]] = [(seed_x, seed_y)]
+    filled = 0
+
+    def matches(x: int, y: int) -> bool:
+        if x < 0 or y < 0 or x >= width or y >= height:
+            return False
+        if visited[y * width + x]:
+            return False
+        pixel = cast(tuple[int, int, int], source_pixels[x, y])
+        return _source_color_within_tolerance(pixel, target, tolerance)
+
+    while pending:
+        start_x, y = pending.pop()
+        if not matches(start_x, y):
+            continue
+        left = start_x
+        while left > 0 and matches(left - 1, y):
+            left -= 1
+
+        span_up = False
+        span_down = False
+        x = left
+        while x < width and matches(x, y):
+            visited[y * width + x] = 1
+            mask_pixels[x, y] = 255
+            filled += 1
+
+            if y > 0:
+                up_matches = matches(x, y - 1)
+                if up_matches and not span_up:
+                    pending.append((x, y - 1))
+                    span_up = True
+                elif not up_matches:
+                    span_up = False
+
+            if y + 1 < height:
+                down_matches = matches(x, y + 1)
+                if down_matches and not span_down:
+                    pending.append((x, y + 1))
+                    span_down = True
+                elif not down_matches:
+                    span_down = False
+            x += 1
+
+    return filled
+
+
+def _load_source_image(
+    settings: Settings,
+    *,
+    source_image_relative_path: str,
+    expected_size: tuple[int, int],
+) -> Image.Image:
+    source_path = resolve_managed_project_path(settings, source_image_relative_path)
+    if not source_path.is_file():
+        raise ValidationError("The managed source image is missing")
+    try:
+        with Image.open(source_path) as source:
+            source.load()
+            if source.size != expected_size:
+                raise ValidationError("Source image dimensions do not match the raster mask")
+            return cast(Image.Image, source.convert("RGB"))
+    except (OSError, UnidentifiedImageError) as exc:
+        raise ValidationError("The managed source image could not be read") from exc
+
+
 def _publish_revision_exclusively(temporary: Path, destination: Path) -> None:
     """Publish a complete revision without replacing an existing immutable file."""
 
@@ -90,9 +190,11 @@ def write_raster_mask_revision(
     source_relative_path: str | None,
     expected_width: int,
     expected_height: int,
+    source_image_relative_path: str | None = None,
     strokes: list[RasterEditStroke],
     brush_radius: float,
     mode: str,
+    fill_tolerance: int = 24,
 ) -> tuple[str, Path, int, tuple[float, float, float, float]]:
     """Apply brush edits and atomically write a new immutable mask revision."""
 
@@ -101,9 +203,30 @@ def write_raster_mask_revision(
         source_relative_path=source_relative_path,
         expected_size=(expected_width, expected_height),
     )
-    fill = 255 if mode == "paint" else 0
-    for stroke in strokes:
-        _draw_stroke(mask, stroke, radius=brush_radius, fill=fill)
+    if mode == "fill":
+        if source_image_relative_path is None:
+            raise ValidationError("Flood fill requires the managed source image")
+        if not strokes or not strokes[0].points:
+            raise ValidationError("Flood fill requires a seed point")
+        source = _load_source_image(
+            settings,
+            source_image_relative_path=source_image_relative_path,
+            expected_size=(expected_width, expected_height),
+        )
+        seed = strokes[0].points[0]
+        _flood_fill_from_source(
+            mask,
+            source,
+            seed_x=round(float(seed.x)),
+            seed_y=round(float(seed.y)),
+            tolerance=fill_tolerance,
+        )
+    elif mode in {"paint", "erase"}:
+        fill = 255 if mode == "paint" else 0
+        for stroke in strokes:
+            _draw_stroke(mask, stroke, radius=brush_radius, fill=fill)
+    else:
+        raise ValidationError(f"Unsupported raster edit mode: {mode}")
 
     binary = mask.point(lambda value: 255 if value > 0 else 0)
     bounds = binary.getbbox()

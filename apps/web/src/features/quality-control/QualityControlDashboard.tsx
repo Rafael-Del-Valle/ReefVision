@@ -241,7 +241,7 @@ export function QualityControlDashboard({
     <section className="dashboard-panel">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Milestone 7</p>
+          <p className="eyebrow">Automated checks</p>
           <h3>Quality Control</h3>
           <span>{runs.data?.length ?? 0} historical runs</span>
         </div>

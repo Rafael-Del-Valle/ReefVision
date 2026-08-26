@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
 import type { Project } from "../../api/client";
+import { AutomaticScientific3DPanel } from "./AutomaticScientific3DPanel";
 import { getVideoTracks, getVideos } from "./videoApi";
 import {
   clearVideoCalibration,
@@ -594,6 +595,13 @@ export function VideoSciencePanel({ project }: VideoSciencePanelProps) {
           </div>
         </div>
       )}
+
+      <AutomaticScientific3DPanel
+        videoId={videoId}
+        tracks={tracksQuery.data ?? []}
+        cameraReady={Boolean(cameraQuery.data)}
+        classNames={classNames}
+      />
 
       <h4>Metric depth / 3D trajectories</h4>
       <p className="annotation-helper">

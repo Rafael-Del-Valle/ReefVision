@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -1105,7 +1106,7 @@ describe("App", () => {
     expect(
       screen.getByRole("heading", { name: "ReefVision" }),
     ).toBeInTheDocument();
-    expect(await screen.findByText("Local API 1.6.0")).toBeInTheDocument();
+    expect(await screen.findByText("Local service 1.6.0")).toBeInTheDocument();
     expect(
       await screen.findByRole("heading", { name: "No projects yet" }),
     ).toBeInTheDocument();
@@ -1202,7 +1203,7 @@ describe("App", () => {
     expect(
       await screen.findByRole("heading", { name: "Project gallery" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("No matching images")).toBeInTheDocument();
+    expect(screen.getByText("No images yet")).toBeInTheDocument();
     expect(screen.getByText("Import files")).toBeInTheDocument();
     expect(screen.getByText("Import folder")).toBeInTheDocument();
   });
@@ -1214,12 +1215,16 @@ describe("App", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: /CPT Coral Study/ }),
     );
-    await userEvent.click(screen.getByRole("tab", { name: "Versions" }));
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Dataset versions" }),
+    );
 
     expect(
-      await screen.findByRole("heading", { name: "Dataset versions" }),
+      screen.getByRole("tab", { name: "Dataset versions" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      await screen.findByText("No dataset versions yet"),
     ).toBeInTheDocument();
-    expect(screen.getByText("No dataset versions yet")).toBeInTheDocument();
   });
 
   it("opens the Training workspace for a project", async () => {
@@ -1262,16 +1267,18 @@ describe("App", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: /CPT Coral Study/ }),
     );
+    await userEvent.click(screen.getByRole("tab", { name: /Models & AI/ }));
     await userEvent.click(screen.getByRole("tab", { name: "Training" }));
 
+    expect(screen.getByRole("tab", { name: "Training" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     expect(
-      await screen.findByRole("heading", { name: "Training" }),
+      await screen.findByText("Pinned-provider workflow"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Pinned-provider workflow")).toBeInTheDocument();
     expect(screen.getByLabelText("Active draft")).toHaveValue("draft-1");
-    expect(
-      await screen.findByText("Launch background run"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Start training")).toBeInTheDocument();
   });
 
   it("opens the models workspace and shows Ultralytics training compatibility", async () => {
@@ -1281,7 +1288,8 @@ describe("App", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: /CPT Coral Study/ }),
     );
-    await userEvent.click(screen.getByRole("tab", { name: "Models" }));
+    await userEvent.click(screen.getByRole("tab", { name: /Models & AI/ }));
+    await userEvent.click(screen.getByRole("tab", { name: "Model Hub" }));
 
     expect(
       await screen.findByRole("heading", {
@@ -1295,7 +1303,7 @@ describe("App", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Advanced -> Import Custom Model"),
+      screen.getByText("Advanced · Import custom checkpoint"),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Model provider catalog" }),
@@ -1310,7 +1318,8 @@ describe("App", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: /CPT Coral Study/ }),
     );
-    await userEvent.click(screen.getByRole("tab", { name: "Quality Control" }));
+    await userEvent.click(screen.getByRole("tab", { name: /Review/ }));
+    await userEvent.click(screen.getByRole("tab", { name: "Quality control" }));
 
     expect(
       await screen.findByRole("heading", { name: "Quality Control" }),
@@ -1325,7 +1334,8 @@ describe("App", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: /CPT Coral Study/ }),
     );
-    await userEvent.click(screen.getByRole("tab", { name: "Review Queue" }));
+    await userEvent.click(screen.getByRole("tab", { name: /Review/ }));
+    await userEvent.click(screen.getByRole("tab", { name: "Review queue" }));
 
     expect(
       await screen.findByRole("heading", { name: "Review Queue" }),
@@ -1347,8 +1357,9 @@ describe("App", () => {
     fireEvent.change(screen.getByLabelText("Description"), {
       target: { value: "Octocoral polyp annotations" },
     });
+    const dialog = screen.getByRole("dialog", { name: "Create project" });
     await userEvent.click(
-      screen.getByRole("button", { name: "Create project" }),
+      within(dialog).getByRole("button", { name: "Create project" }),
     );
 
     await waitFor(() =>
@@ -1386,5 +1397,36 @@ describe("App", () => {
     expect(
       screen.getByRole("button", { name: "Back to gallery" }),
     ).toBeInTheDocument();
+  });
+
+  it("supports arrow-key navigation between workspace groups", async () => {
+    mockApi({ projects: [project] });
+    renderApp();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /CPT Coral Study/ }),
+    );
+    const dataGroup = screen.getByRole("tab", { name: "Data & annotation" });
+    dataGroup.focus();
+    await userEvent.keyboard("{ArrowRight}");
+
+    expect(screen.getByRole("tab", { name: "Models & AI" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tab", { name: "Model Hub" })).toHaveAttribute(
+      "tabindex",
+      "0",
+    );
+  });
+
+  it("does not expose historical product names in the application shell", async () => {
+    mockApi({ projects: [] });
+    renderApp();
+
+    await screen.findByRole("heading", { name: "ReefVision" });
+    expect(
+      screen.queryByText(/CoralVision|CoralAnnotator/i),
+    ).not.toBeInTheDocument();
   });
 });

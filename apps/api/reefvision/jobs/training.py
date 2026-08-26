@@ -27,6 +27,12 @@ from reefvision.db.models import (
 )
 from reefvision.ml.dependencies import configure_provider_runtime, require_provider_ready
 from reefvision.ml.providers import resolve_torch_device
+from reefvision.ml.ultralytics_tuning import (
+    FITNESS_DEFINITION,
+    best_trial,
+    effective_search_space,
+    normalize_tuning_csv,
+)
 from reefvision.storage.catalog_models import catalog_asset_path, catalog_manifest_record
 from reefvision.storage.datasets import write_yolo_detection_export
 from reefvision.storage.models import hash_model_file
@@ -75,10 +81,7 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
                 raise RuntimeError(
                     "This Training foundation currently executes only object-detection runs"
                 )
-            if dict(run.tuning_config_json).get("mode", "disabled") != "disabled":
-                raise RuntimeError(
-                    "Tuning execution is not implemented in this Training foundation"
-                )
+            tuning_enabled = dict(run.tuning_config_json).get("mode", "disabled") != "disabled"
             if dict(run.tiling_config_json).get("mode", "none") != "none":
                 raise RuntimeError(
                     "The current training executor launches only the no-tiling baseline"
@@ -144,8 +147,8 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
 
             checkpoint_source = _resolve_model_source(settings, session, run)
             configure_provider_runtime(settings)
-            run.status = "training"
-            run.stage = "training"
+            run.status = "tuning" if tuning_enabled else "training"
+            run.stage = "tuning" if tuning_enabled else "training"
             run.logs_path = _relative_to_data_dir(settings, logs_path)
             run.artifact_manifest_json = {
                 "dataset_output_path": dataset_output_path,
@@ -206,23 +209,68 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
                 f"[{datetime.now(UTC).isoformat()}] launching Ultralytics detect training",
             )
 
-        model.train(**train_args)
+        tuning_config = dict(run.tuning_config_json)
+        if tuning_config.get("mode", "disabled") != "disabled":
+            iterations = int(tuning_config.get("max_trials", 20))
+            trial_epochs = int(tuning_config.get("epochs_per_trial", 10))
+            train_args["epochs"] = trial_epochs
+            model.tune(
+                iterations=iterations,
+                space=effective_search_space(tuning_config),
+                **train_args,
+            )
+        else:
+            model.train(**train_args)
 
         with factory() as session:
             run = session.get(TrainingRun, run_id)
             job = session.get(Job, job_id)
             if run is None or job is None:
                 raise RuntimeError("Training run disappeared after execution")
+            tuning_enabled = dict(run.tuning_config_json).get("mode", "disabled") != "disabled"
             trainer = model.trainer
-            if trainer is None:
-                raise RuntimeError("Ultralytics trainer unavailable after execution")
-            save_dir = Path(str(trainer.save_dir)).resolve()
-            results_csv = save_dir / "results.csv"
+            if tuning_enabled:
+                run_root = resolve_managed_project_path(settings, f"{base_relative}/runs")
+                csv_candidates = sorted(
+                    run_root.rglob("tune_results.csv"),
+                    key=lambda item: item.stat().st_mtime,
+                    reverse=True,
+                )
+                if not csv_candidates:
+                    csv_candidates = sorted(
+                        run_root.rglob("*.csv"),
+                        key=lambda item: item.stat().st_mtime,
+                        reverse=True,
+                    )
+                if not csv_candidates:
+                    raise RuntimeError("Ultralytics tuning completed without a tuning results CSV")
+                results_csv = csv_candidates[0]
+                save_dir = results_csv.parent.resolve()
+            else:
+                if trainer is None:
+                    raise RuntimeError("Ultralytics trainer unavailable after execution")
+                save_dir = Path(str(trainer.save_dir)).resolve()
+                results_csv = save_dir / "results.csv"
             weights_dir = save_dir / "weights"
             best_ckpt = weights_dir / "best.pt"
             last_ckpt = weights_dir / "last.pt"
-            history = _read_results_csv(results_csv)
-            last_metrics = _last_metrics(history)
+            history = {} if tuning_enabled else _read_results_csv(results_csv)
+            native_results_rows = _read_results_table(results_csv)
+            tuning_trials = normalize_tuning_csv(results_csv) if tuning_enabled else []
+            selected_trial = best_trial(tuning_trials)
+            last_metrics = (
+                dict(selected_trial.get("metrics", {}))
+                if selected_trial
+                else _last_metrics(history)
+            )
+            artifacts = _discover_training_artifacts(settings, save_dir)
+            if tuning_enabled:
+                run.progress_epoch = len(tuning_trials)
+                run.progress_total_epochs = int(
+                    dict(run.tuning_config_json).get("max_trials", len(tuning_trials))
+                )
+                job.progress_current = len(tuning_trials)
+                job.progress_total = run.progress_total_epochs
             run.metrics_history_json = history
             run.metrics_json = last_metrics
             run.artifact_manifest_json = {
@@ -237,6 +285,24 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
                 "last_checkpoint_path": _relative_to_data_dir(settings, last_ckpt)
                 if last_ckpt.is_file()
                 else None,
+                "native_results_rows": native_results_rows,
+                "tuning_results": {
+                    "fitness_definition": FITNESS_DEFINITION,
+                    "search_space": dict(run.tuning_config_json).get("search_space", {}),
+                    "max_trials": dict(run.tuning_config_json).get("max_trials"),
+                    "epochs_per_trial": dict(run.tuning_config_json).get("epochs_per_trial"),
+                    "patience": dict(run.tuning_config_json).get("patience"),
+                    "trials": tuning_trials,
+                    "best_trial_number": selected_trial.get("trial_number")
+                    if selected_trial
+                    else None,
+                    "best_hyperparameters": selected_trial.get("hyperparameters", {})
+                    if selected_trial
+                    else {},
+                }
+                if tuning_enabled
+                else None,
+                "artifacts": artifacts,
             }
             run.result_checkpoint_path = (
                 _relative_to_data_dir(settings, best_ckpt)
@@ -362,21 +428,83 @@ def _append_log(path: Path, message: str) -> None:
 
 
 def _read_results_csv(path: Path) -> dict[str, list[float]]:
-    if not path.is_file():
-        return {}
     rows: dict[str, list[float]] = {}
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
-        for row in reader:
-            for key, value in row.items():
-                if key is None or value is None:
-                    continue
-                normalized = key.strip()
-                try:
-                    rows.setdefault(normalized, []).append(float(value))
-                except ValueError:
-                    continue
+    for row in _read_results_table(path):
+        for key, value in row.items():
+            if isinstance(value, (int, float)):
+                rows.setdefault(key, []).append(float(value))
     return rows
+
+
+def _read_results_table(path: Path) -> list[dict[str, str | float | None]]:
+    """Preserve every native results.csv column while ordering rows by epoch."""
+    if not path.is_file():
+        return []
+    rows: list[dict[str, str | float | None]] = []
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        for raw in reader:
+            row: dict[str, str | float | None] = {}
+            for key, value in raw.items():
+                if key is None:
+                    continue
+                normalized_key = key.strip()
+                normalized_value = value.strip() if isinstance(value, str) else value
+                if normalized_value in (None, ""):
+                    row[normalized_key] = None
+                    continue
+                try:
+                    row[normalized_key] = float(normalized_value)
+                except ValueError:
+                    row[normalized_key] = normalized_value
+            rows.append(row)
+
+    def epoch_value(row: dict[str, str | float | None]) -> float:
+        value = row.get("epoch")
+        return float(value) if isinstance(value, (int, float)) else float("inf")
+
+    return sorted(rows, key=epoch_value)
+
+
+def _discover_training_artifacts(settings: Settings, save_dir: Path) -> list[dict[str, Any]]:
+    """Catalog actual provider artifacts without allowing arbitrary path browsing."""
+    artifacts: list[dict[str, Any]] = []
+    image_names = {
+        "results.png",
+        "confusion_matrix.png",
+        "confusion_matrix_normalized.png",
+        "PR_curve.png",
+        "F1_curve.png",
+        "P_curve.png",
+        "R_curve.png",
+        "labels.jpg",
+        "labels_correlogram.jpg",
+    }
+    for path in sorted(item for item in save_dir.rglob("*") if item.is_file()):
+        suffix = path.suffix.lower()
+        category = (
+            "checkpoint"
+            if suffix == ".pt"
+            else "metrics"
+            if path.name == "results.csv"
+            else "plot"
+            if path.name in image_names or suffix in {".png", ".jpg", ".jpeg"}
+            else "configuration"
+            if suffix in {".yaml", ".yml", ".json"}
+            else "log"
+            if suffix in {".log", ".txt"}
+            else "native"
+        )
+        artifacts.append(
+            {
+                "name": path.name,
+                "category": category,
+                "relative_path": _relative_to_data_dir(settings, path),
+                "size_bytes": path.stat().st_size,
+                "previewable": category == "plot",
+            }
+        )
+    return artifacts
 
 
 def _last_metrics(history: dict[str, list[float]]) -> dict[str, float]:

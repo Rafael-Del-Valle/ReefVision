@@ -49,6 +49,30 @@ class RulerCalibrationCandidate(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class ScaleBarCalibrationDetectRequest(BaseModel):
+    roi: CalibrationRoi | None = None
+    orientation: CalibrationOrientation = "auto"
+
+
+class ScaleBarCalibrationCandidate(BaseModel):
+    image_id: str
+    method: Literal["automatic_scale_bar"] = "automatic_scale_bar"
+    orientation: Literal["horizontal", "vertical"]
+    roi: CalibrationRoi
+    bar_start_pixels: tuple[float, float]
+    bar_end_pixels: tuple[float, float]
+    bar_length_pixels: float = Field(gt=0)
+    bar_thickness_pixels: float = Field(gt=0)
+    polarity: Literal["dark", "light"]
+    continuity_score: float = Field(ge=0, le=1)
+    contrast_score: float = Field(ge=0, le=1)
+    confidence: float = Field(ge=0, le=1)
+    label_text: str | None = None
+    unit_inferred: bool = False
+    reference_length_required: bool = True
+    warnings: list[str] = Field(default_factory=list)
+
+
 class MarkerCalibrationDetectRequest(BaseModel):
     kind: MarkerKind = "aruco"
     unit: str = Field(min_length=1, max_length=32)
@@ -81,9 +105,7 @@ class MarkerCalibrationDetectRequest(BaseModel):
                 )
             square_length = self.charuco_square_length
             if square_length is not None and self.marker_length >= square_length:
-                raise ValueError(
-                    "ChArUco marker_length must be smaller than charuco_square_length"
-                )
+                raise ValueError("ChArUco marker_length must be smaller than charuco_square_length")
         return self
 
 

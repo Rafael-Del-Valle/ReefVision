@@ -162,6 +162,32 @@ export function WorkflowGraphWorkspace({
         </div>
       </div>
 
+      <div className="workspace-guide" aria-label="Workflow builder steps">
+        <div className="workspace-guide-step">
+          <span>1</span>
+          <div>
+            <strong>Start from a template</strong>
+            <small>Choose the closest scientific workflow.</small>
+          </div>
+        </div>
+        <div className="workspace-guide-step">
+          <span>2</span>
+          <div>
+            <strong>Connect and configure</strong>
+            <small>Edit nodes visually and resolve required parameters.</small>
+          </div>
+        </div>
+        <div className="workspace-guide-step">
+          <span>3</span>
+          <div>
+            <strong>Validate and run</strong>
+            <small>
+              Plan first; review gates pause safely before execution continues.
+            </small>
+          </div>
+        </div>
+      </div>
+
       <div className="panel-card">
         <h4>Workflow templates</h4>
         <p className="muted-copy">
@@ -216,13 +242,21 @@ export function WorkflowGraphWorkspace({
 
       <div className="feature-grid" style={{ marginTop: 12 }}>
         <div className="panel-card">
-          <h4>Graph JSON</h4>
-          <textarea
-            rows={22}
-            value={graphJson}
-            onChange={(event) => setGraphJson(event.target.value)}
-            spellCheck={false}
-          />
+          <h4>Validate, save, and run</h4>
+          <details className="advanced-disclosure">
+            <summary>Advanced: edit workflow JSON directly</summary>
+            <p className="muted-copy">
+              Most workflows can be edited visually above. Use JSON when you
+              need exact parameters or want to inspect the complete graph
+              definition.
+            </p>
+            <textarea
+              rows={22}
+              value={graphJson}
+              onChange={(event) => setGraphJson(event.target.value)}
+              spellCheck={false}
+            />
+          </details>
           <div className="button-row">
             <button
               type="button"

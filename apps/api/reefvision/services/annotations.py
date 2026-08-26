@@ -239,11 +239,13 @@ class AnnotationService:
         draft: MaskAnnotationDraft,
         image: ImageAsset,
     ) -> tuple[list[list[float]], float, float, float, float, int]:
-        if draft.geometry_kind != "polygon":
-            raise ValidationError("Editable batch saves currently support polygon masks")
+        if draft.geometry_kind not in {"polygon", "rotated_box"}:
+            raise ValidationError("Unsupported editable mask geometry")
         points = [(float(point.x), float(point.y)) for point in draft.points]
         if len(points) < 3:
-            raise ValidationError("Polygon masks require at least three points")
+            raise ValidationError("Editable mask geometry requires at least three points")
+        if draft.geometry_kind == "rotated_box" and len(points) != 4:
+            raise ValidationError("Rotated boxes require exactly four corner points")
         if len(set(points)) < 3:
             raise ValidationError("Polygon masks require at least three unique points")
         if any(points[index] == points[(index + 1) % len(points)] for index in range(len(points))):
@@ -426,7 +428,7 @@ class AnnotationService:
                     id=mask_draft.id,
                     image_id=image_id,
                     label_class_id=mask_draft.label_class_id,
-                    geometry_kind="polygon",
+                    geometry_kind=mask_draft.geometry_kind,
                     polygon_json=polygon,
                     x_min=x_min,
                     y_min=y_min,
@@ -454,7 +456,7 @@ class AnnotationService:
             before = mask_annotation_snapshot(existing_mask)
             class_changed = existing_mask.label_class_id != mask_draft.label_class_id
             geometry_changed = (
-                existing_mask.geometry_kind != "polygon"
+                existing_mask.geometry_kind != mask_draft.geometry_kind
                 or existing_mask.mask_path is not None
                 or existing_mask.polygon_json != polygon
                 or existing_mask.x_min != x_min
@@ -466,7 +468,7 @@ class AnnotationService:
             restored = existing_mask.deleted_at is not None
             if class_changed or geometry_changed or restored:
                 existing_mask.label_class_id = mask_draft.label_class_id
-                existing_mask.geometry_kind = "polygon"
+                existing_mask.geometry_kind = mask_draft.geometry_kind
                 existing_mask.mask_path = None
                 existing_mask.polygon_json = polygon
                 existing_mask.x_min = x_min

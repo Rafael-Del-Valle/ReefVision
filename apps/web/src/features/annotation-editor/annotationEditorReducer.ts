@@ -18,7 +18,7 @@ const HISTORY_LIMIT = 100;
 interface MaskAnnotationDraftPayload {
   id: string;
   label_class_id: string;
-  geometry_kind: "polygon";
+  geometry_kind: "polygon" | "rotated_box";
   points: Array<{ x: number; y: number }>;
 }
 
@@ -248,7 +248,8 @@ export function toAnnotationSavePayload(
       label_class_id: string;
       points: Array<{ x: number; y: number }>;
     } =>
-      annotation.geometry_kind === "polygon" &&
+      (annotation.geometry_kind === "polygon" ||
+        annotation.geometry_kind === "rotated_box") &&
       annotation.label_class_id !== null &&
       annotation.points !== null &&
       annotation.points.length >= 3,
@@ -257,7 +258,7 @@ export function toAnnotationSavePayload(
     payload.mask_annotations = editableMasks.map((annotation) => ({
       id: annotation.id,
       label_class_id: annotation.label_class_id,
-      geometry_kind: "polygon",
+      geometry_kind: annotation.geometry_kind as "polygon" | "rotated_box",
       points: annotation.points.map((point) => ({ ...point })),
     }));
   }

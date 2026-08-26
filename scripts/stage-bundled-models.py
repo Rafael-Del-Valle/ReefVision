@@ -9,6 +9,7 @@ import json
 import os
 import sys
 import urllib.request
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -26,9 +27,7 @@ def _sha256(path: Path) -> str:
 
 def _is_verified(path: Path, expected_size: int, expected_sha256: str) -> bool:
     return (
-        path.is_file()
-        and path.stat().st_size == expected_size
-        and _sha256(path) == expected_sha256
+        path.is_file() and path.stat().st_size == expected_size and _sha256(path) == expected_sha256
     )
 
 
@@ -80,8 +79,7 @@ def _download(
         print()
         if downloaded != expected_size:
             raise RuntimeError(
-                f"Size mismatch for {destination.name}: expected {expected_size}, "
-                f"got {downloaded}"
+                f"Size mismatch for {destination.name}: expected {expected_size}, got {downloaded}"
             )
         actual_sha256 = digest.hexdigest()
         if actual_sha256 != expected_sha256:
@@ -114,44 +112,76 @@ def stage_models(catalog_path: Path, output_root: Path) -> dict[str, Any]:
         if model.get("availability") != "available" or not expected_files:
             skipped_unavailable += 1
             continue
-        if not isinstance(expected_files, list) or len(expected_files) != 1:
+        if not isinstance(expected_files, list):
             raise RuntimeError(
-                f"Bundled catalog model {catalog_id} must declare exactly one checkpoint file"
+                f"Bundled catalog model {catalog_id} has an invalid expected_files declaration"
             )
 
-        expected = expected_files[0]
-        if not isinstance(expected, dict):
-            raise RuntimeError(f"Invalid expected file declaration for {catalog_id}")
-        filename = str(expected.get("filename") or "")
-        if not filename or Path(filename).name != filename:
-            raise RuntimeError(
-                f"Unsafe checkpoint filename for {catalog_id}: {filename!r}"
+        file_records: list[dict[str, Any]] = []
+        seen_filenames: set[str] = set()
+        model_total_bytes = 0
+
+        for expected in expected_files:
+            if not isinstance(expected, dict):
+                raise RuntimeError(f"Invalid expected file declaration for {catalog_id}")
+            filename = str(expected.get("filename") or "")
+            if not filename or Path(filename).name != filename:
+                raise RuntimeError(f"Unsafe checkpoint filename for {catalog_id}: {filename!r}")
+            if filename in seen_filenames:
+                raise RuntimeError(
+                    f"Bundled catalog model {catalog_id} declares duplicate file {filename!r}"
+                )
+            seen_filenames.add(filename)
+
+            source_url = str(expected.get("source_url") or "")
+            expected_sha256 = str(expected.get("sha256") or "").lower()
+            expected_size = int(expected.get("size_bytes") or 0)
+            if len(expected_sha256) != 64 or expected_size <= 0:
+                raise RuntimeError(
+                    f"Incomplete pinned checkpoint metadata for {catalog_id}/{filename}"
+                )
+
+            destination = output_root.joinpath(*_safe_segments(catalog_id), filename)
+            print(f"Bundling {catalog_id} ({filename})")
+            if _is_verified(destination, expected_size, expected_sha256):
+                print("  verified cached checkpoint")
+            else:
+                destination.unlink(missing_ok=True)
+                _download(source_url, destination, expected_size, expected_sha256)
+
+            relative_path = destination.relative_to(output_root).as_posix()
+            file_records.append(
+                {
+                    "filename": filename,
+                    "relative_path": relative_path,
+                    "sha256": expected_sha256,
+                    "size_bytes": expected_size,
+                    "source_url": source_url,
+                    "revision": expected.get("revision"),
+                }
             )
-        source_url = str(expected.get("source_url") or "")
-        expected_sha256 = str(expected.get("sha256") or "").lower()
-        expected_size = int(expected.get("size_bytes") or 0)
-        if len(expected_sha256) != 64 or expected_size <= 0:
-            raise RuntimeError(f"Incomplete pinned checkpoint metadata for {catalog_id}")
+            model_total_bytes += expected_size
+            total_bytes += expected_size
 
-        destination = output_root.joinpath(*_safe_segments(catalog_id), filename)
-        print(f"Bundling {catalog_id} ({filename})")
-        if _is_verified(destination, expected_size, expected_sha256):
-            print("  verified cached checkpoint")
-        else:
-            destination.unlink(missing_ok=True)
-            _download(source_url, destination, expected_size, expected_sha256)
+        if not file_records:
+            raise RuntimeError(f"Bundled catalog model {catalog_id} declares no checkpoint files")
 
-        relative_path = destination.relative_to(output_root).as_posix()
+        first = file_records[0]
+        model_root = output_root.joinpath(*_safe_segments(catalog_id))
         assets[catalog_id] = {
             "catalog_id": catalog_id,
-            "filename": filename,
-            "relative_path": relative_path,
-            "sha256": expected_sha256,
-            "size_bytes": expected_size,
+            "filename": first["filename"],
+            "relative_path": (
+                first["relative_path"]
+                if len(file_records) == 1
+                else model_root.relative_to(output_root).as_posix()
+            ),
+            "sha256": first["sha256"] if len(file_records) == 1 else None,
+            "size_bytes": model_total_bytes,
+            "files": file_records,
             "provider_version": model.get("provider_version"),
-            "revision": expected.get("revision"),
+            "revision": first.get("revision"),
         }
-        total_bytes += expected_size
 
     manifest = {
         "manifest_version": MANIFEST_VERSION,
@@ -163,16 +193,19 @@ def stage_models(catalog_path: Path, output_root: Path) -> dict[str, Any]:
     }
     manifest_path = output_root / "manifest.json"
     temporary_manifest = manifest_path.with_suffix(".json.part")
-    temporary_manifest.write_text(
-        json.dumps(manifest, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    temporary_manifest.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     os.replace(temporary_manifest, manifest_path)
 
-    declared_paths = {
-        output_root / record["relative_path"] for record in assets.values()
-    }
-    declared_paths.add(manifest_path)
+    declared_paths: set[Path] = {manifest_path}
+    for record in assets.values():
+        files = record.get("files")
+        if isinstance(files, list):
+            for file_record in files:
+                if isinstance(file_record, dict):
+                    relative_path = str(file_record.get("relative_path") or "")
+                    if relative_path:
+                        declared_paths.add(output_root / relative_path)
+
     for candidate in output_root.rglob("*"):
         if candidate.is_file() and candidate not in declared_paths:
             candidate.unlink()
@@ -181,13 +214,11 @@ def stage_models(catalog_path: Path, output_root: Path) -> dict[str, Any]:
         key=lambda path: len(path.parts),
         reverse=True,
     ):
-        try:
+        with suppress(OSError):
             directory.rmdir()
-        except OSError:
-            pass
 
     print(
-        f"Bundled {len(assets)} checkpoints "
+        f"Bundled {len(assets)} catalog models "
         f"({total_bytes / (1024 * 1024):.1f} MB); "
         f"{skipped_unavailable} unavailable/planned entries remain catalog-only."
     )

@@ -21,6 +21,10 @@ from reefvision import __version__
 from reefvision.config import Settings
 from reefvision.db.models import Job, ModelRegistration, Project
 from reefvision.domain.errors import CatalogResourceError, NotFoundError, ValidationError
+from reefvision.ml.optional_transformers_runtime import (
+    OPTIONAL_MODEL_SPECS,
+    optional_model_status,
+)
 from reefvision.repositories.models import ModelRepository
 from reefvision.repositories.projects import ProjectRepository
 from reefvision.schemas.model_catalog import (
@@ -216,7 +220,7 @@ def _task_allowed_for_workflow(task: CatalogTask, workflow: CatalogWorkflow | No
     if workflow == "smart_mask":
         return task == "assist_segmentation"
     if workflow == "video":
-        return task in {"track", "video_propagation"}
+        return task in {"track", "video_propagation", "metric_video_depth"}
     return True
 
 
@@ -308,6 +312,53 @@ class ModelCatalogService:
                 ),
                 installation_job_id=job.id,
             )
+            return entry.model_copy(update=updates)
+
+        if entry.provider_id in OPTIONAL_MODEL_SPECS:
+            runtime_status = optional_model_status(self.settings, entry.provider_id)
+            spec = OPTIONAL_MODEL_SPECS[entry.provider_id]
+            updates.update(
+                installed_asset_id=(
+                    f"optional_model:{entry.provider_id}" if runtime_status["cached"] else None
+                ),
+                installed_path=(str(runtime_status["path"]) if runtime_status["cached"] else None),
+                installed_checksum=(spec.weight_sha256 if runtime_status["verified"] else None),
+            )
+            if runtime_status["ready"]:
+                updates.update(
+                    installation_state="Ready",
+                    installation_reason=(
+                        "Pinned optional model is cached, checksum-verified, "
+                        f"and ready via {runtime_status.get('cache_source') or 'local cache'}."
+                    ),
+                )
+            elif runtime_status["cached"] and not runtime_status["verified"]:
+                updates.update(
+                    installation_state="Corrupted",
+                    installation_reason=runtime_status["reason"]
+                    or "The optional model cache could not be verified.",
+                )
+            elif runtime_status["transformers_version"] is None:
+                updates.update(
+                    installation_state="Provider Required",
+                    installation_reason=(
+                        "Install the ReefVision advanced-provider runtime before using this model."
+                    ),
+                )
+            elif job is not None and job.status == "failed":
+                updates.update(
+                    installation_state="Blocked",
+                    installation_reason=job.error_message
+                    or "The previous optional-model installation failed.",
+                    installation_job_id=job.id,
+                )
+            else:
+                updates.update(
+                    installation_state="Not Installed",
+                    installation_reason=(
+                        "The pinned optional model is not installed yet. Use Download in Model Hub."
+                    ),
+                )
             return entry.model_copy(update=updates)
 
         record_value = manifest.get("assets", {}).get(entry.catalog_id)

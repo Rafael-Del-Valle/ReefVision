@@ -134,10 +134,7 @@ export function MaskMeasurementPanel({
   });
 
   async function acceptCalibration(calibration: MeasurementCalibration) {
-    queryClient.setQueryData(
-      ["measurement-calibration", imageId],
-      calibration,
-    );
+    queryClient.setQueryData(["measurement-calibration", imageId], calibration);
     await queryClient.invalidateQueries({ queryKey: ["mask-measurements"] });
   }
 
@@ -314,10 +311,13 @@ export function MaskMeasurementPanel({
             Clear
           </button>
         </div>
-        {(calibrationMutation.error ?? clearCalibrationMutation.error) instanceof
-          Error && (
+        {(calibrationMutation.error ??
+          clearCalibrationMutation.error) instanceof Error && (
           <p className="form-error">
-            {(calibrationMutation.error ?? clearCalibrationMutation.error)?.message}
+            {
+              (calibrationMutation.error ?? clearCalibrationMutation.error)
+                ?.message
+            }
           </p>
         )}
         {calibrationQuery.data && (
@@ -479,7 +479,8 @@ export function MaskMeasurementPanel({
             <strong>Perimeter</strong>
             <span>
               {measurement.perimeter_pixels.toFixed(2)} px
-              {measurement.perimeter_physical != null && measurement.physical_unit
+              {measurement.perimeter_physical != null &&
+              measurement.physical_unit
                 ? ` | ${measurement.perimeter_physical.toFixed(4)} ${measurement.physical_unit}`
                 : ""}
             </span>
@@ -535,7 +536,8 @@ export function MaskMeasurementPanel({
             <div className="annotation-selection-row">
               <strong>Surface-area estimate</strong>
               <span>
-                {measurement.surface_area_physical != null && measurement.physical_unit
+                {measurement.surface_area_physical != null &&
+                measurement.physical_unit
                   ? `${measurement.surface_area_physical.toFixed(4)} ${measurement.physical_unit}²`
                   : "Unavailable"}
               </span>

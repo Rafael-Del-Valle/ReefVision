@@ -105,6 +105,7 @@ function CatalogModelCard({
   onRemove,
   onSelect,
   onViewReason,
+  verificationResult,
 }: {
   model: ModelCatalogEntry;
   job?: JobRecord;
@@ -114,6 +115,10 @@ function CatalogModelCard({
   onRemove?: (model: ModelCatalogEntry) => void;
   onSelect?: (model: ModelCatalogEntry) => void;
   onViewReason?: (model: ModelCatalogEntry) => void;
+  verificationResult?: {
+    state: "verifying" | "passed" | "failed";
+    message: string;
+  };
 }) {
   const state = model.installation_state;
   const architecture = model.architecture ?? model.architecture_family;
@@ -142,12 +147,35 @@ function CatalogModelCard({
           Provider {model.provider} {model.provider_version}
         </small>
         <small>Runtime: {runtimes.join(", ") || "Not declared"}</small>
+        {model.checkpoint_identifier && (
+          <small>Checkpoint: {model.checkpoint_identifier}</small>
+        )}
+        {model.installed_path && (
+          <small>Location: {model.installed_path}</small>
+        )}
         <small>
           Devices: {model.supported_devices.join(", ") || "Not declared"}
         </small>
         <p>{model.display_summary}</p>
         {model.installation_reason && (
           <p className="annotation-helper">{model.installation_reason}</p>
+        )}
+        {verificationResult && (
+          <p
+            className={
+              verificationResult.state === "failed"
+                ? "form-error"
+                : "annotation-helper"
+            }
+            role={verificationResult.state === "failed" ? "alert" : undefined}
+            aria-live="polite"
+          >
+            {verificationResult.state === "verifying"
+              ? "Verifying checkpoint integrity..."
+              : verificationResult.state === "passed"
+                ? `Verification passed: ${verificationResult.message}`
+                : `Verification failed: ${verificationResult.message}`}
+          </p>
         )}
         <div className="annotation-selection-list">
           <div className="annotation-selection-row">
@@ -179,8 +207,11 @@ function CatalogModelCard({
           <div>
             <progress value={progressCurrent} max={progressTotal || 1} />
             <small aria-live="polite">
-              {state}: {progress}% ({formatBytes(progressCurrent)} /{" "}
-              {formatBytes(progressTotal)})
+              {state}: {progress}% (
+              {job?.result_json?.progress_unit === "files"
+                ? `${progressCurrent} / ${progressTotal} files`
+                : `${formatBytes(progressCurrent)} / ${formatBytes(progressTotal)}`}
+              )
             </small>
           </div>
         )}
@@ -210,8 +241,13 @@ function CatalogModelCard({
                   type="button"
                   className="secondary"
                   onClick={() => onVerify(model)}
+                  disabled={verificationResult?.state === "verifying"}
                 >
-                  Verify
+                  {verificationResult?.state === "verifying"
+                    ? "Verifying..."
+                    : verificationResult?.state === "passed"
+                      ? "Verify again"
+                      : "Verify"}
                 </button>
               )}
               {onRemove && (
@@ -341,6 +377,20 @@ export function ModelManager({
   );
   const [installJobs, setInstallJobs] = useState<Record<string, JobRecord>>({});
   const [operationMessage, setOperationMessage] = useState<string | null>(null);
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogFilter, setCatalogFilter] = useState<
+    "all" | "ready" | "installable" | "training" | "segmentation" | "assist"
+  >("all");
+  const [showUnavailable, setShowUnavailable] = useState(false);
+  const [verificationResults, setVerificationResults] = useState<
+    Record<
+      string,
+      {
+        state: "verifying" | "passed" | "failed";
+        message: string;
+      }
+    >
+  >({});
 
   const catalogQuery = useQuery({
     queryKey: ["model_catalog", project.id, "model_hub"],
@@ -436,6 +486,103 @@ export function ModelManager({
       ),
     [modelCatalog?.models],
   );
+
+  const catalogSummary = useMemo(() => {
+    const entries = pretrainedCatalogModels;
+    return {
+      ready: entries.filter((item) => item.installation_state === "Ready")
+        .length,
+      installable: entries.filter((item) =>
+        ["Not Installed", "Provider Required", "Update Available"].includes(
+          item.installation_state,
+        ),
+      ).length,
+      active: entries.filter((item) =>
+        ["Downloading", "Verifying", "Installing"].includes(
+          item.installation_state,
+        ),
+      ).length,
+      attention: entries.filter((item) =>
+        ["Blocked", "Corrupted", "Incompatible"].includes(
+          item.installation_state,
+        ),
+      ).length,
+    };
+  }, [pretrainedCatalogModels]);
+
+  const filteredPretrainedCatalogModels = useMemo(() => {
+    const query = catalogSearch.trim().toLocaleLowerCase();
+    return pretrainedCatalogModels.filter((model) => {
+      if (!showUnavailable && model.installation_state === "Unavailable") {
+        return false;
+      }
+
+      const matchesSearch =
+        !query ||
+        [
+          model.display_name,
+          model.display_summary,
+          model.architecture,
+          model.architecture_family,
+          model.provider,
+          model.provider_id,
+          model.task,
+          model.variant,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLocaleLowerCase()
+          .includes(query);
+
+      if (!matchesSearch) return false;
+
+      if (catalogFilter === "ready") {
+        return model.installation_state === "Ready";
+      }
+      if (catalogFilter === "installable") {
+        return [
+          "Not Installed",
+          "Provider Required",
+          "Update Available",
+        ].includes(model.installation_state);
+      }
+      if (catalogFilter === "training") {
+        return model.trainable;
+      }
+      if (catalogFilter === "segmentation") {
+        return [
+          "segment",
+          "semantic_segment",
+          "assist_segmentation",
+          "video_propagation",
+        ].includes(model.task);
+      }
+      if (catalogFilter === "assist") {
+        return (
+          model.prompt_assist_compatibility ||
+          ["assist_segmentation", "open_vocabulary_detect", "caption"].includes(
+            model.task,
+          )
+        );
+      }
+      return true;
+    });
+  }, [catalogFilter, catalogSearch, pretrainedCatalogModels, showUnavailable]);
+
+  function jumpToModelSection(sectionId: string) {
+    document.getElementById(sectionId)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
+
+  function openCatalogFilter(
+    filter:
+      "all" | "ready" | "installable" | "training" | "segmentation" | "assist",
+  ) {
+    setCatalogFilter(filter);
+    jumpToModelSection("model-ai-catalog");
+  }
 
   useEffect(() => {
     if (!catalogQuery.data?.models.length) return;
@@ -583,6 +730,11 @@ export function ModelManager({
     }),
     onSuccess: ({ model, job }) => {
       setConfirmationModel(null);
+      setVerificationResults((current) => {
+        const next = { ...current };
+        delete next[model.catalog_id];
+        return next;
+      });
       setOperationMessage(`Installation started for ${model.display_name}.`);
       setInstallJobs((current) => ({ ...current, [model.catalog_id]: job }));
       void queryClient.invalidateQueries({
@@ -608,24 +760,71 @@ export function ModelManager({
   });
 
   const verifyMutation = useMutation({
-    mutationFn: (model: ModelCatalogEntry) =>
-      verifyCatalogModel(project.id, model.catalog_id),
-    onSuccess: (result) => {
+    mutationFn: async (model: ModelCatalogEntry) => ({
+      model,
+      result: await verifyCatalogModel(project.id, model.catalog_id),
+    }),
+    onMutate: (model) => {
+      setVerificationResults((current) => ({
+        ...current,
+        [model.catalog_id]: {
+          state: "verifying",
+          message:
+            "Checking the installed checkpoint against its pinned checksum.",
+        },
+      }));
+      setOperationMessage(`Verifying ${model.display_name}...`);
+    },
+    onSuccess: ({ model, result }) => {
+      const message = result.verified
+        ? result.actual_checksum
+          ? `SHA-256 ${result.actual_checksum.slice(0, 12)}… matches the trusted model.`
+          : "The installed checkpoint matches the trusted model."
+        : (result.reason ??
+          "The installed checkpoint did not pass verification.");
+
+      setVerificationResults((current) => ({
+        ...current,
+        [model.catalog_id]: {
+          state: result.verified ? "passed" : "failed",
+          message,
+        },
+      }));
       setOperationMessage(
         result.verified
-          ? "Managed checkpoint verification passed."
-          : (result.reason ?? "Managed checkpoint verification failed."),
+          ? `${model.display_name} verification passed.`
+          : `${model.display_name} verification failed.`,
       );
       void queryClient.invalidateQueries({
         queryKey: ["model_catalog", project.id],
       });
+      void queryClient.invalidateQueries({
+        queryKey: ["model_hub_bootstrap", project.id],
+      });
+    },
+    onError: (error, model) => {
+      setVerificationResults((current) => ({
+        ...current,
+        [model.catalog_id]: {
+          state: "failed",
+          message: error.message,
+        },
+      }));
+      setOperationMessage(`${model.display_name} verification failed.`);
     },
   });
 
   const removeCatalogMutation = useMutation({
-    mutationFn: (model: ModelCatalogEntry) =>
-      removeCatalogModel(project.id, model.catalog_id),
-    onSuccess: () => {
+    mutationFn: async (model: ModelCatalogEntry) => ({
+      model,
+      result: await removeCatalogModel(project.id, model.catalog_id),
+    }),
+    onSuccess: ({ model }) => {
+      setVerificationResults((current) => {
+        const next = { ...current };
+        delete next[model.catalog_id];
+        return next;
+      });
       setOperationMessage(
         "Managed catalog model removed. The definition remains available.",
       );
@@ -668,12 +867,15 @@ export function ModelManager({
     removeCatalogMutation.error;
 
   return (
-    <section className="gallery-panel">
-      <div className="section-heading gallery-heading">
+    <section className="gallery-panel model-ai-workspace">
+      <div className="section-heading gallery-heading model-ai-header">
         <div>
-          <p className="eyebrow">Model Hub</p>
-          <h3>Catalog and local registrations</h3>
-          <span>{catalogCountLabel}</span>
+          <p className="eyebrow">Models & AI</p>
+          <h3>AI workspace</h3>
+          <span>
+            Find, install, verify, and manage models without digging through
+            provider internals.
+          </span>
         </div>
         <div className="image-card-actions">
           <button
@@ -697,12 +899,92 @@ export function ModelManager({
         </div>
       </div>
 
-      <section className="gallery-panel">
+      <div
+        className="model-ai-overview-grid"
+        aria-label="Models and AI overview"
+      >
+        <button
+          type="button"
+          className="model-ai-overview-card"
+          onClick={() => openCatalogFilter("installable")}
+        >
+          <span className="model-ai-overview-label">Available to install</span>
+          <strong>{catalogSummary.installable}</strong>
+          <small>Browse models that can be added now</small>
+        </button>
+        <button
+          type="button"
+          className="model-ai-overview-card"
+          onClick={() => openCatalogFilter("ready")}
+        >
+          <span className="model-ai-overview-label">Installed & ready</span>
+          <strong>{catalogSummary.ready}</strong>
+          <small>See models that ReefVision can use now</small>
+        </button>
+        <button
+          type="button"
+          className="model-ai-overview-card"
+          onClick={() => openCatalogFilter("assist")}
+        >
+          <span className="model-ai-overview-label">AI assist</span>
+          <strong>Find tools</strong>
+          <small>Segmentation, prompting, vision-language, and OCR</small>
+        </button>
+        <button
+          type="button"
+          className="model-ai-overview-card"
+          onClick={() => jumpToModelSection("model-ai-advanced")}
+        >
+          <span className="model-ai-overview-label">System status</span>
+          <strong>
+            {catalogSummary.active > 0
+              ? `${catalogSummary.active} active`
+              : catalogSummary.attention > 0
+                ? `${catalogSummary.attention} needs attention`
+                : "Healthy"}
+          </strong>
+          <small>Provider, runtime, and compatibility diagnostics</small>
+        </button>
+      </div>
+
+      <nav className="model-ai-jumpbar" aria-label="Models and AI navigation">
+        <button type="button" onClick={() => openCatalogFilter("all")}>
+          Browse models
+        </button>
+        <button type="button" onClick={() => openCatalogFilter("ready")}>
+          Installed
+        </button>
+        <button
+          type="button"
+          onClick={() => jumpToModelSection("model-ai-project-models")}
+        >
+          My models
+        </button>
+        <button
+          type="button"
+          onClick={() => jumpToModelSection("model-ai-custom-models")}
+        >
+          Custom imports
+        </button>
+        <button
+          type="button"
+          onClick={() => jumpToModelSection("model-ai-advanced")}
+        >
+          Advanced
+        </button>
+      </nav>
+
+      <p className="model-ai-catalog-count">{catalogCountLabel}</p>
+
+      <section
+        id="model-ai-catalog"
+        className="gallery-panel model-ai-catalog-section"
+      >
         <div className="section-heading gallery-heading">
           <div>
-            <p className="eyebrow">Pretrained Catalog</p>
+            <p className="eyebrow">Model catalog</p>
             <h3>Validated presets</h3>
-            <span>No checkpoint path entry required</span>
+            <span>Search by task or choose what you want ReefVision to do</span>
           </div>
           <button
             type="button"
@@ -759,8 +1041,78 @@ export function ModelManager({
         {operationError && (
           <p className="form-error">{operationError.message}</p>
         )}
-        <div className="image-grid">
-          {pretrainedCatalogModels.map((model) => {
+
+        <div className="model-ai-catalog-toolbar">
+          <label className="model-ai-search">
+            <span>Search models</span>
+            <input
+              type="search"
+              value={catalogSearch}
+              placeholder="Search model, task, architecture, or provider"
+              onChange={(event) => setCatalogSearch(event.target.value)}
+            />
+          </label>
+
+          <div
+            className="model-ai-filter-tabs"
+            aria-label="Filter model catalog"
+          >
+            {(
+              [
+                ["all", "All"],
+                ["ready", "Installed"],
+                ["installable", "Available"],
+                ["training", "Training"],
+                ["segmentation", "Segmentation"],
+                ["assist", "AI assist"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className="secondary"
+                aria-pressed={catalogFilter === value}
+                onClick={() => setCatalogFilter(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <label className="model-ai-unavailable-toggle">
+            <input
+              type="checkbox"
+              checked={showUnavailable}
+              onChange={(event) => setShowUnavailable(event.target.checked)}
+            />
+            Show unavailable / future models
+          </label>
+        </div>
+
+        <p className="system-subtle">
+          Showing {filteredPretrainedCatalogModels.length} of{" "}
+          {pretrainedCatalogModels.length} pretrained models.
+        </p>
+
+        {filteredPretrainedCatalogModels.length === 0 && (
+          <div className="empty-state gallery-empty">
+            <h4>No models match these filters</h4>
+            <p>Try another search or switch back to All.</p>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setCatalogSearch("");
+                setCatalogFilter("all");
+              }}
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
+
+        <div className="image-grid model-ai-model-grid">
+          {filteredPretrainedCatalogModels.map((model) => {
             const job = installJobs[model.catalog_id];
             const displayedModel =
               job &&
@@ -798,6 +1150,7 @@ export function ModelManager({
                   onSelectCatalogModel?.(item.catalog_id);
                 }}
                 onViewReason={setReasonModel}
+                verificationResult={verificationResults[model.catalog_id]}
               />
             );
           })}
@@ -885,7 +1238,7 @@ export function ModelManager({
         )}
       </section>
 
-      <section className="gallery-panel">
+      <section id="model-ai-project-models" className="gallery-panel">
         <div className="section-heading gallery-heading">
           <div>
             <p className="eyebrow">My Trained Models</p>
@@ -905,7 +1258,7 @@ export function ModelManager({
         </div>
       </section>
 
-      <section className="gallery-panel">
+      <section id="model-ai-custom-models" className="gallery-panel">
         <div className="section-heading gallery-heading">
           <div>
             <p className="eyebrow">Imported Custom Models</p>
@@ -928,137 +1281,160 @@ export function ModelManager({
         </div>
       </section>
 
-      <section className="gallery-panel">
-        <div className="section-heading gallery-heading">
-          <div>
-            <p className="eyebrow">Provider hub</p>
-            <h3>Model provider catalog</h3>
-            <span>Ready, blocked, and future provider families</span>
-          </div>
-        </div>
-        {modelHubBootstrap.isPending && providerCatalog.length === 0 && (
-          <p>Loading provider catalog...</p>
-        )}
-        {modelHubBootstrap.error && providerCatalog.length === 0 && (
-          <p className="form-error">{modelHubBootstrap.error.message}</p>
-        )}
-        <div className="image-grid">
-          {providerCatalog.map((provider) => (
-            <ProviderCatalogCard
-              key={provider.provider_id}
-              provider={provider}
-              dependencyStatus={
-                preflightByName.get(provider.provider_id) ?? undefined
-              }
-            />
-          ))}
-        </div>
-      </section>
+      <details
+        id="model-ai-advanced"
+        className="gallery-panel model-ai-advanced-shell"
+      >
+        <summary>
+          <span>
+            <strong>Advanced diagnostics & provider setup</strong>
+            <small>
+              Runtime health, provider dependencies, and compatibility details
+            </small>
+          </span>
+        </summary>
+        <div className="model-ai-advanced-content">
+          <section className="gallery-panel">
+            <div className="section-heading gallery-heading">
+              <div>
+                <p className="eyebrow">Provider hub</p>
+                <h3>Model provider catalog</h3>
+                <span>Ready, blocked, and future provider families</span>
+              </div>
+            </div>
+            {modelHubBootstrap.isPending && providerCatalog.length === 0 && (
+              <p>Loading provider catalog...</p>
+            )}
+            {modelHubBootstrap.error && providerCatalog.length === 0 && (
+              <p className="form-error">{modelHubBootstrap.error.message}</p>
+            )}
+            <div className="image-grid">
+              {providerCatalog.map((provider) => (
+                <ProviderCatalogCard
+                  key={provider.provider_id}
+                  provider={provider}
+                  dependencyStatus={
+                    preflightByName.get(provider.provider_id) ?? undefined
+                  }
+                />
+              ))}
+            </div>
+          </section>
 
-      <section className="gallery-panel">
-        <div className="section-heading gallery-heading">
-          <div>
-            <p className="eyebrow">Runtime status</p>
-            <h3>Execution backends</h3>
-            <span>
-              {runtimeStatusesCheckedAt
-                ? `Showing latest check from ${runtimeStatusesCheckedAt}`
-                : "Architecture and runtime are tracked separately"}
-            </span>
-          </div>
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => void runtimeStatuses.refetch()}
-            disabled={runtimeStatuses.isFetching}
-          >
-            Refresh runtime status
-          </button>
-        </div>
-        {runtimeStatuses.isPending && !runtimeStatuses.data && (
-          <p>Checking runtime backends...</p>
-        )}
-        {runtimeStatuses.error && (
-          <p className="form-error">{runtimeStatuses.error.message}</p>
-        )}
-        <div className="image-grid">
-          {runtimeStatuses.data?.map((runtime) => (
-            <RuntimeProviderCard key={runtime.runtime_id} runtime={runtime} />
-          ))}
-        </div>
-      </section>
+          <section className="gallery-panel">
+            <div className="section-heading gallery-heading">
+              <div>
+                <p className="eyebrow">Runtime status</p>
+                <h3>Execution backends</h3>
+                <span>
+                  {runtimeStatusesCheckedAt
+                    ? `Showing latest check from ${runtimeStatusesCheckedAt}`
+                    : "Architecture and runtime are tracked separately"}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => void runtimeStatuses.refetch()}
+                disabled={runtimeStatuses.isFetching}
+              >
+                Refresh runtime status
+              </button>
+            </div>
+            {runtimeStatuses.isPending && !runtimeStatuses.data && (
+              <p>Checking runtime backends...</p>
+            )}
+            {runtimeStatuses.error && (
+              <p className="form-error">{runtimeStatuses.error.message}</p>
+            )}
+            <div className="image-grid">
+              {runtimeStatuses.data?.map((runtime) => (
+                <RuntimeProviderCard
+                  key={runtime.runtime_id}
+                  runtime={runtime}
+                />
+              ))}
+            </div>
+          </section>
 
-      <section className="gallery-panel">
-        <div className="section-heading gallery-heading">
-          <div>
-            <p className="eyebrow">Dependency preflight</p>
-            <h3>Implemented provider readiness</h3>
-            <span>
-              {providerPreflightCheckedAt
-                ? `Showing latest check from ${providerPreflightCheckedAt}`
-                : "Explicit local checkpoints only"}
-            </span>
-          </div>
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => void providerPreflight.refetch()}
-            disabled={providerPreflight.isFetching}
-          >
-            Refresh dependencies
-          </button>
-        </div>
-        {providerPreflight.isPending && !providerPreflight.data && (
-          <p>Checking provider dependencies...</p>
-        )}
-        {providerPreflight.error && (
-          <p className="form-error">{providerPreflight.error.message}</p>
-        )}
-        <div className="image-grid">
-          {providerPreflight.data?.providers.map((provider) => (
-            <ProviderReadinessCard
-              key={provider.provider_name}
-              provider={provider}
-            />
-          ))}
-        </div>
-      </section>
+          <section className="gallery-panel">
+            <div className="section-heading gallery-heading">
+              <div>
+                <p className="eyebrow">Dependency preflight</p>
+                <h3>Implemented provider readiness</h3>
+                <span>
+                  {providerPreflightCheckedAt
+                    ? `Showing latest check from ${providerPreflightCheckedAt}`
+                    : "Explicit local checkpoints only"}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => void providerPreflight.refetch()}
+                disabled={providerPreflight.isFetching}
+              >
+                Refresh dependencies
+              </button>
+            </div>
+            {providerPreflight.isPending && !providerPreflight.data && (
+              <p>Checking provider dependencies...</p>
+            )}
+            {providerPreflight.error && (
+              <p className="form-error">{providerPreflight.error.message}</p>
+            )}
+            <div className="image-grid">
+              {providerPreflight.data?.providers.map((provider) => (
+                <ProviderReadinessCard
+                  key={provider.provider_name}
+                  provider={provider}
+                />
+              ))}
+            </div>
+          </section>
 
-      <section className="gallery-panel">
-        <div className="section-heading gallery-heading">
-          <div>
-            <p className="eyebrow">Training compatibility</p>
-            <h3>Pinned Ultralytics registry</h3>
-            <span>
-              {trainingCompatibilityCheckedAt
-                ? `Showing latest compatibility snapshot from ${trainingCompatibilityCheckedAt}`
-                : "Read-only compatibility map for future training workflows"}
-            </span>
-          </div>
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => void trainingCompatibility.refetch()}
-            disabled={trainingCompatibility.isFetching}
-          >
-            Refresh compatibility
-          </button>
+          <section className="gallery-panel">
+            <div className="section-heading gallery-heading">
+              <div>
+                <p className="eyebrow">Training compatibility</p>
+                <h3>Pinned Ultralytics registry</h3>
+                <span>
+                  {trainingCompatibilityCheckedAt
+                    ? `Showing latest compatibility snapshot from ${trainingCompatibilityCheckedAt}`
+                    : "Read-only compatibility map for future training workflows"}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => void trainingCompatibility.refetch()}
+                disabled={trainingCompatibility.isFetching}
+              >
+                Refresh compatibility
+              </button>
+            </div>
+            {trainingCompatibility.isPending && !trainingCompatibility.data && (
+              <p>Loading pinned Ultralytics training compatibility...</p>
+            )}
+            {trainingCompatibility.error && (
+              <p className="form-error">
+                {trainingCompatibility.error.message}
+              </p>
+            )}
+            {trainingCompatibility.data && (
+              <UltralyticsTrainingCompatibility
+                registry={trainingCompatibility.data}
+              />
+            )}
+          </section>
         </div>
-        {trainingCompatibility.isPending && !trainingCompatibility.data && (
-          <p>Loading pinned Ultralytics training compatibility...</p>
-        )}
-        {trainingCompatibility.error && (
-          <p className="form-error">{trainingCompatibility.error.message}</p>
-        )}
-        {trainingCompatibility.data && (
-          <UltralyticsTrainingCompatibility
-            registry={trainingCompatibility.data}
-          />
-        )}
-      </section>
+      </details>
 
-      <details className="gallery-panel">
-        <summary>{"Advanced -> Import Custom Model"}</summary>
+      <details
+        id="model-ai-import"
+        className="gallery-panel model-ai-import-shell"
+      >
+        <summary>Advanced · Import custom checkpoint</summary>
         <form className="new-class-form" onSubmit={submit}>
           <h3>Import a local checkpoint</h3>
           <label>

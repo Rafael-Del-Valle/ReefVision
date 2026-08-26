@@ -9,11 +9,7 @@ import pytest
 
 @pytest.fixture(scope="module")
 def harness():
-    path = (
-        Path(__file__).resolve().parents[4]
-        / "scripts"
-        / "acceptance_physical_calibration.py"
-    )
+    path = Path(__file__).resolve().parents[4] / "scripts" / "acceptance_physical_calibration.py"
     spec = importlib.util.spec_from_file_location("acceptance_physical_calibration", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -81,9 +77,7 @@ def test_reference_parser_requires_explicit_metric_measurements(
     assert payload["spatial_reference"]["unit"] == "cm"
     assert payload["metric_depth"]["unit"] == "m"
     assert payload["metric_depth"]["is_metric"] is True
-    assert payload["metric_depth"]["source"] == (
-        "stereo triangulation with calibrated baseline"
-    )
+    assert payload["metric_depth"]["source"] == ("stereo triangulation with calibrated baseline")
     assert payload["metric_depth"]["samples"][0]["depth"] == 2.0
 
 
@@ -169,8 +163,6 @@ def test_measurement_error_applies_relative_or_absolute_tolerance(harness) -> No
 
 def test_harness_source_keeps_relative_monocular_depth_nonmetric() -> None:
     source = (
-        Path(__file__).resolve().parents[4]
-        / "scripts"
-        / "acceptance_physical_calibration.py"
+        Path(__file__).resolve().parents[4] / "scripts" / "acceptance_physical_calibration.py"
     ).read_text(encoding="utf-8")
     assert '"relative_monocular_depth_is_metric": False' in source

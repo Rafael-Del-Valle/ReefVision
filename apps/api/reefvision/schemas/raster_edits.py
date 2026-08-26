@@ -23,8 +23,9 @@ class RasterMaskEditRequest(BaseModel):
     base_revision: int = Field(ge=0)
     mask_annotation_id: str | None = Field(default=None, min_length=1, max_length=36)
     label_class_id: str = Field(min_length=1, max_length=36)
-    mode: Literal["paint", "erase"]
+    mode: Literal["paint", "erase", "fill"]
     brush_radius: FiniteFloat = Field(gt=0, le=4096)
+    fill_tolerance: int = Field(default=24, ge=0, le=255)
     strokes: list[RasterEditStroke] = Field(min_length=1, max_length=10_000)
 
 

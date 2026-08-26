@@ -249,7 +249,7 @@ export function SystemPanel({
   ) {
     return (
       <div className="welcome-panel">
-        <p className="eyebrow">Milestone 8 foundations</p>
+        <p className="eyebrow">Local application</p>
         <h2>System status</h2>
         <p>
           Loading version, schema, compatibility, logs, command shortcuts,
@@ -268,7 +268,7 @@ export function SystemPanel({
   ) {
     return (
       <div className="welcome-panel">
-        <p className="eyebrow">Milestone 8 foundations</p>
+        <p className="eyebrow">Local application</p>
         <h2>System status</h2>
         <p className="form-error">
           {version.error?.message ||
@@ -293,7 +293,7 @@ export function SystemPanel({
     <div className="system-panel">
       <div className="project-header">
         <div>
-          <p className="eyebrow">Milestone 8 foundations</p>
+          <p className="eyebrow">Local application</p>
           <h2>System status</h2>
           <p>
             Current application identity, database compatibility, backups,
@@ -483,7 +483,10 @@ export function SystemPanel({
                       {bytesLabel(preview.estimated_total_size_bytes)}.
                     </p>
                   )}
-                  <code>{backup.destination_path}</code>
+                  <details className="advanced-disclosure">
+                    <summary>Technical storage details</summary>
+                    <code>{backup.destination_path}</code>
+                  </details>
                   <div className="system-inline-form">
                     <button
                       type="button"
@@ -564,58 +567,63 @@ export function SystemPanel({
             Installs the per-user `start-reefvision` and `update-reefvision`
             wrappers and verifies that the shared command directory is on PATH.
           </p>
-          <dl className="system-list">
-            <div>
-              <dt>Command version</dt>
-              <dd>{commandShortcutData.command_version}</dd>
-            </div>
-            <div>
-              <dt>PATH status</dt>
-              <dd>
-                {commandShortcutData.path_contains_command_directory
-                  ? "Configured"
-                  : "Missing"}
-              </dd>
-            </div>
-            <div>
-              <dt>`start-reefvision`</dt>
-              <dd>
-                {commandShortcutData.start_command_exists
-                  ? commandShortcutData.start_command_managed
-                    ? "Managed wrapper"
-                    : "Conflict detected"
-                  : "Missing"}
-              </dd>
-            </div>
-            <div>
-              <dt>`update-reefvision`</dt>
-              <dd>
-                {commandShortcutData.update_command_exists
-                  ? commandShortcutData.update_command_managed
-                    ? "Managed wrapper"
-                    : "Conflict detected"
-                  : "Missing"}
-              </dd>
-            </div>
-            <div>
-              <dt>Command directory</dt>
-              <dd>
-                <code>{commandShortcutData.command_directory}</code>
-              </dd>
-            </div>
-            <div>
-              <dt>Support directory</dt>
-              <dd>
-                <code>{commandShortcutData.support_directory}</code>
-              </dd>
-            </div>
-            <div>
-              <dt>Repository path</dt>
-              <dd>
-                <code>{commandShortcutData.repo_path ?? "Not configured"}</code>
-              </dd>
-            </div>
-          </dl>
+          <details className="advanced-disclosure">
+            <summary>Technical installation paths</summary>
+            <dl className="system-list">
+              <div>
+                <dt>Command version</dt>
+                <dd>{commandShortcutData.command_version}</dd>
+              </div>
+              <div>
+                <dt>PATH status</dt>
+                <dd>
+                  {commandShortcutData.path_contains_command_directory
+                    ? "Configured"
+                    : "Missing"}
+                </dd>
+              </div>
+              <div>
+                <dt>`start-reefvision`</dt>
+                <dd>
+                  {commandShortcutData.start_command_exists
+                    ? commandShortcutData.start_command_managed
+                      ? "Managed wrapper"
+                      : "Conflict detected"
+                    : "Missing"}
+                </dd>
+              </div>
+              <div>
+                <dt>`update-reefvision`</dt>
+                <dd>
+                  {commandShortcutData.update_command_exists
+                    ? commandShortcutData.update_command_managed
+                      ? "Managed wrapper"
+                      : "Conflict detected"
+                    : "Missing"}
+                </dd>
+              </div>
+              <div>
+                <dt>Command directory</dt>
+                <dd>
+                  <code>{commandShortcutData.command_directory}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Support directory</dt>
+                <dd>
+                  <code>{commandShortcutData.support_directory}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Repository path</dt>
+                <dd>
+                  <code>
+                    {commandShortcutData.repo_path ?? "Not configured"}
+                  </code>
+                </dd>
+              </div>
+            </dl>
+          </details>
           {commandShortcutData.notes.length > 0 && (
             <ul className="system-details">
               {commandShortcutData.notes.map((note) => (
@@ -682,7 +690,10 @@ export function SystemPanel({
                 {diagnosticsData.diagnostic_bundle_version ?? "Pending"}
               </span>
               {diagnosticsData.bundle_path && (
-                <code>{diagnosticsData.bundle_path}</code>
+                <details className="advanced-disclosure">
+                  <summary>Technical bundle location</summary>
+                  <code>{diagnosticsData.bundle_path}</code>
+                </details>
               )}
               {diagnosticsData.bundle_size_bytes != null && (
                 <span>{bytesLabel(diagnosticsData.bundle_size_bytes)}</span>
@@ -707,28 +718,35 @@ export function SystemPanel({
               <h3>Data and logs</h3>
             </div>
           </div>
-          <dl className="system-list">
-            <div>
-              <dt>Data directory</dt>
-              <dd>
-                <code>{versionData.data_dir}</code>
-              </dd>
-            </div>
-            <div>
-              <dt>Database</dt>
-              <dd>
-                <code>
-                  {versionData.database_path ?? "In-memory or unavailable"}
-                </code>
-              </dd>
-            </div>
-            <div>
-              <dt>Logs directory</dt>
-              <dd>
-                <code>{logsData.logs_dir}</code>
-              </dd>
-            </div>
-          </dl>
+          <p className="system-subtle">
+            Use these locations when troubleshooting or sharing a support
+            bundle.
+          </p>
+          <details className="advanced-disclosure">
+            <summary>Show data and log locations</summary>
+            <dl className="system-list">
+              <div>
+                <dt>Data directory</dt>
+                <dd>
+                  <code>{versionData.data_dir}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Database</dt>
+                <dd>
+                  <code>
+                    {versionData.database_path ?? "In-memory or unavailable"}
+                  </code>
+                </dd>
+              </div>
+              <div>
+                <dt>Logs directory</dt>
+                <dd>
+                  <code>{logsData.logs_dir}</code>
+                </dd>
+              </div>
+            </dl>
+          </details>
           <div className="system-log-list">
             {logsData.files.length === 0 ? (
               <p>No log files exist yet.</p>
@@ -737,7 +755,10 @@ export function SystemPanel({
                 <article key={file.path} className="system-log-item">
                   <strong>{file.name}</strong>
                   <span>{bytesLabel(file.size_bytes)}</span>
-                  <code>{file.path}</code>
+                  <details className="advanced-disclosure">
+                    <summary>File location</summary>
+                    <code>{file.path}</code>
+                  </details>
                 </article>
               ))
             )}

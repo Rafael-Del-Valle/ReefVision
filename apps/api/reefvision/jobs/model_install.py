@@ -16,6 +16,11 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import Job
+from reefvision.ml.optional_transformers_runtime import (
+    OPTIONAL_MODEL_SPECS,
+    ensure_optional_model,
+    optional_model_status,
+)
 from reefvision.services.model_catalog import ModelCatalogService
 from reefvision.storage.catalog_models import (
     catalog_asset_path,
@@ -34,6 +39,7 @@ def _set_job(
     status: str | None = None,
     stage: str | None = None,
     progress: int | None = None,
+    total: int | None = None,
     error: str | None = None,
     completed: bool = False,
     result: dict[str, object] | None = None,
@@ -46,6 +52,8 @@ def _set_job(
             job.status = status
         if progress is not None:
             job.progress_current = progress
+        if total is not None:
+            job.progress_total = total
         if error is not None or status == "succeeded":
             job.error_message = error
         current = dict(job.result_json or {})
@@ -104,6 +112,96 @@ def process_model_install_job(
             job.completed_at = datetime.now(UTC)
             session.commit()
             return False
+        if entry.provider_id in OPTIONAL_MODEL_SPECS:
+            spec = OPTIONAL_MODEL_SPECS[entry.provider_id]
+            claim = cast(
+                CursorResult[Any],
+                session.execute(
+                    update(Job)
+                    .where(Job.id == job_id, Job.status == "queued")
+                    .values(
+                        status="running",
+                        started_at=datetime.now(UTC),
+                        error_message=None,
+                        progress_current=0,
+                        progress_total=max(1, len(spec.allow_patterns)),
+                        result_json={
+                            "stage": "downloading",
+                            "progress_unit": "files",
+                            "files_total": len(spec.allow_patterns),
+                        },
+                    )
+                ),
+            )
+            if int(claim.rowcount or 0) != 1:
+                session.rollback()
+                return False
+            session.commit()
+
+            def _optional_progress(current: int, total: int) -> None:
+                if _cancel_requested(factory, job_id):
+                    raise RuntimeError("Model installation cancelled by user")
+                _set_job(
+                    factory,
+                    job_id,
+                    stage="downloading",
+                    progress=current,
+                    total=max(1, total),
+                    result={
+                        "progress_unit": "files",
+                        "files_downloaded": current,
+                        "files_total": total,
+                    },
+                )
+
+            try:
+                target = ensure_optional_model(
+                    settings,
+                    entry.provider_id,
+                    allow_download=True,
+                    progress_callback=_optional_progress,
+                )
+                _set_job(
+                    factory,
+                    job_id,
+                    stage="verifying",
+                    result={"progress_unit": "files"},
+                )
+                runtime_status = optional_model_status(settings, entry.provider_id)
+                if not runtime_status["verified"]:
+                    raise RuntimeError(
+                        runtime_status["reason"]
+                        or "Downloaded optional model could not be verified"
+                    )
+                final_total = max(1, len(spec.allow_patterns))
+                _set_job(
+                    factory,
+                    job_id,
+                    status="succeeded",
+                    stage="ready",
+                    progress=final_total,
+                    total=final_total,
+                    completed=True,
+                    result={
+                        "catalog_id": catalog_id,
+                        "asset_id": f"optional_model:{entry.provider_id}",
+                        "relative_path": str(target),
+                        "sha256": spec.weight_sha256,
+                        "provider_version": runtime_status["transformers_version"],
+                        "repo_id": spec.repo_id,
+                        "revision": spec.revision,
+                        "cache_source": runtime_status.get("cache_source"),
+                        "progress_unit": "files",
+                    },
+                )
+                return True
+            except Exception as exc:
+                if _cancel_requested(factory, job_id):
+                    _cancel(factory, job_id)
+                else:
+                    _fail(factory, job_id, str(exc))
+                return False
+
         expected_files = entry.expected_files
 
         # A model install can be offered to both the long-lived worker and the

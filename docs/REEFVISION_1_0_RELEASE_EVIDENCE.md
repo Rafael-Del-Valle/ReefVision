@@ -1,5 +1,70 @@
 # ReefVision 1.0 Release Evidence
 
+## Source-freeze audit — 2026-08-26
+
+The Prompt 1–8 working tree was audited for an intentional ReefVision 1.0 RC
+source commit. Generated validation/build directories are now ignored, six
+root-level copied-source diagnostic reports and local workbook-render QA output
+were removed, and current README release/package wording was corrected. No files
+were staged or committed.
+
+Source-freeze validation:
+
+| Gate | Result |
+| --- | --- |
+| `git diff --check` | PASS |
+| Ruff lint / Ruff format | PASS — 413 files |
+| mypy | PASS — 278 source files |
+| Backend pytest | PASS — 369 tests; one known dependency warning |
+| Fresh Alembic round trip | PASS — base → `0024` → base → `0024` |
+| Frontend Prettier / TypeScript | PASS |
+| Frontend Vitest | PASS — 116 tests in 39 files; one known non-failing test warning |
+| Frontend Playwright Chromium | PASS — 7 tests |
+| Frontend production build | PASS — known large-chunk warning |
+| Python sdist/wheel build | PASS |
+| Rust fmt / Clippy / test | PASS — 7 tests |
+
+Source decision: **READY FOR HUMAN REVIEW AND RC COMMIT**. This decision applies
+only to the source tree. The existing MSI/CAB set remains a pre-commit validation
+build and is not the final distributable release artifact.
+
+## Prompt 8 current-tree validation — 2026-08-26
+
+Source provenance:
+
+- branch: `agent/coralvision-1.0-completion`
+- HEAD: `9ad0f9d6e82ff0686081365b0a47e8bd161ffb82`
+- version: `1.0.0`
+- `source_working_tree_dirty: true`
+- source diff at validation time: 102 tracked files changed, with integrated untracked source/tests and local evidence present
+
+Current deterministic evidence:
+
+| Gate | Result |
+| --- | --- |
+| Ruff lint / Ruff format | PASS — 413 files formatted; lint clean |
+| mypy | PASS — 278 source files |
+| Backend pytest | PASS — 369 tests |
+| Fresh Alembic round trip | PASS — base → `0024` → base → `0024` |
+| Frontend Prettier / TypeScript | PASS |
+| Frontend Vitest | PASS — 116 tests in 39 files |
+| Frontend Playwright Chromium | PASS — 7 tests, including 1,500-annotation stress case |
+| Frontend production build | PASS — existing large-chunk warning remains |
+| Rust fmt / check / test | PASS — 7 Rust tests |
+| Packaged backend self-test | PASS |
+| MSI administrative extraction and verification | PASS — 19,484 files, longest path 184 characters, 25 migrations, 11 bundled model assets |
+| Clean-machine install/uninstall/reinstall | NOT RUN — plan-only report generated; elevated disposable-machine execution is still required |
+
+Current package:
+
+- `ReefVision_1.0.0_x64_en-US.msi` — 218,156,530 bytes — SHA-256 `a1d7f284fd2711536dd05ca162b74c451b595c9c8369e06737bb9469aa6a7123`
+- nine required external cabinets (`rv1.cab` through `rv9.cab`); the MSI is not distributable by itself
+- build command: `powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-desktop.ps1 -TargetTriple x86_64-pc-windows-msvc`
+
+Release decision: **NOT RELEASE READY**. The package verifies locally, but the
+working tree does not yet provide commit-level provenance and clean-machine
+install/launch/restart/uninstall/reinstall acceptance has not been executed.
+
 This checklist separates software correctness, package readability, installed-Windows behavior, and scientific validation. `PASS` means evidence has actually been produced for the code/package under discussion; old evidence is retained as baseline context but is not promoted to the current head after relevant code or dependency changes.
 
 ## Automated software gate

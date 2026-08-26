@@ -357,8 +357,52 @@ export function VideoTrackingWorkspace({
 
   return (
     <div className="management-grid" data-testid="video-tracking-workspace">
+      <section className="management-card workspace-guide-card">
+        <div>
+          <p className="eyebrow">Video &amp; tracking</p>
+          <h3>From video to reviewed tracks</h3>
+          <p className="muted-copy">
+            Import once, extract only the frames you need for review, run
+            automated tracking, then verify/edit tracks before using behavior or
+            benchmark metrics.
+          </p>
+        </div>
+        <div
+          className="workspace-guide compact"
+          aria-label="Video tracking workflow"
+        >
+          <div className="workspace-guide-step">
+            <span>1</span>
+            <div>
+              <strong>Import</strong>
+              <small>Select a managed video.</small>
+            </div>
+          </div>
+          <div className="workspace-guide-step">
+            <span>2</span>
+            <div>
+              <strong>Track</strong>
+              <small>Run or edit object tracks.</small>
+            </div>
+          </div>
+          <div className="workspace-guide-step">
+            <span>3</span>
+            <div>
+              <strong>Review</strong>
+              <small>Verify keyframes and identities.</small>
+            </div>
+          </div>
+          <div className="workspace-guide-step">
+            <span>4</span>
+            <div>
+              <strong>Analyze</strong>
+              <small>Use science and benchmark outputs.</small>
+            </div>
+          </div>
+        </div>
+      </section>
       <section className="management-card">
-        <p className="eyebrow">Phase 6</p>
+        <p className="eyebrow">Research workflow</p>
         <h3>Managed videos</h3>
         <input
           type="file"

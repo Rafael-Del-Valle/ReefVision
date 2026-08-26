@@ -91,6 +91,9 @@ _ACTIONS: dict[str, str] = {
     "video_depth_3d_analytics": (
         "Reconstruct calibrated metric 3D trajectories from video tracks and depth samples."
     ),
+    "video_metric_depth_3d": (
+        "Estimate model-metric video depth and reconstruct Scientific 3D fish trajectories."
+    ),
     "project_exchange_export": "Build a Phase 9 checksummed project exchange export inline.",
 }
 

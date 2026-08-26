@@ -7,7 +7,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from reefvision.jobs.training import process_training_job
+from reefvision.jobs.training import _read_results_csv, _read_results_table, process_training_job
 from reefvision.ml.dependencies import ProviderPreflightReport
 from reefvision.ml.providers import DetectionModelMetadata
 from reefvision.schemas.training import TrainingProviderArchitectureResponse
@@ -24,6 +24,24 @@ from reefvision.tests.test_dataset_versions import (
     save_annotations,
     update_image,
 )
+
+
+def test_results_csv_preserves_native_columns_and_orders_epochs(tmp_path: Path) -> None:
+    results = tmp_path / "results.csv"
+    results.write_text(
+        " epoch , metrics/mAP50(B) ,native/status,extra metric\n"
+        "2,0.41,complete,\n"
+        "1,0.52,warmup,7.5\n",
+        encoding="utf-8",
+    )
+
+    native = _read_results_table(results)
+    assert [row["epoch"] for row in native] == [1.0, 2.0]
+    assert native[0]["native/status"] == "warmup"
+    assert native[1]["extra metric"] is None
+    normalized = _read_results_csv(results)
+    assert normalized["metrics/mAP50(B)"] == [0.52, 0.41]
+    assert "native/status" not in normalized
 
 
 class FakeTrainingRegistrationProvider:
@@ -386,6 +404,22 @@ def test_training_job_processing_creates_completed_run_and_experiment(
     assert completed["stage"] == "completed"
     assert completed["result_checkpoint_path"] is not None
     assert "metrics/mAP50(B)" in completed["metrics"]
+    assert completed["artifact_manifest"]["native_results_rows"] == [
+        {
+            "epoch": 1.0,
+            "metrics/mAP50(B)": 0.6,
+            "metrics/precision(B)": 0.7,
+        },
+        {
+            "epoch": 2.0,
+            "metrics/mAP50(B)": 0.7,
+            "metrics/precision(B)": 0.8,
+        },
+    ]
+    artifact_names = {item["name"] for item in completed["artifact_manifest"]["artifacts"]}
+    assert {"results.csv", "best.pt", "last.pt"} <= artifact_names
+    artifact_response = client.get(f"/api/v1/training-runs/{run['id']}/artifacts/0")
+    assert artifact_response.status_code == 200
 
     experiments_response = client.get(f"/api/v1/projects/{project['id']}/experiments")
     assert experiments_response.status_code == 200, experiments_response.text

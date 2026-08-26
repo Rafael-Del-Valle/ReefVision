@@ -71,10 +71,12 @@ class RasterMaskEditService:
                 revision=next_revision,
                 source_relative_path=source_path,
                 expected_width=image.width_px,
+                source_image_relative_path=image.managed_path,
                 expected_height=image.height_px,
                 strokes=payload.strokes,
                 brush_radius=float(payload.brush_radius),
                 mode=payload.mode,
+                fill_tolerance=payload.fill_tolerance,
             )
             x_min, y_min, x_max, y_max = bounds
             if existing is None:
@@ -95,6 +97,9 @@ class RasterMaskEditService:
                         "edit_mode": payload.mode,
                         "brush_radius": float(payload.brush_radius),
                         "stroke_count": len(payload.strokes),
+                        "fill_tolerance": (
+                            payload.fill_tolerance if payload.mode == "fill" else None
+                        ),
                     },
                     status="verified",
                     created_by="local_user",
@@ -118,6 +123,9 @@ class RasterMaskEditService:
                     "last_edit_mode": payload.mode,
                     "last_brush_radius": float(payload.brush_radius),
                     "last_stroke_count": len(payload.strokes),
+                    "last_fill_tolerance": (
+                        payload.fill_tolerance if payload.mode == "fill" else None
+                    ),
                     "previous_mask_path": source_path,
                 }
                 mask.status = "verified"

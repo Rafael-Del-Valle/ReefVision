@@ -2,9 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
 import { getDatasetVersions, getModels, type Project } from "../../api/client";
-import { AdvancedProviderWorkspace } from "../advanced-providers/AdvancedProviderWorkspace";
 import { InteroperabilityWorkspace } from "../interoperability/InteroperabilityWorkspace";
-import { WorkflowGraphWorkspace } from "../workflow-graphs/WorkflowGraphWorkspace";
 import {
   activeLearningSelectionItems,
   completeActiveLearningRound,
@@ -122,13 +120,41 @@ export function ActiveLearningWorkspace({
     >
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Phase 7</p>
+          <p className="eyebrow">Research workflow</p>
           <h3>Active learning</h3>
           <p>
             Freeze an explainable acquisition batch, review it through the
             existing queue, and turn verified human feedback into the next
             immutable dataset version.
           </p>
+        </div>
+      </div>
+
+      <div className="workspace-guide" aria-label="Active learning workflow">
+        <div className="workspace-guide-step">
+          <span>1</span>
+          <div>
+            <strong>Create a round</strong>
+            <small>
+              Choose the dataset, strategy, models, and review budget.
+            </small>
+          </div>
+        </div>
+        <div className="workspace-guide-step">
+          <span>2</span>
+          <div>
+            <strong>Review selected images</strong>
+            <small>Use the ranked Review Queue and verify annotations.</small>
+          </div>
+        </div>
+        <div className="workspace-guide-step">
+          <span>3</span>
+          <div>
+            <strong>Complete the round</strong>
+            <small>
+              Freeze reviewed feedback into the next immutable dataset snapshot.
+            </small>
+          </div>
         </div>
       </div>
 
@@ -395,21 +421,9 @@ export function ActiveLearningWorkspace({
 
       <details className="panel-card">
         <summary>
-          <strong>Phase 8 · Advanced Provider Lab</strong>
-        </summary>
-        <AdvancedProviderWorkspace project={project} />
-      </details>
-      <details className="panel-card">
-        <summary>
-          <strong>Phase 9 · Project Interoperability</strong>
+          <strong>Project interoperability</strong>
         </summary>
         <InteroperabilityWorkspace project={project} />
-      </details>
-      <details className="panel-card">
-        <summary>
-          <strong>Phase 10 · Workflow Graphs</strong>
-        </summary>
-        <WorkflowGraphWorkspace project={project} />
       </details>
     </section>
   );

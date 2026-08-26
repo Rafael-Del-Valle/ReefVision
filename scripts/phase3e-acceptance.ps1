@@ -81,7 +81,7 @@ if (-not $SkipValidation) {
 }
 
 Write-Host "`nRun the source desktop in another PowerShell window:" -ForegroundColor Green
-Write-Host '  Set-Location "C:\Users\rafae\Documents\ReefVision\reefvision"'
+Write-Host "  Set-Location `"$Root`""
 Write-Host '  npm --prefix apps/web run desktop:dev'
 Write-Host "Return here after ReefVision is open."
 Read-Host "Press Enter to begin the semantic checks" | Out-Null

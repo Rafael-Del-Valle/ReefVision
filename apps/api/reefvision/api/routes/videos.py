@@ -19,8 +19,10 @@ from reefvision.schemas.video_track_exchange import (
     VideoTrackImportResponse,
 )
 from reefvision.schemas.videos import (
+    Scientific3DCalibrationValidationRequest,
     VideoAssetResponse,
     VideoExtractRequest,
+    VideoMetricDepth3DCreateRequest,
     VideoTrackAnalyticsResponse,
     VideoTrackCreate,
     VideoTrackingBenchmarkRequest,
@@ -33,7 +35,9 @@ from reefvision.schemas.videos import (
     VideoTrackResponse,
     VideoTrackUpdate,
 )
+from reefvision.services.scientific_3d_calibration import Scientific3DCalibrationValidationService
 from reefvision.services.video_assets import VideoAssetService
+from reefvision.services.video_metric_depth_preview import VideoMetricDepthPreviewService
 from reefvision.services.video_track_exchange import VideoTrackExchangeService
 from reefvision.services.video_tracking_benchmark import VideoTrackingBenchmarkService
 from reefvision.services.video_tracking_evaluation import VideoTrackingEvaluationService
@@ -265,6 +269,89 @@ def benchmark_tracking(
     session: DbSession,
 ) -> VideoTrackingBenchmarkResponse:
     return VideoTrackingBenchmarkService(session).benchmark(video_id, payload)
+
+
+@router.post(
+    "/videos/{video_id}/metric-depth-3d-jobs/{job_id}/calibration-validation",
+)
+def validate_metric_depth_3d_calibration(
+    video_id: str,
+    job_id: str,
+    payload: Scientific3DCalibrationValidationRequest,
+    session: DbSession,
+) -> dict[str, object]:
+    return Scientific3DCalibrationValidationService(session).validate(
+        video_id,
+        job_id,
+        payload,
+    )
+
+
+@router.get(
+    "/videos/{video_id}/metric-depth-3d-jobs/{job_id}/depth-preview",
+    response_class=Response,
+)
+def metric_depth_3d_preview(
+    video_id: str,
+    job_id: str,
+    frame: Annotated[int, Query(ge=0)],
+    request: Request,
+    session: DbSession,
+) -> Response:
+    settings: Settings = request.app.state.settings
+    preview = VideoMetricDepthPreviewService(session, settings).render(
+        video_id,
+        job_id,
+        frame,
+    )
+    return Response(
+        content=preview.png_bytes,
+        media_type="image/png",
+        headers={
+            "Cache-Control": "private, max-age=3600",
+            "X-ReefVision-Depth-Frame": str(preview.frame),
+            "X-ReefVision-Depth-Min-M": f"{preview.display_min_m:.9g}",
+            "X-ReefVision-Depth-Max-M": f"{preview.display_max_m:.9g}",
+            "X-ReefVision-Depth-Scaling": preview.scaling,
+            "X-ReefVision-Depth-Tier": preview.depth_tier,
+        },
+    )
+
+
+@router.post("/videos/{video_id}/metric-depth-3d-jobs", response_model=JobResponse)
+def create_metric_depth_3d_job(
+    video_id: str,
+    payload: VideoMetricDepth3DCreateRequest,
+    request: Request,
+    session: DbSession,
+) -> JobResponse:
+    video = asset_service(request, session).get_record(video_id)
+    active_track_ids = {item.id for item in VideoTrackService(session).list(video_id)}
+    missing = [track_id for track_id in payload.track_ids if track_id not in active_track_ids]
+    if missing:
+        raise ValidationError(
+            "Scientific 3D tracks must be active and belong to the selected video: "
+            + ", ".join(missing)
+        )
+    from reefvision.services.video_science import VideoScienceService
+
+    VideoScienceService(session).get_camera_intrinsics(video_id)
+    job = Job(
+        project_id=video.project_id,
+        job_type="video_metric_depth_3d",
+        status="queued",
+        progress_total=video.frame_count,
+        request_json={"video_id": video.id, **payload.model_dump()},
+        result_json={
+            "stage": "queued",
+            "depth_tier": "model_estimated_metric",
+            "physical_measurement_claim_allowed": False,
+        },
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    return JobResponse.model_validate(job)
 
 
 @router.post("/videos/{video_id}/tracking-jobs", response_model=JobResponse)
