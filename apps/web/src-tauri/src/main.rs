@@ -26,6 +26,7 @@ use windows_sys::Win32::{
 };
 
 const BACKEND_SHUTDOWN_REQUEST: &[u8] = b"shutdown\n";
+const BACKEND_STARTUP_TIMEOUT: Duration = Duration::from_secs(180);
 const BACKEND_GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 const BACKEND_FORCE_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 const BACKEND_SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -519,7 +520,7 @@ fn main() {
             let handle = app.handle().clone();
             let port_file = backend_port_path(&data_dir);
             let mut backend = spawn_backend(&handle, &data_dir, &port_file)?;
-            let port = match wait_for_backend_port(&port_file, Duration::from_secs(20)) {
+            let port = match wait_for_backend_port(&port_file, BACKEND_STARTUP_TIMEOUT) {
                 Ok(port) => port,
                 Err(error) => {
                     let _ = shutdown_process(

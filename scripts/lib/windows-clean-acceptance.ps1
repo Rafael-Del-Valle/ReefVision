@@ -79,7 +79,8 @@ function Get-ReefVisionInstalledRegistrations {
         'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
     )
     return @(Get-ItemProperty $roots -ErrorAction SilentlyContinue | Where-Object {
-        $_.DisplayName -like 'ReefVision*'
+        $displayName = $_.PSObject.Properties['DisplayName']
+        $null -ne $displayName -and $displayName.Value -like 'ReefVision*'
     })
 }
 

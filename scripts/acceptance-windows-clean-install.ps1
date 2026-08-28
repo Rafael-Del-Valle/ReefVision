@@ -75,12 +75,27 @@ function Run-Msi([string]$Action, [string]$PackageOrProduct, [string]$LogName, [
     if ($process.ExitCode -notin @(0, 3010)) { throw "msiexec $Action failed with exit code $($process.ExitCode). See $log" }
     return $process.ExitCode
 }
-function Wait-BackendPort([string]$Path, [int]$Seconds = 45) {
+function Wait-BackendPort(
+    [string]$Path,
+    [System.Diagnostics.Process]$DesktopProcess,
+    [string]$BackendLogPath,
+    [int]$Seconds = 180
+) {
     $deadline = [DateTime]::UtcNow.AddSeconds($Seconds)
     while ([DateTime]::UtcNow -lt $deadline) {
         if (Test-Path -LiteralPath $Path) {
             $value = (Get-Content -LiteralPath $Path -Raw).Trim()
             if ($value -match '^\d+$') { return [int]$value }
+        }
+        $DesktopProcess.Refresh()
+        if ($DesktopProcess.HasExited) {
+            $exitCode = try { $DesktopProcess.ExitCode } catch { 'unavailable' }
+            $logTail = if (Test-Path -LiteralPath $BackendLogPath) {
+                (Get-Content -LiteralPath $BackendLogPath -Tail 20 | Out-String).TrimEnd()
+            } else {
+                '(backend log unavailable)'
+            }
+            throw "ReefVision.exe exited before the backend published its port (exit code: $exitCode). Backend log tail:`n$logTail"
         }
         Start-Sleep -Milliseconds 250
     }
@@ -129,7 +144,7 @@ if ($PlanOnly) {
 
 try {
     if (-not (Test-ReefVisionAdministrator)) { throw 'Administrator privileges are required. Rerun PowerShell as Administrator on the disposable machine.' }
-    $existing = Get-ReefVisionInstalledRegistrations
+    $existing = @(Get-ReefVisionInstalledRegistrations)
     if ($existing.Count -gt 0) { throw 'Refusing to modify an existing ReefVision installation. Start from a disposable machine with no ReefVision registration.' }
     New-Item -ItemType Directory -Path $RunRoot,$DataRoot -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $RunRoot '.reefvision-acceptance-run') -Value $Token
@@ -151,12 +166,12 @@ try {
     if (-not $shortcuts.Count) { throw 'The MSI installed no discoverable ReefVision shortcut.' }
 
     $desktop = Start-AcceptanceDesktop
-    $port = Wait-BackendPort (Join-Path $DataRoot 'runtime\backend-port.txt')
+    $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
     $versionPayload = Invoke-RestMethod "$api/system/version"
     $migrationPayload = Invoke-RestMethod "$api/system/migrations/status"
-    $report.first_launch = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and packaged backend started; database initialized; API version $($versionPayload.version)"
-    $report.frontend_backend_connectivity = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop-published loopback API responded; migration status: $($migrationPayload.status)"
+    $report.first_launch = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and packaged backend started; database initialized; API version $($versionPayload.application_version)"
+    $report.frontend_backend_connectivity = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop-published loopback API responded; migration status: $($migrationPayload.schema_status)"
 
     $project = Invoke-RestMethod "$api/projects" -Method Post -ContentType 'application/json' -Body (@{name="Clean install $Token";template='octocoral'} | ConvertTo-Json)
     $projectId = $project.id
@@ -177,8 +192,8 @@ try {
     } | ConvertTo-Json -Depth 6
     $saved = Invoke-RestMethod "$api/images/$imageId/annotations" -Method Put -ContentType 'application/json' -Body $annotationBody
     if ($saved.annotations[0].id -ne $annotationId) { throw 'Durable acceptance annotation was not returned after save.' }
-    $projectChecksum = (Get-FileHash -LiteralPath (Join-Path $DataRoot 'reefvision.db') -Algorithm SHA256).Hash
     Stop-AcceptanceDesktop $desktop
+    $projectChecksum = (Get-FileHash -LiteralPath (Join-Path $DataRoot 'reefvision.db') -Algorithm SHA256).Hash
 
     if ($PreviousInstallerPath -and -not $SkipUpgrade) {
         Run-Msi -Action Install -PackageOrProduct $InstallerPath -LogName 'upgrade.log' -TargetRoot $InstallRoot | Out-Null
@@ -186,7 +201,7 @@ try {
     }
 
     $desktop = Start-AcceptanceDesktop
-    $port = Wait-BackendPort (Join-Path $DataRoot 'runtime\backend-port.txt')
+    $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
     $persisted = Invoke-RestMethod "$api/projects/$projectId"
     if ($persisted.id -ne $projectId) { throw 'Project ID changed across restart.' }
@@ -204,7 +219,7 @@ try {
     Invoke-WebRequest "$api/exchange-packages/$($exchange.package.id)/download" -OutFile $archive
     if ((Get-Item $archive).Length -le 0) { throw 'Project Exchange archive is empty.' }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
-    $zip = [IO.Compression.ZipFile]::OpenRead($archive); try { if (-not ($zip.Entries | Where-Object FullName -eq 'manifest.json')) { throw 'Project Exchange archive has no manifest.json.' } } finally { $zip.Dispose() }
+    $zip = [IO.Compression.ZipFile]::OpenRead($archive); try { if (-not ($zip.Entries | Where-Object FullName -eq 'reefvision-exchange-manifest.json')) { throw 'Project Exchange archive has no reefvision-exchange-manifest.json.' } } finally { $zip.Dispose() }
     $report.project_exchange = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Exported inspectable archive: $archive"
     Stop-AcceptanceDesktop $desktop
 
@@ -214,7 +229,7 @@ try {
         Run-Msi -Action Uninstall -PackageOrProduct $productCode -LogName 'uninstall.log' | Out-Null
         if (Test-Path (Join-Path $InstallRoot 'ReefVision.exe')) { throw 'ReefVision.exe remains after uninstall.' }
         if (@($shortcutCandidates | Where-Object { Test-Path -LiteralPath $_ }).Count -gt 0) { throw 'A ReefVision shortcut remains after uninstall.' }
-        if ((Get-ReefVisionInstalledRegistrations).Count -gt 0) { throw 'ReefVision uninstall registration remains after uninstall.' }
+        if (@(Get-ReefVisionInstalledRegistrations).Count -gt 0) { throw 'ReefVision uninstall registration remains after uninstall.' }
         $report.uninstall = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Program binaries removed.'
         if (-not (Test-Path $DataRoot)) { throw 'Isolated user data was removed by uninstall.' }
         $report.data_retention = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Isolated project data remained after uninstall.'

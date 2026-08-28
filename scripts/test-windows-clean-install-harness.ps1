@@ -29,6 +29,30 @@ Assert-True (($arguments -join ' ') -match 'INSTALLDIR=') 'Install command omitt
 $uninstall = New-ReefVisionMsiArguments -Action Uninstall -PackageOrProduct '{00000000-0000-0000-0000-000000000000}' -LogPath 'C:\rv-test\uninstall.log'
 Assert-True ($uninstall[0] -eq '/x') 'Uninstall command does not use /x.'
 
+function Get-ItemProperty {
+    [CmdletBinding()]
+    param([Parameter(Position = 0)]$Path)
+    return $script:registrationFixtures
+}
+
+$registrationFixtures = @()
+Assert-True (@(Get-ReefVisionInstalledRegistrations).Count -eq 0) 'Empty registration enumeration was not handled.'
+$registrationFixtures = @(
+    [pscustomobject]@{ UninstallString = 'missing display name' },
+    [pscustomobject]@{ DisplayName = 'Unrelated Product' },
+    [pscustomobject]@{ DisplayName = 'ReefVision' }
+)
+$registrations = @(Get-ReefVisionInstalledRegistrations)
+Assert-True ($registrations.Count -eq 1) 'Registration filtering did not safely handle a missing DisplayName or a single match.'
+Assert-True ($registrations[0].DisplayName -eq 'ReefVision') 'Registration filtering returned the wrong single match.'
+$registrationFixtures += [pscustomobject]@{ DisplayName = 'ReefVision 1.0.0' }
+Assert-True (@(Get-ReefVisionInstalledRegistrations).Count -eq 2) 'Multiple registration results were not preserved as an array.'
+
+$acceptanceScript = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'acceptance-windows-clean-install.ps1') -Raw
+Assert-True ($acceptanceScript -match 'Stop-AcceptanceDesktop\s+\$desktop\s*\r?\n\s*\$projectChecksum\s*=\s*\(Get-FileHash\s+-LiteralPath\s+\(Join-Path\s+\$DataRoot\s+''reefvision\.db''\)') 'Desktop shutdown must occur before hashing reefvision.db.'
+Assert-True ($acceptanceScript -match 'Where-Object\s+FullName\s+-eq\s+''reefvision-exchange-manifest\.json''') 'Project Exchange validation does not require the canonical manifest name.'
+Assert-True ($acceptanceScript -notmatch 'Where-Object\s+FullName\s+-eq\s+''manifest\.json''') 'Project Exchange validation still accepts the incorrect manifest.json name.'
+
 $reportPath = Join-Path $env:TEMP ('reefvision-evidence-' + [guid]::NewGuid().ToString('N') + '.json')
 $report = [ordered]@{ upgrade = New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'previous installer not supplied'; failure_reason = $null }
 Write-ReefVisionEvidenceReport -Report $report -Path $reportPath
