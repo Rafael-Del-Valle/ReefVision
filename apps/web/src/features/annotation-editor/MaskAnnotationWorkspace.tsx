@@ -99,7 +99,7 @@ export function MaskAnnotationWorkspace({
   });
 
   const saveNow = useCallback(async (): Promise<boolean> => {
-    const snapshot = stateRef.current;
+    const snapshot = state;
     if (!isDirty(snapshot)) {
       return true;
     }
@@ -135,7 +135,7 @@ export function MaskAnnotationWorkspace({
       });
     savePromiseRef.current = request;
     return request;
-  }, [persistDocument, project.id, queryClient]);
+  }, [persistDocument, project.id, queryClient, state]);
 
   useEffect(() => {
     if (!isDirty(state) || state.saveState === "saving") {
