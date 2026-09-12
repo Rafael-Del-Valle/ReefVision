@@ -24,6 +24,7 @@ interface PolygonMaskLayerProps {
   onUpdate: (mask: EditorMaskAnnotation) => void;
   onSelectionChange: (maskIds: string[]) => void;
   onDeleteMaskIds?: (maskIds: string[]) => void;
+  onFill?: (seed: Point) => void;
 }
 
 interface VertexDrag {
@@ -175,6 +176,7 @@ export function PolygonMaskLayer({
   onUpdate,
   onSelectionChange,
   onDeleteMaskIds,
+  onFill,
 }: PolygonMaskLayerProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [draftPoints, setDraftPoints] = useState<Point[]>([]);
@@ -369,6 +371,16 @@ export function PolygonMaskLayer({
       viewBox={`0 0 ${width} ${height}`}
       preserveAspectRatio="none"
       tabIndex={0}
+      onPointerDownCapture={(event) => {
+        if (tool !== "fill") return;
+        event.stopPropagation();
+        if (event.button !== 0 || activeClassId === null || !onFill) return;
+        const bounds = event.currentTarget.getBoundingClientRect();
+        if (bounds.width <= 0 || bounds.height <= 0) return;
+        const x = ((event.clientX - bounds.left) * width) / bounds.width;
+        const y = ((event.clientY - bounds.top) * height) / bounds.height;
+        if (x >= 0 && y >= 0 && x < width && y < height) onFill({ x, y });
+      }}
       onPointerDown={handleBackgroundPointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

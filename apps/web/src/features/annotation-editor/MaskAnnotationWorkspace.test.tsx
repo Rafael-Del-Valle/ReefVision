@@ -1,0 +1,301 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { beforeEach, expect, it, vi } from "vitest";
+
+import {
+  getAnnotationSession,
+  saveAnnotations,
+  type AnnotationSession,
+  type Project,
+} from "../../api/client";
+import { MaskAnnotationWorkspace } from "./MaskAnnotationWorkspace";
+import { EnhancedAnnotationEditor } from "./EnhancedAnnotationEditor";
+import { generatePolygonFill } from "./rasterMaskApi";
+
+vi.mock("../../api/client", () => ({
+  getAnnotationSession: vi.fn(),
+  saveAnnotations: vi.fn(),
+  imageContentUrl: () => "/image.png",
+}));
+vi.mock("./rasterMaskApi", () => ({
+  generatePolygonFill: vi.fn(),
+  rasterMaskContentUrl: () => "",
+}));
+vi.mock("./MaskMeasurementPanel", () => ({ MaskMeasurementPanel: () => null }));
+vi.mock("./CenterlineMeasurementLayer", () => ({
+  CenterlineMeasurementLayer: () => null,
+}));
+vi.mock("./AnnotationEditor", () => ({
+  AnnotationEditor: () => <div data-testid="box-workspace" />,
+}));
+vi.mock("./RasterMaskWorkspace", () => ({
+  RasterMaskWorkspace: () => <div data-testid="raster-workspace" />,
+}));
+
+const points = [
+  { x: 10, y: 10 },
+  { x: 30, y: 10 },
+  { x: 30, y: 25 },
+  { x: 10, y: 25 },
+];
+function session(imageId = "image-1", withClass = true): AnnotationSession {
+  return {
+    image: {
+      id: imageId,
+      width_px: 400,
+      height_px: 300,
+      original_filename: `${imageId}.png`,
+      annotation_status: "unannotated",
+      annotation_revision: 0,
+    },
+    label_classes: withClass
+      ? [
+          {
+            id: "class-1",
+            name: "Coral",
+            display_color: "#2a9d8f",
+            is_active: true,
+          },
+        ]
+      : [],
+    annotations: [],
+    mask_annotations: [],
+    counts_by_class: [],
+    previous_image_id: null,
+    next_image_id: null,
+  } as unknown as AnnotationSession;
+}
+function workspace(imageId = "image-1") {
+  return (
+    <MaskAnnotationWorkspace
+      project={{ id: "project-1", name: "Reef" } as Project}
+      imageId={imageId}
+      onReturnToBoxes={vi.fn()}
+      onClose={vi.fn()}
+      onOpenBrush={openBrush}
+    />
+  );
+}
+const openBrush = vi.fn();
+async function mount() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      {workspace()}
+    </QueryClientProvider>,
+  );
+  await screen.findByTestId("activate-polygon-fill-tool");
+  return { ...view, queryClient };
+}
+function seed() {
+  const layer = screen.getByTestId("polygon-mask-layer");
+  vi.spyOn(layer, "getBoundingClientRect").mockReturnValue({
+    left: 20,
+    top: 30,
+    width: 200,
+    height: 150,
+  } as DOMRect);
+  fireEvent.pointerDown(layer, { clientX: 30, clientY: 40, button: 0 });
+}
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(getAnnotationSession).mockImplementation(async (id) => session(id));
+  vi.mocked(generatePolygonFill).mockResolvedValue({ points });
+});
+
+async function mountEnhancedWithFill() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <EnhancedAnnotationEditor
+        project={{ id: "project-1", name: "Reef" } as Project}
+        initialImageId="image-1"
+        onClose={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+  fireEvent.change(screen.getByTestId("annotation-type-select"), {
+    target: { value: "masks" },
+  });
+  await screen.findByTestId("activate-polygon-fill-tool");
+  fireEvent.click(screen.getByTestId("activate-polygon-fill-tool"));
+  seed();
+  await screen.findByText("1 masks");
+}
+
+it.each(["raster", "boxes"])(
+  "saves an unsaved Fill before dropdown navigation to %s",
+  async (destination) => {
+    let finishSave!: (
+      response: Awaited<ReturnType<typeof saveAnnotations>>,
+    ) => void;
+    vi.mocked(saveAnnotations).mockReturnValue(
+      new Promise((resolve) => {
+        finishSave = resolve;
+      }),
+    );
+    await mountEnhancedWithFill();
+    fireEvent.change(screen.getByTestId("annotation-type-select"), {
+      target: { value: destination },
+    });
+    expect(screen.getByTestId("mask-workspace")).toBeInTheDocument();
+    expect(screen.getByTestId("annotation-type-select")).toHaveValue("masks");
+    await waitFor(() => expect(saveAnnotations).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(saveAnnotations).mock.calls[0][1]).toMatchObject({
+      mask_annotations: [{ geometry_kind: "polygon", points }],
+    });
+    await act(async () =>
+      finishSave({
+        ...session(),
+        image: { ...session().image, annotation_revision: 1 },
+      }),
+    );
+    await screen.findByTestId(
+      destination === "raster" ? "raster-workspace" : "box-workspace",
+    );
+    expect(screen.queryByTestId("mask-workspace")).not.toBeInTheDocument();
+  },
+);
+
+it.each(["raster", "boxes"])(
+  "keeps unsaved Fill when dropdown navigation to %s cannot save",
+  async (destination) => {
+    vi.mocked(saveAnnotations).mockRejectedValue(new Error("Save unavailable"));
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    await mountEnhancedWithFill();
+    fireEvent.change(screen.getByTestId("annotation-type-select"), {
+      target: { value: destination },
+    });
+    await screen.findByText("Save unavailable");
+    expect(screen.getByTestId("annotation-type-select")).toHaveValue("masks");
+    expect(screen.getByText("1 masks")).toBeInTheDocument();
+  },
+);
+
+it("fills in source coordinates as a normal polygon with selection, undo, redo, save and deletion", async () => {
+  await mount();
+  fireEvent.click(screen.getByTestId("activate-polygon-fill-tool"));
+  fireEvent.change(screen.getByLabelText("Fill tolerance"), {
+    target: { value: "12" },
+  });
+  seed();
+  await waitFor(() => expect(screen.getByText("1 masks")).toBeInTheDocument());
+  expect(vi.mocked(generatePolygonFill).mock.calls[0].slice(0, 2)).toEqual([
+    "image-1",
+    { seed: { x: 20, y: 20 }, tolerance: 12 },
+  ]);
+  expect(screen.getByText("1 selected")).toBeInTheDocument();
+  expect(
+    screen
+      .getByTestId("polygon-mask-layer")
+      .querySelector("polygon")
+      ?.getAttribute("points"),
+  ).toBe("10,10 30,10 30,25 10,25");
+  fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+  expect(screen.getByText("0 masks")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+  expect(screen.getByText("1 masks")).toBeInTheDocument();
+  vi.mocked(saveAnnotations).mockRejectedValue(new Error("Save unavailable"));
+  fireEvent.click(screen.getByRole("button", { name: "Save now" }));
+  await screen.findByText("Save unavailable");
+  expect(vi.mocked(saveAnnotations).mock.calls[0][1]).toMatchObject({
+    mask_annotations: [
+      { geometry_kind: "polygon", label_class_id: "class-1", points },
+    ],
+  });
+  fireEvent.click(screen.getByTestId("activate-mask-select-tool"));
+  fireEvent.pointerDown(
+    screen.getByTestId("polygon-mask-layer").querySelector("polygon")!,
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Delete selected masks" }),
+  );
+  expect(screen.getByText("0 masks")).toBeInTheDocument();
+});
+
+it("shows fill failures and leaves the annotation history unchanged", async () => {
+  vi.mocked(generatePolygonFill).mockRejectedValue(
+    new Error("Fill contains holes"),
+  );
+  await mount();
+  fireEvent.click(screen.getByTestId("activate-polygon-fill-tool"));
+  seed();
+  await screen.findByText("Fill contains holes");
+  expect(screen.getByText("0 masks")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
+});
+
+it("ignores an in-flight fill after switching images", async () => {
+  let resolve!: (value: { points: typeof points }) => void;
+  vi.mocked(generatePolygonFill).mockReturnValue(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  const { rerender, queryClient } = await mount();
+  fireEvent.click(screen.getByTestId("activate-polygon-fill-tool"));
+  seed();
+  rerender(
+    <QueryClientProvider client={queryClient}>
+      {workspace("image-2")}
+    </QueryClientProvider>,
+  );
+  await screen.findByText("image-2.png");
+  await act(async () => resolve({ points }));
+  expect(screen.getByText("0 masks")).toBeInTheDocument();
+});
+
+it("requires an active class before filling", async () => {
+  vi.mocked(getAnnotationSession).mockResolvedValue(session("image-1", false));
+  await mount();
+  expect(screen.getByTestId("activate-polygon-fill-tool")).toBeDisabled();
+});
+
+it("retains unsaved fill when Brush navigation cannot save", async () => {
+  vi.mocked(saveAnnotations).mockRejectedValue(new Error("Save unavailable"));
+  vi.spyOn(window, "confirm").mockReturnValue(false);
+  await mount();
+  fireEvent.click(screen.getByTestId("activate-polygon-fill-tool"));
+  seed();
+  await screen.findByText("1 masks");
+  fireEvent.click(screen.getByRole("button", { name: "Brush" }));
+  await screen.findByText("Save unavailable");
+  expect(openBrush).not.toHaveBeenCalled();
+  expect(screen.getByText("1 masks")).toBeInTheDocument();
+});
+
+it.each(
+  [
+    [],
+    [
+      { x: 1, y: 1 },
+      { x: 2, y: 2 },
+      { x: 3, y: 3 },
+    ],
+    [
+      { x: -1, y: 1 },
+      { x: 2, y: 2 },
+      { x: 3, y: 1 },
+    ],
+  ].map((points) => ({ points })),
+)(
+  "rejects invalid fill geometry without creating an annotation",
+  async (invalid) => {
+    vi.mocked(generatePolygonFill).mockResolvedValue(invalid);
+    await mount();
+    fireEvent.click(screen.getByTestId("activate-polygon-fill-tool"));
+    seed();
+    await screen.findByText("Fill returned an invalid or empty polygon");
+    expect(screen.getByText("0 masks")).toBeInTheDocument();
+  },
+);

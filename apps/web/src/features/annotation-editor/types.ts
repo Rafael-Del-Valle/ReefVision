@@ -1,6 +1,7 @@
 import type { AnnotationRecord, AnnotationStatus } from "../../api/client";
 
-export type EditorTool = "select" | "pan" | "box" | "polygon" | "rotated_box";
+export type EditorTool =
+  "select" | "pan" | "box" | "polygon" | "rotated_box" | "fill";
 
 export interface Point {
   x: number;

@@ -29,14 +29,16 @@ import {
   updateMaskAnnotation,
 } from "./maskDocumentOperations";
 import { MaskMeasurementPanel } from "./MaskMeasurementPanel";
-import { PolygonMaskLayer } from "./PolygonMaskLayer";
+import { PolygonMaskLayer, polygonMaskFromPoints } from "./PolygonMaskLayer";
+import { generatePolygonFill } from "./rasterMaskApi";
 import { RotatedBoxLayer } from "./RotatedBoxLayer";
-import type { AnnotationDocument, EditorMaskAnnotation } from "./types";
+import type { AnnotationDocument, EditorMaskAnnotation, Point } from "./types";
 
 interface MaskAnnotationWorkspaceProps {
   project: Project;
   imageId: string;
   onReturnToBoxes: () => void;
+  onOpenBrush?: () => void;
   onClose: () => void;
 }
 
@@ -44,10 +46,15 @@ export function MaskAnnotationWorkspace({
   project,
   imageId,
   onReturnToBoxes,
+  onOpenBrush,
   onClose,
 }: MaskAnnotationWorkspaceProps) {
   const queryClient = useQueryClient();
   const [centerlineEditing, setCenterlineEditing] = useState(false);
+  const [fillTolerance, setFillTolerance] = useState(24);
+  const [fillPending, setFillPending] = useState(false);
+  const [fillError, setFillError] = useState<string | null>(null);
+  const fillRequestRef = useRef<AbortController | null>(null);
   const [state, dispatch] = useReducer(
     annotationEditorReducer,
     initialAnnotationEditorState,
@@ -63,6 +70,15 @@ export function MaskAnnotationWorkspace({
   useEffect(() => {
     setCenterlineEditing(false);
   }, [imageId]);
+
+  useEffect(() => {
+    setFillPending(false);
+    setFillError(null);
+    return () => {
+      fillRequestRef.current?.abort();
+      fillRequestRef.current = null;
+    };
+  }, [imageId, state.tool]);
 
   const sessionQuery = useQuery({
     queryKey: ["annotation-session", imageId],
@@ -147,6 +163,63 @@ export function MaskAnnotationWorkspace({
     ]);
   }
 
+  async function fillPolygon(seed: Point) {
+    const labelClassId = stateRef.current.activeClassId;
+    const image = sessionQuery.data?.image;
+    if (
+      !labelClassId ||
+      !image ||
+      loadedImageIdRef.current !== imageId ||
+      fillRequestRef.current
+    )
+      return;
+    const controller = new AbortController();
+    fillRequestRef.current = controller;
+    setFillPending(true);
+    setFillError(null);
+    try {
+      const result = await generatePolygonFill(
+        imageId,
+        { seed, tolerance: fillTolerance },
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      const points = result.points;
+      if (
+        !Array.isArray(points) ||
+        points.length < 3 ||
+        points.some(
+          (point) =>
+            !point ||
+            !Number.isFinite(point.x) ||
+            !Number.isFinite(point.y) ||
+            point.x < 0 ||
+            point.y < 0 ||
+            point.x > image.width_px ||
+            point.y > image.height_px,
+        ) ||
+        Math.abs(
+          points.reduce((sum, point, index) => {
+            const next = points[(index + 1) % points.length];
+            return sum + point.x * next.y - next.x * point.y;
+          }, 0),
+        ) === 0
+      )
+        throw new Error("Fill returned an invalid or empty polygon");
+      createMask(polygonMaskFromPoints(points, labelClassId));
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setFillError(
+          error instanceof Error ? error.message : "Polygon Fill failed",
+        );
+    } finally {
+      if (fillRequestRef.current === controller) {
+        fillRequestRef.current = null;
+        setFillPending(false);
+      }
+    }
+  }
+
   function updateMask(mask: EditorMaskAnnotation) {
     commitDocument(updateMaskAnnotation(stateRef.current.document, mask), [
       mask.id,
@@ -185,7 +258,10 @@ export function MaskAnnotationWorkspace({
     await queryClient.invalidateQueries({ queryKey: ["mask-measurements"] });
   }, [imageId, project.id, queryClient, sessionQuery]);
 
-  async function leaveWorkspace(destination: "boxes" | "close") {
+  async function leaveWorkspace(destination: "boxes" | "close" | "brush") {
+    fillRequestRef.current?.abort();
+    fillRequestRef.current = null;
+    setFillPending(false);
     const saved = await saveNow();
     if (!saved && !window.confirm("Discard unsaved mask edits?")) {
       return;
@@ -193,7 +269,9 @@ export function MaskAnnotationWorkspace({
     await queryClient.invalidateQueries({
       queryKey: ["annotation-session", imageId],
     });
-    if (destination === "boxes") {
+    if (destination === "brush") {
+      onOpenBrush?.();
+    } else if (destination === "boxes") {
       onReturnToBoxes();
     } else {
       onClose();
@@ -285,6 +363,31 @@ export function MaskAnnotationWorkspace({
           >
             Polygon
           </button>
+          {onOpenBrush && (
+            <button
+              type="button"
+              className="secondary"
+              data-testid="activate-mask-brush-tool"
+              data-mask-workspace-destination="raster"
+              onClick={() => void leaveWorkspace("brush")}
+              title="Save polygon edits and open raster Brush workspace"
+            >
+              Brush
+            </button>
+          )}
+          <button
+            type="button"
+            className={state.tool === "fill" ? "active" : "secondary"}
+            data-testid="activate-polygon-fill-tool"
+            title="Fill a connected source-image color region as an editable polygon"
+            disabled={state.activeClassId === null}
+            onClick={() => {
+              setCenterlineEditing(false);
+              dispatch({ type: "setTool", tool: "fill" });
+            }}
+          >
+            Fill
+          </button>
           <button
             type="button"
             className={state.tool === "rotated_box" ? "active" : "secondary"}
@@ -322,6 +425,7 @@ export function MaskAnnotationWorkspace({
             type="button"
             className="secondary"
             onClick={() => void leaveWorkspace("boxes")}
+            data-mask-workspace-destination="boxes"
           >
             Box editor
           </button>
@@ -368,6 +472,37 @@ export function MaskAnnotationWorkspace({
             </label>
             {state.saveMessage && state.saveState !== "saved" && (
               <p className="form-error">{state.saveMessage}</p>
+            )}
+            {state.tool === "fill" && (
+              <>
+                <label>
+                  Fill tolerance
+                  <input
+                    type="range"
+                    min={0}
+                    max={255}
+                    step={1}
+                    value={fillTolerance}
+                    onChange={(event) =>
+                      setFillTolerance(Number(event.target.value))
+                    }
+                  />
+                  <output>{fillTolerance}</output>
+                </label>
+                <p className="annotation-helper">
+                  Click inside a region to create a polygon. Tolerance is the
+                  maximum RGB channel difference from the seed (0–255). Higher
+                  values include more colors. Holes require Polygon or Brush.
+                </p>
+                {fillPending && (
+                  <p role="status">Finding connected region...</p>
+                )}
+                {fillError && (
+                  <p role="alert" className="form-error">
+                    {fillError}
+                  </p>
+                )}
+              </>
             )}
           </section>
 
@@ -505,6 +640,7 @@ export function MaskAnnotationWorkspace({
                 }}
               />
               <PolygonMaskLayer
+                key={image.id}
                 width={image.width_px}
                 height={image.height_px}
                 masks={state.document.maskAnnotations}
@@ -518,6 +654,7 @@ export function MaskAnnotationWorkspace({
                   dispatch({ type: "setMaskSelection", selection })
                 }
                 onDeleteMaskIds={deleteMasks}
+                onFill={(seed) => void fillPolygon(seed)}
               />
               {state.tool === "rotated_box" && (
                 <RotatedBoxLayer

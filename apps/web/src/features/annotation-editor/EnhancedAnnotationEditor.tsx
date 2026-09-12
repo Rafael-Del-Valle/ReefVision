@@ -150,6 +150,13 @@ export function EnhancedAnnotationEditor({
       if (!layer) {
         return;
       }
+      if (
+        !document
+          .querySelector('[data-testid="activate-mask-select-tool"]')
+          ?.classList.contains("active")
+      ) {
+        return;
+      }
 
       if (
         vertexEditMode === "insert" &&
@@ -218,6 +225,7 @@ export function EnhancedAnnotationEditor({
           project={project}
           imageId={activeImageId}
           onReturnToBoxes={() => setWorkspace("boxes")}
+          onOpenBrush={() => setWorkspace("raster")}
           onClose={onClose}
         />
       );
@@ -249,9 +257,19 @@ export function EnhancedAnnotationEditor({
           aria-label="Annotation type"
           data-testid="annotation-type-select"
           value={workspace}
-          onChange={(event) =>
-            setWorkspace(event.target.value as EditorWorkspace)
-          }
+          onChange={(event) => {
+            const destination = event.target.value as EditorWorkspace;
+            if (workspace === "masks") {
+              // Use the workspace's existing save/discard guard for every exit.
+              document
+                .querySelector<HTMLButtonElement>(
+                  `[data-mask-workspace-destination="${destination}"]`,
+                )
+                ?.click();
+              return;
+            }
+            setWorkspace(destination);
+          }}
         >
           <option value="boxes">Bounding boxes</option>
           <option value="masks">Polygons</option>

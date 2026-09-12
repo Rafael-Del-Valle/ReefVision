@@ -156,6 +156,93 @@ def _load_source_image(
         raise ValidationError("The managed source image could not be read") from exc
 
 
+def polygon_from_binary_region(mask: Image.Image) -> list[tuple[int, int]]:
+    """Trace exact pixel edges; simplify only collinear vertices, never fill holes."""
+    bounds = mask.getbbox()
+    if bounds is None:
+        raise ValidationError("Fill produced an empty region")
+    width, height = mask.size
+    pixels = mask.load()
+    if pixels is None:
+        raise ValidationError("Fill pixels could not be accessed")
+    edges: dict[tuple[int, int], tuple[int, int]] = {}
+
+    def occupied(x: int, y: int) -> bool:
+        return 0 <= x < width and 0 <= y < height and bool(pixels[x, y])
+
+    def add(start: tuple[int, int], end: tuple[int, int]) -> None:
+        if start in edges:
+            raise ValidationError("Fill has touching boundaries; use Polygon or Brush instead")
+        edges[start] = end
+
+    left, top, right, bottom = bounds
+    for y in range(top, bottom):
+        for x in range(left, right):
+            if not occupied(x, y):
+                continue
+            if not occupied(x, y - 1):
+                add((x, y), (x + 1, y))
+            if not occupied(x + 1, y):
+                add((x + 1, y), (x + 1, y + 1))
+            if not occupied(x, y + 1):
+                add((x + 1, y + 1), (x, y + 1))
+            if not occupied(x - 1, y):
+                add((x, y + 1), (x, y))
+    start = min(edges, key=lambda point: (point[1], point[0]))
+    outline = [start]
+    point = edges.pop(start)
+    while point != start:
+        outline.append(point)
+        following = edges.pop(point, None)
+        if following is None:
+            raise ValidationError("Fill boundary cannot be represented as a simple polygon")
+        point = following
+    if edges:
+        raise ValidationError(
+            "Fill contains holes or separate regions; use Polygon or Brush instead"
+        )
+    simplified = []
+    for index, point in enumerate(outline):
+        previous = outline[index - 1]
+        following = outline[(index + 1) % len(outline)]
+        if (point[0] - previous[0]) * (following[1] - point[1]) != (point[1] - previous[1]) * (
+            following[0] - point[0]
+        ):
+            simplified.append(point)
+    # Existing polygon validation checks segment intersections pairwise. Bound
+    # editor/save work instead of silently discarding fine image structure.
+    if len(simplified) > 4096:
+        raise ValidationError("Fill boundary is too complex; adjust tolerance or use Brush")
+    return simplified
+
+
+def polygon_fill_from_source(
+    source: Image.Image, *, seed_x: int, seed_y: int, tolerance: int
+) -> list[tuple[int, int]]:
+    if not (0 <= seed_x < source.width and 0 <= seed_y < source.height):
+        raise ValidationError("Fill seed must be inside the image")
+    if not 0 <= tolerance <= 255:
+        raise ValidationError("Fill tolerance must be between 0 and 255")
+    mask = Image.new("L", source.size, 0)
+    _flood_fill_from_source(mask, source, seed_x=seed_x, seed_y=seed_y, tolerance=tolerance)
+    return polygon_from_binary_region(mask)
+
+
+def polygon_fill_from_managed_image(
+    settings: Settings,
+    *,
+    source_path: str,
+    expected_size: tuple[int, int],
+    seed_x: int,
+    seed_y: int,
+    tolerance: int,
+) -> list[tuple[int, int]]:
+    source = _load_source_image(
+        settings, source_image_relative_path=source_path, expected_size=expected_size
+    )
+    return polygon_fill_from_source(source, seed_x=seed_x, seed_y=seed_y, tolerance=tolerance)
+
+
 def _publish_revision_exclusively(temporary: Path, destination: Path) -> None:
     """Publish a complete revision without replacing an existing immutable file."""
 

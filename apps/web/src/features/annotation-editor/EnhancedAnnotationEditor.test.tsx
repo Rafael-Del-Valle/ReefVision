@@ -24,8 +24,22 @@ vi.mock("./AnnotationEditor", () => ({
 }));
 
 vi.mock("./MaskAnnotationWorkspace", () => ({
-  MaskAnnotationWorkspace: ({ imageId }: { imageId: string }) => (
+  MaskAnnotationWorkspace: ({
+    imageId,
+    onOpenBrush,
+    onReturnToBoxes,
+  }: {
+    imageId: string;
+    onOpenBrush: () => void;
+    onReturnToBoxes: () => void;
+  }) => (
     <div data-testid="mask-workspace">
+      <button data-mask-workspace-destination="raster" onClick={onOpenBrush}>
+        Brush
+      </button>
+      <button data-mask-workspace-destination="boxes" onClick={onReturnToBoxes}>
+        Boxes
+      </button>
       <button
         type="button"
         className="active"
@@ -68,6 +82,20 @@ vi.mock("./RasterMaskWorkspace", () => ({
 }));
 
 import { EnhancedAnnotationEditor } from "./EnhancedAnnotationEditor";
+
+it("does not intercept Fill clicks when a previous node insertion mode is remembered", () => {
+  renderEditor();
+  fireEvent.change(screen.getByTestId("annotation-type-select"), {
+    target: { value: "masks" },
+  });
+  fireEvent.click(screen.getByTestId("insert-polygon-node"));
+  screen.getByTestId("activate-mask-select-tool").classList.remove("active");
+  fireEvent.pointerDown(screen.getByTestId("editable-polygon"), {
+    clientX: 20,
+    clientY: 20,
+  });
+  expect(polygonInsertHandler).not.toHaveBeenCalled();
+});
 
 function renderEditor() {
   const queryClient = new QueryClient({
