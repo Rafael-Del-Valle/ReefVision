@@ -298,14 +298,30 @@ def test_training_workspace_bootstrap_returns_seed_data(
     )
 
 
+@pytest.mark.parametrize(
+    ("device", "precision", "cancel", "raise_on_cancel"),
+    [
+        ("cpu", "fp32", False, False),
+        ("cpu", "amp", False, False),
+        ("cuda:0", "fp32", False, False),
+        ("cuda:0", "amp", False, False),
+        ("cpu", "fp32", True, False),
+        ("cpu", "fp32", True, True),
+    ],
+)
 def test_training_job_processing_creates_completed_run_and_experiment(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    device: str,
+    precision: str,
+    cancel: bool,
+    raise_on_cancel: bool,
 ) -> None:
     _patch_training_foundation(monkeypatch)
     monkeypatch.setattr(
         "reefvision.jobs.training.require_provider_ready", lambda *args, **kwargs: None
     )
-    monkeypatch.setattr("reefvision.jobs.training.resolve_torch_device", lambda requested: "cpu")
+    monkeypatch.setattr("reefvision.jobs.training.resolve_torch_device", lambda requested: device)
     monkeypatch.setattr(
         "reefvision.jobs.training.configure_provider_runtime", lambda settings: None
     )
@@ -326,6 +342,11 @@ def test_training_job_processing_creates_completed_run_and_experiment(
             self.callbacks.setdefault(event, []).append(callback)
 
         def train(self, **kwargs) -> None:
+            assert kwargs["device"] == device
+            assert kwargs["amp"] == (precision == "amp")
+            assert (kwargs["epochs"], kwargs["batch"], kwargs["imgsz"]) == (2, 2, 64)
+            if sys.platform == "win32":
+                assert kwargs["workers"] == 0
             save_dir = Path(kwargs["project"]) / kwargs["name"]
             save_dir.mkdir(parents=True, exist_ok=True)
             results_csv = save_dir / "results.csv"
@@ -346,6 +367,12 @@ def test_training_job_processing_creates_completed_run_and_experiment(
             )
             for epoch in range(int(kwargs["epochs"])):
                 self.trainer.epoch = epoch
+                if cancel:
+                    from reefvision.db.models import Job
+
+                    with client.app.state.session_factory() as session:
+                        session.get(Job, run["job_id"]).status = "cancel_requested"
+                        session.commit()
                 with results_csv.open("a", encoding="utf-8") as handle:
                     handle.write(f"{epoch + 1},0.{epoch + 6},0.{epoch + 7}\n")
                 for callback in self.callbacks.get("on_fit_epoch_end", []):
@@ -354,6 +381,30 @@ def test_training_job_processing_creates_completed_run_and_experiment(
                     break
             (weights_dir / "best.pt").write_bytes(b"best")
             (weights_dir / "last.pt").write_bytes(b"last")
+            if cancel and raise_on_cancel:
+                raise RuntimeError("provider stopped after cancellation")
+            # Pinned 8.3.228 validates best.pt standalone, then repeats the fit
+            # callback with the same final epoch. It must not write progress again.
+            from sqlalchemy import event
+
+            writes = []
+
+            def track_writes(conn, cursor, statement, parameters, context, executemany):
+                if statement.lstrip().upper().startswith(("UPDATE ", "INSERT ")):
+                    writes.append(statement)
+
+            event.listen(client.app.state.engine, "before_cursor_execute", track_writes)
+            try:
+                validator = SimpleNamespace(training=False)
+                for event_name in ("on_val_start", "on_val_end"):
+                    for callback in self.callbacks.get(event_name, []):
+                        callback(validator)
+                self.trainer.metrics = {"metrics/mAP50(B)": 0.99}
+                for callback in self.callbacks.get("on_fit_epoch_end", []):
+                    callback(self.trainer)
+                assert writes == []
+            finally:
+                event.remove(client.app.state.engine, "before_cursor_execute", track_writes)
             for callback in self.callbacks.get("on_train_end", []):
                 callback(self.trainer)
 
@@ -369,7 +420,7 @@ def test_training_job_processing_creates_completed_run_and_experiment(
             "dataset_version_id": version["id"],
             "catalog_model_id": "ultralytics/yolo11/detect/x",
             "device": "auto",
-            "precision": "fp32",
+            "precision": precision,
             "random_seed": 11,
             "tiling_config": {"mode": "none"},
             "training_config": {"epochs": 2, "batch": 2, "imgsz": 64},
@@ -393,6 +444,13 @@ def test_training_job_processing_creates_completed_run_and_experiment(
         client.app.state.session_factory,
         run["job_id"],
     )
+    if cancel:
+        cancelled = client.get(f"/api/v1/training-runs/{run['id']}").json()
+        assert cancelled["status"] == cancelled["stage"] == "cancelled"
+        assert client.get(f"/api/v1/jobs/{run['job_id']}").json()["status"] == "cancelled"
+        assert client.get(f"/api/v1/projects/{project['id']}/experiments").json() == []
+        assert list(client.app.state.settings.resolved_data_dir.rglob("best.pt"))
+        return
     if not processed:
         failed_job = client.get(f"/api/v1/jobs/{run['job_id']}").json()
         pytest.fail(f"Training worker failed: {failed_job.get('error_message')}")
@@ -402,6 +460,7 @@ def test_training_job_processing_creates_completed_run_and_experiment(
     completed = completed_response.json()
     assert completed["status"] == "completed"
     assert completed["stage"] == "completed"
+    assert completed["progress_epoch"] == completed["progress_total_epochs"] == 2
     assert completed["result_checkpoint_path"] is not None
     assert "metrics/mAP50(B)" in completed["metrics"]
     assert completed["artifact_manifest"]["native_results_rows"] == [

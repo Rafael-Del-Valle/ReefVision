@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import csv
+import logging
+import math
 import shutil
 import sys
 from contextlib import suppress
@@ -26,6 +28,7 @@ from reefvision.db.models import (
     Project,
     TrainingRun,
 )
+from reefvision.domain.errors import ValidationError
 from reefvision.ml.dependencies import configure_provider_runtime, require_provider_ready
 from reefvision.ml.providers import resolve_torch_device
 from reefvision.ml.ultralytics_tuning import (
@@ -38,6 +41,131 @@ from reefvision.storage.catalog_models import catalog_asset_path, catalog_manife
 from reefvision.storage.datasets import write_yolo_detection_export
 from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.training import intact_torch_checkpoint
+
+LOGGER = logging.getLogger("reefvision.training")
+
+
+def _complete_training_run(session: Session, run: TrainingRun, job: Job) -> None:
+    """Commit with the caller so run, job and experiment become durable together."""
+    now = datetime.now(UTC)
+    run.status = run.stage = "completed"
+    run.error_message = job.error_message = None
+    run.completed_at = run.completed_at or now
+    job.completed_at = job.completed_at or now
+    job.status = "succeeded"
+    job.progress_current = run.progress_epoch
+    job.progress_total = run.progress_total_epochs
+    job.result_json = {
+        "stage": "completed",
+        "metrics": dict(run.metrics_json),
+        "result_checkpoint_path": run.result_checkpoint_path,
+    }
+    if (
+        session.scalar(
+            select(ExperimentRecord.id).where(ExperimentRecord.training_run_id == run.id)
+        )
+        is None
+    ):
+        session.add(
+            ExperimentRecord(
+                project_id=run.project_id,
+                training_run_id=run.id,
+                dataset_version_id=run.dataset_version_id,
+                dataset_manifest_sha256=run.dataset_manifest_sha256,
+                split_manifest_sha256=run.split_manifest_sha256,
+                task=run.task,
+                provider_id=run.provider_id,
+                architecture=run.architecture,
+                summary_metrics_json=dict(run.metrics_json),
+                comparison_warnings_json=list(run.warnings_json),
+                artifact_manifest_json=dict(run.artifact_manifest_json),
+                package_versions_json=_package_versions_snapshot(),
+            )
+        )
+
+
+def recover_training_run(session: Session, settings: Settings | None, job: Job) -> None:
+    """Finalize interrupted training conservatively; never execute or remove output."""
+    run = session.scalar(select(TrainingRun).where(TrainingRun.job_id == job.id))
+    if run is not None and run.status == "completed":
+        _complete_training_run(session, run, job)
+        return
+    cancelled = job.status == "cancel_requested" or (
+        run is not None and run.status in {"cancel_requested", "cancelled"}
+    )
+    if not cancelled and run is not None and settings is not None:
+        try:
+            if _recover_completed_artifacts(session, settings, run, job):
+                LOGGER.info("Recovered completed training run %s after restart", run.id)
+                return
+        except (OSError, ValueError, csv.Error, ValidationError) as exc:
+            LOGGER.warning("Cannot validate interrupted training artifacts for %s: %s", run.id, exc)
+    final_status = "cancelled" if cancelled else "failed"
+    message = (
+        "Training cancellation finalized after application restart."
+        if cancelled
+        else "Training was interrupted by an application restart; complete final artifacts "
+        "could not be verified. Training was not restarted."
+    ) + " Existing checkpoints, metrics, logs and artifacts were preserved."
+    now = datetime.now(UTC)
+    job.status = final_status
+    job.error_message = message
+    job.completed_at = now
+    job.result_json = {**(job.result_json or {}), "stage": final_status}
+    if run is not None:
+        run.status = run.stage = final_status
+        run.error_message = message
+        run.completed_at = now
+
+
+def _recover_completed_artifacts(
+    session: Session,
+    settings: Settings,
+    run: TrainingRun,
+    job: Job,
+) -> bool:
+    # Other providers and tuning trials have different completion evidence.
+    if (
+        run.provider_id != "ultralytics"
+        or run.task != "detect"
+        or run.tuning_config_json.get("mode", "disabled") != "disabled"
+    ):
+        return False
+    total = int(run.training_config_json.get("epochs", 0))
+    project = session.get(Project, run.project_id)
+    if total <= 0 or project is None:
+        return False
+    save_dir = resolve_managed_project_path(
+        settings,
+        f"{project.storage_root}/training/{run.id}/runs/detect",
+    )
+    results_csv = save_dir / "results.csv"
+    rows = _read_results_table(results_csv)
+    if [row.get("epoch") for row in rows] != list(range(1, total + 1)):
+        return False
+    final_metrics = {key: value for key, value in rows[-1].items() if key.startswith("metrics/")}
+    if not final_metrics or not all(
+        isinstance(value, (int, float)) and math.isfinite(value) for value in final_metrics.values()
+    ):
+        return False
+    # A torn CSV with invalid numeric values is not durable completion evidence.
+    if any(
+        isinstance(value, float) and not math.isfinite(value)
+        for row in rows
+        for value in row.values()
+    ):
+        return False
+    checkpoints = [save_dir / "weights" / name for name in ("best.pt", "last.pt")]
+    checkpoint = next((path for path in checkpoints if intact_torch_checkpoint(path)), None)
+    if checkpoint is None:
+        return False
+    _collect_training_results(settings, run, job, save_dir, results_csv)
+    run.result_checkpoint_path = _relative_to_data_dir(settings, checkpoint)
+    run.progress_epoch = run.progress_total_epochs = total
+    _complete_training_run(session, run, job)
+    job.result_json = {**(job.result_json or {}), "recovered_after_restart": True}
+    return True
 
 
 def process_training_job(settings: Settings, factory: sessionmaker[Session], job_id: str) -> bool:
@@ -167,62 +295,31 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
         last_reported_epoch = {"value": 0}
 
         def report_fit_epoch_end(trainer: Any) -> None:
-            epoch = int(getattr(trainer, "epoch", 0)) + 1
+            total = int(getattr(trainer, "epochs", 0))
+            epoch = min(int(getattr(trainer, "epoch", 0)) + 1, total)
+            # Ultralytics 8.3.228 repeats this hook after standalone final val.
+            # Avoid CSV reads and database writes for that duplicate callback.
             if epoch <= last_reported_epoch["value"]:
-                _append_log(
-                    logs_path,
-                    f"[{datetime.now(UTC).isoformat()}] duplicate on_fit_epoch_end skipped epoch={epoch}",
-                )
                 return
-            _append_log(
-                logs_path,
-                f"[{datetime.now(UTC).isoformat()}] callback on_fit_epoch_end entered epoch={epoch}",
-            )
-            _on_fit_epoch_end(
-                settings, factory, job_id, run_id, trainer, cancellation_requested
-            )
+            _on_fit_epoch_end(settings, factory, job_id, run_id, trainer, cancellation_requested)
             last_reported_epoch["value"] = epoch
-            _append_log(
-                logs_path,
-                f"[{datetime.now(UTC).isoformat()}] callback on_fit_epoch_end completed epoch={epoch}",
-            )
+
+        def report_train_start(trainer: Any) -> None:
+            last_reported_epoch["value"] = 0
+            _on_train_start(settings, factory, job_id, run_id, trainer)
+
+        def report_validation_start(validator: Any) -> None:
+            if getattr(validator, "training", True) is False:
+                _append_log(
+                    logs_path, f"[{datetime.now(UTC).isoformat()}] final validation started"
+                )
 
         model.add_callback("on_fit_epoch_end", report_fit_epoch_end)
-        model.add_callback(
-            "on_train_start",
-            lambda trainer: _on_train_start(settings, factory, job_id, run_id, trainer),
-        )
-        model.add_callback(
-            "on_val_start",
-            lambda validator: _append_log(
-                logs_path,
-                f"[{datetime.now(UTC).isoformat()}] callback on_val_start training={getattr(validator, "training", None)}",
-            ),
-        )
-        model.add_callback(
-            "on_val_end",
-            lambda validator: _append_log(
-                logs_path,
-                f"[{datetime.now(UTC).isoformat()}] callback on_val_end training={getattr(validator, "training", None)}",
-            ),
-        )
-        model.add_callback(
-            "on_train_end",
-            lambda trainer: _append_log(
-                logs_path,
-                f"[{datetime.now(UTC).isoformat()}] callback on_train_end entered",
-            ),
-        )
+        model.add_callback("on_train_start", report_train_start)
+        model.add_callback("on_val_start", report_validation_start)
         model.add_callback(
             "on_train_end",
             lambda trainer: _on_train_end(settings, factory, job_id, run_id, trainer),
-        )
-        model.add_callback(
-            "on_train_end",
-            lambda trainer: _append_log(
-                logs_path,
-                f"[{datetime.now(UTC).isoformat()}] callback on_train_end completed",
-            ),
         )
 
         with factory() as session:
@@ -273,7 +370,7 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
 
         _append_log(
             logs_path,
-            f"[{datetime.now(UTC).isoformat()}] model.train returned",
+            f"[{datetime.now(UTC).isoformat()}] provider execution returned; collecting artifacts",
         )
 
         with factory() as session:
@@ -305,65 +402,13 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
                     raise RuntimeError("Ultralytics trainer unavailable after execution")
                 save_dir = Path(str(trainer.save_dir)).resolve()
                 results_csv = save_dir / "results.csv"
-            weights_dir = save_dir / "weights"
-            best_ckpt = weights_dir / "best.pt"
-            last_ckpt = weights_dir / "last.pt"
-            history = {} if tuning_enabled else _read_results_csv(results_csv)
-            native_results_rows = _read_results_table(results_csv)
-            tuning_trials = normalize_tuning_csv(results_csv) if tuning_enabled else []
-            selected_trial = best_trial(tuning_trials)
-            last_metrics = (
-                dict(selected_trial.get("metrics", {}))
-                if selected_trial
-                else _last_metrics(history)
-            )
-            artifacts = _discover_training_artifacts(settings, save_dir)
-            if tuning_enabled:
-                run.progress_epoch = len(tuning_trials)
-                run.progress_total_epochs = int(
-                    dict(run.tuning_config_json).get("max_trials", len(tuning_trials))
-                )
-                job.progress_current = len(tuning_trials)
-                job.progress_total = run.progress_total_epochs
-            run.metrics_history_json = history
-            run.metrics_json = last_metrics
-            run.artifact_manifest_json = {
-                **dict(run.artifact_manifest_json),
-                "run_save_dir": _relative_to_data_dir(settings, save_dir),
-                "results_csv": _relative_to_data_dir(settings, results_csv)
-                if results_csv.is_file()
-                else None,
-                "best_checkpoint_path": _relative_to_data_dir(settings, best_ckpt)
-                if best_ckpt.is_file()
-                else None,
-                "last_checkpoint_path": _relative_to_data_dir(settings, last_ckpt)
-                if last_ckpt.is_file()
-                else None,
-                "native_results_rows": native_results_rows,
-                "tuning_results": {
-                    "fitness_definition": FITNESS_DEFINITION,
-                    "search_space": dict(run.tuning_config_json).get("search_space", {}),
-                    "max_trials": dict(run.tuning_config_json).get("max_trials"),
-                    "epochs_per_trial": dict(run.tuning_config_json).get("epochs_per_trial"),
-                    "patience": dict(run.tuning_config_json).get("patience"),
-                    "trials": tuning_trials,
-                    "best_trial_number": selected_trial.get("trial_number")
-                    if selected_trial
-                    else None,
-                    "best_hyperparameters": selected_trial.get("hyperparameters", {})
-                    if selected_trial
-                    else {},
-                }
-                if tuning_enabled
-                else None,
-                "artifacts": artifacts,
-            }
-            run.result_checkpoint_path = (
-                _relative_to_data_dir(settings, best_ckpt)
-                if best_ckpt.is_file()
-                else _relative_to_data_dir(settings, last_ckpt)
-                if last_ckpt.is_file()
-                else None
+            _collect_training_results(
+                settings,
+                run,
+                job,
+                save_dir,
+                results_csv,
+                tuning_enabled=tuning_enabled,
             )
             if cancellation_requested["value"] or job.status == "cancel_requested":
                 job.status = "cancelled"
@@ -374,30 +419,7 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
                     f"[{datetime.now(UTC).isoformat()}] training cancelled",
                 )
             else:
-                job.status = "succeeded"
-                job.progress_current = max(job.progress_total, 1)
-                job.result_json = {
-                    "stage": "completed",
-                    "metrics": last_metrics,
-                    "result_checkpoint_path": run.result_checkpoint_path,
-                }
-                run.status = "completed"
-                run.stage = "completed"
-                experiment = ExperimentRecord(
-                    project_id=run.project_id,
-                    training_run_id=run.id,
-                    dataset_version_id=run.dataset_version_id,
-                    dataset_manifest_sha256=run.dataset_manifest_sha256,
-                    split_manifest_sha256=run.split_manifest_sha256,
-                    task=run.task,
-                    provider_id=run.provider_id,
-                    architecture=run.architecture,
-                    summary_metrics_json=last_metrics,
-                    comparison_warnings_json=list(run.warnings_json),
-                    artifact_manifest_json=dict(run.artifact_manifest_json),
-                    package_versions_json=_package_versions_snapshot(),
-                )
-                session.add(experiment)
+                _complete_training_run(session, run, job)
                 _append_log(
                     resolve_managed_project_path(settings, run.logs_path or ""),
                     f"[{datetime.now(UTC).isoformat()}] training completed",
@@ -410,13 +432,14 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
         with factory() as session:
             job = session.get(Job, job_id)
             run = session.get(TrainingRun, run_id) if run_id is not None else None
+            final_status = "cancelled" if job and job.status == "cancel_requested" else "failed"
             if job is not None:
-                job.status = "failed"
+                job.status = final_status
                 job.error_message = str(exc)
                 job.completed_at = datetime.now(UTC)
             if run is not None:
-                run.status = "failed"
-                run.stage = "failed"
+                run.status = final_status
+                run.stage = final_status
                 run.error_message = str(exc)
                 run.completed_at = datetime.now(UTC)
                 if run.logs_path:
@@ -592,15 +615,24 @@ def _on_fit_epoch_end(
     trainer: Any,
     cancellation_requested: dict[str, bool],
 ) -> None:
-    history = _read_results_csv(Path(str(trainer.csv)))
-    last_metrics = _last_metrics(history)
     with factory() as session:
         job = session.get(Job, job_id)
         run = session.get(TrainingRun, run_id)
         if job is None or run is None:
             return
-        run.progress_epoch = int(getattr(trainer, "epoch", 0)) + 1
-        run.progress_total_epochs = int(getattr(trainer, "epochs", run.progress_total_epochs) or 0)
+        if run.status in {"completed", "failed", "cancelled"}:
+            return
+        if job.status == "cancel_requested":
+            cancellation_requested["value"] = True
+            trainer.stop = True
+        total = int(getattr(trainer, "epochs", run.progress_total_epochs) or 0)
+        epoch = max(0, min(int(getattr(trainer, "epoch", 0)) + 1, total))
+        if epoch <= run.progress_epoch:
+            return
+        history = _read_results_csv(Path(str(trainer.csv)))
+        last_metrics = _last_metrics(history)
+        run.progress_epoch = epoch
+        run.progress_total_epochs = total
         run.metrics_history_json = history
         run.metrics_json = last_metrics
         job.progress_current = max(run.progress_epoch, job.progress_current)
@@ -611,9 +643,6 @@ def _on_fit_epoch_end(
             "total_epochs": run.progress_total_epochs,
             "metrics": last_metrics,
         }
-        if job.status == "cancel_requested":
-            cancellation_requested["value"] = True
-            trainer.stop = True
         session.commit()
 
 
@@ -628,6 +657,8 @@ def _on_train_end(
         job = session.get(Job, job_id)
         run = session.get(TrainingRun, run_id)
         if job is None or run is None:
+            return
+        if run.status in {"completed", "failed", "cancelled"}:
             return
         run.stage = "evaluating"
         job.result_json = {"stage": "evaluating"}
@@ -651,3 +682,70 @@ def _package_version(distribution_name: str) -> str | None:
         return version(distribution_name)
     except PackageNotFoundError:
         return None
+
+
+def _collect_training_results(
+    settings: Settings,
+    run: TrainingRun,
+    job: Job,
+    save_dir: Path,
+    results_csv: Path,
+    *,
+    tuning_enabled: bool = False,
+) -> None:
+    weights_dir = save_dir / "weights"
+    best_ckpt = weights_dir / "best.pt"
+    last_ckpt = weights_dir / "last.pt"
+    history = {} if tuning_enabled else _read_results_csv(results_csv)
+    native_results_rows = _read_results_table(results_csv)
+    tuning_trials = normalize_tuning_csv(results_csv) if tuning_enabled else []
+    selected_trial = best_trial(tuning_trials)
+    last_metrics = (
+        dict(selected_trial.get("metrics", {})) if selected_trial else _last_metrics(history)
+    )
+    artifacts = _discover_training_artifacts(settings, save_dir)
+    if tuning_enabled:
+        run.progress_epoch = len(tuning_trials)
+        run.progress_total_epochs = int(
+            dict(run.tuning_config_json).get("max_trials", len(tuning_trials))
+        )
+        job.progress_current = len(tuning_trials)
+        job.progress_total = run.progress_total_epochs
+    run.metrics_history_json = history
+    run.metrics_json = last_metrics
+    run.artifact_manifest_json = {
+        **dict(run.artifact_manifest_json),
+        "run_save_dir": _relative_to_data_dir(settings, save_dir),
+        "results_csv": _relative_to_data_dir(settings, results_csv)
+        if results_csv.is_file()
+        else None,
+        "best_checkpoint_path": _relative_to_data_dir(settings, best_ckpt)
+        if best_ckpt.is_file()
+        else None,
+        "last_checkpoint_path": _relative_to_data_dir(settings, last_ckpt)
+        if last_ckpt.is_file()
+        else None,
+        "native_results_rows": native_results_rows,
+        "tuning_results": {
+            "fitness_definition": FITNESS_DEFINITION,
+            "search_space": dict(run.tuning_config_json).get("search_space", {}),
+            "max_trials": dict(run.tuning_config_json).get("max_trials"),
+            "epochs_per_trial": dict(run.tuning_config_json).get("epochs_per_trial"),
+            "patience": dict(run.tuning_config_json).get("patience"),
+            "trials": tuning_trials,
+            "best_trial_number": selected_trial.get("trial_number") if selected_trial else None,
+            "best_hyperparameters": selected_trial.get("hyperparameters", {})
+            if selected_trial
+            else {},
+        }
+        if tuning_enabled
+        else None,
+        "artifacts": artifacts,
+    }
+    run.result_checkpoint_path = (
+        _relative_to_data_dir(settings, best_ckpt)
+        if best_ckpt.is_file()
+        else _relative_to_data_dir(settings, last_ckpt)
+        if last_ckpt.is_file()
+        else None
+    )

@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
-from reefvision.db.models import BackupRecord, ImageAsset, Job, QualityControlRun, TrainingRun
+from reefvision.db.models import BackupRecord, ImageAsset, Job, QualityControlRun
 from reefvision.jobs.backups import process_backup_job
 from reefvision.jobs.classification_inference import process_classification_inference_job
 from reefvision.jobs.classification_training import process_classification_training_job
@@ -22,6 +22,7 @@ from reefvision.jobs.model_install import process_model_install_job
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
 from reefvision.jobs.quality_control import process_quality_control_job
 from reefvision.jobs.restores import process_restore_job
+from reefvision.jobs.training import recover_training_run
 from reefvision.jobs.training_dispatch import process_task_aware_training_job
 from reefvision.jobs.video import process_video_extract_job
 from reefvision.jobs.video_metric_depth import process_video_metric_depth_job
@@ -34,47 +35,23 @@ from reefvision.storage.projects import resolve_managed_project_path
 LOGGER = logging.getLogger("reefvision.worker")
 
 
-def recover_interrupted_jobs(factory: sessionmaker[Session]) -> int:
+def recover_interrupted_jobs(
+    factory: sessionmaker[Session],
+    settings: Settings | None = None,
+) -> int:
     with factory() as session:
         interrupted_training_jobs = list(
-            session.execute(
-                select(Job.id, Job.status).where(
+            session.scalars(
+                select(Job).where(
                     Job.job_type == "training",
                     Job.status.in_(("running", "cancel_requested")),
                 )
-            ).all()
-        )
-
-        count = JobRepository(session).recover_interrupted_jobs()
-
-        for job_id, previous_status in interrupted_training_jobs:
-            job = session.get(Job, job_id)
-            run = session.scalar(
-                select(TrainingRun).where(TrainingRun.job_id == job_id)
             )
-            if job is None:
-                continue
-
-            if previous_status == "cancel_requested":
-                final_status = "cancelled"
-                message = "Training cancellation finalized after application restart"
-            else:
-                final_status = "failed"
-                message = (
-                    "Training was interrupted by an application restart. "
-                    "Existing checkpoints and artifacts were preserved."
-                )
-
-            now = datetime.now(UTC)
-            job.status = final_status
-            job.error_message = message
-            job.completed_at = now
-
-            if run is not None:
-                run.status = final_status
-                run.stage = final_status
-                run.error_message = message
-                run.completed_at = now
+        )
+        count = len(interrupted_training_jobs)
+        for job in interrupted_training_jobs:
+            recover_training_run(session, settings, job)
+        count += JobRepository(session).recover_interrupted_jobs()
 
         for run in session.scalars(
             select(QualityControlRun).where(
@@ -221,7 +198,7 @@ async def thumbnail_worker_loop(
     factory: sessionmaker[Session],
     stop_event: asyncio.Event,
 ) -> None:
-    recover_interrupted_jobs(factory)
+    recover_interrupted_jobs(factory, settings)
     while not stop_event.is_set():
         try:
             processed = await asyncio.to_thread(process_next_thumbnail_job, settings, factory)

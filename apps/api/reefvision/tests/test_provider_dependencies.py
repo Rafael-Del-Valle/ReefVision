@@ -1,4 +1,6 @@
 import os
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -17,6 +19,35 @@ from reefvision.ml.dependencies import (
 )
 from reefvision.ml.provider_hub import get_model_provider
 from reefvision.ml.providers import UltralyticsDetectionProvider
+
+
+def test_provider_plots_render_headlessly_in_worker_thread(tmp_path: Path) -> None:
+    script = """
+import sys
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from reefvision.ml.dependencies import configure_provider_runtime
+configure_provider_runtime(data_dir=Path(sys.argv[1]))
+def plot():
+    import matplotlib
+    import matplotlib.pyplot as plt
+    assert matplotlib.get_backend().lower() == 'agg'
+    fig, ax = plt.subplots()
+    ax.plot([0, 1], [0, 1])
+    fig.savefig(Path(sys.argv[1]) / 'headless.png')
+    plt.close(fig)
+with ThreadPoolExecutor(max_workers=1) as pool:
+    pool.submit(plot).result()
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(tmp_path)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env={**os.environ, "MPLBACKEND": "TkAgg"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "headless.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
 
 
 def test_configure_provider_runtime_uses_research_data_dir(tmp_path: Path) -> None:
