@@ -111,13 +111,15 @@ def _ultralytics_architecture_available(
 
     requested_name = Path(requested).name.casefold()
     available = {
-        Path(architecture_id).name.casefold()
-        for architecture_id in available_architecture_ids
+        Path(architecture_id).name.casefold() for architecture_id in available_architecture_ids
     }
     if requested_name in available:
         return True
 
-    match = re.fullmatch(r"(yolo(?:v)?\d+)[nslmx](\.yaml)", requested_name)
+    # The pinned loader also accepts P2/P6/ghost suffixes and the legacy P6
+    # spelling (for example yolov8n6.yaml -> yolov8n-p6.yaml).
+    requested_name = re.sub(r"^(yolov[58][nslmx])6\.yaml$", r"\1-p6.yaml", requested_name)
+    match = re.fullmatch(r"(yolo(?:v)?\d+)[nslmx]((?:-[\w-]+)?\.yaml)", requested_name)
     if match is None:
         return False
 
@@ -368,10 +370,7 @@ class TrainingService:
             blockers.append("Choose a local Ultralytics architecture before launching training")
         elif not _ultralytics_architecture_available(
             architecture,
-            {
-                item.architecture_id
-                for item in self._cached_ultralytics_detect_architectures()
-            },
+            {item.architecture_id for item in self._cached_ultralytics_detect_architectures()},
         ):
             blockers.append(
                 "The selected architecture is not available in the installed pinned "
@@ -1166,10 +1165,7 @@ class TrainingService:
             blockers.append("Choose a local Ultralytics architecture before launching training")
         elif not _ultralytics_architecture_available(
             draft.architecture,
-            {
-                item.architecture_id
-                for item in self._cached_ultralytics_detect_architectures()
-            },
+            {item.architecture_id for item in self._cached_ultralytics_detect_architectures()},
         ):
             blockers.append(
                 "The selected architecture is not available in the installed pinned "

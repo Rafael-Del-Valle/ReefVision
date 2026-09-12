@@ -303,6 +303,7 @@ export function TrainingWorkspace({
   const pendingDraftIdRef = useRef<string | null>(null);
   const lastSaveTokenRef = useRef(0);
   const consumedCatalogSelectionRef = useRef<string | null>(null);
+  const previousRunStatusesRef = useRef(new Map<string, string>());
 
   const workspaceBootstrap = useQuery({
     queryKey: ["training_workspace_bootstrap", project.id],
@@ -344,11 +345,7 @@ export function TrainingWorkspace({
         ].includes(run.status),
       );
 
-      return hasActiveRun ||
-        activeSection === "runs" ||
-        activeSection === "models"
-        ? 2000
-        : false;
+      return hasActiveRun ? 2000 : false;
     },
   });
   const experiments = useQuery({
@@ -356,6 +353,26 @@ export function TrainingWorkspace({
     queryFn: ({ signal }) => getExperiments(project.id, signal),
     enabled: activeSection === "experiments",
   });
+
+  useEffect(() => {
+    if (!runs.data) return;
+    const previous = previousRunStatusesRef.current;
+    const hasNewCompletion = runs.data.some(
+      (run) =>
+        run.status === "completed" && previous.get(run.id) !== "completed",
+    );
+    previousRunStatusesRef.current = new Map(
+      runs.data.map((run) => [run.id, run.status]),
+    );
+    if (hasNewCompletion) {
+      void queryClient.invalidateQueries({
+        queryKey: ["experiments", project.id],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["models", project.id, "detector"],
+      });
+    }
+  }, [project.id, queryClient, runs.data]);
 
   const selectedDraftQuery = useQuery({
     queryKey: ["training_draft", selectedDraftId],
@@ -1404,7 +1421,10 @@ export function TrainingWorkspace({
                     <button
                       type="button"
                       onClick={() => launchRunMutation.mutate()}
-                      disabled={launchRunMutation.isPending}
+                      disabled={
+                        launchRunMutation.isPending ||
+                        draftSaveState !== "saved"
+                      }
                     >
                       {launchRunMutation.isPending
                         ? "Queueing..."
