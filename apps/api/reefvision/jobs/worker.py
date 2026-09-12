@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
-from reefvision.db.models import BackupRecord, ImageAsset, Job, QualityControlRun
+from reefvision.db.models import BackupRecord, ImageAsset, Job, QualityControlRun, TrainingRun
 from reefvision.jobs.backups import process_backup_job
 from reefvision.jobs.classification_inference import process_classification_inference_job
 from reefvision.jobs.classification_training import process_classification_training_job
@@ -36,7 +36,46 @@ LOGGER = logging.getLogger("reefvision.worker")
 
 def recover_interrupted_jobs(factory: sessionmaker[Session]) -> int:
     with factory() as session:
+        interrupted_training_jobs = list(
+            session.execute(
+                select(Job.id, Job.status).where(
+                    Job.job_type == "training",
+                    Job.status.in_(("running", "cancel_requested")),
+                )
+            ).all()
+        )
+
         count = JobRepository(session).recover_interrupted_jobs()
+
+        for job_id, previous_status in interrupted_training_jobs:
+            job = session.get(Job, job_id)
+            run = session.scalar(
+                select(TrainingRun).where(TrainingRun.job_id == job_id)
+            )
+            if job is None:
+                continue
+
+            if previous_status == "cancel_requested":
+                final_status = "cancelled"
+                message = "Training cancellation finalized after application restart"
+            else:
+                final_status = "failed"
+                message = (
+                    "Training was interrupted by an application restart. "
+                    "Existing checkpoints and artifacts were preserved."
+                )
+
+            now = datetime.now(UTC)
+            job.status = final_status
+            job.error_message = message
+            job.completed_at = now
+
+            if run is not None:
+                run.status = final_status
+                run.stage = final_status
+                run.error_message = message
+                run.completed_at = now
+
         for run in session.scalars(
             select(QualityControlRun).where(
                 QualityControlRun.status.in_(("running", "cancel_requested"))

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import csv
 import shutil
+import sys
 from contextlib import suppress
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
@@ -163,19 +164,65 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
 
         cancellation_requested = {"value": False}
         model = YOLO(checkpoint_source)
-        model.add_callback(
-            "on_fit_epoch_end",
-            lambda trainer: _on_fit_epoch_end(
+        last_reported_epoch = {"value": 0}
+
+        def report_fit_epoch_end(trainer: Any) -> None:
+            epoch = int(getattr(trainer, "epoch", 0)) + 1
+            if epoch <= last_reported_epoch["value"]:
+                _append_log(
+                    logs_path,
+                    f"[{datetime.now(UTC).isoformat()}] duplicate on_fit_epoch_end skipped epoch={epoch}",
+                )
+                return
+            _append_log(
+                logs_path,
+                f"[{datetime.now(UTC).isoformat()}] callback on_fit_epoch_end entered epoch={epoch}",
+            )
+            _on_fit_epoch_end(
                 settings, factory, job_id, run_id, trainer, cancellation_requested
-            ),
-        )
+            )
+            last_reported_epoch["value"] = epoch
+            _append_log(
+                logs_path,
+                f"[{datetime.now(UTC).isoformat()}] callback on_fit_epoch_end completed epoch={epoch}",
+            )
+
+        model.add_callback("on_fit_epoch_end", report_fit_epoch_end)
         model.add_callback(
             "on_train_start",
             lambda trainer: _on_train_start(settings, factory, job_id, run_id, trainer),
         )
         model.add_callback(
+            "on_val_start",
+            lambda validator: _append_log(
+                logs_path,
+                f"[{datetime.now(UTC).isoformat()}] callback on_val_start training={getattr(validator, "training", None)}",
+            ),
+        )
+        model.add_callback(
+            "on_val_end",
+            lambda validator: _append_log(
+                logs_path,
+                f"[{datetime.now(UTC).isoformat()}] callback on_val_end training={getattr(validator, "training", None)}",
+            ),
+        )
+        model.add_callback(
+            "on_train_end",
+            lambda trainer: _append_log(
+                logs_path,
+                f"[{datetime.now(UTC).isoformat()}] callback on_train_end entered",
+            ),
+        )
+        model.add_callback(
             "on_train_end",
             lambda trainer: _on_train_end(settings, factory, job_id, run_id, trainer),
+        )
+        model.add_callback(
+            "on_train_end",
+            lambda trainer: _append_log(
+                logs_path,
+                f"[{datetime.now(UTC).isoformat()}] callback on_train_end completed",
+            ),
         )
 
         with factory() as session:
@@ -183,6 +230,8 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
             if run is None:
                 raise RuntimeError("Training run disappeared before launch")
             train_args = dict(run.training_config_json)
+            if sys.platform == "win32":
+                train_args["workers"] = 0
             precision = run.precision
             device = resolve_torch_device(run.device)
             if precision == "fp32":
@@ -221,6 +270,11 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
             )
         else:
             model.train(**train_args)
+
+        _append_log(
+            logs_path,
+            f"[{datetime.now(UTC).isoformat()}] model.train returned",
+        )
 
         with factory() as session:
             run = session.get(TrainingRun, run_id)

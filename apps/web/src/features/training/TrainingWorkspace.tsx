@@ -329,9 +329,27 @@ export function TrainingWorkspace({
   const runs = useQuery({
     queryKey: ["training_runs", project.id],
     queryFn: ({ signal }) => getTrainingRuns(project.id, signal),
-    enabled: activeSection === "runs" || activeSection === "models",
-    refetchInterval: () =>
-      activeSection === "runs" || activeSection === "models" ? 2000 : false,
+    refetchOnMount: "always",
+    refetchInterval: (query) => {
+      const data = query.state.data as TrainingRun[] | undefined;
+      const hasActiveRun = data?.some((run) =>
+        [
+          "queued",
+          "preflight",
+          "preparing_dataset",
+          "training",
+          "tuning",
+          "running",
+          "cancel_requested",
+        ].includes(run.status),
+      );
+
+      return hasActiveRun ||
+        activeSection === "runs" ||
+        activeSection === "models"
+        ? 2000
+        : false;
+    },
   });
   const experiments = useQuery({
     queryKey: ["experiments", project.id],
@@ -1386,10 +1404,7 @@ export function TrainingWorkspace({
                     <button
                       type="button"
                       onClick={() => launchRunMutation.mutate()}
-                      disabled={
-                        launchRunMutation.isPending ||
-                        preflight?.status === "blocked"
-                      }
+                      disabled={launchRunMutation.isPending}
                     >
                       {launchRunMutation.isPending
                         ? "Queueing..."

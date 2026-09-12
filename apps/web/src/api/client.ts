@@ -2395,9 +2395,14 @@ export async function getTrainingRuns(
   projectId: string,
   signal?: AbortSignal,
 ): Promise<TrainingRun[]> {
-  return request<TrainingRun[]>(`/projects/${projectId}/training-runs`, {
-    signal,
-  });
+  const pollToken = Date.now();
+  return request<TrainingRun[]>(
+    `/projects/${projectId}/training-runs?poll=${pollToken}`,
+    {
+      signal,
+      cache: "no-store",
+    },
+  );
 }
 
 export async function getTrainingRun(

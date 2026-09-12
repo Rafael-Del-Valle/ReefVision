@@ -160,6 +160,7 @@ def configure_provider_runtime(
     runtime_dir = provider_runtime_dir(settings, data_dir=data_dir)
     runtime_dir.mkdir(parents=True, exist_ok=True)
     os.environ["YOLO_AUTOINSTALL"] = "false"
+    os.environ["MPLBACKEND"] = "Agg"
     config_dir = str(runtime_dir.resolve())
     if settings is not None or data_dir is not None:
         os.environ["YOLO_CONFIG_DIR"] = config_dir

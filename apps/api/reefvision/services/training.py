@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 from importlib.resources import files
 from pathlib import Path
@@ -100,6 +101,28 @@ DEFAULT_RESOURCE_LIMITS: dict[str, Any] = {
     "max_workers": 2,
     "allowed_devices": ["auto"],
 }
+
+
+def _ultralytics_architecture_available(
+    requested: str,
+    available_architecture_ids: set[str],
+) -> bool:
+    """Match scaled YOLO catalog names to Ultralytics base architecture YAMLs."""
+
+    requested_name = Path(requested).name.casefold()
+    available = {
+        Path(architecture_id).name.casefold()
+        for architecture_id in available_architecture_ids
+    }
+    if requested_name in available:
+        return True
+
+    match = re.fullmatch(r"(yolo(?:v)?\d+)[nslmx](\.yaml)", requested_name)
+    if match is None:
+        return False
+
+    base_architecture = f"{match.group(1)}{match.group(2)}"
+    return base_architecture in available
 
 
 class TrainingService:
@@ -343,9 +366,13 @@ class TrainingService:
         )
         if not architecture:
             blockers.append("Choose a local Ultralytics architecture before launching training")
-        elif architecture not in {
-            item.architecture_id for item in self._cached_ultralytics_detect_architectures()
-        }:
+        elif not _ultralytics_architecture_available(
+            architecture,
+            {
+                item.architecture_id
+                for item in self._cached_ultralytics_detect_architectures()
+            },
+        ):
             blockers.append(
                 "The selected architecture is not available in the installed pinned "
                 "Ultralytics package"
@@ -1137,9 +1164,13 @@ class TrainingService:
             )
         if not draft.architecture:
             blockers.append("Choose a local Ultralytics architecture before launching training")
-        elif draft.architecture not in {
-            item.architecture_id for item in self._cached_ultralytics_detect_architectures()
-        }:
+        elif not _ultralytics_architecture_available(
+            draft.architecture,
+            {
+                item.architecture_id
+                for item in self._cached_ultralytics_detect_architectures()
+            },
+        ):
             blockers.append(
                 "The selected architecture is not available in the installed pinned "
                 "Ultralytics package"

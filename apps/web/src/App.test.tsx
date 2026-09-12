@@ -1281,6 +1281,35 @@ describe("App", () => {
     expect(await screen.findByText("Start training")).toBeInTheDocument();
   });
 
+  it("allows retrying training when the saved preflight is blocked", async () => {
+    const blockedDrafts: typeof trainingDrafts = trainingDrafts.map((draft) => ({
+      ...draft,
+      validation_state: {
+        ...draft.validation_state,
+        status: "blocked",
+      },
+    }));
+
+    mockApi({
+      projects: [project],
+      models: [],
+      savedTrainingDrafts: blockedDrafts,
+    });
+    renderApp();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /CPT Coral Study/ }),
+    );
+    await userEvent.click(screen.getByRole("tab", { name: "Models & AI" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Training" }));
+
+    const startButton = await screen.findByRole("button", {
+      name: "Start training",
+    });
+
+    expect(startButton).toBeEnabled();
+  });
+
   it("opens the models workspace and shows Ultralytics training compatibility", async () => {
     mockApi({ projects: [project], models: [] });
     renderApp();
