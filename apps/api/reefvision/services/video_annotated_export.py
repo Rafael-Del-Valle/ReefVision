@@ -136,14 +136,32 @@ def _draw_label(
     top = max(0, baseline_y - text_height - baseline - 6)
     right = min(width - 1, x + text_width + 8)
     bottom = min(height - 1, baseline_y + 4)
-    cv2.rectangle(frame, (x, top), (right, bottom), color, cv2.FILLED)
+    label_fill = (245, 245, 245)
+    label_text = (0, 0, 0)
+    border_thickness = max(1, thickness)
+
+    cv2.rectangle(
+        frame,
+        (x, top),
+        (right, bottom),
+        label_fill,
+        cv2.FILLED,
+    )
+    cv2.rectangle(
+        frame,
+        (x, top),
+        (right, bottom),
+        color,
+        border_thickness,
+        cv2.LINE_AA,
+    )
     cv2.putText(
         frame,
         text,
         (x + 4, baseline_y - baseline),
         cv2.FONT_HERSHEY_SIMPLEX,
         font_scale,
-        (255, 255, 255),
+        label_text,
         thickness,
         cv2.LINE_AA,
     )

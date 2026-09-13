@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from reefvision.db.models import Job, VideoAsset, VideoTrack
 from reefvision.jobs import video_annotated_export as export_job_module
+from reefvision.services import video_annotated_export as renderer
 from reefvision.services.video_annotated_export import resolve_overlay_options
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project
@@ -31,6 +32,50 @@ def test_annotated_export_preset_defaults() -> None:
     assert full.trails
     assert full.frame_time
     assert full.counters
+
+
+def test_annotation_label_uses_readable_text_and_class_border(
+    monkeypatch,
+) -> None:
+    rectangle_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    text_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    class FakeFrame:
+        shape = (100, 200, 3)
+
+    monkeypatch.setattr(
+        renderer.cv2,
+        "getTextSize",
+        lambda *args, **kwargs: ((60, 12), 3),
+    )
+    monkeypatch.setattr(
+        renderer.cv2,
+        "rectangle",
+        lambda *args, **kwargs: rectangle_calls.append((args, kwargs)),
+    )
+    monkeypatch.setattr(
+        renderer.cv2,
+        "putText",
+        lambda *args, **kwargs: text_calls.append((args, kwargs)),
+    )
+
+    class_color = (20, 120, 230)
+
+    renderer._draw_label(
+        FakeFrame(),
+        "#7 Cruise Searching 0.91",
+        10,
+        30,
+        class_color,
+        font_scale=0.6,
+        thickness=2,
+    )
+
+    assert len(rectangle_calls) == 2
+    assert rectangle_calls[0][0][3] == (245, 245, 245)
+    assert rectangle_calls[0][0][4] == renderer.cv2.FILLED
+    assert rectangle_calls[1][0][3] == class_color
+    assert text_calls[0][0][5] == (0, 0, 0)
 
 
 def test_annotated_export_job_and_download(
