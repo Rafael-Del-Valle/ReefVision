@@ -996,6 +996,12 @@ function mockApi({
       if (url.includes(`/projects/${project.id}/dataset-versions`)) {
         return jsonResponse(datasetVersions);
       }
+      if (
+        url.endsWith(`/projects/${project.id}/exchange-packages`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse([]);
+      }
       if (url.endsWith(`/projects/${project.id}/training/bootstrap`)) {
         return jsonResponse(trainingWorkspaceBootstrap);
       }
@@ -1224,6 +1230,29 @@ describe("App", () => {
     ).toHaveAttribute("aria-selected", "true");
     expect(
       await screen.findByText("No dataset versions yet"),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the project interoperability workspace", async () => {
+    mockApi({ projects: [project] });
+    renderApp();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /CPT Coral Study/ }),
+    );
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Interoperability" }),
+    );
+
+    expect(
+      screen.getByRole("tab", { name: "Interoperability" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      await screen.findByRole("heading", { name: "Project interoperability" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Create exchange package")).toBeInTheDocument();
+    expect(
+      screen.getByText("Inspect or import exchange package"),
     ).toBeInTheDocument();
   });
 

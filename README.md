@@ -1,35 +1,38 @@
 # ReefVision
 
-ReefVision is a local-first scientific image-annotation and computer-vision platform. The current `1.0.1` release line focuses on coral-polyp bounding-box annotation, trusted local model registration, model-assisted review, a unified model-provider catalog, prompt-assisted proposal segmentation, immutable dataset versions, leakage-aware splitting, explainable annotation quality control, deterministic review prioritization, and backup or recovery and release-hardening foundations.
+ReefVision is a local-first scientific annotation, computer-vision, and marine-imagery analysis platform. The current `1.0.1` release line combines manual and model-assisted annotation, detection and segmentation workflows, coral measurements, classification, active learning, model/provider management, video tracking and scientific video analysis, reproducible datasets, review and quality-control workflows, project interoperability, executable workflow graphs, and Windows desktop packaging.
 
-The repository currently includes the application foundation, project and class management, managed image importing, thumbnail jobs, a searchable project gallery, manual bounding-box annotation, model registration, detector-driven prediction proposals, review tooling, and a Tauri-based Windows desktop shell that packages the existing frontend and backend together.
+The application uses a React/Tauri desktop interface with a FastAPI/SQLAlchemy backend and persisted background jobs. Research data, annotations, model outputs, provenance, immutable dataset versions, generated artifacts, and project-exchange records are managed locally rather than requiring a hosted ReefVision service.
 
 ## Available now
 
 - Create blank projects or projects using the six-class octocoral template.
-- Add, rename, reorder, recolor, and deactivate annotation classes.
-- Import JPEG, PNG, TIFF, and WebP images as protected managed copies.
-- Detect exact project-level duplicates with SHA-256.
-- Generate thumbnails through persisted background jobs.
-- Review structured successful, duplicate, unsupported, and failed import results.
-- Browse images with server-side filename, status, and group-key filters.
-- Open the annotation editor from the gallery and draw, move, resize, delete, undo, redo, and save manual bounding boxes.
-- Register trusted local detector and assist checkpoints per project.
-- Inspect a unified Model Hub catalog that distinguishes implemented providers, blocked provider families, and runtime backend availability.
-- Launch queued detector inference jobs on selected images from the gallery.
-- Review pending prediction proposals in the annotation editor before they become verified annotations.
-- Send one pending detector proposal through Prompt Assist, review the candidate SAM mask, and accept it with preserved proposal provenance.
-- Edit image status and leakage-prevention group keys.
-- Preview immutable dataset snapshots from current project state using image-status filters, seeded split rules, and parent-version reuse.
-- Create sequential dataset versions with frozen per-image annotation snapshots and stable manifest checksums.
-- Compare dataset versions to review added, removed, and changed image membership or annotation totals.
-- Export YOLO detection datasets directly from immutable dataset versions and download the generated archive plus manifest.
-- Run historical quality-control checks across a whole project or one immutable dataset version with configurable thresholds, severity filters, run comparison, and issue acknowledgement or dismissal.
-- Generate historical review queues with deterministic score breakdowns, queue-item state tracking, and direct navigation into annotation mode for ranked images.
+- Add, rename, reorder, recolor, deactivate, and manage visibility for annotation classes.
+- Import JPEG, PNG, TIFF, and WebP images as protected managed copies, with SHA-256 duplicate detection and background thumbnail generation.
+- Browse project imagery with filename, annotation-status, and leakage-prevention group filters.
+- Annotate imagery with bounding boxes, rotated boxes, polygons, raster brush edits, deterministic Fill, and editable mask workflows.
+- Draw and retain coral centerlines and use scale/calibration assistants for scientific measurements.
+- Calculate mask- and calibration-aware coral measurements and measurement analytics.
+- Register trusted local detection, segmentation, classification, assist, depth, and other supported model checkpoints through the Model Hub.
+- Run detector inference and review model proposals separately from verified human annotations.
+- Run segmentation inference and edit resulting polygon or raster-mask annotations before saving them as research annotations.
+- Use Prompt Assist and supported advanced providers through guarded preflight and execution workflows, including provider families such as SAM2, Grounding DINO, Depth Anything, OCR, VLM, and other installed adapters where runtime support is available.
+- Create immutable dataset versions with frozen annotation state, leakage-aware splitting, parent-version reuse, comparisons, manifests, and dataset exports.
+- Train supported detection and segmentation models through reproducible persisted training runs with validation, tuning, recovery, results packages, and model registration.
+- Assign image-level classification labels, create versioned whole-image or crop-based classification datasets, train Ultralytics classifiers, run inference, and accept or reject ranked predictions.
+- Run explainable quality-control checks across projects or immutable dataset versions, compare historical runs, and acknowledge or dismiss findings.
+- Generate deterministic review queues with score breakdowns and direct navigation into annotation mode.
+- Create active-learning acquisition rounds using uncertainty, rare-class, quality-risk, or hybrid strategies and freeze reviewed feedback into subsequent dataset versions.
+- Import videos, run persisted ByteTrack or BoT-SORT tracking jobs, retain independent run histories, inspect tracking outputs, and exchange track data.
+- Export annotated tracking-review MP4s from persisted observations without rerunning the detector, with selectable boxes, track IDs, class labels, confidence, trails, timestamps, and counters.
+- Analyze video activity and occupancy and use scientific 3D/depth workflows with calibration validation, previews, visualization, and reporting.
+- Build typed workflow graphs visually, validate and plan execution, save revisions, run persisted workflows, pause at human-review gates, resume work, and inspect artifact lineage.
+- Export versioned, checksummed ReefVision project-exchange ZIPs, safely inspect packages before import, and import them as new managed projects with record-ID remapping. Original media, model weights, and generated artifacts remain explicit opt-ins.
+- Export and import supported video-track exchange formats independently of whole-project exchange packages.
 - Create managed backups, verify them, restore them into new managed recovery locations, and export redacted diagnostics bundles from the `System status` view.
-- Reopen a first-run onboarding guide from the top bar or `System status`.
-- Archive projects without deleting their records or files.
-- Build a Windows MSI desktop installer that bundles the existing React frontend and a PyInstaller-frozen FastAPI sidecar.
+- Reopen the first-run onboarding guide from the top bar or `System status`.
+- Archive projects without deleting their records or managed files.
+- Build a Windows MSI desktop installer that bundles the React frontend and PyInstaller-frozen FastAPI sidecar.
 
 ## Repository layout
 

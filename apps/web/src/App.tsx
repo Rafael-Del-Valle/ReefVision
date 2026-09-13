@@ -22,6 +22,7 @@ import { ClassManagerPanel } from "./features/classes/ClassManagerPanel";
 import { ClassificationWorkspace } from "./features/classification/ClassificationWorkspace";
 import { DatasetVersionsPanel } from "./features/dataset-versions/DatasetVersionsPanel";
 import { Gallery } from "./features/gallery/Gallery";
+import { InteroperabilityWorkspace } from "./features/interoperability/InteroperabilityWorkspace";
 import { ModelManager } from "./features/models/ModelManager";
 import { OnboardingModal } from "./features/onboarding/OnboardingModal";
 import { QualityControlDashboard } from "./features/quality-control/QualityControlDashboard";
@@ -53,6 +54,7 @@ interface AnnotationLaunchState {
 type ProjectView =
   | "gallery"
   | "versions"
+  | "interoperability"
   | "models"
   | "training"
   | "classification"
@@ -92,6 +94,12 @@ const PROJECT_NAV_GROUPS: Array<{
         label: "Dataset versions",
         description:
           "Create immutable snapshots, splits, comparisons, and exports.",
+      },
+      {
+        id: "interoperability",
+        label: "Interoperability",
+        description:
+          "Export, inspect, and import versioned ReefVision project packages.",
       },
       {
         id: "classes",
@@ -574,6 +582,9 @@ export function App() {
               )}
               {activeView === "versions" && (
                 <DatasetVersionsPanel project={selectedProject} />
+              )}
+              {activeView === "interoperability" && (
+                <InteroperabilityWorkspace project={selectedProject} />
               )}
               {activeView === "classification" && (
                 <ClassificationWorkspace project={selectedProject} />
