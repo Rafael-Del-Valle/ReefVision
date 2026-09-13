@@ -33,6 +33,28 @@ from reefvision.jobs.worker import recover_interrupted_jobs
 from reefvision.main import create_app
 
 
+def validate_acceptance_output_root(output: Path) -> None:
+    """Fail early when Windows acceptance evidence would exceed safe path lengths."""
+    if sys.platform != "win32":
+        return
+    probe = (
+        output
+        / "data"
+        / "projects"
+        / ("p" * 36)
+        / "training"
+        / ("r" * 36)
+        / "dataset"
+        / "images"
+        / "validation"
+        / (("i" * 36) + "_region-3.png")
+    )
+    if len(str(probe)) >= 240:
+        raise RuntimeError(
+            "Acceptance output root is too deep for reliable Windows filesystem "
+            "operations. Use a short path such as %TEMP%\\rv101-<commit>."
+        )
+
 def settings_for(output: Path) -> Settings:
     data = output / "data"
     return Settings(
@@ -302,6 +324,7 @@ def main() -> None:
     parser.add_argument("--cpu-only", action="store_true")
     args = parser.parse_args()
     output = args.output.resolve()
+    validate_acceptance_output_root(output)
     if args.child_job:
         child(output, args.child_job, args.mode)
         return

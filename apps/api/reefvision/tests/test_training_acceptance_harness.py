@@ -51,3 +51,15 @@ def test_acceptance_rejects_crashes_and_unexercised_faults(
     )
     with pytest.raises(AssertionError):
         harness["assert_worker_outcome"](mode, exit_code, status, acted)
+
+def test_acceptance_rejects_overly_deep_windows_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness = runpy.run_path(
+        str(Path(__file__).resolve().parents[4] / "scripts" / "acceptance_training_lifecycle.py")
+    )
+    monkeypatch.setattr(harness["sys"], "platform", "win32")
+    deep = Path("C:/") / ("deep-output/" * 20)
+    with pytest.raises(RuntimeError, match="too deep"):
+        harness["validate_acceptance_output_root"](deep)
+
