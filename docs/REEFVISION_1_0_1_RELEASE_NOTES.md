@@ -49,7 +49,8 @@ Use a new output directory on every run; the harness refuses an existing one:
 
 ```powershell
 Set-Location C:\Users\rafae\Documents\ReefVision\reefvision
-.\.venv\Scripts\python.exe scripts\acceptance_training_lifecycle.py --output .artifacts\training-lifecycle-1.0.1-new
+$AcceptanceOutput = Join-Path $env:TEMP ("rv101-" + (git rev-parse --short HEAD) + "-" + [guid]::NewGuid().ToString("N").Substring(0,8))
+.\.venv\Scripts\python.exe scripts\acceptance_training_lifecycle.py --output $AcceptanceOutput
 ```
 
 It creates four synthetic images in isolated managed storage, executes real

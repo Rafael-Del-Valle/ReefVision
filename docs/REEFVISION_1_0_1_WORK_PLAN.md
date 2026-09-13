@@ -1,7 +1,7 @@
 # ReefVision 1.0.1 implementation and validation ledger
 
 Source baseline: `8d4a39d`, branch `release/reefvision-1.0-finalize-20260910`.
-Existing `v1.0.0`: `6be8880e76bd033f18114f4df0cb7278a593ac51`; immutable.
+Existing `v1.0.0` tag target commit: `a0d60c8997e9e4a03e291a5bc14147e11a8c5602`; immutable.
 
 The user's 1.0.1 release scope supersedes historical 0.1 exclusions in the
 product specification. Keep source images, checkpoints, datasets, applied
@@ -50,9 +50,11 @@ training or a host installation as clean-VM acceptance.
 
 - Lifecycle commit `901ec7b`; architecture/training UI commit `2643568`;
   polygon Fill and guarded workspace exit commit `e94bca6`.
-- Six real hardware cases passed; report and per-case logs are under
-  `.artifacts/training-lifecycle-1.0.1-a`. CPU FP32, CUDA FP32, CUDA AMP,
+- Six real hardware cases passed against candidate `f8e5221`; report and per-case
+  logs are under `%TEMP%\rv101-f8e5221`. CPU FP32, CUDA FP32, CUDA AMP,
   interrupted incomplete, cancelled, and recovered real 50/50 completion.
+- Commit `feb07a9` only hardens the acceptance harness and its regression test;
+  production training/runtime code is unchanged from the hardware-tested candidate.
 - Frontend latest full suite: 140 passed; production build and TypeScript passed.
   Playwright: seven passed before final guarded dropdown regression; rerunning
   after it. Existing Starlette deprecation and Vite chunk-size warnings remain.

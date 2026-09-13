@@ -62,4 +62,3 @@ def test_acceptance_rejects_overly_deep_windows_output(
     deep = Path("C:/") / ("deep-output/" * 20)
     with pytest.raises(RuntimeError, match="too deep"):
         harness["validate_acceptance_output_root"](deep)
-
