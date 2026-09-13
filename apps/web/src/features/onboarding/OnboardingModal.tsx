@@ -59,9 +59,8 @@ export function OnboardingModal({
             <h3>Recovery and support</h3>
             <p>
               Open System status for backups, restore into a new recovery
-              location, log paths, and redacted diagnostics bundles. YOLO import
-              remains planned in the product specification and is not yet
-              exposed in this v1.6.0 interface.
+              location, log paths, and redacted diagnostics bundles. Keep a
+              verified backup before moving research data to another computer.
             </p>
           </article>
         </div>

@@ -1,12 +1,27 @@
 param(
     [ValidateSet("x86_64-pc-windows-msvc", "i686-pc-windows-msvc", "aarch64-pc-windows-msvc")]
     [string]$TargetTriple = "x86_64-pc-windows-msvc",
+    [string]$CargoTargetDirectory = '',
     [switch]$SkipMsiVerification
 )
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
+
+$BuildCommit = (git rev-parse HEAD)
+if ($LASTEXITCODE -ne 0 -or (git status --porcelain)) {
+    throw 'Production installers must be built from a clean committed source tree.'
+}
+
+if (-not $CargoTargetDirectory) {
+    $CargoTargetDirectory = Join-Path $Root 'apps\web\src-tauri\target'
+}
+$CargoTargetDirectory = [System.IO.Path]::GetFullPath($CargoTargetDirectory)
+if (-not $CargoTargetDirectory.StartsWith($Root + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw 'The cargo build directory must be inside this repository.'
+}
+$env:CARGO_TARGET_DIR = $CargoTargetDirectory
 
 . (Join-Path $PSScriptRoot "lib\node-tools.ps1")
 $NodeTools = Ensure-ReefVisionNodeTools
@@ -16,13 +31,13 @@ Assert-ReefVisionPublicLockfile -NodeTools $NodeTools
 function Build-ReefVisionSplitCabinetMsi {
     param([Parameter(Mandatory = $true)][string]$TargetTriple)
 
-    $ReleaseRoot = Join-Path $Root "apps\web\src-tauri\target\$TargetTriple\release"
+    $ReleaseRoot = Join-Path $CargoTargetDirectory "$TargetTriple\release"
     $WixRoot = Join-Path $ReleaseRoot "wix\x64"
     $WixSource = Join-Path $WixRoot "main.wxs"
     $WixObject = Join-Path $WixRoot "main.wixobj"
     $Locale = Join-Path $WixRoot "locale.wxl"
     $InstallerDirectory = Join-Path $ReleaseRoot "bundle\msi"
-    $Installer = Join-Path $InstallerDirectory "ReefVision_1.0.0_x64_en-US.msi"
+    $Installer = Join-Path $InstallerDirectory "ReefVision_$($TauriConfig.version)_x64_en-US.msi"
     $WixTools = Join-Path $env:LOCALAPPDATA "tauri\WixTools314"
     $Candle = Join-Path $WixTools "candle.exe"
     $Light = Join-Path $WixTools "light.exe"
@@ -102,8 +117,8 @@ Write-Host "Bundling $($BundleMetadata.asset_count) verified checkpoints ($([mat
 & (Join-Path $PSScriptRoot "build-desktop-backend.ps1") -TargetTriple $TargetTriple
 
 Write-ReefVisionStep "Building the Tauri MSI installer"
-$GeneratedWixDirectory = Join-Path $Root "apps\web\src-tauri\target\$TargetTriple\release\wix\x64"
-$InstallerDirectory = Join-Path $Root "apps\web\src-tauri\target\$TargetTriple\release\bundle\msi"
+$GeneratedWixDirectory = Join-Path $CargoTargetDirectory "$TargetTriple\release\wix\x64"
+$InstallerDirectory = Join-Path $CargoTargetDirectory "$TargetTriple\release\bundle\msi"
 foreach ($generatedPath in @(
     (Join-Path $GeneratedWixDirectory "main.wxs"),
     (Join-Path $GeneratedWixDirectory "main.wixobj")
@@ -158,3 +173,18 @@ if (-not $SkipMsiVerification) {
 else {
     Write-Warning "MSI verification was explicitly skipped. This build is not release-validated."
 }
+
+if ((git rev-parse HEAD) -ne $BuildCommit -or (git status --porcelain)) {
+    throw 'Source tree changed while packaging; do not release these artifacts.'
+}
+$BuildArtifactRecords = @(Get-ChildItem -LiteralPath $InstallerDirectory -File |
+    Where-Object { $_.Extension -in @('.msi', '.cab') } | ForEach-Object {
+        [ordered]@{ name = $_.Name; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
+    })
+[ordered]@{
+    version = $TauriConfig.version
+    source_commit = $BuildCommit
+    source_tree_clean = $true
+    msi_verified = (-not [bool]$SkipMsiVerification)
+    files = $BuildArtifactRecords
+} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $InstallerDirectory 'build-provenance.json') -Encoding UTF8

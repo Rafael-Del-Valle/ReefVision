@@ -2,6 +2,35 @@
 
 All notable changes to ReefVision will be documented here.
 
+## [1.0.1] - Release candidate
+
+### Fixed
+
+- Recover interrupted detection training as completed when the full configured
+  epoch history and intact final checkpoint prove completion; preserve artifacts,
+  metrics, timestamps and one experiment record without rerunning training.
+- Finalize incomplete interrupted runs as failed and pending cancellations as
+  cancelled. Preserve completed runs across restarts and ignore duplicate final
+  Ultralytics epoch callbacks.
+- Retain Windows single-process data loading and headless plotting. Preserve
+  cancellation status when a provider raises while stopping.
+- Accept installed scaled/P6 architecture aliases during preflight. Refresh
+  training results and stop polling after terminal states; wait for draft saves
+  before launching with fresh server-side preflight.
+- Use the current package version in onboarding and verify MSI, desktop and API
+  version metadata during production package verification.
+
+### Added
+
+- Polygon Fill: local connected flood fill with tolerance control, exact pixel
+  boundary contours and conservative simplification. Results use ordinary
+  editable polygons, classes, undo/redo and persistence. Holes, touching boundaries
+  and overly complex outlines are rejected rather than silently changing geometry.
+- Isolated real CPU/CUDA training lifecycle acceptance harness, including AMP,
+  FP32, cancellation and process interruption at the final commit boundary.
+
+No database migration is required. The existing 1.0.0 release/tag is unchanged.
+
 ## [Unreleased]
 
 ### Added

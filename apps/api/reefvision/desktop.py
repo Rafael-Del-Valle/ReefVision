@@ -246,7 +246,11 @@ def run_self_test(settings: Settings) -> int:
     paths = schema.get("paths")
     if not isinstance(paths, dict) or not paths:
         raise RuntimeError("Packaged FastAPI application produced no OpenAPI paths")
-    LOGGER.info("Desktop self-test validated %s OpenAPI paths", len(paths))
+    LOGGER.info(
+        "Desktop self-test validated ReefVision version %s; %s OpenAPI paths",
+        schema["info"]["version"],
+        len(paths),
+    )
     return 0
 
 

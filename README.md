@@ -1,6 +1,6 @@
 # ReefVision
 
-ReefVision is a local-first scientific image-annotation and computer-vision platform. The current `1.0.0` release line focuses on coral-polyp bounding-box annotation, trusted local model registration, model-assisted review, a unified model-provider catalog, prompt-assisted proposal segmentation, immutable dataset versions, leakage-aware splitting, explainable annotation quality control, deterministic review prioritization, and backup or recovery and release-hardening foundations.
+ReefVision is a local-first scientific image-annotation and computer-vision platform. The current `1.0.1` release line focuses on coral-polyp bounding-box annotation, trusted local model registration, model-assisted review, a unified model-provider catalog, prompt-assisted proposal segmentation, immutable dataset versions, leakage-aware splitting, explainable annotation quality control, deterministic review prioritization, and backup or recovery and release-hardening foundations.
 
 The repository currently includes the application foundation, project and class management, managed image importing, thumbnail jobs, a searchable project gallery, manual bounding-box annotation, model registration, detector-driven prediction proposals, review tooling, and a Tauri-based Windows desktop shell that packages the existing frontend and backend together.
 

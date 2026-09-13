@@ -1,6 +1,7 @@
 param(
     [string]$TargetTriple = 'x86_64-pc-windows-msvc',
     [string]$InstallerDirectory = '',
+    [string]$ExpectedVersion = '',
     [switch]$KeepExtracted
 )
 
@@ -21,6 +22,17 @@ if ($MsiFiles.Count -ne 1) {
     throw "Expected exactly one MSI in $InstallerDirectory but found $($MsiFiles.Count)."
 }
 $Msi = $MsiFiles[0]
+if (-not $ExpectedVersion) {
+    $ExpectedVersion = (Get-Content -LiteralPath (Join-Path $RepositoryRoot 'apps\web\src-tauri\tauri.conf.json') -Raw | ConvertFrom-Json).version
+}
+$MsiDatabase = (New-Object -ComObject WindowsInstaller.Installer).OpenDatabase($Msi.FullName, 0)
+$VersionView = $MsiDatabase.OpenView("SELECT ``Value`` FROM ``Property`` WHERE ``Property``='ProductVersion'")
+$VersionView.Execute()
+$ProductVersion = $VersionView.Fetch().StringData(1)
+$VersionView.Close()
+if ($ProductVersion -ne $ExpectedVersion) {
+    throw "MSI ProductVersion $ProductVersion does not match expected $ExpectedVersion."
+}
 $CabFiles = @(Get-ChildItem -Path $InstallerDirectory -Filter '*.cab' -File)
 foreach ($Cab in $CabFiles) {
     if ($Cab.Length -le 0) {
@@ -64,7 +76,7 @@ try {
         "TARGETDIR=$ExtractRoot",
         '/L*v',
         $MsiLog
-    ) -Wait -PassThru
+    ) -Wait -PassThru -WindowStyle Hidden
     $MsiExitCode = $MsiProcess.ExitCode
     if ($MsiExitCode -notin @(0, 3010)) {
         Show-Tail -Path $MsiLog
@@ -79,6 +91,10 @@ try {
     $DesktopExe = @($ExtractedFiles | Where-Object { $_.Name -ieq 'ReefVision.exe' }) | Select-Object -First 1
     if (-not $DesktopExe) {
         throw 'Extracted MSI does not contain ReefVision.exe.'
+    }
+    $DesktopVersion = $DesktopExe.VersionInfo.ProductVersion
+    if ($DesktopVersion -notin @($ExpectedVersion, "$ExpectedVersion.0")) {
+        throw "Desktop version $DesktopVersion does not match expected $ExpectedVersion."
     }
     $SidecarExe = @($ExtractedFiles | Where-Object { $_.Name -ieq 'reefvision-api.exe' }) | Select-Object -First 1
     if (-not $SidecarExe) {
@@ -125,10 +141,13 @@ try {
         '--safe-mode',
         '--data-dir', $SelfTestData,
         '--log-file', $SidecarLog
-    ) -Wait -PassThru
+    ) -Wait -PassThru -WindowStyle Hidden
     if ($SidecarProcess.ExitCode -ne 0) {
         Show-Tail -Path $SidecarLog
         throw "Packaged reefvision-api.exe self-test failed with exit code $($SidecarProcess.ExitCode)."
+    }
+    if (-not (Select-String -LiteralPath $SidecarLog -SimpleMatch "ReefVision version $ExpectedVersion;" -Quiet)) {
+        throw "Packaged API self-test did not report expected version $ExpectedVersion."
     }
 
     $DatabaseFiles = @(Get-ChildItem -Path $SelfTestData -Recurse -File | Where-Object {
@@ -142,6 +161,12 @@ try {
 }
 finally {
     if (-not $KeepExtracted) {
+        foreach ($cleanupPath in @($ExtractRoot, $SelfTestData)) {
+            $resolvedCleanupPath = [System.IO.Path]::GetFullPath($cleanupPath)
+            if ($resolvedCleanupPath -notin @((Join-Path $SystemDrive "rv1-$Token"), (Join-Path $SystemDrive "rvd-$Token"))) {
+                throw "Refusing cleanup outside the generated verification directories: $resolvedCleanupPath"
+            }
+        }
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $ExtractRoot
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $SelfTestData
     }

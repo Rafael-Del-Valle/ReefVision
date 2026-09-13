@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
 
+import { version as applicationVersion } from "../package.json";
+
 import {
   archiveProject,
   createProject,
@@ -728,7 +730,7 @@ export function App() {
       )}
       {showOnboarding && (
         <OnboardingModal
-          version={health.data?.version ?? "1.6.0"}
+          version={health.data?.version ?? applicationVersion}
           onClose={() => setShowOnboarding(false)}
           onDismissPermanently={dismissOnboardingPermanently}
         />
