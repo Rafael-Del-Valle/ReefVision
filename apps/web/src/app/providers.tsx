@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
 
+import { DesktopResumeRecovery } from "./DesktopResumeRecovery";
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -13,6 +15,9 @@ const queryClient = new QueryClient({
 
 export function AppProviders({ children }: PropsWithChildren) {
   return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <DesktopResumeRecovery />
+      {children}
+    </QueryClientProvider>
   );
 }
