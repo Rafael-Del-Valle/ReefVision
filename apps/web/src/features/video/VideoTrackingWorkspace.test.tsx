@@ -16,6 +16,7 @@ vi.mock("./videoApi", async () => {
     getVideoTrackInterpolation: vi.fn(),
     getVideoTrackAnalytics: vi.fn(),
     getTrackingModels: vi.fn(),
+    getAnnotatedVideoExports: vi.fn(),
   };
 });
 
@@ -105,6 +106,7 @@ describe("VideoTrackingWorkspace", () => {
       occupancy_grid: {},
     });
     vi.mocked(api.getTrackingModels).mockResolvedValue([]);
+    vi.mocked(api.getAnnotatedVideoExports).mockResolvedValue([]);
   });
 
   it("shows managed video, frame, track, and automated tracking sections", async () => {

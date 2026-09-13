@@ -9,7 +9,12 @@ from fastapi.testclient import TestClient
 
 from reefvision.db.models import Job, ModelRegistration
 from reefvision.jobs import video_tracking as tracking_module
-from reefvision.ml.video_tracking import TrackObservation
+from reefvision.ml.video_tracking import (
+    TrackObservation,
+    VideoTrackingCancellationCheck,
+    VideoTrackingProgress,
+    VideoTrackingProgressCallback,
+)
 from reefvision.services import video_assets as video_assets_module
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project
@@ -31,12 +36,16 @@ class MultiTrackerProvider:
         confidence: float,
         iou: float,
         device: str,
+        on_progress: VideoTrackingProgressCallback | None = None,
+        should_cancel: VideoTrackingCancellationCheck | None = None,
     ) -> list[TrackObservation]:
         assert checkpoint_path.read_bytes() == b"detector"
         assert video_path.read_bytes() == b"video"
+
         provider_track_id = 7 if tracker == "bytetrack.yaml" else 8
         x = 10 if tracker == "bytetrack.yaml" else 20
-        return [
+
+        observations = [
             TrackObservation(
                 frame=0,
                 provider_track_id=provider_track_id,
@@ -52,6 +61,21 @@ class MultiTrackerProvider:
                 bbox=(x + 2, 10, 20, 10),
             ),
         ]
+
+        for index in range(2):
+            assert should_cancel is None or not should_cancel()
+
+            if on_progress is not None:
+                on_progress(
+                    VideoTrackingProgress(
+                        frames_processed=index + 1,
+                        detections_seen=index + 1,
+                        tracked_observations_seen=index + 1,
+                        unique_tracks_seen=1,
+                    )
+                )
+
+        return observations
 
 
 def _fake_metadata(_path: Path) -> dict[str, float | int]:

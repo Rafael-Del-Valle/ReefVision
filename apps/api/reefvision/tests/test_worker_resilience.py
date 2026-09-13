@@ -90,3 +90,79 @@ def test_unexpected_handler_error_is_contained_and_queue_continues(
         assert following.status == "failed"
         assert "simulated handler crash" in (crashing.error_message or "")
         assert "Unsupported queued job type" in (following.error_message or "")
+
+
+def test_interrupted_video_tracking_is_not_silently_requeued(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Interrupted tracking recovery")
+
+    with client.app.state.session_factory() as session:
+        job = Job(
+            project_id=project["id"],
+            job_type="video_tracking",
+            status="running",
+            progress_current=123,
+            progress_total=300,
+            request_json={"video_id": "missing-video"},
+            result_json={
+                "stage": "tracking",
+                "frames_processed": 123,
+                "detection_count": 50,
+            },
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+
+    recovered = worker.recover_interrupted_jobs(
+        client.app.state.session_factory,
+        client.app.state.settings,
+    )
+
+    assert recovered >= 1
+
+    with client.app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == "failed"
+        assert job.progress_current == 123
+        assert job.progress_total == 300
+        assert job.result_json["stage"] == "interrupted"
+        assert job.result_json["recovery"] == "interrupted_on_startup"
+        assert "123/300" in (job.error_message or "")
+
+
+def test_interrupted_video_tracking_cancellation_finishes_cancelled(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Interrupted tracking cancellation")
+
+    with client.app.state.session_factory() as session:
+        job = Job(
+            project_id=project["id"],
+            job_type="video_tracking",
+            status="cancel_requested",
+            progress_current=42,
+            progress_total=300,
+            request_json={"video_id": "missing-video"},
+            result_json={"stage": "tracking"},
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+
+    worker.recover_interrupted_jobs(
+        client.app.state.session_factory,
+        client.app.state.settings,
+    )
+
+    with client.app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == "cancelled"
+        assert job.progress_current == 42
+        assert job.result_json["stage"] == "cancelled"
+        assert job.result_json["recovery"] == "interrupted_on_startup"

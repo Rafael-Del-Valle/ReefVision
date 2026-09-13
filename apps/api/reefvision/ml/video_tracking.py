@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
@@ -19,6 +20,23 @@ class TrackObservation:
     bbox: tuple[float, float, float, float]
 
 
+@dataclass(frozen=True)
+class VideoTrackingProgress:
+    frames_processed: int
+    detections_seen: int
+    tracked_observations_seen: int
+    unique_tracks_seen: int
+    stage: str = "tracking"
+
+
+class VideoTrackingCancelled(RuntimeError):
+    """Raised when a video-tracking run is cancelled between frames."""
+
+
+VideoTrackingProgressCallback = Callable[[VideoTrackingProgress], None]
+VideoTrackingCancellationCheck = Callable[[], bool]
+
+
 class VideoTrackingProvider(Protocol):
     provider_id: str
 
@@ -34,6 +52,8 @@ class VideoTrackingProvider(Protocol):
         confidence: float,
         iou: float,
         device: str,
+        on_progress: VideoTrackingProgressCallback | None = None,
+        should_cancel: VideoTrackingCancellationCheck | None = None,
     ) -> list[TrackObservation]: ...
 
 
@@ -72,12 +92,34 @@ class UltralyticsVideoTrackingProvider:
         confidence: float,
         iou: float,
         device: str,
+        on_progress: VideoTrackingProgressCallback | None = None,
+        should_cancel: VideoTrackingCancellationCheck | None = None,
     ) -> list[TrackObservation]:
         if not checkpoint_path.is_file():
             raise ValidationError("Tracking checkpoint is missing")
         if not video_path.is_file():
             raise ValidationError("Tracking source video is missing")
+        if should_cancel is not None and should_cancel():
+            raise VideoTrackingCancelled("Video tracking cancelled before inference")
+
+        def report_stage(stage: str) -> None:
+            if on_progress is not None:
+                on_progress(
+                    VideoTrackingProgress(
+                        frames_processed=0,
+                        detections_seen=0,
+                        tracked_observations_seen=0,
+                        unique_tracks_seen=0,
+                        stage=stage,
+                    )
+                )
+
+        report_stage("loading_model")
         model = self._ultralytics.YOLO(str(checkpoint_path))
+
+        report_stage("model_loaded")
+        report_stage("starting_stream")
+
         stream = model.track(
             source=str(video_path),
             stream=True,
@@ -88,33 +130,65 @@ class UltralyticsVideoTrackingProvider:
             device=self._device(device),
             verbose=False,
         )
+
+        report_stage("waiting_for_first_frame")
+
         observations: list[TrackObservation] = []
+        detections_seen = 0
+        tracked_observations_seen = 0
+        unique_track_ids: set[int] = set()
+
         for frame_index, result in enumerate(stream):
+            if should_cancel is not None and should_cancel():
+                raise VideoTrackingCancelled(f"Video tracking cancelled after frame {frame_index}")
+
             boxes = getattr(result, "boxes", None)
-            if boxes is None or getattr(boxes, "id", None) is None:
-                continue
-            ids = boxes.id.int().cpu().tolist()
-            classes = boxes.cls.int().cpu().tolist()
-            confidences = boxes.conf.cpu().tolist()
-            coordinates = boxes.xywh.cpu().tolist()
-            names = dict(getattr(result, "names", {}))
-            for track_id, class_index, score, xywh in zip(
-                ids,
-                classes,
-                confidences,
-                coordinates,
-                strict=False,
-            ):
-                center_x, center_y, width, height = (float(value) for value in xywh)
-                observations.append(
-                    TrackObservation(
-                        frame=frame_index,
-                        provider_track_id=int(track_id),
-                        class_name=str(names.get(int(class_index), class_index)),
-                        confidence=float(score),
-                        bbox=(center_x - width / 2.0, center_y - height / 2.0, width, height),
+            detection_count = 0 if boxes is None else len(boxes)
+            detections_seen += detection_count
+
+            if boxes is not None and getattr(boxes, "id", None) is not None:
+                ids = boxes.id.int().cpu().tolist()
+                classes = boxes.cls.int().cpu().tolist()
+                confidences = boxes.conf.cpu().tolist()
+                coordinates = boxes.xywh.cpu().tolist()
+                names = dict(getattr(result, "names", {}))
+
+                tracked_observations_seen += len(ids)
+                unique_track_ids.update(int(track_id) for track_id in ids)
+
+                for track_id, class_index, score, xywh in zip(
+                    ids,
+                    classes,
+                    confidences,
+                    coordinates,
+                    strict=False,
+                ):
+                    center_x, center_y, width, height = (float(value) for value in xywh)
+                    observations.append(
+                        TrackObservation(
+                            frame=frame_index,
+                            provider_track_id=int(track_id),
+                            class_name=str(names.get(int(class_index), class_index)),
+                            confidence=float(score),
+                            bbox=(
+                                center_x - width / 2.0,
+                                center_y - height / 2.0,
+                                width,
+                                height,
+                            ),
+                        )
+                    )
+
+            if on_progress is not None:
+                on_progress(
+                    VideoTrackingProgress(
+                        frames_processed=frame_index + 1,
+                        detections_seen=detections_seen,
+                        tracked_observations_seen=tracked_observations_seen,
+                        unique_tracks_seen=len(unique_track_ids),
                     )
                 )
+
         return observations
 
 

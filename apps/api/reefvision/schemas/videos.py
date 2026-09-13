@@ -147,6 +147,23 @@ class VideoTrackingCreateRequest(BaseModel):
     minimum_track_frames: int = Field(default=2, ge=1, le=1000000)
 
 
+class AnnotatedVideoOverlayOptions(BaseModel):
+    boxes: bool | None = None
+    track_ids: bool | None = None
+    class_labels: bool | None = None
+    confidence: bool | None = None
+    trails: bool | None = None
+    frame_time: bool | None = None
+    counters: bool | None = None
+
+
+class AnnotatedVideoExportCreateRequest(BaseModel):
+    source_tracking_job_id: str = Field(min_length=1, max_length=36)
+    preset: Literal["clean_tracking", "full_review"] = "clean_tracking"
+    overlays: AnnotatedVideoOverlayOptions = Field(default_factory=AnnotatedVideoOverlayOptions)
+    trail_length: int = Field(default=60, ge=2, le=1000)
+
+
 class VideoMetricDepth3DCreateRequest(BaseModel):
     track_ids: list[str] = Field(min_length=1, max_length=10000)
     device: str = Field(default="auto", min_length=1, max_length=60)
@@ -172,14 +189,22 @@ class VideoTrackingRunResponse(BaseModel):
     project_id: str
     video_id: str
     status: str
+    stage: str
     tracker: str
     model_id: str | None
     confidence: float
     iou: float
     device: str
     minimum_track_frames: int
+    progress_current: int
+    progress_total: int
     track_count: int
     observation_count: int
+    live_detection_count: int
+    live_observation_count: int
+    live_tracks_seen: int
+    heartbeat_at: datetime | None
+    stale: bool
     unmapped_labels: list[str]
     error_message: str | None
     created_at: datetime

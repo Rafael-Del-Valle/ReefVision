@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import subprocess
+import sys
 from contextlib import suppress
 from datetime import UTC, datetime
 
@@ -11,7 +13,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
-from reefvision.db.models import BackupRecord, ImageAsset, Job, QualityControlRun
+from reefvision.db.models import (
+    BackupRecord,
+    ImageAsset,
+    Job,
+    QualityControlRun,
+    VideoAsset,
+)
 from reefvision.jobs.backups import process_backup_job
 from reefvision.jobs.classification_inference import process_classification_inference_job
 from reefvision.jobs.classification_training import process_classification_training_job
@@ -25,6 +33,7 @@ from reefvision.jobs.restores import process_restore_job
 from reefvision.jobs.training import recover_training_run
 from reefvision.jobs.training_dispatch import process_task_aware_training_job
 from reefvision.jobs.video import process_video_extract_job
+from reefvision.jobs.video_annotated_export import process_video_annotated_export_job
 from reefvision.jobs.video_metric_depth import process_video_metric_depth_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.jobs.workflow import process_workflow_run_job
@@ -33,6 +42,186 @@ from reefvision.storage.images import create_thumbnail
 from reefvision.storage.projects import resolve_managed_project_path
 
 LOGGER = logging.getLogger("reefvision.worker")
+
+
+def _next_queued_job_identity(
+    factory: sessionmaker[Session],
+) -> tuple[str, str] | None:
+    with factory() as session:
+        job = JobRepository(session).next_queued()
+        if job is None:
+            return None
+        return job.id, job.job_type
+
+
+def _video_tracking_worker_command(
+    settings: Settings,
+    job_id: str,
+) -> list[str]:
+    child_log = settings.resolved_data_dir / "logs" / f"video-tracking-{job_id}.log"
+
+    args = [
+        "--data-dir",
+        str(settings.resolved_data_dir),
+        "--log-file",
+        str(child_log),
+        "--skip-migrations",
+        "--video-tracking-job",
+        job_id,
+    ]
+
+    if bool(vars(sys).get("frozen", False)):
+        return [sys.executable, *args]
+
+    return [
+        sys.executable,
+        "-m",
+        "reefvision.desktop",
+        *args,
+    ]
+
+
+async def process_isolated_video_tracking_job(
+    settings: Settings,
+    factory: sessionmaker[Session],
+    job_id: str,
+    stop_event: asyncio.Event,
+) -> bool:
+    command = _video_tracking_worker_command(settings, job_id)
+
+    LOGGER.info(
+        "Launching isolated video tracking process",
+        extra={
+            "event_id": "video_tracking_process_start",
+            "component": "worker",
+            "job_id": job_id,
+        },
+    )
+
+    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+
+    process = await asyncio.create_subprocess_exec(
+        *command,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+        creationflags=creationflags,
+    )
+
+    wait_task = asyncio.create_task(process.wait())
+    stop_task = asyncio.create_task(stop_event.wait())
+
+    done, _ = await asyncio.wait(
+        {wait_task, stop_task},
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+
+    if stop_task in done and stop_event.is_set():
+        if process.returncode is None:
+            LOGGER.info(
+                "Stopping isolated video tracking process during API shutdown",
+                extra={
+                    "event_id": "video_tracking_process_shutdown",
+                    "component": "worker",
+                    "job_id": job_id,
+                },
+            )
+            process.terminate()
+            try:
+                await asyncio.wait_for(process.wait(), timeout=3.0)
+            except TimeoutError:
+                process.kill()
+                await process.wait()
+
+        if not wait_task.done():
+            wait_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await wait_task
+
+        return True
+
+    if not stop_task.done():
+        stop_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await stop_task
+
+    return_code = await wait_task
+
+    with factory() as session:
+        job = session.get(Job, job_id)
+
+        if job is None:
+            return True
+
+        if job.status in {"succeeded", "failed", "cancelled"}:
+            LOGGER.info(
+                "Isolated video tracking process exited with status %s",
+                job.status,
+                extra={
+                    "event_id": "video_tracking_process_exit",
+                    "component": "worker",
+                    "job_id": job_id,
+                    "return_code": return_code,
+                },
+            )
+            return True
+
+    _fail_job(
+        factory,
+        job_id,
+        (f"Isolated video tracking process exited unexpectedly with code {return_code}"),
+    )
+    return True
+
+
+def recover_interrupted_video_tracking_jobs(session: Session) -> int:
+    jobs = list(
+        session.scalars(
+            select(Job).where(
+                Job.job_type == "video_tracking",
+                Job.status.in_(("running", "cancel_requested")),
+            )
+        )
+    )
+    now = datetime.now(UTC)
+
+    for job in jobs:
+        result = dict(job.result_json or {})
+
+        if job.status == "cancel_requested":
+            job.status = "cancelled"
+            stage = "cancelled"
+            message = "Cancellation finalized after ReefVision restart"
+            video_status = "tracking_cancelled"
+        else:
+            job.status = "failed"
+            stage = "interrupted"
+            message = (
+                "Video tracking was interrupted while ReefVision was closed at "
+                f"frame {job.progress_current}/{job.progress_total}. "
+                "Start or retry the tracking run explicitly."
+            )
+            video_status = "tracking_failed"
+
+        result.update(
+            {
+                "stage": stage,
+                "recovery": "interrupted_on_startup",
+                "recovered_at": now.isoformat(),
+            }
+        )
+        job.result_json = result
+        job.error_message = message
+        job.completed_at = now
+
+        video_id = str(dict(job.request_json or {}).get("video_id", ""))
+        if video_id:
+            video = session.get(VideoAsset, video_id)
+            if video is not None:
+                video.status = video_status
+                video.revision += 1
+
+    return len(jobs)
 
 
 def recover_interrupted_jobs(
@@ -51,6 +240,7 @@ def recover_interrupted_jobs(
         count = len(interrupted_training_jobs)
         for job in interrupted_training_jobs:
             recover_training_run(session, settings, job)
+        count += recover_interrupted_video_tracking_jobs(session)
         count += JobRepository(session).recover_interrupted_jobs()
 
         for run in session.scalars(
@@ -160,6 +350,8 @@ def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session
             return process_video_extract_job(settings, factory, job_id)
         if job_type == "video_tracking":
             return process_video_tracking_job(settings, factory, job_id)
+        if job_type == "video_annotated_export":
+            return process_video_annotated_export_job(settings, factory, job_id)
         if job_type == "video_metric_depth_3d":
             return process_video_metric_depth_job(settings, factory, job_id)
         if job_type == "project_exchange_export":
@@ -193,6 +385,100 @@ def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session
         return True
 
 
+def _annotated_video_export_worker_command(
+    settings: Settings,
+    job_id: str,
+) -> list[str]:
+    child_log = settings.resolved_data_dir / "logs" / f"annotated-video-export-{job_id}.log"
+    args = [
+        "--data-dir",
+        str(settings.resolved_data_dir),
+        "--log-file",
+        str(child_log),
+        "--skip-migrations",
+        "--annotated-video-export-job",
+        job_id,
+    ]
+    if bool(vars(sys).get("frozen", False)):
+        return [sys.executable, *args]
+    return [sys.executable, "-m", "reefvision.desktop", *args]
+
+
+async def process_isolated_annotated_video_export_job(
+    settings: Settings,
+    factory: sessionmaker[Session],
+    job_id: str,
+    stop_event: asyncio.Event,
+) -> bool:
+    command = _annotated_video_export_worker_command(settings, job_id)
+    LOGGER.info(
+        "Launching isolated annotated-video export process",
+        extra={
+            "event_id": "annotated_video_export_process_start",
+            "component": "worker",
+            "job_id": job_id,
+        },
+    )
+    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    process = await asyncio.create_subprocess_exec(
+        *command,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+        creationflags=creationflags,
+    )
+    wait_task = asyncio.create_task(process.wait())
+    stop_task = asyncio.create_task(stop_event.wait())
+    done, _ = await asyncio.wait(
+        {wait_task, stop_task},
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+
+    if stop_task in done and stop_event.is_set():
+        if process.returncode is None:
+            process.terminate()
+            try:
+                await asyncio.wait_for(process.wait(), timeout=3.0)
+            except TimeoutError:
+                process.kill()
+                await process.wait()
+        if not wait_task.done():
+            wait_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await wait_task
+        return True
+
+    if not stop_task.done():
+        stop_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await stop_task
+
+    return_code = await wait_task
+    with factory() as session:
+        job = session.get(Job, job_id)
+        if job is None:
+            return True
+        if job.status in {"succeeded", "failed", "cancelled"}:
+            LOGGER.info(
+                "Isolated annotated-video export process exited with status %s",
+                job.status,
+                extra={
+                    "event_id": "annotated_video_export_process_exit",
+                    "component": "worker",
+                    "job_id": job_id,
+                    "return_code": return_code,
+                },
+            )
+            return True
+
+    _fail_job(
+        factory,
+        job_id,
+        f"Isolated annotated-video export process exited unexpectedly with code {return_code}",
+    )
+    return True
+
+
 async def thumbnail_worker_loop(
     settings: Settings,
     factory: sessionmaker[Session],
@@ -201,7 +487,28 @@ async def thumbnail_worker_loop(
     recover_interrupted_jobs(factory, settings)
     while not stop_event.is_set():
         try:
-            processed = await asyncio.to_thread(process_next_thumbnail_job, settings, factory)
+            queued = _next_queued_job_identity(factory)
+
+            if queued is not None and queued[1] == "video_tracking":
+                processed = await process_isolated_video_tracking_job(
+                    settings,
+                    factory,
+                    queued[0],
+                    stop_event,
+                )
+            elif queued is not None and queued[1] == "video_annotated_export":
+                processed = await process_isolated_annotated_video_export_job(
+                    settings,
+                    factory,
+                    queued[0],
+                    stop_event,
+                )
+            else:
+                processed = await asyncio.to_thread(
+                    process_next_thumbnail_job,
+                    settings,
+                    factory,
+                )
         except Exception:
             LOGGER.exception(
                 "Background worker iteration failed",

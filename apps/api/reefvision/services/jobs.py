@@ -77,6 +77,7 @@ class JobService:
             "diagnostics",
             "model_install",
             "workflow_run",
+            "video_tracking",
         }:
             raise ConflictError("Only supported failed background jobs can be retried")
         job.status = "queued"

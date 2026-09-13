@@ -41,6 +41,8 @@ class DesktopLaunchOptions:
     run_migrations: bool
     safe_mode: bool = False
     self_test: bool = False
+    video_tracking_job: str | None = None
+    annotated_video_export_job: str | None = None
 
 
 def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
@@ -65,6 +67,16 @@ def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
             "API server"
         ),
     )
+    parser.add_argument(
+        "--video-tracking-job",
+        default=None,
+        help="Process one queued video-tracking job and exit",
+    )
+    parser.add_argument(
+        "--annotated-video-export-job",
+        default=None,
+        help="Process one queued annotated-video export job and exit",
+    )
     namespace = parser.parse_args(argv)
     return DesktopLaunchOptions(
         host=namespace.host,
@@ -75,6 +87,8 @@ def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
         run_migrations=namespace.run_migrations,
         safe_mode=namespace.safe_mode,
         self_test=namespace.self_test,
+        video_tracking_job=namespace.video_tracking_job,
+        annotated_video_export_job=namespace.annotated_video_export_job,
     )
 
 
@@ -240,6 +254,69 @@ def write_self_test_result(
     os.replace(temporary, result_path)
     return result_path
 
+
+def run_single_video_tracking_job(
+    settings: Settings,
+    job_id: str,
+) -> int:
+    """Process one isolated video-tracking job and exit."""
+
+    from reefvision.db.session import (
+        create_database_engine,
+        create_session_factory,
+    )
+    from reefvision.jobs.video_tracking import process_video_tracking_job
+    from reefvision.ml.dependencies import configure_provider_runtime
+
+    configure_provider_runtime(settings)
+
+    engine = create_database_engine(settings)
+    factory = create_session_factory(engine)
+
+    try:
+        LOGGER.info(
+            "Starting isolated video tracking job %s",
+            job_id,
+        )
+        processed = process_video_tracking_job(
+            settings,
+            factory,
+            job_id,
+        )
+        LOGGER.info(
+            "Isolated video tracking job %s exited; processed=%s",
+            job_id,
+            processed,
+        )
+        return 0 if processed else 1
+    finally:
+        engine.dispose()
+
+
+def run_single_annotated_video_export_job(
+    settings: Settings,
+    job_id: str,
+) -> int:
+    """Process one isolated annotated-video export job and exit."""
+
+    from reefvision.db.session import create_database_engine, create_session_factory
+    from reefvision.jobs.video_annotated_export import process_video_annotated_export_job
+
+    engine = create_database_engine(settings)
+    factory = create_session_factory(engine)
+    try:
+        LOGGER.info("Starting isolated annotated-video export job %s", job_id)
+        processed = process_video_annotated_export_job(settings, factory, job_id)
+        LOGGER.info(
+            "Isolated annotated-video export job %s exited; processed=%s",
+            job_id,
+            processed,
+        )
+        return 0 if processed else 1
+    finally:
+        engine.dispose()
+
+
 def run_self_test(settings: Settings) -> int:
     """Exercise packaged resources and providers without opening a server socket."""
 
@@ -360,6 +437,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         if options.self_test:
             LOGGER.info("Running packaged ReefVision desktop self-test")
             return run_self_test(settings)
+        if options.video_tracking_job is not None:
+            LOGGER.info(
+                "Running isolated video-tracking worker for job %s",
+                options.video_tracking_job,
+            )
+            return run_single_video_tracking_job(
+                settings,
+                options.video_tracking_job,
+            )
+        if options.annotated_video_export_job is not None:
+            LOGGER.info(
+                "Running isolated annotated-video export worker for job %s",
+                options.annotated_video_export_job,
+            )
+            return run_single_annotated_video_export_job(
+                settings,
+                options.annotated_video_export_job,
+            )
         configure_windows_event_loop_policy()
         LOGGER.info("Loading FastAPI application factory")
         return asyncio.run(run_api_server(settings, options))

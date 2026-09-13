@@ -34,8 +34,15 @@ class JobRepository:
     def recover_interrupted_jobs(self) -> int:
         statement = (
             update(Job)
-            .where(Job.status.in_(("running", "cancel_requested")), Job.job_type != "training")
-            .values(status="queued", started_at=None, error_message="Recovered after interruption")
+            .where(
+                Job.status.in_(("running", "cancel_requested")),
+                Job.job_type.notin_(("training", "video_tracking")),
+            )
+            .values(
+                status="queued",
+                started_at=None,
+                error_message="Recovered after interruption",
+            )
         )
         result = cast(CursorResult[Any], self.session.execute(statement))
         return int(result.rowcount or 0)

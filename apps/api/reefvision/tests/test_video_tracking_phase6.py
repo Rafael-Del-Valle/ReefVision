@@ -10,7 +10,12 @@ from fastapi.testclient import TestClient
 
 from reefvision.db.models import ModelRegistration
 from reefvision.jobs import video_tracking as tracking_module
-from reefvision.ml.video_tracking import TrackObservation
+from reefvision.ml.video_tracking import (
+    TrackObservation,
+    VideoTrackingCancellationCheck,
+    VideoTrackingProgress,
+    VideoTrackingProgressCallback,
+)
 from reefvision.services import video_assets as video_assets_module
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project
@@ -32,6 +37,8 @@ class FakeVideoTrackingProvider:
         confidence: float,
         iou: float,
         device: str,
+        on_progress: VideoTrackingProgressCallback | None = None,
+        should_cancel: VideoTrackingCancellationCheck | None = None,
     ) -> list[TrackObservation]:
         assert checkpoint_path.read_bytes() == b"fake-detector"
         assert video_path.read_bytes() == b"fake-video"
@@ -39,7 +46,8 @@ class FakeVideoTrackingProvider:
         assert confidence == pytest.approx(0.2)
         assert iou == pytest.approx(0.4)
         assert device == "cpu"
-        return [
+
+        observations = [
             TrackObservation(
                 frame=0,
                 provider_track_id=7,
@@ -62,6 +70,21 @@ class FakeVideoTrackingProvider:
                 bbox=(30, 10, 20, 10),
             ),
         ]
+
+        for index in range(3):
+            assert should_cancel is None or not should_cancel()
+
+            if on_progress is not None:
+                on_progress(
+                    VideoTrackingProgress(
+                        frames_processed=index + 1,
+                        detections_seen=index + 1,
+                        tracked_observations_seen=index + 1,
+                        unique_tracks_seen=1,
+                    )
+                )
+
+        return observations
 
 
 def _fake_metadata(_path: Path) -> dict[str, float | int]:
@@ -214,6 +237,20 @@ def test_fake_detector_tracker_creates_editable_machine_track(
     tracks = client.get(f"/api/v1/videos/{video['id']}/tracks")
     assert tracks.status_code == 200, tracks.text
     job_id = queued.json()["id"]
+
+    runs = client.get(f"/api/v1/videos/{video['id']}/tracking-runs")
+    assert runs.status_code == 200, runs.text
+    run = next(item for item in runs.json() if item["job_id"] == job_id)
+
+    assert run["progress_current"] == 30
+    assert run["progress_total"] == 30
+    assert run["stage"] == "completed"
+    assert run["live_detection_count"] == 3
+    assert run["live_observation_count"] == 3
+    assert run["live_tracks_seen"] == 1
+    assert run["heartbeat_at"] is not None
+    assert run["stale"] is False
+
     machine_tracks = [item for item in tracks.json() if item["source_job_id"] == job_id]
     assert len(machine_tracks) == 1
     machine = machine_tracks[0]

@@ -7,6 +7,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile, status
 from fastapi.responses import FileResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
@@ -19,6 +20,7 @@ from reefvision.schemas.video_track_exchange import (
     VideoTrackImportResponse,
 )
 from reefvision.schemas.videos import (
+    AnnotatedVideoExportCreateRequest,
     Scientific3DCalibrationValidationRequest,
     VideoAssetResponse,
     VideoExtractRequest,
@@ -352,6 +354,107 @@ def create_metric_depth_3d_job(
     session.commit()
     session.refresh(job)
     return JobResponse.model_validate(job)
+
+
+@router.get(
+    "/videos/{video_id}/annotated-video-exports",
+    response_model=list[JobResponse],
+)
+def list_annotated_video_exports(
+    video_id: str,
+    request: Request,
+    session: DbSession,
+) -> list[JobResponse]:
+    video = asset_service(request, session).get_record(video_id)
+    jobs = list(
+        session.scalars(
+            select(Job)
+            .where(
+                Job.project_id == video.project_id,
+                Job.job_type == "video_annotated_export",
+            )
+            .order_by(Job.created_at.desc(), Job.id.desc())
+        )
+    )
+    return [
+        JobResponse.model_validate(job)
+        for job in jobs
+        if str((job.request_json or {}).get("video_id") or "") == video_id
+    ]
+
+
+@router.post(
+    "/videos/{video_id}/annotated-video-exports",
+    response_model=JobResponse,
+)
+def create_annotated_video_export(
+    video_id: str,
+    payload: AnnotatedVideoExportCreateRequest,
+    request: Request,
+    session: DbSession,
+) -> JobResponse:
+    video = asset_service(request, session).get_record(video_id)
+    source_job = session.get(Job, payload.source_tracking_job_id)
+    if (
+        source_job is None
+        or source_job.job_type != "video_tracking"
+        or source_job.project_id != video.project_id
+        or source_job.status != "succeeded"
+        or str((source_job.request_json or {}).get("video_id") or "") != video.id
+    ):
+        raise ValidationError(
+            "Annotated video export requires a succeeded tracking run for the selected video"
+        )
+
+    job = Job(
+        project_id=video.project_id,
+        job_type="video_annotated_export",
+        status="queued",
+        progress_total=video.frame_count,
+        request_json={"video_id": video.id, **payload.model_dump()},
+        result_json={
+            "stage": "queued",
+            "video_id": video.id,
+            "source_tracking_job_id": payload.source_tracking_job_id,
+            "preset": payload.preset,
+        },
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    return JobResponse.model_validate(job)
+
+
+@router.get(
+    "/video-annotated-exports/{job_id}/content",
+    response_class=FileResponse,
+)
+def annotated_video_export_content(
+    job_id: str,
+    request: Request,
+    session: DbSession,
+) -> FileResponse:
+    job = session.get(Job, job_id)
+    if job is None or job.job_type != "video_annotated_export":
+        raise NotFoundError("Annotated video export not found")
+    if job.status != "succeeded":
+        raise ValidationError("Annotated video export is not ready for download")
+    result = dict(job.result_json or {})
+    output_path = result.get("output_path")
+    if not isinstance(output_path, str) or not output_path:
+        raise NotFoundError("Annotated video export file is missing")
+    settings: Settings = request.app.state.settings
+    from reefvision.storage.projects import resolve_managed_project_path
+
+    path = resolve_managed_project_path(settings, output_path)
+    if not path.is_file():
+        raise NotFoundError("Annotated video export file is missing")
+    filename = result.get("filename")
+    return FileResponse(
+        path,
+        media_type="video/mp4",
+        filename=filename if isinstance(filename, str) else path.name,
+    )
 
 
 @router.post("/videos/{video_id}/tracking-jobs", response_model=JobResponse)

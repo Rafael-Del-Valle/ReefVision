@@ -1,7 +1,8 @@
+import { AnnotatedVideoExportPanel } from "./AnnotatedVideoExportPanel";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
-import type { Project } from "../../api/client";
+import { cancelJob, retryJob, type Project } from "../../api/client";
 import {
   benchmarkVideoTracking,
   createVideoTrack,
@@ -34,6 +35,11 @@ function trackerLabel(value: string): string {
   if (value.toLowerCase().includes("botsort")) return "BoT-SORT";
   if (value.toLowerCase().includes("bytetrack")) return "ByteTrack";
   return value.replace(/\.ya?ml$/i, "");
+}
+
+function trackingPercent(current: number, total: number): number {
+  if (total <= 0) return 0;
+  return Math.min(100, (current / total) * 100);
 }
 
 function toggleSelection(
@@ -96,7 +102,7 @@ export function VideoTrackingWorkspace({
     queryKey: ["video-tracking-runs", selectedVideoId],
     queryFn: ({ signal }) => getVideoTrackingRuns(selectedVideoId, signal),
     enabled: Boolean(selectedVideoId),
-    refetchInterval: 3000,
+    refetchInterval: 1000,
   });
   const selectedTrack = tracksQuery.data?.find(
     (track) => track.id === selectedTrackId,
@@ -270,6 +276,27 @@ export function VideoTrackingWorkspace({
       ]);
     },
   });
+  const cancelTrackingMutation = useMutation({
+    mutationFn: (jobId: string) => cancelJob(jobId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["video-tracking-runs", selectedVideoId],
+      });
+    },
+  });
+  const retryTrackingMutation = useMutation({
+    mutationFn: (jobId: string) => retryJob(jobId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["video-tracking-runs", selectedVideoId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["videos", project.id],
+        }),
+      ]);
+    },
+  });
   const benchmarkMutation = useMutation({
     mutationFn: () => {
       if (!selectedVideoId) throw new Error("Select a video first");
@@ -325,6 +352,8 @@ export function VideoTrackingWorkspace({
     saveTrackMutation.error ??
     deleteTrackMutation.error ??
     trackingMutation.error ??
+    cancelTrackingMutation.error ??
+    retryTrackingMutation.error ??
     benchmarkMutation.error ??
     trackingRunsQuery.error;
 
@@ -783,26 +812,96 @@ export function VideoTrackingWorkspace({
                   <th>Run</th>
                   <th>Tracker</th>
                   <th>Status</th>
-                  <th>Tracks</th>
+                  <th>Progress</th>
+                  <th>Detections</th>
                   <th>Observations</th>
+                  <th>Tracks</th>
                   <th>Confidence</th>
                   <th>IoU</th>
                   <th>Device</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {(trackingRunsQuery.data ?? []).map((run) => (
-                  <tr key={run.job_id}>
-                    <td>{run.job_id.slice(0, 8)}</td>
-                    <td>{trackerLabel(run.tracker)}</td>
-                    <td>{run.status}</td>
-                    <td>{run.track_count}</td>
-                    <td>{run.observation_count}</td>
-                    <td>{run.confidence.toFixed(2)}</td>
-                    <td>{run.iou.toFixed(2)}</td>
-                    <td>{run.device}</td>
-                  </tr>
-                ))}
+                {(trackingRunsQuery.data ?? []).map((run) => {
+                  const active =
+                    run.status === "queued" ||
+                    run.status === "running" ||
+                    run.status === "cancel_requested";
+                  return (
+                    <tr key={run.job_id}>
+                      <td>{run.job_id.slice(0, 8)}</td>
+                      <td>{trackerLabel(run.tracker)}</td>
+                      <td>
+                        {run.stale ? <strong>Stalled</strong> : run.stage}
+                        {run.stale && (
+                          <div className="form-error">
+                            No heartbeat for more than two minutes.
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <div>
+                          {run.progress_current.toLocaleString()} /{" "}
+                          {run.progress_total.toLocaleString()}
+                        </div>
+                        <progress
+                          value={run.progress_current}
+                          max={Math.max(1, run.progress_total)}
+                        />
+                        <div>
+                          {trackingPercent(
+                            run.progress_current,
+                            run.progress_total,
+                          ).toFixed(1)}
+                          %
+                        </div>
+                      </td>
+                      <td>{run.live_detection_count.toLocaleString()}</td>
+                      <td>
+                        {(active
+                          ? run.live_observation_count
+                          : run.observation_count
+                        ).toLocaleString()}
+                      </td>
+                      <td>
+                        {(active
+                          ? run.live_tracks_seen
+                          : run.track_count
+                        ).toLocaleString()}
+                      </td>
+                      <td>{run.confidence.toFixed(2)}</td>
+                      <td>{run.iou.toFixed(2)}</td>
+                      <td>{run.device}</td>
+                      <td>
+                        {active && run.status !== "cancel_requested" && (
+                          <button
+                            type="button"
+                            className="danger-ghost"
+                            disabled={cancelTrackingMutation.isPending}
+                            onClick={() =>
+                              cancelTrackingMutation.mutate(run.job_id)
+                            }
+                          >
+                            Cancel
+                          </button>
+                        )}
+                        {run.status === "failed" && (
+                          <button
+                            type="button"
+                            className="secondary"
+                            disabled={retryTrackingMutation.isPending}
+                            onClick={() =>
+                              retryTrackingMutation.mutate(run.job_id)
+                            }
+                          >
+                            Retry
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -838,6 +937,11 @@ export function VideoTrackingWorkspace({
           </div>
         )}
       </section>
+
+      <AnnotatedVideoExportPanel
+        videoId={selectedVideoId || null}
+        trackingRuns={trackingRunsQuery.data ?? []}
+      />
 
       <section className="management-card">
         <p className="eyebrow">Scientific validation</p>

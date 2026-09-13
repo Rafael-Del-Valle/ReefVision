@@ -100,14 +100,22 @@ export interface VideoTrackingRun {
   project_id: string;
   video_id: string;
   status: string;
+  stage: string;
   tracker: string;
   model_id: string;
   confidence: number;
   iou: number;
   device: string;
   minimum_track_frames: number;
+  progress_current: number;
+  progress_total: number;
   track_count: number;
   observation_count: number;
+  live_detection_count: number;
+  live_observation_count: number;
+  live_tracks_seen: number;
+  heartbeat_at: string | null;
+  stale: boolean;
   unmapped_labels: string[];
   error_message: string | null;
   created_at: string;
@@ -268,9 +276,10 @@ export function getVideoTrackingRuns(
   videoId: string,
   signal?: AbortSignal,
 ): Promise<VideoTrackingRun[]> {
+  const pollToken = Date.now();
   return request<VideoTrackingRun[]>(
-    `/videos/${encodeURIComponent(videoId)}/tracking-runs`,
-    { signal },
+    `/videos/${encodeURIComponent(videoId)}/tracking-runs?poll=${pollToken}`,
+    { signal, cache: "no-store" },
   );
 }
 
@@ -402,4 +411,48 @@ export function createVideoTrackingJob(
     `/videos/${encodeURIComponent(videoId)}/tracking-jobs`,
     { method: "POST", body: JSON.stringify(payload) },
   );
+}
+
+export type AnnotatedVideoPreset = "clean_tracking" | "full_review";
+
+export interface AnnotatedVideoOverlayOptions {
+  boxes: boolean;
+  track_ids: boolean;
+  class_labels: boolean;
+  confidence: boolean;
+  trails: boolean;
+  frame_time: boolean;
+  counters: boolean;
+}
+
+export interface AnnotatedVideoExportPayload {
+  source_tracking_job_id: string;
+  preset: AnnotatedVideoPreset;
+  overlays: AnnotatedVideoOverlayOptions;
+  trail_length: number;
+}
+
+export function getAnnotatedVideoExports(
+  videoId: string,
+  signal?: AbortSignal,
+): Promise<JobRecord[]> {
+  const poll = Date.now();
+  return request<JobRecord[]>(
+    `/videos/${encodeURIComponent(videoId)}/annotated-video-exports?poll=${poll}`,
+    { signal, cache: "no-store" },
+  );
+}
+
+export function createAnnotatedVideoExport(
+  videoId: string,
+  payload: AnnotatedVideoExportPayload,
+): Promise<JobRecord> {
+  return request<JobRecord>(
+    `/videos/${encodeURIComponent(videoId)}/annotated-video-exports`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export function annotatedVideoExportContentUrl(jobId: string): string {
+  return `${getApiBaseUrl()}/video-annotated-exports/${encodeURIComponent(jobId)}/content`;
 }
