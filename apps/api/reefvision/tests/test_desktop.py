@@ -1,4 +1,5 @@
 import io
+import json
 import os
 import sys
 from pathlib import Path
@@ -17,6 +18,7 @@ from reefvision.desktop import (
     resolve_server_port,
     watch_shutdown_stream,
     write_runtime_port,
+    write_self_test_result,
 )
 
 
@@ -135,3 +137,17 @@ def test_watch_shutdown_stream_stops_server_on_eof() -> None:
     watch_shutdown_stream(io.StringIO(""), server)
 
     assert server.should_exit is True
+
+def test_write_self_test_result_records_packaged_version(tmp_path: Path) -> None:
+    result = write_self_test_result(
+        tmp_path,
+        version="1.0.1",
+        openapi_path_count=147,
+    )
+
+    payload = json.loads(result.read_text(encoding="utf-8"))
+    assert payload == {
+        "application_version": "1.0.1",
+        "openapi_path_count": 147,
+        "status": "PASS",
+    }

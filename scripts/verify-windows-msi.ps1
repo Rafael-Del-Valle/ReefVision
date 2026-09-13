@@ -146,8 +146,25 @@ try {
         Show-Tail -Path $SidecarLog
         throw "Packaged reefvision-api.exe self-test failed with exit code $($SidecarProcess.ExitCode)."
     }
-    if (-not (Select-String -LiteralPath $SidecarLog -SimpleMatch "ReefVision version $ExpectedVersion;" -Quiet)) {
-        throw "Packaged API self-test did not report expected version $ExpectedVersion."
+    $SelfTestResultPath = Join-Path $SelfTestData 'self-test-result.json'
+    if (-not (Test-Path -LiteralPath $SelfTestResultPath -PathType Leaf)) {
+        Show-Tail -Path $SidecarLog
+        throw "Packaged API self-test did not produce evidence: $SelfTestResultPath"
+    }
+    try {
+        $SelfTestResult = Get-Content -LiteralPath $SelfTestResultPath -Raw | ConvertFrom-Json
+    }
+    catch {
+        throw "Packaged API self-test evidence is invalid JSON: $SelfTestResultPath"
+    }
+    if ([string]$SelfTestResult.status -ne 'PASS') {
+        throw "Packaged API self-test did not report PASS."
+    }
+    if ([string]$SelfTestResult.application_version -ne $ExpectedVersion) {
+        throw "Packaged API self-test version $($SelfTestResult.application_version) does not match expected $ExpectedVersion."
+    }
+    if ([int]$SelfTestResult.openapi_path_count -le 0) {
+        throw "Packaged API self-test reported no OpenAPI paths."
     }
 
     $DatabaseFiles = @(Get-ChildItem -Path $SelfTestData -Recurse -File | Where-Object {

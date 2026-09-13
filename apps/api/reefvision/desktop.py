@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import os
 import sys
@@ -23,6 +24,7 @@ from reefvision.logging_utils import configure_rotating_json_logging
 
 LOGGER = logging.getLogger("reefvision.desktop")
 _WINDOWED_STREAMS: list[TextIO] = []
+SELF_TEST_RESULT_FILENAME = "self-test-result.json"
 
 
 class SupportsShouldExit(Protocol):
@@ -216,8 +218,33 @@ def require_scale_assistant_marker_runtime() -> None:
         )
 
 
+def write_self_test_result(
+    data_dir: Path,
+    *,
+    version: str,
+    openapi_path_count: int,
+) -> Path:
+    """Write deterministic machine-readable evidence for packaged self-test success."""
+    result_path = data_dir / SELF_TEST_RESULT_FILENAME
+    result_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = result_path.with_suffix(result_path.suffix + ".tmp")
+    payload = {
+        "status": "PASS",
+        "application_version": version,
+        "openapi_path_count": openapi_path_count,
+    }
+    temporary.write_text(
+        json.dumps(payload, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporary, result_path)
+    return result_path
+
 def run_self_test(settings: Settings) -> int:
     """Exercise packaged resources and providers without opening a server socket."""
+
+    self_test_result = settings.resolved_data_dir / SELF_TEST_RESULT_FILENAME
+    self_test_result.unlink(missing_ok=True)
 
     alembic_ini, migrations_dir = resolve_alembic_paths()
     if not alembic_ini.is_file():
@@ -246,6 +273,11 @@ def run_self_test(settings: Settings) -> int:
     paths = schema.get("paths")
     if not isinstance(paths, dict) or not paths:
         raise RuntimeError("Packaged FastAPI application produced no OpenAPI paths")
+    write_self_test_result(
+        settings.resolved_data_dir,
+        version=str(schema["info"]["version"]),
+        openapi_path_count=len(paths),
+    )
     LOGGER.info(
         "Desktop self-test validated ReefVision version %s; %s OpenAPI paths",
         schema["info"]["version"],
