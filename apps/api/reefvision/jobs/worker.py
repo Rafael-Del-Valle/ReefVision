@@ -9,7 +9,7 @@ import sys
 from contextlib import suppress
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
@@ -54,6 +54,36 @@ def _next_queued_job_identity(
         return job.id, job.job_type
 
 
+def _claim_isolated_job(
+    factory: sessionmaker[Session],
+    job_id: str,
+    job_type: str,
+) -> bool:
+    """Atomically claim one queued isolated job before launching its child process."""
+
+    now = datetime.now(UTC)
+    with factory() as session:
+        result = session.execute(
+            update(Job)
+            .where(
+                Job.id == job_id,
+                Job.job_type == job_type,
+                Job.status == "queued",
+            )
+            .values(
+                status="running",
+                started_at=now,
+                error_message=None,
+                result_json={
+                    "stage": "launching_process",
+                    "heartbeat_at": now.isoformat(),
+                },
+            )
+        )
+        session.commit()
+        return int(getattr(result, "rowcount", 0) or 0) == 1
+
+
 def _video_tracking_worker_command(
     settings: Settings,
     job_id: str,
@@ -87,6 +117,17 @@ async def process_isolated_video_tracking_job(
     job_id: str,
     stop_event: asyncio.Event,
 ) -> bool:
+    if not _claim_isolated_job(factory, job_id, "video_tracking"):
+        LOGGER.info(
+            "Skipping isolated video tracking launch because job was already claimed",
+            extra={
+                "event_id": "video_tracking_process_claim_skipped",
+                "component": "worker",
+                "job_id": job_id,
+            },
+        )
+        return True
+
     command = _video_tracking_worker_command(settings, job_id)
 
     LOGGER.info(
@@ -410,6 +451,17 @@ async def process_isolated_annotated_video_export_job(
     job_id: str,
     stop_event: asyncio.Event,
 ) -> bool:
+    if not _claim_isolated_job(factory, job_id, "video_annotated_export"):
+        LOGGER.info(
+            "Skipping isolated annotated-video export launch because job was already claimed",
+            extra={
+                "event_id": "annotated_video_export_process_claim_skipped",
+                "component": "worker",
+                "job_id": job_id,
+            },
+        )
+        return True
+
     command = _annotated_video_export_worker_command(settings, job_id)
     LOGGER.info(
         "Launching isolated annotated-video export process",

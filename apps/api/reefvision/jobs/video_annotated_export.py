@@ -107,7 +107,23 @@ def process_video_annotated_export_job(
 ) -> bool:
     with factory() as session:
         job = session.get(Job, job_id)
-        if job is None or job.job_type != "video_annotated_export" or job.status != "queued":
+        if job is None or job.job_type != "video_annotated_export":
+            return False
+
+        claim_stage = str((job.result_json or {}).get("stage") or "")
+        preclaimed = job.status == "running" and claim_stage == "launching_process"
+
+        if job.status == "cancel_requested" and claim_stage == "launching_process":
+            job.status = "cancelled"
+            job.completed_at = datetime.now(UTC)
+            job.result_json = {
+                **dict(job.result_json or {}),
+                "stage": "cancelled",
+            }
+            session.commit()
+            return True
+
+        if job.status != "queued" and not preclaimed:
             return False
 
         request = dict(job.request_json or {})

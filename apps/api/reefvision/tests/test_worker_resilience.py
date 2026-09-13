@@ -4,6 +4,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from reefvision.db.models import Job
+from reefvision.jobs import video_annotated_export as video_annotated_export_module
+from reefvision.jobs import video_tracking as video_tracking_module
 from reefvision.jobs import worker
 from reefvision.tests.test_annotations import create_project
 
@@ -90,6 +92,137 @@ def test_unexpected_handler_error_is_contained_and_queue_continues(
         assert following.status == "failed"
         assert "simulated handler crash" in (crashing.error_message or "")
         assert "Unsupported queued job type" in (following.error_message or "")
+
+
+def test_isolated_background_job_claim_is_atomic(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Atomic isolated job claim")
+
+    with client.app.state.session_factory() as session:
+        job = Job(
+            project_id=project["id"],
+            job_type="video_tracking",
+            status="queued",
+            progress_current=0,
+            progress_total=10,
+            request_json={"video_id": "test-video"},
+            result_json={"stage": "queued"},
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+
+    assert worker._claim_isolated_job(
+        client.app.state.session_factory,
+        job_id,
+        "video_tracking",
+    )
+    assert not worker._claim_isolated_job(
+        client.app.state.session_factory,
+        job_id,
+        "video_tracking",
+    )
+
+    with client.app.state.session_factory() as session:
+        claimed = session.get(Job, job_id)
+        assert claimed is not None
+        assert claimed.status == "running"
+        assert claimed.started_at is not None
+        assert claimed.result_json["stage"] == "launching_process"
+
+
+def test_preclaimed_video_tracking_job_is_accepted_by_child(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Preclaimed tracking handoff")
+
+    with client.app.state.session_factory() as session:
+        job = Job(
+            project_id=project["id"],
+            job_type="video_tracking",
+            status="queued",
+            progress_current=0,
+            progress_total=10,
+            request_json={
+                "video_id": "missing-video",
+                "model_id": "missing-model",
+            },
+            result_json={"stage": "queued"},
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+
+    assert worker._claim_isolated_job(
+        client.app.state.session_factory,
+        job_id,
+        "video_tracking",
+    )
+
+    assert (
+        video_tracking_module.process_video_tracking_job(
+            client.app.state.settings,
+            client.app.state.session_factory,
+            job_id,
+        )
+        is False
+    )
+
+    with client.app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == "failed"
+        assert job.error_message == (
+            "Video or detector model was not found in the selected project"
+        )
+
+
+def test_preclaimed_annotated_export_job_is_accepted_by_child(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Preclaimed export handoff")
+
+    with client.app.state.session_factory() as session:
+        job = Job(
+            project_id=project["id"],
+            job_type="video_annotated_export",
+            status="queued",
+            progress_current=0,
+            progress_total=10,
+            request_json={
+                "video_id": "missing-video",
+                "source_tracking_job_id": "missing-tracking-job",
+            },
+            result_json={"stage": "queued"},
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+
+    assert worker._claim_isolated_job(
+        client.app.state.session_factory,
+        job_id,
+        "video_annotated_export",
+    )
+
+    assert (
+        video_annotated_export_module.process_video_annotated_export_job(
+            client.app.state.settings,
+            client.app.state.session_factory,
+            job_id,
+        )
+        is False
+    )
+
+    with client.app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == "failed"
+        assert job.error_message == "Video not found for annotated export"
 
 
 def test_interrupted_video_tracking_is_not_silently_requeued(

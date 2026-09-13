@@ -79,7 +79,29 @@ def process_video_tracking_job(
 ) -> bool:
     with factory() as session:
         job = session.get(Job, job_id)
-        if job is None or job.job_type != "video_tracking" or job.status != "queued":
+        if job is None or job.job_type != "video_tracking":
+            return False
+
+        claim_stage = str((job.result_json or {}).get("stage") or "")
+        preclaimed = job.status == "running" and claim_stage == "launching_process"
+
+        if job.status == "cancel_requested" and claim_stage == "launching_process":
+            now = datetime.now(UTC)
+            result = dict(job.result_json or {})
+            result.update(
+                {
+                    "stage": "cancelled",
+                    "heartbeat_at": now.isoformat(),
+                }
+            )
+            job.status = "cancelled"
+            job.result_json = result
+            job.error_message = None
+            job.completed_at = now
+            session.commit()
+            return True
+
+        if job.status != "queued" and not preclaimed:
             return False
 
         request = dict(job.request_json)
