@@ -1282,13 +1282,15 @@ describe("App", () => {
   });
 
   it("allows retrying training when the saved preflight is blocked", async () => {
-    const blockedDrafts: typeof trainingDrafts = trainingDrafts.map((draft) => ({
-      ...draft,
-      validation_state: {
-        ...draft.validation_state,
-        status: "blocked",
-      },
-    }));
+    const blockedDrafts: typeof trainingDrafts = trainingDrafts.map(
+      (draft) => ({
+        ...draft,
+        validation_state: {
+          ...draft.validation_state,
+          status: "blocked",
+        },
+      }),
+    );
 
     mockApi({
       projects: [project],
