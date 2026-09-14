@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -131,6 +133,121 @@ def test_isolated_background_job_claim_is_atomic(
         assert claimed.status == "running"
         assert claimed.started_at is not None
         assert claimed.result_json["stage"] == "launching_process"
+
+
+def test_isolated_video_tracking_launch_completes_without_asyncio_subprocess(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Isolated tracking process launch")
+    job_id = _queued_job(client, project["id"], "video_tracking")
+
+    class FakeProcess:
+        def __init__(self) -> None:
+            self.returncode: int | None = None
+
+        def wait(self) -> int:
+            with client.app.state.session_factory() as session:
+                job = session.get(Job, job_id)
+                assert job is not None
+                job.status = "succeeded"
+                session.commit()
+            self.returncode = 0
+            return 0
+
+        def terminate(self) -> None:
+            self.returncode = 0
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    launched: list[list[str]] = []
+
+    def fake_start(command: list[str]) -> FakeProcess:
+        launched.append(command)
+        return FakeProcess()
+
+    monkeypatch.setattr(worker, "_start_isolated_process", fake_start)
+
+    async def run() -> bool:
+        return await worker.process_isolated_video_tracking_job(
+            client.app.state.settings,
+            client.app.state.session_factory,
+            job_id,
+            asyncio.Event(),
+        )
+
+    assert asyncio.run(run()) is True
+    assert len(launched) == 1
+    assert "--video-tracking-job" in launched[0]
+    assert job_id in launched[0]
+
+    with client.app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == "succeeded"
+
+
+def test_isolated_video_tracking_launch_failure_is_terminal(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Tracking launch failure")
+    job_id = _queued_job(client, project["id"], "video_tracking")
+
+    def fail_start(command: list[str]) -> None:
+        raise OSError("simulated packaged process launch failure")
+
+    monkeypatch.setattr(worker, "_start_isolated_process", fail_start)
+
+    async def run() -> bool:
+        return await worker.process_isolated_video_tracking_job(
+            client.app.state.settings,
+            client.app.state.session_factory,
+            job_id,
+            asyncio.Event(),
+        )
+
+    assert asyncio.run(run()) is True
+
+    with client.app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == "failed"
+        assert job.completed_at is not None
+        assert job.result_json["stage"] == "failed"
+        assert "simulated packaged process launch failure" in (job.error_message or "")
+
+
+def test_isolated_annotated_export_launch_failure_is_terminal(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Annotated export launch failure")
+    job_id = _queued_job(client, project["id"], "video_annotated_export")
+
+    def fail_start(command: list[str]) -> None:
+        raise OSError("simulated annotated export launch failure")
+
+    monkeypatch.setattr(worker, "_start_isolated_process", fail_start)
+
+    async def run() -> bool:
+        return await worker.process_isolated_annotated_video_export_job(
+            client.app.state.settings,
+            client.app.state.session_factory,
+            job_id,
+            asyncio.Event(),
+        )
+
+    assert asyncio.run(run()) is True
+
+    with client.app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == "failed"
+        assert job.completed_at is not None
+        assert job.result_json["stage"] == "failed"
+        assert "simulated annotated export launch failure" in (job.error_message or "")
 
 
 def test_preclaimed_video_tracking_job_is_accepted_by_child(

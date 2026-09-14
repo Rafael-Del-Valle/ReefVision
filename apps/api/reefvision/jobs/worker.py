@@ -113,6 +113,46 @@ def _video_tracking_worker_command(
     ]
 
 
+def _start_isolated_process(command: list[str]) -> subprocess.Popen[bytes]:
+    """Start an isolated worker without depending on asyncio subprocess support."""
+
+    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    return subprocess.Popen(
+        command,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=creationflags,
+    )
+
+
+def _fail_isolated_launch(
+    factory: sessionmaker[Session],
+    job_id: str,
+    message: str,
+) -> None:
+    """Make a claimed isolated job terminal when its child cannot be launched."""
+
+    with factory() as session:
+        job = session.get(Job, job_id)
+        if job is None:
+            return
+
+        now = datetime.now(UTC)
+        result = dict(job.result_json or {})
+        result.update(
+            {
+                "stage": "failed",
+                "heartbeat_at": now.isoformat(),
+            }
+        )
+        job.status = "failed"
+        job.result_json = result
+        job.error_message = message
+        job.completed_at = now
+        session.commit()
+
+
 async def process_isolated_video_tracking_job(
     settings: Settings,
     factory: sessionmaker[Session],
@@ -141,17 +181,22 @@ async def process_isolated_video_tracking_job(
         },
     )
 
-    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    try:
+        process = await asyncio.to_thread(_start_isolated_process, command)
+    except Exception as exc:
+        message = f"Failed to launch isolated video tracking process: {exc}"
+        _fail_isolated_launch(factory, job_id, message)
+        LOGGER.exception(
+            message,
+            extra={
+                "event_id": "video_tracking_process_launch_failure",
+                "component": "worker",
+                "job_id": job_id,
+            },
+        )
+        return True
 
-    process = await asyncio.create_subprocess_exec(
-        *command,
-        stdin=asyncio.subprocess.DEVNULL,
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
-        creationflags=creationflags,
-    )
-
-    wait_task = asyncio.create_task(process.wait())
+    wait_task = asyncio.create_task(asyncio.to_thread(process.wait))
     stop_task = asyncio.create_task(stop_event.wait())
 
     done, _ = await asyncio.wait(
@@ -171,15 +216,13 @@ async def process_isolated_video_tracking_job(
             )
             process.terminate()
             try:
-                await asyncio.wait_for(process.wait(), timeout=3.0)
+                await asyncio.wait_for(asyncio.shield(wait_task), timeout=3.0)
             except TimeoutError:
                 process.kill()
-                await process.wait()
+                await wait_task
 
         if not wait_task.done():
-            wait_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await wait_task
+            await wait_task
 
         return True
 
@@ -535,15 +578,22 @@ async def process_isolated_annotated_video_export_job(
             "job_id": job_id,
         },
     )
-    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-    process = await asyncio.create_subprocess_exec(
-        *command,
-        stdin=asyncio.subprocess.DEVNULL,
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
-        creationflags=creationflags,
-    )
-    wait_task = asyncio.create_task(process.wait())
+    try:
+        process = await asyncio.to_thread(_start_isolated_process, command)
+    except Exception as exc:
+        message = f"Failed to launch isolated annotated-video export process: {exc}"
+        _fail_isolated_launch(factory, job_id, message)
+        LOGGER.exception(
+            message,
+            extra={
+                "event_id": "annotated_video_export_process_launch_failure",
+                "component": "worker",
+                "job_id": job_id,
+            },
+        )
+        return True
+
+    wait_task = asyncio.create_task(asyncio.to_thread(process.wait))
     stop_task = asyncio.create_task(stop_event.wait())
     done, _ = await asyncio.wait(
         {wait_task, stop_task},
@@ -554,14 +604,12 @@ async def process_isolated_annotated_video_export_job(
         if process.returncode is None:
             process.terminate()
             try:
-                await asyncio.wait_for(process.wait(), timeout=3.0)
+                await asyncio.wait_for(asyncio.shield(wait_task), timeout=3.0)
             except TimeoutError:
                 process.kill()
-                await process.wait()
-        if not wait_task.done():
-            wait_task.cancel()
-            with suppress(asyncio.CancelledError):
                 await wait_task
+        if not wait_task.done():
+            await wait_task
         return True
 
     if not stop_task.done():
