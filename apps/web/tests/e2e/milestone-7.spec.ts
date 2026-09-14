@@ -77,7 +77,7 @@ async function mountBuiltApp(page: Parameters<typeof test>[0]["page"]) {
   await page.goto("http://127.0.0.1:8000/");
   await page.evaluate(() => {
     window.localStorage.setItem(
-      "reefvision.onboarding.dismissed.1.6.0",
+      "reefvision.onboarding.dismissed.1.0.1",
       "true",
     );
   });
@@ -180,7 +180,7 @@ test("quality-control workflow opens the flagged image and returns to the QC das
     const request = route.request();
     const url = new URL(request.url());
     if (url.pathname.endsWith("/health")) {
-      await route.fulfill({ json: { status: "ok", version: "1.6.0" } });
+      await route.fulfill({ json: { status: "ok", version: "1.0.1" } });
       return;
     }
     if (
@@ -491,7 +491,7 @@ test("review-queue workflow preserves score context and item state transitions",
     const request = route.request();
     const url = new URL(request.url());
     if (url.pathname.endsWith("/health")) {
-      await route.fulfill({ json: { status: "ok", version: "1.6.0" } });
+      await route.fulfill({ json: { status: "ok", version: "1.0.1" } });
       return;
     }
     if (

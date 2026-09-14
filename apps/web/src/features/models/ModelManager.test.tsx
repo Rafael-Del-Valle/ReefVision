@@ -115,7 +115,7 @@ function catalog(
   return {
     schema_version: 2,
     catalog_version: "2.0.0",
-    application_version: "1.6.0",
+    application_version: "1.0.1",
     models: [entry(state)],
     validation_warnings: [],
     rejected_entries: 0,
@@ -133,7 +133,7 @@ function jsonResponse(value: unknown, status = 200): Response {
 
 function bootstrap(modelCatalog: ModelCatalogResponse) {
   return {
-    application_version: "1.6.0",
+    application_version: "1.0.1",
     catalog: modelCatalog,
     models: [],
     providers: [],

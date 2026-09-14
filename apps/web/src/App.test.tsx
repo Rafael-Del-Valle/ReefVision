@@ -20,7 +20,7 @@ import type {
 } from "./api/client";
 
 const systemVersion = {
-  application_version: "1.6.0",
+  application_version: "1.0.1",
   backup_format_version: "1.0",
   environment: "test",
   data_dir: "C:/ReefVisionData",
@@ -31,7 +31,7 @@ const systemVersion = {
 };
 
 const systemCompatibility = {
-  application_version: "1.6.0",
+  application_version: "1.0.1",
   schema_status: "up_to_date",
   compatible_for_read_write: true,
   current_schema_revision: "0009",
@@ -53,7 +53,7 @@ const systemLogs = {
 };
 
 const systemCommandShortcuts = {
-  command_version: "1.6.0",
+  command_version: "1.0.1",
   command_directory: "C:/Users/test/AppData/Local/ReefVision/bin",
   support_directory: "C:/Users/test/AppData/Local/ReefVision/commands",
   repo_path: "C:/src/ReefVision/reefvision",
@@ -878,7 +878,7 @@ function mockApi({
     .mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.endsWith("/health")) {
-        return jsonResponse({ status: "ok", version: "1.6.0" });
+        return jsonResponse({ status: "ok", version: "1.0.1" });
       }
       if (url.endsWith("/system/version")) {
         return jsonResponse(systemVersion);
@@ -1090,7 +1090,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  window.localStorage.setItem("reefvision.onboarding.dismissed.1.6.0", "true");
+  window.localStorage.setItem("reefvision.onboarding.dismissed.1.0.1", "true");
 });
 
 function renderApp() {
@@ -1112,7 +1112,7 @@ describe("App", () => {
     expect(
       screen.getByRole("heading", { name: "ReefVision" }),
     ).toBeInTheDocument();
-    expect(await screen.findByText("Local service 1.6.0")).toBeInTheDocument();
+    expect(await screen.findByText("Local service 1.0.1")).toBeInTheDocument();
     expect(
       await screen.findByRole("heading", { name: "No projects yet" }),
     ).toBeInTheDocument();
@@ -1126,7 +1126,7 @@ describe("App", () => {
       await screen.findByRole("button", { name: /System status/ }),
     );
 
-    expect(await screen.findAllByText("1.6.0")).not.toHaveLength(0);
+    expect(await screen.findAllByText("1.0.1")).not.toHaveLength(0);
     expect(screen.getByText("1.0")).toBeInTheDocument();
     expect(screen.getByText("Disabled")).toBeInTheDocument();
     expect(screen.getAllByText("0009")).toHaveLength(2);
@@ -1167,7 +1167,7 @@ describe("App", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: /Welcome to ReefVision 1.6.0/,
+        name: /Welcome to ReefVision 1.0.1/,
       }),
     ).toBeInTheDocument();
 
@@ -1177,7 +1177,7 @@ describe("App", () => {
 
     await waitFor(() =>
       expect(
-        screen.queryByRole("heading", { name: /Welcome to ReefVision 1.6.0/ }),
+        screen.queryByRole("heading", { name: /Welcome to ReefVision 1.0.1/ }),
       ).not.toBeInTheDocument(),
     );
   });
@@ -1282,7 +1282,7 @@ describe("App", () => {
           image_count: 3,
           annotation_count: 6,
           created_by: "local_user",
-          reefvision_version: "1.6.0",
+          reefvision_version: "1.0.1",
           schema_version: "0006",
           error_message: null,
           created_at: "2026-07-09T00:00:00Z",

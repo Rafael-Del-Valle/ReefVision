@@ -128,7 +128,7 @@ async function mountBuiltApp(page: Parameters<typeof test>[0]["page"]) {
   await page.goto("http://127.0.0.1:8000/");
   await page.evaluate(() => {
     window.localStorage.setItem(
-      "reefvision.onboarding.dismissed.1.6.0",
+      "reefvision.onboarding.dismissed.1.0.1",
       "true",
     );
   });

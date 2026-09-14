@@ -19,6 +19,13 @@ All notable changes to ReefVision will be documented here.
   before launching with fresh server-side preflight.
 - Use the current package version in onboarding and verify MSI, desktop and API
   version metadata during production package verification.
+- Recover the desktop UI after Windows sleep or resume without discarding the
+  selected project or annotation state.
+- Prevent duplicate isolated video workers from acquiring the same queued job.
+- Finalize interrupted cancellation requests as cancelled on startup instead of
+  silently requeueing work the user explicitly cancelled.
+- Reject cancellation requests for running job types that do not implement
+  cooperative cancellation while retaining cancellation for queued work.
 
 ### Added
 
@@ -28,6 +35,13 @@ All notable changes to ReefVision will be documented here.
   and overly complex outlines are rejected rather than silently changing geometry.
 - Isolated real CPU/CUDA training lifecycle acceptance harness, including AMP,
   FP32, cancellation and process interruption at the final commit boundary.
+- Isolated persisted video tracking with live progress, cancellation, retry and
+  conservative restart recovery.
+- Annotated tracking-video exports generated from persisted observations without
+  rerunning the detector, including Clean Tracking and Full Review overlays.
+- Project-level interoperability navigation for versioned, checksummed project
+  exchange package export, inspection and safe import.
+- Deterministic packaged self-test evidence for release acceptance.
 
 No database migration is required. The existing 1.0.0 release/tag is unchanged.
 
@@ -98,7 +112,6 @@ No database migration is required. The existing 1.0.0 release/tag is unchanged.
 
 ### Changed
 
-- Version line advanced to `1.6.0`.
 - The Model Manager now exposes provider-catalog and runtime-status sections alongside the existing dependency preflight and pinned Ultralytics training registry.
 - Assist sessions can now retain an originating prediction proposal so accepted prompt-assisted masks update the proposal-review lifecycle instead of bypassing it.
 - The project UI now exposes dedicated `Quality Control` and `Review Queue` tabs beside the existing gallery, versions, models, and classes workflows.

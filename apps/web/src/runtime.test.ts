@@ -47,7 +47,7 @@ describe("runtime", () => {
       desktopMode: true,
     });
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      jsonResponse({ status: "ok", version: "1.6.0" }),
+      jsonResponse({ status: "ok", version: "1.0.1" }),
     );
 
     await initializeRuntime();

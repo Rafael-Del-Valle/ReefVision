@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import tomllib
 from pathlib import Path
 
@@ -32,6 +33,22 @@ def test_authoritative_version_sources_match_release_line() -> None:
         if package["name"] == "reefvision-desktop"
     )
 
+    command_source = (root / "scripts" / "lib" / "reefvision-commands.ps1").read_text(
+        encoding="utf-8"
+    )
+    command_match = re.search(
+        r'\$script:ReefVisionCommandVersion\s*=\s*"([^"]+)"',
+        command_source,
+    )
+    assert command_match is not None
+
+    app_source = (root / "apps" / "web" / "src" / "App.tsx").read_text(encoding="utf-8")
+    onboarding_match = re.search(
+        r'ONBOARDING_DISMISS_KEY\s*=\s*"reefvision\.onboarding\.dismissed\.([^"]+)"',
+        app_source,
+    )
+    assert onboarding_match is not None
+
     authoritative_versions = {
         "python_package": __version__,
         "pyproject": pyproject["project"]["version"],
@@ -42,6 +59,8 @@ def test_authoritative_version_sources_match_release_line() -> None:
         "tauri_config": tauri_config["version"],
         "cargo_toml": cargo_toml["package"]["version"],
         "cargo_lock": cargo_lock_version,
+        "command_tools": command_match.group(1),
+        "onboarding_key": onboarding_match.group(1),
     }
 
     assert authoritative_versions

@@ -327,7 +327,7 @@ def seed_reassignment_records(
                 image_count=1,
                 annotation_count=1,
                 created_by="local_user",
-                reefvision_version="1.6.0",
+                reefvision_version="1.0.1",
                 schema_version="0010",
                 created_at=datetime.now(UTC),
                 completed_at=datetime.now(UTC),

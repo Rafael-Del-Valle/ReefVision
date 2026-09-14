@@ -227,7 +227,8 @@ class BackupService:
             raise ConflictError("The backup schema revision is invalid")
         if schema_revision not in self._known_schema_revisions():
             raise ConflictError(
-                "This backup uses an unsupported database schema revision for ReefVision 1.6.0"
+                "This backup uses an unsupported database schema revision "
+                f"for ReefVision {__version__}"
             )
 
     def _known_schema_revisions(self) -> set[str]:

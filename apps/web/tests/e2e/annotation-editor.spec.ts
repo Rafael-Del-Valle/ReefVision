@@ -90,7 +90,7 @@ async function mountBuiltApp(page: Parameters<typeof test>[0]["page"]) {
   await page.goto("http://127.0.0.1:8000/");
   await page.evaluate(() => {
     window.localStorage.setItem(
-      "reefvision.onboarding.dismissed.1.6.0",
+      "reefvision.onboarding.dismissed.1.0.1",
       "true",
     );
   });
@@ -118,7 +118,7 @@ test("stores source-image coordinates correctly after zooming and reloads saved 
     const request = route.request();
     const url = new URL(request.url());
     if (url.pathname.endsWith("/health")) {
-      await route.fulfill({ json: { status: "ok", version: "1.6.0" } });
+      await route.fulfill({ json: { status: "ok", version: "1.0.1" } });
       return;
     }
     if (
@@ -381,7 +381,7 @@ test("keeps unsaved boxes visible after a failed save and allows retry", async (
     const request = route.request();
     const url = new URL(request.url());
     if (url.pathname.endsWith("/health")) {
-      await route.fulfill({ json: { status: "ok", version: "1.6.0" } });
+      await route.fulfill({ json: { status: "ok", version: "1.0.1" } });
       return;
     }
     if (
@@ -617,7 +617,7 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
     const request = route.request();
     const url = new URL(request.url());
     if (url.pathname.endsWith("/health")) {
-      await route.fulfill({ json: { status: "ok", version: "1.6.0" } });
+      await route.fulfill({ json: { status: "ok", version: "1.0.1" } });
       return;
     }
     if (

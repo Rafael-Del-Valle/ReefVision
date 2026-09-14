@@ -366,7 +366,7 @@ def test_used_class_delete_is_blocked_and_usage_is_reported(client: TestClient) 
             image_count=1,
             annotation_count=2,
             created_by="local_user",
-            reefvision_version="1.6.0",
+            reefvision_version="1.0.1",
             schema_version="0006",
             completed_at=datetime.now(UTC),
         )

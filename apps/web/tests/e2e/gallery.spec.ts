@@ -47,7 +47,7 @@ test("imports an image and updates leakage-group metadata", async ({
     const request = route.request();
     const url = new URL(request.url());
     if (url.pathname.endsWith("/health")) {
-      await route.fulfill({ json: { status: "ok", version: "1.6.0" } });
+      await route.fulfill({ json: { status: "ok", version: "1.0.1" } });
       return;
     }
     if (
@@ -168,7 +168,7 @@ test("imports an image and updates leakage-group metadata", async ({
   await page.goto("http://127.0.0.1:8000/");
   await page.evaluate(() => {
     window.localStorage.setItem(
-      "reefvision.onboarding.dismissed.1.6.0",
+      "reefvision.onboarding.dismissed.1.0.1",
       "true",
     );
   });

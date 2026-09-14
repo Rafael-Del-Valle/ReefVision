@@ -1,8 +1,10 @@
 # ReefVision 1.0.1 release candidate
 
 This patch retains the existing 1.0.0 release and tag. It targets training
-lifecycle/restart reliability, Windows provider execution, training UI refresh
-and editable polygon Fill.
+lifecycle and restart reliability, Windows provider execution, training UI
+refresh, editable polygon Fill, desktop sleep/resume recovery, isolated video
+tracking and annotated-video exports, project interoperability visibility, and
+background-job cancellation and recovery hardening.
 
 ## Training recovery
 
@@ -42,6 +44,37 @@ that touch themselves, and outlines over 4096 simplified vertices; adjust the
 tolerance or use Brush for those regions. It does not silently fill holes or
 change the polygon data model. Conversion from a binary region to a polygon is
 reusable by future segmentation providers.
+
+## Desktop, video and background-job reliability
+
+The Windows desktop shell detects wake, visibility restoration, focus recovery
+and BFCache restoration, then repaints the WebView, verifies backend health and
+refetches active state without unconditionally reloading the application.
+
+Video tracking runs execute in isolated child processes so long-running OpenCV
+and model work does not block the API. Tracking exposes persisted frame progress,
+heartbeat state, cancellation and retry. Atomic queued-job claims prevent two
+worker loops from launching the same isolated tracking or annotated-export job.
+
+Succeeded tracking runs can generate Clean Tracking or Full Review MP4 exports
+from persisted observations without rerunning detector inference. Class-colored
+boxes and trails are retained while labels use a light background with black text
+for readability.
+
+Startup recovery does not silently resurrect cancellation requests. Generic
+`cancel_requested` jobs are finalized as cancelled, while recoverable interrupted
+running jobs are requeued according to their lifecycle policy. Quality-control,
+backup and workflow companion records are kept synchronized. Running jobs only
+accept generic cancellation when their processor implements cooperative
+cancellation.
+
+## Project interoperability
+
+The existing project interoperability workspace is now exposed directly in the
+project navigation. ReefVision can create versioned, checksummed project-exchange
+ZIP packages, inspect them before import and import them as new managed projects
+with identifier remapping. Inclusion of original media, model weights and
+generated artifacts remains explicit.
 
 ## Reproduce acceptance
 
