@@ -19,6 +19,8 @@ from reefvision.db.models import (
     Job,
     QualityControlRun,
     VideoAsset,
+    WorkflowNodeRun,
+    WorkflowRun,
 )
 from reefvision.jobs.backups import process_backup_job
 from reefvision.jobs.classification_inference import process_classification_inference_job
@@ -284,20 +286,82 @@ def recover_interrupted_jobs(
         count += recover_interrupted_video_tracking_jobs(session)
         count += JobRepository(session).recover_interrupted_jobs()
 
-        for run in session.scalars(
+        recovered_at = datetime.now(UTC)
+
+        for qc_run in session.scalars(
             select(QualityControlRun).where(
                 QualityControlRun.status.in_(("running", "cancel_requested"))
             )
         ):
-            run.status = "queued"
-            run.error_message = "Recovered after interruption"
-            run.started_at = None
+            if qc_run.status == "cancel_requested":
+                qc_run.status = "cancelled"
+                qc_run.cancelled_at = recovered_at
+                qc_run.completed_at = recovered_at
+                qc_run.error_message = "Cancellation finalized after ReefVision restart"
+            else:
+                qc_run.status = "queued"
+                qc_run.error_message = "Recovered after interruption"
+                qc_run.started_at = None
+                qc_run.completed_at = None
+
         for backup in session.scalars(
-            select(BackupRecord).where(BackupRecord.status.in_(("running", "verifying")))
+            select(BackupRecord).where(
+                BackupRecord.status.in_(("running", "verifying", "cancel_requested"))
+            )
         ):
-            backup.status = "queued"
-            backup.error_message = "Recovered after interruption"
-            backup.started_at = None
+            if backup.status == "cancel_requested":
+                backup.status = "cancelled"
+                backup.completed_at = recovered_at
+                backup.error_message = "Cancellation finalized after ReefVision restart"
+                backup.result_json = {
+                    **dict(backup.result_json or {}),
+                    "stage": "cancelled",
+                    "recovery": "cancelled_on_startup",
+                    "recovered_at": recovered_at.isoformat(),
+                }
+            else:
+                backup.status = "queued"
+                backup.error_message = "Recovered after interruption"
+                backup.started_at = None
+                backup.completed_at = None
+
+        for workflow_run in session.scalars(
+            select(WorkflowRun).where(WorkflowRun.status.in_(("running", "cancel_requested")))
+        ):
+            if workflow_run.status == "cancel_requested":
+                workflow_run.status = "cancelled"
+                workflow_run.completed_at = recovered_at
+                workflow_run.error_message = "Cancellation finalized after ReefVision restart"
+                workflow_run.result_json = {
+                    **dict(workflow_run.result_json or {}),
+                    "stage": "cancelled",
+                    "recovery": "cancelled_on_startup",
+                    "recovered_at": recovered_at.isoformat(),
+                }
+
+                for node in session.scalars(
+                    select(WorkflowNodeRun).where(
+                        WorkflowNodeRun.workflow_run_id == workflow_run.id,
+                        WorkflowNodeRun.status.in_(
+                            ("pending", "running", "waiting_for_review", "review_approved")
+                        ),
+                    )
+                ):
+                    node.status = "cancelled"
+                    node.completed_at = recovered_at
+                    node.error_message = "Workflow cancellation finalized after ReefVision restart"
+            else:
+                workflow_run.status = "queued"
+                workflow_run.started_at = None
+                workflow_run.completed_at = None
+                workflow_run.error_message = "Recovered after interruption"
+                workflow_run.result_json = {
+                    **dict(workflow_run.result_json or {}),
+                    "stage": "queued",
+                    "recovery": "requeued_on_startup",
+                    "recovered_at": recovered_at.isoformat(),
+                }
+
         session.commit()
         return count
 

@@ -299,3 +299,167 @@ def test_interrupted_video_tracking_cancellation_finishes_cancelled(
         assert job.progress_current == 42
         assert job.result_json["stage"] == "cancelled"
         assert job.result_json["recovery"] == "interrupted_on_startup"
+
+
+def test_generic_interrupted_job_is_requeued(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Generic interrupted recovery")
+
+    with client.app.state.session_factory() as session:
+        job = Job(
+            project_id=project["id"],
+            job_type="diagnostics",
+            status="running",
+            progress_current=1,
+            progress_total=3,
+            request_json={},
+            result_json={"stage": "collecting"},
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+
+    worker.recover_interrupted_jobs(
+        client.app.state.session_factory,
+        client.app.state.settings,
+    )
+
+    with client.app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == "queued"
+        assert job.progress_current == 1
+        assert job.result_json["stage"] == "queued"
+        assert job.result_json["recovery"] == "requeued_on_startup"
+        assert job.completed_at is None
+
+
+def test_generic_interrupted_cancellation_is_not_requeued(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Generic interrupted cancellation")
+
+    with client.app.state.session_factory() as session:
+        job = Job(
+            project_id=project["id"],
+            job_type="diagnostics",
+            status="cancel_requested",
+            progress_current=2,
+            progress_total=3,
+            request_json={},
+            result_json={"stage": "collecting"},
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+
+    worker.recover_interrupted_jobs(
+        client.app.state.session_factory,
+        client.app.state.settings,
+    )
+
+    with client.app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == "cancelled"
+        assert job.progress_current == 2
+        assert job.result_json["stage"] == "cancelled"
+        assert job.result_json["recovery"] == "cancelled_on_startup"
+        assert job.completed_at is not None
+
+
+def test_running_cooperative_job_can_request_cancellation(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Cooperative cancellation")
+
+    with client.app.state.session_factory() as session:
+        job = Job(
+            project_id=project["id"],
+            job_type="diagnostics",
+            status="running",
+            progress_current=1,
+            progress_total=3,
+            request_json={},
+            result_json={"stage": "collecting"},
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+
+    response = client.post(f"/api/v1/jobs/{job_id}/cancel")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancel_requested"
+
+    with client.app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == "cancel_requested"
+
+
+def test_running_noncooperative_job_rejects_cancellation(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Noncooperative cancellation")
+
+    with client.app.state.session_factory() as session:
+        job = Job(
+            project_id=project["id"],
+            job_type="classification_inference",
+            status="running",
+            progress_current=1,
+            progress_total=3,
+            request_json={},
+            result_json={"stage": "inference"},
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+
+    response = client.post(f"/api/v1/jobs/{job_id}/cancel")
+
+    assert response.status_code == 409
+    assert "do not support cooperative cancellation" in response.json()["detail"]
+
+    with client.app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == "running"
+
+
+def test_queued_noncooperative_job_can_still_be_cancelled(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Queued cancellation")
+
+    with client.app.state.session_factory() as session:
+        job = Job(
+            project_id=project["id"],
+            job_type="classification_inference",
+            status="queued",
+            progress_current=0,
+            progress_total=3,
+            request_json={},
+            result_json={"stage": "queued"},
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+
+    response = client.post(f"/api/v1/jobs/{job_id}/cancel")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
+
+    with client.app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        assert job.status == "cancelled"
+        assert job.completed_at is not None

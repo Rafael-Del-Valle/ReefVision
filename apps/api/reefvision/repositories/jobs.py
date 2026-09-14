@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from datetime import UTC, datetime
 
-from sqlalchemy import select, update
-from sqlalchemy.engine import CursorResult
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import Job
@@ -32,17 +31,43 @@ class JobRepository:
         return self.session.scalar(statement) is not None
 
     def recover_interrupted_jobs(self) -> int:
-        statement = (
-            update(Job)
-            .where(
-                Job.status.in_(("running", "cancel_requested")),
-                Job.job_type.notin_(("training", "video_tracking")),
-            )
-            .values(
-                status="queued",
-                started_at=None,
-                error_message="Recovered after interruption",
+        jobs = list(
+            self.session.scalars(
+                select(Job).where(
+                    Job.status.in_(("running", "cancel_requested")),
+                    Job.job_type.notin_(("training", "video_tracking")),
+                )
             )
         )
-        result = cast(CursorResult[Any], self.session.execute(statement))
-        return int(result.rowcount or 0)
+        now = datetime.now(UTC)
+
+        for job in jobs:
+            result = dict(job.result_json or {})
+
+            if job.status == "cancel_requested":
+                job.status = "cancelled"
+                job.completed_at = now
+                job.error_message = "Cancellation finalized after ReefVision restart"
+                result.update(
+                    {
+                        "stage": "cancelled",
+                        "recovery": "cancelled_on_startup",
+                        "recovered_at": now.isoformat(),
+                    }
+                )
+            else:
+                job.status = "queued"
+                job.started_at = None
+                job.completed_at = None
+                job.error_message = "Recovered after interruption"
+                result.update(
+                    {
+                        "stage": "queued",
+                        "recovery": "requeued_on_startup",
+                        "recovered_at": now.isoformat(),
+                    }
+                )
+
+            job.result_json = result
+
+        return len(jobs)

@@ -12,6 +12,22 @@ from reefvision.repositories.backups import BackupRepository
 from reefvision.repositories.jobs import JobRepository
 from reefvision.repositories.quality_control import QualityControlRepository
 
+RUNNING_CANCELLABLE_JOB_TYPES = frozenset(
+    {
+        "inference",
+        "qc",
+        "backup",
+        "restore",
+        "diagnostics",
+        "model_install",
+        "training",
+        "video_tracking",
+        "video_annotated_export",
+        "video_metric_depth_3d",
+        "workflow_run",
+    }
+)
+
 
 class JobService:
     def __init__(self, session: Session) -> None:
@@ -175,6 +191,10 @@ class JobService:
                     node.completed_at = now
                     node.error_message = "Workflow run was cancelled before completion"
         elif job.status == "running":
+            if job.job_type not in RUNNING_CANCELLABLE_JOB_TYPES:
+                raise ConflictError(
+                    f"Running {job.job_type} jobs do not support cooperative cancellation"
+                )
             job.status = "cancel_requested"
             if quality_control_run is not None:
                 quality_control_run.status = "cancel_requested"
