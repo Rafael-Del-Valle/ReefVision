@@ -36,7 +36,6 @@ def generate_polygon_fill(
     return PolygonFillResponse(points=[PolygonPoint(x=x, y=y) for x, y in points])
 
 
-
 def generate_smart_close_polygon(
     session: Session, settings: Settings, image_id: str, payload: SmartCloseRequest
 ) -> PolygonFillResponse:
