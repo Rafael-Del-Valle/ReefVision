@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import cast
 
@@ -169,8 +170,6 @@ def test_brush_object_vectorizes_into_yolo_segmentation_export(
     assert label_files[0].read_text(encoding="utf-8").strip().startswith("0 ")
 
     manifest_path = test_settings.resolved_data_dir / Path(export["manifest_path"])
-    import json
-
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["vectorized_raster_count"] == 1
     assert manifest["skipped_raster_count"] == 0
