@@ -136,7 +136,7 @@ async function mountEnhancedWithFill() {
 function navigateEnhanced(destination: "raster" | "boxes") {
   fireEvent.click(
     screen.getByTestId(
-      destination === "raster" ? "open-brush-tool" : "open-box-workspace",
+      destination === "raster" ? "open-brush-tool" : "return-main-tools",
     ),
   );
 }
