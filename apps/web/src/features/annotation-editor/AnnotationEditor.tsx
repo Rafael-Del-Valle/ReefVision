@@ -47,6 +47,8 @@ import {
   isDirty,
   toAnnotationSavePayload,
 } from "./annotationEditorReducer";
+import { deleteMaskAnnotations } from "./maskDocumentOperations";
+import { rasterMaskContentUrl } from "./rasterMaskApi";
 import {
   boxArea,
   clampScale,
@@ -673,6 +675,8 @@ export function AnnotationEditor({
   const activeClass =
     (activeClassId ? labelClassesById.get(activeClassId) : null) ?? null;
   const saveStatusText = saveStateLabel(state.saveState, state.saveMessage);
+  const selectedObjectCount =
+    state.selectedIds.length + state.selectedMaskIds.length;
   const canReassignSelection =
     state.tool === "select" && state.selectedIds.length > 0;
   const visiblePredictions = useMemo(() => {
@@ -1024,9 +1028,22 @@ export function AnnotationEditor({
     dispatch({ type: "setSelection", selection });
   }, []);
 
+  const setMaskSelection = useCallback((selection: string[]) => {
+    dispatch({ type: "setMaskSelection", selection });
+  }, []);
+
   const commitDocument = useCallback(
-    (document: AnnotationDocument, selection?: string[]) => {
-      dispatch({ type: "commitDocument", document, selection });
+    (
+      document: AnnotationDocument,
+      selection?: string[],
+      maskSelection?: string[],
+    ) => {
+      dispatch({
+        type: "commitDocument",
+        document,
+        selection,
+        maskSelection,
+      });
     },
     [],
   );
@@ -1155,19 +1172,29 @@ export function AnnotationEditor({
   );
 
   const deleteSelection = useCallback(() => {
-    if (state.selectedIds.length === 0) {
+    if (
+      state.selectedIds.length === 0 &&
+      state.selectedMaskIds.length === 0
+    ) {
       return;
     }
-    commitDocument(
-      {
-        ...state.document,
-        annotations: state.document.annotations.filter(
-          (annotation) => !state.selectedIds.includes(annotation.id),
-        ),
-      },
-      [],
+    const withoutBoxes = {
+      ...state.document,
+      annotations: state.document.annotations.filter(
+        (annotation) => !state.selectedIds.includes(annotation.id),
+      ),
+    };
+    const nextDocument = deleteMaskAnnotations(
+      withoutBoxes,
+      state.selectedMaskIds,
     );
-  }, [commitDocument, state.document, state.selectedIds]);
+    commitDocument(nextDocument, [], []);
+  }, [
+    commitDocument,
+    state.document,
+    state.selectedIds,
+    state.selectedMaskIds,
+  ]);
 
   const saveNow = useCallback((): Promise<boolean> => {
     if (savePromiseRef.current) {
@@ -1674,6 +1701,23 @@ export function AnnotationEditor({
       });
     },
     [currentView, setSelection],
+  );
+
+  const handleMaskPointerDown = useCallback(
+    (event: ReactPointerEvent<SVGElement>, maskId: string) => {
+      event.stopPropagation();
+      if (state.tool !== "select") {
+        return;
+      }
+      const additive = event.metaKey || event.ctrlKey || event.shiftKey;
+      if (!additive) {
+        setSelection([]);
+        setMaskSelection([maskId]);
+        return;
+      }
+      setMaskSelection(selectionToggled(state.selectedMaskIds, maskId));
+    },
+    [setMaskSelection, setSelection, state.selectedMaskIds, state.tool],
   );
 
   function togglePredictionSelection(proposalId: string) {
