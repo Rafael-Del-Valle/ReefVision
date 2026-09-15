@@ -21,7 +21,7 @@ import { generatePolygonFill } from "./rasterMaskApi";
 vi.mock("../../api/client", () => ({
   getAnnotationSession: vi.fn(),
   saveAnnotations: vi.fn(),
-  imageContentUrl: () => "/image.png",
+  imageDisplayUrl: () => "/image.png",
 }));
 vi.mock("./rasterMaskApi", () => ({
   generatePolygonFill: vi.fn(),
