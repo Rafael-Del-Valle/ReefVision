@@ -112,8 +112,14 @@ export function RasterMaskWorkspace({
     },
     onSuccess: async (response) => {
       setActiveClassId(response.mask_annotation.label_class_id);
+      const deleted = response.mask_annotation.deleted_at !== null;
+      if (deleted) {
+        setSelectedMaskId(null);
+      }
       await sessionQuery.refetch();
-      setSelectedMaskId(response.mask_annotation.id);
+      if (!deleted) {
+        setSelectedMaskId(response.mask_annotation.id);
+      }
       setCreateAnotherMaskRequested(false);
       await queryClient.invalidateQueries({
         queryKey: ["project-images", project.id],
@@ -249,7 +255,8 @@ export function RasterMaskWorkspace({
               </label>
             )}
             <p className="annotation-helper">
-              Paint and erase edit the selected mask object. Use Create another
+              Paint and erase edit the selected mask object. Erasing the final
+              painted pixels deletes that object cleanly. Use Create another
               mask when you want to paint a separate countable object.
             </p>
             {editMutation.error && (
