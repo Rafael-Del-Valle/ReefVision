@@ -116,7 +116,7 @@ export function SegmentationExportLauncher() {
           position: "fixed",
           left: "1rem",
           bottom: "1rem",
-          zIndex: 9000,
+          zIndex: 40,
           boxShadow: "0 0.5rem 1.5rem rgba(0, 0, 0, 0.22)",
         }}
       >
