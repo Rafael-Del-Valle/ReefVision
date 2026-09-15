@@ -51,6 +51,33 @@ export async function generatePolygonFill(
   return (await response.json()) as { points: Point[] };
 }
 
+export async function generateSmartClosePolygon(
+  imageId: string,
+  payload: { seed: Point; closure_strength: number },
+  signal?: AbortSignal,
+): Promise<{ points: Point[] }> {
+  const response = await fetch(
+    `${getApiBaseUrl()}/images/${encodeURIComponent(imageId)}/smart-close-polygon`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal,
+    },
+  );
+  if (!response.ok) {
+    let message = `Smart Close failed with HTTP ${response.status}`;
+    try {
+      const body = (await response.json()) as { detail?: unknown };
+      if (typeof body.detail === "string") message = body.detail;
+    } catch {
+      /* Preserve the HTTP error for non-JSON failures. */
+    }
+    throw new Error(message);
+  }
+  return (await response.json()) as { points: Point[] };
+}
+
 export async function editRasterMask(
   imageId: string,
   payload: RasterMaskEditPayload,
