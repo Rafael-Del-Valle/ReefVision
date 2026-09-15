@@ -1584,6 +1584,10 @@ export function imageContentUrl(imageId: string): string {
   return `${getApiBaseUrl()}/images/${imageId}/content`;
 }
 
+export function imageDisplayUrl(imageId: string): string {
+  return `${getApiBaseUrl()}/images/${imageId}/display`;
+}
+
 export function predictionMaskUrl(proposalId: string): string {
   return `${getApiBaseUrl()}/prediction-proposals/${encodeURIComponent(proposalId)}/mask`;
 }
