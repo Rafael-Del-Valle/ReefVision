@@ -322,6 +322,100 @@ afterEach(() => {
 });
 
 describe("AnnotationEditor", () => {
+  it("shows and deletes polygon masks from Main Select", async () => {
+    const sessionWithMask = {
+      ...session,
+      mask_annotations: [
+        {
+          id: "mask-1",
+          image_id: session.image.id,
+          label_class_id: "class-1",
+          geometry_kind: "polygon",
+          mask_path: null,
+          polygon_json: [
+            [320, 320],
+            [420, 320],
+            [420, 420],
+            [320, 420],
+          ],
+          x_min: 320,
+          y_min: 320,
+          x_max: 420,
+          y_max: 420,
+          area_pixels: 10000,
+          source_type: "human",
+          provenance_json: null,
+          status: "verified",
+          created_by: "local_user",
+          created_at: "2026-07-08T00:00:00Z",
+          updated_at: "2026-07-08T00:00:00Z",
+          deleted_at: null,
+          revision: 1,
+        },
+      ],
+      mask_counts_by_class: [{ label_class_id: "class-1", count: 1 }],
+    } as AnnotationSession;
+
+    let savedPayload: Record<string, unknown> | null = null;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse(sessionWithMask);
+      }
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        init?.method === "PUT"
+      ) {
+        savedPayload = JSON.parse(String(init.body)) as Record<string, unknown>;
+        return jsonResponse({
+          image: {
+            ...session.image,
+            annotation_revision: 3,
+          },
+          annotations: session.annotations,
+          mask_annotations: [],
+          counts_by_class: session.counts_by_class,
+          mask_counts_by_class: [],
+        });
+      }
+      const shared = handleDefaultEditorRequests(url, init);
+      if (shared) {
+        return shared;
+      }
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    stubCanvasRect();
+
+    const mask = await screen.findByTestId("mask-annotation-mask-1");
+    expect(mask).toBeVisible();
+    expect(screen.getByText("Polygon / Fill")).toBeInTheDocument();
+
+    fireEvent.pointerDown(mask, { button: 0 });
+    expect(
+      screen.getByRole("heading", { name: "1 selected" }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete selection" }),
+    );
+    expect(screen.queryByTestId("mask-annotation-mask-1")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Save now" }));
+    await waitFor(() =>
+      expect(savedPayload).toMatchObject({
+        deleted_mask_annotation_ids: ["mask-1"],
+      }),
+    );
+  });
+
   it("keeps the selected annotation class unchanged in box mode", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
