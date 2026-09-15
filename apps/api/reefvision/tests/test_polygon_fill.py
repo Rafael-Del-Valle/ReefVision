@@ -126,6 +126,43 @@ def test_polygon_fill_uses_16_bit_tiff_intensity_boundaries(client: TestClient) 
     ]
 
 
+def test_smart_close_strength_severs_narrow_opening_leak() -> None:
+    source = Image.new("RGB", (31, 31), "white")
+    draw = ImageDraw.Draw(source)
+    draw.rectangle((8, 8, 22, 22), fill=(40, 40, 40))
+    draw.rectangle((0, 14, 8, 15), fill=(40, 40, 40))
+
+    full_opening = raster_edits.smart_close_polygon_from_source(
+        source,
+        seed_x=15,
+        seed_y=15,
+        closure_strength=0,
+    )
+    closed = raster_edits.smart_close_polygon_from_source(
+        source,
+        seed_x=15,
+        seed_y=15,
+        closure_strength=60,
+    )
+
+    assert min(x for x, _ in full_opening) == 0
+    assert min(x for x, _ in closed) > 0
+    assert max(x for x, _ in closed) <= 23
+    assert min(y for _, y in closed) >= 8
+    assert max(y for _, y in closed) <= 23
+
+
+def test_smart_close_api_returns_editable_polygon(client: TestClient) -> None:
+    project = create_project(client, "Smart Close")
+    image_id = import_one(client, project["id"])["successful"][0]["image_id"]
+    response = client.post(
+        f"/api/v1/images/{image_id}/smart-close-polygon",
+        json={"seed": {"x": 20, "y": 20}, "closure_strength": 0},
+    )
+    assert response.status_code == 200, response.text
+    assert len(response.json()["points"]) >= 3
+
+
 def test_polygon_fill_api_validates_inputs(client: TestClient) -> None:
     project = create_project(client, "Fill invalid input")
     image_id = import_one(client, project["id"])["successful"][0]["image_id"]
