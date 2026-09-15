@@ -67,7 +67,7 @@ class ImageRepository:
         return list(self.session.scalars(statement))
 
     def neighbor_ids_for_image(self, image: ImageAsset) -> tuple[str | None, str | None]:
-        current_name = func.lower(image.original_filename)
+        current_name = image.original_filename.lower()
         image_name = func.lower(ImageAsset.original_filename)
         previous_statement = (
             select(ImageAsset.id)
