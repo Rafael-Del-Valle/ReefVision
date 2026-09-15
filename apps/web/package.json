@@ -1,11 +1,11 @@
 {
   "name": "@reefvision/web",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "scripts": {
     "dev": "tauri dev",
-    "build": "tsc -b \u0026\u0026 vite build --config vite.config.mjs --configLoader runner",
+    "build": "tsc -b && vite build --config vite.config.mjs --configLoader runner",
     "preview": "vite preview --config vite.config.mjs --configLoader runner",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build --bundles msi",
@@ -15,9 +15,9 @@
     "test:watch": "vitest --config vite.config.mjs --configLoader runner",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test:e2e": "npm run ui:build \u0026\u0026 playwright test",
+    "test:e2e": "npm run ui:build && playwright test",
     "ui:dev": "vite --config vite.config.mjs --configLoader runner",
-    "ui:build": "tsc -b \u0026\u0026 vite build --config vite.config.mjs --configLoader runner"
+    "ui:build": "tsc -b && vite build --config vite.config.mjs --configLoader runner"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
@@ -42,7 +42,7 @@
     "vitest": "^3.0.0"
   },
   "engines": {
-    "node": "\u003e=22",
-    "npm": "\u003e=10"
+    "node": ">=22",
+    "npm": ">=10"
   }
 }
