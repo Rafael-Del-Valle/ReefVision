@@ -7,9 +7,16 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
-from reefvision.schemas.polygon_fill import PolygonFillRequest, PolygonFillResponse
+from reefvision.schemas.polygon_fill import (
+    PolygonFillRequest,
+    PolygonFillResponse,
+    SmartCloseRequest,
+)
 from reefvision.schemas.raster_edits import RasterMaskEditRequest, RasterMaskEditResponse
-from reefvision.services.polygon_fill import generate_polygon_fill
+from reefvision.services.polygon_fill import (
+    generate_polygon_fill,
+    generate_smart_close_polygon,
+)
 from reefvision.services.raster_edits import RasterMaskEditService
 
 router = APIRouter(tags=["raster_edits"])
@@ -21,6 +28,21 @@ def polygon_fill(
     image_id: str, payload: PolygonFillRequest, request: Request, session: DbSession
 ) -> PolygonFillResponse:
     return generate_polygon_fill(session, request.app.state.settings, image_id, payload)
+
+
+@router.post(
+    "/images/{image_id}/smart-close-polygon",
+    response_model=PolygonFillResponse,
+)
+def smart_close_polygon(
+    image_id: str, payload: SmartCloseRequest, request: Request, session: DbSession
+) -> PolygonFillResponse:
+    return generate_smart_close_polygon(
+        session,
+        request.app.state.settings,
+        image_id,
+        payload,
+    )
 
 
 @router.post(
