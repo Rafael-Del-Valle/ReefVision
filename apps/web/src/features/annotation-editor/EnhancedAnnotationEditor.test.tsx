@@ -137,7 +137,7 @@ describe("EnhancedAnnotationEditor", () => {
     vertexPointerHandler.mockClear();
   });
 
-  it("opens Fill object directly in the mask workspace", () => {
+  it("opens Fill object directly and keeps Fill visibly active", () => {
     renderEditor();
 
     fireEvent.click(screen.getByTestId("open-fill-object-tool"));
@@ -147,6 +147,8 @@ describe("EnhancedAnnotationEditor", () => {
     expect(
       screen.getByTestId("enhanced-annotation-editor"),
     ).toHaveAttribute("data-active-annotation-type", "masks");
+    expect(screen.getByTestId("open-fill-object-tool")).toHaveClass("active");
+    expect(screen.getByTestId("open-polygon-tool")).not.toHaveClass("active");
   });
 
   it("uses the left tool rail to switch annotation workspaces", async () => {
