@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import os
 import shutil
+from math import cos, pi, sin
 from pathlib import Path
+from statistics import median
 from typing import cast
 from uuid import uuid4
 
@@ -281,41 +283,145 @@ def smart_close_polygon_from_source(
     seed_y: int,
     closure_strength: int,
 ) -> list[tuple[int, int]]:
+    """Trace a local circular/oval rim and bridge missing rim sections directly."""
+
     if not (0 <= seed_x < source.width and 0 <= seed_y < source.height):
         raise ValidationError("Smart Close seed must be inside the image")
     if not 0 <= closure_strength <= 100:
         raise ValidationError("Auto-close tolerance must be between 0 and 100")
 
-    grayscale = source.convert("L")
-    seed_value = int(grayscale.getpixel((seed_x, seed_y)))
+    grayscale = source.convert("L").filter(ImageFilter.GaussianBlur(radius=1.0))
+    pixels = grayscale.load()
+    if pixels is None:
+        raise ValidationError("Smart Close could not access source pixels")
 
-    # Strength 0 intentionally favors the full visible opening. As strength
-    # increases, the accepted intensity band tightens and a larger morphology
-    # kernel removes narrow leaks through weak or broken boundary pixels.
-    intensity_tolerance = max(10, round(56 - (closure_strength * 0.42)))
-    candidate = grayscale.point(
-        lambda value: 255 if abs(int(value) - seed_value) <= intensity_tolerance else 0
-    )
+    seed_samples: list[int] = []
+    for offset_y in range(-2, 3):
+        for offset_x in range(-2, 3):
+            x = seed_x + offset_x
+            y = seed_y + offset_y
+            if 0 <= x < source.width and 0 <= y < source.height:
+                seed_samples.append(int(pixels[x, y]))
+    seed_value = int(median(seed_samples))
 
-    max_radius = max(
-        1,
-        min(32, round(min(source.width, source.height) * 0.015)),
+    ray_count = 144
+    max_search_radius = min(
+        320,
+        max(24, round(min(source.width, source.height) * 0.30)),
     )
-    radius = round(max_radius * (closure_strength / 100))
-    if radius > 0:
-        kernel = radius * 2 + 1
-        # Opening the candidate region severs narrow connections from the
-        # clicked opening into similarly toned exterior pixels.
-        candidate = candidate.filter(ImageFilter.MinFilter(kernel))
-        candidate = candidate.filter(ImageFilter.MaxFilter(kernel))
+    minimum_radius = 3
 
-    component = _connected_binary_component(
-        candidate,
-        seed_x=seed_x,
-        seed_y=seed_y,
-    )
-    component = _fill_binary_holes(component)
-    return polygon_from_binary_region(component)
+    # Keep the first pass conservative. The auto-close control governs how
+    # large a missing rim section ReefVision is allowed to bridge; it does not
+    # expand a flood fill into the surrounding image.
+    intensity_threshold = max(12, round(22 - closure_strength * 0.06))
+    gradient_threshold = max(8, round(16 - closure_strength * 0.05))
+
+    distances: list[float | None] = []
+    for ray_index in range(ray_count):
+        angle = (2.0 * pi * ray_index) / ray_count
+        direction_x = cos(angle)
+        direction_y = sin(angle)
+        previous_value = seed_value
+        boundary_distance: float | None = None
+
+        for radius in range(1, max_search_radius + 1):
+            x = round(seed_x + direction_x * radius)
+            y = round(seed_y + direction_y * radius)
+            if x < 0 or y < 0 or x >= source.width or y >= source.height:
+                break
+
+            value = int(pixels[x, y])
+            intensity_change = abs(value - seed_value)
+            local_gradient = abs(value - previous_value)
+            previous_value = value
+
+            if radius < minimum_radius:
+                continue
+            if (
+                intensity_change >= intensity_threshold
+                or local_gradient >= gradient_threshold
+            ):
+                boundary_distance = float(radius)
+                break
+
+        distances.append(boundary_distance)
+
+    detected = [distance for distance in distances if distance is not None]
+    if len(detected) < round(ray_count * 0.45):
+        raise ValidationError(
+            "Smart Close could not find enough of a local rim. "
+            "Click nearer the center of the opening or use Polygon."
+        )
+
+    typical_radius = float(median(detected))
+    if typical_radius < 4:
+        raise ValidationError(
+            "Smart Close detected a boundary too close to the click. "
+            "Click nearer the center of the opening."
+        )
+
+    # Reject unrelated distant edges. Missing/broken rim rays stay empty so the
+    # polygon connects the two visible rim endpoints with a straight segment.
+    lower_bound = typical_radius * 0.35
+    upper_bound = typical_radius * 2.25
+    filtered = [
+        distance
+        if distance is not None and lower_bound <= distance <= upper_bound
+        else None
+        for distance in distances
+    ]
+
+    valid_count = sum(distance is not None for distance in filtered)
+    if valid_count < round(ray_count * 0.40):
+        raise ValidationError(
+            "Smart Close could not isolate a local circular boundary. "
+            "Use Polygon or Brush for this object."
+        )
+
+    # Find the largest circular run with no detected rim. Tolerance 0 permits
+    # a small broken section; increasing it allows progressively wider gaps.
+    doubled = filtered + filtered
+    longest_gap = 0
+    current_gap = 0
+    for distance in doubled:
+        if distance is None:
+            current_gap += 1
+            longest_gap = max(longest_gap, current_gap)
+        else:
+            current_gap = 0
+    longest_gap = min(longest_gap, ray_count)
+    allowed_gap_degrees = 12.0 + closure_strength * 0.78
+    allowed_gap_rays = max(1, round(ray_count * allowed_gap_degrees / 360.0))
+    if longest_gap > allowed_gap_rays:
+        raise ValidationError(
+            "Smart Close found a gap wider than the current Auto-close tolerance. "
+            "Increase the tolerance or use Polygon."
+        )
+
+    points: list[tuple[int, int]] = []
+    for ray_index, distance in enumerate(filtered):
+        if distance is None:
+            continue
+        angle = (2.0 * pi * ray_index) / ray_count
+        x = round(seed_x + cos(angle) * distance)
+        y = round(seed_y + sin(angle) * distance)
+        point = (
+            max(0, min(source.width, x)),
+            max(0, min(source.height, y)),
+        )
+        if not points or point != points[-1]:
+            points.append(point)
+
+    if len(points) < 8:
+        raise ValidationError(
+            "Smart Close could not construct a reliable local boundary."
+        )
+
+    # The angular ordering guarantees a closed local contour. Rays through the
+    # broken section are omitted, so the polygon edge directly links the two
+    # detected rim endpoints instead of following the leak to the image edge.
+    return points
 
 
 def smart_close_polygon_from_managed_image(
