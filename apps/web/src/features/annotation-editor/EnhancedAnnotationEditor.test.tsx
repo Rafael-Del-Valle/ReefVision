@@ -19,7 +19,10 @@ const { polygonKeyHandler, polygonInsertHandler, vertexPointerHandler } =
 
 vi.mock("./AnnotationEditor", () => ({
   AnnotationEditor: ({ initialImageId }: { initialImageId: string }) => (
-    <div data-testid="box-workspace">{initialImageId}</div>
+    <div data-testid="box-workspace">
+      <aside className="annotation-tool-rail" aria-label="Annotation tools" />
+      {initialImageId}
+    </div>
   ),
 }));
 
@@ -36,10 +39,17 @@ vi.mock("./MaskAnnotationWorkspace", () => ({
     onReturnToBoxes: () => void;
   }) => (
     <div data-testid="mask-workspace">
+      <aside className="annotation-tool-rail" aria-label="Annotation tools" />
       <span data-testid="mask-initial-tool">{initialTool ?? "none"}</span>
-      <button data-mask-workspace-destination="raster" onClick={onOpenBrush}>
+      <button
+        data-testid="activate-mask-brush-tool"
+        data-mask-workspace-destination="raster"
+        onClick={onOpenBrush}
+      >
         Brush
       </button>
+      <button data-testid="activate-polygon-tool">Polygon</button>
+      <button data-testid="activate-polygon-fill-tool">Fill object</button>
       <button data-mask-workspace-destination="boxes" onClick={onReturnToBoxes}>
         Boxes
       </button>
@@ -80,7 +90,10 @@ vi.mock("./MaskAnnotationWorkspace", () => ({
 
 vi.mock("./RasterMaskWorkspace", () => ({
   RasterMaskWorkspace: ({ imageId }: { imageId: string }) => (
-    <div data-testid="raster-workspace">{imageId}</div>
+    <div data-testid="raster-workspace">
+      <aside className="annotation-tool-rail" aria-label="Annotation tools" />
+      {imageId}
+    </div>
   ),
 }));
 
@@ -88,9 +101,7 @@ import { EnhancedAnnotationEditor } from "./EnhancedAnnotationEditor";
 
 it("does not intercept Fill clicks when a previous node insertion mode is remembered", () => {
   renderEditor();
-  fireEvent.change(screen.getByTestId("annotation-type-select"), {
-    target: { value: "masks" },
-  });
+  fireEvent.click(screen.getByTestId("open-polygon-tool"));
   fireEvent.click(screen.getByTestId("insert-polygon-node"));
   screen.getByTestId("activate-mask-select-tool").classList.remove("active");
   fireEvent.pointerDown(screen.getByTestId("editable-polygon"), {
@@ -133,27 +144,23 @@ describe("EnhancedAnnotationEditor", () => {
 
     expect(screen.getByTestId("mask-workspace")).toBeInTheDocument();
     expect(screen.getByTestId("mask-initial-tool")).toHaveTextContent("fill");
-    expect(screen.getByLabelText("Annotation type")).toHaveValue("masks");
+    expect(
+      screen.getByTestId("enhanced-annotation-editor"),
+    ).toHaveAttribute("data-active-annotation-type", "masks");
   });
 
-  it("uses annotation type as the exclusive workspace and overlay filter", async () => {
+  it("uses the left tool rail to switch annotation workspaces", async () => {
     const { queryClient, project } = renderEditor();
     const editor = screen.getByTestId("enhanced-annotation-editor");
 
     expect(screen.getByTestId("box-workspace")).toHaveTextContent("image-1");
-    expect(
-      screen.queryByRole("button", { name: "Polygon tool" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("group", { name: "Visible annotation types" }),
-    ).not.toBeInTheDocument();
-
-    const annotationType = screen.getByLabelText("Annotation type");
-    expect(annotationType).toHaveValue("boxes");
     expect(editor).toHaveAttribute("data-active-annotation-type", "boxes");
     expect(editor).toHaveAttribute("data-boxes-visible", "true");
     expect(editor).toHaveAttribute("data-polygons-visible", "false");
     expect(editor).toHaveAttribute("data-raster-visible", "false");
+    expect(screen.getByTestId("open-polygon-tool")).toBeInTheDocument();
+    expect(screen.getByTestId("open-fill-object-tool")).toBeInTheDocument();
+    expect(screen.getByTestId("open-brush-tool")).toBeInTheDocument();
 
     act(() => {
       queryClient.setQueryData(["annotation-session", "image-2"], {
@@ -165,7 +172,7 @@ describe("EnhancedAnnotationEditor", () => {
       expect(screen.getByTestId("box-workspace")).toHaveTextContent("image-2");
     });
 
-    fireEvent.change(annotationType, { target: { value: "masks" } });
+    fireEvent.click(screen.getByTestId("open-polygon-tool"));
     expect(screen.getByTestId("polygon-mask-layer")).toHaveTextContent(
       "image-2",
     );
@@ -174,21 +181,21 @@ describe("EnhancedAnnotationEditor", () => {
     expect(editor).toHaveAttribute("data-polygons-visible", "true");
     expect(editor).toHaveAttribute("data-raster-visible", "false");
 
-    fireEvent.change(screen.getByLabelText("Annotation type"), {
-      target: { value: "raster" },
-    });
+    fireEvent.click(screen.getByTestId("open-brush-tool"));
     expect(screen.getByTestId("raster-workspace")).toHaveTextContent("image-2");
     expect(editor).toHaveAttribute("data-active-annotation-type", "raster");
     expect(editor).toHaveAttribute("data-boxes-visible", "false");
     expect(editor).toHaveAttribute("data-polygons-visible", "false");
     expect(editor).toHaveAttribute("data-raster-visible", "true");
+
+    fireEvent.click(screen.getByTestId("open-box-workspace"));
+    expect(screen.getByTestId("box-workspace")).toHaveTextContent("image-2");
+    expect(editor).toHaveAttribute("data-active-annotation-type", "boxes");
   });
 
   it("requires clicking the first polygon node instead of pressing Enter", () => {
     renderEditor();
-    fireEvent.change(screen.getByLabelText("Annotation type"), {
-      target: { value: "masks" },
-    });
+    fireEvent.click(screen.getByTestId("open-polygon-tool"));
 
     fireEvent.keyDown(screen.getByTestId("polygon-mask-layer"), {
       key: "Enter",
@@ -199,14 +206,12 @@ describe("EnhancedAnnotationEditor", () => {
 
   it("inserts and deletes individual polygon nodes through visible modes", () => {
     renderEditor();
-    fireEvent.change(screen.getByLabelText("Annotation type"), {
-      target: { value: "masks" },
-    });
+    fireEvent.click(screen.getByTestId("open-polygon-tool"));
 
     const editor = screen.getByTestId("enhanced-annotation-editor");
     expect(editor).toHaveAttribute("data-vertex-edit-mode", "move");
 
-    fireEvent.click(screen.getByRole("button", { name: "Insert node" }));
+    fireEvent.click(screen.getByTestId("insert-polygon-node"));
     expect(editor).toHaveAttribute("data-vertex-edit-mode", "insert");
     fireEvent.pointerDown(screen.getByTestId("editable-polygon"), {
       clientX: 30,
@@ -214,7 +219,7 @@ describe("EnhancedAnnotationEditor", () => {
     });
     expect(polygonInsertHandler).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete node" }));
+    fireEvent.click(screen.getByTestId("delete-polygon-node"));
     expect(editor).toHaveAttribute("data-vertex-edit-mode", "delete");
     fireEvent.pointerDown(screen.getByTestId("mask-vertex-mask-1-0"));
     expect(vertexPointerHandler).toHaveBeenCalledTimes(1);
@@ -223,9 +228,7 @@ describe("EnhancedAnnotationEditor", () => {
 
   it("keeps whole-polygon removal explicit", () => {
     renderEditor();
-    fireEvent.change(screen.getByLabelText("Annotation type"), {
-      target: { value: "masks" },
-    });
+    fireEvent.click(screen.getByTestId("open-polygon-tool"));
 
     fireEvent.keyDown(screen.getByTestId("polygon-mask-layer"), {
       key: "Delete",
