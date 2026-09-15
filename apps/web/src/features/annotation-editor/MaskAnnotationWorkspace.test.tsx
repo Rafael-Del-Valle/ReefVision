@@ -16,7 +16,10 @@ import {
 } from "../../api/client";
 import { MaskAnnotationWorkspace } from "./MaskAnnotationWorkspace";
 import { EnhancedAnnotationEditor } from "./EnhancedAnnotationEditor";
-import { generatePolygonFill } from "./rasterMaskApi";
+import {
+  generatePolygonFill,
+  generateSmartClosePolygon,
+} from "./rasterMaskApi";
 
 vi.mock("../../api/client", () => ({
   getAnnotationSession: vi.fn(),
@@ -25,6 +28,7 @@ vi.mock("../../api/client", () => ({
 }));
 vi.mock("./rasterMaskApi", () => ({
   generatePolygonFill: vi.fn(),
+  generateSmartClosePolygon: vi.fn(),
   rasterMaskContentUrl: () => "",
 }));
 vi.mock("./MaskMeasurementPanel", () => ({ MaskMeasurementPanel: () => null }));
@@ -109,6 +113,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getAnnotationSession).mockImplementation(async (id) => session(id));
   vi.mocked(generatePolygonFill).mockResolvedValue({ points });
+  vi.mocked(generateSmartClosePolygon).mockResolvedValue({ points });
 });
 
 async function mountEnhancedWithFill() {
@@ -193,14 +198,11 @@ it.each(["raster", "boxes"] as const)(
 it("fills in source coordinates as a normal polygon with selection, undo, redo, save and deletion", async () => {
   await mount();
   fireEvent.click(screen.getByTestId("activate-polygon-fill-tool"));
-  fireEvent.change(screen.getByLabelText("Fill tolerance"), {
-    target: { value: "12" },
-  });
   seed();
   await waitFor(() => expect(screen.getByText("1 masks")).toBeInTheDocument());
   expect(vi.mocked(generatePolygonFill).mock.calls[0].slice(0, 2)).toEqual([
     "image-1",
-    { seed: { x: 20, y: 20 }, tolerance: 12 },
+    { seed: { x: 20, y: 20 }, tolerance: 24 },
   ]);
   expect(screen.getByText("1 selected")).toBeInTheDocument();
   expect(
@@ -229,6 +231,28 @@ it("fills in source coordinates as a normal polygon with selection, undo, redo, 
     screen.getByRole("button", { name: "Delete selected masks" }),
   );
   expect(screen.getByText("0 masks")).toBeInTheDocument();
+});
+
+it("uses a separate Smart Close tool with full-opening strength at zero", async () => {
+  await mount();
+  fireEvent.click(screen.getByTestId("activate-smart-close-tool"));
+  expect(screen.getByLabelText("Closure strength")).toHaveValue("0");
+  expect(screen.getByText("Full opening")).toBeInTheDocument();
+
+  seed();
+  await waitFor(() => expect(screen.getByText("1 masks")).toBeInTheDocument());
+  expect(
+    vi.mocked(generateSmartClosePolygon).mock.calls[0].slice(0, 2),
+  ).toEqual([
+    "image-1",
+    { seed: { x: 20, y: 20 }, closure_strength: 0 },
+  ]);
+  expect(generatePolygonFill).not.toHaveBeenCalled();
+
+  fireEvent.change(screen.getByLabelText("Closure strength"), {
+    target: { value: "60" },
+  });
+  expect(screen.getByText("60%")).toBeInTheDocument();
 });
 
 it("shows fill failures and leaves the annotation history unchanged", async () => {
