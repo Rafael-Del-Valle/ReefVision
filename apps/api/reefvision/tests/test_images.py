@@ -11,7 +11,7 @@ from PIL import Image
 
 from reefvision.config import Settings
 from reefvision.db.base import Base
-from reefvision.db.models import Job
+from reefvision.db.models import Job, MaskAnnotation
 from reefvision.jobs.worker import process_thumbnail_job, recover_interrupted_jobs
 from reefvision.main import create_app
 
@@ -170,6 +170,44 @@ def test_gallery_pagination_filters_and_updates_are_stable(client: TestClient) -
     assert {item["id"] for item in page_one["items"]}.isdisjoint(
         {item["id"] for item in page_two["items"]}
     )
+    assert page_one["items"][0]["id"] == ids[-1]
+
+    filename_page_one = client.get(
+        f"/api/v1/projects/{project['id']}/images",
+        params={"page": 1, "page_size": 2, "sort_by": "filename"},
+    ).json()
+    filename_page_two = client.get(
+        f"/api/v1/projects/{project['id']}/images",
+        params={"page": 2, "page_size": 2, "sort_by": "filename"},
+    ).json()
+    assert [item["original_filename"] for item in filename_page_one["items"]] == [
+        "coral-0.png",
+        "coral-1.png",
+    ]
+    assert [item["original_filename"] for item in filename_page_two["items"]] == [
+        "coral-2.png"
+    ]
+
+    app = cast(FastAPI, client.app)
+    factory = app.state.session_factory
+    with factory() as session:
+        session.add(
+            MaskAnnotation(
+                image_id=ids[0],
+                geometry_kind="polygon",
+                polygon_json=[[1.0, 1.0], [5.0, 1.0], [5.0, 5.0]],
+                x_min=1.0,
+                y_min=1.0,
+                x_max=5.0,
+                y_max=5.0,
+                area_pixels=8,
+                source_type="human",
+                status="verified",
+            )
+        )
+        session.commit()
+    counted = client.get(f"/api/v1/images/{ids[0]}").json()
+    assert counted["annotation_count"] == 1
 
     by_name = client.get(
         f"/api/v1/projects/{project['id']}/images", params={"filename": "coral-1"}
