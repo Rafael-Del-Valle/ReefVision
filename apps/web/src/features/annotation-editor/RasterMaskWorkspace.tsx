@@ -158,7 +158,7 @@ export function RasterMaskWorkspace({
         <div className="annotation-editor-actions">
           <button
             type="button"
-            className="secondary"
+            className="visually-hidden"
             disabled={editMutation.isPending}
             onClick={onReturnToMasks}
           >
@@ -166,7 +166,7 @@ export function RasterMaskWorkspace({
           </button>
           <button
             type="button"
-            className="secondary"
+            className="visually-hidden"
             disabled={editMutation.isPending}
             onClick={onReturnToBoxes}
           >
@@ -183,12 +183,13 @@ export function RasterMaskWorkspace({
       </header>
 
       <div className="annotation-editor-body">
+        <aside className="annotation-tool-rail" aria-label="Annotation tools" />
         <aside className="annotation-editor-sidebar">
           <section className="annotation-sidebar-section">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">Tool</p>
-                <h3>Brush controls</h3>
+                <p className="eyebrow">Brush tool</p>
+                <h3>Paint mask object</h3>
               </div>
               <span>{editMutation.isPending ? "Saving..." : "Ready"}</span>
             </div>
@@ -248,8 +249,8 @@ export function RasterMaskWorkspace({
               </label>
             )}
             <p className="annotation-helper">
-              Strokes update the selected raster layer. Use Create another mask
-              only when you intentionally want a separate layer.
+              Paint and erase edit the selected mask object. Use Create another
+              mask when you want to paint a separate countable object.
             </p>
             {editMutation.error && (
               <p className="form-error">{editMutation.error.message}</p>
@@ -291,7 +292,7 @@ export function RasterMaskWorkspace({
           <section className="annotation-sidebar-section">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">Raster layers</p>
+                <p className="eyebrow">Painted objects</p>
                 <h3>{rasterMasks.length} masks</h3>
               </div>
               <button
