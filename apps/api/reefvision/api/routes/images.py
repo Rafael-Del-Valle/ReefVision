@@ -104,7 +104,7 @@ def image_display(image_id: str, request: Request, session: DbSession) -> FileRe
 def image_thumbnail(image_id: str, request: Request, session: DbSession) -> FileResponse:
     image_service = service(request, session)
     image = image_service.get_image_record(image_id)
-    path = image_service.content_path_for_image(image, thumbnail=True)
+    path = image_service.thumbnail_path_for_image(image)
     return FileResponse(
         path,
         media_type="image/jpeg",
