@@ -7,7 +7,7 @@ from typing import cast
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, load_only
 
-from reefvision.db.models import Annotation, ImageAsset
+from reefvision.db.models import Annotation, ImageAsset, MaskAnnotation
 
 
 class ImageRepository:
@@ -22,13 +22,23 @@ class ImageRepository:
         return self.session.scalar(statement)
 
     def get(self, image_id: str) -> ImageAsset | None:
-        count_subquery = (
+        box_count_subquery = (
             select(func.count(Annotation.id))
             .where(Annotation.image_id == ImageAsset.id, Annotation.deleted_at.is_(None))
             .correlate(ImageAsset)
             .scalar_subquery()
         )
-        statement = select(ImageAsset, count_subquery.label("annotation_count")).where(
+        mask_count_subquery = (
+            select(func.count(MaskAnnotation.id))
+            .where(
+                MaskAnnotation.image_id == ImageAsset.id,
+                MaskAnnotation.deleted_at.is_(None),
+            )
+            .correlate(ImageAsset)
+            .scalar_subquery()
+        )
+        count_expression = box_count_subquery + mask_count_subquery
+        statement = select(ImageAsset, count_expression.label("annotation_count")).where(
             ImageAsset.id == image_id
         )
         row = self.session.execute(statement).one_or_none()
@@ -98,6 +108,7 @@ class ImageRepository:
         filename: str | None = None,
         annotation_status: str | None = None,
         group_key: str | None = None,
+        sort_by: str = "newest",
     ) -> tuple[list[ImageAsset], int]:
         filters = [ImageAsset.project_id == project_id]
         if filename:
@@ -109,6 +120,48 @@ class ImageRepository:
 
         count_statement = select(func.count(ImageAsset.id)).where(*filters)
         total = int(self.session.scalar(count_statement) or 0)
+        box_count_subquery = (
+            select(func.count(Annotation.id))
+            .where(Annotation.image_id == ImageAsset.id, Annotation.deleted_at.is_(None))
+            .correlate(ImageAsset)
+            .scalar_subquery()
+        )
+        mask_count_subquery = (
+            select(func.count(MaskAnnotation.id))
+            .where(
+                MaskAnnotation.image_id == ImageAsset.id,
+                MaskAnnotation.deleted_at.is_(None),
+            )
+            .correlate(ImageAsset)
+            .scalar_subquery()
+        )
+        annotation_count_expression = box_count_subquery + mask_count_subquery
+
+        if sort_by == "oldest":
+            ordering = (
+                ImageAsset.created_at.asc(),
+                func.lower(ImageAsset.original_filename).asc(),
+                ImageAsset.id.asc(),
+            )
+        elif sort_by == "filename":
+            ordering = (
+                func.lower(ImageAsset.original_filename).asc(),
+                ImageAsset.created_at.asc(),
+                ImageAsset.id.asc(),
+            )
+        elif sort_by == "annotations":
+            ordering = (
+                annotation_count_expression.desc(),
+                func.lower(ImageAsset.original_filename).asc(),
+                ImageAsset.id.asc(),
+            )
+        else:
+            ordering = (
+                ImageAsset.created_at.desc(),
+                func.lower(ImageAsset.original_filename).desc(),
+                ImageAsset.id.asc(),
+            )
+
         statement = (
             select(ImageAsset)
             .options(
@@ -127,7 +180,7 @@ class ImageRepository:
                 )
             )
             .where(*filters)
-            .order_by(ImageAsset.created_at.desc(), ImageAsset.id)
+            .order_by(*ordering)
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
@@ -136,17 +189,25 @@ class ImageRepository:
             return [], total
 
         page_ids = [item.id for item in page_items]
-        annotation_counts = {
-            image_id: int(count or 0)
-            for image_id, count in self.session.execute(
-                select(Annotation.image_id, func.count(Annotation.id))
-                .where(
-                    Annotation.deleted_at.is_(None),
-                    Annotation.image_id.in_(page_ids),
-                )
-                .group_by(Annotation.image_id)
-            ).all()
-        }
+        annotation_counts: dict[str, int] = {image_id: 0 for image_id in page_ids}
+        for image_id, count in self.session.execute(
+            select(Annotation.image_id, func.count(Annotation.id))
+            .where(
+                Annotation.deleted_at.is_(None),
+                Annotation.image_id.in_(page_ids),
+            )
+            .group_by(Annotation.image_id)
+        ).all():
+            annotation_counts[image_id] += int(count or 0)
+        for image_id, count in self.session.execute(
+            select(MaskAnnotation.image_id, func.count(MaskAnnotation.id))
+            .where(
+                MaskAnnotation.deleted_at.is_(None),
+                MaskAnnotation.image_id.in_(page_ids),
+            )
+            .group_by(MaskAnnotation.image_id)
+        ).all():
+            annotation_counts[image_id] += int(count or 0)
 
         items: list[ImageAsset] = []
         for item in page_items:
