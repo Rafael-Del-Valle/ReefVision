@@ -25,14 +25,10 @@ _BOOTSTRAP_ENV_KEYS = (
 
 def _load_test_create_app():
     """Import the default FastAPI module without touching developer data."""
-    previous_environment = {
-        key: os.environ.get(key) for key in _BOOTSTRAP_ENV_KEYS
-    }
+    previous_environment = {key: os.environ.get(key) for key in _BOOTSTRAP_ENV_KEYS}
     root_logger = logging.getLogger()
     previous_root_level = root_logger.level
-    bootstrap_root = Path(
-        tempfile.mkdtemp(prefix="reefvision-pytest-bootstrap-")
-    ).resolve()
+    bootstrap_root = Path(tempfile.mkdtemp(prefix="reefvision-pytest-bootstrap-")).resolve()
 
     try:
         os.environ["REEFVISION_ENV"] = "test"

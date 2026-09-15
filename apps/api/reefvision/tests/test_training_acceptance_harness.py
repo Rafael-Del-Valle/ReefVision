@@ -52,6 +52,7 @@ def test_acceptance_rejects_crashes_and_unexercised_faults(
     with pytest.raises(AssertionError):
         harness["assert_worker_outcome"](mode, exit_code, status, acted)
 
+
 def test_acceptance_rejects_overly_deep_windows_output(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

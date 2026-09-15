@@ -48,9 +48,7 @@ def list_images(
     filename: Annotated[str | None, Query(max_length=500)] = None,
     annotation_status: Annotated[str | None, Query(max_length=30)] = None,
     group_key: Annotated[str | None, Query(max_length=300)] = None,
-    sort_by: Annotated[
-        Literal["newest", "oldest", "filename", "annotations"], Query()
-    ] = "newest",
+    sort_by: Annotated[Literal["newest", "oldest", "filename", "annotations"], Query()] = "newest",
 ) -> ImagePageResponse:
     return service(request, session).list_images(
         project_id,

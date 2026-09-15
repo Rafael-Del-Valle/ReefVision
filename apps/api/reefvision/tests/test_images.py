@@ -184,9 +184,7 @@ def test_gallery_pagination_filters_and_updates_are_stable(client: TestClient) -
         "coral-0.png",
         "coral-1.png",
     ]
-    assert [item["original_filename"] for item in filename_page_two["items"]] == [
-        "coral-2.png"
-    ]
+    assert [item["original_filename"] for item in filename_page_two["items"]] == ["coral-2.png"]
 
     app = cast(FastAPI, client.app)
     factory = app.state.session_factory
@@ -264,9 +262,7 @@ def test_supported_image_formats_import(client: TestClient) -> None:
         assert client.get(f"/api/v1/images/{image_id}").json()["media_type"] == media_type
 
 
-def test_imports_16_bit_grayscale_tiff(
-    client: TestClient, test_settings: Settings
-) -> None:
+def test_imports_16_bit_grayscale_tiff(client: TestClient, test_settings: Settings) -> None:
     project = create_project(client, "16-bit TIFF coverage")
     stream = BytesIO()
     Image.new("I;16", (64, 48), 2048).save(stream, format="TIFF")

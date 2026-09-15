@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+﻿import { expect, test } from "@playwright/test";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
@@ -376,7 +376,7 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
   await mountBuiltApp(page);
   await page.getByRole("button", { name: /Milestone 2 Coral Study/ }).click();
   await page.getByRole("button", { name: "Annotate" }).first().click();
-  await page.getByLabel("Annotation type").selectOption("masks");
+  await page.getByTestId("open-polygon-tool").click();
   await expect(page.getByTestId("mask-workspace")).toBeVisible();
 
   await page.getByTestId("activate-polygon-tool").click();
@@ -475,7 +475,7 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
     )[0].label_class_id,
   ).toBe("class-2");
 
-  await page.getByLabel("Annotation type").selectOption("raster");
+  await page.getByTestId("open-brush-tool").click();
   await expect(page.getByTestId("raster-mask-workspace")).toBeVisible();
   const brush = page.getByTestId("raster-brush-layer");
   const brushBox = await brush.boundingBox();
@@ -498,7 +498,7 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
   ]);
   expect(rasterEditPayloads[1].mask_annotation_id).toBe("raster-mask-1");
 
-  await page.getByLabel("Annotation type").selectOption("boxes");
+  await page.getByTestId("return-main-tools").click();
   await expect(page.getByTestId("annotation-editor")).toBeVisible();
   await page.keyboard.press("d");
   await expect(
@@ -518,7 +518,7 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
   await mountBuiltApp(page);
   await page.getByRole("button", { name: /Milestone 2 Coral Study/ }).click();
   await page.getByRole("button", { name: "Annotate" }).first().click();
-  await page.getByLabel("Annotation type").selectOption("masks");
+  await page.getByTestId("open-polygon-tool").click();
   await expect(page.getByTestId("mask-workspace")).toBeVisible();
   await expect(page.locator(`g[data-mask-id="${maskId}"]`)).toHaveCount(1);
   await page.getByTestId("activate-mask-select-tool").click();
@@ -527,8 +527,9 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
     "Muricea Open",
   );
 
-  await page.getByLabel("Annotation type").selectOption("raster");
+  await page.getByTestId("open-brush-tool").click();
   await expect(
     page.getByRole("button", { name: /Muricea Closed \| r2/ }),
   ).toBeVisible();
 });
+

@@ -301,7 +301,7 @@ def smart_close_polygon_from_source(
             x = seed_x + offset_x
             y = seed_y + offset_y
             if 0 <= x < source.width and 0 <= y < source.height:
-                seed_samples.append(int(pixels[x, y]))
+                seed_samples.append(cast(int, pixels[x, y]))
     seed_value = int(median(seed_samples))
 
     ray_count = 144
@@ -331,17 +331,14 @@ def smart_close_polygon_from_source(
             if x < 0 or y < 0 or x >= source.width or y >= source.height:
                 break
 
-            value = int(pixels[x, y])
+            value = cast(int, pixels[x, y])
             intensity_change = abs(value - seed_value)
             local_gradient = abs(value - previous_value)
             previous_value = value
 
             if radius < minimum_radius:
                 continue
-            if (
-                intensity_change >= intensity_threshold
-                or local_gradient >= gradient_threshold
-            ):
+            if intensity_change >= intensity_threshold or local_gradient >= gradient_threshold:
                 boundary_distance = float(radius)
                 break
 
@@ -366,9 +363,7 @@ def smart_close_polygon_from_source(
     lower_bound = typical_radius * 0.35
     upper_bound = typical_radius * 2.25
     filtered = [
-        distance
-        if distance is not None and lower_bound <= distance <= upper_bound
-        else None
+        distance if distance is not None and lower_bound <= distance <= upper_bound else None
         for distance in distances
     ]
 
@@ -414,9 +409,7 @@ def smart_close_polygon_from_source(
             points.append(point)
 
     if len(points) < 8:
-        raise ValidationError(
-            "Smart Close could not construct a reliable local boundary."
-        )
+        raise ValidationError("Smart Close could not construct a reliable local boundary.")
 
     # The angular ordering guarantees a closed local contour. Rays through the
     # broken section are omitted, so the polygon edge directly links the two

@@ -138,6 +138,7 @@ def test_watch_shutdown_stream_stops_server_on_eof() -> None:
 
     assert server.should_exit is True
 
+
 def test_write_self_test_result_records_packaged_version(tmp_path: Path) -> None:
     result = write_self_test_result(
         tmp_path,
