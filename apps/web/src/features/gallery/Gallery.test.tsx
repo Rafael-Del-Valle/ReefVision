@@ -201,6 +201,39 @@ describe("Gallery", () => {
     expect(screen.getByText("1 imported")).toBeInTheDocument();
   });
 
+  it("jumps directly to a requested page with global newest-first ordering", async () => {
+    const requestedPages: number[] = [];
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = new URL(String(input));
+        if (url.pathname.includes(`/projects/${project.id}/images`)) {
+          requestedPages.push(Number(url.searchParams.get("page") ?? "1"));
+          expect(url.searchParams.get("sort_by")).toBe("newest");
+          return jsonResponse({
+            items: [],
+            total: 792,
+            page: Number(url.searchParams.get("page") ?? "1"),
+            page_size: 24,
+            pages: 33,
+          });
+        }
+        throw new Error(`Unhandled request GET ${url}`);
+      });
+
+    renderGallery();
+    const pageInput = await screen.findByLabelText("Page number");
+    expect(pageInput).toHaveValue(1);
+    expect(fetchMock).toHaveBeenCalled();
+
+    await userEvent.clear(pageInput);
+    await userEvent.type(pageInput, "30");
+    await userEvent.tab();
+
+    await waitFor(() => expect(requestedPages).toContain(30));
+    expect(pageInput).toHaveValue(30);
+  });
+
   it("splits large image selections into bounded import batches", async () => {
     const batchSizes: number[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
