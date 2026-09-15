@@ -119,6 +119,63 @@ def test_raster_brush_revisions_preserve_frozen_semantic_exports(
         assert semantic.getpixel((45, 30)) == 0
 
 
+def test_brush_object_vectorizes_into_yolo_segmentation_export(
+    client: TestClient,
+    test_settings: Settings,
+) -> None:
+    project = create_project(client, "Brush YOLO export")
+    report = import_image(
+        client,
+        project["id"],
+        filename="brush.png",
+        relative_path="brush/brush.png",
+        color=(25, 80, 135),
+    )
+    image_id = report["successful"][0]["image_id"]
+    class_id = project["label_classes"][0]["id"]
+
+    _brush(
+        client,
+        image_id=image_id,
+        class_id=class_id,
+        base_revision=0,
+        x=20,
+        y=20,
+    )
+    update_image(
+        client,
+        image_id,
+        group_key="fragment-1",
+        annotation_status="reviewed",
+    )
+    version = create_version(client, project["id"], name="Brush YOLO snapshot")
+
+    queued = client.post(
+        f"/api/v1/dataset-versions/{version['id']}/exports",
+        json={"format": "yolo_segmentation"},
+    )
+    assert queued.status_code == 200, queued.text
+    payload = queued.json()
+    app = cast(FastAPI, client.app)
+    assert process_export_job(
+        app.state.settings,
+        app.state.session_factory,
+        payload["job"]["id"],
+    )
+    export = client.get(f"/api/v1/exports/{payload['export']['id']}").json()
+    output_root = test_settings.resolved_data_dir / Path(export["output_path"])
+    label_files = sorted(output_root.glob("labels/*/*.txt"))
+    assert len(label_files) == 1
+    assert label_files[0].read_text(encoding="utf-8").strip().startswith("0 ")
+
+    manifest_path = test_settings.resolved_data_dir / Path(export["manifest_path"])
+    import json
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["vectorized_raster_count"] == 1
+    assert manifest["skipped_raster_count"] == 0
+
+
 def test_eraser_rejects_empty_raster_mask(client: TestClient) -> None:
     project = create_project(client, "Raster eraser study")
     report = import_image(
