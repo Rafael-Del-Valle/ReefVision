@@ -175,7 +175,10 @@ def test_brush_object_vectorizes_into_yolo_segmentation_export(
     assert manifest["skipped_raster_count"] == 0
 
 
-def test_eraser_rejects_empty_raster_mask(client: TestClient) -> None:
+def test_full_erase_deletes_raster_mask_object(
+    client: TestClient,
+    test_settings: Settings,
+) -> None:
     project = create_project(client, "Raster eraser study")
     report = import_image(
         client,
@@ -195,6 +198,8 @@ def test_eraser_rejects_empty_raster_mask(client: TestClient) -> None:
         y=20,
     )
     mask = cast(dict[str, object], first["mask_annotation"])
+    original_path = test_settings.resolved_data_dir / Path(str(mask["mask_path"]))
+    original_bytes = original_path.read_bytes()
 
     response = client.post(
         f"/api/v1/images/{image_id}/raster-mask-edits",
@@ -207,5 +212,17 @@ def test_eraser_rejects_empty_raster_mask(client: TestClient) -> None:
             "strokes": [{"points": [{"x": 20, "y": 20}]}],
         },
     )
-    assert response.status_code == 400
-    assert "empty mask" in response.json()["detail"]
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["mask_annotation"]["deleted_at"] is not None
+    assert payload["mask_annotation"]["revision"] == 2
+    assert payload["mask_annotation"]["provenance_json"]["deleted_by_full_erase"] is True
+    assert payload["image"]["annotation_revision"] == 2
+
+    session = client.get(f"/api/v1/images/{image_id}/annotations")
+    assert session.status_code == 200, session.text
+    assert session.json()["mask_annotations"] == []
+
+    assert original_path.is_file()
+    assert original_path.read_bytes() == original_bytes
