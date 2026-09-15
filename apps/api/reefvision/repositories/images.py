@@ -58,21 +58,39 @@ class ImageRepository:
         statement = (
             select(ImageAsset.id)
             .where(ImageAsset.project_id == project_id)
-            .order_by(ImageAsset.created_at.desc(), ImageAsset.id)
+            .order_by(
+                ImageAsset.created_at.desc(),
+                func.lower(ImageAsset.original_filename).desc(),
+                ImageAsset.id.asc(),
+            )
         )
         return list(self.session.scalars(statement))
 
     def neighbor_ids_for_image(self, image: ImageAsset) -> tuple[str | None, str | None]:
+        current_name = func.lower(image.original_filename)
+        image_name = func.lower(ImageAsset.original_filename)
         previous_statement = (
             select(ImageAsset.id)
             .where(
                 ImageAsset.project_id == image.project_id,
                 or_(
                     ImageAsset.created_at > image.created_at,
-                    and_(ImageAsset.created_at == image.created_at, ImageAsset.id < image.id),
+                    and_(
+                        ImageAsset.created_at == image.created_at,
+                        image_name > current_name,
+                    ),
+                    and_(
+                        ImageAsset.created_at == image.created_at,
+                        image_name == current_name,
+                        ImageAsset.id < image.id,
+                    ),
                 ),
             )
-            .order_by(ImageAsset.created_at.asc(), ImageAsset.id.desc())
+            .order_by(
+                ImageAsset.created_at.asc(),
+                image_name.asc(),
+                ImageAsset.id.desc(),
+            )
             .limit(1)
         )
         next_statement = (
@@ -81,10 +99,22 @@ class ImageRepository:
                 ImageAsset.project_id == image.project_id,
                 or_(
                     ImageAsset.created_at < image.created_at,
-                    and_(ImageAsset.created_at == image.created_at, ImageAsset.id > image.id),
+                    and_(
+                        ImageAsset.created_at == image.created_at,
+                        image_name < current_name,
+                    ),
+                    and_(
+                        ImageAsset.created_at == image.created_at,
+                        image_name == current_name,
+                        ImageAsset.id > image.id,
+                    ),
                 ),
             )
-            .order_by(ImageAsset.created_at.desc(), ImageAsset.id.asc())
+            .order_by(
+                ImageAsset.created_at.desc(),
+                image_name.desc(),
+                ImageAsset.id.asc(),
+            )
             .limit(1)
         )
         previous_image_id = self.session.scalar(previous_statement)
