@@ -30,7 +30,10 @@ import {
 } from "./maskDocumentOperations";
 import { MaskMeasurementPanel } from "./MaskMeasurementPanel";
 import { PolygonMaskLayer, polygonMaskFromPoints } from "./PolygonMaskLayer";
-import { generatePolygonFill } from "./rasterMaskApi";
+import {
+  generatePolygonFill,
+  generateSmartClosePolygon,
+} from "./rasterMaskApi";
 import { RotatedBoxLayer } from "./RotatedBoxLayer";
 import type {
   AnnotationDocument,
@@ -60,7 +63,7 @@ export function MaskAnnotationWorkspace({
 }: MaskAnnotationWorkspaceProps) {
   const queryClient = useQueryClient();
   const [centerlineEditing, setCenterlineEditing] = useState(false);
-  const [fillTolerance, setFillTolerance] = useState(24);
+  const [smartCloseStrength, setSmartCloseStrength] = useState(0);
   const [fillPending, setFillPending] = useState(false);
   const [fillError, setFillError] = useState<string | null>(null);
   const fillRequestRef = useRef<AbortController | null>(null);
@@ -196,7 +199,7 @@ export function MaskAnnotationWorkspace({
     try {
       const result = await generatePolygonFill(
         imageId,
-        { seed, tolerance: fillTolerance },
+        { seed, tolerance: 24 },
         controller.signal,
       );
       if (controller.signal.aborted) return;
@@ -227,6 +230,63 @@ export function MaskAnnotationWorkspace({
       if (!controller.signal.aborted)
         setFillError(
           error instanceof Error ? error.message : "Polygon Fill failed",
+        );
+    } finally {
+      if (fillRequestRef.current === controller) {
+        fillRequestRef.current = null;
+        setFillPending(false);
+      }
+    }
+  }
+
+  async function smartClosePolygon(seed: Point) {
+    const labelClassId = stateRef.current.activeClassId;
+    const image = sessionQuery.data?.image;
+    if (
+      !labelClassId ||
+      !image ||
+      loadedImageIdRef.current !== imageId ||
+      fillRequestRef.current
+    )
+      return;
+    const controller = new AbortController();
+    fillRequestRef.current = controller;
+    setFillPending(true);
+    setFillError(null);
+    try {
+      const result = await generateSmartClosePolygon(
+        imageId,
+        { seed, closure_strength: smartCloseStrength },
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      const points = result.points;
+      if (
+        !Array.isArray(points) ||
+        points.length < 3 ||
+        points.some(
+          (point) =>
+            !point ||
+            !Number.isFinite(point.x) ||
+            !Number.isFinite(point.y) ||
+            point.x < 0 ||
+            point.y < 0 ||
+            point.x > image.width_px ||
+            point.y > image.height_px,
+        ) ||
+        Math.abs(
+          points.reduce((sum, point, index) => {
+            const next = points[(index + 1) % points.length];
+            return sum + point.x * next.y - next.x * point.y;
+          }, 0),
+        ) === 0
+      )
+        throw new Error("Smart Close returned an invalid or empty polygon");
+      createMask(polygonMaskFromPoints(points, labelClassId));
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setFillError(
+          error instanceof Error ? error.message : "Smart Close failed",
         );
     } finally {
       if (fillRequestRef.current === controller) {
@@ -410,6 +470,19 @@ export function MaskAnnotationWorkspace({
           </button>
           <button
             type="button"
+            className="visually-hidden"
+            data-testid="activate-smart-close-tool"
+            title="Predict and close a weak or broken opening boundary"
+            disabled={state.activeClassId === null}
+            onClick={() => {
+              setCenterlineEditing(false);
+              dispatch({ type: "setTool", tool: "smart_close" });
+            }}
+          >
+            Smart Close
+          </button>
+          <button
+            type="button"
             className={state.tool === "rotated_box" ? "active" : "secondary"}
             data-testid="activate-rotated-box-tool"
             title="Draw, move, resize, and rotate an oriented bounding box"
@@ -496,28 +569,50 @@ export function MaskAnnotationWorkspace({
             )}
             {state.tool === "fill" && (
               <>
-                <label>
-                  Fill tolerance
-                  <input
-                    type="range"
-                    min={0}
-                    max={255}
-                    step={1}
-                    value={fillTolerance}
-                    onChange={(event) =>
-                      setFillTolerance(Number(event.target.value))
-                    }
-                  />
-                  <output>{fillTolerance}</output>
-                </label>
                 <p className="annotation-helper">
-                  Click inside each hole or enclosed region to create one
-                  separate countable polygon object. Tolerance is the maximum
-                  RGB channel difference from the seed (0–255); higher values
-                  include a wider range of neighboring pixels.
+                  Exact Fill follows the connected image region around your
+                  click and creates one editable polygon. Use Smart Close when
+                  the opening has weak, broken, or incomplete edges.
                 </p>
                 {fillPending && (
                   <p role="status">Finding connected region...</p>
+                )}
+                {fillError && (
+                  <p role="alert" className="form-error">
+                    {fillError}
+                  </p>
+                )}
+              </>
+            )}
+            {state.tool === "smart_close" && (
+              <>
+                <label>
+                  Closure strength
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={smartCloseStrength}
+                    aria-label="Closure strength"
+                    onChange={(event) =>
+                      setSmartCloseStrength(Number(event.target.value))
+                    }
+                  />
+                  <output>
+                    {smartCloseStrength === 0
+                      ? "Full opening"
+                      : `${smartCloseStrength}%`}
+                  </output>
+                </label>
+                <p className="annotation-helper">
+                  Click inside the opening. The lowest setting favors the full
+                  visible opening. Increase Closure strength to bridge narrower
+                  weak or broken boundary gaps and produce a tighter closed
+                  prediction.
+                </p>
+                {fillPending && (
+                  <p role="status">Predicting closed boundary...</p>
                 )}
                 {fillError && (
                   <p role="alert" className="form-error">
@@ -676,7 +771,11 @@ export function MaskAnnotationWorkspace({
                   dispatch({ type: "setMaskSelection", selection })
                 }
                 onDeleteMaskIds={deleteMasks}
-                onFill={(seed) => void fillPolygon(seed)}
+                onFill={(seed) =>
+                  void (state.tool === "smart_close"
+                    ? smartClosePolygon(seed)
+                    : fillPolygon(seed))
+                }
               />
               {state.tool === "rotated_box" && (
                 <RotatedBoxLayer
