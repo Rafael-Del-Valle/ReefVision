@@ -199,7 +199,7 @@ describe("Gallery", () => {
 
     expect(await screen.findByText("1 files processed")).toBeInTheDocument();
     expect(screen.getByText("1 imported")).toBeInTheDocument();
-
+  });
 
   it("splits large image selections into bounded import batches", async () => {
     const batchSizes: number[] = [];
@@ -252,6 +252,5 @@ describe("Gallery", () => {
 
     expect(await screen.findByText("21 files processed")).toBeInTheDocument();
     expect(batchSizes).toEqual([10, 10, 1]);
-  });
   });
 });
