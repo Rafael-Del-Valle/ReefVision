@@ -151,6 +151,9 @@ def _load_source_image(
             source.load()
             if source.size != expected_size:
                 raise ValidationError("Source image dimensions do not match the raster mask")
+            if source.mode in {"I;16", "I;16L", "I;16B"}:
+                normalized = source.point(lambda value: value / 257).convert("L")
+                return cast(Image.Image, normalized.convert("RGB"))
             return cast(Image.Image, source.convert("RGB"))
     except (OSError, UnidentifiedImageError) as exc:
         raise ValidationError("The managed source image could not be read") from exc
