@@ -145,9 +145,10 @@ describe("EnhancedAnnotationEditor", () => {
 
     expect(screen.getByTestId("mask-workspace")).toBeInTheDocument();
     expect(screen.getByTestId("mask-initial-tool")).toHaveTextContent("fill");
-    expect(
-      screen.getByTestId("enhanced-annotation-editor"),
-    ).toHaveAttribute("data-active-annotation-type", "masks");
+    expect(screen.getByTestId("enhanced-annotation-editor")).toHaveAttribute(
+      "data-active-annotation-type",
+      "masks",
+    );
     expect(screen.getByTestId("open-fill-object-tool")).toHaveClass("active");
     expect(screen.getByTestId("open-polygon-tool")).not.toHaveClass("active");
   });

@@ -1,4 +1,4 @@
-﻿import { expect, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
@@ -379,7 +379,6 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
   await page.getByTestId("open-polygon-tool").click();
   await expect(page.getByTestId("mask-workspace")).toBeVisible();
 
-  await page.getByTestId("activate-polygon-tool").click();
   const layer = page.getByTestId("polygon-mask-layer");
   const layerBox = await layer.boundingBox();
   if (!layerBox) throw new Error("Polygon layer geometry is unavailable");
@@ -403,7 +402,7 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
     .getAttribute("data-mask-id");
   if (!maskId) throw new Error("Created polygon did not receive an ID");
 
-  await page.getByTestId("activate-mask-select-tool").click();
+  await page.getByTestId("move-polygon-nodes").click();
   await layer.locator(`g[data-mask-id="${maskId}"] polygon`).click();
   await expect(
     page.locator(`[data-testid^="mask-vertex-${maskId}-"]`),
@@ -521,7 +520,7 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
   await page.getByTestId("open-polygon-tool").click();
   await expect(page.getByTestId("mask-workspace")).toBeVisible();
   await expect(page.locator(`g[data-mask-id="${maskId}"]`)).toHaveCount(1);
-  await page.getByTestId("activate-mask-select-tool").click();
+  await page.getByTestId("move-polygon-nodes").click();
   await page.locator(`g[data-mask-id="${maskId}"] polygon`).click();
   await expect(page.locator(".annotation-selection-row strong")).toHaveText(
     "Muricea Open",
@@ -532,4 +531,3 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
     page.getByRole("button", { name: /Muricea Closed \| r2/ }),
   ).toBeVisible();
 });
-

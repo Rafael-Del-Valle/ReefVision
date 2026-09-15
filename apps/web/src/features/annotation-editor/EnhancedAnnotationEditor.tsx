@@ -284,7 +284,9 @@ export function EnhancedAnnotationEditor({
   function activatePolygonTool() {
     if (workspace === "masks") {
       document
-        .querySelector<HTMLButtonElement>('[data-testid="activate-polygon-tool"]')
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="activate-polygon-tool"]',
+        )
         ?.click();
       return;
     }

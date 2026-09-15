@@ -160,9 +160,10 @@ it.each(["raster", "boxes"] as const)(
     await mountEnhancedWithFill();
     navigateEnhanced(destination);
     expect(screen.getByTestId("mask-workspace")).toBeInTheDocument();
-    expect(
-      screen.getByTestId("enhanced-annotation-editor"),
-    ).toHaveAttribute("data-active-annotation-type", "masks");
+    expect(screen.getByTestId("enhanced-annotation-editor")).toHaveAttribute(
+      "data-active-annotation-type",
+      "masks",
+    );
     await waitFor(() => expect(saveAnnotations).toHaveBeenCalledTimes(1));
     expect(vi.mocked(saveAnnotations).mock.calls[0][1]).toMatchObject({
       mask_annotations: [{ geometry_kind: "polygon", points }],
@@ -188,9 +189,10 @@ it.each(["raster", "boxes"] as const)(
     await mountEnhancedWithFill();
     navigateEnhanced(destination);
     await screen.findByText("Save unavailable");
-    expect(
-      screen.getByTestId("enhanced-annotation-editor"),
-    ).toHaveAttribute("data-active-annotation-type", "masks");
+    expect(screen.getByTestId("enhanced-annotation-editor")).toHaveAttribute(
+      "data-active-annotation-type",
+      "masks",
+    );
     expect(screen.getByText("1 masks")).toBeInTheDocument();
   },
 );
@@ -243,10 +245,7 @@ it("uses a separate Smart Close tool with full-opening strength at zero", async 
   await waitFor(() => expect(screen.getByText("1 masks")).toBeInTheDocument());
   expect(
     vi.mocked(generateSmartClosePolygon).mock.calls[0].slice(0, 2),
-  ).toEqual([
-    "image-1",
-    { seed: { x: 20, y: 20 }, closure_strength: 0 },
-  ]);
+  ).toEqual(["image-1", { seed: { x: 20, y: 20 }, closure_strength: 0 }]);
   expect(generatePolygonFill).not.toHaveBeenCalled();
 
   fireEvent.change(screen.getByLabelText("Auto-close tolerance"), {

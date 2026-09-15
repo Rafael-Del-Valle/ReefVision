@@ -317,7 +317,9 @@ export function RasterMaskWorkspace({
             </div>
             <div className="annotation-selection-list">
               {rasterMasks.length === 0 && (
-                <p>Your first stroke will create the first painted mask object.</p>
+                <p>
+                  Your first stroke will create the first painted mask object.
+                </p>
               )}
               {rasterMasks.map((mask) => {
                 const labelClass = session.label_classes.find(

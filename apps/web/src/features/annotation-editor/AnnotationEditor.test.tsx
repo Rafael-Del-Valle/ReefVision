@@ -406,7 +406,9 @@ describe("AnnotationEditor", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Delete selection" }),
     );
-    expect(screen.queryByTestId("mask-annotation-mask-1")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("mask-annotation-mask-1"),
+    ).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Save now" }));
     await waitFor(() =>

@@ -1,13 +1,7 @@
 import type { AnnotationRecord, AnnotationStatus } from "../../api/client";
 
 export type EditorTool =
-  | "select"
-  | "pan"
-  | "box"
-  | "polygon"
-  | "rotated_box"
-  | "fill"
-  | "smart_close";
+  "select" | "pan" | "box" | "polygon" | "rotated_box" | "fill" | "smart_close";
 
 export interface Point {
   x: number;

@@ -1172,10 +1172,7 @@ export function AnnotationEditor({
   );
 
   const deleteSelection = useCallback(() => {
-    if (
-      state.selectedIds.length === 0 &&
-      state.selectedMaskIds.length === 0
-    ) {
+    if (state.selectedIds.length === 0 && state.selectedMaskIds.length === 0) {
       return;
     }
     const withoutBoxes = {
@@ -2529,9 +2526,9 @@ export function AnnotationEditor({
               </div>
             </div>
             <p className="annotation-helper">
-              Wheel to zoom. Right-drag to pan. Ctrl/Cmd-click to build a
-              mixed selection of boxes and masks. Polygon, Fill, Smart Close,
-              and Brush masks remain visible in Select mode.
+              Wheel to zoom. Right-drag to pan. Ctrl/Cmd-click to build a mixed
+              selection of boxes and masks. Polygon, Fill, Smart Close, and
+              Brush masks remain visible in Select mode.
             </p>
             <button
               type="button"
@@ -2602,9 +2599,7 @@ export function AnnotationEditor({
                 })}
               {state.document.maskAnnotations
                 .filter((mask) =>
-                  (
-                    labelClassesById.get(mask.label_class_id ?? "")?.name ?? ""
-                  )
+                  (labelClassesById.get(mask.label_class_id ?? "")?.name ?? "")
                     .toLowerCase()
                     .includes(objectFilter.toLowerCase()),
                 )

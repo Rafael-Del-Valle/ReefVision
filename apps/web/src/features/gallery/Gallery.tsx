@@ -1,11 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  FormEvent,
-  KeyboardEvent,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 
 import {
   cancelJob,
@@ -288,7 +282,11 @@ export function Gallery({
       setReport(null);
       setImportProgress({ processed: 0, total: files.length });
 
-      for (let index = 0; index < files.length; index += IMAGE_IMPORT_BATCH_SIZE) {
+      for (
+        let index = 0;
+        index < files.length;
+        index += IMAGE_IMPORT_BATCH_SIZE
+      ) {
         const batch = files.slice(index, index + IMAGE_IMPORT_BATCH_SIZE);
         const result = await importImages(project.id, batch);
         combined.successful.push(...result.successful);

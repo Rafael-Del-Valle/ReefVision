@@ -845,7 +845,6 @@ select:hover {
   background: rgba(114, 219, 201, 0.08);
 }
 
-
 .annotation-editor-sidebar {
   grid-area: inspector;
   border-right: 0;
