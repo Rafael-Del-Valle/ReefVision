@@ -248,7 +248,14 @@ export function EnhancedAnnotationEditor({
         onClose={onClose}
       />
     );
-  }, [activeImageId, launchContext, onClose, project, workspace]);
+  }, [
+    activeImageId,
+    launchContext,
+    maskInitialTool,
+    onClose,
+    project,
+    workspace,
+  ]);
 
   function activateFillObjectTool() {
     if (workspace === "masks") {
