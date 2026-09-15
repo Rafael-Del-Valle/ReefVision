@@ -236,7 +236,7 @@ it("fills in source coordinates as a normal polygon with selection, undo, redo, 
 it("uses a separate Smart Close tool with full-opening strength at zero", async () => {
   await mount();
   fireEvent.click(screen.getByTestId("activate-smart-close-tool"));
-  expect(screen.getByLabelText("Closure strength")).toHaveValue("0");
+  expect(screen.getByLabelText("Auto-close tolerance")).toHaveValue("0");
   expect(screen.getByText("Full opening")).toBeInTheDocument();
 
   seed();
@@ -249,7 +249,7 @@ it("uses a separate Smart Close tool with full-opening strength at zero", async 
   ]);
   expect(generatePolygonFill).not.toHaveBeenCalled();
 
-  fireEvent.change(screen.getByLabelText("Closure strength"), {
+  fireEvent.change(screen.getByLabelText("Auto-close tolerance"), {
     target: { value: "60" },
   });
   expect(screen.getByText("60%")).toBeInTheDocument();
