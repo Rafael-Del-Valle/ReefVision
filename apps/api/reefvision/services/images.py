@@ -187,6 +187,7 @@ class ImageService:
         filename: str | None,
         annotation_status: str | None,
         group_key: str | None,
+        sort_by: str,
     ) -> ImagePageResponse:
         self._project(project_id)
         if annotation_status and annotation_status not in ANNOTATION_STATUSES:
@@ -198,6 +199,7 @@ class ImageService:
             filename=filename,
             annotation_status=annotation_status,
             group_key=group_key,
+            sort_by=sort_by,
         )
         return ImagePageResponse(
             items=[ImageListItemResponse.model_validate(item) for item in items],
