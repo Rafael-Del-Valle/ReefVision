@@ -124,17 +124,22 @@ async function mountEnhancedWithFill() {
       />
     </QueryClientProvider>,
   );
-  fireEvent.change(screen.getByTestId("annotation-type-select"), {
-    target: { value: "masks" },
-  });
-  await screen.findByTestId("activate-polygon-fill-tool");
-  fireEvent.click(screen.getByTestId("activate-polygon-fill-tool"));
+  fireEvent.click(screen.getByTestId("open-fill-object-tool"));
+  await screen.findByTestId("mask-workspace");
   seed();
   await screen.findByText("1 masks");
 }
 
-it.each(["raster", "boxes"])(
-  "saves an unsaved Fill before dropdown navigation to %s",
+function navigateEnhanced(destination: "raster" | "boxes") {
+  fireEvent.click(
+    screen.getByTestId(
+      destination === "raster" ? "open-brush-tool" : "open-box-workspace",
+    ),
+  );
+}
+
+it.each(["raster", "boxes"] as const)(
+  "saves an unsaved Fill before left-rail navigation to %s",
   async (destination) => {
     let finishSave!: (
       response: Awaited<ReturnType<typeof saveAnnotations>>,
@@ -145,11 +150,11 @@ it.each(["raster", "boxes"])(
       }),
     );
     await mountEnhancedWithFill();
-    fireEvent.change(screen.getByTestId("annotation-type-select"), {
-      target: { value: destination },
-    });
+    navigateEnhanced(destination);
     expect(screen.getByTestId("mask-workspace")).toBeInTheDocument();
-    expect(screen.getByTestId("annotation-type-select")).toHaveValue("masks");
+    expect(
+      screen.getByTestId("enhanced-annotation-editor"),
+    ).toHaveAttribute("data-active-annotation-type", "masks");
     await waitFor(() => expect(saveAnnotations).toHaveBeenCalledTimes(1));
     expect(vi.mocked(saveAnnotations).mock.calls[0][1]).toMatchObject({
       mask_annotations: [{ geometry_kind: "polygon", points }],
@@ -167,17 +172,17 @@ it.each(["raster", "boxes"])(
   },
 );
 
-it.each(["raster", "boxes"])(
-  "keeps unsaved Fill when dropdown navigation to %s cannot save",
+it.each(["raster", "boxes"] as const)(
+  "keeps unsaved Fill when left-rail navigation to %s cannot save",
   async (destination) => {
     vi.mocked(saveAnnotations).mockRejectedValue(new Error("Save unavailable"));
     vi.spyOn(window, "confirm").mockReturnValue(false);
     await mountEnhancedWithFill();
-    fireEvent.change(screen.getByTestId("annotation-type-select"), {
-      target: { value: destination },
-    });
+    navigateEnhanced(destination);
     await screen.findByText("Save unavailable");
-    expect(screen.getByTestId("annotation-type-select")).toHaveValue("masks");
+    expect(
+      screen.getByTestId("enhanced-annotation-editor"),
+    ).toHaveAttribute("data-active-annotation-type", "masks");
     expect(screen.getByText("1 masks")).toBeInTheDocument();
   },
 );
