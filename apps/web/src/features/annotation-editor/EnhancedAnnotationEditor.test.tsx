@@ -163,6 +163,7 @@ describe("EnhancedAnnotationEditor", () => {
     expect(screen.getByTestId("open-polygon-tool")).toBeInTheDocument();
     expect(screen.getByTestId("open-fill-object-tool")).toBeInTheDocument();
     expect(screen.getByTestId("open-brush-tool")).toBeInTheDocument();
+    expect(screen.getByTestId("mask-tool-group")).toBeInTheDocument();
 
     act(() => {
       queryClient.setQueryData(["annotation-session", "image-2"], {
@@ -182,6 +183,8 @@ describe("EnhancedAnnotationEditor", () => {
     expect(editor).toHaveAttribute("data-boxes-visible", "false");
     expect(editor).toHaveAttribute("data-polygons-visible", "true");
     expect(editor).toHaveAttribute("data-raster-visible", "false");
+    expect(screen.getByTestId("return-main-tools")).toBeInTheDocument();
+    expect(screen.getByTestId("polygon-edit-tool-group")).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("open-brush-tool"));
     expect(screen.getByTestId("raster-workspace")).toHaveTextContent("image-2");
@@ -190,7 +193,7 @@ describe("EnhancedAnnotationEditor", () => {
     expect(editor).toHaveAttribute("data-polygons-visible", "false");
     expect(editor).toHaveAttribute("data-raster-visible", "true");
 
-    fireEvent.click(screen.getByTestId("open-box-workspace"));
+    fireEvent.click(screen.getByTestId("return-main-tools"));
     expect(screen.getByTestId("box-workspace")).toHaveTextContent("image-2");
     expect(editor).toHaveAttribute("data-active-annotation-type", "boxes");
   });
