@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   getAnnotationSession,
-  imageContentUrl,
+  imageDisplayUrl,
   type AnnotationSession,
   type Project,
 } from "../../api/client";
@@ -347,7 +347,13 @@ export function RasterMaskWorkspace({
                   ? "Painting a separate raster mask"
                   : "Painting the initial raster mask"}
             </span>
-            <span>{mode === "paint" ? "Paint mode" : "Eraser mode"}</span>
+            <span>
+              {mode === "paint"
+                ? "Paint mode"
+                : mode === "erase"
+                  ? "Eraser mode"
+                  : "Fill mode"}
+            </span>
           </div>
           <div
             className="annotation-canvas-frame"
@@ -366,7 +372,7 @@ export function RasterMaskWorkspace({
               }}
             >
               <img
-                src={imageContentUrl(image.id)}
+                src={imageDisplayUrl(image.id)}
                 alt={image.original_filename}
                 draggable={false}
                 style={{ display: "block", width: "100%", height: "100%" }}
