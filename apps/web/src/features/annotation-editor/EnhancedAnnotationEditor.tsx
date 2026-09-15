@@ -268,7 +268,7 @@ export function EnhancedAnnotationEditor({
     workspace,
   ]);
 
-  function activateBoxWorkspace() {
+  function returnToMainTools() {
     setMaskInitialTool(undefined);
     if (workspace === "masks") {
       document
@@ -331,59 +331,76 @@ export function EnhancedAnnotationEditor({
   }
 
   const annotationControls = (
-    <div style={visibilityGroupStyle}>
+    <div
+      className={
+        workspace === "boxes"
+          ? "annotation-tool-extension"
+          : "annotation-tool-submenu"
+      }
+    >
       {workspace !== "boxes" && (
         <button
           type="button"
-          className="secondary"
-          data-testid="open-box-workspace"
-          title="Switch to bounding-box annotation"
-          onClick={activateBoxWorkspace}
+          className="secondary annotation-tool-back"
+          data-testid="return-main-tools"
+          title="Return to the main annotation tools"
+          onClick={returnToMainTools}
         >
-          <span aria-hidden="true">□</span>
-          <small>Boxes</small>
+          <span aria-hidden="true">←</span>
+          <small>Main</small>
         </button>
       )}
-      <button
-        type="button"
-        className={
-          workspace === "masks" && activeMaskTool === "polygon"
-            ? "active"
-            : "secondary"
-        }
-        data-testid="open-polygon-tool"
-        title="Draw editable polygon objects"
-        onClick={activatePolygonTool}
-      >
-        <span aria-hidden="true">⬡</span>
-        <small>Polygon</small>
-      </button>
-      <button
-        type="button"
-        className={
-          workspace === "masks" && activeMaskTool === "fill"
-            ? "active"
-            : "secondary"
-        }
-        data-testid="open-fill-object-tool"
-        title="Click enclosed regions such as holes to create countable mask objects"
-        onClick={activateFillObjectTool}
-      >
-        <span aria-hidden="true">◉</span>
-        <small>Fill</small>
-      </button>
-      <button
-        type="button"
-        className={workspace === "raster" ? "active" : "secondary"}
-        data-testid="open-brush-tool"
-        title="Paint freehand mask objects"
-        onClick={activateBrushTool}
-      >
-        <span aria-hidden="true">✎</span>
-        <small>Brush</small>
-      </button>
+
+      <div className="annotation-tool-group" data-testid="mask-tool-group">
+        <span className="annotation-tool-group-label">
+          {workspace === "boxes" ? "Masks" : "Mask tools"}
+        </span>
+        <button
+          type="button"
+          className={
+            workspace === "masks" && activeMaskTool === "polygon"
+              ? "active"
+              : "secondary"
+          }
+          data-testid="open-polygon-tool"
+          title="Draw editable polygon objects"
+          onClick={activatePolygonTool}
+        >
+          <span aria-hidden="true">⬡</span>
+          <small>Polygon</small>
+        </button>
+        <button
+          type="button"
+          className={
+            workspace === "masks" && activeMaskTool === "fill"
+              ? "active"
+              : "secondary"
+          }
+          data-testid="open-fill-object-tool"
+          title="Click enclosed regions such as holes to create countable mask objects"
+          onClick={activateFillObjectTool}
+        >
+          <span aria-hidden="true">◉</span>
+          <small>Fill</small>
+        </button>
+        <button
+          type="button"
+          className={workspace === "raster" ? "active" : "secondary"}
+          data-testid="open-brush-tool"
+          title="Paint freehand mask objects"
+          onClick={activateBrushTool}
+        >
+          <span aria-hidden="true">✎</span>
+          <small>Brush</small>
+        </button>
+      </div>
+
       {workspace === "masks" && (
-        <>
+        <div
+          className="annotation-tool-group annotation-tool-edit-group"
+          data-testid="polygon-edit-tool-group"
+        >
+          <span className="annotation-tool-group-label">Polygon edit</span>
           <button
             type="button"
             className={vertexEditMode === "move" ? "active" : "secondary"}
@@ -392,7 +409,7 @@ export function EnhancedAnnotationEditor({
             onClick={() => activateVertexEditMode("move")}
           >
             <span aria-hidden="true">↔</span>
-            <small>Move node</small>
+            <small>Move</small>
           </button>
           <button
             type="button"
@@ -402,7 +419,7 @@ export function EnhancedAnnotationEditor({
             onClick={() => activateVertexEditMode("insert")}
           >
             <span aria-hidden="true">＋</span>
-            <small>Add node</small>
+            <small>Add</small>
           </button>
           <button
             type="button"
@@ -412,9 +429,9 @@ export function EnhancedAnnotationEditor({
             onClick={() => activateVertexEditMode("delete")}
           >
             <span aria-hidden="true">−</span>
-            <small>Del node</small>
+            <small>Delete</small>
           </button>
-        </>
+        </div>
       )}
     </div>
   );
