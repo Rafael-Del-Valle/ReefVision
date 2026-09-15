@@ -396,7 +396,7 @@ describe("AnnotationEditor", () => {
 
     const mask = await screen.findByTestId("mask-annotation-mask-1");
     expect(mask).toBeVisible();
-    expect(screen.getByText("Polygon / Fill")).toBeInTheDocument();
+    expect(screen.getByText(/Polygon \/ Fill/)).toBeInTheDocument();
 
     fireEvent.pointerDown(mask, { button: 0 });
     expect(
