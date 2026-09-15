@@ -297,7 +297,11 @@ def smart_close_polygon_from_source(
         lambda value: 255 if abs(int(value) - seed_value) <= intensity_tolerance else 0
     )
 
-    radius = round(closure_strength / 12)
+    max_radius = max(
+        1,
+        min(32, round(min(source.width, source.height) * 0.015)),
+    )
+    radius = round(max_radius * (closure_strength / 100))
     if radius > 0:
         kernel = radius * 2 + 1
         # Opening the candidate region severs narrow connections from the
