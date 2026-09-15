@@ -50,6 +50,7 @@ vi.mock("./MaskAnnotationWorkspace", () => ({
       </button>
       <button data-testid="activate-polygon-tool">Polygon</button>
       <button data-testid="activate-polygon-fill-tool">Fill object</button>
+      <button data-testid="activate-smart-close-tool">Smart Close</button>
       <button data-mask-workspace-destination="boxes" onClick={onReturnToBoxes}>
         Boxes
       </button>
@@ -151,6 +152,22 @@ describe("EnhancedAnnotationEditor", () => {
     expect(screen.getByTestId("open-polygon-tool")).not.toHaveClass("active");
   });
 
+  it("opens Smart Close as a separate active mask tool", () => {
+    renderEditor();
+
+    fireEvent.click(screen.getByTestId("open-smart-close-tool"));
+
+    expect(screen.getByTestId("mask-workspace")).toBeInTheDocument();
+    expect(screen.getByTestId("mask-initial-tool")).toHaveTextContent(
+      "smart_close",
+    );
+    expect(screen.getByTestId("open-smart-close-tool")).toHaveClass("active");
+    expect(screen.getByTestId("open-fill-object-tool")).not.toHaveClass(
+      "active",
+    );
+    expect(screen.getByTestId("open-polygon-tool")).not.toHaveClass("active");
+  });
+
   it("uses the left tool rail to switch annotation workspaces", async () => {
     const { queryClient, project } = renderEditor();
     const editor = screen.getByTestId("enhanced-annotation-editor");
@@ -162,6 +179,7 @@ describe("EnhancedAnnotationEditor", () => {
     expect(editor).toHaveAttribute("data-raster-visible", "false");
     expect(screen.getByTestId("open-polygon-tool")).toBeInTheDocument();
     expect(screen.getByTestId("open-fill-object-tool")).toBeInTheDocument();
+    expect(screen.getByTestId("open-smart-close-tool")).toBeInTheDocument();
     expect(screen.getByTestId("open-brush-tool")).toBeInTheDocument();
     expect(screen.getByTestId("mask-tool-group")).toBeInTheDocument();
 
