@@ -125,11 +125,11 @@ export function RasterMaskWorkspace({
     return (
       <div className="annotation-editor-shell">
         <div className="annotation-editor-splash">
-          <h2>Loading raster workspace</h2>
+          <h2>Loading brush workspace</h2>
           <p>
             {sessionQuery.error instanceof Error
               ? sessionQuery.error.message
-              : "Preparing image and raster masks..."}
+              : "Preparing image and painted mask objects..."}
           </p>
           <button type="button" onClick={onClose}>
             Close
@@ -149,7 +149,7 @@ export function RasterMaskWorkspace({
     >
       <header className="annotation-editor-topbar">
         <div>
-          <p className="eyebrow">Revision-safe raster mask editor</p>
+          <p className="eyebrow">Brush mask editor</p>
           <h2>{image.original_filename}</h2>
           <p className="annotation-editor-subtitle">
             {project.name} | revision {image.annotation_revision}
@@ -310,7 +310,7 @@ export function RasterMaskWorkspace({
             </div>
             <div className="annotation-selection-list">
               {rasterMasks.length === 0 && (
-                <p>Your first stroke will create the initial raster mask.</p>
+                <p>Your first stroke will create the first painted mask object.</p>
               )}
               {rasterMasks.map((mask) => {
                 const labelClass = session.label_classes.find(
@@ -343,10 +343,10 @@ export function RasterMaskWorkspace({
           <div className="annotation-nav">
             <span>
               {selectedMask
-                ? `Editing raster revision ${selectedMask.revision}`
+                ? `Editing painted object revision ${selectedMask.revision}`
                 : createAnotherMaskRequested
-                  ? "Painting a separate raster mask"
-                  : "Painting the initial raster mask"}
+                  ? "Painting a separate mask object"
+                  : "Painting the first mask object"}
             </span>
             <span>
               {mode === "paint"
