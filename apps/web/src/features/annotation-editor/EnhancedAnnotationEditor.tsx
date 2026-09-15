@@ -43,10 +43,6 @@ const fallbackToolbarStyle = {
   boxShadow: "0 0.75rem 2rem rgba(0, 0, 0, 0.45)",
 };
 
-const visibilityGroupStyle = {
-  display: "contents" as const,
-};
-
 function stopEditorEvent(event: Event) {
   event.preventDefault();
   event.stopPropagation();
