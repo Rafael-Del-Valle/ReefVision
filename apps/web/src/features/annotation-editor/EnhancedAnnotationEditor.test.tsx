@@ -26,14 +26,17 @@ vi.mock("./AnnotationEditor", () => ({
 vi.mock("./MaskAnnotationWorkspace", () => ({
   MaskAnnotationWorkspace: ({
     imageId,
+    initialTool,
     onOpenBrush,
     onReturnToBoxes,
   }: {
     imageId: string;
+    initialTool?: string;
     onOpenBrush: () => void;
     onReturnToBoxes: () => void;
   }) => (
     <div data-testid="mask-workspace">
+      <span data-testid="mask-initial-tool">{initialTool ?? "none"}</span>
       <button data-mask-workspace-destination="raster" onClick={onOpenBrush}>
         Brush
       </button>
@@ -121,6 +124,16 @@ describe("EnhancedAnnotationEditor", () => {
     polygonKeyHandler.mockClear();
     polygonInsertHandler.mockClear();
     vertexPointerHandler.mockClear();
+  });
+
+  it("opens Fill object directly in the mask workspace", () => {
+    renderEditor();
+
+    fireEvent.click(screen.getByTestId("open-fill-object-tool"));
+
+    expect(screen.getByTestId("mask-workspace")).toBeInTheDocument();
+    expect(screen.getByTestId("mask-initial-tool")).toHaveTextContent("fill");
+    expect(screen.getByLabelText("Annotation type")).toHaveValue("masks");
   });
 
   it("uses annotation type as the exclusive workspace and overlay filter", async () => {
