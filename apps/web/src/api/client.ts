@@ -1500,6 +1500,7 @@ export interface ImageFilters {
   filename?: string;
   annotationStatus?: string;
   groupKey?: string;
+  sortBy?: "newest" | "oldest" | "filename" | "annotations";
 }
 
 export class ApiRequestError extends Error {
@@ -1883,6 +1884,7 @@ export async function getImages(
     search.set("annotation_status", filters.annotationStatus);
   }
   if (filters.groupKey) search.set("group_key", filters.groupKey);
+  if (filters.sortBy) search.set("sort_by", filters.sortBy);
   return request<ImagePage>(`/projects/${projectId}/images?${search}`, {
     signal,
   });
