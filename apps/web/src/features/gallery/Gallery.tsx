@@ -42,6 +42,8 @@ const statuses: { value: AnnotationStatus | ""; label: string }[] = [
   { value: "excluded", label: "Excluded" },
 ];
 
+const IMAGE_IMPORT_BATCH_SIZE = 10;
+
 function ImageCard({
   image,
   selected,
@@ -221,6 +223,10 @@ export function Gallery({
     groupKey: "",
   });
   const [report, setReport] = useState<ImageImportReport | null>(null);
+  const [importProgress, setImportProgress] = useState<{
+    processed: number;
+    total: number;
+  } | null>(null);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [selectedModelId, setSelectedModelId] = useState("");
   const [confidenceThreshold, setConfidenceThreshold] = useState("0.25");
@@ -270,12 +276,44 @@ export function Gallery({
     },
   });
   const importer = useMutation({
-    mutationFn: (files: File[]) => importImages(project.id, files),
+    mutationFn: async (files: File[]) => {
+      const combined: ImageImportReport = {
+        project_id: project.id,
+        successful: [],
+        duplicates: [],
+        unsupported: [],
+        failed: [],
+      };
+      setReport(null);
+      setImportProgress({ processed: 0, total: files.length });
+
+      for (let index = 0; index < files.length; index += IMAGE_IMPORT_BATCH_SIZE) {
+        const batch = files.slice(index, index + IMAGE_IMPORT_BATCH_SIZE);
+        const result = await importImages(project.id, batch);
+        combined.successful.push(...result.successful);
+        combined.duplicates.push(...result.duplicates);
+        combined.unsupported.push(...result.unsupported);
+        combined.failed.push(...result.failed);
+
+        const processed = Math.min(index + batch.length, files.length);
+        setImportProgress({ processed, total: files.length });
+        setReport({
+          ...combined,
+          successful: [...combined.successful],
+          duplicates: [...combined.duplicates],
+          unsupported: [...combined.unsupported],
+          failed: [...combined.failed],
+        });
+      }
+
+      return combined;
+    },
     onSuccess: async (result) => {
       setReport(result);
       setPage(1);
       await queryClient.invalidateQueries({ queryKey: ["images", project.id] });
     },
+    onSettled: () => setImportProgress(null),
   });
   const inference = useMutation({
     mutationFn: () =>
@@ -397,8 +435,12 @@ export function Gallery({
     >
       {importer.isPending && (
         <LoadingState
-          title="Importing images"
-          description="ReefVision is validating files, checking duplicates, and creating managed copies."
+          title={
+            importProgress
+              ? `Importing images (${importProgress.processed}/${importProgress.total})`
+              : "Importing images"
+          }
+          description="ReefVision imports large selections in smaller batches while validating files, checking duplicates, and creating managed copies."
         />
       )}
       {importer.error && (
