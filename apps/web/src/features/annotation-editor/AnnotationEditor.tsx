@@ -1569,6 +1569,7 @@ export function AnnotationEditor({
 
       if (state.tool === "box" && activeClassId) {
         setSelection([]);
+        setMaskSelection([]);
         setInteraction({
           type: "drawing",
           start: point,
@@ -1578,8 +1579,16 @@ export function AnnotationEditor({
       }
 
       setSelection([]);
+      setMaskSelection([]);
     },
-    [activeClassId, currentView, imageSize, setSelection, state.tool],
+    [
+      activeClassId,
+      currentView,
+      imageSize,
+      setMaskSelection,
+      setSelection,
+      state.tool,
+    ],
   );
 
   const handleCanvasWheel = useCallback(
@@ -1647,6 +1656,9 @@ export function AnnotationEditor({
         : state.selectedIds.includes(annotationId)
           ? state.selectedIds
           : [annotationId];
+      if (!additive) {
+        setMaskSelection([]);
+      }
       setSelection(selection);
       const snapshot = Object.fromEntries(
         state.document.annotations
@@ -1664,6 +1676,7 @@ export function AnnotationEditor({
     [
       currentView,
       imageSize,
+      setMaskSelection,
       setSelection,
       state.document.annotations,
       state.selectedIds,
