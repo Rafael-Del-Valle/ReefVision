@@ -126,41 +126,76 @@ def test_polygon_fill_uses_16_bit_tiff_intensity_boundaries(client: TestClient) 
     ]
 
 
-def test_smart_close_strength_severs_narrow_opening_leak() -> None:
-    source = Image.new("RGB", (31, 31), "white")
+def test_smart_close_bridges_broken_circle_without_leaking_to_frame() -> None:
+    source = Image.new("RGB", (81, 81), "white")
     draw = ImageDraw.Draw(source)
-    draw.rectangle((8, 8, 22, 22), fill=(40, 40, 40))
-    draw.rectangle((0, 14, 8, 15), fill=(40, 40, 40))
+    draw.ellipse((20, 20, 60, 60), fill=(40, 40, 40))
+    draw.rectangle((0, 39, 20, 41), fill=(40, 40, 40))
 
-    full_opening = raster_edits.smart_close_polygon_from_source(
-        source,
-        seed_x=15,
-        seed_y=15,
-        closure_strength=0,
-    )
     closed = raster_edits.smart_close_polygon_from_source(
         source,
-        seed_x=15,
-        seed_y=15,
-        closure_strength=60,
+        seed_x=40,
+        seed_y=40,
+        closure_strength=0,
     )
 
-    assert min(x for x, _ in full_opening) == 0
-    assert min(x for x, _ in closed) > 0
-    assert max(x for x, _ in closed) <= 23
-    assert min(y for _, y in closed) >= 8
-    assert max(y for _, y in closed) <= 23
+    assert min(x for x, _ in closed) >= 18
+    assert max(x for x, _ in closed) <= 62
+    assert min(y for _, y in closed) >= 18
+    assert max(y for _, y in closed) <= 62
+    assert not any(x in {0, source.width - 1} for x, _ in closed)
 
 
-def test_smart_close_api_returns_editable_polygon(client: TestClient) -> None:
+def test_smart_close_tolerance_controls_bridgeable_gap_width() -> None:
+    source = Image.new("RGB", (81, 81), "white")
+    draw = ImageDraw.Draw(source)
+    draw.ellipse((20, 20, 60, 60), fill=(40, 40, 40))
+    draw.rectangle((0, 34, 20, 46), fill=(40, 40, 40))
+
+    with pytest.raises(ValidationError, match="gap wider"):
+        raster_edits.smart_close_polygon_from_source(
+            source,
+            seed_x=40,
+            seed_y=40,
+            closure_strength=0,
+        )
+
+    closed = raster_edits.smart_close_polygon_from_source(
+        source,
+        seed_x=40,
+        seed_y=40,
+        closure_strength=70,
+    )
+    assert min(x for x, _ in closed) >= 18
+    assert max(x for x, _ in closed) <= 62
+
+
+def test_smart_close_api_returns_editable_local_polygon(client: TestClient) -> None:
+    source = Image.new("RGB", (81, 81), "white")
+    draw = ImageDraw.Draw(source)
+    draw.ellipse((20, 20, 60, 60), fill=(40, 40, 40))
+    draw.rectangle((0, 39, 20, 41), fill=(40, 40, 40))
+    stream = BytesIO()
+    source.save(stream, format="PNG")
+
     project = create_project(client, "Smart Close")
-    image_id = import_one(client, project["id"])["successful"][0]["image_id"]
+    imported = client.post(
+        f"/api/v1/projects/{project['id']}/imports/images",
+        files=[("files", ("broken-circle.png", stream.getvalue(), "image/png"))],
+        data={"relative_paths": "broken-circle.png"},
+    )
+    assert imported.status_code == 200, imported.text
+    image_id = imported.json()["successful"][0]["image_id"]
+
     response = client.post(
         f"/api/v1/images/{image_id}/smart-close-polygon",
-        json={"seed": {"x": 20, "y": 20}, "closure_strength": 0},
+        json={"seed": {"x": 40, "y": 40}, "closure_strength": 0},
     )
     assert response.status_code == 200, response.text
-    assert len(response.json()["points"]) >= 3
+    points = response.json()["points"]
+    assert len(points) >= 8
+    assert min(point["x"] for point in points) >= 18
+    assert max(point["x"] for point in points) <= 62
 
 
 def test_polygon_fill_api_validates_inputs(client: TestClient) -> None:
