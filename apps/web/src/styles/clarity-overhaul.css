@@ -787,6 +787,9 @@ select:hover {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .annotation-tool-extension,
@@ -807,6 +810,18 @@ select:hover {
   margin-top: 0.35rem;
   padding-top: 0.55rem;
   border-top: 1px dashed rgba(182, 238, 228, 0.2);
+}
+
+.annotation-tool-group button {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.annotation-tool-group button small {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: center;
 }
 
 .annotation-tool-group-label {
