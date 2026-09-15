@@ -160,6 +160,24 @@ def commit_staged_image(staged_path: Path, destination: Path) -> None:
     os.replace(staged_path, destination)
 
 
+def create_browser_display(source: Path, destination: Path) -> None:
+    """Create a browser-safe, full-resolution PNG rendition without changing the source."""
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(destination.suffix + ".part")
+    temporary.unlink(missing_ok=True)
+    try:
+        with Image.open(source) as image:
+            display = image
+            if display.mode not in {"1", "L", "LA", "P", "RGB", "RGBA", "I", "I;16"}:
+                display = display.convert("RGB")
+            display.save(temporary, format="PNG", optimize=True)
+        os.replace(temporary, destination)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
 def create_thumbnail(source: Path, destination: Path, *, max_width: int, max_height: int) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".part")
