@@ -257,7 +257,7 @@ def _connected_binary_component(
     working = mask.convert("L").point(lambda value: 255 if value > 0 else 0)
     if working.getpixel((seed_x, seed_y)) == 0:
         raise ValidationError(
-            "Smart Close removed the clicked opening; reduce Closure strength"
+            "Smart Close removed the clicked opening; reduce Auto-close tolerance"
         )
     ImageDraw.floodfill(working, (seed_x, seed_y), 128, thresh=0)
     return working.point(lambda value: 255 if value == 128 else 0)
@@ -284,7 +284,7 @@ def smart_close_polygon_from_source(
     if not (0 <= seed_x < source.width and 0 <= seed_y < source.height):
         raise ValidationError("Smart Close seed must be inside the image")
     if not 0 <= closure_strength <= 100:
-        raise ValidationError("Closure strength must be between 0 and 100")
+        raise ValidationError("Auto-close tolerance must be between 0 and 100")
 
     grayscale = source.convert("L")
     seed_value = int(grayscale.getpixel((seed_x, seed_y)))
