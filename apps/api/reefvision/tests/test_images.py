@@ -226,7 +226,9 @@ def test_supported_image_formats_import(client: TestClient) -> None:
         assert client.get(f"/api/v1/images/{image_id}").json()["media_type"] == media_type
 
 
-def test_imports_16_bit_grayscale_tiff(client: TestClient) -> None:
+def test_imports_16_bit_grayscale_tiff(
+    client: TestClient, test_settings: Settings
+) -> None:
     project = create_project(client, "16-bit TIFF coverage")
     stream = BytesIO()
     Image.new("I;16", (64, 48), 2048).save(stream, format="TIFF")
@@ -241,12 +243,29 @@ def test_imports_16_bit_grayscale_tiff(client: TestClient) -> None:
 
     assert len(report["successful"]) == 1
     assert not report["failed"]
-    image_id = report["successful"][0]["image_id"]
+    item = report["successful"][0]
+    image_id = item["image_id"]
     image = client.get(f"/api/v1/images/{image_id}").json()
     assert image["media_type"] == "image/tiff"
     assert image["width_px"] == 64
     assert image["height_px"] == 48
     assert image["metadata_json"]["mode"] == "I;16"
+
+    display = client.get(f"/api/v1/images/{image_id}/display")
+    assert display.status_code == 200
+    assert display.headers["content-type"].startswith("image/png")
+    with Image.open(BytesIO(display.content)) as display_image:
+        assert display_image.size == (64, 48)
+        assert display_image.mode == "I;16"
+
+    app = cast(FastAPI, client.app)
+    factory = app.state.session_factory
+    assert process_thumbnail_job(test_settings, factory, item["thumbnail_job_id"])
+    thumbnail = client.get(f"/api/v1/images/{image_id}/thumbnail")
+    assert thumbnail.status_code == 200
+    with Image.open(BytesIO(thumbnail.content)) as thumbnail_image:
+        extrema = thumbnail_image.getextrema()
+        assert extrema != ((255, 255), (255, 255), (255, 255))
 
 
 def test_batch_imports_ten_images(client: TestClient) -> None:
