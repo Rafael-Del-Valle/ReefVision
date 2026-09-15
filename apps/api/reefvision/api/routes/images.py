@@ -88,6 +88,18 @@ def image_content(image_id: str, request: Request, session: DbSession) -> FileRe
     )
 
 
+@router.get("/images/{image_id}/display", response_class=FileResponse)
+def image_display(image_id: str, request: Request, session: DbSession) -> FileResponse:
+    image_service = service(request, session)
+    image = image_service.get_image_record(image_id)
+    path, media_type = image_service.display_path_for_image(image)
+    return FileResponse(
+        path,
+        media_type=media_type,
+        headers={"Cache-Control": IMMUTABLE_MEDIA_CACHE_CONTROL},
+    )
+
+
 @router.get("/images/{image_id}/thumbnail", response_class=FileResponse)
 def image_thumbnail(image_id: str, request: Request, session: DbSession) -> FileResponse:
     image_service = service(request, session)
