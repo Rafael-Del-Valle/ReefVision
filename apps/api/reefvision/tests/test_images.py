@@ -226,6 +226,29 @@ def test_supported_image_formats_import(client: TestClient) -> None:
         assert client.get(f"/api/v1/images/{image_id}").json()["media_type"] == media_type
 
 
+def test_imports_16_bit_grayscale_tiff(client: TestClient) -> None:
+    project = create_project(client, "16-bit TIFF coverage")
+    stream = BytesIO()
+    Image.new("I;16", (64, 48), 2048).save(stream, format="TIFF")
+
+    report = import_one(
+        client,
+        project["id"],
+        filename="microscopy-16bit.tif",
+        content=stream.getvalue(),
+        relative_path="microscopy/microscopy-16bit.tif",
+    )
+
+    assert len(report["successful"]) == 1
+    assert not report["failed"]
+    image_id = report["successful"][0]["image_id"]
+    image = client.get(f"/api/v1/images/{image_id}").json()
+    assert image["media_type"] == "image/tiff"
+    assert image["width_px"] == 64
+    assert image["height_px"] == 48
+    assert image["metadata_json"]["mode"] == "I;16"
+
+
 def test_batch_imports_ten_images(client: TestClient) -> None:
     project = create_project(client, "Batch import")
     files = []
