@@ -363,7 +363,7 @@ export function MaskAnnotationWorkspace({
           </button>
           <button
             type="button"
-            className={state.tool === "polygon" ? "active" : "secondary"}
+            className="visually-hidden"
             data-testid="activate-polygon-tool"
             title="Draw a polygon mask"
             onClick={() => {
@@ -376,7 +376,7 @@ export function MaskAnnotationWorkspace({
           {onOpenBrush && (
             <button
               type="button"
-              className="secondary"
+              className="visually-hidden"
               data-testid="activate-mask-brush-tool"
               data-mask-workspace-destination="raster"
               onClick={() => void leaveWorkspace("brush")}
@@ -387,7 +387,7 @@ export function MaskAnnotationWorkspace({
           )}
           <button
             type="button"
-            className={state.tool === "fill" ? "active" : "secondary"}
+            className="visually-hidden"
             data-testid="activate-polygon-fill-tool"
             title="Click an enclosed region to create one countable mask object"
             disabled={state.activeClassId === null}
@@ -433,7 +433,7 @@ export function MaskAnnotationWorkspace({
           </button>
           <button
             type="button"
-            className="secondary"
+            className="visually-hidden"
             onClick={() => void leaveWorkspace("boxes")}
             data-mask-workspace-destination="boxes"
           >
@@ -446,6 +446,7 @@ export function MaskAnnotationWorkspace({
       </header>
 
       <div className="annotation-editor-body">
+        <aside className="annotation-tool-rail" aria-label="Annotation tools" />
         <aside className="annotation-editor-sidebar">
           <section className="annotation-sidebar-section">
             <div className="section-heading">
