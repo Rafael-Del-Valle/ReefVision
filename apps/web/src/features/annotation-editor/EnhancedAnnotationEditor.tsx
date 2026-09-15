@@ -32,6 +32,9 @@ const fallbackToolbarStyle = {
   top: "5rem",
   left: "1rem",
   zIndex: 999999,
+  width: "4.6rem",
+  boxSizing: "border-box" as const,
+  overflowX: "hidden" as const,
   display: "flex",
   flexDirection: "column" as const,
   alignItems: "stretch",
@@ -58,10 +61,10 @@ export function EnhancedAnnotationEditor({
   const queryClient = useQueryClient();
   const [workspace, setWorkspace] = useState<EditorWorkspace>("boxes");
   const [maskInitialTool, setMaskInitialTool] = useState<
-    "polygon" | "fill" | undefined
+    "polygon" | "fill" | "smart_close" | undefined
   >(undefined);
   const [activeMaskTool, setActiveMaskTool] = useState<
-    "select" | "polygon" | "fill" | "rotated_box"
+    "select" | "polygon" | "fill" | "smart_close" | "rotated_box"
   >("select");
   const [vertexEditMode, setVertexEditMode] = useState<VertexEditMode>("move");
   const [activeImageId, setActiveImageId] = useState(initialImageId);
@@ -230,6 +233,7 @@ export function EnhancedAnnotationEditor({
               tool === "select" ||
               tool === "polygon" ||
               tool === "fill" ||
+              tool === "smart_close" ||
               tool === "rotated_box"
             ) {
               setActiveMaskTool(tool);
@@ -316,6 +320,20 @@ export function EnhancedAnnotationEditor({
     setWorkspace("masks");
   }
 
+  function activateSmartCloseTool() {
+    if (workspace === "masks") {
+      document
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="activate-smart-close-tool"]',
+        )
+        ?.click();
+      return;
+    }
+    setMaskInitialTool("smart_close");
+    setActiveMaskTool("smart_close");
+    setWorkspace("masks");
+  }
+
   function activateVertexEditMode(mode: VertexEditMode) {
     setVertexEditMode(mode);
     setActiveMaskTool("select");
@@ -378,6 +396,20 @@ export function EnhancedAnnotationEditor({
         >
           <span aria-hidden="true">◉</span>
           <small>Fill</small>
+        </button>
+        <button
+          type="button"
+          className={
+            workspace === "masks" && activeMaskTool === "smart_close"
+              ? "active"
+              : "secondary"
+          }
+          data-testid="open-smart-close-tool"
+          title="Predict a closed polygon around a weak or broken opening boundary"
+          onClick={activateSmartCloseTool}
+        >
+          <span aria-hidden="true">◎</span>
+          <small>Smart close</small>
         </button>
         <button
           type="button"
