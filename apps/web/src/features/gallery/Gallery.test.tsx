@@ -199,5 +199,59 @@ describe("Gallery", () => {
 
     expect(await screen.findByText("1 files processed")).toBeInTheDocument();
     expect(screen.getByText("1 imported")).toBeInTheDocument();
+
+
+  it("splits large image selections into bounded import batches", async () => {
+    const batchSizes: number[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes(`/projects/${project.id}/images`)) {
+        return jsonResponse({
+          items: [],
+          total: 0,
+          page: 1,
+          page_size: 24,
+          pages: 0,
+        });
+      }
+      if (url.endsWith(`/projects/${project.id}/imports/images`)) {
+        expect(init?.method).toBe("POST");
+        const formData = init?.body as FormData;
+        const files = formData.getAll("files") as File[];
+        batchSizes.push(files.length);
+        return jsonResponse({
+          project_id: project.id,
+          successful: files.map((file, index) => ({
+            filename: file.name,
+            relative_path: file.name,
+            status: "successful",
+            detail: null,
+            image_id: `image-batch-${batchSizes.length}-${index}`,
+            duplicate_image_id: null,
+            thumbnail_job_id: `thumbnail-batch-${batchSizes.length}-${index}`,
+          })),
+          duplicates: [],
+          unsupported: [],
+          failed: [],
+        });
+      }
+      throw new Error(`Unhandled request ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderGallery();
+    await screen.findByText("No images yet");
+    const files = Array.from(
+      { length: 21 },
+      (_, index) =>
+        new File(["image bytes"], `coral-${index + 1}.png`, {
+          type: "image/png",
+        }),
+    );
+
+    await userEvent.upload(screen.getByLabelText("Import files"), files);
+
+    expect(await screen.findByText("21 files processed")).toBeInTheDocument();
+    expect(batchSizes).toEqual([10, 10, 1]);
+  });
   });
 });
