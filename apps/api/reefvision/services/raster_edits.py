@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
 from reefvision.db.models import MaskAnnotation, MaskAnnotationEvent
+from reefvision.db.models.project import utc_now
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.repositories.images import ImageRepository
 from reefvision.repositories.mask_annotations import MaskAnnotationRepository
@@ -78,7 +79,45 @@ class RasterMaskEditService:
                 mode=payload.mode,
                 fill_tolerance=payload.fill_tolerance,
             )
+
+            if bounds is None:
+                if existing is None or payload.mode != "erase":
+                    raise ValidationError("Only an existing raster mask may be erased completely")
+                mask = existing
+                mask.deleted_at = utc_now()
+                mask.revision = next_revision
+                mask.provenance_json = {
+                    **(mask.provenance_json or {}),
+                    "last_edit_mode": payload.mode,
+                    "last_brush_radius": float(payload.brush_radius),
+                    "last_stroke_count": len(payload.strokes),
+                    "previous_mask_path": source_path,
+                    "deleted_by_full_erase": True,
+                }
+                self.masks.add_event(
+                    MaskAnnotationEvent(
+                        mask_annotation_id=mask.id,
+                        image_id=image.id,
+                        event_type="deleted",
+                        before_json=before,
+                        after_json=mask_annotation_snapshot(mask),
+                        actor="local_user",
+                    )
+                )
+                image.annotation_revision += 1
+                if image.annotation_status == "unannotated":
+                    image.annotation_status = "in_progress"
+                self.session.commit()
+                self.session.refresh(image)
+                self.session.refresh(mask)
+                return RasterMaskEditResponse(
+                    image=ImageResponse.model_validate(image),
+                    mask_annotation=MaskAnnotationResponse.model_validate(mask),
+                )
+
             x_min, y_min, x_max, y_max = bounds
+            if relative_path is None:
+                raise ValidationError("Raster mask revision path is missing")
             if existing is None:
                 mask = MaskAnnotation(
                     id=mask_id,
