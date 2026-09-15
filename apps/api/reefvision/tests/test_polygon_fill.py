@@ -96,6 +96,36 @@ def test_polygon_fill_preview_saves_as_normal_polygon(client: TestClient) -> Non
         assert reopened[key] == mask[key]
 
 
+def test_polygon_fill_uses_16_bit_tiff_intensity_boundaries(client: TestClient) -> None:
+    source = Image.new("I;16", (7, 7), 50000)
+    for y in range(2, 5):
+        for x in range(2, 5):
+            source.putpixel((x, y), 5000)
+    stream = BytesIO()
+    source.save(stream, format="TIFF")
+
+    project = create_project(client, "16-bit Fill Object")
+    imported = client.post(
+        f"/api/v1/projects/{project['id']}/imports/images",
+        files=[("files", ("holes-16bit.tif", stream.getvalue(), "image/tiff"))],
+        data={"relative_paths": "holes-16bit.tif"},
+    ).json()
+    image_id = imported["successful"][0]["image_id"]
+
+    response = client.post(
+        f"/api/v1/images/{image_id}/polygon-fill",
+        json={"seed": {"x": 3, "y": 3}, "tolerance": 0},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["points"] == [
+        {"x": 2.0, "y": 2.0},
+        {"x": 5.0, "y": 2.0},
+        {"x": 5.0, "y": 5.0},
+        {"x": 2.0, "y": 5.0},
+    ]
+
+
 def test_polygon_fill_api_validates_inputs(client: TestClient) -> None:
     project = create_project(client, "Fill invalid input")
     image_id = import_one(client, project["id"])["successful"][0]["image_id"]
