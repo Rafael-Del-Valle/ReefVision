@@ -20,6 +20,7 @@ from reefvision.storage.datasets import (
     safe_export_filename,
 )
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.raster_edits import polygon_from_binary_region
 
 if TYPE_CHECKING:
     from reefvision.db.models.dataset_version import DatasetVersion
@@ -113,6 +114,7 @@ def write_yolo_segmentation_export(
 
     split_counts = {split: 0 for split in EXPORT_SPLIT_DIRECTORIES}
     polygon_count = 0
+    vectorized_raster_count = 0
     skipped_raster_count = 0
     manifest_items: list[dict[str, Any]] = []
     ordered_items = sorted(
@@ -138,19 +140,45 @@ def write_yolo_segmentation_export(
         lines: list[str] = []
         item_polygon_count = 0
         item_skipped_rasters = 0
+        item_vectorized_rasters = 0
         for snapshot in item.mask_annotation_snapshot_json:
-            if snapshot.get("geometry_kind") != "polygon":
+            geometry_kind = snapshot.get("geometry_kind")
+            if geometry_kind == "polygon":
+                points = _normalized_polygon(
+                    snapshot,
+                    width=item.width_px,
+                    height=item.height_px,
+                )
+                if points is None:
+                    raise ValidationError(
+                        f"Dataset item {item.image_id} contains an invalid polygon snapshot"
+                    )
+            elif geometry_kind == "raster_mask":
+                raster = _verified_raster_mask(
+                    settings,
+                    snapshot,
+                    expected_size=(item.width_px, item.height_px),
+                )
+                try:
+                    raw_points = polygon_from_binary_region(raster)
+                except ValidationError:
+                    item_skipped_rasters += 1
+                    continue
+                points = [
+                    (
+                        min(max(float(x) / item.width_px, 0.0), 1.0),
+                        min(max(float(y) / item.height_px, 0.0), 1.0),
+                    )
+                    for x, y in raw_points
+                ]
+                if len(set(points)) < 3:
+                    item_skipped_rasters += 1
+                    continue
+                item_vectorized_rasters += 1
+            else:
                 item_skipped_rasters += 1
                 continue
-            points = _normalized_polygon(
-                snapshot,
-                width=item.width_px,
-                height=item.height_px,
-            )
-            if points is None:
-                raise ValidationError(
-                    f"Dataset item {item.image_id} contains an invalid polygon snapshot"
-                )
+
             coordinates = " ".join(
                 coordinate for x, y in points for coordinate in (f"{x:.8f}", f"{y:.8f}")
             )
@@ -158,6 +186,7 @@ def write_yolo_segmentation_export(
             item_polygon_count += 1
         label_path.write_text("\n".join(lines), encoding="utf-8")
         polygon_count += item_polygon_count
+        vectorized_raster_count += item_vectorized_rasters
         skipped_raster_count += item_skipped_rasters
         split_counts[item.split] += 1
         manifest_items.append(
@@ -167,6 +196,7 @@ def write_yolo_segmentation_export(
                 "image_sha256": item.image_sha256,
                 "snapshot_sha256": item.snapshot_sha256,
                 "polygon_count": item_polygon_count,
+                "vectorized_raster_count": item_vectorized_rasters,
                 "skipped_raster_count": item_skipped_rasters,
                 "image_path": target_image.relative_to(output_root).as_posix(),
                 "label_path": label_path.relative_to(output_root).as_posix(),
@@ -185,6 +215,7 @@ def write_yolo_segmentation_export(
         "format": "yolo_segmentation",
         "split_counts": split_counts,
         "polygon_count": polygon_count,
+        "vectorized_raster_count": vectorized_raster_count,
         "skipped_raster_count": skipped_raster_count,
         "class_map": version.class_map_json,
         "items": manifest_items,
@@ -199,6 +230,7 @@ def write_yolo_segmentation_export(
         "split_counts": split_counts,
         "item_count": len(manifest_items),
         "polygon_count": polygon_count,
+        "vectorized_raster_count": vectorized_raster_count,
         "skipped_raster_count": skipped_raster_count,
         "archive_size_bytes": archive_file.stat().st_size,
     }
