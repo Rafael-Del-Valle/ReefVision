@@ -25,7 +25,7 @@ import {
   getModels,
   getPredictions,
   getProjectModelCatalog,
-  imageContentUrl,
+  imageDisplayUrl,
   imageThumbnailUrl,
   rejectPrediction,
   saveAnnotations,
@@ -460,7 +460,7 @@ export function AnnotationEditor({
         setFullImageFailed(true);
       }
     };
-    preloader.src = imageContentUrl(sessionQuery.data.image.id);
+    preloader.src = imageDisplayUrl(sessionQuery.data.image.id);
     return () => {
       cancelled = true;
       preloader.onload = null;
@@ -1716,7 +1716,7 @@ export function AnnotationEditor({
   const imageHref =
     image.thumbnail_path && !fullImageLoaded && !fullImageFailed
       ? imageThumbnailUrl(image.id)
-      : imageContentUrl(image.id);
+      : imageDisplayUrl(image.id);
   const assistAcceptLabelClassId =
     (assistSourcePrediction
       ? (predictionClassOverrides[assistSourcePrediction.id] ??
