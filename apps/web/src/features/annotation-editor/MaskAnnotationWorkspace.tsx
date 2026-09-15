@@ -43,6 +43,7 @@ interface MaskAnnotationWorkspaceProps {
   project: Project;
   imageId: string;
   initialTool?: EditorTool;
+  onToolChange?: (tool: EditorTool) => void;
   onReturnToBoxes: () => void;
   onOpenBrush?: () => void;
   onClose: () => void;
@@ -52,6 +53,7 @@ export function MaskAnnotationWorkspace({
   project,
   imageId,
   initialTool,
+  onToolChange,
   onReturnToBoxes,
   onOpenBrush,
   onClose,
@@ -73,6 +75,10 @@ export function MaskAnnotationWorkspace({
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useEffect(() => {
+    onToolChange?.(state.tool);
+  }, [onToolChange, state.tool]);
 
   useEffect(() => {
     setCenterlineEditing(false);
