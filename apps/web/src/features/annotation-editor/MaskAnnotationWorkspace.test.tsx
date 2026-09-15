@@ -125,7 +125,10 @@ async function mountEnhancedWithFill() {
     </QueryClientProvider>,
   );
   fireEvent.click(screen.getByTestId("open-fill-object-tool"));
-  await screen.findByTestId("mask-workspace");
+  const maskWorkspace = await screen.findByTestId("mask-workspace");
+  await waitFor(() =>
+    expect(maskWorkspace).toHaveAttribute("data-active-tool", "fill"),
+  );
   seed();
   await screen.findByText("1 masks");
 }
