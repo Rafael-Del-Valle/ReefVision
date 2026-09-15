@@ -10,5 +10,10 @@ class PolygonFillRequest(BaseModel):
     tolerance: int = Field(default=24, ge=0, le=255)
 
 
+class SmartCloseRequest(BaseModel):
+    seed: PolygonPoint
+    closure_strength: int = Field(default=0, ge=0, le=100)
+
+
 class PolygonFillResponse(BaseModel):
     points: list[PolygonPoint]
