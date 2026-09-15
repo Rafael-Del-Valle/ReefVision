@@ -1577,7 +1577,7 @@ async function request<T>(
 }
 
 export function imageThumbnailUrl(imageId: string): string {
-  return `${getApiBaseUrl()}/images/${imageId}/thumbnail`;
+  return `${getApiBaseUrl()}/images/${imageId}/thumbnail?renderer=2`;
 }
 
 export function imageContentUrl(imageId: string): string {
