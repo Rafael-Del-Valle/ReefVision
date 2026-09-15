@@ -606,10 +606,10 @@ export function MaskAnnotationWorkspace({
                   </output>
                 </label>
                 <p className="annotation-helper">
-                  Click inside the opening. The lowest setting favors the full
-                  visible opening. Increase Auto-close tolerance to bridge narrower
-                  weak or broken boundary gaps and produce a tighter closed
-                  prediction.
+                  Click near the center of the opening. Smart Close traces the
+                  visible circular or oval rim and directly links across the
+                  broken section. Full opening bridges only small breaks;
+                  increase Auto-close tolerance when more of the rim is missing.
                 </p>
                 {fillPending && (
                   <p role="status">Predicting closed boundary...</p>
