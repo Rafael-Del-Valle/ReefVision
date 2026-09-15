@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import cast
 from uuid import uuid4
 
-from PIL import Image, ImageDraw, UnidentifiedImageError
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps, UnidentifiedImageError
 
 from reefvision.config import Settings
 from reefvision.domain.errors import ConflictError, ValidationError
@@ -244,6 +244,96 @@ def polygon_fill_from_managed_image(
         settings, source_image_relative_path=source_path, expected_size=expected_size
     )
     return polygon_fill_from_source(source, seed_x=seed_x, seed_y=seed_y, tolerance=tolerance)
+
+
+def _connected_binary_component(
+    mask: Image.Image,
+    *,
+    seed_x: int,
+    seed_y: int,
+) -> Image.Image:
+    if not (0 <= seed_x < mask.width and 0 <= seed_y < mask.height):
+        raise ValidationError("Smart Close seed must be inside the image")
+    working = mask.convert("L").point(lambda value: 255 if value > 0 else 0)
+    if working.getpixel((seed_x, seed_y)) == 0:
+        raise ValidationError(
+            "Smart Close removed the clicked opening; reduce Closure strength"
+        )
+    ImageDraw.floodfill(working, (seed_x, seed_y), 128, thresh=0)
+    return working.point(lambda value: 255 if value == 128 else 0)
+
+
+def _fill_binary_holes(mask: Image.Image) -> Image.Image:
+    binary = mask.convert("L").point(lambda value: 255 if value > 0 else 0)
+    inverted = ImageOps.invert(binary)
+    padded = Image.new("L", (binary.width + 2, binary.height + 2), 255)
+    padded.paste(inverted, (1, 1))
+    ImageDraw.floodfill(padded, (0, 0), 128, thresh=0)
+    interior = padded.crop((1, 1, binary.width + 1, binary.height + 1))
+    holes = interior.point(lambda value: 255 if value == 255 else 0)
+    return ImageChops.lighter(binary, holes)
+
+
+def smart_close_polygon_from_source(
+    source: Image.Image,
+    *,
+    seed_x: int,
+    seed_y: int,
+    closure_strength: int,
+) -> list[tuple[int, int]]:
+    if not (0 <= seed_x < source.width and 0 <= seed_y < source.height):
+        raise ValidationError("Smart Close seed must be inside the image")
+    if not 0 <= closure_strength <= 100:
+        raise ValidationError("Closure strength must be between 0 and 100")
+
+    grayscale = source.convert("L")
+    seed_value = int(grayscale.getpixel((seed_x, seed_y)))
+
+    # Strength 0 intentionally favors the full visible opening. As strength
+    # increases, the accepted intensity band tightens and a larger morphology
+    # kernel removes narrow leaks through weak or broken boundary pixels.
+    intensity_tolerance = max(10, round(56 - (closure_strength * 0.42)))
+    candidate = grayscale.point(
+        lambda value: 255 if abs(int(value) - seed_value) <= intensity_tolerance else 0
+    )
+
+    radius = round(closure_strength / 12)
+    if radius > 0:
+        kernel = radius * 2 + 1
+        # Opening the candidate region severs narrow connections from the
+        # clicked opening into similarly toned exterior pixels.
+        candidate = candidate.filter(ImageFilter.MinFilter(kernel))
+        candidate = candidate.filter(ImageFilter.MaxFilter(kernel))
+
+    component = _connected_binary_component(
+        candidate,
+        seed_x=seed_x,
+        seed_y=seed_y,
+    )
+    component = _fill_binary_holes(component)
+    return polygon_from_binary_region(component)
+
+
+def smart_close_polygon_from_managed_image(
+    settings: Settings,
+    *,
+    source_path: str,
+    expected_size: tuple[int, int],
+    seed_x: int,
+    seed_y: int,
+    closure_strength: int,
+) -> list[tuple[int, int]]:
+    source = _load_source_image(
+        settings,
+        source_image_relative_path=source_path,
+        expected_size=expected_size,
+    )
+    return smart_close_polygon_from_source(
+        source,
+        seed_x=seed_x,
+        seed_y=seed_y,
+        closure_strength=closure_strength,
+    )
 
 
 def _publish_revision_exclusively(temporary: Path, destination: Path) -> None:
