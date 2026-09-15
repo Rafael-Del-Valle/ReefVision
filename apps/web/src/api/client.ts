@@ -1896,10 +1896,14 @@ export async function importImages(
       file.name;
     formData.append("relative_paths", relativePath);
   });
-  return request<ImageImportReport>(`/projects/${projectId}/imports/images`, {
-    method: "POST",
-    body: formData,
-  });
+  return request<ImageImportReport>(
+    `/projects/${projectId}/imports/images`,
+    {
+      method: "POST",
+      body: formData,
+    },
+    10 * 60_000,
+  );
 }
 
 export async function updateImage(
