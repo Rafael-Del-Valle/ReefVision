@@ -587,14 +587,14 @@ export function MaskAnnotationWorkspace({
             {state.tool === "smart_close" && (
               <>
                 <label>
-                  Closure strength
+                  Auto-close tolerance
                   <input
                     type="range"
                     min={0}
                     max={100}
                     step={1}
                     value={smartCloseStrength}
-                    aria-label="Closure strength"
+                    aria-label="Auto-close tolerance"
                     onChange={(event) =>
                       setSmartCloseStrength(Number(event.target.value))
                     }
@@ -607,7 +607,7 @@ export function MaskAnnotationWorkspace({
                 </label>
                 <p className="annotation-helper">
                   Click inside the opening. The lowest setting favors the full
-                  visible opening. Increase Closure strength to bridge narrower
+                  visible opening. Increase Auto-close tolerance to bridge narrower
                   weak or broken boundary gaps and produce a tighter closed
                   prediction.
                 </p>
