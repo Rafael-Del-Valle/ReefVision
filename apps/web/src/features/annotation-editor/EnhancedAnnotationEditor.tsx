@@ -64,6 +64,9 @@ export function EnhancedAnnotationEditor({
   const [maskInitialTool, setMaskInitialTool] = useState<
     "polygon" | "fill" | undefined
   >(undefined);
+  const [activeMaskTool, setActiveMaskTool] = useState<
+    "select" | "polygon" | "fill" | "rotated_box"
+  >("select");
   const [vertexEditMode, setVertexEditMode] = useState<VertexEditMode>("move");
   const [activeImageId, setActiveImageId] = useState(initialImageId);
   const [toolbarTarget, setToolbarTarget] = useState<HTMLElement | null>(null);
@@ -226,6 +229,16 @@ export function EnhancedAnnotationEditor({
           project={project}
           imageId={activeImageId}
           initialTool={maskInitialTool}
+          onToolChange={(tool) => {
+            if (
+              tool === "select" ||
+              tool === "polygon" ||
+              tool === "fill" ||
+              tool === "rotated_box"
+            ) {
+              setActiveMaskTool(tool);
+            }
+          }}
           onReturnToBoxes={() => {
             setMaskInitialTool(undefined);
             setWorkspace("boxes");
@@ -276,6 +289,7 @@ export function EnhancedAnnotationEditor({
       return;
     }
     setMaskInitialTool("polygon");
+    setActiveMaskTool("polygon");
     setWorkspace("masks");
   }
 
@@ -302,11 +316,13 @@ export function EnhancedAnnotationEditor({
       return;
     }
     setMaskInitialTool("fill");
+    setActiveMaskTool("fill");
     setWorkspace("masks");
   }
 
   function activateVertexEditMode(mode: VertexEditMode) {
     setVertexEditMode(mode);
+    setActiveMaskTool("select");
     document
       .querySelector<HTMLButtonElement>(
         '[data-testid="activate-mask-select-tool"]',
@@ -330,7 +346,11 @@ export function EnhancedAnnotationEditor({
       )}
       <button
         type="button"
-        className={workspace === "masks" ? "active" : "secondary"}
+        className={
+          workspace === "masks" && activeMaskTool === "polygon"
+            ? "active"
+            : "secondary"
+        }
         data-testid="open-polygon-tool"
         title="Draw editable polygon objects"
         onClick={activatePolygonTool}
@@ -340,7 +360,11 @@ export function EnhancedAnnotationEditor({
       </button>
       <button
         type="button"
-        className="secondary"
+        className={
+          workspace === "masks" && activeMaskTool === "fill"
+            ? "active"
+            : "secondary"
+        }
         data-testid="open-fill-object-tool"
         title="Click enclosed regions such as holes to create countable mask objects"
         onClick={activateFillObjectTool}
