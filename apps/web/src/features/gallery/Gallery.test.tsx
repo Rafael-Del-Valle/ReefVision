@@ -206,7 +206,7 @@ describe("Gallery", () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input) => {
-        const url = new URL(String(input));
+        const url = new URL(String(input), "http://localhost");
         if (url.pathname.includes(`/projects/${project.id}/images`)) {
           requestedPages.push(Number(url.searchParams.get("page") ?? "1"));
           expect(url.searchParams.get("sort_by")).toBe("newest");
