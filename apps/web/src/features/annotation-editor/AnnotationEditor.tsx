@@ -2781,6 +2781,59 @@ export function AnnotationEditor({
                   height={image.height_px}
                   fill="transparent"
                 />
+                {state.tool === "select" &&
+                  state.document.maskAnnotations.map((mask) => {
+                    const labelClass = mask.label_class_id
+                      ? labelClassesById.get(mask.label_class_id)
+                      : null;
+                    const color = labelClass?.display_color ?? "#72dbc9";
+                    const selected = state.selectedMaskIds.includes(mask.id);
+
+                    if (
+                      mask.geometry_kind === "raster_mask" &&
+                      mask.mask_path !== null
+                    ) {
+                      return (
+                        <image
+                          key={mask.id}
+                          data-testid={`mask-annotation-${mask.id}`}
+                          href={rasterMaskContentUrl(mask)}
+                          x={0}
+                          y={0}
+                          width={image.width_px}
+                          height={image.height_px}
+                          opacity={selected ? 0.52 : 0.3}
+                          preserveAspectRatio="none"
+                          style={{ cursor: "pointer", mixBlendMode: "screen" }}
+                          onPointerDown={(event) =>
+                            handleMaskPointerDown(event, mask.id)
+                          }
+                        />
+                      );
+                    }
+
+                    if (!mask.points || mask.points.length < 3) {
+                      return null;
+                    }
+                    return (
+                      <polygon
+                        key={mask.id}
+                        data-testid={`mask-annotation-${mask.id}`}
+                        points={mask.points
+                          .map((point) => `${point.x},${point.y}`)
+                          .join(" ")}
+                        fill={color}
+                        fillOpacity={selected ? 0.28 : 0.14}
+                        stroke={color}
+                        strokeWidth={selected ? 2.5 : 1.5}
+                        vectorEffect="non-scaling-stroke"
+                        style={{ cursor: "pointer" }}
+                        onPointerDown={(event) =>
+                          handleMaskPointerDown(event, mask.id)
+                        }
+                      />
+                    );
+                  })}
                 {assistMaskHref && (
                   <image
                     href={assistMaskHref}
