@@ -2494,7 +2494,7 @@ export function AnnotationEditor({
             <div className="section-heading">
               <div>
                 <p className="eyebrow">Selection</p>
-                <h3>{state.selectedIds.length} selected</h3>
+                <h3>{selectedObjectCount} selected</h3>
               </div>
               <div className="annotation-editor-inline-actions">
                 <button
@@ -2517,12 +2517,13 @@ export function AnnotationEditor({
             </div>
             <p className="annotation-helper">
               Wheel to zoom. Right-drag to pan. Ctrl/Cmd-click to build a
-              multi-selection.
+              mixed selection of boxes and masks. Polygon, Fill, Smart Close,
+              and Brush masks remain visible in Select mode.
             </p>
             <button
               type="button"
               className="danger-ghost"
-              disabled={state.selectedIds.length === 0}
+              disabled={selectedObjectCount === 0}
               onClick={deleteSelection}
             >
               Delete selection
@@ -2540,9 +2541,10 @@ export function AnnotationEditor({
               role="listbox"
               aria-label="Objects"
             >
-              {state.document.annotations.length === 0 && (
-                <p>No box annotations yet.</p>
-              )}
+              {state.document.annotations.length === 0 &&
+                state.document.maskAnnotations.length === 0 && (
+                  <p>No annotations yet.</p>
+                )}
               {state.document.annotations
                 .filter((annotation) =>
                   (labelClassesById.get(annotation.label_class_id)?.name ?? "")
@@ -2561,7 +2563,10 @@ export function AnnotationEditor({
                       role="option"
                       aria-selected={selected}
                       className={`annotation-selection-row object-row ${selected ? "selected" : ""}`}
-                      onClick={() => setSelection([annotation.id])}
+                      onClick={() => {
+                        setMaskSelection([]);
+                        setSelection([annotation.id]);
+                      }}
                     >
                       <span className="object-index">{index + 1}</span>
                       <span
@@ -2577,6 +2582,57 @@ export function AnnotationEditor({
                           Bounding box ·{" "}
                           {Math.round(annotation.x_max - annotation.x_min)} ×{" "}
                           {Math.round(annotation.y_max - annotation.y_min)} px
+                        </small>
+                      </span>
+                    </button>
+                  );
+                })}
+              {state.document.maskAnnotations
+                .filter((mask) =>
+                  (
+                    labelClassesById.get(mask.label_class_id ?? "")?.name ?? ""
+                  )
+                    .toLowerCase()
+                    .includes(objectFilter.toLowerCase()),
+                )
+                .map((mask, index) => {
+                  const labelClass = mask.label_class_id
+                    ? labelClassesById.get(mask.label_class_id)
+                    : null;
+                  const selected = state.selectedMaskIds.includes(mask.id);
+                  const kindLabel =
+                    mask.geometry_kind === "raster_mask"
+                      ? "Brush mask"
+                      : "Polygon / Fill";
+                  return (
+                    <button
+                      key={mask.id}
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      className={`annotation-selection-row object-row ${selected ? "selected" : ""}`}
+                      onClick={() => {
+                        setSelection([]);
+                        setMaskSelection([mask.id]);
+                      }}
+                    >
+                      <span className="object-index">
+                        {state.document.annotations.length + index + 1}
+                      </span>
+                      <span
+                        className="annotation-class-swatch"
+                        style={{
+                          backgroundColor:
+                            labelClass?.display_color ?? "#72dbc9",
+                        }}
+                      />
+                      <span>
+                        <strong>{labelClass?.name ?? "Unassigned"}</strong>
+                        <small>
+                          {kindLabel}
+                          {mask.area_pixels !== null
+                            ? ` · ${mask.area_pixels} px²`
+                            : ""}
                         </small>
                       </span>
                     </button>
