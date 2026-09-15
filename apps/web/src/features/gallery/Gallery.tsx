@@ -3,7 +3,6 @@ import {
   FormEvent,
   KeyboardEvent,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -214,6 +213,7 @@ export function Gallery({
   const queryClient = useQueryClient();
   const folderInput = useRef<HTMLInputElement | null>(null);
   const [page, setPage] = useState(1);
+  const [pageDraft, setPageDraft] = useState("1");
   const [filenameDraft, setFilenameDraft] = useState("");
   const [statusDraft, setStatusDraft] = useState("");
   const [groupDraft, setGroupDraft] = useState("");
@@ -234,7 +234,7 @@ export function Gallery({
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<
     "filename" | "newest" | "oldest" | "annotations"
-  >("filename");
+  >("newest");
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
@@ -245,7 +245,7 @@ export function Gallery({
   }, []);
 
   const images = useQuery({
-    queryKey: ["images", project.id, page, filters],
+    queryKey: ["images", project.id, page, filters, sortBy],
     queryFn: ({ signal }) =>
       getImages(
         project.id,
@@ -255,6 +255,7 @@ export function Gallery({
           filename: filters.filename,
           annotationStatus: filters.annotationStatus,
           groupKey: filters.groupKey,
+          sortBy,
         },
         signal,
       ),
@@ -310,6 +311,7 @@ export function Gallery({
     },
     onSuccess: async (result) => {
       setReport(result);
+      setSortBy("newest");
       setPage(1);
       await queryClient.invalidateQueries({ queryKey: ["images", project.id] });
     },
@@ -345,8 +347,13 @@ export function Gallery({
     filters.filename,
     filters.annotationStatus,
     filters.groupKey,
+    sortBy,
     project.id,
   ]);
+
+  useEffect(() => {
+    setPageDraft(String(page));
+  }, [page]);
 
   function applyFilters(event: FormEvent) {
     event.preventDefault();
@@ -376,22 +383,20 @@ export function Gallery({
   const selectedModel =
     detectorModels.data?.find((model) => model.id === selectedModelId) ?? null;
 
-  const visibleImages = useMemo(() => {
-    const items = [...(images.data?.items ?? [])];
-    return items.sort((left, right) => {
-      if (sortBy === "newest")
-        return Date.parse(right.updated_at) - Date.parse(left.updated_at);
-      if (sortBy === "oldest")
-        return Date.parse(left.updated_at) - Date.parse(right.updated_at);
-      if (sortBy === "annotations")
-        return right.annotation_count - left.annotation_count;
-      return left.original_filename.localeCompare(
-        right.original_filename,
-        undefined,
-        { numeric: true },
-      );
-    });
-  }, [images.data?.items, sortBy]);
+  const visibleImages = images.data?.items ?? [];
+
+  function jumpToPage(event: FormEvent) {
+    event.preventDefault();
+    const totalPages = images.data?.pages ?? 1;
+    const requested = Number.parseInt(pageDraft, 10);
+    if (!Number.isFinite(requested)) {
+      setPageDraft(String(page));
+      return;
+    }
+    const destination = Math.max(1, Math.min(totalPages, requested));
+    setPage(destination);
+    setPageDraft(String(destination));
+  }
 
   function resetFilters() {
     setFilenameDraft("");
@@ -589,11 +594,14 @@ export function Gallery({
           Sort
           <select
             value={sortBy}
-            onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
+            onChange={(event) => {
+              setSortBy(event.target.value as typeof sortBy);
+              setPage(1);
+            }}
           >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
             <option value="filename">Filename</option>
-            <option value="newest">Newest updated</option>
-            <option value="oldest">Oldest updated</option>
             <option value="annotations">Annotation count</option>
           </select>
         </label>
@@ -671,13 +679,41 @@ export function Gallery({
             type="button"
             className="secondary"
             disabled={page === 1}
+            onClick={() => setPage(1)}
+          >
+            First
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={page === 1}
             onClick={() => setPage((current) => current - 1)}
           >
             Previous
           </button>
-          <span>
-            Page {images.data.page} of {images.data.pages}
-          </span>
+          <form onSubmit={jumpToPage}>
+            <label>
+              Page
+              <input
+                type="number"
+                min={1}
+                max={images.data.pages}
+                step={1}
+                value={pageDraft}
+                aria-label="Page number"
+                onChange={(event) => setPageDraft(event.target.value)}
+                onBlur={(event) => {
+                  if (event.currentTarget.form) {
+                    event.currentTarget.form.requestSubmit();
+                  }
+                }}
+              />
+            </label>
+            <span> of {images.data.pages}</span>
+            <button type="submit" className="secondary">
+              Go
+            </button>
+          </form>
           <button
             type="button"
             className="secondary"
@@ -685,6 +721,14 @@ export function Gallery({
             onClick={() => setPage((current) => current + 1)}
           >
             Next
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={page === images.data.pages}
+            onClick={() => setPage(images.data.pages)}
+          >
+            Last
           </button>
         </nav>
       )}
