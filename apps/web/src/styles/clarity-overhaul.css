@@ -781,6 +781,52 @@ select:hover {
   font-size: 0.66rem;
 }
 
+.annotation-tool-extension,
+.annotation-tool-submenu,
+.annotation-tool-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.annotation-tool-extension,
+.annotation-tool-submenu {
+  margin-top: 0.25rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(182, 238, 228, 0.2);
+}
+
+.annotation-tool-submenu {
+  padding: 0.55rem 0.35rem 0.35rem;
+  border: 1px solid rgba(114, 219, 201, 0.28);
+  border-radius: 0.7rem;
+  background: rgba(20, 73, 78, 0.2);
+}
+
+.annotation-tool-group + .annotation-tool-group {
+  margin-top: 0.35rem;
+  padding-top: 0.55rem;
+  border-top: 1px dashed rgba(182, 238, 228, 0.2);
+}
+
+.annotation-tool-group-label {
+  display: block;
+  padding: 0 0.1rem;
+  color: var(--rv-text-muted);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.annotation-tool-rail .annotation-tool-back {
+  border-color: rgba(114, 219, 201, 0.34);
+  background: rgba(114, 219, 201, 0.08);
+}
+
+
 .annotation-editor-sidebar {
   grid-area: inspector;
   border-right: 0;
