@@ -203,6 +203,13 @@ def write_yolo_segmentation_export(
             }
         )
 
+    if skipped_raster_count:
+        raise ValidationError(
+            f"{skipped_raster_count} Brush mask object(s) could not be represented "
+            "faithfully as a single YOLO polygon. Use semantic mask export or "
+            "simplify/split the painted object before exporting."
+        )
+
     _write_data_yaml(output_root, version.class_map_json)
     (output_root / "dataset-version-manifest.json").write_bytes(
         canonical_json_bytes(version.manifest_json)
