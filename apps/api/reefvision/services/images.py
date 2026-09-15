@@ -29,6 +29,7 @@ from reefvision.storage.images import (
     UnsupportedImageError,
     commit_staged_image,
     create_browser_display,
+    create_thumbnail,
     ensure_supported_extension,
     inspect_staged_image,
     project_image_directories,
@@ -257,3 +258,18 @@ class ImageService:
         if not display_path.is_file():
             create_browser_display(source, display_path)
         return display_path, "image/png"
+
+    def thumbnail_path_for_image(self, image: ImageAsset) -> Path:
+        mode = str((image.metadata_json or {}).get("mode", ""))
+        if image.media_type == "image/tiff" and mode in {"I;16", "I;16L", "I;16B"}:
+            source = self.content_path_for_image(image)
+            corrected = source.parent.parent / "thumbnails-v2" / f"{image.id}.jpg"
+            if not corrected.is_file():
+                create_thumbnail(
+                    source,
+                    corrected,
+                    max_width=self.settings.thumbnail_max_width,
+                    max_height=self.settings.thumbnail_max_height,
+                )
+            return corrected
+        return self.content_path_for_image(image, thumbnail=True)
