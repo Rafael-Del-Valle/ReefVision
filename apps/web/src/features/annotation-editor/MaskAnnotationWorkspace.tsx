@@ -10,7 +10,7 @@ import {
 
 import {
   getAnnotationSession,
-  imageContentUrl,
+  imageDisplayUrl,
   saveAnnotations,
   type Project,
 } from "../../api/client";
@@ -32,11 +32,17 @@ import { MaskMeasurementPanel } from "./MaskMeasurementPanel";
 import { PolygonMaskLayer, polygonMaskFromPoints } from "./PolygonMaskLayer";
 import { generatePolygonFill } from "./rasterMaskApi";
 import { RotatedBoxLayer } from "./RotatedBoxLayer";
-import type { AnnotationDocument, EditorMaskAnnotation, Point } from "./types";
+import type {
+  AnnotationDocument,
+  EditorMaskAnnotation,
+  EditorTool,
+  Point,
+} from "./types";
 
 interface MaskAnnotationWorkspaceProps {
   project: Project;
   imageId: string;
+  initialTool?: EditorTool;
   onReturnToBoxes: () => void;
   onOpenBrush?: () => void;
   onClose: () => void;
@@ -45,6 +51,7 @@ interface MaskAnnotationWorkspaceProps {
 export function MaskAnnotationWorkspace({
   project,
   imageId,
+  initialTool,
   onReturnToBoxes,
   onOpenBrush,
   onClose,
@@ -89,9 +96,12 @@ export function MaskAnnotationWorkspace({
   useEffect(() => {
     if (sessionQuery.data && loadedImageIdRef.current !== imageId) {
       dispatch({ type: "loadSession", session: sessionQuery.data });
+      if (initialTool) {
+        dispatch({ type: "setTool", tool: initialTool });
+      }
       loadedImageIdRef.current = imageId;
     }
-  }, [imageId, sessionQuery.data]);
+  }, [imageId, initialTool, sessionQuery.data]);
 
   const { mutateAsync: persistDocument, isPending: savePending } = useMutation({
     mutationFn: (payload: ExtendedAnnotationSavePayload) =>
@@ -379,14 +389,14 @@ export function MaskAnnotationWorkspace({
             type="button"
             className={state.tool === "fill" ? "active" : "secondary"}
             data-testid="activate-polygon-fill-tool"
-            title="Fill a connected source-image color region as an editable polygon"
+            title="Click an enclosed region to create one countable mask object"
             disabled={state.activeClassId === null}
             onClick={() => {
               setCenterlineEditing(false);
               dispatch({ type: "setTool", tool: "fill" });
             }}
           >
-            Fill
+            Fill object
           </button>
           <button
             type="button"
@@ -490,9 +500,10 @@ export function MaskAnnotationWorkspace({
                   <output>{fillTolerance}</output>
                 </label>
                 <p className="annotation-helper">
-                  Click inside a region to create a polygon. Tolerance is the
-                  maximum RGB channel difference from the seed (0–255). Higher
-                  values include more colors. Holes require Polygon or Brush.
+                  Click inside each hole or enclosed region to create one
+                  separate countable polygon object. Tolerance is the maximum
+                  RGB channel difference from the seed (0–255); higher values
+                  include a wider range of neighboring pixels.
                 </p>
                 {fillPending && (
                   <p role="status">Finding connected region...</p>
@@ -629,7 +640,7 @@ export function MaskAnnotationWorkspace({
               }}
             >
               <img
-                src={imageContentUrl(image.id)}
+                src={imageDisplayUrl(image.id)}
                 alt={image.original_filename}
                 draggable={false}
                 style={{
