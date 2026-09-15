@@ -63,6 +63,9 @@ export function EnhancedAnnotationEditor({
 }: EnhancedAnnotationEditorProps) {
   const queryClient = useQueryClient();
   const [workspace, setWorkspace] = useState<EditorWorkspace>("boxes");
+  const [maskInitialTool, setMaskInitialTool] = useState<"fill" | undefined>(
+    undefined,
+  );
   const [vertexEditMode, setVertexEditMode] = useState<VertexEditMode>("move");
   const [activeImageId, setActiveImageId] = useState(initialImageId);
   const [toolbarTarget, setToolbarTarget] = useState<HTMLElement | null>(null);
@@ -224,8 +227,15 @@ export function EnhancedAnnotationEditor({
         <MaskAnnotationWorkspace
           project={project}
           imageId={activeImageId}
-          onReturnToBoxes={() => setWorkspace("boxes")}
-          onOpenBrush={() => setWorkspace("raster")}
+          initialTool={maskInitialTool}
+          onReturnToBoxes={() => {
+            setMaskInitialTool(undefined);
+            setWorkspace("boxes");
+          }}
+          onOpenBrush={() => {
+            setMaskInitialTool(undefined);
+            setWorkspace("raster");
+          }}
           onClose={onClose}
         />
       );
@@ -240,6 +250,19 @@ export function EnhancedAnnotationEditor({
     );
   }, [activeImageId, launchContext, onClose, project, workspace]);
 
+  function activateFillObjectTool() {
+    if (workspace === "masks") {
+      document
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="activate-polygon-fill-tool"]',
+        )
+        ?.click();
+      return;
+    }
+    setMaskInitialTool("fill");
+    setWorkspace("masks");
+  }
+
   function activateVertexEditMode(mode: VertexEditMode) {
     setVertexEditMode(mode);
     document
@@ -251,6 +274,15 @@ export function EnhancedAnnotationEditor({
 
   const annotationControls = (
     <div style={visibilityGroupStyle}>
+      <button
+        type="button"
+        className="secondary"
+        data-testid="open-fill-object-tool"
+        title="Click enclosed regions such as holes to create countable mask objects"
+        onClick={activateFillObjectTool}
+      >
+        Fill object
+      </button>
       <label data-testid="annotation-type-toggle" style={{ minWidth: "10rem" }}>
         Annotation type
         <select
@@ -268,11 +300,12 @@ export function EnhancedAnnotationEditor({
                 ?.click();
               return;
             }
+            setMaskInitialTool(undefined);
             setWorkspace(destination);
           }}
         >
           <option value="boxes">Bounding boxes</option>
-          <option value="masks">Polygons</option>
+          <option value="masks">Polygons / Fill objects</option>
           <option value="raster">Raster masks</option>
         </select>
       </label>
