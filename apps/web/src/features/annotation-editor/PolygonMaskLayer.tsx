@@ -372,7 +372,7 @@ export function PolygonMaskLayer({
       preserveAspectRatio="none"
       tabIndex={0}
       onPointerDownCapture={(event) => {
-        if (tool !== "fill") return;
+        if (tool !== "fill" && tool !== "smart_close") return;
         event.stopPropagation();
         if (event.button !== 0 || activeClassId === null || !onFill) return;
         const bounds = event.currentTarget.getBoundingClientRect();
