@@ -285,7 +285,12 @@ def write_raster_mask_revision(
     brush_radius: float,
     mode: str,
     fill_tolerance: int = 24,
-) -> tuple[str, Path, int, tuple[float, float, float, float]]:
+) -> tuple[
+    str | None,
+    Path | None,
+    int,
+    tuple[float, float, float, float] | None,
+]:
     """Apply brush edits and atomically write a new immutable mask revision."""
 
     mask = _load_source_mask(
@@ -321,6 +326,8 @@ def write_raster_mask_revision(
     binary = mask.point(lambda value: 255 if value > 0 else 0)
     bounds = binary.getbbox()
     if bounds is None:
+        if mode == "erase":
+            return None, None, 0, None
         raise ValidationError("Raster mask edits cannot produce an empty mask")
     histogram = binary.histogram()
     area_pixels = int(sum(histogram[1:]))
