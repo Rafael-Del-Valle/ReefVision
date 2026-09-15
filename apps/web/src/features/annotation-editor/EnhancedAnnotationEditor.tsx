@@ -29,12 +29,13 @@ type VertexEditMode = "move" | "insert" | "delete";
 
 const fallbackToolbarStyle = {
   position: "fixed" as const,
-  top: "1rem",
-  right: "1rem",
+  top: "5rem",
+  left: "1rem",
   zIndex: 999999,
   display: "flex",
-  alignItems: "center",
-  gap: "0.5rem",
+  flexDirection: "column" as const,
+  alignItems: "stretch",
+  gap: "0.45rem",
   padding: "0.55rem",
   border: "1px solid rgba(182, 238, 228, 0.3)",
   borderRadius: "0.9rem",
@@ -43,10 +44,7 @@ const fallbackToolbarStyle = {
 };
 
 const visibilityGroupStyle = {
-  display: "flex",
-  alignItems: "center",
-  gap: "0.45rem",
-  flexWrap: "wrap" as const,
+  display: "contents" as const,
 };
 
 function stopEditorEvent(event: Event) {
@@ -63,9 +61,9 @@ export function EnhancedAnnotationEditor({
 }: EnhancedAnnotationEditorProps) {
   const queryClient = useQueryClient();
   const [workspace, setWorkspace] = useState<EditorWorkspace>("boxes");
-  const [maskInitialTool, setMaskInitialTool] = useState<"fill" | undefined>(
-    undefined,
-  );
+  const [maskInitialTool, setMaskInitialTool] = useState<
+    "polygon" | "fill" | undefined
+  >(undefined);
   const [vertexEditMode, setVertexEditMode] = useState<VertexEditMode>("move");
   const [activeImageId, setActiveImageId] = useState(initialImageId);
   const [toolbarTarget, setToolbarTarget] = useState<HTMLElement | null>(null);
@@ -93,7 +91,7 @@ export function EnhancedAnnotationEditor({
   useEffect(() => {
     const findToolbarTarget = () => {
       const target = document.querySelector<HTMLElement>(
-        ".annotation-editor-topbar .annotation-editor-actions",
+        ".annotation-tool-rail",
       );
       setToolbarTarget((current) => (current === target ? current : target));
     };
@@ -257,6 +255,43 @@ export function EnhancedAnnotationEditor({
     workspace,
   ]);
 
+  function activateBoxWorkspace() {
+    setMaskInitialTool(undefined);
+    if (workspace === "masks") {
+      document
+        .querySelector<HTMLButtonElement>(
+          '[data-mask-workspace-destination="boxes"]',
+        )
+        ?.click();
+      return;
+    }
+    setWorkspace("boxes");
+  }
+
+  function activatePolygonTool() {
+    if (workspace === "masks") {
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="activate-polygon-tool"]')
+        ?.click();
+      return;
+    }
+    setMaskInitialTool("polygon");
+    setWorkspace("masks");
+  }
+
+  function activateBrushTool() {
+    setMaskInitialTool(undefined);
+    if (workspace === "masks") {
+      document
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="activate-mask-brush-tool"]',
+        )
+        ?.click();
+      return;
+    }
+    setWorkspace("raster");
+  }
+
   function activateFillObjectTool() {
     if (workspace === "masks") {
       document
@@ -281,6 +316,28 @@ export function EnhancedAnnotationEditor({
 
   const annotationControls = (
     <div style={visibilityGroupStyle}>
+      {workspace !== "boxes" && (
+        <button
+          type="button"
+          className="secondary"
+          data-testid="open-box-workspace"
+          title="Switch to bounding-box annotation"
+          onClick={activateBoxWorkspace}
+        >
+          <span aria-hidden="true">□</span>
+          <small>Boxes</small>
+        </button>
+      )}
+      <button
+        type="button"
+        className={workspace === "masks" ? "active" : "secondary"}
+        data-testid="open-polygon-tool"
+        title="Draw editable polygon objects"
+        onClick={activatePolygonTool}
+      >
+        <span aria-hidden="true">⬡</span>
+        <small>Polygon</small>
+      </button>
       <button
         type="button"
         className="secondary"
@@ -288,65 +345,52 @@ export function EnhancedAnnotationEditor({
         title="Click enclosed regions such as holes to create countable mask objects"
         onClick={activateFillObjectTool}
       >
-        Fill object
+        <span aria-hidden="true">◉</span>
+        <small>Fill</small>
       </button>
-      <label data-testid="annotation-type-toggle" style={{ minWidth: "10rem" }}>
-        Annotation type
-        <select
-          aria-label="Annotation type"
-          data-testid="annotation-type-select"
-          value={workspace}
-          onChange={(event) => {
-            const destination = event.target.value as EditorWorkspace;
-            if (workspace === "masks") {
-              // Use the workspace's existing save/discard guard for every exit.
-              document
-                .querySelector<HTMLButtonElement>(
-                  `[data-mask-workspace-destination="${destination}"]`,
-                )
-                ?.click();
-              return;
-            }
-            setMaskInitialTool(undefined);
-            setWorkspace(destination);
-          }}
-        >
-          <option value="boxes">Bounding boxes</option>
-          <option value="masks">Polygons / Fill objects</option>
-          <option value="raster">Raster masks</option>
-        </select>
-      </label>
+      <button
+        type="button"
+        className={workspace === "raster" ? "active" : "secondary"}
+        data-testid="open-brush-tool"
+        title="Paint freehand mask objects"
+        onClick={activateBrushTool}
+      >
+        <span aria-hidden="true">✎</span>
+        <small>Brush</small>
+      </button>
       {workspace === "masks" && (
-        <div
-          role="group"
-          aria-label="Polygon node editing"
-          style={visibilityGroupStyle}
-        >
+        <>
           <button
             type="button"
             className={vertexEditMode === "move" ? "active" : "secondary"}
             data-testid="move-polygon-nodes"
+            title="Move polygon nodes"
             onClick={() => activateVertexEditMode("move")}
           >
-            Move nodes
+            <span aria-hidden="true">↔</span>
+            <small>Move node</small>
           </button>
           <button
             type="button"
             className={vertexEditMode === "insert" ? "active" : "secondary"}
             data-testid="insert-polygon-node"
+            title="Insert a polygon node"
             onClick={() => activateVertexEditMode("insert")}
           >
-            Insert node
+            <span aria-hidden="true">＋</span>
+            <small>Add node</small>
           </button>
           <button
             type="button"
             className={vertexEditMode === "delete" ? "active" : "secondary"}
             data-testid="delete-polygon-node"
+            title="Delete a polygon node"
             onClick={() => activateVertexEditMode("delete")}
           >
-            Delete node
+            <span aria-hidden="true">−</span>
+            <small>Del node</small>
           </button>
-        </div>
+        </>
       )}
     </div>
   );
@@ -367,7 +411,7 @@ export function EnhancedAnnotationEditor({
       {createPortal(
         <div
           role="group"
-          aria-label="Annotation controls"
+          aria-label="Annotation mode and mask tools"
           style={toolbarTarget ? undefined : fallbackToolbarStyle}
         >
           {annotationControls}
