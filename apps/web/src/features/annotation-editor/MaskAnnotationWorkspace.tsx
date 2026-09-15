@@ -339,7 +339,11 @@ export function MaskAnnotationWorkspace({
     selectedMeasurementMask?.persisted === true && !isDirty(state);
 
   return (
-    <div className="annotation-editor-shell" data-testid="mask-workspace">
+    <div
+      className="annotation-editor-shell"
+      data-testid="mask-workspace"
+      data-active-tool={state.tool}
+    >
       <header className="annotation-editor-topbar">
         <div>
           <p className="eyebrow">Editable segmentation workspace</p>
