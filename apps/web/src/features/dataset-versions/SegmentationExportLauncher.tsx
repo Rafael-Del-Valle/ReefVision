@@ -50,6 +50,7 @@ export function SegmentationExportLauncher() {
     useState<DatasetExportFormat>("yolo_segmentation");
   const [jobId, setJobId] = useState<string | null>(null);
   const [exportId, setExportId] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const projects = useQuery({
     queryKey: ["project_summaries", "export_launcher"],
@@ -72,6 +73,26 @@ export function SegmentationExportLauncher() {
         : 1000;
     },
   });
+
+  useEffect(() => {
+    const updateEditorState = () => {
+      const nextEditorOpen = Boolean(
+        document.querySelector(".annotation-editor-shell"),
+      );
+      setEditorOpen(nextEditorOpen);
+      if (nextEditorOpen) {
+        setOpen(false);
+      }
+    };
+
+    updateEditorState();
+    const observer = new MutationObserver(updateEditorState);
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!projectId && projects.data?.length) {
@@ -107,23 +128,25 @@ export function SegmentationExportLauncher() {
 
   return (
     <>
-      <button
-        type="button"
-        className="secondary"
-        data-testid="open-dataset-export-launcher"
-        onClick={() => setOpen(true)}
-        style={{
-          position: "fixed",
-          left: "1rem",
-          bottom: "1rem",
-          zIndex: 40,
-          boxShadow: "0 0.5rem 1.5rem rgba(0, 0, 0, 0.22)",
-        }}
-      >
-        Dataset exports
-      </button>
+      {!editorOpen && (
+        <button
+          type="button"
+          className="secondary"
+          data-testid="open-dataset-export-launcher"
+          onClick={() => setOpen(true)}
+          style={{
+            position: "fixed",
+            left: "1rem",
+            bottom: "1rem",
+            zIndex: 40,
+            boxShadow: "0 0.5rem 1.5rem rgba(0, 0, 0, 0.22)",
+          }}
+        >
+          Dataset exports
+        </button>
+      )}
 
-      {open && (
+      {open && !editorOpen && (
         <div
           className="modal-backdrop"
           role="presentation"
