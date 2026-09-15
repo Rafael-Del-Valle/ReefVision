@@ -1,6 +1,6 @@
 """Managed image import and gallery endpoints."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -48,6 +48,9 @@ def list_images(
     filename: Annotated[str | None, Query(max_length=500)] = None,
     annotation_status: Annotated[str | None, Query(max_length=30)] = None,
     group_key: Annotated[str | None, Query(max_length=300)] = None,
+    sort_by: Annotated[
+        Literal["newest", "oldest", "filename", "annotations"], Query()
+    ] = "newest",
 ) -> ImagePageResponse:
     return service(request, session).list_images(
         project_id,
@@ -56,6 +59,7 @@ def list_images(
         filename=filename,
         annotation_status=annotation_status,
         group_key=group_key,
+        sort_by=sort_by,
     )
 
 
