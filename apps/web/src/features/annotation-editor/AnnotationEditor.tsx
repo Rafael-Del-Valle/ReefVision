@@ -285,7 +285,10 @@ function countByClass(
     );
   });
   maskAnnotations.forEach((annotation) => {
-    if (!annotation.label_class_id) {
+    if (
+      annotation.geometry_kind !== "rotated_box" ||
+      !annotation.label_class_id
+    ) {
       return;
     }
     counts.set(
@@ -1211,10 +1214,17 @@ export function AnnotationEditor({
             : annotation,
         ),
       };
-      if (state.selectedMaskIds.length > 0) {
+      const selectedRotatedBoxIds = state.document.maskAnnotations
+        .filter(
+          (annotation) =>
+            annotation.geometry_kind === "rotated_box" &&
+            state.selectedMaskIds.includes(annotation.id),
+        )
+        .map((annotation) => annotation.id);
+      if (selectedRotatedBoxIds.length > 0) {
         nextDocument = changeMaskAnnotationClass(
           nextDocument,
-          state.selectedMaskIds,
+          selectedRotatedBoxIds,
           classId,
         );
       }
