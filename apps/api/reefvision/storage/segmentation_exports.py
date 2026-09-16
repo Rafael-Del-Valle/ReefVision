@@ -7,7 +7,7 @@ import shutil
 import zipfile
 from hashlib import sha256
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from PIL import Image, ImageDraw, UnidentifiedImageError
 
