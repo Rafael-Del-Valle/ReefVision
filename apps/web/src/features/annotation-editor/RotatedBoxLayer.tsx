@@ -263,15 +263,18 @@ export function resizeRotatedBox(
   );
 }
 
-export function rotatedBoxRotationHandle(points: Point[]): Point {
+export function rotatedBoxRotationHandle(
+  points: Point[],
+  distance = 30,
+): Point {
   const d = rotatedBoxDimensions(points);
   const top = {
     x: (points[0].x + points[1].x) / 2,
     y: (points[0].y + points[1].y) / 2,
   };
   return {
-    x: top.x + Math.sin(d.angle) * 30,
-    y: top.y - Math.cos(d.angle) * 30,
+    x: top.x + Math.sin(d.angle) * distance,
+    y: top.y - Math.cos(d.angle) * distance,
   };
 }
 
