@@ -322,6 +322,125 @@ afterEach(() => {
 });
 
 describe("AnnotationEditor", () => {
+  it("shows a rotation handle for a selected regular box and deletes it with Backspace", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse(session);
+      }
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        init?.method === "PUT"
+      ) {
+        return jsonResponse({
+          image: { ...session.image, annotation_revision: 3 },
+          annotations: [],
+          counts_by_class: [
+            { label_class_id: "class-1", count: 0 },
+            { label_class_id: "class-2", count: 0 },
+          ],
+        });
+      }
+      const shared = handleDefaultEditorRequests(url, init);
+      if (shared) {
+        return shared;
+      }
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+
+    const objectList = screen.getByRole("listbox", { name: "Objects" });
+    await userEvent.click(within(objectList).getAllByRole("option")[0]);
+
+    expect(
+      screen.getByTestId("rotation-handle-annotation-1"),
+    ).toBeInTheDocument();
+
+    fireEvent.keyDown(document.body, { key: "Backspace" });
+
+    expect(
+      screen.queryByTestId("annotation-annotation-1"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows rotation and resize handles for a selected rotated box in Main Select", async () => {
+    const sessionWithRotatedBox = {
+      ...session,
+      mask_annotations: [
+        {
+          id: "rotated-mask-1",
+          image_id: session.image.id,
+          label_class_id: "class-1",
+          geometry_kind: "rotated_box",
+          mask_path: null,
+          polygon_json: [
+            [320, 320],
+            [440, 340],
+            [420, 440],
+            [300, 420],
+          ],
+          x_min: 300,
+          y_min: 320,
+          x_max: 440,
+          y_max: 440,
+          area_pixels: 12400,
+          source_type: "human",
+          provenance_json: null,
+          status: "verified",
+          created_by: "local_user",
+          created_at: "2026-07-08T00:00:00Z",
+          updated_at: "2026-07-08T00:00:00Z",
+          deleted_at: null,
+          revision: 1,
+        },
+      ],
+      mask_counts_by_class: [{ label_class_id: "class-1", count: 1 }],
+    } as AnnotationSession;
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse(sessionWithRotatedBox);
+      }
+      const shared = handleDefaultEditorRequests(url, init);
+      if (shared) {
+        return shared;
+      }
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+
+    const objectList = screen.getByRole("listbox", { name: "Objects" });
+    const rotatedRow = within(objectList).getByText("Rotated box").closest(
+      "button",
+    );
+    if (!(rotatedRow instanceof HTMLButtonElement)) {
+      throw new Error("Rotated box row was not rendered");
+    }
+    await userEvent.click(rotatedRow);
+
+    expect(
+      screen.getByTestId("rotation-handle-rotated-mask-1"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("resize-handle-rotated-mask-1-0"),
+    ).toBeInTheDocument();
+  });
+
   it("shows and deletes polygon masks from Main Select", async () => {
     const sessionWithMask = {
       ...session,
