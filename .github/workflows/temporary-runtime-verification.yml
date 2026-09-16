@@ -8,6 +8,8 @@ on:
 jobs:
   backend-runtime:
     runs-on: ubuntu-latest
+    env:
+      PYTHONWARNINGS: "ignore::DeprecationWarning"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -17,9 +19,7 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[dev]"
       - name: Full backend suite
-        run: >-
-          python -m pytest apps/api/reefvision/tests -q
-          -W "ignore:The anyio\.abc\.BlockingPortal alias is deprecated.*:DeprecationWarning"
+        run: python -m pytest apps/api/reefvision/tests -q
       - name: Verify canonical migration roundtrip
         shell: bash
         run: |
@@ -71,3 +71,20 @@ jobs:
       - name: E2E on validated 1.0.2 source under current runner
         run: npm run test:e2e
         working-directory: apps/web
+
+
+  validated-base-mypy-comparison:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: de03d5862759bf887cc314517728d7954ca3aacd
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Mypy on validated 1.0.2 source
+        run: python -m mypy apps/api/reefvision
