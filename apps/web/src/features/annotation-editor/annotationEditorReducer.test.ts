@@ -252,6 +252,115 @@ describe("annotationEditorReducer", () => {
     });
   });
 
+  it("undoes a saved box rotation without leaving the persisted rotated mask behind", () => {
+    let state = annotationEditorReducer(initialAnnotationEditorState, {
+      type: "loadSession",
+      session,
+    });
+
+    const rotatedMask = {
+      id: "rotated-1",
+      label_class_id: "class-1",
+      geometry_kind: "rotated_box",
+      points: [
+        { x: 10, y: 12 },
+        { x: 22, y: 12 },
+        { x: 22, y: 30 },
+        { x: 10, y: 30 },
+      ],
+      mask_path: null,
+      x_min: 10,
+      y_min: 12,
+      x_max: 22,
+      y_max: 30,
+      area_pixels: 216,
+      source_type: "human",
+      persisted: false,
+    };
+
+    state = annotationEditorReducer(state, {
+      type: "commitDocument",
+      document: {
+        ...state.document,
+        annotations: [],
+        maskAnnotations: [rotatedMask],
+      },
+      selection: [],
+      maskSelection: ["rotated-1"],
+    });
+
+    const sentVersion = state.documentVersion;
+    state = annotationEditorReducer(state, {
+      type: "saveStarted",
+      sentVersion,
+    });
+    state = annotationEditorReducer(state, {
+      type: "saveSucceeded",
+      sentVersion,
+      response: {
+        image: {
+          ...session.image,
+          annotation_revision: 4,
+        },
+        annotations: [],
+        counts_by_class: [
+          { label_class_id: "class-1", count: 0 },
+          { label_class_id: "class-2", count: 0 },
+        ],
+        mask_annotations: [
+          {
+            id: "rotated-1",
+            image_id: "image-1",
+            label_class_id: "class-1",
+            geometry_kind: "rotated_box",
+            mask_path: null,
+            polygon_json: [
+              [10, 12],
+              [22, 12],
+              [22, 30],
+              [10, 30],
+            ],
+            x_min: 10,
+            y_min: 12,
+            x_max: 22,
+            y_max: 30,
+            area_pixels: 216,
+            source_type: "human",
+            provenance_json: null,
+            status: "verified",
+            created_by: "local_user",
+            created_at: "2026-09-16T00:00:00Z",
+            updated_at: "2026-09-16T00:00:00Z",
+            deleted_at: null,
+            revision: 1,
+          },
+        ],
+        mask_counts_by_class: [
+          { label_class_id: "class-1", count: 1 },
+          { label_class_id: "class-2", count: 0 },
+        ],
+      } as never,
+    });
+
+    expect(state.document.maskAnnotations[0].persisted).toBe(true);
+
+    state = annotationEditorReducer(state, { type: "undo" });
+
+    expect(state.document.annotations).toHaveLength(1);
+    expect(state.document.annotations[0].id).toBe("annotation-1");
+    expect(state.document.maskAnnotations).toEqual([]);
+    expect(state.document.deletedMaskAnnotationIds).toEqual(["rotated-1"]);
+    expect(toAnnotationSavePayload(state)).toMatchObject({
+      deleted_mask_annotation_ids: ["rotated-1"],
+      annotations: [
+        {
+          id: "annotation-1",
+          label_class_id: "class-1",
+        },
+      ],
+    });
+  });
+
   it("supports hide-all, invert, solo, and reset visibility actions", () => {
     let state = annotationEditorReducer(initialAnnotationEditorState, {
       type: "loadSession",
