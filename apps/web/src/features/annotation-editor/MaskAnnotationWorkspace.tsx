@@ -34,7 +34,6 @@ import {
   generatePolygonFill,
   generateSmartClosePolygon,
 } from "./rasterMaskApi";
-import { RotatedBoxLayer } from "./RotatedBoxLayer";
 import type {
   AnnotationDocument,
   EditorMaskAnnotation,
@@ -302,12 +301,52 @@ export function MaskAnnotationWorkspace({
     ]);
   }
 
-  function deleteMasks(maskIds: string[]) {
-    commitDocument(
-      deleteMaskAnnotations(stateRef.current.document, maskIds),
-      [],
-    );
-  }
+  const deleteMasks = useCallback(
+    (maskIds: string[]) => {
+      commitDocument(
+        deleteMaskAnnotations(stateRef.current.document, maskIds),
+        [],
+      );
+    },
+    [commitDocument],
+  );
+
+  useEffect(() => {
+    const handleDeleteShortcut = (event: globalThis.KeyboardEvent) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          Boolean(
+            target.closest(
+              "input, textarea, select, [contenteditable='true']",
+            ),
+          ))
+      ) {
+        return;
+      }
+
+      const snapshot = stateRef.current;
+      if (
+        snapshot.tool !== "select" ||
+        snapshot.selectedMaskIds.length === 0 ||
+        (event.key !== "Backspace" && event.key !== "Delete")
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      deleteMasks(snapshot.selectedMaskIds);
+    };
+
+    window.addEventListener("keydown", handleDeleteShortcut, true);
+    return () =>
+      window.removeEventListener("keydown", handleDeleteShortcut, true);
+  }, [deleteMasks]);
 
   function applyClass(labelClassId: string) {
     if (state.selectedMaskIds.length > 0) {
@@ -483,18 +522,6 @@ export function MaskAnnotationWorkspace({
           </button>
           <button
             type="button"
-            className={state.tool === "rotated_box" ? "active" : "secondary"}
-            data-testid="activate-rotated-box-tool"
-            title="Draw, move, resize, and rotate an oriented bounding box"
-            onClick={() => {
-              setCenterlineEditing(false);
-              dispatch({ type: "setTool", tool: "rotated_box" });
-            }}
-          >
-            Rotated box
-          </button>
-          <button
-            type="button"
             className={centerlineEditing ? "active" : "secondary"}
             data-testid="activate-centerline-tool"
             title="Draw total-linear-extension centerline points"
@@ -590,6 +617,7 @@ export function MaskAnnotationWorkspace({
                   Auto-close tolerance
                   <input
                     type="range"
+                    className="annotation-range-control"
                     min={0}
                     max={100}
                     step={1}
@@ -684,9 +712,8 @@ export function MaskAnnotationWorkspace({
               </div>
             </div>
             <p className="annotation-helper">
-              Polygon: add vertices and close the outline. Rotated box: drag a
-              box, then refine it with corner and rotation handles. Select keeps
-              polygon vertex editing separate from oriented-box editing.
+              Polygon: add vertices and close the outline. Select an existing
+              mask to move vertices, reassign its class, or delete it.
             </p>
             <button
               type="button"
@@ -777,21 +804,6 @@ export function MaskAnnotationWorkspace({
                     : fillPolygon(seed))
                 }
               />
-              {state.tool === "rotated_box" && (
-                <RotatedBoxLayer
-                  width={image.width_px}
-                  height={image.height_px}
-                  masks={state.document.maskAnnotations}
-                  classColors={classColors}
-                  activeClassId={state.activeClassId}
-                  selectedMaskIds={state.selectedMaskIds}
-                  onCreate={createMask}
-                  onUpdate={updateMask}
-                  onSelectionChange={(selection) =>
-                    dispatch({ type: "setMaskSelection", selection })
-                  }
-                />
-              )}
               <CenterlineMeasurementLayer
                 width={image.width_px}
                 height={image.height_px}
