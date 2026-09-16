@@ -358,7 +358,7 @@ describe("Gallery", () => {
       await screen.findByRole("heading", { name: "Batch model deployment" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/trained or imported project model/i),
+      screen.getByLabelText("Trained or imported project model"),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Run detector" }),
