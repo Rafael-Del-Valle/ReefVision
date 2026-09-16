@@ -3242,7 +3242,10 @@ export function AnnotationEditor({
                       mask.geometry_kind === "rotated_box" &&
                       mask.points.length === 4
                     ) {
-                      const rotationHandle = rotatedBoxRotationHandle(mask.points);
+                      const rotationHandle = rotatedBoxRotationHandle(
+                        mask.points,
+                        30 * strokeScale,
+                      );
                       const topCenter = {
                         x: (mask.points[0].x + mask.points[1].x) / 2,
                         y: (mask.points[0].y + mask.points[1].y) / 2,
