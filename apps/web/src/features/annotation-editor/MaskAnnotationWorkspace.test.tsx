@@ -235,6 +235,18 @@ it("fills in source coordinates as a normal polygon with selection, undo, redo, 
   expect(screen.getByText("0 masks")).toBeInTheDocument();
 });
 
+it("deletes any selected mask annotation with Backspace while Select is active", async () => {
+  await mount();
+  fireEvent.click(screen.getByTestId("activate-polygon-fill-tool"));
+  seed();
+  await screen.findByText("1 masks");
+
+  fireEvent.click(screen.getByTestId("activate-mask-select-tool"));
+  fireEvent.keyDown(document.body, { key: "Backspace" });
+
+  await waitFor(() => expect(screen.getByText("0 masks")).toBeInTheDocument());
+});
+
 it("uses a separate Smart Close tool with full-opening strength at zero", async () => {
   await mount();
   fireEvent.click(screen.getByTestId("activate-smart-close-tool"));
