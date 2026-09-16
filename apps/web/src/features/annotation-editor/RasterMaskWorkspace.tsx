@@ -230,6 +230,7 @@ export function RasterMaskWorkspace({
                 Fill color tolerance: {fillTolerance}
                 <input
                   type="range"
+                  className="annotation-range-control"
                   min="0"
                   max="96"
                   value={fillTolerance}
@@ -244,6 +245,7 @@ export function RasterMaskWorkspace({
                 Brush radius: {brushRadius}px
                 <input
                   type="range"
+                  className="annotation-range-control"
                   min="1"
                   max="128"
                   value={brushRadius}
