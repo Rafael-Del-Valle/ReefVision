@@ -419,6 +419,17 @@ input[type="color"] {
   min-height: 2.45rem;
   padding: 0.25rem;
 }
+
+input[type="range"].annotation-range-control {
+  width: 100%;
+  min-height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
 textarea {
   min-height: 6rem;
   resize: vertical;
