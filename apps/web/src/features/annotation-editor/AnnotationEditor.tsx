@@ -353,8 +353,7 @@ export function AnnotationEditor({
     enabled: deployJobId !== null,
     refetchInterval: (query) => {
       const job = query.state.data as JobRecord | undefined;
-      return job &&
-        ["succeeded", "failed", "cancelled"].includes(job.status)
+      return job && ["succeeded", "failed", "cancelled"].includes(job.status)
         ? false
         : 1000;
     },
@@ -2061,9 +2060,9 @@ export function AnnotationEditor({
               </select>
             </label>
             <p className="annotation-helper">
-              Run a registered trained or imported project model such as
-              best.pt on this image. Grounding DINO and other prompted,
-              open-vocabulary tools remain separate assist workflows.
+              Run a registered trained or imported project model such as best.pt
+              on this image. Grounding DINO and other prompted, open-vocabulary
+              tools remain separate assist workflows.
             </p>
             <button
               type="button"
@@ -2090,9 +2089,7 @@ export function AnnotationEditor({
               </p>
             )}
             {deployJobQuery.data?.error_message && (
-              <p className="form-error">
-                {deployJobQuery.data.error_message}
-              </p>
+              <p className="form-error">{deployJobQuery.data.error_message}</p>
             )}
           </section>
 

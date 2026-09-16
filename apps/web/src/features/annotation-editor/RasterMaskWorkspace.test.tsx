@@ -68,7 +68,6 @@ it("uses endpoint-safe styling for the Brush radius slider", async () => {
   expect(slider).toHaveClass("annotation-range-control");
 });
 
-
 it("reassigns a selected painted mask class immediately and displays the class color", async () => {
   const mask = {
     id: "mask-1",
@@ -150,7 +149,9 @@ it("reassigns a selected painted mask class immediately and displays the class c
   screen.getByText("Sponge").closest("button")?.click();
 
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: /Sponge \| r2/i })).toBeInTheDocument(),
+    expect(
+      screen.getByRole("button", { name: /Sponge \| r2/i }),
+    ).toBeInTheDocument(),
   );
   expect(screen.getByTestId("selected-raster-mask-overlay")).toHaveStyle({
     backgroundColor: "#e76f51",

@@ -465,8 +465,8 @@ export function Gallery({
         </div>
         <p className="annotation-helper">
           Run a trained or imported project model such as best.pt on the
-          selected images. Grounding DINO and other prompted,
-          open-vocabulary tools remain separate assist workflows.
+          selected images. Grounding DINO and other prompted, open-vocabulary
+          tools remain separate assist workflows.
         </p>
         <label>
           Trained or imported project model
@@ -544,8 +544,8 @@ export function Gallery({
         )}
         {activeJob.data && (
           <p className="annotation-helper">
-            Model job {activeJob.data.status}: {activeJob.data.progress_current}/
-            {activeJob.data.progress_total} images
+            Model job {activeJob.data.status}: {activeJob.data.progress_current}
+            /{activeJob.data.progress_total} images
           </p>
         )}
         {activeJob.data?.error_message && (

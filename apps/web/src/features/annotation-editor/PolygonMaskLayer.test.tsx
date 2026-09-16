@@ -329,5 +329,4 @@ describe("PolygonMaskLayer", () => {
       { x: 50, y: 55 },
     ]);
   });
-
 });

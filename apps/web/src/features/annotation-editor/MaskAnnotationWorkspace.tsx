@@ -115,7 +115,8 @@ export function MaskAnnotationWorkspace({
     const snapshot = stateRef.current;
     const imageChanged = loadedImageIdRef.current !== imageId;
     const newerSameImage =
-      !imageChanged && session.image.annotation_revision > snapshot.baseRevision;
+      !imageChanged &&
+      session.image.annotation_revision > snapshot.baseRevision;
     if (!imageChanged && !newerSameImage) {
       return;
     }
@@ -361,9 +362,7 @@ export function MaskAnnotationWorkspace({
           target.tagName === "TEXTAREA" ||
           target.tagName === "SELECT" ||
           Boolean(
-            target.closest(
-              "input, textarea, select, [contenteditable='true']",
-            ),
+            target.closest("input, textarea, select, [contenteditable='true']"),
           ))
       ) {
         return;

@@ -1151,7 +1151,9 @@ describe("AnnotationEditor", () => {
     });
 
     renderEditor();
-    await screen.findByRole("heading", { name: session.image.original_filename });
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
     expect(
       screen.getByRole("heading", { name: "Deploy trained model" }),
     ).toBeInTheDocument();
@@ -1204,7 +1206,9 @@ describe("AnnotationEditor", () => {
     });
 
     const { queryClient } = renderEditor();
-    await screen.findByRole("heading", { name: session.image.original_filename });
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
     await userEvent.click(screen.getByRole("button", { name: "Select tool" }));
     fireEvent.pointerDown(screen.getByTestId("annotation-annotation-1"), {
       button: 0,
@@ -1223,5 +1227,4 @@ describe("AnnotationEditor", () => {
       expect(cached?.annotations[0].label_class_id).toBe("class-2");
     });
   });
-
 });

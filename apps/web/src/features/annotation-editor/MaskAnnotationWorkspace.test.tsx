@@ -365,7 +365,6 @@ it.each(
   },
 );
 
-
 it("refreshes same-image mask state when a newer annotation session replaces cached data", async () => {
   const staleSession = {
     ...session(),
