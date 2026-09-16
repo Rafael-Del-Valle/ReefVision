@@ -235,10 +235,26 @@ it("fills in source coordinates as a normal polygon with selection, undo, redo, 
   expect(screen.getByText("0 masks")).toBeInTheDocument();
 });
 
-it("uses a separate Smart Close tool with full-opening strength at zero", async () => {
+it("deletes a selected polygon with Backspace while Select is active", async () => {
+  await mount();
+  fireEvent.click(screen.getByTestId("activate-polygon-fill-tool"));
+  seed();
+  await screen.findByText("1 masks");
+
+  fireEvent.click(screen.getByTestId("activate-mask-select-tool"));
+  fireEvent.keyDown(document.body, { key: "Backspace" });
+
+  await waitFor(() => expect(screen.getByText("0 masks")).toBeInTheDocument());
+});
+
+it("uses a full-track Smart Close control that reaches both endpoints", async () => {
   await mount();
   fireEvent.click(screen.getByTestId("activate-smart-close-tool"));
-  expect(screen.getByLabelText("Auto-close tolerance")).toHaveValue("0");
+  const tolerance = screen.getByLabelText("Auto-close tolerance");
+  expect(tolerance).toHaveClass("annotation-range-control");
+  expect(tolerance).toHaveAttribute("min", "0");
+  expect(tolerance).toHaveAttribute("max", "100");
+  expect(tolerance).toHaveValue("0");
   expect(screen.getByText("Full opening")).toBeInTheDocument();
 
   seed();
@@ -248,10 +264,11 @@ it("uses a separate Smart Close tool with full-opening strength at zero", async 
   ).toEqual(["image-1", { seed: { x: 20, y: 20 }, closure_strength: 0 }]);
   expect(generatePolygonFill).not.toHaveBeenCalled();
 
-  fireEvent.change(screen.getByLabelText("Auto-close tolerance"), {
-    target: { value: "60" },
-  });
-  expect(screen.getByText("60%")).toBeInTheDocument();
+  fireEvent.change(tolerance, { target: { value: "100" } });
+  expect(screen.getByText("100%")).toBeInTheDocument();
+
+  fireEvent.change(tolerance, { target: { value: "0" } });
+  expect(screen.getByText("Full opening")).toBeInTheDocument();
 });
 
 it("shows fill failures and leaves the annotation history unchanged", async () => {
