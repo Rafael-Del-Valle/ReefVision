@@ -364,7 +364,7 @@ describe("Gallery", () => {
       screen.queryByRole("button", { name: "Run detector" }),
     ).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByLabelText("Select image"));
+    await userEvent.click(await screen.findByLabelText("Select image"));
     await userEvent.click(
       screen.getByRole("button", { name: "Run model on selected images" }),
     );
