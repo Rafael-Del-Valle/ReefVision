@@ -287,4 +287,47 @@ describe("PolygonMaskLayer", () => {
       { x: 10, y: 25 },
     ]);
   });
+  it("drags the whole selected polygon while keeping every vertex inside the image", () => {
+    const onUpdate = vi.fn();
+    render(
+      <PolygonMaskLayer
+        width={400}
+        height={300}
+        masks={[polygonMask]}
+        classColors={{ "class-1": "#2a9d8f" }}
+        activeClassId="class-1"
+        tool="select"
+        selectedMaskIds={[polygonMask.id]}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onSelectionChange={vi.fn()}
+      />,
+    );
+
+    const layer = maskLayer();
+    mockLayerBounds(layer);
+    const polygon = layer.querySelector("polygon") as SVGPolygonElement;
+
+    fireEvent.pointerDown(polygon, {
+      pointerId: 12,
+      clientX: 20,
+      clientY: 20,
+      button: 0,
+    });
+    fireEvent.pointerMove(layer, {
+      pointerId: 12,
+      clientX: 60,
+      clientY: 50,
+    });
+    fireEvent.pointerUp(layer, { pointerId: 12 });
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate.mock.calls[0][0].points).toEqual([
+      { x: 50, y: 40 },
+      { x: 70, y: 40 },
+      { x: 70, y: 55 },
+      { x: 50, y: 55 },
+    ]);
+  });
+
 });
