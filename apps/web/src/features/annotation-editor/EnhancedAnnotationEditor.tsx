@@ -61,7 +61,7 @@ export function EnhancedAnnotationEditor({
   const queryClient = useQueryClient();
   const [workspace, setWorkspace] = useState<EditorWorkspace>("boxes");
   const [maskInitialTool, setMaskInitialTool] = useState<
-    "polygon" | "fill" | "smart_close" | undefined
+    "polygon" | "fill" | "smart_close" | "rotated_box" | undefined
   >(undefined);
   const [activeMaskTool, setActiveMaskTool] = useState<
     "select" | "polygon" | "fill" | "smart_close" | "rotated_box"
@@ -134,15 +134,6 @@ export function EnhancedAnnotationEditor({
         return;
       }
 
-      const selectToolActive = document
-        .querySelector('[data-testid="activate-mask-select-tool"]')
-        ?.classList.contains("active");
-      if (
-        selectToolActive &&
-        (event.key === "Delete" || event.key === "Backspace")
-      ) {
-        stopEditorEvent(event);
-      }
     };
 
     const handlePointerDown = (event: globalThis.PointerEvent) => {
@@ -295,6 +286,20 @@ export function EnhancedAnnotationEditor({
     setWorkspace("masks");
   }
 
+  function activateRotatedBoxTool() {
+    if (workspace === "masks") {
+      document
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="activate-rotated-box-tool"]',
+        )
+        ?.click();
+      return;
+    }
+    setMaskInitialTool("rotated_box");
+    setActiveMaskTool("rotated_box");
+    setWorkspace("masks");
+  }
+
   function activateBrushTool() {
     setMaskInitialTool(undefined);
     if (workspace === "masks") {
@@ -384,6 +389,20 @@ export function EnhancedAnnotationEditor({
         >
           <span aria-hidden="true">⬡</span>
           <small>Polygon</small>
+        </button>
+        <button
+          type="button"
+          className={
+            workspace === "masks" && activeMaskTool === "rotated_box"
+              ? "active"
+              : "secondary"
+          }
+          data-testid="open-rotated-box-tool"
+          title="Draw and edit oriented bounding boxes"
+          onClick={activateRotatedBoxTool}
+        >
+          <span aria-hidden="true">▱</span>
+          <small>Rotated box</small>
         </button>
         <button
           type="button"
