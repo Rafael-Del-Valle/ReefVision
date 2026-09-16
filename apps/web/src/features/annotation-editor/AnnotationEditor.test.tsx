@@ -285,7 +285,7 @@ function renderEditor(onClose = vi.fn()) {
       />
     </QueryClientProvider>,
   );
-  return { onClose };
+  return { onClose, queryClient };
 }
 
 function selectionPanel(): HTMLElement {
@@ -1065,4 +1065,163 @@ describe("AnnotationEditor", () => {
       ),
     );
   });
+  it("deploys a trained project model on the currently open image", async () => {
+    const detectorModel = {
+      id: "detector-best",
+      project_id: project.id,
+      purpose: "detector",
+      display_name: "Coral best.pt",
+      source_filename: "best.pt",
+      managed_path: "projects/project-1/models/best.pt",
+      sha256: "d".repeat(64),
+      file_size_bytes: 2048,
+      framework: "ultralytics",
+      task: "detect",
+      provider_name: "ultralytics",
+      provider_version: "8.4.19",
+      class_map_json: {},
+      input_size_json: null,
+      metadata_json: {},
+      notes: null,
+      created_at: "2026-09-16T00:00:00Z",
+      updated_at: "2026-09-16T00:00:00Z",
+    };
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse(session);
+      }
+      if (url.includes(`/projects/${project.id}/models?purpose=detector`)) {
+        return jsonResponse([detectorModel]);
+      }
+      if (url.includes(`/projects/${project.id}/model-catalog`)) {
+        return jsonResponse({
+          schema_version: 2,
+          catalog_version: "2.0.0",
+          models: [],
+          warnings: [],
+          rejected_entries: [],
+        });
+      }
+      if (
+        url.endsWith(`/projects/${project.id}/class-visibility`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse(buildVisibilityBundle());
+      }
+      if (
+        url.includes(`/images/${session.image.id}/prediction-proposals`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse({ items: [], counts: { pending: 0 } });
+      }
+      if (
+        url.endsWith(`/projects/${project.id}/inference-jobs`) &&
+        init?.method === "POST"
+      ) {
+        return jsonResponse({
+          id: "job-single",
+          project_id: project.id,
+          job_type: "inference",
+          status: "queued",
+          progress_current: 0,
+          progress_total: 1,
+          result_json: {},
+          error_message: null,
+        });
+      }
+      if (url.includes("/jobs/job-single")) {
+        return jsonResponse({
+          id: "job-single",
+          project_id: project.id,
+          job_type: "inference",
+          status: "succeeded",
+          progress_current: 1,
+          progress_total: 1,
+          result_json: {},
+          error_message: null,
+        });
+      }
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderEditor();
+    await screen.findByRole("heading", { name: session.image.original_filename });
+    expect(
+      screen.getByRole("heading", { name: "Deploy trained model" }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Run model on this image" }),
+    );
+
+    await waitFor(() => {
+      const request = requests.find(
+        (entry) =>
+          entry.url.endsWith(`/projects/${project.id}/inference-jobs`) &&
+          entry.init?.method === "POST",
+      );
+      expect(request).toBeDefined();
+      expect(JSON.parse(String(request?.init?.body))).toMatchObject({
+        model_id: "detector-best",
+        image_ids: [session.image.id],
+        confidence_threshold: 0.25,
+      });
+    });
+  });
+
+  it("updates the cached annotation session revision after a successful save", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse(session);
+      }
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        init?.method === "PUT"
+      ) {
+        const body = JSON.parse(String(init.body));
+        return jsonResponse({
+          image: {
+            ...session.image,
+            annotation_revision: 3,
+          },
+          annotations: body.annotations,
+          counts_by_class: session.counts_by_class,
+        });
+      }
+      const shared = handleDefaultEditorRequests(url, init);
+      if (shared) return shared;
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    const { queryClient } = renderEditor();
+    await screen.findByRole("heading", { name: session.image.original_filename });
+    await userEvent.click(screen.getByRole("button", { name: "Select tool" }));
+    fireEvent.pointerDown(screen.getByTestId("annotation-annotation-1"), {
+      button: 0,
+      clientX: 120,
+      clientY: 160,
+    });
+    await userEvent.click(screen.getByTestId("class-tool-2"));
+    await userEvent.click(screen.getByRole("button", { name: "Save now" }));
+
+    await waitFor(() => {
+      const cached = queryClient.getQueryData<AnnotationSession>([
+        "annotation-session",
+        session.image.id,
+      ]);
+      expect(cached?.image.annotation_revision).toBe(3);
+      expect(cached?.annotations[0].label_class_id).toBe("class-2");
+    });
+  });
+
 });
