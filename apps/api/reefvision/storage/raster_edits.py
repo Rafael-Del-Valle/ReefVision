@@ -107,34 +107,36 @@ def _flood_fill_from_source(
         start_x, y = pending.pop()
         if not matches(start_x, y):
             continue
+
         left = start_x
         while left > 0 and matches(left - 1, y):
             left -= 1
 
-        span_up = False
-        span_down = False
-        x = left
-        while x < width and matches(x, y):
+        right = start_x
+        while right + 1 < width and matches(right + 1, y):
+            right += 1
+
+        for x in range(left, right + 1):
             visited[y * width + x] = 1
             mask_pixels[x, y] = 255
             filled += 1
 
-            if y > 0:
-                up_matches = matches(x, y - 1)
-                if up_matches and not span_up:
-                    pending.append((x, y - 1))
-                    span_up = True
-                elif not up_matches:
-                    span_up = False
-
-            if y + 1 < height:
-                down_matches = matches(x, y + 1)
-                if down_matches and not span_down:
-                    pending.append((x, y + 1))
-                    span_down = True
-                elif not down_matches:
-                    span_down = False
-            x += 1
+        # Search one pixel beyond the horizontal run on adjacent rows. This
+        # keeps diagonally connected image regions connected, so Fill can trace
+        # around narrow obstacles instead of truncating the region at a corner.
+        for neighbor_y in (y - 1, y + 1):
+            if neighbor_y < 0 or neighbor_y >= height:
+                continue
+            scan_x = max(0, left - 1)
+            scan_right = min(width - 1, right + 1)
+            while scan_x <= scan_right:
+                if not matches(scan_x, neighbor_y):
+                    scan_x += 1
+                    continue
+                pending.append((scan_x, neighbor_y))
+                scan_x += 1
+                while scan_x <= scan_right and matches(scan_x, neighbor_y):
+                    scan_x += 1
 
     return filled
 

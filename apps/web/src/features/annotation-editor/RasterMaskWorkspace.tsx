@@ -12,6 +12,7 @@ import { RasterFillLayer } from "./RasterFillLayer";
 import {
   editRasterMask,
   rasterMaskContentUrl,
+  reclassifyRasterMask,
   type RasterEditMode,
 } from "./rasterMaskApi";
 import { resolveRasterMaskSelection } from "./rasterMaskSelection";
@@ -60,6 +61,10 @@ export function RasterMaskWorkspace({
   );
   const selectedMask =
     rasterMasks.find((mask) => mask.id === selectedMaskId) ?? null;
+  const selectedMaskClassId = selectedMask?.label_class_id ?? null;
+  const selectedMaskColor =
+    session?.label_classes.find((item) => item.id === selectedMaskClassId)
+      ?.display_color ?? "#2a9d8f";
 
   useEffect(() => {
     setSelectedMaskId(null);
@@ -86,14 +91,10 @@ export function RasterMaskWorkspace({
   }, [createAnotherMaskRequested, rasterMasks, selectedMaskId]);
 
   useEffect(() => {
-    if (
-      !createAnotherMaskRequested &&
-      selectedMask?.label_class_id &&
-      selectedMask.label_class_id !== activeClassId
-    ) {
-      setActiveClassId(selectedMask.label_class_id);
+    if (!createAnotherMaskRequested && selectedMaskClassId) {
+      setActiveClassId(selectedMaskClassId);
     }
-  }, [activeClassId, createAnotherMaskRequested, selectedMask]);
+  }, [createAnotherMaskRequested, selectedMaskClassId]);
 
   const editMutation = useMutation({
     mutationFn: (points: Point[]) => {
@@ -121,6 +122,26 @@ export function RasterMaskWorkspace({
         setSelectedMaskId(response.mask_annotation.id);
       }
       setCreateAnotherMaskRequested(false);
+      await queryClient.invalidateQueries({
+        queryKey: ["project-images", project.id],
+      });
+    },
+  });
+
+  const classMutation = useMutation({
+    mutationFn: (labelClassId: string) => {
+      if (!session || !selectedMask) {
+        throw new Error("Select a painted mask before changing its class");
+      }
+      return reclassifyRasterMask(imageId, selectedMask.id, {
+        base_revision: session.image.annotation_revision,
+        label_class_id: labelClassId,
+      });
+    },
+    onSuccess: async (response) => {
+      setActiveClassId(response.mask_annotation.label_class_id);
+      await sessionQuery.refetch();
+      setSelectedMaskId(response.mask_annotation.id);
       await queryClient.invalidateQueries({
         queryKey: ["project-images", project.id],
       });
@@ -264,6 +285,9 @@ export function RasterMaskWorkspace({
             {editMutation.error && (
               <p className="form-error">{editMutation.error.message}</p>
             )}
+            {classMutation.error && (
+              <p className="form-error">{classMutation.error.message}</p>
+            )}
           </section>
 
           <section className="annotation-sidebar-section">
@@ -282,8 +306,17 @@ export function RasterMaskWorkspace({
                   <button
                     type="button"
                     className="annotation-class-button"
-                    disabled={editMutation.isPending}
-                    onClick={() => setActiveClassId(labelClass.id)}
+                    disabled={editMutation.isPending || classMutation.isPending}
+                    onClick={() => {
+                      if (
+                        selectedMask &&
+                        selectedMask.label_class_id !== labelClass.id
+                      ) {
+                        classMutation.mutate(labelClass.id);
+                        return;
+                      }
+                      setActiveClassId(labelClass.id);
+                    }}
                   >
                     <span
                       className="annotation-class-swatch"
@@ -390,10 +423,9 @@ export function RasterMaskWorkspace({
                 style={{ display: "block", width: "100%", height: "100%" }}
               />
               {selectedMask && (
-                <img
-                  src={rasterMaskContentUrl(selectedMask)}
-                  alt="Selected raster mask"
-                  draggable={false}
+                <div
+                  data-testid="selected-raster-mask-overlay"
+                  aria-label="Selected raster mask"
                   style={{
                     position: "absolute",
                     inset: 0,
@@ -401,7 +433,15 @@ export function RasterMaskWorkspace({
                     height: "100%",
                     opacity: 0.42,
                     pointerEvents: "none",
-                    mixBlendMode: "screen",
+                    backgroundColor: selectedMaskColor,
+                    WebkitMaskImage: `url(${rasterMaskContentUrl(selectedMask)})`,
+                    maskImage: `url(${rasterMaskContentUrl(selectedMask)})`,
+                    WebkitMaskRepeat: "no-repeat",
+                    maskRepeat: "no-repeat",
+                    WebkitMaskPosition: "center",
+                    maskPosition: "center",
+                    WebkitMaskSize: "100% 100%",
+                    maskSize: "100% 100%",
                   }}
                 />
               )}

@@ -12,7 +12,11 @@ from reefvision.schemas.polygon_fill import (
     PolygonFillResponse,
     SmartCloseRequest,
 )
-from reefvision.schemas.raster_edits import RasterMaskEditRequest, RasterMaskEditResponse
+from reefvision.schemas.raster_edits import (
+    RasterMaskClassUpdateRequest,
+    RasterMaskEditRequest,
+    RasterMaskEditResponse,
+)
 from reefvision.services.polygon_fill import (
     generate_polygon_fill,
     generate_smart_close_polygon,
@@ -57,3 +61,23 @@ def edit_raster_mask(
 ) -> RasterMaskEditResponse:
     settings: Settings = request.app.state.settings
     return RasterMaskEditService(session, settings).edit(image_id, payload)
+
+
+
+@router.patch(
+    "/images/{image_id}/raster-mask-annotations/{mask_annotation_id}/class",
+    response_model=RasterMaskEditResponse,
+)
+def reclassify_raster_mask(
+    image_id: str,
+    mask_annotation_id: str,
+    payload: RasterMaskClassUpdateRequest,
+    request: Request,
+    session: DbSession,
+) -> RasterMaskEditResponse:
+    settings: Settings = request.app.state.settings
+    return RasterMaskEditService(session, settings).reclassify(
+        image_id,
+        mask_annotation_id,
+        payload,
+    )

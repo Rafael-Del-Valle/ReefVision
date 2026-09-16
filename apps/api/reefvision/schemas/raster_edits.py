@@ -29,6 +29,11 @@ class RasterMaskEditRequest(BaseModel):
     strokes: list[RasterEditStroke] = Field(min_length=1, max_length=10_000)
 
 
+class RasterMaskClassUpdateRequest(BaseModel):
+    base_revision: int = Field(ge=0)
+    label_class_id: str = Field(min_length=1, max_length=36)
+
+
 class RasterMaskEditResponse(BaseModel):
     image: ImageResponse
     mask_annotation: MaskAnnotationResponse

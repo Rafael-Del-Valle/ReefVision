@@ -12,6 +12,7 @@ import {
   getAnnotationSession,
   imageDisplayUrl,
   saveAnnotations,
+  type AnnotationSession,
   type Project,
 } from "../../api/client";
 import {
@@ -38,8 +39,13 @@ import type {
   AnnotationDocument,
   EditorMaskAnnotation,
   EditorTool,
+  MaskAnnotationRecord,
   Point,
 } from "./types";
+
+type MaskAwareAnnotationSession = AnnotationSession & {
+  mask_annotations?: MaskAnnotationRecord[];
+};
 
 interface MaskAnnotationWorkspaceProps {
   project: Project;
@@ -102,13 +108,28 @@ export function MaskAnnotationWorkspace({
   });
 
   useEffect(() => {
-    if (sessionQuery.data && loadedImageIdRef.current !== imageId) {
-      dispatch({ type: "loadSession", session: sessionQuery.data });
-      if (initialTool) {
-        dispatch({ type: "setTool", tool: initialTool });
-      }
-      loadedImageIdRef.current = imageId;
+    const session = sessionQuery.data;
+    if (!session) {
+      return;
     }
+    const snapshot = stateRef.current;
+    const imageChanged = loadedImageIdRef.current !== imageId;
+    const newerSameImage =
+      !imageChanged && session.image.annotation_revision > snapshot.baseRevision;
+    if (!imageChanged && !newerSameImage) {
+      return;
+    }
+    if (
+      !imageChanged &&
+      (isDirty(snapshot) || snapshot.saveState === "saving")
+    ) {
+      return;
+    }
+    dispatch({ type: "loadSession", session });
+    if (initialTool) {
+      dispatch({ type: "setTool", tool: initialTool });
+    }
+    loadedImageIdRef.current = imageId;
   }, [imageId, initialTool, sessionQuery.data]);
 
   const { mutateAsync: persistDocument, isPending: savePending } = useMutation({
@@ -129,6 +150,25 @@ export function MaskAnnotationWorkspace({
     dispatch({ type: "saveStarted", sentVersion });
     const request = persistDocument(toAnnotationSavePayload(snapshot))
       .then(async (response) => {
+        const responseWithMasks = response as typeof response & {
+          mask_annotations?: MaskAnnotationRecord[];
+        };
+        queryClient.setQueryData<MaskAwareAnnotationSession>(
+          ["annotation-session", imageId],
+          (current) =>
+            current
+              ? {
+                  ...current,
+                  image: response.image,
+                  annotations: response.annotations,
+                  counts_by_class: response.counts_by_class,
+                  mask_annotations:
+                    responseWithMasks.mask_annotations ??
+                    current.mask_annotations ??
+                    [],
+                }
+              : current,
+        );
         dispatch({ type: "saveSucceeded", sentVersion, response });
         await queryClient.invalidateQueries({
           queryKey: ["project-images", project.id],

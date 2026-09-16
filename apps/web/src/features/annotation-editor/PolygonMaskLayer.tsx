@@ -33,6 +33,14 @@ interface VertexDrag {
   pointerId: number;
 }
 
+interface PolygonDrag {
+  maskId: string;
+  pointerId: number;
+  origin: Point;
+  points: Point[];
+  moved: boolean;
+}
+
 interface PolygonMetrics {
   areaPixels: number;
   xMin: number;
@@ -182,6 +190,7 @@ export function PolygonMaskLayer({
   const [draftPoints, setDraftPoints] = useState<Point[]>([]);
   const [pointerPosition, setPointerPosition] = useState<Point | null>(null);
   const [vertexDrag, setVertexDrag] = useState<VertexDrag | null>(null);
+  const [polygonDrag, setPolygonDrag] = useState<PolygonDrag | null>(null);
   const [dragPreview, setDragPreview] = useState<EditorMaskAnnotation | null>(
     null,
   );
@@ -289,19 +298,65 @@ export function PolygonMaskLayer({
       setDragPreview(updatedMask(sourceMask, nextPoints));
       return;
     }
+    if (polygonDrag !== null) {
+      const sourceMask =
+        masks.find((mask) => mask.id === polygonDrag.maskId) ?? null;
+      if (!sourceMask) {
+        return;
+      }
+      const xValues = polygonDrag.points.map((item) => item.x);
+      const yValues = polygonDrag.points.map((item) => item.y);
+      const requestedX = point.x - polygonDrag.origin.x;
+      const requestedY = point.y - polygonDrag.origin.y;
+      const deltaX = clamp(
+        requestedX,
+        -Math.min(...xValues),
+        width - Math.max(...xValues),
+      );
+      const deltaY = clamp(
+        requestedY,
+        -Math.min(...yValues),
+        height - Math.max(...yValues),
+      );
+      const nextPoints = polygonDrag.points.map((existingPoint) => ({
+        x: existingPoint.x + deltaX,
+        y: existingPoint.y + deltaY,
+      }));
+      setPolygonDrag((current) =>
+        current
+          ? {
+              ...current,
+              moved:
+                current.moved ||
+                Math.abs(deltaX) > Number.EPSILON ||
+                Math.abs(deltaY) > Number.EPSILON,
+            }
+          : current,
+      );
+      setDragPreview(updatedMask(sourceMask, nextPoints));
+      return;
+    }
     if (tool === "polygon" && draftPoints.length > 0) {
       setPointerPosition(point);
     }
   }
 
   function handlePointerUp(event: PointerEvent<SVGSVGElement>) {
-    if (vertexDrag === null || event.pointerId !== vertexDrag.pointerId) {
+    const matchingVertexDrag =
+      vertexDrag !== null && event.pointerId === vertexDrag.pointerId;
+    const matchingPolygonDrag =
+      polygonDrag !== null && event.pointerId === polygonDrag.pointerId;
+    if (!matchingVertexDrag && !matchingPolygonDrag) {
       return;
     }
-    if (dragPreview !== null) {
+    if (
+      dragPreview !== null &&
+      (matchingVertexDrag || (matchingPolygonDrag && polygonDrag?.moved))
+    ) {
       onUpdate(dragPreview);
     }
     setVertexDrag(null);
+    setPolygonDrag(null);
     setDragPreview(null);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -313,6 +368,7 @@ export function PolygonMaskLayer({
       setDraftPoints([]);
       setPointerPosition(null);
       setVertexDrag(null);
+      setPolygonDrag(null);
       setDragPreview(null);
       return;
     }
@@ -410,24 +466,44 @@ export function PolygonMaskLayer({
           "#2a9d8f";
 
         if (mask.geometry_kind === "raster_mask" && mask.mask_path !== null) {
+          const svgMaskId = `raster-mask-${mask.id}`;
           return (
-            <image
-              key={mask.id}
-              data-mask-id={mask.id}
-              href={rasterMaskContentUrl(mask)}
-              x={0}
-              y={0}
-              width={width}
-              height={height}
-              opacity={selected ? 0.55 : 0.35}
-              style={{ cursor: tool === "select" ? "pointer" : "default" }}
-              onPointerDown={(event) => {
-                event.stopPropagation();
-                if (tool === "select") {
-                  selectMask(mask.id, event.shiftKey);
-                }
-              }}
-            />
+            <g key={mask.id} data-mask-id={mask.id}>
+              <defs>
+                <mask
+                  id={svgMaskId}
+                  maskUnits="userSpaceOnUse"
+                  x={0}
+                  y={0}
+                  width={width}
+                  height={height}
+                >
+                  <image
+                    href={rasterMaskContentUrl(mask)}
+                    x={0}
+                    y={0}
+                    width={width}
+                    height={height}
+                  />
+                </mask>
+              </defs>
+              <rect
+                x={0}
+                y={0}
+                width={width}
+                height={height}
+                fill={color}
+                opacity={selected ? 0.55 : 0.35}
+                mask={`url(#${svgMaskId})`}
+                style={{ cursor: tool === "select" ? "pointer" : "default" }}
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                  if (tool === "select") {
+                    selectMask(mask.id, event.shiftKey);
+                  }
+                }}
+              />
+            </g>
           );
         }
 
@@ -446,14 +522,34 @@ export function PolygonMaskLayer({
               stroke={color}
               strokeWidth={selected ? 3 : 2}
               vectorEffect="non-scaling-stroke"
-              style={{ cursor: tool === "select" ? "pointer" : "default" }}
+              style={{ cursor: tool === "select" ? "move" : "default" }}
               onDoubleClick={(event) => {
                 if (mask.geometry_kind === "polygon") insertVertex(event, mask);
               }}
               onPointerDown={(event) => {
                 event.stopPropagation();
-                if (tool === "select") {
-                  selectMask(mask.id, event.shiftKey);
+                if (tool !== "select") {
+                  return;
+                }
+                selectMask(mask.id, event.shiftKey);
+                if (
+                  event.button === 0 &&
+                  mask.geometry_kind === "polygon" &&
+                  mask.points
+                ) {
+                  const svg = event.currentTarget.ownerSVGElement;
+                  if (!svg) {
+                    return;
+                  }
+                  svg.setPointerCapture(event.pointerId);
+                  setPolygonDrag({
+                    maskId: mask.id,
+                    pointerId: event.pointerId,
+                    origin: sourcePoint(svg, event.clientX, event.clientY),
+                    points: mask.points.map((point) => ({ ...point })),
+                    moved: false,
+                  });
+                  setDragPreview(mask);
                 }
               }}
             />

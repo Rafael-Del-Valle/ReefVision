@@ -17,11 +17,13 @@ import {
   boxAssistSession,
   bulkReviewPredictions,
   createAssistSession,
+  createInferenceJob,
   deleteClassVisibilityPreference,
   deleteAssistSession,
   deleteProjectClassVisibilityDefault,
   getClassVisibilityBundle,
   getAnnotationSession,
+  getJob,
   getModels,
   getPredictions,
   getProjectModelCatalog,
@@ -31,10 +33,12 @@ import {
   saveAnnotations,
   saveClassVisibilityPreference,
   saveProjectClassVisibilityDefault,
+  type AnnotationSession,
   type AssistSession,
   type ClassVisibilityBundle,
   type ClassVisibilityLayerType,
   type ClassVisibilityScopeState,
+  type JobRecord,
   type LabelClass,
   type ModelCatalogEntry,
   type PredictionProposal,
@@ -283,6 +287,11 @@ export function AnnotationEditor({
   const [assistSession, setAssistSession] = useState<AssistSession | null>(
     null,
   );
+  const [deployModelId, setDeployModelId] = useState("");
+  const [deployConfidence, setDeployConfidence] = useState("0.25");
+  const [deployDevice, setDeployDevice] = useState("auto");
+  const [deployJobId, setDeployJobId] = useState<string | null>(null);
+  const completedDeployJobRef = useRef<string | null>(null);
   const [predictionClassOverrides, setPredictionClassOverrides] = useState<
     Record<string, string>
   >({});
@@ -338,6 +347,18 @@ export function AnnotationEditor({
     queryKey: ["models", project.id, "detector"],
     queryFn: () => getModels(project.id, "detector"),
   });
+  const deployJobQuery = useQuery({
+    queryKey: ["job", deployJobId],
+    queryFn: ({ signal }) => getJob(deployJobId as string, signal),
+    enabled: deployJobId !== null,
+    refetchInterval: (query) => {
+      const job = query.state.data as JobRecord | undefined;
+      return job &&
+        ["succeeded", "failed", "cancelled"].includes(job.status)
+        ? false
+        : 1000;
+    },
+  });
   const assistModels = useQuery({
     queryKey: ["model_catalog", project.id, "smart_mask"],
     queryFn: () =>
@@ -368,6 +389,12 @@ export function AnnotationEditor({
     enabled: Boolean(sessionQuery.data) && showPredictions,
     refetchOnWindowFocus: false,
   });
+
+  useEffect(() => {
+    if (!deployModelId && detectorModels.data?.[0]) {
+      setDeployModelId(detectorModels.data[0].id);
+    }
+  }, [deployModelId, detectorModels.data]);
 
   useEffect(() => {
     if (!sessionQuery.data) {
@@ -872,6 +899,40 @@ export function AnnotationEditor({
     },
   });
 
+  useEffect(() => {
+    const job = deployJobQuery.data;
+    if (
+      !job ||
+      job.status !== "succeeded" ||
+      completedDeployJobRef.current === job.id
+    ) {
+      return;
+    }
+    completedDeployJobRef.current = job.id;
+    setShowPredictions(true);
+    void queryClient.invalidateQueries({
+      queryKey: ["predictions", currentImageId],
+    });
+  }, [currentImageId, deployJobQuery.data, queryClient]);
+
+  const deployModelMutation = useMutation({
+    mutationFn: () => {
+      if (!deployModelId) {
+        throw new Error("Choose a trained or imported project model first");
+      }
+      return createInferenceJob(project.id, {
+        model_id: deployModelId,
+        image_ids: [currentImageId],
+        confidence_threshold: Number(deployConfidence),
+        device: deployDevice,
+      });
+    },
+    onSuccess: (job) => {
+      completedDeployJobRef.current = null;
+      setDeployJobId(job.id);
+    },
+  });
+
   const deleteAssistSessionQuietly = useCallback(async (sessionId: string) => {
     try {
       await deleteAssistSession(sessionId);
@@ -1208,6 +1269,18 @@ export function AnnotationEditor({
       toAnnotationSavePayload(snapshot),
     )
       .then(async (response) => {
+        queryClient.setQueryData<AnnotationSession>(
+          ["annotation-session", currentImageIdRef.current],
+          (current) =>
+            current
+              ? {
+                  ...current,
+                  image: response.image,
+                  annotations: response.annotations,
+                  counts_by_class: response.counts_by_class,
+                }
+              : current,
+        );
         dispatch({ type: "saveSucceeded", sentVersion, response });
         await queryClient.invalidateQueries({
           queryKey: ["images", project.id],
@@ -1936,6 +2009,90 @@ export function AnnotationEditor({
                   </button>
                 </div>
               </div>
+            )}
+          </section>
+
+          <section className="annotation-sidebar-section">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Project model</p>
+                <h3>Deploy trained model</h3>
+              </div>
+              <span>{detectorModels.data?.length ?? 0} available</span>
+            </div>
+            <label>
+              Trained or imported model
+              <select
+                value={deployModelId}
+                onChange={(event) => setDeployModelId(event.target.value)}
+                disabled={!detectorModels.data?.length}
+              >
+                {detectorModels.data?.length ? (
+                  detectorModels.data.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.display_name}
+                    </option>
+                  ))
+                ) : (
+                  <option value="">No project models registered</option>
+                )}
+              </select>
+            </label>
+            <label>
+              Deployment confidence
+              <input
+                type="number"
+                min="0"
+                max="1"
+                step="0.05"
+                value={deployConfidence}
+                onChange={(event) => setDeployConfidence(event.target.value)}
+              />
+            </label>
+            <label>
+              Deployment device
+              <select
+                value={deployDevice}
+                onChange={(event) => setDeployDevice(event.target.value)}
+              >
+                <option value="auto">Auto</option>
+                <option value="cuda">CUDA</option>
+                <option value="cpu">CPU</option>
+              </select>
+            </label>
+            <p className="annotation-helper">
+              Run a registered trained or imported project model such as
+              best.pt on this image. Grounding DINO and other prompted,
+              open-vocabulary tools remain separate assist workflows.
+            </p>
+            <button
+              type="button"
+              disabled={
+                !deployModelId ||
+                deployModelMutation.isPending ||
+                deployJobQuery.data?.status === "queued" ||
+                deployJobQuery.data?.status === "running"
+              }
+              onClick={() => deployModelMutation.mutate()}
+            >
+              {deployModelMutation.isPending
+                ? "Queueing model..."
+                : "Run model on this image"}
+            </button>
+            {deployModelMutation.error && (
+              <p className="form-error">{deployModelMutation.error.message}</p>
+            )}
+            {deployJobQuery.data && (
+              <p className="annotation-helper">
+                Model job {deployJobQuery.data.status}:{" "}
+                {deployJobQuery.data.progress_current}/
+                {deployJobQuery.data.progress_total} image
+              </p>
+            )}
+            {deployJobQuery.data?.error_message && (
+              <p className="form-error">
+                {deployJobQuery.data.error_message}
+              </p>
             )}
           </section>
 

@@ -17,6 +17,7 @@ from reefvision.repositories.projects import ProjectRepository
 from reefvision.schemas.annotations import MaskAnnotationResponse
 from reefvision.schemas.images import ImageResponse
 from reefvision.schemas.raster_edits import (
+    RasterMaskClassUpdateRequest,
     RasterMaskEditRequest,
     RasterMaskEditResponse,
 )
@@ -31,6 +32,64 @@ class RasterMaskEditService:
         self.images = ImageRepository(session)
         self.projects = ProjectRepository(session)
         self.masks = MaskAnnotationRepository(session)
+
+    def reclassify(
+        self,
+        image_id: str,
+        mask_annotation_id: str,
+        payload: RasterMaskClassUpdateRequest,
+    ) -> RasterMaskEditResponse:
+        image = self.images.get(image_id)
+        if image is None:
+            raise NotFoundError("Image not found")
+        if image.annotation_revision != payload.base_revision:
+            raise ConflictError("Annotation revision conflict")
+
+        project = self.projects.get(image.project_id)
+        if project is None:
+            raise NotFoundError("Project not found")
+        if payload.label_class_id not in {
+            label_class.id for label_class in project.label_classes
+        }:
+            raise ValidationError("Mask class does not belong to this image's project")
+
+        mask = self.masks.get(mask_annotation_id)
+        if mask is None or mask.deleted_at is not None:
+            raise NotFoundError("Mask annotation not found")
+        if mask.image_id != image.id:
+            raise ValidationError("Raster masks may only be edited on their source image")
+        if mask.geometry_kind != "raster_mask":
+            raise ValidationError("Class reassignment requires a raster mask")
+
+        if mask.label_class_id == payload.label_class_id:
+            return RasterMaskEditResponse(
+                image=ImageResponse.model_validate(image),
+                mask_annotation=MaskAnnotationResponse.model_validate(mask),
+            )
+
+        before = mask_annotation_snapshot(mask)
+        mask.label_class_id = payload.label_class_id
+        mask.revision += 1
+        self.masks.add_event(
+            MaskAnnotationEvent(
+                mask_annotation_id=mask.id,
+                image_id=image.id,
+                event_type="class_changed",
+                before_json=before,
+                after_json=mask_annotation_snapshot(mask),
+                actor="local_user",
+            )
+        )
+        image.annotation_revision += 1
+        if image.annotation_status == "unannotated":
+            image.annotation_status = "in_progress"
+        self.session.commit()
+        self.session.refresh(image)
+        self.session.refresh(mask)
+        return RasterMaskEditResponse(
+            image=ImageResponse.model_validate(image),
+            mask_annotation=MaskAnnotationResponse.model_validate(mask),
+        )
 
     def edit(
         self,

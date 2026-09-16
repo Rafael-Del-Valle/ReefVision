@@ -455,102 +455,111 @@ export function Gallery({
       )}
       {report && <ImportSummary report={report} />}
 
+      <section className="annotation-sidebar-section">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Project models</p>
+            <h3>Batch model deployment</h3>
+          </div>
+          <span>{detectorModels.data?.length ?? 0} project models</span>
+        </div>
+        <p className="annotation-helper">
+          Run a trained or imported project model such as best.pt on the
+          selected images. Grounding DINO and other prompted,
+          open-vocabulary tools remain separate assist workflows.
+        </p>
+        <label>
+          Trained or imported project model
+          <select
+            value={selectedModelId}
+            onChange={(event) => setSelectedModelId(event.target.value)}
+          >
+            {detectorModels.data?.length ? (
+              detectorModels.data.map((model: ModelRegistration) => (
+                <option key={model.id} value={model.id}>
+                  {model.display_name}
+                </option>
+              ))
+            ) : (
+              <option value="">No project models registered</option>
+            )}
+          </select>
+        </label>
+        <label>
+          Confidence threshold
+          <input
+            type="number"
+            min="0"
+            max="1"
+            step="0.05"
+            value={confidenceThreshold}
+            onChange={(event) => setConfidenceThreshold(event.target.value)}
+          />
+        </label>
+        <label>
+          Device
+          <select
+            value={device}
+            onChange={(event) => setDevice(event.target.value)}
+          >
+            <option value="auto">Auto</option>
+            <option value="cuda">CUDA</option>
+            <option value="cpu">CPU</option>
+          </select>
+        </label>
+        <div className="annotation-editor-inline-actions">
+          <button
+            type="button"
+            disabled={
+              !selectedModel ||
+              selectedImageIds.length === 0 ||
+              inference.isPending ||
+              activeJob.data?.status === "queued" ||
+              activeJob.data?.status === "running"
+            }
+            onClick={() => inference.mutate()}
+          >
+            {inference.isPending
+              ? "Queueing model..."
+              : "Run model on selected images"}
+          </button>
+          {activeJob.data &&
+            !["succeeded", "failed", "cancelled"].includes(
+              activeJob.data.status,
+            ) && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => cancelInference.mutate(activeJob.data.id)}
+              >
+                Cancel job
+              </button>
+            )}
+        </div>
+        {inference.error && (
+          <p className="form-error">{inference.error.message}</p>
+        )}
+        {cancelInference.error && (
+          <p className="form-error">{cancelInference.error.message}</p>
+        )}
+        {activeJob.data && (
+          <p className="annotation-helper">
+            Model job {activeJob.data.status}: {activeJob.data.progress_current}/
+            {activeJob.data.progress_total} images
+          </p>
+        )}
+        {activeJob.data?.error_message && (
+          <p className="form-error">{activeJob.data.error_message}</p>
+        )}
+      </section>
+
       <details
         className="gallery-advanced"
         open={showAdvanced}
         onToggle={(event) => setShowAdvanced(event.currentTarget.open)}
       >
-        <summary>Advanced import and model actions</summary>
+        <summary>Advanced annotation import</summary>
         <AnnotationImportControls projectId={project.id} />
-        <section className="annotation-sidebar-section">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Detector workflow</p>
-              <h3>Run local inference</h3>
-            </div>
-            <span>{detectorModels.data?.length ?? 0} detector models</span>
-          </div>
-          <label>
-            Detector model
-            <select
-              value={selectedModelId}
-              onChange={(event) => setSelectedModelId(event.target.value)}
-            >
-              {detectorModels.data?.length ? (
-                detectorModels.data.map((model: ModelRegistration) => (
-                  <option key={model.id} value={model.id}>
-                    {model.display_name}
-                  </option>
-                ))
-              ) : (
-                <option value="">No detector models registered</option>
-              )}
-            </select>
-          </label>
-          <label>
-            Confidence threshold
-            <input
-              type="number"
-              min="0"
-              max="1"
-              step="0.05"
-              value={confidenceThreshold}
-              onChange={(event) => setConfidenceThreshold(event.target.value)}
-            />
-          </label>
-          <label>
-            Device
-            <select
-              value={device}
-              onChange={(event) => setDevice(event.target.value)}
-            >
-              <option value="cpu">CPU</option>
-              <option value="auto">Auto</option>
-              <option value="cuda">CUDA</option>
-            </select>
-          </label>
-          <div className="annotation-editor-inline-actions">
-            <button
-              type="button"
-              disabled={
-                !selectedModel ||
-                selectedImageIds.length === 0 ||
-                inference.isPending ||
-                activeJob.data?.status === "running"
-              }
-              onClick={() => inference.mutate()}
-            >
-              {inference.isPending ? "Queueing..." : "Run detector"}
-            </button>
-            {activeJob.data &&
-              !["succeeded", "failed", "cancelled"].includes(
-                activeJob.data.status,
-              ) && (
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => cancelInference.mutate(activeJob.data.id)}
-                >
-                  Cancel job
-                </button>
-              )}
-          </div>
-          {inference.error && (
-            <p className="form-error">{inference.error.message}</p>
-          )}
-          {cancelInference.error && (
-            <p className="form-error">{cancelInference.error.message}</p>
-          )}
-          {activeJob.data && (
-            <p>
-              Job {activeJob.data.status}: {activeJob.data.progress_current}/
-              {activeJob.data.progress_total} images
-            </p>
-          )}
-          {activeJob.data?.error_message && (
-            <p className="form-error">{activeJob.data.error_message}</p>
-          )}
-        </section>
       </details>
 
       <form className="gallery-filters" onSubmit={applyFilters}>
