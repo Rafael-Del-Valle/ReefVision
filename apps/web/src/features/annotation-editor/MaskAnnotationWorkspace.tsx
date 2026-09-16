@@ -302,12 +302,52 @@ export function MaskAnnotationWorkspace({
     ]);
   }
 
-  function deleteMasks(maskIds: string[]) {
-    commitDocument(
-      deleteMaskAnnotations(stateRef.current.document, maskIds),
-      [],
-    );
-  }
+  const deleteMasks = useCallback(
+    (maskIds: string[]) => {
+      commitDocument(
+        deleteMaskAnnotations(stateRef.current.document, maskIds),
+        [],
+      );
+    },
+    [commitDocument],
+  );
+
+  useEffect(() => {
+    const handleDeleteShortcut = (event: globalThis.KeyboardEvent) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          Boolean(
+            target.closest(
+              "input, textarea, select, [contenteditable='true']",
+            ),
+          ))
+      ) {
+        return;
+      }
+
+      const snapshot = stateRef.current;
+      if (
+        snapshot.tool !== "select" ||
+        snapshot.selectedMaskIds.length === 0 ||
+        (event.key !== "Backspace" && event.key !== "Delete")
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      deleteMasks(snapshot.selectedMaskIds);
+    };
+
+    window.addEventListener("keydown", handleDeleteShortcut, true);
+    return () =>
+      window.removeEventListener("keydown", handleDeleteShortcut, true);
+  }, [deleteMasks]);
 
   function applyClass(labelClassId: string) {
     if (state.selectedMaskIds.length > 0) {
