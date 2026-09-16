@@ -243,6 +243,7 @@ export function RasterMaskWorkspace({
               <label>
                 Brush radius: {brushRadius}px
                 <input
+                  className="annotation-range-control"
                   type="range"
                   min="1"
                   max="128"
