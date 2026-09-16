@@ -132,4 +132,43 @@ describe("mask document operations", () => {
 
     expect(changed.maskAnnotations[0].label_class_id).toBe("class-1");
   });
+
+  it("reassigns rotated boxes without changing their geometry kind", () => {
+    const document = {
+      ...baseDocument,
+      maskAnnotations: [
+        {
+          id: "rotated-1",
+          label_class_id: "class-1",
+          geometry_kind: "rotated_box",
+          points: [
+            { x: 10, y: 10 },
+            { x: 30, y: 12 },
+            { x: 28, y: 32 },
+            { x: 8, y: 30 },
+          ],
+          mask_path: null,
+          x_min: 8,
+          y_min: 10,
+          x_max: 30,
+          y_max: 32,
+          area_pixels: 400,
+          source_type: "human",
+          persisted: true,
+          revision: 1,
+        },
+      ],
+    };
+    const updated = changeMaskAnnotationClass(
+      document,
+      ["rotated-1"],
+      "class-2",
+    );
+    expect(updated.maskAnnotations[0]).toMatchObject({
+      id: "rotated-1",
+      label_class_id: "class-2",
+      geometry_kind: "rotated_box",
+    });
+  });
+
 });
