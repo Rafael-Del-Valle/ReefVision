@@ -50,6 +50,15 @@ import {
 import { deleteMaskAnnotations } from "./maskDocumentOperations";
 import { rasterMaskContentUrl } from "./rasterMaskApi";
 import {
+  centerOfRotatedBox,
+  resizeRotatedBox,
+  rotatedBoxFromAnnotation,
+  rotatedBoxRotationHandle,
+  rotateRotatedBox,
+  rotationAngleForPoint,
+  translateRotatedBox,
+} from "./RotatedBoxLayer";
+import {
   boxArea,
   clampScale,
   createBoxFromPoints,
@@ -63,6 +72,7 @@ import type {
   AnnotationDocument,
   AnnotationEditorState,
   EditorAnnotation,
+  EditorMaskAnnotation,
   Point,
   ResizeHandle,
   ViewportTransform,
@@ -115,6 +125,35 @@ type EditorInteraction =
       current: Point;
     }
   | {
+      type: "rotating_box";
+      annotationId: string;
+      snapshot: EditorAnnotation;
+      start: Point;
+      current: Point;
+    }
+  | {
+      type: "moving_rotated_box";
+      maskId: string;
+      snapshot: EditorMaskAnnotation;
+      start: Point;
+      current: Point;
+    }
+  | {
+      type: "rotating_rotated_box";
+      maskId: string;
+      snapshot: EditorMaskAnnotation;
+      start: Point;
+      current: Point;
+    }
+  | {
+      type: "resizing_rotated_box";
+      maskId: string;
+      snapshot: EditorMaskAnnotation;
+      cornerIndex: number;
+      start: Point;
+      current: Point;
+    }
+  | {
       type: "panning";
       origin: Point;
       initialView: ViewportTransform;
@@ -156,6 +195,25 @@ function replaceAnnotations(
       (annotation) => updatedById.get(annotation.id) ?? annotation,
     ),
   };
+}
+
+function replaceMaskAnnotations(
+  document: AnnotationDocument,
+  updated: EditorMaskAnnotation[],
+): AnnotationDocument {
+  const updatedById = new Map(
+    updated.map((annotation) => [annotation.id, annotation]),
+  );
+  return {
+    ...document,
+    maskAnnotations: document.maskAnnotations.map(
+      (annotation) => updatedById.get(annotation.id) ?? annotation,
+    ),
+  };
+}
+
+function pointerDistance(first: Point, second: Point): number {
+  return Math.hypot(second.x - first.x, second.y - first.y);
 }
 
 function saveStateLabel(
