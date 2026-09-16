@@ -226,3 +226,55 @@ def test_full_erase_deletes_raster_mask_object(
 
     assert original_path.is_file()
     assert original_path.read_bytes() == original_bytes
+
+
+def test_raster_mask_class_can_be_reassigned_without_repainting(
+    client: TestClient,
+    test_settings: Settings,
+) -> None:
+    project = create_project(client, "Raster class reassignment")
+    report = import_image(
+        client,
+        project["id"],
+        filename="painted.png",
+        relative_path="painted/painted.png",
+        color=(25, 80, 135),
+    )
+    image_id = report["successful"][0]["image_id"]
+    first_class_id = project["label_classes"][0]["id"]
+    second_class_id = project["label_classes"][1]["id"]
+
+    created = _brush(
+        client,
+        image_id=image_id,
+        class_id=first_class_id,
+        base_revision=0,
+        x=20,
+        y=20,
+    )
+    mask = cast(dict[str, object], created["mask_annotation"])
+    mask_id = str(mask["id"])
+    mask_path = test_settings.resolved_data_dir / Path(str(mask["mask_path"]))
+    original_bytes = mask_path.read_bytes()
+
+    response = client.patch(
+        f"/api/v1/images/{image_id}/raster-mask-annotations/{mask_id}/class",
+        json={
+            "base_revision": 1,
+            "label_class_id": second_class_id,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["image"]["annotation_revision"] == 2
+    assert payload["mask_annotation"]["label_class_id"] == second_class_id
+    assert payload["mask_annotation"]["revision"] == 2
+    assert Path(str(payload["mask_annotation"]["mask_path"])).name == mask_path.name
+    assert mask_path.read_bytes() == original_bytes
+
+    reloaded = client.get(f"/api/v1/images/{image_id}/annotations")
+    assert reloaded.status_code == 200
+    saved_mask = reloaded.json()["mask_annotations"][0]
+    assert saved_mask["label_class_id"] == second_class_id
+    assert saved_mask["revision"] == 2
