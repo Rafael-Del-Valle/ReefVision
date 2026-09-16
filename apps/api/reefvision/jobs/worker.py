@@ -117,9 +117,7 @@ def _start_isolated_process(command: list[str]) -> subprocess.Popen[bytes]:
     """Start an isolated worker without depending on asyncio subprocess support."""
 
     creationflags = (
-        int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        if sys.platform == "win32"
-        else 0
+        int(getattr(subprocess, "CREATE_NO_WINDOW", 0)) if sys.platform == "win32" else 0
     )
     return subprocess.Popen(
         command,
