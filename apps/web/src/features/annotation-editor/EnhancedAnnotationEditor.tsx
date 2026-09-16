@@ -61,10 +61,10 @@ export function EnhancedAnnotationEditor({
   const queryClient = useQueryClient();
   const [workspace, setWorkspace] = useState<EditorWorkspace>("boxes");
   const [maskInitialTool, setMaskInitialTool] = useState<
-    "polygon" | "fill" | "smart_close" | "rotated_box" | undefined
+    "polygon" | "fill" | "smart_close" | undefined
   >(undefined);
   const [activeMaskTool, setActiveMaskTool] = useState<
-    "select" | "polygon" | "fill" | "smart_close" | "rotated_box"
+    "select" | "polygon" | "fill" | "smart_close"
   >("select");
   const [vertexEditMode, setVertexEditMode] = useState<VertexEditMode>("move");
   const [activeImageId, setActiveImageId] = useState(initialImageId);
@@ -224,8 +224,7 @@ export function EnhancedAnnotationEditor({
               tool === "select" ||
               tool === "polygon" ||
               tool === "fill" ||
-              tool === "smart_close" ||
-              tool === "rotated_box"
+              tool === "smart_close"
             ) {
               setActiveMaskTool(tool);
             }
@@ -283,20 +282,6 @@ export function EnhancedAnnotationEditor({
     }
     setMaskInitialTool("polygon");
     setActiveMaskTool("polygon");
-    setWorkspace("masks");
-  }
-
-  function activateRotatedBoxTool() {
-    if (workspace === "masks") {
-      document
-        .querySelector<HTMLButtonElement>(
-          '[data-testid="activate-rotated-box-tool"]',
-        )
-        ?.click();
-      return;
-    }
-    setMaskInitialTool("rotated_box");
-    setActiveMaskTool("rotated_box");
     setWorkspace("masks");
   }
 
@@ -389,20 +374,6 @@ export function EnhancedAnnotationEditor({
         >
           <span aria-hidden="true">⬡</span>
           <small>Polygon</small>
-        </button>
-        <button
-          type="button"
-          className={
-            workspace === "masks" && activeMaskTool === "rotated_box"
-              ? "active"
-              : "secondary"
-          }
-          data-testid="open-rotated-box-tool"
-          title="Draw and edit oriented bounding boxes"
-          onClick={activateRotatedBoxTool}
-        >
-          <span aria-hidden="true">▱</span>
-          <small>Rotated box</small>
         </button>
         <button
           type="button"
