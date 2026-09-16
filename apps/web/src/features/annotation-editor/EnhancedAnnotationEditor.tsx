@@ -64,7 +64,7 @@ export function EnhancedAnnotationEditor({
     "polygon" | "fill" | "smart_close" | undefined
   >(undefined);
   const [activeMaskTool, setActiveMaskTool] = useState<
-    "select" | "polygon" | "fill" | "smart_close" | "rotated_box"
+    "select" | "polygon" | "fill" | "smart_close"
   >("select");
   const [vertexEditMode, setVertexEditMode] = useState<VertexEditMode>("move");
   const [activeImageId, setActiveImageId] = useState(initialImageId);
@@ -134,15 +134,6 @@ export function EnhancedAnnotationEditor({
         return;
       }
 
-      const selectToolActive = document
-        .querySelector('[data-testid="activate-mask-select-tool"]')
-        ?.classList.contains("active");
-      if (
-        selectToolActive &&
-        (event.key === "Delete" || event.key === "Backspace")
-      ) {
-        stopEditorEvent(event);
-      }
     };
 
     const handlePointerDown = (event: globalThis.PointerEvent) => {
@@ -233,8 +224,7 @@ export function EnhancedAnnotationEditor({
               tool === "select" ||
               tool === "polygon" ||
               tool === "fill" ||
-              tool === "smart_close" ||
-              tool === "rotated_box"
+              tool === "smart_close"
             ) {
               setActiveMaskTool(tool);
             }
