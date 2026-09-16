@@ -307,6 +307,7 @@ export function AnnotationEditor({
   const interactionRef = useRef<EditorInteraction | null>(interaction);
   const viewRef = useRef<ViewportTransform | null>(view);
   const currentImageIdRef = useRef(currentImageId);
+  const loadedImageIdRef = useRef<string | null>(null);
   const savePromiseRef = useRef<Promise<boolean> | null>(null);
   const assistSessionRef = useRef<AssistSession | null>(assistSession);
 
@@ -396,10 +397,25 @@ export function AnnotationEditor({
   }, [deployModelId, detectorModels.data]);
 
   useEffect(() => {
-    if (!sessionQuery.data) {
+    const session = sessionQuery.data;
+    if (!session) {
       return;
     }
-    dispatch({ type: "loadSession", session: sessionQuery.data });
+    const snapshot = stateRef.current;
+    const imageChanged = loadedImageIdRef.current !== session.image.id;
+    const newerSameImage =
+      !imageChanged && session.image.annotation_revision > snapshot.baseRevision;
+    if (!imageChanged && !newerSameImage) {
+      return;
+    }
+    if (
+      !imageChanged &&
+      (isDirty(snapshot) || snapshot.saveState === "saving")
+    ) {
+      return;
+    }
+    dispatch({ type: "loadSession", session });
+    loadedImageIdRef.current = session.image.id;
     setHideAnnotations(false);
     setSelectedPredictionIds([]);
     setPredictionGeometryOverrides({});
