@@ -6,7 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, expect, it, vi } from "vitest";
 
 import {
   getAnnotationSession,
@@ -20,6 +20,21 @@ import {
   generatePolygonFill,
   generateSmartClosePolygon,
 } from "./rasterMaskApi";
+
+beforeAll(() => {
+  Object.defineProperty(SVGElement.prototype, "setPointerCapture", {
+    configurable: true,
+    value: vi.fn(),
+  });
+  Object.defineProperty(SVGElement.prototype, "releasePointerCapture", {
+    configurable: true,
+    value: vi.fn(),
+  });
+  Object.defineProperty(SVGElement.prototype, "hasPointerCapture", {
+    configurable: true,
+    value: vi.fn(() => true),
+  });
+});
 
 vi.mock("../../api/client", () => ({
   getAnnotationSession: vi.fn(),
