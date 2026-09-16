@@ -1947,6 +1947,147 @@ export function AnnotationEditor({
     [currentView, setSelection],
   );
 
+  const handleBoxRotatePointerDown = useCallback(
+    (
+      event: ReactPointerEvent<SVGCircleElement>,
+      annotation: EditorAnnotation,
+    ) => {
+      event.stopPropagation();
+      if (!currentView || state.tool !== "select") {
+        return;
+      }
+      const svg = svgRef.current;
+      if (!svg) {
+        return;
+      }
+      const point = clientPointInSvg(
+        svg,
+        event.clientX,
+        event.clientY,
+        currentView,
+      );
+      setMaskSelection([]);
+      setSelection([annotation.id]);
+      setInteraction({
+        type: "rotating_box",
+        annotationId: annotation.id,
+        snapshot: annotation,
+        start: point,
+        current: point,
+      });
+    },
+    [currentView, setMaskSelection, setSelection, state.tool],
+  );
+
+  const handleRotatedMaskPointerDown = useCallback(
+    (
+      event: ReactPointerEvent<SVGPolygonElement>,
+      mask: EditorMaskAnnotation,
+    ) => {
+      event.stopPropagation();
+      if (!currentView || state.tool !== "select") {
+        return;
+      }
+      const additive = event.metaKey || event.ctrlKey || event.shiftKey;
+      if (additive) {
+        setMaskSelection(selectionToggled(state.selectedMaskIds, mask.id));
+        return;
+      }
+      const svg = svgRef.current;
+      if (!svg) {
+        return;
+      }
+      const point = clientPointInSvg(
+        svg,
+        event.clientX,
+        event.clientY,
+        currentView,
+      );
+      setSelection([]);
+      setMaskSelection([mask.id]);
+      setInteraction({
+        type: "moving_rotated_box",
+        maskId: mask.id,
+        snapshot: mask,
+        start: point,
+        current: point,
+      });
+    },
+    [
+      currentView,
+      setMaskSelection,
+      setSelection,
+      state.selectedMaskIds,
+      state.tool,
+    ],
+  );
+
+  const handleRotatedMaskRotatePointerDown = useCallback(
+    (
+      event: ReactPointerEvent<SVGCircleElement>,
+      mask: EditorMaskAnnotation,
+    ) => {
+      event.stopPropagation();
+      if (!currentView || state.tool !== "select") {
+        return;
+      }
+      const svg = svgRef.current;
+      if (!svg) {
+        return;
+      }
+      const point = clientPointInSvg(
+        svg,
+        event.clientX,
+        event.clientY,
+        currentView,
+      );
+      setSelection([]);
+      setMaskSelection([mask.id]);
+      setInteraction({
+        type: "rotating_rotated_box",
+        maskId: mask.id,
+        snapshot: mask,
+        start: point,
+        current: point,
+      });
+    },
+    [currentView, setMaskSelection, setSelection, state.tool],
+  );
+
+  const handleRotatedMaskResizePointerDown = useCallback(
+    (
+      event: ReactPointerEvent<SVGCircleElement>,
+      mask: EditorMaskAnnotation,
+      cornerIndex: number,
+    ) => {
+      event.stopPropagation();
+      if (!currentView || state.tool !== "select") {
+        return;
+      }
+      const svg = svgRef.current;
+      if (!svg) {
+        return;
+      }
+      const point = clientPointInSvg(
+        svg,
+        event.clientX,
+        event.clientY,
+        currentView,
+      );
+      setSelection([]);
+      setMaskSelection([mask.id]);
+      setInteraction({
+        type: "resizing_rotated_box",
+        maskId: mask.id,
+        snapshot: mask,
+        cornerIndex,
+        start: point,
+        current: point,
+      });
+    },
+    [currentView, setMaskSelection, setSelection, state.tool],
+  );
+
   const handleMaskPointerDown = useCallback(
     (event: ReactPointerEvent<SVGElement>, maskId: string) => {
       event.stopPropagation();
