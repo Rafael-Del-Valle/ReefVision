@@ -182,6 +182,7 @@ describe("EnhancedAnnotationEditor", () => {
     expect(screen.getByTestId("open-fill-object-tool")).toBeInTheDocument();
     expect(screen.getByTestId("open-smart-close-tool")).toBeInTheDocument();
     expect(screen.getByTestId("open-brush-tool")).toBeInTheDocument();
+    expect(screen.queryByTestId("open-rotated-box-tool")).not.toBeInTheDocument();
     expect(screen.getByTestId("mask-tool-group")).toBeInTheDocument();
 
     act(() => {
