@@ -88,12 +88,15 @@ async function mountBuiltApp(page: Parameters<typeof test>[0]["page"]) {
     });
   });
   await page.goto("http://127.0.0.1:8000/");
-  await page.evaluate(() => {
+  const packageMetadata = JSON.parse(
+    await readFile(path.resolve("package.json"), "utf8"),
+  ) as { version: string };
+  await page.evaluate((version) => {
     window.localStorage.setItem(
-      "reefvision.onboarding.dismissed.1.0.1",
+      `reefvision.onboarding.dismissed.${version}`,
       "true",
     );
-  });
+  }, packageMetadata.version);
   await page.addStyleTag({ content: style });
   await page.addScriptTag({ content: script, type: "module" });
 }
