@@ -1,0 +1,37 @@
+name: Temporary Runtime Verification
+
+on:
+  push:
+    branches:
+      - feat/annotation-editor-smoke-fixes-20260916
+
+jobs:
+  backend-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Full backend suite
+        run: python -m pytest apps/api/reefvision/tests -q
+      - name: Verify canonical migration roundtrip
+        shell: bash
+        run: |
+          export REEFVISION_DATA_ROOT="$RUNNER_TEMP/reefvision-runtime-verification"
+          export REEFVISION_DATA_DIR="$REEFVISION_DATA_ROOT"
+          mkdir -p "$REEFVISION_DATA_DIR"
+          python -m alembic -c apps/api/alembic.ini upgrade head
+          python - <<'PY'
+          from alembic.config import Config
+          from alembic.script import ScriptDirectory
+          scripts = ScriptDirectory.from_config(Config('apps/api/alembic.ini'))
+          heads = scripts.get_heads()
+          assert len(heads) == 1, f"Expected one canonical migration head, found {heads}"
+          print(f"Canonical migration head: {heads[0]}")
+          PY
+          python -m alembic -c apps/api/alembic.ini downgrade base
+          python -m alembic -c apps/api/alembic.ini upgrade head
