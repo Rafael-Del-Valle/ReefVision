@@ -54,3 +54,25 @@ def test_flood_fill_tolerance_accepts_small_variation() -> None:
 
     assert filled == 2
     assert list(mask.getdata()) == [255, 255, 0]
+
+
+def test_flood_fill_keeps_diagonally_connected_space_reachable_around_obstacles() -> None:
+    source = Image.new("RGB", (6, 6), (220, 220, 220))
+    target = (20, 30, 40)
+    for x, y in [
+        (1, 1),
+        (2, 1),
+        (1, 2),
+        (2, 2),
+        (3, 3),
+        (4, 3),
+        (3, 4),
+        (4, 4),
+    ]:
+        source.putpixel((x, y), target)
+    mask = Image.new("L", source.size, 0)
+
+    filled = _flood_fill_from_source(mask, source, seed_x=1, seed_y=1, tolerance=0)
+
+    assert filled == 8
+    assert mask.getpixel((4, 4)) == 255
