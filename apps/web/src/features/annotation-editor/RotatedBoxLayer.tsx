@@ -164,7 +164,11 @@ export function rotatedBoxFromAnnotation(
   );
 }
 
-function inside(points: Point[], width: number, height: number): boolean {
+export function rotatedBoxFitsImage(
+  points: Point[],
+  width: number,
+  height: number,
+): boolean {
   return points.every(
     (point) =>
       point.x >= 0 && point.y >= 0 && point.x <= width && point.y <= height,
@@ -206,7 +210,7 @@ export function rotateRotatedBox(
   const angle =
     Math.atan2(pointer.y - d.center.y, pointer.x - d.center.x) + Math.PI / 2;
   const points = rotatedBoxPoints(d.center, d.width, d.height, angle);
-  if (!inside(points, width, height)) return mask;
+  if (!rotatedBoxFitsImage(points, width, height)) return mask;
   return rotatedBoxMaskFromPoints(
     points,
     mask.label_class_id,
@@ -249,7 +253,7 @@ export function resizeRotatedBox(
       0.5 * (signs.x * boxWidth * axisX.y + signs.y * boxHeight * axisY.y),
   };
   const points = rotatedBoxPoints(center, boxWidth, boxHeight, d.angle);
-  if (!inside(points, width, height)) return mask;
+  if (!rotatedBoxFitsImage(points, width, height)) return mask;
   return rotatedBoxMaskFromPoints(
     points,
     mask.label_class_id,
