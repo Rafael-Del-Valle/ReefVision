@@ -63,7 +63,6 @@ def edit_raster_mask(
     return RasterMaskEditService(session, settings).edit(image_id, payload)
 
 
-
 @router.patch(
     "/images/{image_id}/raster-mask-annotations/{mask_annotation_id}/class",
     response_model=RasterMaskEditResponse,

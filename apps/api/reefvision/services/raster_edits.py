@@ -48,9 +48,7 @@ class RasterMaskEditService:
         project = self.projects.get(image.project_id)
         if project is None:
             raise NotFoundError("Project not found")
-        if payload.label_class_id not in {
-            label_class.id for label_class in project.label_classes
-        }:
+        if payload.label_class_id not in {label_class.id for label_class in project.label_classes}:
             raise ValidationError("Mask class does not belong to this image's project")
 
         mask = self.masks.get(mask_annotation_id)
