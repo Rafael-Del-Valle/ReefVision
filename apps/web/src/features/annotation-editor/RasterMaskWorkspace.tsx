@@ -229,6 +229,7 @@ export function RasterMaskWorkspace({
               <label>
                 Fill color tolerance: {fillTolerance}
                 <input
+                  className="annotation-range-control"
                   type="range"
                   min="0"
                   max="96"
