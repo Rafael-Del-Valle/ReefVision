@@ -135,7 +135,7 @@ describe("mask document operations", () => {
 
   it("reassigns rotated boxes without changing their geometry kind", () => {
     const document = {
-      ...baseDocument,
+      ...emptyDocument,
       maskAnnotations: [
         {
           id: "rotated-1",
