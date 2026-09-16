@@ -50,7 +50,6 @@ import {
 import { deleteMaskAnnotations } from "./maskDocumentOperations";
 import { rasterMaskContentUrl } from "./rasterMaskApi";
 import {
-  centerOfRotatedBox,
   resizeRotatedBox,
   rotatedBoxFitsImage,
   rotatedBoxFromAnnotation,
