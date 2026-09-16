@@ -629,6 +629,7 @@ export function MaskAnnotationWorkspace({
                 <label>
                   Auto-close tolerance
                   <input
+                    className="annotation-range-control"
                     type="range"
                     min={0}
                     max={100}
