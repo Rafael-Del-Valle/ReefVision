@@ -286,4 +286,102 @@ describe("Gallery", () => {
     expect(await screen.findByText("21 files processed")).toBeInTheDocument();
     expect(batchSizes).toEqual([10, 10, 1]);
   });
+  it("keeps trained-model batch deployment visible outside advanced import controls", async () => {
+    const model = {
+      id: "model-best",
+      project_id: project.id,
+      purpose: "detector",
+      display_name: "Coral best.pt",
+      source_filename: "best.pt",
+      managed_path: "projects/project-1/models/best.pt",
+      sha256: "d".repeat(64),
+      file_size_bytes: 1234,
+      framework: "ultralytics",
+      task: "detect",
+      provider_name: "ultralytics",
+      provider_version: "8.4.19",
+      class_map_json: {},
+      input_size_json: null,
+      metadata_json: {},
+      notes: null,
+      created_at: "2026-09-16T00:00:00Z",
+      updated_at: "2026-09-16T00:00:00Z",
+    };
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (url.includes(`/projects/${project.id}/images`)) {
+        return jsonResponse({
+          items: [image],
+          total: 1,
+          page: 1,
+          page_size: 24,
+          pages: 1,
+        });
+      }
+      if (url.includes(`/projects/${project.id}/models?purpose=detector`)) {
+        return jsonResponse([model]);
+      }
+      if (
+        url.endsWith(`/projects/${project.id}/inference-jobs`) &&
+        init?.method === "POST"
+      ) {
+        return jsonResponse({
+          id: "job-batch",
+          project_id: project.id,
+          job_type: "inference",
+          status: "queued",
+          progress_current: 0,
+          progress_total: 1,
+          result_json: {},
+          error_message: null,
+        });
+      }
+      if (url.includes("/jobs/job-batch")) {
+        return jsonResponse({
+          id: "job-batch",
+          project_id: project.id,
+          job_type: "inference",
+          status: "succeeded",
+          progress_current: 1,
+          progress_total: 1,
+          result_json: {},
+          error_message: null,
+        });
+      }
+      throw new Error(`Unhandled request ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderGallery();
+    expect(
+      await screen.findByRole("heading", { name: "Batch model deployment" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/trained or imported project model/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Run detector" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByLabelText("Select image"));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Run model on selected images" }),
+    );
+
+    await waitFor(() => {
+      const request = requests.find(
+        (entry) =>
+          entry.url.endsWith(`/projects/${project.id}/inference-jobs`) &&
+          entry.init?.method === "POST",
+      );
+      expect(request).toBeDefined();
+      expect(JSON.parse(String(request?.init?.body))).toMatchObject({
+        model_id: "model-best",
+        image_ids: ["image-1"],
+        confidence_threshold: 0.25,
+      });
+    });
+  });
+
 });
