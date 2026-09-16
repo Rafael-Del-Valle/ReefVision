@@ -226,6 +226,32 @@ function nextHistory(
   return withCurrent.slice(-HISTORY_LIMIT);
 }
 
+function reconcilePersistedMaskRemovals(
+  current: AnnotationDocument,
+  target: AnnotationDocument,
+): AnnotationDocument {
+  const targetMaskIds = new Set(
+    target.maskAnnotations.map((annotation) => annotation.id),
+  );
+  const removedPersistedMaskIds = current.maskAnnotations
+    .filter(
+      (annotation) => annotation.persisted && !targetMaskIds.has(annotation.id),
+    )
+    .map((annotation) => annotation.id);
+
+  return {
+    ...target,
+    deletedMaskAnnotationIds: Array.from(
+      new Set([
+        ...target.deletedMaskAnnotationIds.filter(
+          (id) => !targetMaskIds.has(id),
+        ),
+        ...removedPersistedMaskIds,
+      ]),
+    ),
+  };
+}
+
 export function toAnnotationSavePayload(
   state: AnnotationEditorState,
 ): ExtendedAnnotationSavePayload {
@@ -382,13 +408,23 @@ export function annotationEditorReducer(
       if (!previous) {
         return state;
       }
+      const reconciledPrevious = reconcilePersistedMaskRemovals(
+        state.document,
+        previous,
+      );
       return {
         ...state,
-        document: previous,
+        document: reconciledPrevious,
         history: state.history.slice(0, -1),
         future: [state.document, ...state.future],
-        selectedIds: validSelection(previous, state.selectedIds),
-        selectedMaskIds: validMaskSelection(previous, state.selectedMaskIds),
+        selectedIds: validSelection(
+          reconciledPrevious,
+          state.selectedIds,
+        ),
+        selectedMaskIds: validMaskSelection(
+          reconciledPrevious,
+          state.selectedMaskIds,
+        ),
         documentVersion: state.documentVersion + 1,
         saveState: state.saveState === "saving" ? "saving" : "dirty",
         saveMessage: null,
