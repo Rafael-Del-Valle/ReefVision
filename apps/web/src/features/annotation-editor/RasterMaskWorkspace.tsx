@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import {
   getAnnotationSession,
   imageDisplayUrl,
+  saveAnnotations,
   type AnnotationSession,
   type Project,
 } from "../../api/client";
+import type { ExtendedAnnotationSavePayload } from "./annotationEditorReducer";
 import { RasterBrushLayer } from "./RasterBrushLayer";
 import { RasterFillLayer } from "./RasterFillLayer";
 import {
@@ -126,6 +128,70 @@ export function RasterMaskWorkspace({
       });
     },
   });
+
+  const deleteMaskMutation = useMutation({
+    mutationFn: (maskId: string) => {
+      if (!session) {
+        throw new Error("Mask data is not ready");
+      }
+      const payload: ExtendedAnnotationSavePayload = {
+        base_revision: session.image.annotation_revision,
+        annotation_status: session.image.annotation_status,
+        annotations: session.annotations.map((annotation) => ({
+          id: annotation.id,
+          label_class_id: annotation.label_class_id,
+          x_min: annotation.x_min,
+          y_min: annotation.y_min,
+          x_max: annotation.x_max,
+          y_max: annotation.y_max,
+        })),
+        deleted_mask_annotation_ids: [maskId],
+      };
+      return saveAnnotations(imageId, payload);
+    },
+    onSuccess: async () => {
+      setSelectedMaskId(null);
+      setCreateAnotherMaskRequested(false);
+      await sessionQuery.refetch();
+      await queryClient.invalidateQueries({
+        queryKey: ["project-images", project.id],
+      });
+    },
+  });
+
+  useEffect(() => {
+    const handleDeleteShortcut = (event: globalThis.KeyboardEvent) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          Boolean(
+            target.closest(
+              "input, textarea, select, [contenteditable='true']",
+            ),
+          ))
+      ) {
+        return;
+      }
+      if (
+        selectedMaskId === null ||
+        deleteMaskMutation.isPending ||
+        (event.key !== "Backspace" && event.key !== "Delete")
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      deleteMaskMutation.mutate(selectedMaskId);
+    };
+
+    window.addEventListener("keydown", handleDeleteShortcut, true);
+    return () =>
+      window.removeEventListener("keydown", handleDeleteShortcut, true);
+  }, [deleteMaskMutation, selectedMaskId]);
 
   if (sessionQuery.isPending || !session) {
     return (
