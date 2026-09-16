@@ -2986,7 +2986,9 @@ export function AnnotationEditor({
                   const kindLabel =
                     mask.geometry_kind === "raster_mask"
                       ? "Brush mask"
-                      : "Polygon / Fill";
+                      : mask.geometry_kind === "rotated_box"
+                        ? "Rotated box"
+                        : "Polygon / Fill";
                   return (
                     <button
                       key={mask.id}
@@ -3165,7 +3167,7 @@ export function AnnotationEditor({
                   fill="transparent"
                 />
                 {state.tool === "select" &&
-                  state.document.maskAnnotations.map((mask) => {
+                  renderedMaskAnnotations.map((mask) => {
                     const labelClass = mask.label_class_id
                       ? labelClassesById.get(mask.label_class_id)
                       : null;
@@ -3198,6 +3200,86 @@ export function AnnotationEditor({
                     if (!mask.points || mask.points.length < 3) {
                       return null;
                     }
+
+                    if (
+                      mask.geometry_kind === "rotated_box" &&
+                      mask.points.length === 4
+                    ) {
+                      const rotationHandle = rotatedBoxRotationHandle(mask.points);
+                      const topCenter = {
+                        x: (mask.points[0].x + mask.points[1].x) / 2,
+                        y: (mask.points[0].y + mask.points[1].y) / 2,
+                      };
+                      return (
+                        <g key={mask.id}>
+                          <polygon
+                            data-testid={`mask-annotation-${mask.id}`}
+                            points={mask.points
+                              .map((point) => `${point.x},${point.y}`)
+                              .join(" ")}
+                            fill={color}
+                            fillOpacity={selected ? 0.28 : 0.14}
+                            stroke={color}
+                            strokeWidth={selected ? 2.5 : 1.5}
+                            vectorEffect="non-scaling-stroke"
+                            style={{ cursor: "move" }}
+                            onPointerDown={(event) =>
+                              handleRotatedMaskPointerDown(event, mask)
+                            }
+                          />
+                          {selected && (
+                            <>
+                              <line
+                                x1={topCenter.x}
+                                y1={topCenter.y}
+                                x2={rotationHandle.x}
+                                y2={rotationHandle.y}
+                                stroke={color}
+                                strokeWidth={1.5}
+                                vectorEffect="non-scaling-stroke"
+                                pointerEvents="none"
+                              />
+                              <circle
+                                data-testid={`rotation-handle-${mask.id}`}
+                                cx={rotationHandle.x}
+                                cy={rotationHandle.y}
+                                r={handleRadius}
+                                fill="#ffffff"
+                                stroke={color}
+                                strokeWidth={1.5}
+                                vectorEffect="non-scaling-stroke"
+                                style={{ cursor: "grab" }}
+                                onPointerDown={(event) =>
+                                  handleRotatedMaskRotatePointerDown(event, mask)
+                                }
+                              />
+                              {mask.points.map((point, cornerIndex) => (
+                                <circle
+                                  key={`${mask.id}-corner-${cornerIndex}`}
+                                  data-testid={`resize-handle-${mask.id}-${cornerIndex}`}
+                                  cx={point.x}
+                                  cy={point.y}
+                                  r={handleRadius}
+                                  fill="#ffffff"
+                                  stroke={color}
+                                  strokeWidth={1.5}
+                                  vectorEffect="non-scaling-stroke"
+                                  style={{ cursor: "nwse-resize" }}
+                                  onPointerDown={(event) =>
+                                    handleRotatedMaskResizePointerDown(
+                                      event,
+                                      mask,
+                                      cornerIndex,
+                                    )
+                                  }
+                                />
+                              ))}
+                            </>
+                          )}
+                        </g>
+                      );
+                    }
+
                     return (
                       <polygon
                         key={mask.id}
@@ -3374,9 +3456,56 @@ export function AnnotationEditor({
                               }
                             />
                           ))}
+                        {selected && state.tool === "select" && (
+                          <>
+                            <line
+                              x1={(annotation.x_min + annotation.x_max) / 2}
+                              y1={annotation.y_min}
+                              x2={(annotation.x_min + annotation.x_max) / 2}
+                              y2={annotation.y_min - 30 * strokeScale}
+                              stroke={labelClass?.display_color ?? "#72dbc9"}
+                              strokeWidth={1.5}
+                              vectorEffect="non-scaling-stroke"
+                              pointerEvents="none"
+                            />
+                            <circle
+                              data-testid={`rotation-handle-${annotation.id}`}
+                              cx={(annotation.x_min + annotation.x_max) / 2}
+                              cy={annotation.y_min - 30 * strokeScale}
+                              r={handleRadius}
+                              fill="#ffffff"
+                              stroke={labelClass?.display_color ?? "#72dbc9"}
+                              strokeWidth={1.5}
+                              vectorEffect="non-scaling-stroke"
+                              style={{ cursor: "grab" }}
+                              onPointerDown={(event) =>
+                                handleBoxRotatePointerDown(event, annotation)
+                              }
+                            />
+                          </>
+                        )}
                       </g>
                     );
                   })}
+                {!hideAnnotations &&
+                  regularBoxRotationPreview?.points && (
+                    <polygon
+                      data-testid="regular-box-rotation-preview"
+                      points={regularBoxRotationPreview.points
+                        .map((point) => `${point.x},${point.y}`)
+                        .join(" ")}
+                      fill="rgba(114,219,201,0.12)"
+                      stroke={
+                        labelClassesById.get(
+                          regularBoxRotationPreview.label_class_id ?? "",
+                        )?.display_color ?? "#72dbc9"
+                      }
+                      strokeDasharray={`${6 * strokeScale} ${4 * strokeScale}`}
+                      strokeWidth={1.5}
+                      vectorEffect="non-scaling-stroke"
+                      pointerEvents="none"
+                    />
+                  )}
                 {!hideAnnotations &&
                   draftBox &&
                   boxArea({
