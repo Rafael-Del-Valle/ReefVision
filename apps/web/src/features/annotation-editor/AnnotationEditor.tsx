@@ -52,6 +52,7 @@ import { rasterMaskContentUrl } from "./rasterMaskApi";
 import {
   centerOfRotatedBox,
   resizeRotatedBox,
+  rotatedBoxFitsImage,
   rotatedBoxFromAnnotation,
   rotatedBoxRotationHandle,
   rotateRotatedBox,
@@ -690,7 +691,77 @@ export function AnnotationEditor({
       );
       return replaceAnnotations(state.document, [preview]).annotations;
     }
+    if (interaction.type === "rotating_box") {
+      return state.document.annotations.filter(
+        (annotation) => annotation.id !== interaction.annotationId,
+      );
+    }
     return state.document.annotations;
+  }, [imageSize, interaction, state.document]);
+
+  const regularBoxRotationPreview = useMemo(() => {
+    if (
+      !imageSize ||
+      !interaction ||
+      interaction.type !== "rotating_box"
+    ) {
+      return null;
+    }
+    const center = {
+      x: (interaction.snapshot.x_min + interaction.snapshot.x_max) / 2,
+      y: (interaction.snapshot.y_min + interaction.snapshot.y_max) / 2,
+    };
+    const angle = rotationAngleForPoint(center, interaction.current);
+    const preview = rotatedBoxFromAnnotation(
+      interaction.snapshot,
+      angle,
+      `rotation-preview-${interaction.annotationId}`,
+    );
+    if (
+      !preview.points ||
+      !rotatedBoxFitsImage(preview.points, imageSize.width, imageSize.height)
+    ) {
+      return rotatedBoxFromAnnotation(
+        interaction.snapshot,
+        0,
+        `rotation-preview-${interaction.annotationId}`,
+      );
+    }
+    return preview;
+  }, [imageSize, interaction]);
+
+  const renderedMaskAnnotations = useMemo(() => {
+    if (!imageSize || !interaction) {
+      return state.document.maskAnnotations;
+    }
+    let preview: EditorMaskAnnotation | null = null;
+    if (interaction.type === "moving_rotated_box") {
+      preview = translateRotatedBox(
+        interaction.snapshot,
+        interaction.current.x - interaction.start.x,
+        interaction.current.y - interaction.start.y,
+        imageSize.width,
+        imageSize.height,
+      );
+    } else if (interaction.type === "rotating_rotated_box") {
+      preview = rotateRotatedBox(
+        interaction.snapshot,
+        interaction.current,
+        imageSize.width,
+        imageSize.height,
+      );
+    } else if (interaction.type === "resizing_rotated_box") {
+      preview = resizeRotatedBox(
+        interaction.snapshot,
+        interaction.current,
+        interaction.cornerIndex,
+        imageSize.width,
+        imageSize.height,
+      );
+    }
+    return preview
+      ? replaceMaskAnnotations(state.document, [preview]).maskAnnotations
+      : state.document.maskAnnotations;
   }, [imageSize, interaction, state.document]);
 
   const draftBox = useMemo(() => {
