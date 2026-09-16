@@ -1608,6 +1608,111 @@ export function AnnotationEditor({
         ]);
       }
 
+      if (
+        currentInteraction.type === "rotating_box" &&
+        pointerDistance(currentInteraction.start, currentInteraction.current) >= 1
+      ) {
+        const center = {
+          x:
+            (currentInteraction.snapshot.x_min +
+              currentInteraction.snapshot.x_max) /
+            2,
+          y:
+            (currentInteraction.snapshot.y_min +
+              currentInteraction.snapshot.y_max) /
+            2,
+        };
+        const angle = rotationAngleForPoint(
+          center,
+          currentInteraction.current,
+        );
+        const promoted = rotatedBoxFromAnnotation(
+          currentInteraction.snapshot,
+          angle,
+          makeAnnotationId(),
+        );
+        if (
+          promoted.points &&
+          rotatedBoxFitsImage(
+            promoted.points,
+            imageSize.width,
+            imageSize.height,
+          )
+        ) {
+          commitDocument(
+            {
+              ...currentState.document,
+              annotations: currentState.document.annotations.filter(
+                (annotation) =>
+                  annotation.id !== currentInteraction.annotationId,
+              ),
+              maskAnnotations: [
+                ...currentState.document.maskAnnotations,
+                promoted,
+              ],
+            },
+            [],
+            [promoted.id],
+          );
+        }
+      }
+
+      if (
+        currentInteraction.type === "moving_rotated_box" &&
+        pointerDistance(currentInteraction.start, currentInteraction.current) >=
+          0.5
+      ) {
+        const moved = translateRotatedBox(
+          currentInteraction.snapshot,
+          currentInteraction.current.x - currentInteraction.start.x,
+          currentInteraction.current.y - currentInteraction.start.y,
+          imageSize.width,
+          imageSize.height,
+        );
+        commitDocument(
+          replaceMaskAnnotations(currentState.document, [moved]),
+          [],
+          [currentInteraction.maskId],
+        );
+      }
+
+      if (
+        currentInteraction.type === "rotating_rotated_box" &&
+        pointerDistance(currentInteraction.start, currentInteraction.current) >=
+          0.5
+      ) {
+        const rotated = rotateRotatedBox(
+          currentInteraction.snapshot,
+          currentInteraction.current,
+          imageSize.width,
+          imageSize.height,
+        );
+        commitDocument(
+          replaceMaskAnnotations(currentState.document, [rotated]),
+          [],
+          [currentInteraction.maskId],
+        );
+      }
+
+      if (
+        currentInteraction.type === "resizing_rotated_box" &&
+        pointerDistance(currentInteraction.start, currentInteraction.current) >=
+          0.5
+      ) {
+        const resized = resizeRotatedBox(
+          currentInteraction.snapshot,
+          currentInteraction.current,
+          currentInteraction.cornerIndex,
+          imageSize.width,
+          imageSize.height,
+        );
+        commitDocument(
+          replaceMaskAnnotations(currentState.document, [resized]),
+          [],
+          [currentInteraction.maskId],
+        );
+      }
+
       setInteraction(null);
     };
 
