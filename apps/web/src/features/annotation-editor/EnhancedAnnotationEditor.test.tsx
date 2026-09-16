@@ -138,6 +138,17 @@ describe("EnhancedAnnotationEditor", () => {
     vertexPointerHandler.mockClear();
   });
 
+  it("opens rotated boxes as a dedicated annotation tool", async () => {
+    renderEditor();
+
+    fireEvent.click(screen.getByTestId("open-rotated-box-tool"));
+
+    expect(await screen.findByTestId("mask-initial-tool")).toHaveTextContent(
+      "rotated_box",
+    );
+    expect(screen.getByTestId("open-rotated-box-tool")).toHaveClass("active");
+  });
+
   it("opens Fill object directly and keeps Fill visibly active", () => {
     renderEditor();
 
