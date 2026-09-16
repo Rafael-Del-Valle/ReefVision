@@ -235,6 +235,40 @@ it("fills in source coordinates as a normal polygon with selection, undo, redo, 
   expect(screen.getByText("0 masks")).toBeInTheDocument();
 });
 
+it("does not expose a separate rotated-box annotation tool", async () => {
+  await mount();
+  expect(
+    screen.queryByTestId("activate-rotated-box-tool"),
+  ).not.toBeInTheDocument();
+});
+
+it("deletes a selected mask with Backspace even when the canvas is not focused", async () => {
+  await mount();
+  fireEvent.click(screen.getByTestId("activate-polygon-fill-tool"));
+  seed();
+  await screen.findByText("1 masks");
+
+  fireEvent.click(screen.getByTestId("activate-mask-select-tool"));
+  fireEvent.pointerDown(
+    screen.getByTestId("polygon-mask-layer").querySelector("polygon")!,
+  );
+  expect(screen.getByText("1 selected")).toBeInTheDocument();
+
+  fireEvent.keyDown(document.body, { key: "Backspace" });
+
+  await waitFor(() => expect(screen.getByText("0 masks")).toBeInTheDocument());
+});
+
+it("uses endpoint-safe styling for the Auto-close tolerance slider", async () => {
+  await mount();
+  fireEvent.click(screen.getByTestId("activate-smart-close-tool"));
+
+  const slider = screen.getByLabelText("Auto-close tolerance");
+  expect(slider).toHaveAttribute("min", "0");
+  expect(slider).toHaveAttribute("max", "100");
+  expect(slider).toHaveClass("annotation-range-control");
+});
+
 it("uses a separate Smart Close tool with full-opening strength at zero", async () => {
   await mount();
   fireEvent.click(screen.getByTestId("activate-smart-close-tool"));
