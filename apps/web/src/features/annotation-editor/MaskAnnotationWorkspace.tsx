@@ -34,7 +34,6 @@ import {
   generatePolygonFill,
   generateSmartClosePolygon,
 } from "./rasterMaskApi";
-import { RotatedBoxLayer } from "./RotatedBoxLayer";
 import type {
   AnnotationDocument,
   EditorMaskAnnotation,
@@ -523,18 +522,6 @@ export function MaskAnnotationWorkspace({
           </button>
           <button
             type="button"
-            className={state.tool === "rotated_box" ? "active" : "secondary"}
-            data-testid="activate-rotated-box-tool"
-            title="Draw, move, resize, and rotate an oriented bounding box"
-            onClick={() => {
-              setCenterlineEditing(false);
-              dispatch({ type: "setTool", tool: "rotated_box" });
-            }}
-          >
-            Rotated box
-          </button>
-          <button
-            type="button"
             className={centerlineEditing ? "active" : "secondary"}
             data-testid="activate-centerline-tool"
             title="Draw total-linear-extension centerline points"
@@ -818,21 +805,6 @@ export function MaskAnnotationWorkspace({
                     : fillPolygon(seed))
                 }
               />
-              {state.tool === "rotated_box" && (
-                <RotatedBoxLayer
-                  width={image.width_px}
-                  height={image.height_px}
-                  masks={state.document.maskAnnotations}
-                  classColors={classColors}
-                  activeClassId={state.activeClassId}
-                  selectedMaskIds={state.selectedMaskIds}
-                  onCreate={createMask}
-                  onUpdate={updateMask}
-                  onSelectionChange={(selection) =>
-                    dispatch({ type: "setMaskSelection", selection })
-                  }
-                />
-              )}
               <CenterlineMeasurementLayer
                 width={image.width_px}
                 height={image.height_px}
