@@ -47,7 +47,10 @@ import {
   isDirty,
   toAnnotationSavePayload,
 } from "./annotationEditorReducer";
-import { deleteMaskAnnotations } from "./maskDocumentOperations";
+import {
+  changeMaskAnnotationClass,
+  deleteMaskAnnotations,
+} from "./maskDocumentOperations";
 import { rasterMaskContentUrl } from "./rasterMaskApi";
 import {
   resizeRotatedBox,
@@ -271,10 +274,20 @@ function clientPointInSvg(
 
 function countByClass(
   annotations: EditorAnnotation[],
+  maskAnnotations: EditorMaskAnnotation[],
   labelClasses: LabelClass[],
 ): Map<string, number> {
   const counts = new Map<string, number>();
   annotations.forEach((annotation) => {
+    counts.set(
+      annotation.label_class_id,
+      (counts.get(annotation.label_class_id) ?? 0) + 1,
+    );
+  });
+  maskAnnotations.forEach((annotation) => {
+    if (!annotation.label_class_id) {
+      return;
+    }
     counts.set(
       annotation.label_class_id,
       (counts.get(annotation.label_class_id) ?? 0) + 1,
@@ -651,8 +664,13 @@ export function AnnotationEditor({
     ) ?? visibilityLayerOptions[0];
 
   const counts = useMemo(
-    () => countByClass(state.document.annotations, labelClasses),
-    [labelClasses, state.document.annotations],
+    () =>
+      countByClass(
+        state.document.annotations,
+        state.document.maskAnnotations,
+        labelClasses,
+      ),
+    [labelClasses, state.document.annotations, state.document.maskAnnotations],
   );
   const highlightedAnnotationIds = useMemo(
     () => new Set(launchContext?.highlightAnnotationIds ?? []),
@@ -1179,10 +1197,13 @@ export function AnnotationEditor({
   const applyClassToSelection = useCallback(
     (classId: string) => {
       dispatch({ type: "setActiveClassId", classId });
-      if (state.tool !== "select" || state.selectedIds.length === 0) {
+      if (
+        state.tool !== "select" ||
+        (state.selectedIds.length === 0 && state.selectedMaskIds.length === 0)
+      ) {
         return;
       }
-      const nextDocument = {
+      let nextDocument: AnnotationDocument = {
         ...state.document,
         annotations: state.document.annotations.map((annotation) =>
           state.selectedIds.includes(annotation.id)
@@ -1190,9 +1211,26 @@ export function AnnotationEditor({
             : annotation,
         ),
       };
-      commitDocument(nextDocument, state.selectedIds);
+      if (state.selectedMaskIds.length > 0) {
+        nextDocument = changeMaskAnnotationClass(
+          nextDocument,
+          state.selectedMaskIds,
+          classId,
+        );
+      }
+      commitDocument(
+        nextDocument,
+        state.selectedIds,
+        state.selectedMaskIds,
+      );
     },
-    [commitDocument, state.document, state.selectedIds, state.tool],
+    [
+      commitDocument,
+      state.document,
+      state.selectedIds,
+      state.selectedMaskIds,
+      state.tool,
+    ],
   );
 
   const saveCurrentVisibilityAsMyPreference = useCallback(() => {
