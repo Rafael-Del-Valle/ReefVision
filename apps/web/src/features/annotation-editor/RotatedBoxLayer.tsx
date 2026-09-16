@@ -1,7 +1,7 @@
 import { useMemo, useState, type PointerEvent } from "react";
 
 import { polygonMetrics } from "./PolygonMaskLayer";
-import type { EditorMaskAnnotation, Point } from "./types";
+import type { EditorAnnotation, EditorMaskAnnotation, Point } from "./types";
 
 interface RotatedBoxLayerProps {
   width: number;
@@ -57,16 +57,16 @@ function sourcePoint(
   };
 }
 
-function centerOf(points: Point[]): Point {
+export function centerOfRotatedBox(points: Point[]): Point {
   return {
     x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
     y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
   };
 }
 
-function dimensions(points: Point[]) {
+export function rotatedBoxDimensions(points: Point[]) {
   return {
-    center: centerOf(points),
+    center: centerOfRotatedBox(points),
     width: Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y),
     height: Math.hypot(points[2].x - points[1].x, points[2].y - points[1].y),
     angle: Math.atan2(points[1].y - points[0].y, points[1].x - points[0].x),
@@ -138,6 +138,32 @@ export function rotatedBoxFromDrag(
   );
 }
 
+export function rotationAngleForPoint(center: Point, pointer: Point): number {
+  return Math.atan2(pointer.y - center.y, pointer.x - center.x) + Math.PI / 2;
+}
+
+export function rotatedBoxFromAnnotation(
+  annotation: EditorAnnotation,
+  angle: number,
+  id = generatedMaskId(),
+): EditorMaskAnnotation {
+  const center = {
+    x: (annotation.x_min + annotation.x_max) / 2,
+    y: (annotation.y_min + annotation.y_max) / 2,
+  };
+  return rotatedBoxMaskFromPoints(
+    rotatedBoxPoints(
+      center,
+      annotation.x_max - annotation.x_min,
+      annotation.y_max - annotation.y_min,
+      angle,
+    ),
+    annotation.label_class_id,
+    id,
+    false,
+  );
+}
+
 function inside(points: Point[], width: number, height: number): boolean {
   return points.every(
     (point) =>
@@ -145,7 +171,7 @@ function inside(points: Point[], width: number, height: number): boolean {
   );
 }
 
-function translate(
+export function translateRotatedBox(
   mask: EditorMaskAnnotation,
   dx: number,
   dy: number,
@@ -169,14 +195,14 @@ function translate(
   );
 }
 
-function rotate(
+export function rotateRotatedBox(
   mask: EditorMaskAnnotation,
   pointer: Point,
   width: number,
   height: number,
 ): EditorMaskAnnotation {
   if (!mask.points || mask.label_class_id === null) return mask;
-  const d = dimensions(mask.points);
+  const d = rotatedBoxDimensions(mask.points);
   const angle =
     Math.atan2(pointer.y - d.center.y, pointer.x - d.center.x) + Math.PI / 2;
   const points = rotatedBoxPoints(d.center, d.width, d.height, angle);
@@ -190,7 +216,7 @@ function rotate(
   );
 }
 
-function resize(
+export function resizeRotatedBox(
   mask: EditorMaskAnnotation,
   pointer: Point,
   cornerIndex: number,
@@ -198,7 +224,7 @@ function resize(
   height: number,
 ): EditorMaskAnnotation {
   if (!mask.points || mask.label_class_id === null) return mask;
-  const d = dimensions(mask.points);
+  const d = rotatedBoxDimensions(mask.points);
   const opposite = mask.points[(cornerIndex + 2) % 4];
   const signs = [
     { x: -1, y: -1 },
@@ -233,8 +259,8 @@ function resize(
   );
 }
 
-function rotationHandle(points: Point[]): Point {
-  const d = dimensions(points);
+export function rotatedBoxRotationHandle(points: Point[]): Point {
+  const d = rotatedBoxDimensions(points);
   const top = {
     x: (points[0].x + points[1].x) / 2,
     y: (points[0].y + points[1].y) / 2,
@@ -310,7 +336,7 @@ export function RotatedBoxLayer({
         setPreview(rotatedBoxFromDrag(drag.start, point, activeClassId));
     } else if (drag.mask && drag.kind === "move") {
       setPreview(
-        translate(
+        translateRotatedBox(
           drag.mask,
           point.x - drag.start.x,
           point.y - drag.start.y,
@@ -319,13 +345,13 @@ export function RotatedBoxLayer({
         ),
       );
     } else if (drag.mask && drag.kind === "rotate") {
-      setPreview(rotate(drag.mask, point, width, height));
+      setPreview(rotateRotatedBox(drag.mask, point, width, height));
     } else if (
       drag.mask &&
       drag.kind === "resize" &&
       drag.cornerIndex !== undefined
     ) {
-      setPreview(resize(drag.mask, point, drag.cornerIndex, width, height));
+      setPreview(resizeRotatedBox(drag.mask, point, drag.cornerIndex, width, height));
     }
   }
 
@@ -370,7 +396,7 @@ export function RotatedBoxLayer({
         if (!mask.points || mask.label_class_id === null) return null;
         const color = classColors[mask.label_class_id] ?? "#2a9d8f";
         const isSelected = selected.has(mask.id) || preview?.id === mask.id;
-        const handle = rotationHandle(mask.points);
+        const handle = rotatedBoxRotationHandle(mask.points);
         const points = mask.points
           .map((point) => `${point.x},${point.y}`)
           .join(" ");
