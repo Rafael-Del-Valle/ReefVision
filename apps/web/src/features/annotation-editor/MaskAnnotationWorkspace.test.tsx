@@ -364,3 +364,55 @@ it.each(
     expect(screen.getByText("0 masks")).toBeInTheDocument();
   },
 );
+
+
+it("refreshes same-image mask state when a newer annotation session replaces cached data", async () => {
+  const staleSession = {
+    ...session(),
+    image: { ...session().image, annotation_revision: 4 },
+    mask_annotations: [
+      {
+        id: "stale-mask",
+        image_id: "image-1",
+        label_class_id: "class-1",
+        geometry_kind: "polygon",
+        mask_path: null,
+        polygon_json: points.map((point) => [point.x, point.y]),
+        x_min: 10,
+        y_min: 10,
+        x_max: 30,
+        y_max: 25,
+        area_pixels: 300,
+        source_type: "human",
+        provenance_json: null,
+        status: "verified",
+        created_by: "local_user",
+        created_at: "2026-09-16T00:00:00Z",
+        updated_at: "2026-09-16T00:00:00Z",
+        deleted_at: null,
+        revision: 1,
+      },
+    ],
+  } as unknown as AnnotationSession;
+  const freshSession = {
+    ...session(),
+    image: { ...session().image, annotation_revision: 5 },
+    mask_annotations: [],
+  } as unknown as AnnotationSession;
+
+  vi.mocked(getAnnotationSession).mockResolvedValue(freshSession);
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  queryClient.setQueryData(["annotation-session", "image-1"], staleSession);
+
+  render(
+    <QueryClientProvider client={queryClient}>
+      {workspace()}
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByText("1 masks")).toBeInTheDocument();
+  await waitFor(() => expect(getAnnotationSession).toHaveBeenCalled());
+  await waitFor(() => expect(screen.getByText("0 masks")).toBeInTheDocument());
+});
