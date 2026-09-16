@@ -106,7 +106,7 @@ class ScaleLabelOcrService:
 
         device = resolve_torch_device("auto")
         processor = TrOCRProcessor.from_pretrained(model_path, local_files_only=True)
-        model = VisionEncoderDecoderModel.from_pretrained(model_path, local_files_only=True).to(  # type: ignore[no-untyped-call]
+        model = VisionEncoderDecoderModel.from_pretrained(model_path, local_files_only=True).to(
             device
         )
         model.eval()
@@ -126,7 +126,7 @@ class ScaleLabelOcrService:
                     return_dict_in_generate=True,
                     output_scores=True,
                 )
-            text = processor.batch_decode(generated.sequences, skip_special_tokens=True)[0].strip()  # type: ignore[no-untyped-call]
+            text = processor.batch_decode(generated.sequences, skip_special_tokens=True)[0].strip()
             parsed = parse_scale_label(text)
             token_confidence = 0.0
             scores = list(generated.scores or [])

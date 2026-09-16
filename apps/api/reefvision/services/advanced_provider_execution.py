@@ -163,7 +163,7 @@ class AdvancedProviderExecutionService:
         except Exception as exc:
             raise ValidationError(f"Grounding DINO runtime is unavailable: {exc}") from exc
         device = resolve_torch_device(request.device)
-        processor = AutoProcessor.from_pretrained(model_path, local_files_only=True)  # type: ignore[no-untyped-call]
+        processor = AutoProcessor.from_pretrained(model_path, local_files_only=True)
         model = AutoModelForZeroShotObjectDetection.from_pretrained(
             model_path, local_files_only=True
         ).to(device)
@@ -285,7 +285,7 @@ class AdvancedProviderExecutionService:
         inputs = processor(**kwargs).to(device)
         with torch.no_grad():
             outputs = model(**inputs, multimask_output=False)
-        masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]  # type: ignore[no-untyped-call]
+        masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
         mask_tensor = masks[0, 0] if masks.ndim == 4 else masks[0]
         mask = np.asarray(mask_tensor, dtype=bool)
         mask_box = mask_to_box(mask)
@@ -367,8 +367,8 @@ class AdvancedProviderExecutionService:
         except Exception as exc:
             raise ValidationError(f"SmolVLM runtime is unavailable: {exc}") from exc
         device = resolve_torch_device(request.device)
-        processor = AutoProcessor.from_pretrained(model_path, local_files_only=True)  # type: ignore[no-untyped-call]
-        model = AutoModelForVision2Seq.from_pretrained(model_path, local_files_only=True).to(device)  # type: ignore[no-untyped-call]
+        processor = AutoProcessor.from_pretrained(model_path, local_files_only=True)
+        model = AutoModelForVision2Seq.from_pretrained(model_path, local_files_only=True).to(device)
         model.eval()
         messages = [
             {

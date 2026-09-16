@@ -116,7 +116,11 @@ def _video_tracking_worker_command(
 def _start_isolated_process(command: list[str]) -> subprocess.Popen[bytes]:
     """Start an isolated worker without depending on asyncio subprocess support."""
 
-    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    creationflags = (
+        int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if sys.platform == "win32"
+        else 0
+    )
     return subprocess.Popen(
         command,
         stdin=subprocess.DEVNULL,

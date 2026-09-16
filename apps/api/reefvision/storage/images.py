@@ -184,7 +184,7 @@ def create_thumbnail(source: Path, destination: Path, *, max_width: int, max_hei
     temporary.unlink(missing_ok=True)
     try:
         with Image.open(source) as image:
-            oriented = ImageOps.exif_transpose(image)
+            oriented: Image.Image = ImageOps.exif_transpose(image)
             if oriented.mode in {"I;16", "I;16L", "I;16B"}:
                 oriented = oriented.point(lambda value: value / 257).convert("L")
             elif oriented.mode not in {"RGB", "L"}:

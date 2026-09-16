@@ -59,6 +59,7 @@ addopts = "-ra --strict-markers --strict-config"
 filterwarnings = [
   "error::DeprecationWarning",
   "error::ResourceWarning",
+  "ignore:The anyio\\.abc\\.BlockingPortal alias is deprecated, use anyio\\.from_thread\\.BlockingPortal instead\\.:DeprecationWarning",
 ]
 
 [tool.ruff]
