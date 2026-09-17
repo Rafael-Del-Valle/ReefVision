@@ -12,6 +12,7 @@ license = "MIT"
 authors = [{ name = "Rafael Del Valle" }]
 dependencies = [
   "alembic>=1.14,<2",
+  "anyio>=4,<4.15",
   "fastapi>=0.139,<1",
   "httpx>=0.28,<1",
   "openpyxl>=3.1,<4",
