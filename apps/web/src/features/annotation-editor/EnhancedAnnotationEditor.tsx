@@ -128,17 +128,6 @@ export function EnhancedAnnotationEditor({
 
       if (event.key === "Enter") {
         stopEditorEvent(event);
-        return;
-      }
-
-      const selectToolActive = document
-        .querySelector('[data-testid="activate-mask-select-tool"]')
-        ?.classList.contains("active");
-      if (
-        selectToolActive &&
-        (event.key === "Delete" || event.key === "Backspace")
-      ) {
-        stopEditorEvent(event);
       }
     };
 
