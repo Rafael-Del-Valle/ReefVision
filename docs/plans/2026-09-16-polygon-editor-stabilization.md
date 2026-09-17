@@ -18,9 +18,11 @@ The current first-node polygon closure is intentional and remains unchanged. Vis
    - Change the integration regression so Delete/Backspace must reach the polygon layer while Enter remains blocked for first-node closure.
 2. `apps/web/src/features/annotation-editor/EnhancedAnnotationEditor.tsx`
    - Remove only the capture-phase suppression of Delete/Backspace; preserve the Enter suppression and visible vertex-mode behavior.
-3. `apps/web/tests/e2e/milestone2-mask-acceptance.spec.ts`
-   - Strengthen the polygon acceptance path to verify vertex movement changes geometry, whole-polygon keyboard deletion works, Undo restores the polygon, and the edited geometry survives save/reopen.
+3. `apps/web/src/features/annotation-editor/PolygonMaskLayer.test.tsx`
+   - Verify both Delete and Backspace request whole-polygon removal, alongside the existing creation, vertex-drag, insert-node, and delete-node coverage.
+4. `apps/web/tests/e2e/milestone2-mask-acceptance.spec.ts`
+   - Run the existing real-workflow acceptance path unchanged. It already exercises polygon creation, vertex dragging, node insertion/deletion, saving, image navigation, and restart persistence. The integrated keyboard regression above specifically closes the event-routing gap; only alter the E2E scenario if CI exposes an additional behavior gap.
 
 ## Verification
 
-Run the focused frontend unit tests, full Vitest suite, Playwright E2E suite, TypeScript typecheck, formatting check, and production build through the repository CI workflow. Do not claim completion while any acceptance test fails.
+Run the full Vitest suite, Playwright E2E suite, TypeScript typecheck, formatting check, and production build through the repository CI workflow. The repository CI also runs backend lint/type/tests and migration validation. Do not claim completion while any acceptance test fails.
