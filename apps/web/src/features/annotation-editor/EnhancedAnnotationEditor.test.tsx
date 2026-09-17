@@ -180,7 +180,7 @@ describe("EnhancedAnnotationEditor", () => {
     expect(vertexPointerHandler.mock.calls[0][0].altKey).toBe(true);
   });
 
-  it("keeps whole-polygon removal explicit", () => {
+  it("passes whole-polygon Delete and Backspace shortcuts to the mask layer", () => {
     renderEditor();
     fireEvent.change(screen.getByLabelText("Annotation type"), {
       target: { value: "masks" },
@@ -193,6 +193,8 @@ describe("EnhancedAnnotationEditor", () => {
       key: "Backspace",
     });
 
-    expect(polygonKeyHandler).not.toHaveBeenCalled();
+    expect(polygonKeyHandler).toHaveBeenCalledTimes(2);
+    expect(polygonKeyHandler.mock.calls[0][0].key).toBe("Delete");
+    expect(polygonKeyHandler.mock.calls[1][0].key).toBe("Backspace");
   });
 });
