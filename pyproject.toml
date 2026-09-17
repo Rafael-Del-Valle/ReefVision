@@ -104,3 +104,18 @@ module = [
   "ultralytics.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+  "reefvision.services.image_scale_calibration",
+  "reefvision.storage.segmentation_exports",
+  "reefvision.storage.raster_edits",
+]
+disable_error_code = ["redundant-cast"]
+
+[[tool.mypy.overrides]]
+module = [
+  "reefvision.services.scale_label_ocr",
+  "reefvision.services.advanced_provider_execution",
+]
+disable_error_code = ["unused-ignore"]
