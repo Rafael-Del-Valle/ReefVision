@@ -467,7 +467,7 @@ class ImageScaleCalibrationService:
         try:
             with Image.open(self._image_path(image)) as source:
                 source.load()
-                return source.convert("RGB")
+                return cast(Image.Image, source.convert("RGB"))
         except (OSError, UnidentifiedImageError) as exc:
             raise ValidationError("Managed image could not be read for calibration") from exc
 
