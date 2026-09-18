@@ -157,7 +157,7 @@ describe("PolygonMaskLayer", () => {
     });
   });
 
-  it("selects polygon masks and requests explicit deletion", () => {
+  it("selects polygon masks and requests Delete and Backspace removal", () => {
     const onSelectionChange = vi.fn();
     const onDeleteMaskIds = vi.fn();
     render(
@@ -183,7 +183,10 @@ describe("PolygonMaskLayer", () => {
     expect(onSelectionChange).toHaveBeenCalledWith([polygonMask.id]);
 
     fireEvent.keyDown(layer, { key: "Delete" });
-    expect(onDeleteMaskIds).toHaveBeenCalledWith([polygonMask.id]);
+    fireEvent.keyDown(layer, { key: "Backspace" });
+    expect(onDeleteMaskIds).toHaveBeenCalledTimes(2);
+    expect(onDeleteMaskIds).toHaveBeenNthCalledWith(1, [polygonMask.id]);
+    expect(onDeleteMaskIds).toHaveBeenNthCalledWith(2, [polygonMask.id]);
   });
 
   it("commits a dragged polygon vertex in image coordinates", () => {
