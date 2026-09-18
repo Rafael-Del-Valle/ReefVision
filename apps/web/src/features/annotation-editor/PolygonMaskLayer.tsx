@@ -203,6 +203,13 @@ export function PolygonMaskLayer({
     () => new Set(selectedMaskIds),
     [selectedMaskIds],
   );
+  const renderedMasks = useMemo(
+    () => [
+      ...masks.filter((mask) => mask.geometry_kind === "raster_mask"),
+      ...masks.filter((mask) => mask.geometry_kind !== "raster_mask"),
+    ],
+    [masks],
+  );
 
   useEffect(() => {
     if (tool !== "polygon") {
@@ -451,7 +458,7 @@ export function PolygonMaskLayer({
         touchAction: "none",
       }}
     >
-      {masks.map((sourceMask) => {
+      {renderedMasks.map((sourceMask) => {
         const mask =
           dragPreview?.id === sourceMask.id ? dragPreview : sourceMask;
         if (
