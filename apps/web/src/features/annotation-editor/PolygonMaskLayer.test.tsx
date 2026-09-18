@@ -197,6 +197,44 @@ describe("PolygonMaskLayer", () => {
     ]);
   });
 
+  it("disables raster hit testing outside select mode", () => {
+    const rasterMask: EditorMaskAnnotation = {
+      id: "raster-mask-pointer-events",
+      label_class_id: "class-1",
+      geometry_kind: "raster_mask",
+      points: null,
+      mask_path: "projects/project-1/masks/raster-mask-pointer-events.png",
+      x_min: 0,
+      y_min: 0,
+      x_max: 400,
+      y_max: 300,
+      area_pixels: 120000,
+      source_type: "human",
+      persisted: true,
+    };
+
+    render(
+      <PolygonMaskLayer
+        width={400}
+        height={300}
+        masks={[rasterMask]}
+        classColors={{ "class-1": "#2a9d8f" }}
+        activeClassId="class-1"
+        tool="polygon"
+        selectedMaskIds={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onSelectionChange={vi.fn()}
+      />,
+    );
+
+    expect(
+      maskLayer().querySelector<SVGRectElement>(
+        'g[data-mask-id="raster-mask-pointer-events"] rect',
+      ),
+    ).toHaveAttribute("pointer-events", "none");
+  });
+
   it("selects polygon masks and requests Delete and Backspace removal", () => {
     const onSelectionChange = vi.fn();
     const onDeleteMaskIds = vi.fn();
