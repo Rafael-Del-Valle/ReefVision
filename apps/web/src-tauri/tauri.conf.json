@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "ReefVision",
   "mainBinaryName": "ReefVision",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "identifier": "org.reefvision.desktop",
   "build": {
     "beforeDevCommand": "npm run ui:dev -- --host 127.0.0.1 --port 5173",
