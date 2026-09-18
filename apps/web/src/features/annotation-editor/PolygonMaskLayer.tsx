@@ -502,12 +502,14 @@ export function PolygonMaskLayer({
                 fill={color}
                 opacity={selected ? 0.55 : 0.35}
                 mask={`url(#${svgMaskId})`}
+                pointerEvents={tool === "select" ? "auto" : "none"}
                 style={{ cursor: tool === "select" ? "pointer" : "default" }}
                 onPointerDown={(event) => {
-                  event.stopPropagation();
-                  if (tool === "select") {
-                    selectMask(mask.id, event.shiftKey);
+                  if (tool !== "select") {
+                    return;
                   }
+                  event.stopPropagation();
+                  selectMask(mask.id, event.shiftKey);
                 }}
               />
             </g>
