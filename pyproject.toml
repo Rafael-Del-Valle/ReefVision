@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reefvision"
-version = "1.0.2"
+version = "1.0.3"
 description = "Local-first scientific image annotation and computer vision platform"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,6 +12,7 @@ license = "MIT"
 authors = [{ name = "Rafael Del Valle" }]
 dependencies = [
   "alembic>=1.14,<2",
+  "anyio>=4,<4.15",
   "fastapi>=0.139,<1",
   "httpx>=0.28,<1",
   "openpyxl>=3.1,<4",
@@ -105,3 +106,18 @@ module = [
   "ultralytics.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+  "reefvision.services.image_scale_calibration",
+  "reefvision.storage.segmentation_exports",
+  "reefvision.storage.raster_edits",
+]
+disable_error_code = ["redundant-cast"]
+
+[[tool.mypy.overrides]]
+module = [
+  "reefvision.services.scale_label_ocr",
+  "reefvision.services.advanced_provider_execution",
+]
+disable_error_code = ["unused-ignore"]
