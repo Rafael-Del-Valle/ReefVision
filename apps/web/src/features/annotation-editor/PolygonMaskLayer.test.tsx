@@ -157,6 +157,46 @@ describe("PolygonMaskLayer", () => {
     });
   });
 
+  it("renders raster masks beneath polygons regardless of source order", () => {
+    const rasterMask: EditorMaskAnnotation = {
+      id: "raster-mask-1",
+      label_class_id: "class-1",
+      geometry_kind: "raster_mask",
+      points: null,
+      mask_path: "projects/project-1/masks/raster-mask-1.png",
+      x_min: 0,
+      y_min: 0,
+      x_max: 400,
+      y_max: 300,
+      area_pixels: 120000,
+      source_type: "human",
+      persisted: true,
+    };
+
+    render(
+      <PolygonMaskLayer
+        width={400}
+        height={300}
+        masks={[polygonMask, rasterMask]}
+        classColors={{ "class-1": "#2a9d8f" }}
+        activeClassId="class-1"
+        tool="select"
+        selectedMaskIds={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onSelectionChange={vi.fn()}
+      />,
+    );
+
+    const maskGroups = Array.from(
+      maskLayer().querySelectorAll<SVGGElement>("g[data-mask-id]"),
+    );
+    expect(maskGroups.map((group) => group.dataset.maskId)).toEqual([
+      rasterMask.id,
+      polygonMask.id,
+    ]);
+  });
+
   it("selects polygon masks and requests Delete and Backspace removal", () => {
     const onSelectionChange = vi.fn();
     const onDeleteMaskIds = vi.fn();
