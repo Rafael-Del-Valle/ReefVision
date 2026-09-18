@@ -7,7 +7,7 @@ import shutil
 import zipfile
 from hashlib import sha256
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from PIL import Image, ImageDraw, UnidentifiedImageError
 
@@ -284,7 +284,10 @@ def _verified_raster_mask(
             image.load()
             if image.size != expected_size:
                 raise ValidationError("Raster mask dimensions do not match the source image")
-            return image.convert("L").point(lambda value: 255 if value > 0 else 0)
+            return cast(
+                Image.Image,
+                image.convert("L").point(lambda value: 255 if value > 0 else 0),
+            )
     except (OSError, UnidentifiedImageError) as exc:
         raise ValidationError("Raster mask content could not be read") from exc
 
