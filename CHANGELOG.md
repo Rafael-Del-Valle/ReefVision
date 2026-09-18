@@ -2,6 +2,26 @@
 
 All notable changes to ReefVision will be documented here.
 
+## [1.0.3] - Release candidate
+
+### Added
+
+- Direct deployment of trained or imported project detector models such as `best.pt` on the currently open annotation image.
+- Batch model deployment from Gallery for selected images with model, confidence threshold, and device controls.
+- Raster-mask class reassignment without repainting the underlying mask.
+
+### Fixed
+
+- Allow Delete and Backspace to remove the selected polygon instead of being intercepted by the enhanced annotation editor.
+- Preserve polygon creation, whole-polygon movement, vertex movement, vertex insertion, and vertex deletion behavior with regression coverage.
+- Keep annotation-editor onboarding E2E setup tied to the package version instead of a stale hard-coded version key.
+- Correct range-control styling and annotation/mask workflow regressions found during 1.0.2 smoke testing.
+- Use package-mode mypy invocation and pin AnyIO below 4.15 for the validated backend test environment.
+
+### Release validation
+
+- Final hosted CI, Windows MSI build, and clean-machine lifecycle acceptance must pass before this candidate is published as the downloadable 1.0.3 installer.
+
 ## [1.0.1] - Release candidate
 
 ### Fixed
