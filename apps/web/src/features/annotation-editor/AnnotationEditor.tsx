@@ -404,7 +404,8 @@ export function AnnotationEditor({
     const snapshot = stateRef.current;
     const imageChanged = loadedImageIdRef.current !== session.image.id;
     const newerSameImage =
-      !imageChanged && session.image.annotation_revision > snapshot.baseRevision;
+      !imageChanged &&
+      session.image.annotation_revision > snapshot.baseRevision;
     if (!imageChanged && !newerSameImage) {
       return;
     }
