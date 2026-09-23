@@ -170,11 +170,13 @@ describe("VideoTrackingWorkspace", () => {
       issues: [
         {
           code: "missing_calibration",
-          message: "Video georeferencing camera calibration has not been configured",
+          message:
+            "Video georeferencing camera calibration has not been configured",
         },
         {
           code: "missing_surface_reference",
-          message: "Project georeferencing height datum evidence has not been configured",
+          message:
+            "Project georeferencing height datum evidence has not been configured",
         },
       ],
       srt_available: true,
@@ -266,12 +268,18 @@ describe("VideoTrackingWorkspace", () => {
     fireEvent.change(screen.getByLabelText("Video file"), {
       target: { files: [video] },
     });
-    fireEvent.change(screen.getByLabelText("AirData CSV telemetry (optional)"), {
-      target: { files: [airdata] },
-    });
-    fireEvent.change(await screen.findByLabelText("AirData time offset (seconds)"), {
-      target: { value: "6.19" },
-    });
+    fireEvent.change(
+      screen.getByLabelText("AirData CSV telemetry (optional)"),
+      {
+        target: { files: [airdata] },
+      },
+    );
+    fireEvent.change(
+      await screen.findByLabelText("AirData time offset (seconds)"),
+      {
+        target: { value: "6.19" },
+      },
+    );
     fireEvent.click(screen.getByRole("button", { name: "Import video" }));
 
     expect(
