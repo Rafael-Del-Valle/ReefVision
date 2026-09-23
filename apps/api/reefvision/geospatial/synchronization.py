@@ -6,7 +6,12 @@ from math import isfinite
 from typing import Protocol
 
 from reefvision.domain.errors import ValidationError
-from reefvision.geospatial.models import TelemetryMatch, TelemetryProvenance, TelemetrySample
+from reefvision.geospatial.models import (
+    TelemetryFieldSource,
+    TelemetryMatch,
+    TelemetryProvenance,
+    TelemetrySample,
+)
 
 
 class TelemetrySource(Protocol):
@@ -56,7 +61,7 @@ class IndexedTelemetrySource:
 def _pick(
     airdata_value: object | None,
     srt_value: object | None,
-) -> tuple[object | None, str | None]:
+) -> tuple[object | None, TelemetryFieldSource | None]:
     if airdata_value is not None:
         return airdata_value, "airdata"
     if srt_value is not None:
@@ -112,6 +117,7 @@ class PreferredTelemetrySource:
         air = air_match.sample if air_match is not None else None
         srt = srt_match.sample if srt_match is not None else None
 
+        position_source: TelemetryFieldSource | None
         if air is not None and air.latitude is not None and air.longitude is not None:
             latitude, longitude, position_source = air.latitude, air.longitude, "airdata"
         elif srt is not None and srt.latitude is not None and srt.longitude is not None:
@@ -142,10 +148,11 @@ class PreferredTelemetrySource:
             srt_value = getattr(srt, field) if srt is not None else None
             return air_value if air_value is not None else srt_value
 
-        assert air is not None or srt is not None
+        base_sample = air if air is not None else srt
+        assert base_sample is not None
         merged = TelemetrySample.model_validate(
             {
-                "sample_index": air.sample_index if air is not None else srt.sample_index,
+                "sample_index": base_sample.sample_index,
                 "time_s": time_s,
                 "frame_number": srt.frame_number if srt is not None else None,
                 "latitude": latitude,
