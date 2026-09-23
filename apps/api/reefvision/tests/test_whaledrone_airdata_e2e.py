@@ -17,6 +17,7 @@ from reefvision.config import Settings
 from reefvision.db.base import Base
 from reefvision.db.session import create_database_engine, create_session_factory
 from reefvision.geospatial.projection import SurfaceReference
+from reefvision.geospatial.synchronization import IndexedTelemetrySource
 from reefvision.geospatial.validation import (
     GeoreferenceValidationPoint,
     evaluate_georeferencing,
@@ -27,7 +28,7 @@ from reefvision.services.projects import ProjectService
 from reefvision.services.video_assets import VideoAssetService
 from reefvision.storage.georeferencing import load_camera_calibration
 from reefvision.storage.projects import resolve_managed_project_path
-from reefvision.storage.telemetry import read_srt_stream
+from reefvision.storage.telemetry import read_airdata_stream, read_srt_stream
 from reefvision.tests.whaledrone import get_whaledrone_root
 
 FPS_FALLBACK = 29.97002997002997
@@ -160,6 +161,67 @@ def _load_points(
 def _angle_error_deg(actual: float, expected: float) -> float:
     return abs((actual - expected + 180.0) % 360.0 - 180.0)
 
+
+def _refine_airdata_offset_from_source_telemetry(
+    *,
+    airdata: IndexedTelemetrySource,
+    srt: IndexedTelemetrySource,
+    initial_offset_s: float,
+) -> tuple[float, dict[str, float]]:
+    """Refine sub-second alignment using only the two source telemetry streams."""
+
+    comparisons = [
+        sample for sample in srt.samples[::10] if sample.gimbal_yaw_deg is not None
+    ]
+    if not comparisons:
+        raise AssertionError("WhaleDrone SRT heading channel is unavailable")
+
+    air_min = airdata.samples[0].time_s
+    air_max = airdata.samples[-1].time_s
+    best: tuple[float, float, float, float, int] | None = None
+    for step in range(-200, 201):
+        offset_s = initial_offset_s + step / 100.0
+        errors: list[float] = []
+        for srt_sample in comparisons:
+            target_time = srt_sample.time_s + offset_s
+            if not air_min <= target_time <= air_max:
+                continue
+            air_match = airdata.sample_for_time(target_time)
+            if air_match is None or air_match.sample.aircraft_yaw_deg is None:
+                continue
+            errors.append(
+                _angle_error_deg(
+                    air_match.sample.aircraft_yaw_deg,
+                    srt_sample.gimbal_yaw_deg,
+                )
+            )
+        if len(errors) < 20:
+            continue
+        median_error = median(errors)
+        mean_error = mean(errors)
+        candidate = (
+            median_error,
+            mean_error,
+            abs(offset_s - initial_offset_s),
+            offset_s,
+            len(errors),
+        )
+        if best is None or candidate[:3] < best[:3]:
+            best = candidate
+
+    if best is None:
+        raise AssertionError("Could not align AirData and SRT heading telemetry")
+
+    median_error, mean_error, _, offset_s, count = best
+    return offset_s, {
+        "initial_timestamp_offset_s": initial_offset_s,
+        "refined_offset_s": offset_s,
+        "heading_comparisons": float(count),
+        "median_srt_vs_airdata_heading_error_deg": median_error,
+        "mean_srt_vs_airdata_heading_error_deg": mean_error,
+        "refinement_from_timestamp_anchor_s": offset_s - initial_offset_s,
+    }
+
 @pytest.mark.integration
 def test_whaledrone_airdata_end_to_end(
     tmp_path: Path,
@@ -212,14 +274,25 @@ def test_whaledrone_airdata_end_to_end(
             if not srt_path.is_file():
                 pytest.skip(f"Missing WhaleDrone SRT: {srt_path}")
 
-            offset_s, clock_diagnostics = _derive_airdata_offset(airdata_path, video_name)
-            evidence = (
-                "WhaleDrone source clocks: DJI filename/SRT clock CET (UTC+1); "
-                "AirData datetime(utc) UTC+0; offset derived from absolute source timestamps"
+            initial_offset_s, clock_diagnostics = _derive_airdata_offset(
+                airdata_path, video_name
             )
-
-            with srt_path.open("rb") as stream:
+            with (
+                srt_path.open("rb") as stream,
+                airdata_path.open("rb") as airdata_stream,
+            ):
                 _, srt_source = read_srt_stream(stream)
+                _, airdata_source = read_airdata_stream(airdata_stream)
+            offset_s, source_alignment = _refine_airdata_offset_from_source_telemetry(
+                airdata=airdata_source,
+                srt=srt_source,
+                initial_offset_s=initial_offset_s,
+            )
+            evidence = (
+                "WhaleDrone source-clock anchor: DJI filename/SRT CET (UTC+1) versus "
+                "AirData datetime(utc) UTC+0; sub-second refinement uses only SRT "
+                "gb_yaw versus AirData compass_heading, never DVM/geolocation residuals"
+            )
             source_video = _find_video(root, video_name)
             video_metadata_source = "documented_fallback"
             metadata: dict[str, float | int] = {
@@ -344,6 +417,21 @@ def test_whaledrone_airdata_end_to_end(
                     )
 
             unique_frames = {observation.point.frame_index for observation in projected}
+            diagnostics = {
+                "clip": clip_key,
+                "airdata_time_offset_s": offset_s,
+                "source_telemetry_alignment": source_alignment,
+                "unique_frames_projected": len(unique_frames),
+                "mean_sync_error_ms": mean(sync_errors) * 1000.0,
+                "max_sync_error_ms": max(sync_errors) * 1000.0,
+                "mean_airdata_vs_dvm_yaw_error_deg": mean(yaw_errors),
+                "max_airdata_vs_dvm_yaw_error_deg": max(yaw_errors),
+                "mean_resolved_vs_dvm_height_error_m": mean(height_errors),
+                "max_resolved_vs_dvm_height_error_m": max(height_errors),
+                "geolocation": report.statistics.model_dump(mode="json"),
+            }
+            print(json.dumps(diagnostics, indent=2, sort_keys=True))
+
             assert len(unique_frames) >= int(clip_config["expected_unique_frames"])
             assert max(sync_errors) <= 0.100 + 1e-12
             assert yaw_errors and mean(yaw_errors) <= 0.05
@@ -357,6 +445,7 @@ def test_whaledrone_airdata_end_to_end(
                 "fps": fps,
                 "airdata_time_offset_s": offset_s,
                 "airdata_clock_diagnostics": clock_diagnostics,
+                "source_telemetry_alignment": source_alignment,
                 "persisted_alignment_evidence": evidence,
                 "srt_sample_count": len(srt_source.samples),
                 "airdata_sample_count": persisted.airdata_telemetry.sample_count,
