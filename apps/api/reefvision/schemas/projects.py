@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 HEX_COLOR_PATTERN = r"^#[0-9A-Fa-f]{6}$"
 
@@ -33,15 +33,27 @@ class ProjectCreate(BaseModel):
     slug: str | None = Field(default=None, min_length=1, max_length=220)
     description: str | None = Field(default=None, max_length=5000)
     georeference_height_offset_m: float = Field(default=0.0, ge=-10000.0, le=10000.0)
+    georeference_height_evidence: str | None = Field(default=None, max_length=2000)
     template: Literal["blank", "octocoral"] = "blank"
 
-    @field_validator("name", "slug", "description")
+    @field_validator("name", "slug", "description", "georeference_height_evidence")
     @classmethod
     def strip_optional_text(cls, value: str | None) -> str | None:
         if value is None:
             return None
         stripped = value.strip()
         return stripped or None
+
+    @model_validator(mode="after")
+    def explicit_georeference_datum_requires_evidence(self) -> ProjectCreate:
+        if (
+            "georeference_height_offset_m" in self.model_fields_set
+            and not self.georeference_height_evidence
+        ):
+            raise ValueError(
+                "An explicitly configured georeference height offset requires datum evidence"
+            )
+        return self
 
 
 class ProjectUpdate(BaseModel):
@@ -49,14 +61,24 @@ class ProjectUpdate(BaseModel):
     slug: str | None = Field(default=None, min_length=1, max_length=220)
     description: str | None = Field(default=None, max_length=5000)
     georeference_height_offset_m: float = Field(default=0.0, ge=-10000.0, le=10000.0)
+    georeference_height_evidence: str | None = Field(default=None, max_length=2000)
 
-    @field_validator("name", "slug", "description")
+    @field_validator("name", "slug", "description", "georeference_height_evidence")
     @classmethod
     def strip_optional_text(cls, value: str | None) -> str | None:
         if value is None:
             return None
         stripped = value.strip()
         return stripped or None
+
+    @model_validator(mode="after")
+    def height_offset_update_requires_evidence(self) -> ProjectUpdate:
+        if (
+            "georeference_height_offset_m" in self.model_fields_set
+            and not self.georeference_height_evidence
+        ):
+            raise ValueError("Updating georeference height offset requires datum evidence")
+        return self
 
 
 class ProjectResponse(BaseModel):
@@ -69,6 +91,7 @@ class ProjectResponse(BaseModel):
     storage_root: str
     default_annotation_type: str
     georeference_height_offset_m: float
+    georeference_height_evidence: str | None
     created_at: datetime
     updated_at: datetime
     archived_at: datetime | None
@@ -83,6 +106,7 @@ class ProjectSummaryResponse(BaseModel):
     storage_root: str
     default_annotation_type: str
     georeference_height_offset_m: float
+    georeference_height_evidence: str | None
     created_at: datetime
     updated_at: datetime
     archived_at: datetime | None
