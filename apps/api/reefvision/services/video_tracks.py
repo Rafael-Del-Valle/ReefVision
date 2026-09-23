@@ -21,7 +21,6 @@ from reefvision.schemas.videos import (
     VideoTrackResponse,
     VideoTrackUpdate,
 )
-
 from reefvision.services.video_observation_location import (
     select_video_observation_image_location,
 )
