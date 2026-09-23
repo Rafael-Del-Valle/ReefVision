@@ -11,7 +11,7 @@ from reefvision.db.session import create_database_engine, create_session_factory
 from reefvision.geospatial.calibration import CameraCalibration
 from reefvision.geospatial.models import TelemetrySample
 from reefvision.geospatial.projection import SurfaceReference
-from reefvision.geospatial.synchronization import IndexedTelemetrySource
+from reefvision.geospatial.synchronization import IndexedTelemetrySource, PreferredTelemetrySource
 from reefvision.services.video_georeferencing import VideoGeoreferencingService
 
 
@@ -108,7 +108,8 @@ def test_georeference_point_success(
     settings, factory, video_id = service_context
     with factory() as session:
         service = VideoGeoreferencingService(session, settings)
-        monkeypatch.setattr(service.video_assets, "telemetry_source", lambda _: _source())
+        preferred = PreferredTelemetrySource(airdata=_source(), srt=None)
+        monkeypatch.setattr(service.video_assets, "telemetry_source", lambda _: preferred)
         response = service.georeference_point(
             video_id,
             frame_index=0,
@@ -124,6 +125,9 @@ def test_georeference_point_success(
     assert response.result.latitude == pytest.approx(0.0, abs=1e-12)
     assert response.result.longitude == pytest.approx(0.0, abs=1e-12)
     assert response.sync_error_s == pytest.approx(0.0)
+    assert response.telemetry_provenance is not None
+    assert response.telemetry_provenance.position_source == "airdata"
+    assert response.telemetry_provenance.gimbal_yaw_source == "airdata"
 
 
 def test_georeference_point_reports_missing_telemetry(
