@@ -96,12 +96,18 @@ alignment where supported.
 Return/display Ready, missing telemetry, missing calibration, missing datum,
 alignment unverified, synchronization failure, and per-field provenance.
 
-### 9. Define organism image-location policy — IN PROGRESS
+### 9. Define organism image-location policy — VERIFY
 
 Initial production policy: bbox center unless a more specific point is supplied.
 Preserve the original bbox/pixel and record the point-selection method.
 
-### 10. Add typed georeferenced observation schemas — TODO
+Acceptance gate:
+- one reusable selector owns the policy;
+- explicit points take precedence and are validated against the native image and bbox;
+- bbox-center fallback preserves existing track-center behavior;
+- the selected pixel, original bbox, and method are typed and documented.
+
+### 10. Add typed georeferenced observation schemas — NEXT
 
 Include frame/time, source pixel, target lat/lon, camera lat/lon, ENU offsets,
 height, synchronization error, provenance, calibration checksum, datum evidence,
