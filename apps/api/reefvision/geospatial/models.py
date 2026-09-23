@@ -37,24 +37,44 @@ class TelemetrySample(BaseModel):
     digital_zoom_ratio: FiniteFloat | None = Field(default=None, gt=0)
 
 
+TelemetryFieldSource = Literal["airdata", "dji_srt"]
+
+
 class TelemetryMetadata(BaseModel):
     found: bool = False
     available: bool = False
-    source_type: Literal["dji_srt"] | None = None
+    source_type: Literal["dji_srt", "airdata"] | None = None
     source_path: str | None = None
     path_kind: Literal["managed", "external"] | None = None
     sample_count: int = Field(default=0, ge=0)
     error: str | None = None
 
 
+class TelemetryProvenance(BaseModel):
+    """Source identity for fields merged across aligned telemetry streams."""
+
+    model_config = {"frozen": True}
+
+    position_source: TelemetryFieldSource | None = None
+    relative_altitude_source: TelemetryFieldSource | None = None
+    gimbal_yaw_source: TelemetryFieldSource | None = None
+    gimbal_pitch_source: TelemetryFieldSource | None = None
+    gimbal_roll_source: TelemetryFieldSource | None = None
+    airdata_delta_s: float | None = None
+    srt_delta_s: float | None = None
+    airdata_time_offset_s: float = 0.0
+    airdata_time_offset_evidence: str | None = None
+
+
 class TelemetryMatch(BaseModel):
-    """Signed delta = sample time - request time; error is its absolute value."""
+    """Signed delta = effective source sample time - request time."""
 
     model_config = {"frozen": True}
 
     sample: TelemetrySample
     requested_time_s: float
     delta_s: float
+    provenance: TelemetryProvenance | None = None
 
     @property
     def error_s(self) -> float:
