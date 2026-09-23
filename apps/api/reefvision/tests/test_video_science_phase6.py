@@ -183,6 +183,27 @@ def test_calibration_can_be_cleared_and_schooling_requires_scale(
     assert client.get(f"/api/v1/videos/{video['id']}/calibration").status_code == 404
 
 
+def test_georeferencing_readiness_api_reports_missing_prerequisites(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Georeferencing readiness")
+    video = _video(client, str(project["id"]), monkeypatch)
+
+    response = client.get(
+        f"/api/v1/videos/{video['id']}/georeferencing-readiness"
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["ready"] is False
+    assert payload["state"] == "missing_calibration"
+    assert {issue["code"] for issue in payload["issues"]} == {
+        "missing_calibration",
+        "missing_surface_reference",
+        "missing_telemetry",
+    }
+
+
 def test_georeferencing_calibration_persists_full_camera_model(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
