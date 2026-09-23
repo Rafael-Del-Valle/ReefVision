@@ -578,6 +578,18 @@ def test_project_georeference_height_offset_is_configurable(client: TestClient) 
     assert fetched.json()["georeference_height_evidence"].startswith("Updated surveyed")
 
 
+def test_project_height_offset_creation_requires_evidence(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/projects",
+        json={
+            "name": "Undocumented datum",
+            "template": "blank",
+            "georeference_height_offset_m": 5.0,
+        },
+    )
+    assert response.status_code == 422
+
+
 def test_project_height_offset_update_requires_evidence(client: TestClient) -> None:
     project = create_project(client, template="blank")
     response = client.patch(
