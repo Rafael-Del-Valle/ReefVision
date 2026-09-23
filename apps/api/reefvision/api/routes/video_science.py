@@ -9,6 +9,10 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.schemas.video_activity import VideoTrackActivityRequest, VideoTrackActivityResponse
+from reefvision.schemas.video_georeferencing_calibration import (
+    VideoGeoreferencingCalibrationResponse,
+    VideoGeoreferencingCalibrationSetRequest,
+)
 from reefvision.schemas.video_occupancy import VideoOccupancyRequest, VideoOccupancyResponse
 from reefvision.schemas.video_science import (
     CalibratedVideoTrackAnalyticsResponse,
@@ -22,6 +26,9 @@ from reefvision.schemas.video_science import (
     VideoSpatialCalibrationSetRequest,
 )
 from reefvision.services.video_activity import VideoActivityService
+from reefvision.services.video_georeferencing_calibration import (
+    VideoGeoreferencingCalibrationService,
+)
 from reefvision.services.video_occupancy import VideoOccupancyService
 from reefvision.services.video_science import VideoScienceService
 
@@ -106,6 +113,38 @@ def schooling_analytics(
     session: DbSession,
 ) -> VideoSchoolingAnalyticsResponse:
     return VideoScienceService(session).schooling_analytics(video_id, payload)
+
+
+@router.get(
+    "/videos/{video_id}/georeferencing-calibration",
+    response_model=VideoGeoreferencingCalibrationResponse,
+)
+def get_video_georeferencing_calibration(
+    video_id: str,
+    session: DbSession,
+) -> VideoGeoreferencingCalibrationResponse:
+    return VideoGeoreferencingCalibrationService(session).get(video_id)
+
+
+@router.put(
+    "/videos/{video_id}/georeferencing-calibration",
+    response_model=VideoGeoreferencingCalibrationResponse,
+)
+def set_video_georeferencing_calibration(
+    video_id: str,
+    payload: VideoGeoreferencingCalibrationSetRequest,
+    session: DbSession,
+) -> VideoGeoreferencingCalibrationResponse:
+    return VideoGeoreferencingCalibrationService(session).set(video_id, payload)
+
+
+@router.delete(
+    "/videos/{video_id}/georeferencing-calibration",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def clear_video_georeferencing_calibration(video_id: str, session: DbSession) -> Response:
+    VideoGeoreferencingCalibrationService(session).clear(video_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(
