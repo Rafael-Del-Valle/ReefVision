@@ -151,12 +151,10 @@ describe("GeoreferencedMapPanel", () => {
   });
 
   it("shows loading and then the successful empty state", async () => {
-    let resolveRequest:
-      | ((value: {
-          items: GeoReferencedObservationSummary[];
-          count: number;
-        }) => void)
-      | null = null;
+    let resolveRequest!: (value: {
+      items: GeoReferencedObservationSummary[];
+      count: number;
+    }) => void;
 
     vi.mocked(api.getVideoGeoreferencedObservations).mockReturnValue(
       new Promise((resolve) => {
@@ -170,7 +168,7 @@ describe("GeoreferencedMapPanel", () => {
       screen.getByText("Loading georeferenced observations..."),
     ).toBeInTheDocument();
 
-    resolveRequest?.({
+    resolveRequest({
       items: [],
       count: 0,
     });
