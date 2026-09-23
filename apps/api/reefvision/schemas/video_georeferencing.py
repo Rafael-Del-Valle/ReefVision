@@ -42,6 +42,10 @@ class VideoGeoreferenceResponse(BaseModel):
         if self.status == "success":
             if self.result is None or self.failure_reason is not None or self.message is not None:
                 raise ValueError("Successful georeferencing requires a result and no failure")
-        elif self.result is not None or self.failure_reason is None or not (self.message or "").strip():
+        elif (
+            self.result is not None
+            or self.failure_reason is None
+            or not (self.message or "").strip()
+        ):
             raise ValueError("Failed georeferencing requires a reason/message and no result")
         return self
