@@ -147,6 +147,7 @@ class ProjectService:
                 storage_root=row.project.storage_root,
                 default_annotation_type=row.project.default_annotation_type,
                 georeference_height_offset_m=row.project.georeference_height_offset_m,
+                georeference_height_evidence=row.project.georeference_height_evidence,
                 created_at=row.project.created_at,
                 updated_at=row.project.updated_at,
                 archived_at=row.project.archived_at,
@@ -188,6 +189,7 @@ class ProjectService:
             description=payload.description,
             storage_root=storage_root,
             georeference_height_offset_m=payload.georeference_height_offset_m,
+            georeference_height_evidence=payload.georeference_height_evidence,
         )
         self.projects.add(project)
         if payload.template == "octocoral":
