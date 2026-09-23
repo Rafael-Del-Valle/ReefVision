@@ -17,16 +17,17 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "projects",
-        sa.Column(
-            "georeference_height_offset_m",
-            sa.Float(),
-            nullable=False,
-            server_default=sa.text("0.0"),
-        ),
-    )
+    with op.batch_alter_table("projects") as batch_op:
+        batch_op.add_column(
+            sa.Column(
+                "georeference_height_offset_m",
+                sa.Float(),
+                nullable=False,
+                server_default=sa.text("0.0"),
+            )
+        )
 
 
 def downgrade() -> None:
-    op.drop_column("projects", "georeference_height_offset_m")
+    with op.batch_alter_table("projects") as batch_op:
+        batch_op.drop_column("georeference_height_offset_m")
