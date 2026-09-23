@@ -189,8 +189,7 @@ class VideoGeoreferencingReadinessService:
                     VideoGeoreferencingReadinessIssue(
                         code="calibration_zoom_mismatch",
                         message=(
-                            "Telemetry zoom does not match the selected "
-                            "georeferencing calibration"
+                            "Telemetry zoom does not match the selected georeferencing calibration"
                         ),
                     )
                 )
