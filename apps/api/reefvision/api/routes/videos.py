@@ -66,12 +66,15 @@ def import_video(
     request: Request,
     session: DbSession,
     file: Annotated[UploadFile, File()],
+    telemetry_file: Annotated[UploadFile | None, File()] = None,
 ) -> VideoAssetResponse:
     return asset_service(request, session).import_video(
         project_id,
         filename=file.filename,
         stream=file.file,
         media_type=file.content_type,
+        telemetry_filename=telemetry_file.filename if telemetry_file is not None else None,
+        telemetry_stream=telemetry_file.file if telemetry_file is not None else None,
     )
 
 

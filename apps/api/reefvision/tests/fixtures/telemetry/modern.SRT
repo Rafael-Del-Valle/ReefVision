@@ -1,0 +1,17 @@
+1
+00:00:00,000 --> 00:00:00,033
+<font size="28">FrameCnt: 1, DiffTime: 33ms
+2026-01-16 15:49:54.000
+[iso: 100] [shutter: 1/1000.0] [focal_length: 24 mm] [dzoom_ratio: 1.5]
+[latitude: 25.125] [longitude: -80.25] [rel_alt: 12.5 abs_alt: 42.5]
+[gb_yaw: 179] [gb_pitch: -90] [gb_roll: 0.5]
+[drone_yaw: 180] [drone_pitch: -2] [drone_roll: 1]
+[hspeed: 3.5] [vspeed: -0.5]</font>
+
+2
+00:00:00,100 --> 00:00:00,133
+[longitude: -80.251] [unknown: 999] [rel_alt: 13.0] [latitude: 25.126]
+
+3
+00:00:10,000 --> 00:00:10,033
+[latitude: 25.127] [longitude: -80.252]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import shutil
 from pathlib import Path
 from typing import BinaryIO
@@ -15,9 +16,22 @@ from sqlalchemy.orm import Session
 from reefvision.config import Settings
 from reefvision.db.models import Job, Project, VideoAsset
 from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.geospatial.models import TelemetryMetadata
+from reefvision.geospatial.synchronization import TelemetrySource
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.videos import VideoAssetResponse, VideoExtractRequest
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.telemetry import (
+    find_paired_srt,
+    load_dji_srt,
+    matching_srt_name,
+    open_video_source,
+    read_srt_stream,
+    remove_srt,
+    write_srt,
+)
+
+LOGGER = logging.getLogger(__name__)
 
 SUPPORTED_VIDEO_EXTENSIONS = {".avi", ".m4v", ".mkv", ".mov", ".mp4", ".webm"}
 
@@ -108,13 +122,20 @@ class VideoAssetService:
         filename: str | None,
         stream: BinaryIO,
         media_type: str | None,
+        telemetry_filename: str | None = None,
+        telemetry_stream: BinaryIO | None = None,
+        source_path: Path | None = None,
     ) -> VideoAssetResponse:
         project = self._project(project_id)
         safe_name = _safe_video_name(filename)
+        telemetry, telemetry_data = self._prepare_telemetry(
+            safe_name, source_path, telemetry_filename, telemetry_stream
+        )
         suffix = Path(safe_name).suffix.casefold()
         staging_relative = f"{project.storage_root}/videos/staging/{uuid4()}.part"
         staging = resolve_managed_project_path(self.settings, staging_relative)
         managed_path: Path | None = None
+        telemetry_path: Path | None = None
         try:
             checksum, size = _stream_video(stream, staging)
             duplicate = self.session.scalar(
@@ -124,6 +145,20 @@ class VideoAssetService:
                 )
             )
             if duplicate is not None:
+                existing = TelemetryMetadata.model_validate(
+                    dict(duplicate.metadata_json or {}).get("telemetry", {})
+                )
+                if telemetry.found and not existing.available:
+                    telemetry_path = self._store_telemetry(
+                        project, duplicate.id, telemetry, telemetry_data
+                    )
+                    duplicate.metadata_json = {
+                        **dict(duplicate.metadata_json or {}),
+                        "telemetry": telemetry.model_dump(mode="json"),
+                    }
+                    duplicate.revision += 1
+                    self.session.commit()
+                    self.session.refresh(duplicate)
                 staging.unlink(missing_ok=True)
                 return VideoAssetResponse.model_validate(duplicate)
             metadata = _inspect_video(staging)
@@ -132,6 +167,7 @@ class VideoAssetService:
             managed_path = resolve_managed_project_path(self.settings, relative_managed)
             managed_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(staging), managed_path)
+            telemetry_path = self._store_telemetry(project, video_id, telemetry, telemetry_data)
             video = VideoAsset(
                 id=video_id,
                 project_id=project_id,
@@ -144,7 +180,10 @@ class VideoAssetService:
                 frame_count=int(metadata["frame_count"]),
                 fps=float(metadata["fps"]),
                 duration_seconds=float(metadata["duration_seconds"]),
-                metadata_json={"file_size_bytes": size},
+                metadata_json={
+                    "file_size_bytes": size,
+                    "telemetry": telemetry.model_dump(mode="json"),
+                },
                 status="imported",
             )
             self.session.add(video)
@@ -156,7 +195,95 @@ class VideoAssetService:
             staging.unlink(missing_ok=True)
             if managed_path is not None:
                 managed_path.unlink(missing_ok=True)
+            if telemetry_path is not None:
+                remove_srt(telemetry_path)
             raise
+
+    def _prepare_telemetry(
+        self,
+        video_name: str,
+        source_path: Path | None,
+        telemetry_filename: str | None,
+        telemetry_stream: BinaryIO | None,
+    ) -> tuple[TelemetryMetadata, bytes | None]:
+        if telemetry_stream is not None:
+            if not matching_srt_name(video_name, telemetry_filename or ""):
+                raise ValidationError(
+                    "Telemetry must be an SRT with the same filename stem as the video"
+                )
+            data, source = read_srt_stream(telemetry_stream)
+            return TelemetryMetadata(
+                found=True,
+                available=True,
+                source_type="dji_srt",
+                path_kind="managed",
+                sample_count=len(source.samples),
+            ), data
+        metadata = TelemetryMetadata()
+        if source_path is not None:
+            try:
+                paired = find_paired_srt(source_path)
+                if paired is not None:
+                    metadata = TelemetryMetadata(
+                        found=True,
+                        source_type="dji_srt",
+                        source_path=str(paired.resolve()),
+                        path_kind="external",
+                    )
+                    metadata.sample_count = len(load_dji_srt(paired).samples)
+                    metadata.available = True
+            except ValidationError as exc:
+                metadata.error = str(exc)
+                LOGGER.warning("Optional video telemetry unavailable: %s", exc)
+        return metadata, None
+
+    def _store_telemetry(
+        self, project: Project, video_id: str, metadata: TelemetryMetadata, data: bytes | None
+    ) -> Path | None:
+        if data is None:
+            return None
+        # Unique names also make rollback safe when enriching a duplicate import.
+        relative = f"{project.storage_root}/videos/telemetry/{video_id}-{uuid4()}.srt"
+        path = resolve_managed_project_path(self.settings, relative)
+        try:
+            write_srt(path, data)
+        except OSError:
+            remove_srt(path)
+            raise
+        metadata.source_path = relative
+        return path
+
+    def import_video_path(self, project_id: str, source_path: Path) -> VideoAssetResponse:
+        """Backend local-file import with optional sibling discovery; no dataset assumptions."""
+        with open_video_source(source_path) as stream:
+            return self.import_video(
+                project_id,
+                filename=source_path.name,
+                stream=stream,
+                media_type=None,
+                source_path=source_path,
+            )
+
+    def telemetry_source(self, video_id: str) -> TelemetrySource | None:
+        """Load once per job, then reuse the source for frame lookups.
+
+        Persisted metadata is an import-time snapshot. Missing/moved resources
+        return None here so ordinary inference remains independent of telemetry.
+        """
+        metadata = self.get(video_id).telemetry
+        if not metadata.available or metadata.source_path is None:
+            return None
+        try:
+            if metadata.path_kind == "managed":
+                path = resolve_managed_project_path(self.settings, metadata.source_path)
+            elif metadata.path_kind == "external":
+                path = Path(metadata.source_path)
+            else:
+                return None
+            return load_dji_srt(path)
+        except ValidationError as exc:
+            LOGGER.warning("Video %s telemetry unavailable: %s", video_id, exc)
+            return None
 
     def content_path(self, video_id: str) -> Path:
         video = self.get_record(video_id)

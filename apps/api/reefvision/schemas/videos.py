@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, FiniteFloat, field_validator, model_validator
 
+from reefvision.geospatial.models import TelemetryMetadata
+
 TrackInterpolation = Literal["linear", "hold"]
 TrackGeometryKind = Literal["bbox"]
 
@@ -34,8 +36,14 @@ class VideoAssetResponse(BaseModel):
     revision: int
     created_at: datetime
     updated_at: datetime
+    telemetry: TelemetryMetadata = Field(default_factory=TelemetryMetadata)
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def telemetry_from_metadata(self) -> VideoAssetResponse:
+        self.telemetry = TelemetryMetadata.model_validate(self.metadata_json.get("telemetry", {}))
+        return self
 
 
 class VideoTrackKeyframe(BaseModel):

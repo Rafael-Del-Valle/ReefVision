@@ -1,0 +1,9 @@
+1
+00:00:01.000 --> 00:00:02.000
+GPS(-80.25,25.125,42.5M) H 12.5m H.S 12.6km/h V.S -0.5m/s
+F.PRY (-2, 1, 180) G.PRY (-90, 0.5, 179) ISO 200 SS 500
+
+2
+00:00:02,000 --> 00:00:03,000
+[LONGITUDE: -80.251] [LATITUDE: 25.126] [relative_altitude: 13]
+[gimbal_pitch: -89] [gimbal_roll: 0] [gimbal_yaw: 178] [focal_len: 240]

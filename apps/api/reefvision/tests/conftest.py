@@ -65,6 +65,27 @@ def _load_test_create_app():
 create_app = _load_test_create_app()
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--whaledrone-integration",
+        action="store_true",
+        default=False,
+        help="Read an external WhaleDrone MP4/SRT pair (never downloads or copies data)",
+    )
+    parser.addoption(
+        "--whaledrone-video", default=None, help="Original DJI video filename to validate"
+    )
+    parser.addoption("--whaledrone-frame-base", type=int, choices=[0, 1], default=None)
+    parser.addoption("--whaledrone-takeoff-height-m", type=float, default=None)
+    parser.addoption("--whaledrone-height-evidence", default=None)
+    parser.addoption("--whaledrone-height-datum-verified", action="store_true", default=False)
+    parser.addoption("--whaledrone-time-offset-s", type=float, default=0.0)
+    parser.addoption("--whaledrone-time-offset-evidence", default=None)
+    parser.addoption("--whaledrone-time-column", default=None)
+    parser.addoption("--whaledrone-sync-evidence", default=None)
+    parser.addoption("--whaledrone-camera-evidence", default=None)
+
+
 @pytest.fixture
 def test_settings(tmp_path: Path) -> Settings:
     return Settings(
