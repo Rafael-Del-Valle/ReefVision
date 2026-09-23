@@ -15,7 +15,7 @@ from reefvision.schemas.video_georeferencing_calibration import (
 )
 from reefvision.services.video_georeferencing import VideoGeoreferencingService
 from reefvision.services.video_georeferencing_calibration import (
-    GEOREREFERENCING_CALIBRATION_METADATA_KEY,
+    GEOREFERENCING_CALIBRATION_METADATA_KEY,
     VideoGeoreferencingCalibrationService,
 )
 
@@ -246,9 +246,9 @@ def test_georeference_point_reports_corrupt_calibration_resolution(
         video = session.get(VideoAsset, video_id)
         assert video is not None
         metadata = dict(video.metadata_json)
-        raw = dict(metadata[GEOREREFERENCING_CALIBRATION_METADATA_KEY])
+        raw = dict(metadata[GEOREFERENCING_CALIBRATION_METADATA_KEY])
         raw["width_px"] = 999
-        metadata[GEOREREFERENCING_CALIBRATION_METADATA_KEY] = raw
+        metadata[GEOREFERENCING_CALIBRATION_METADATA_KEY] = raw
         video.metadata_json = metadata
         session.commit()
 
@@ -261,6 +261,33 @@ def test_georeference_point_reports_corrupt_calibration_resolution(
 
     assert response.status == "failed"
     assert response.failure_reason == "calibration_mismatch"
+
+
+def test_georeference_point_reports_calibration_checksum_mismatch(
+    service_context,
+) -> None:
+    settings, factory, video_id = service_context
+    with factory() as session:
+        video = session.get(VideoAsset, video_id)
+        assert video is not None
+        metadata = dict(video.metadata_json)
+        raw = dict(metadata[GEOREFERENCING_CALIBRATION_METADATA_KEY])
+        raw["checksum_sha256"] = "0" * 64
+        metadata[GEOREFERENCING_CALIBRATION_METADATA_KEY] = raw
+        video.metadata_json = metadata
+        session.commit()
+
+        response = VideoGeoreferencingService(session, settings).georeference_point(
+            video_id,
+            frame_index=0,
+            pixel_x=500.0,
+            pixel_y=400.0,
+        )
+
+    assert response.status == "failed"
+    assert response.failure_reason == "calibration_mismatch"
+    assert response.message is not None
+    assert "checksum" in response.message.casefold()
 
 
 def test_georeference_point_reports_zoom_mismatch(
