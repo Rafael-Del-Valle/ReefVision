@@ -303,10 +303,19 @@ def resolve_preferred_telemetry(
         srt.camera_roll_deg if srt else None,
     )
 
-    timing_sample = airdata or srt
+    elapsed_sample = (
+        srt
+        if srt is not None and srt.elapsed_seconds is not None
+        else airdata
+    )
+    absolute_sample = (
+        airdata
+        if airdata is not None and airdata.absolute_time_utc is not None
+        else srt
+    )
     return ResolvedTelemetrySample(
-        elapsed_seconds=timing_sample.elapsed_seconds if timing_sample else None,
-        absolute_time_utc=timing_sample.absolute_time_utc if timing_sample else None,
+        elapsed_seconds=elapsed_sample.elapsed_seconds if elapsed_sample else None,
+        absolute_time_utc=absolute_sample.absolute_time_utc if absolute_sample else None,
         latitude=latitude,
         longitude=longitude,
         camera_height_m=camera_height_m,
