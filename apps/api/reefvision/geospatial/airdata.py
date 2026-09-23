@@ -45,7 +45,12 @@ def parse_airdata_csv(text: str) -> list[TelemetrySample]:
 
     try:
         reader = csv.DictReader(io.StringIO(text.lstrip("\ufeff")))
-        columns = set(reader.fieldnames or [])
+        raw_fieldnames = reader.fieldnames or []
+        fieldnames = [name.strip() for name in raw_fieldnames if name is not None]
+        if len(fieldnames) != len(raw_fieldnames) or len(fieldnames) != len(set(fieldnames)):
+            raise ValidationError("AirData CSV header contains missing or duplicate columns")
+        reader.fieldnames = fieldnames
+        columns = set(fieldnames)
     except csv.Error as exc:
         raise ValidationError("Malformed AirData CSV header") from exc
     if _TIME_COLUMN not in columns:
