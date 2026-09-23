@@ -120,11 +120,7 @@ def _derive_airdata_offset(
 
 
 def _find_video(root: Path, video_name: str) -> Path | None:
-    candidates = [
-        path
-        for path in (root / "videos").rglob(video_name)
-        if path.is_file()
-    ]
+    candidates = [path for path in (root / "videos").rglob(video_name) if path.is_file()]
     if len(candidates) > 1:
         raise AssertionError(f"Ambiguous source video locations for {video_name}")
     return candidates[0] if candidates else None
@@ -190,10 +186,7 @@ def _source_alignment_score(
         if air_match is None:
             continue
         air_sample = air_match.sample
-        if (
-            srt_sample.gimbal_yaw_deg is not None
-            and air_sample.aircraft_yaw_deg is not None
-        ):
+        if srt_sample.gimbal_yaw_deg is not None and air_sample.aircraft_yaw_deg is not None:
             heading_errors.append(
                 _angle_error_deg(
                     air_sample.aircraft_yaw_deg,
@@ -375,9 +368,7 @@ def test_whaledrone_airdata_end_to_end(
             if not srt_path.is_file():
                 pytest.skip(f"Missing WhaleDrone SRT: {srt_path}")
 
-            initial_offset_s, clock_diagnostics = _derive_airdata_offset(
-                airdata_path, video_name
-            )
+            initial_offset_s, clock_diagnostics = _derive_airdata_offset(airdata_path, video_name)
             with (
                 srt_path.open("rb") as stream,
                 airdata_path.open("rb") as airdata_stream,
@@ -522,9 +513,7 @@ def test_whaledrone_airdata_end_to_end(
                     )
                 expected_height = expected["height_m"]
                 if expected_height is not None:
-                    height_errors.append(
-                        abs(observation.result.camera_height_m - expected_height)
-                    )
+                    height_errors.append(abs(observation.result.camera_height_m - expected_height))
 
             unique_frames = {observation.point.frame_index for observation in projected}
             diagnostics = {
@@ -579,16 +568,11 @@ def test_whaledrone_airdata_end_to_end(
                 "reference_agreement_status": "MEASURED_NOT_ACCEPTANCE_GATED",
                 "reference_kind": "DVM-derived coordinates, not independent surveyed ground truth",
                 "critical_field_provenance": {
-                    "|".join(str(item) for item in key): value
-                    for key, value in provenance.items()
+                    "|".join(str(item) for item in key): value for key, value in provenance.items()
                 },
             }
 
-        destination = (
-            Path(__file__).resolve().parents[4]
-            / ".artifacts"
-            / "whaledrone-airdata-e2e"
-        )
+        destination = Path(__file__).resolve().parents[4] / ".artifacts" / "whaledrone-airdata-e2e"
         destination.mkdir(parents=True, exist_ok=True)
         output = destination / "summary.json"
         output.write_text(json.dumps(summaries, indent=2, sort_keys=True) + "\n", encoding="utf-8")
