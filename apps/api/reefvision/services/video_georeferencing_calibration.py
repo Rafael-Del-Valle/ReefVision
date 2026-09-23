@@ -75,7 +75,9 @@ class VideoGeoreferencingCalibrationService:
                 fy_px=float(raw["fy_px"]),
                 cx_px=float(raw["cx_px"]),
                 cy_px=float(raw["cy_px"]),
-                distortion_coefficients=tuple(float(value) for value in raw["distortion_coefficients"]),
+                distortion_coefficients=tuple(
+                    float(value) for value in raw["distortion_coefficients"]
+                ),
                 digital_zoom_ratio=float(raw["digital_zoom_ratio"]),
                 camera_mode=str(raw["camera_mode"]),
             )
@@ -104,7 +106,9 @@ class VideoGeoreferencingCalibrationService:
             raise ValidationError("Stored georeferencing camera calibration is invalid") from exc
 
         if (calibration.width_px, calibration.height_px) != (video.width_px, video.height_px):
-            raise ValidationError("Stored georeferencing calibration resolution does not match video")
+            raise ValidationError(
+                "Stored georeferencing calibration resolution does not match video"
+            )
         if _checksum(geometry) != checksum:
             raise ValidationError("Stored georeferencing camera calibration checksum mismatch")
         if not source.strip() or not evidence.strip() or not str(geometry["camera_mode"]).strip():
