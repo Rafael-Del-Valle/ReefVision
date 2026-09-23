@@ -21,6 +21,7 @@ from reefvision.ml.video_tracking import (
     video_tracking_provider_for_name,
 )
 from reefvision.schemas.georeferenced_observation import BoundingBoxPixels
+from reefvision.services.georeferenced_observations import GeoReferencedObservationService
 from reefvision.services.video_georeferencing import VideoGeoreferencingService
 from reefvision.services.video_georeferencing_readiness import VideoGeoreferencingReadinessService
 from reefvision.storage.projects import resolve_managed_project_path
@@ -96,6 +97,7 @@ def _bounding_box_pixels(
 
 def _georeference_track_observations(
     service: VideoGeoreferencingService,
+    persistence: GeoReferencedObservationService,
     *,
     video_id: str,
     track_id: str,
@@ -116,7 +118,7 @@ def _georeference_track_observations(
 
     for observation in observations:
         try:
-            service.georeference_detection(
+            geo_observation = service.georeference_detection(
                 video_id,
                 frame_index=observation.frame,
                 bbox=_bounding_box_pixels(observation),
@@ -132,6 +134,10 @@ def _georeference_track_observations(
                 exc,
             )
         else:
+            # Persistence failures are intentionally not swallowed here.
+            # A database/provenance mismatch should fail the transaction
+            # rather than report a geographic point that was never stored.
+            persistence.persist(geo_observation)
             successful += 1
 
     return successful, failed
@@ -397,6 +403,14 @@ def process_video_tracking_job(
                 )
             )
 
+            persistence = GeoReferencedObservationService(session)
+
+            # A tracking-job rerun replaces its previous machine outputs.
+            # Remove the derived geographic observations before soft-deleting
+            # and recreating those tracks so duplicate map points cannot
+            # accumulate.
+            persistence.delete_for_tracks(track.id for track in existing)
+
             for track in existing:
                 track.deleted_at = datetime.now(UTC)
                 track.revision += 1
@@ -467,6 +481,7 @@ def process_video_tracking_job(
 
                     successful, failed = _georeference_track_observations(
                         georeferencing_service,
+                        persistence,
                         video_id=video_id,
                         track_id=track.id,
                         observations=ordered,
