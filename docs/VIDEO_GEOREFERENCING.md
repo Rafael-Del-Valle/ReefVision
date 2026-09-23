@@ -86,6 +86,35 @@ Sources: [dataset technical reference](https://huggingface.co/datasets/LucieLprt
 [OpenCV](https://docs.opencv.org/4.x/d9/d0c/group__calib3d.html),
 [GeographicLib](https://geographiclib.sourceforge.io/html/python/code.html).
 
+## Organism image-location policy
+
+Georeferencing needs one native-image pixel for each organism observation. ReefVision
+uses a deterministic policy rather than inferring a point differently in each
+pipeline:
+
+1. If an observation supplies an explicit organism point, use that point.
+2. Otherwise, for a bounding-box observation `(x, y, width, height)`, use
+   `(x + width / 2, y + height / 2)`.
+3. Never substitute image center, box bottom-center, a tracker-specific centroid,
+   or another heuristic without recording a new explicit method.
+
+The current methods are `explicit_point` and `bbox_center`. Coordinates are
+floating-point native source-image pixels with origin at the upper-left, x increasing
+rightward and y increasing downward. Do not round before projection.
+
+The original bbox is retained together with the selected pixel and method. An
+explicit point must be finite, inside the native image, and inside the associated
+bbox; otherwise the observation is rejected rather than silently falling back to
+the bbox center. This guards against associating an unrelated pixel with an
+organism. If a future observation type legitimately requires a representative
+point outside its bbox, add a new named method with its own validation contract.
+
+Existing sparse-track interpolation continues to expose `center_x` and
+`center_y`, but those values now come through this policy's `bbox_center`
+fallback. This does not change ByteTrack/BoT-SORT identities, box interpolation,
+or current pixel analytics. Task 10 will embed the selected pixel, original bbox,
+and method in the typed georeferenced-observation contract.
+
 ## Using the geometry API
 
 This example uses synthetic inputs. Runtime callers can instead load a file with
