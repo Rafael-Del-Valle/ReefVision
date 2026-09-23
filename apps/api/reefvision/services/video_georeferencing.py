@@ -13,6 +13,7 @@ from reefvision.db.models import Project, VideoAsset
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.geospatial.models import TelemetryProvenance
 from reefvision.geospatial.projection import SurfaceReference, georeference_pixel
+from reefvision.geospatial.synchronization import TelemetrySource
 from reefvision.schemas.georeferenced_observation import (
     BoundingBoxPixels,
     CalibrationReference,
@@ -51,6 +52,18 @@ class VideoGeoreferencingService:
         self.settings = settings
         self.video_assets = VideoAssetService(session, settings)
         self.calibrations = VideoGeoreferencingCalibrationService(session)
+        self._telemetry_source_cache: dict[str, TelemetrySource | None] = {}
+
+    def _telemetry_source(
+        self,
+        video_id: str,
+    ) -> TelemetrySource | None:
+        """Load aligned telemetry once per service instance/video."""
+
+        if video_id not in self._telemetry_source_cache:
+            self._telemetry_source_cache[video_id] = self.video_assets.telemetry_source(video_id)
+
+        return self._telemetry_source_cache[video_id]
 
     @staticmethod
     def _required_uuid(
@@ -258,7 +271,7 @@ class VideoGeoreferencingService:
 
         # Re-resolve the synchronized sample so the observation stores the
         # actual pose and telemetry provenance used by projection.
-        telemetry_source = self.video_assets.telemetry_source(video.id)
+        telemetry_source = self._telemetry_source(video.id)
 
         if telemetry_source is None:
             raise ValidationError(
@@ -527,7 +540,7 @@ class VideoGeoreferencingService:
             evidence=evidence,
         )
 
-        telemetry_source = self.video_assets.telemetry_source(video.id)
+        telemetry_source = self._telemetry_source(video.id)
         if telemetry_source is None:
             return self._failure(
                 video_id=video.id,

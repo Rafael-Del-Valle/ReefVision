@@ -13,12 +13,16 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import Job, ModelRegistration, VideoAsset, VideoTrack
+from reefvision.domain.errors import ValidationError
 from reefvision.ml.video_tracking import (
     TrackObservation,
     VideoTrackingCancelled,
     VideoTrackingProgress,
     video_tracking_provider_for_name,
 )
+from reefvision.schemas.georeferenced_observation import BoundingBoxPixels
+from reefvision.services.video_georeferencing import VideoGeoreferencingService
+from reefvision.services.video_georeferencing_readiness import VideoGeoreferencingReadinessService
 from reefvision.storage.projects import resolve_managed_project_path
 
 LOGGER = logging.getLogger("reefvision.video_tracking")
@@ -70,6 +74,67 @@ def _keyframes(observations: list[TrackObservation]) -> list[dict[str, object]]:
         }
         for item in observations
     ]
+
+
+def _bounding_box_pixels(
+    observation: TrackObservation,
+) -> BoundingBoxPixels:
+    """Convert ReefVision/Ultralytics xywh into Task 10 xyxy pixels."""
+
+    x, y, width, height = observation.bbox
+
+    if width <= 0 or height <= 0:
+        raise ValidationError("YOLO detection bounding box requires positive dimensions")
+
+    return BoundingBoxPixels(
+        x_min=float(x),
+        y_min=float(y),
+        x_max=float(x + width),
+        y_max=float(y + height),
+    )
+
+
+def _georeference_track_observations(
+    service: VideoGeoreferencingService,
+    *,
+    video_id: str,
+    track_id: str,
+    observations: list[TrackObservation],
+) -> tuple[int, int]:
+    """Feed retained YOLO/ByteTrack observations into georeferencing.
+
+    YOLO supplies no explicit scientific representative point here, so
+    georeference_detection() intentionally receives only the bbox. The
+    Task 9 bbox-center fallback therefore selects the projected pixel.
+
+    Returns:
+        (successful_count, failed_count)
+    """
+
+    successful = 0
+    failed = 0
+
+    for observation in observations:
+        try:
+            service.georeference_detection(
+                video_id,
+                frame_index=observation.frame,
+                bbox=_bounding_box_pixels(observation),
+                track_id=track_id,
+            )
+        except ValidationError as exc:
+            failed += 1
+            LOGGER.debug(
+                ("Could not georeference video %s track %s frame %s: %s"),
+                video_id,
+                track_id,
+                observation.frame,
+                exc,
+            )
+        else:
+            successful += 1
+
+    return successful, failed
 
 
 def process_video_tracking_job(
@@ -351,31 +416,65 @@ def process_video_tracking_job(
             created = 0
             observation_count = 0
 
+            georeferencing_readiness = VideoGeoreferencingReadinessService(
+                session,
+                settings,
+            ).evaluate(video_id)
+
+            georeferencing_ready = georeferencing_readiness.ready
+            georeferencing_issue_codes = [issue.code for issue in georeferencing_readiness.issues]
+
+            georeferencing_service = (
+                VideoGeoreferencingService(session, settings) if georeferencing_ready else None
+            )
+
+            georeferencing_attempted_count = 0
+            georeferenced_observation_count = 0
+            georeferencing_failure_count = 0
+
             for (provider_track_id, label_class_id), items in sorted(grouped.items()):
                 ordered = sorted(items, key=lambda item: item.frame)
                 if len(ordered) < minimum_frames:
                     continue
 
-                session.add(
-                    VideoTrack(
-                        video_id=video_id,
-                        label_class_id=label_class_id,
-                        track_number=next_number,
-                        geometry_kind="bbox",
-                        keyframes_json=_keyframes(ordered),
-                        interpolation="linear",
-                        status="machine_generated",
-                        source_model_id=model_id,
-                        source_job_id=job_id,
-                        metadata_json={
-                            "provider_track_id": provider_track_id,
-                            "provider_name": provider.provider_id,
-                            "provider_version": provider.provider_version,
-                            "tracker": tracker_name,
-                            "mean_confidence": mean(item.confidence for item in ordered),
-                        },
-                    )
+                track = VideoTrack(
+                    video_id=video_id,
+                    label_class_id=label_class_id,
+                    track_number=next_number,
+                    geometry_kind="bbox",
+                    keyframes_json=_keyframes(ordered),
+                    interpolation="linear",
+                    status="machine_generated",
+                    source_model_id=model_id,
+                    source_job_id=job_id,
+                    metadata_json={
+                        "provider_track_id": provider_track_id,
+                        "provider_name": provider.provider_id,
+                        "provider_version": provider.provider_version,
+                        "tracker": tracker_name,
+                        "mean_confidence": mean(item.confidence for item in ordered),
+                    },
                 )
+
+                session.add(track)
+
+                # We need the persistent ReefVision track UUID before
+                # constructing GeoReferencedObservation.track_id.
+                session.flush()
+
+                if georeferencing_service is not None:
+                    georeferencing_attempted_count += len(ordered)
+
+                    successful, failed = _georeference_track_observations(
+                        georeferencing_service,
+                        video_id=video_id,
+                        track_id=track.id,
+                        observations=ordered,
+                    )
+
+                    georeferenced_observation_count += successful
+                    georeferencing_failure_count += failed
+
                 next_number += 1
                 created += 1
                 observation_count += len(ordered)
@@ -406,6 +505,11 @@ def process_video_tracking_job(
                 "iou": iou,
                 "device": device,
                 "minimum_track_frames": minimum_frames,
+                "georeferencing_ready": georeferencing_ready,
+                "georeferencing_issue_codes": (georeferencing_issue_codes),
+                "georeferencing_attempted_count": (georeferencing_attempted_count),
+                "georeferenced_observation_count": (georeferenced_observation_count),
+                "georeferencing_failure_count": (georeferencing_failure_count),
             }
             job.completed_at = completed_at
             session.commit()

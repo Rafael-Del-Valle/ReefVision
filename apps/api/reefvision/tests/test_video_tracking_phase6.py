@@ -16,6 +16,7 @@ from reefvision.ml.video_tracking import (
     VideoTrackingProgress,
     VideoTrackingProgressCallback,
 )
+from reefvision.schemas.georeferenced_observation import BoundingBoxPixels
 from reefvision.services import video_assets as video_assets_module
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project
@@ -272,3 +273,98 @@ def test_fake_detector_tracker_creates_editable_machine_track(
     assert updated.status_code == 200, updated.text
     assert updated.json()["revision"] == machine["revision"] + 1
     assert updated.json()["status"] == "verified"
+
+
+def test_task11_yolo_bbox_is_fed_to_georeferencing() -> None:
+    observation = TrackObservation(
+        frame=12,
+        provider_track_id=7,
+        class_name="fish",
+        confidence=0.91,
+        bbox=(10.0, 12.0, 20.0, 8.0),
+    )
+
+    bbox = tracking_module._bounding_box_pixels(observation)
+
+    assert bbox.x_min == pytest.approx(10.0)
+    assert bbox.y_min == pytest.approx(12.0)
+    assert bbox.x_max == pytest.approx(30.0)
+    assert bbox.y_max == pytest.approx(20.0)
+
+    class FakeGeoreferencingService:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, object]] = []
+
+        def georeference_detection(
+            self,
+            video_id: str,
+            **kwargs: object,
+        ) -> object:
+            self.calls.append(
+                {
+                    "video_id": video_id,
+                    **kwargs,
+                }
+            )
+            return object()
+
+    service = FakeGeoreferencingService()
+
+    successful, failed = tracking_module._georeference_track_observations(
+        service,  # type: ignore[arg-type]
+        video_id="video-id",
+        track_id="track-id",
+        observations=[observation],
+    )
+
+    assert successful == 1
+    assert failed == 0
+    assert len(service.calls) == 1
+
+    call = service.calls[0]
+
+    assert call["video_id"] == "video-id"
+    assert call["frame_index"] == 12
+    assert call["track_id"] == "track-id"
+
+    projected_bbox = call["bbox"]
+
+    assert isinstance(projected_bbox, BoundingBoxPixels)
+    assert projected_bbox.x_min == pytest.approx(10.0)
+    assert projected_bbox.y_min == pytest.approx(12.0)
+    assert projected_bbox.x_max == pytest.approx(30.0)
+    assert projected_bbox.y_max == pytest.approx(20.0)
+
+    # Task 11 intentionally supplies no explicit representative pixel.
+    # Task 9 therefore selects the bbox center:
+    # x = (10 + 30) / 2 = 20
+    # y = (12 + 20) / 2 = 16
+    assert "representative_pixel" not in call
+
+
+def test_task11_invalid_yolo_bbox_is_counted_as_failure() -> None:
+    observation = TrackObservation(
+        frame=12,
+        provider_track_id=7,
+        class_name="fish",
+        confidence=0.91,
+        bbox=(10.0, 12.0, -20.0, 8.0),
+    )
+
+    class FakeGeoreferencingService:
+        def georeference_detection(
+            self,
+            video_id: str,
+            **kwargs: object,
+        ) -> object:
+            raise AssertionError("Invalid YOLO geometry should fail before projection")
+
+    successful, failed = tracking_module._georeference_track_observations(
+        FakeGeoreferencingService(),  # type: ignore[arg-type]
+        video_id="video-id",
+        track_id="track-id",
+        observations=[observation],
+    )
+
+    assert successful == 0
+    assert failed == 1
