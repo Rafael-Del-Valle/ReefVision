@@ -82,11 +82,11 @@ Acceptance gate:
 
 ## Sprint B — production data model and API
 
-### 6. Expose typed telemetry/georeferencing state to frontend — VERIFY
+### 6. Expose typed telemetry/georeferencing state to frontend — DONE
 
 Extend frontend video types for SRT, AirData, alignment, calibration, and readiness.
 
-### 7. Upgrade video import UI for SRT + AirData — NEXT
+### 7. Upgrade video import UI for SRT + AirData — IN PROGRESS
 
 Allow video, SRT, AirData CSV, alignment evidence, and automated source-only
 alignment where supported.
