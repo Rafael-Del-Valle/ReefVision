@@ -612,8 +612,8 @@ export function VideoTrackingWorkspace({
                       }
                       /{georeferencingReadinessQuery.data.sampled_frame_count}{" "}
                       representative frames
-                      {georeferencingReadinessQuery.data.maximum_sync_error_s !==
-                      null
+                      {georeferencingReadinessQuery.data
+                        .maximum_sync_error_s !== null
                         ? ` | max ${(
                             georeferencingReadinessQuery.data
                               .maximum_sync_error_s * 1000
@@ -622,9 +622,11 @@ export function VideoTrackingWorkspace({
                     </p>
                     {georeferencingReadinessQuery.data.issues.length > 0 && (
                       <ul>
-                        {georeferencingReadinessQuery.data.issues.map((issue) => (
-                          <li key={issue.code}>{issue.message}</li>
-                        ))}
+                        {georeferencingReadinessQuery.data.issues.map(
+                          (issue) => (
+                            <li key={issue.code}>{issue.message}</li>
+                          ),
+                        )}
                       </ul>
                     )}
                   </>
