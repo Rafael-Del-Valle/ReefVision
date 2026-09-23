@@ -180,3 +180,41 @@ Non-failing existing diagnostics: Starlette/httpx deprecation warning; frontend
 MaskMeasurementPanel query warning; Vite chunk-size warning and Node color flags.
 Independent review findings were reproduced in failing tests and corrected;
 final scoped review and all focused tests passed.
+
+
+## AirData camera-pose precedence
+
+ReefVision can now ingest an optional AirData flight-log CSV alongside the
+existing DJI SRT. AirData `gimbal_heading(degrees)` is normalized to
+`TelemetrySample.gimbal_yaw_deg`; AirData `compass_heading(degrees)` remains
+separate as aircraft yaw.
+
+AirData uses flight-relative `time(millisecond)`, while DJI SRT cue times are
+video-relative. The two streams are therefore not silently assumed to share an
+origin. A caller must provide an independently established
+`airdata_time_offset_s` such that:
+
+```text
+airdata_flight_time = video_time + airdata_time_offset_s
+```
+
+Any nonzero offset requires an evidence string. ReefVision does not fit this
+offset from geographic residuals.
+
+When both streams are aligned, source precedence is field-level:
+
+1. AirData latitude/longitude are preferred when both are present.
+2. AirData height-above-takeoff is preferred over SRT relative altitude.
+3. AirData gimbal yaw/pitch/roll are preferred for camera pose.
+4. Missing AirData fields fall back to the existing DJI SRT sample.
+5. SRT-only videos retain the original Task 1 behavior unchanged.
+
+Each merged match retains provenance for position, relative altitude, and each
+gimbal attitude field, plus both source synchronization deltas. The effective
+synchronization error is the largest absolute delta among sources that actually
+contributed georeferencing fields.
+
+The video import endpoint accepts optional `airdata_file`,
+`airdata_time_offset_s`, and `airdata_time_offset_evidence`. AirData is stored
+beside managed SRT telemetry; no flight logs are auto-downloaded or inferred by
+filename.
