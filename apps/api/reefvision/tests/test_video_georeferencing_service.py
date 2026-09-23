@@ -68,7 +68,7 @@ def service_context(tmp_path: Path):
                 cx_px=500,
                 cy_px=400,
                 distortion_coefficients=(),
-                digital_zoom_ratio=digital_zoom_ratio,
+                digital_zoom_ratio=1.0,
                 camera_mode="synthetic-wide",
                 source="Synthetic unit-test calibration",
                 evidence="Known pinhole parameters for service contract tests",
@@ -98,7 +98,7 @@ def _source(
                 gimbal_yaw_deg=0.0,
                 gimbal_pitch_deg=-90.0,
                 gimbal_roll_deg=roll,
-                digital_zoom_ratio=1.0,
+                digital_zoom_ratio=digital_zoom_ratio,
             )
         ]
     )
