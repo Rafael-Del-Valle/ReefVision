@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import DateTime, Float, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from reefvision.db.base import Base
@@ -35,6 +35,9 @@ class Project(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     storage_root: Mapped[str] = mapped_column(String(500), nullable=False, unique=True)
     default_annotation_type: Mapped[str] = mapped_column(String(30), default="bbox", nullable=False)
+    georeference_height_offset_m: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
