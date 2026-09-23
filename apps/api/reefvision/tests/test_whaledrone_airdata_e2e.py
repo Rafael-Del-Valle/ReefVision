@@ -16,6 +16,7 @@ import pytest
 from reefvision.config import Settings
 from reefvision.db.base import Base
 from reefvision.db.session import create_database_engine, create_session_factory
+from reefvision.geospatial.geodesy import geodesic_distance_m
 from reefvision.geospatial.projection import SurfaceReference
 from reefvision.geospatial.synchronization import IndexedTelemetrySource
 from reefvision.geospatial.validation import (
@@ -176,65 +177,146 @@ def _angle_error_deg(actual: float, expected: float) -> float:
     return abs((actual - expected + 180.0) % 360.0 - 180.0)
 
 
+def _source_alignment_score(
+    *,
+    airdata: IndexedTelemetrySource,
+    srt_samples: list,
+    offset_s: float,
+) -> tuple[float, float, float, int] | None:
+    heading_errors: list[float] = []
+    position_errors: list[float] = []
+    for srt_sample in srt_samples:
+        air_match = airdata.sample_for_time(srt_sample.time_s + offset_s)
+        if air_match is None:
+            continue
+        air_sample = air_match.sample
+        if (
+            srt_sample.gimbal_yaw_deg is not None
+            and air_sample.aircraft_yaw_deg is not None
+        ):
+            heading_errors.append(
+                _angle_error_deg(
+                    air_sample.aircraft_yaw_deg,
+                    srt_sample.gimbal_yaw_deg,
+                )
+            )
+        if (
+            srt_sample.latitude is not None
+            and srt_sample.longitude is not None
+            and air_sample.latitude is not None
+            and air_sample.longitude is not None
+        ):
+            position_errors.append(
+                geodesic_distance_m(
+                    srt_sample.latitude,
+                    srt_sample.longitude,
+                    air_sample.latitude,
+                    air_sample.longitude,
+                )
+            )
+    if len(heading_errors) < 20 or len(position_errors) < 20:
+        return None
+    return (
+        median(heading_errors),
+        median(position_errors),
+        mean(heading_errors),
+        min(len(heading_errors), len(position_errors)),
+    )
+
+
 def _refine_airdata_offset_from_source_telemetry(
     *,
     airdata: IndexedTelemetrySource,
     srt: IndexedTelemetrySource,
     initial_offset_s: float,
 ) -> tuple[float, dict[str, float]]:
-    """Refine sub-second alignment using only the two source telemetry streams."""
+    """Align AirData to video using source telemetry only, never DVM outputs."""
 
     comparisons = [
-        sample for sample in srt.samples[::10] if sample.gimbal_yaw_deg is not None
+        sample
+        for sample in srt.samples[::30]
+        if sample.gimbal_yaw_deg is not None
+        and sample.latitude is not None
+        and sample.longitude is not None
     ]
-    if not comparisons:
-        raise AssertionError("WhaleDrone SRT heading channel is unavailable")
+    if len(comparisons) < 20:
+        raise AssertionError("WhaleDrone SRT lacks enough source telemetry for alignment")
 
+    # Require the complete SRT clip to fit within the AirData flight-time span.
     air_min = airdata.samples[0].time_s
     air_max = airdata.samples[-1].time_s
+    srt_min = srt.samples[0].time_s
+    srt_max = srt.samples[-1].time_s
+    offset_min = air_min - srt_min
+    offset_max = air_max - srt_max
+    if offset_max < offset_min:
+        raise AssertionError("AirData flight log is shorter than the SRT clip")
+
     best: tuple[float, float, float, float, int] | None = None
-    for step in range(-200, 201):
-        offset_s = initial_offset_s + step / 100.0
-        errors: list[float] = []
-        for srt_sample in comparisons:
-            target_time = srt_sample.time_s + offset_s
-            if not air_min <= target_time <= air_max:
-                continue
-            air_match = airdata.sample_for_time(target_time)
-            if air_match is None or air_match.sample.aircraft_yaw_deg is None:
-                continue
-            errors.append(
-                _angle_error_deg(
-                    air_match.sample.aircraft_yaw_deg,
-                    srt_sample.gimbal_yaw_deg,
-                )
-            )
-        if len(errors) < 20:
+    coarse_start = int(offset_min * 10)
+    coarse_end = int(offset_max * 10)
+    for tick in range(coarse_start, coarse_end + 1):
+        offset_s = tick / 10.0
+        score = _source_alignment_score(
+            airdata=airdata,
+            srt_samples=comparisons,
+            offset_s=offset_s,
+        )
+        if score is None:
             continue
-        median_error = median(errors)
-        mean_error = mean(errors)
+        median_heading, median_position, mean_heading, count = score
         candidate = (
-            median_error,
-            mean_error,
-            abs(offset_s - initial_offset_s),
+            median_heading,
+            median_position,
+            mean_heading,
             offset_s,
-            len(errors),
+            count,
         )
         if best is None or candidate[:3] < best[:3]:
             best = candidate
 
     if best is None:
-        raise AssertionError("Could not align AirData and SRT heading telemetry")
+        raise AssertionError("Could not coarsely align AirData and SRT source telemetry")
 
-    median_error, mean_error, _, offset_s, count = best
+    coarse_offset = best[3]
+    refined_best = best
+    for tick in range(-20, 21):
+        offset_s = coarse_offset + tick / 100.0
+        if not offset_min <= offset_s <= offset_max:
+            continue
+        score = _source_alignment_score(
+            airdata=airdata,
+            srt_samples=comparisons,
+            offset_s=offset_s,
+        )
+        if score is None:
+            continue
+        median_heading, median_position, mean_heading, count = score
+        candidate = (
+            median_heading,
+            median_position,
+            mean_heading,
+            offset_s,
+            count,
+        )
+        if candidate[:3] < refined_best[:3]:
+            refined_best = candidate
+
+    median_heading, median_position, mean_heading, offset_s, count = refined_best
     return offset_s, {
         "initial_timestamp_offset_s": initial_offset_s,
+        "feasible_offset_min_s": offset_min,
+        "feasible_offset_max_s": offset_max,
+        "coarse_offset_s": coarse_offset,
         "refined_offset_s": offset_s,
-        "heading_comparisons": float(count),
-        "median_srt_vs_airdata_heading_error_deg": median_error,
-        "mean_srt_vs_airdata_heading_error_deg": mean_error,
-        "refinement_from_timestamp_anchor_s": offset_s - initial_offset_s,
+        "source_comparisons": float(count),
+        "median_srt_vs_airdata_heading_error_deg": median_heading,
+        "mean_srt_vs_airdata_heading_error_deg": mean_heading,
+        "median_srt_vs_airdata_position_error_m": median_position,
+        "difference_from_timestamp_anchor_s": offset_s - initial_offset_s,
     }
+
+
 
 @pytest.mark.integration
 def test_whaledrone_airdata_end_to_end(
@@ -303,9 +385,9 @@ def test_whaledrone_airdata_end_to_end(
                 initial_offset_s=initial_offset_s,
             )
             evidence = (
-                "WhaleDrone source-clock anchor: DJI filename/SRT CET (UTC+1) versus "
-                "AirData datetime(utc) UTC+0; sub-second refinement uses only SRT "
-                "gb_yaw versus AirData compass_heading, never DVM/geolocation residuals"
+                "WhaleDrone AirData/video offset established from source-only SRT versus "
+                "AirData heading/GPS alignment across the feasible flight-time range; "
+                "DVM annotations and geolocation residuals are excluded from alignment"
             )
             source_video = _find_video(root, video_name)
             video_metadata_source = "documented_fallback"
