@@ -243,28 +243,29 @@ def test_whaledrone_airdata_end_to_end(
                 dvm_video,
                 srt_frame_count=len(srt_source.samples),
             )
+            frozen_metadata = tuple(metadata.items())
             monkeypatch.setattr(
                 video_assets_module,
                 "_inspect_video",
-                lambda _: dict(metadata),
+                lambda _, current=frozen_metadata: dict(current),
             )
-            with session_factory() as session:
-                with (
-                    srt_path.open("rb") as srt_stream,
-                    airdata_path.open("rb") as airdata_stream,
-                ):
-                    imported = VideoAssetService(session, settings).import_video(
-                        project_id,
-                        filename=video_name,
-                        stream=io.BytesIO(("WhaleDrone-E2E:" + video_name).encode()),
-                        media_type="video/mp4",
-                        telemetry_filename=srt_path.name,
-                        telemetry_stream=srt_stream,
-                        airdata_filename=airdata_path.name,
-                        airdata_stream=airdata_stream,
-                        airdata_time_offset_s=offset_s,
-                        airdata_time_offset_evidence=evidence,
-                    )
+            with (
+                session_factory() as session,
+                srt_path.open("rb") as srt_stream,
+                airdata_path.open("rb") as airdata_stream,
+            ):
+                imported = VideoAssetService(session, settings).import_video(
+                    project_id,
+                    filename=video_name,
+                    stream=io.BytesIO(("WhaleDrone-E2E:" + video_name).encode()),
+                    media_type="video/mp4",
+                    telemetry_filename=srt_path.name,
+                    telemetry_stream=srt_stream,
+                    airdata_filename=airdata_path.name,
+                    airdata_stream=airdata_stream,
+                    airdata_time_offset_s=offset_s,
+                    airdata_time_offset_evidence=evidence,
+                )
             video_id = imported.id
 
             with session_factory() as session:
