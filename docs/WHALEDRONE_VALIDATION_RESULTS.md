@@ -1,3 +1,59 @@
+# 2026-09-23 AirData end-to-end operational validation
+
+This section supersedes the earlier SRT-only availability status for the current
+AirData integration. The historical Task 2.5 baseline remains below for provenance.
+
+The production AirData parser, managed sidecar persistence, persisted alignment,
+field-level AirData precedence, project height datum, and existing
+`georeference_pixel()` path were exercised together against WhaleDrone clips
+`DJI_20260116154954_0001_V.MP4` and
+`DJI_20260116155837_0003_V.MP4`.
+
+A real-data parser defect was found during this validation: the AirData file uses
+whitespace-padded column names such as `" compass_heading(degrees)"`. The parser
+now strips header whitespace before matching fields. A regression test covers this
+case, and all 5,522 rows in the Jan-16 AirData flight log expose
+`aircraft_yaw_deg` after the fix.
+
+AirData/video offsets are established from source telemetry only. The alignment
+search compares the SRT heading/GPS stream against AirData aircraft heading/GPS
+across the feasible flight-time range, then refines hierarchically. DVM
+annotations and geographic residuals are excluded from offset selection.
+
+| Metric | Clip 0001 | Clip 0003 |
+| --- | ---: | ---: |
+| Persisted AirData offset | 6.19 s | 528.55 s |
+| Expected unique frames projected | 44/44 | 58/58 |
+| Projected point rows | 88 | 138 |
+| Max effective sync error | 98.60 ms | 99.63 ms |
+| Median SRT↔AirData heading disagreement | 0.30° | 0.20° |
+| Median SRT↔AirData GPS disagreement | 0.045 m | 0.081 m |
+| Mean AirData↔DVM yaw disagreement | 0.215° | 0.814° |
+| Mean AirData↔DVM pitch disagreement | 0.116° | 0.390° |
+| Mean resolved↔DVM height disagreement | 0.017 m | 0.160 m |
+| Mean DVM-coordinate agreement | 4.407 m | 2.957 m |
+| Median DVM-coordinate agreement | 2.228 m | 2.014 m |
+| RMSE DVM-coordinate agreement | 5.847 m | 4.273 m |
+
+For every projected observation in both clips, position, relative altitude, gimbal
+yaw, gimbal pitch, and gimbal roll provenance resolves to AirData. Both clips stay
+inside the 100 ms synchronization gate. Clip 0003 was inspected against the actual
+source MP4 metadata; clip 0001 used the documented 3840×2160 / 29.97003 FPS
+fallback because the original MP4 was not present in the local external bundle.
+
+**Operational result: PASS.** AirData ingestion, managed persistence/reload,
+alignment evidence, field precedence, project datum use, synchronization, and
+projection execution are validated end to end on both clips.
+
+The remaining meter-scale ReefVision↔DVM coordinate difference is treated as a
+projection/reference-agreement diagnostic, not an ingestion failure and not an
+independent absolute-accuracy result. DVM coordinates are themselves derived from
+AirData and camera calibration. The next scientific task is to isolate any
+remaining ReefVision↔DVM camera/world convention difference before making
+georeferenced track coordinates a normal UI feature.
+
+---
+
 # Task 2.5 real-data results
 
 The unchanged `georeference_pixel()` produces **10.553 m mean error, 7.509 m median
