@@ -66,6 +66,10 @@ def test_airdata_pose_wins_over_srt_and_height_offset_is_explicit() -> None:
     assert resolved.height_source == "airdata_height_above_takeoff"
     assert resolved.camera_height_m == 88.4
     assert resolved.project_height_offset_m == 5.0
+    assert resolved.elapsed_seconds == 17.649
+    assert resolved.absolute_time_utc == datetime(
+        2026, 1, 16, 14, 49, 50, tzinfo=UTC
+    )
 
 
 def test_srt_is_used_when_airdata_is_unavailable() -> None:
@@ -91,3 +95,26 @@ def test_non_finite_project_height_offset_is_rejected() -> None:
             srt=parse_dji_srt(SRT)[0],
             project_height_offset_m=float("nan"),
         )
+
+
+
+def test_srt_yaw_fills_only_missing_airdata_yaw() -> None:
+    airdata_without_yaw = parse_airdata_csv(
+        """time(millisecond),datetime(utc),latitude,longitude,height_above_takeoff(meters),gimbal_heading(degrees),gimbal_pitch(degrees),gimbal_roll(degrees)
+0,2026-01-16 14:49:50,22.892814,-109.840571,83.4,,-23.4,0
+"""
+    )[0]
+    srt = parse_dji_srt(SRT)[0]
+
+    resolved = resolve_preferred_telemetry(
+        airdata=airdata_without_yaw,
+        srt=srt,
+        project_height_offset_m=5.0,
+    )
+
+    assert resolved.camera_yaw_deg == pytest.approx(249.3)
+    assert resolved.camera_yaw_source == "srt_gb_yaw"
+    assert resolved.camera_pitch_source == "airdata"
+    assert resolved.position_source == "airdata"
+    assert resolved.height_source == "airdata_height_above_takeoff"
+    assert resolved.camera_height_m == 88.4
