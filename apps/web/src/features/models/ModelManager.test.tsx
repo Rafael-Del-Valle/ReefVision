@@ -24,6 +24,8 @@ const project: Project = {
   description: null,
   storage_root: "projects/project-1",
   default_annotation_type: "bounding_box",
+  georeference_height_offset_m: 0,
+  georeference_height_evidence: null,
   created_at: "2026-07-11T00:00:00Z",
   updated_at: "2026-07-11T00:00:00Z",
   archived_at: null,
