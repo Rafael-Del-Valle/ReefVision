@@ -323,7 +323,6 @@ def _refine_airdata_offset_from_source_telemetry(
     }
 
 
-
 @pytest.mark.integration
 def test_whaledrone_airdata_end_to_end(
     tmp_path: Path,
