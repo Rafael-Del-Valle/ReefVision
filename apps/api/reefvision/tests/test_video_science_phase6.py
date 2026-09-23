@@ -183,6 +183,91 @@ def test_calibration_can_be_cleared_and_schooling_requires_scale(
     assert client.get(f"/api/v1/videos/{video['id']}/calibration").status_code == 404
 
 
+def test_georeferencing_calibration_persists_full_camera_model(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Georeferencing calibration")
+    video = _video(client, str(project["id"]), monkeypatch)
+    video_id = str(video["id"])
+    endpoint = f"/api/v1/videos/{video_id}/georeferencing-calibration"
+
+    assert client.get(endpoint).status_code == 404
+
+    created = client.put(
+        endpoint,
+        json={
+            "width_px": 200,
+            "height_px": 100,
+            "fx_px": 150.0,
+            "fy_px": 151.0,
+            "cx_px": 100.5,
+            "cy_px": 49.5,
+            "distortion_coefficients": [0.1, -0.2, 0.001, -0.001, 0.05],
+            "digital_zoom_ratio": 1.0,
+            "camera_mode": "DJI Mavic 3T RGB wide",
+            "source": "checkerboard calibration fixture",
+            "evidence": "Synthetic full camera model used for API persistence testing",
+        },
+    )
+    assert created.status_code == 200, created.text
+    calibration = created.json()
+    assert calibration["schema_version"] == "video-georeferencing-calibration-0001"
+    assert calibration["width_px"] == 200
+    assert calibration["height_px"] == 100
+    assert calibration["distortion_coefficients"] == [0.1, -0.2, 0.001, -0.001, 0.05]
+    assert calibration["camera_mode"] == "DJI Mavic 3T RGB wide"
+    assert len(calibration["checksum_sha256"]) == 64
+    assert calibration["calibration_revision"] == 1
+
+    fetched = client.get(endpoint)
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json()["checksum_sha256"] == calibration["checksum_sha256"]
+    assert fetched.json()["evidence"] == calibration["evidence"]
+
+    replacement = client.put(
+        endpoint,
+        json={
+            "width_px": 200,
+            "height_px": 100,
+            "fx_px": 150.0,
+            "fy_px": 151.0,
+            "cx_px": 100.5,
+            "cy_px": 49.5,
+            "distortion_coefficients": [0.1, -0.2, 0.001, -0.001, 0.05],
+            "digital_zoom_ratio": 1.0,
+            "camera_mode": "DJI Mavic 3T RGB wide",
+            "source": "checkerboard calibration fixture",
+            "evidence": "Reviewed calibration evidence",
+        },
+    )
+    assert replacement.status_code == 200, replacement.text
+    assert replacement.json()["calibration_revision"] == 2
+    assert replacement.json()["checksum_sha256"] == calibration["checksum_sha256"]
+
+    mismatch = client.put(
+        endpoint,
+        json={
+            "width_px": 201,
+            "height_px": 100,
+            "fx_px": 150.0,
+            "fy_px": 151.0,
+            "cx_px": 100.5,
+            "cy_px": 49.5,
+            "distortion_coefficients": [],
+            "digital_zoom_ratio": 1.0,
+            "camera_mode": "wide",
+            "source": "invalid fixture",
+            "evidence": "Resolution intentionally mismatched",
+        },
+    )
+    assert mismatch.status_code == 400
+
+    cleared = client.delete(endpoint)
+    assert cleared.status_code == 204
+    assert client.get(endpoint).status_code == 404
+
+
 def test_metric_depth_samples_back_project_tracks_into_3d(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
