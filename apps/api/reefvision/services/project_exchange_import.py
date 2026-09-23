@@ -278,6 +278,16 @@ def import_project_exchange(
             if project_name is not None and project_name.strip()
             else str(source_project.get("name") or inspection.project_name or "Imported project")
         )
+        raw_height_offset = source_project.get("georeference_height_offset_m")
+        try:
+            georeference_height_offset_m = (
+                0.0 if raw_height_offset is None else float(raw_height_offset)
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValidationError(
+                "Exchange project georeference height offset is invalid"
+            ) from exc
+
         project = ProjectService(session, settings).create_project(
             ProjectCreate(
                 name=requested_name,
@@ -286,6 +296,7 @@ def import_project_exchange(
                     if source_project.get("description") is not None
                     else None
                 ),
+                georeference_height_offset_m=georeference_height_offset_m,
                 template="blank",
             )
         )
