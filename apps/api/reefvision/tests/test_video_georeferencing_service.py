@@ -14,12 +14,12 @@ from reefvision.schemas.video_georeferencing_calibration import (
     VideoGeoreferencingCalibrationSetRequest,
 )
 from reefvision.services.video_georeferencing import VideoGeoreferencingService
-from reefvision.services.video_georeferencing_readiness import (
-    VideoGeoreferencingReadinessService,
-)
 from reefvision.services.video_georeferencing_calibration import (
     GEOREFERENCING_CALIBRATION_METADATA_KEY,
     VideoGeoreferencingCalibrationService,
+)
+from reefvision.services.video_georeferencing_readiness import (
+    VideoGeoreferencingReadinessService,
 )
 
 
@@ -467,8 +467,6 @@ def test_georeferencing_readiness_reports_airdata_alignment_problem(
     assert {issue.code for issue in readiness.issues} == {"invalid_airdata_alignment"}
 
 
-
-
 def test_georeferencing_readiness_reports_synchronization_problem(
     service_context,
     monkeypatch: pytest.MonkeyPatch,
@@ -538,8 +536,6 @@ def test_georeferencing_readiness_reports_zoom_mismatch(
     assert readiness.state == "zoom_mismatch"
     assert readiness.synchronized_frame_count == 5
     assert readiness.zoom_compatible is False
-    assert {issue.code for issue in readiness.issues} == {
-        "calibration_zoom_mismatch"
-    }
+    assert {issue.code for issue in readiness.issues} == {"calibration_zoom_mismatch"}
 
 
