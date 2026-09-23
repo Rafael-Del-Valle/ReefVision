@@ -97,7 +97,6 @@ def test_non_finite_project_height_offset_is_rejected() -> None:
         )
 
 
-
 def test_srt_yaw_fills_only_missing_airdata_yaw() -> None:
     airdata_without_yaw = parse_airdata_csv(
         """time(millisecond),datetime(utc),latitude,longitude,height_above_takeoff(meters),gimbal_heading(degrees),gimbal_pitch(degrees),gimbal_roll(degrees)
