@@ -35,9 +35,7 @@ describe("video georeferencing API", () => {
       fy_px: 2970.3,
       cx_px: 1968.5,
       cy_px: 1116.9,
-      distortion_coefficients: [
-        0.26049, -0.83362, 0.00045, -0.00025, 0.73529,
-      ],
+      distortion_coefficients: [0.26049, -0.83362, 0.00045, -0.00025, 0.73529],
       digital_zoom_ratio: 1,
       camera_mode: "DJI Mavic 3T RGB wide",
       source: "camera_calibration_DJIM3T_RGBwide.json",
