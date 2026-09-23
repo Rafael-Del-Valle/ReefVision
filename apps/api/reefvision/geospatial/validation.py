@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, FiniteFloat, model_validator
 from reefvision.domain.errors import ValidationError
 from reefvision.geospatial.calibration import CameraCalibration
 from reefvision.geospatial.geodesy import geodesic_distance_m
-from reefvision.geospatial.models import TelemetrySample
+from reefvision.geospatial.models import TelemetryProvenance, TelemetrySample
 from reefvision.geospatial.projection import (
     GeoreferenceResult,
     SurfaceReference,
@@ -63,6 +63,7 @@ class GeoreferenceValidationObservation(BaseModel):
     sync_error_s: float | None = None
     video_time_s: float | None = None
     telemetry: TelemetrySample | None = None
+    telemetry_provenance: TelemetryProvenance | None = None
     east_error_m: float | None = None
     north_error_m: float | None = None
     distance_from_principal_point_px: float
@@ -151,6 +152,7 @@ def evaluate_georeferencing(
             row.sync_delta_s = match.delta_s
             row.sync_error_s = match.error_s
             row.telemetry = match.sample
+            row.telemetry_provenance = match.provenance
             row.gimbal_pitch_deg = match.sample.gimbal_pitch_deg
             row.digital_zoom_ratio = match.sample.digital_zoom_ratio
             if match.error_s > max_delta_s + 1e-12:
