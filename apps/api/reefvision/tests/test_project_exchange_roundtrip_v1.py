@@ -571,9 +571,7 @@ def test_project_exchange_round_trip_preserves_restart_safe_metric_3d_science(
             f"/api/v1/videos/{imported_video_id}/georeferencing-calibration"
         )
         assert reopened_georeferencing.status_code == 200
-        assert reopened_georeferencing.json()["checksum_sha256"] == (
-            source_georeferencing_checksum
-        )
+        assert reopened_georeferencing.json()["checksum_sha256"] == (source_georeferencing_checksum)
         reopened_run = restarted.get(f"/api/v1/workflow-runs/{imported_run_id}")
         assert reopened_run.status_code == 200, reopened_run.text
         reopened_artifact = next(
