@@ -14,6 +14,9 @@ from reefvision.schemas.video_georeferencing_calibration import (
     VideoGeoreferencingCalibrationSetRequest,
 )
 from reefvision.services.video_georeferencing import VideoGeoreferencingService
+from reefvision.services.video_georeferencing_readiness import (
+    VideoGeoreferencingReadinessService,
+)
 from reefvision.services.video_georeferencing_calibration import (
     GEOREFERENCING_CALIBRATION_METADATA_KEY,
     VideoGeoreferencingCalibrationService,
@@ -100,6 +103,37 @@ def _source(
                 gimbal_roll_deg=roll,
                 digital_zoom_ratio=digital_zoom_ratio,
             )
+        ]
+    )
+
+
+def _source_for_video(
+    *,
+    fps: float = 30.0,
+    frame_count: int = 300,
+    digital_zoom_ratio: float = 1.0,
+) -> IndexedTelemetrySource:
+    frames = [
+        0,
+        round((frame_count - 1) * 0.25),
+        round((frame_count - 1) * 0.50),
+        round((frame_count - 1) * 0.75),
+        frame_count - 1,
+    ]
+    return IndexedTelemetrySource(
+        [
+            TelemetrySample(
+                sample_index=index,
+                time_s=frame / fps,
+                latitude=0.0,
+                longitude=0.0,
+                relative_altitude_m=100.0,
+                gimbal_yaw_deg=0.0,
+                gimbal_pitch_deg=-90.0,
+                gimbal_roll_deg=0.0,
+                digital_zoom_ratio=digital_zoom_ratio,
+            )
+            for index, frame in enumerate(frames)
         ]
     )
 
@@ -337,3 +371,99 @@ def test_georeference_point_returns_projection_failure(
     assert response.sync_error_s == pytest.approx(0.0)
     assert response.message is not None
     assert "gimbal" in response.message.casefold()
+
+
+def test_georeferencing_readiness_reports_all_missing_inputs(
+    service_context,
+) -> None:
+    settings, factory, video_id = service_context
+    with factory() as session:
+        video = session.get(VideoAsset, video_id)
+        assert video is not None
+        project = session.get(Project, video.project_id)
+        assert project is not None
+        project.georeference_height_evidence = None
+        VideoGeoreferencingCalibrationService(session).clear(video_id)
+
+        readiness = VideoGeoreferencingReadinessService(session, settings).evaluate(video_id)
+
+    assert readiness.ready is False
+    assert readiness.state == "missing_calibration"
+    codes = {issue.code for issue in readiness.issues}
+    assert codes == {
+        "missing_calibration",
+        "missing_surface_reference",
+        "missing_telemetry",
+    }
+
+
+def test_georeferencing_readiness_reports_ready_for_synced_video(
+    service_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings, factory, video_id = service_context
+    with factory() as session:
+        video = session.get(VideoAsset, video_id)
+        assert video is not None
+        metadata = dict(video.metadata_json)
+        metadata["telemetry"] = {
+            "found": True,
+            "available": True,
+            "source_type": "dji_srt",
+            "source_path": "synthetic.srt",
+            "path_kind": "managed",
+            "sample_count": 5,
+            "error": None,
+        }
+        video.metadata_json = metadata
+        session.commit()
+
+        service = VideoGeoreferencingReadinessService(session, settings)
+        monkeypatch.setattr(
+            service.video_assets,
+            "telemetry_source",
+            lambda _: _source_for_video(),
+        )
+        readiness = service.evaluate(video_id)
+
+    assert readiness.ready is True
+    assert readiness.state == "ready"
+    assert readiness.issues == []
+    assert readiness.synchronized_frame_count == 5
+    assert readiness.sampled_frame_count == 5
+    assert readiness.maximum_sync_error_s == pytest.approx(0.0)
+    assert readiness.zoom_compatible is True
+
+
+def test_georeferencing_readiness_reports_airdata_alignment_problem(
+    service_context,
+) -> None:
+    settings, factory, video_id = service_context
+    with factory() as session:
+        video = session.get(VideoAsset, video_id)
+        assert video is not None
+        metadata = dict(video.metadata_json)
+        metadata["airdata_telemetry"] = {
+            "found": True,
+            "available": True,
+            "source_type": "airdata",
+            "source_path": "synthetic.csv",
+            "path_kind": "managed",
+            "sample_count": 100,
+            "error": None,
+        }
+        metadata["airdata_alignment"] = {
+            "time_offset_s": 6.19,
+            "evidence": None,
+        }
+        video.metadata_json = metadata
+        session.commit()
+
+        readiness = VideoGeoreferencingReadinessService(session, settings).evaluate(video_id)
+
+    assert readiness.ready is False
+    assert readiness.state == "alignment_problem"
+    assert readiness.airdata_alignment_valid is False
+    assert {issue.code for issue in readiness.issues} == {"invalid_airdata_alignment"}
+
+
