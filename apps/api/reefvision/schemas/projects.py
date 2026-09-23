@@ -32,6 +32,7 @@ class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     slug: str | None = Field(default=None, min_length=1, max_length=220)
     description: str | None = Field(default=None, max_length=5000)
+    georeference_height_offset_m: float = Field(default=0.0, ge=-10000.0, le=10000.0)
     template: Literal["blank", "octocoral"] = "blank"
 
     @field_validator("name", "slug", "description")
@@ -47,6 +48,7 @@ class ProjectUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     slug: str | None = Field(default=None, min_length=1, max_length=220)
     description: str | None = Field(default=None, max_length=5000)
+    georeference_height_offset_m: float = Field(default=0.0, ge=-10000.0, le=10000.0)
 
     @field_validator("name", "slug", "description")
     @classmethod
@@ -66,6 +68,7 @@ class ProjectResponse(BaseModel):
     description: str | None
     storage_root: str
     default_annotation_type: str
+    georeference_height_offset_m: float
     created_at: datetime
     updated_at: datetime
     archived_at: datetime | None
@@ -79,6 +82,7 @@ class ProjectSummaryResponse(BaseModel):
     description: str | None
     storage_root: str
     default_annotation_type: str
+    georeference_height_offset_m: float
     created_at: datetime
     updated_at: datetime
     archived_at: datetime | None
