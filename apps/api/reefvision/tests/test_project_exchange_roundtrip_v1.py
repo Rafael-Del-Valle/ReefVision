@@ -37,7 +37,10 @@ def test_project_exchange_round_trip_remaps_ids_media_artifacts_and_workflows(
     project = create_project(client, "Round-trip reef project")
     configured = client.patch(
         f"/api/v1/projects/{project['id']}",
-        json={"georeference_height_offset_m": 5.0},
+        json={
+            "georeference_height_offset_m": 5.0,
+            "georeference_height_evidence": "Surveyed takeoff pad is 5 m above the surface",
+        },
     )
     assert configured.status_code == 200, configured.text
     project = configured.json()
@@ -169,6 +172,9 @@ def test_project_exchange_round_trip_remaps_ids_media_artifacts_and_workflows(
         imported_project = session.get(Project, imported_project_id)
         assert imported_project is not None
         assert imported_project.georeference_height_offset_m == 5.0
+        assert imported_project.georeference_height_evidence == (
+            "Surveyed takeoff pad is 5 m above the surface"
+        )
         restored_generated_path = (
             test_settings.resolved_data_dir
             / imported_project.storage_root
