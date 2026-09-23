@@ -3,22 +3,19 @@
 from __future__ import annotations
 
 import csv
+import io
 import json
 import re
 from collections import Counter
 from datetime import UTC, datetime, timedelta, timezone
-from hashlib import sha256
 from pathlib import Path
 from statistics import mean, median
-from uuid import uuid4
 
 import pytest
 
 from reefvision.config import Settings
 from reefvision.db.base import Base
-from reefvision.db.models import VideoAsset
 from reefvision.db.session import create_database_engine, create_session_factory
-from reefvision.geospatial.models import TelemetryMetadata
 from reefvision.geospatial.projection import SurfaceReference
 from reefvision.geospatial.validation import (
     GeoreferenceValidationPoint,
@@ -26,15 +23,11 @@ from reefvision.geospatial.validation import (
 )
 from reefvision.schemas.projects import ProjectCreate
 from reefvision.services.projects import ProjectService
-from reefvision.services.video_assets import VideoAssetService, _inspect_video
+from reefvision.services import video_assets as video_assets_module
+from reefvision.services.video_assets import VideoAssetService
 from reefvision.storage.georeferencing import load_camera_calibration
 from reefvision.storage.projects import resolve_managed_project_path
-from reefvision.storage.telemetry import (
-    read_airdata_stream,
-    read_srt_stream,
-    write_airdata,
-    write_srt,
-)
+from reefvision.storage.telemetry import read_srt_stream
 from reefvision.tests.whaledrone import get_whaledrone_root
 
 FPS_FALLBACK = 29.97002997002997
@@ -167,46 +160,12 @@ def _load_points(
 def _angle_error_deg(actual: float, expected: float) -> float:
     return abs((actual - expected + 180.0) % 360.0 - 180.0)
 
-
-def _managed_telemetry(
-    settings: Settings,
-    storage_root: str,
-    video_id: str,
-    srt_path: Path,
-    airdata_path: Path,
-) -> tuple[TelemetryMetadata, TelemetryMetadata]:
-    with srt_path.open("rb") as stream:
-        srt_bytes, srt_source = read_srt_stream(stream)
-    with airdata_path.open("rb") as stream:
-        airdata_bytes, airdata_source = read_airdata_stream(stream)
-
-    srt_relative = f"{storage_root}/videos/telemetry/{video_id}.srt"
-    airdata_relative = f"{storage_root}/videos/telemetry/{video_id}.airdata.csv"
-    write_srt(resolve_managed_project_path(settings, srt_relative), srt_bytes)
-    write_airdata(resolve_managed_project_path(settings, airdata_relative), airdata_bytes)
-
-    return (
-        TelemetryMetadata(
-            found=True,
-            available=True,
-            source_type="dji_srt",
-            source_path=srt_relative,
-            path_kind="managed",
-            sample_count=len(srt_source.samples),
-        ),
-        TelemetryMetadata(
-            found=True,
-            available=True,
-            source_type="airdata",
-            source_path=airdata_relative,
-            path_kind="managed",
-            sample_count=len(airdata_source.samples),
-        ),
-    )
-
-
 @pytest.mark.integration
-def test_whaledrone_airdata_end_to_end(tmp_path: Path, request: pytest.FixtureRequest) -> None:
+def test_whaledrone_airdata_end_to_end(
+    tmp_path: Path,
+    request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     if not request.config.getoption("--whaledrone-integration"):
         pytest.skip("Explicit --whaledrone-integration opt-in required")
     root = get_whaledrone_root()
@@ -245,6 +204,7 @@ def test_whaledrone_airdata_end_to_end(tmp_path: Path, request: pytest.FixtureRe
             )
             project_id = project.id
 
+        inspect_source_video = video_assets_module._inspect_video
         for clip_key, clip_config in CLIPS.items():
             video_name = str(clip_config["video"])
             dvm_video = str(clip_config["dvm_video"])
@@ -260,57 +220,52 @@ def test_whaledrone_airdata_end_to_end(tmp_path: Path, request: pytest.FixtureRe
 
             with srt_path.open("rb") as stream:
                 _, srt_source = read_srt_stream(stream)
-            fps = FPS_FALLBACK
             source_video = _find_video(root, video_name)
             video_metadata_source = "documented_fallback"
+            metadata: dict[str, float | int] = {
+                "width_px": calibration.width_px,
+                "height_px": calibration.height_px,
+                "frame_count": len(srt_source.samples),
+                "fps": FPS_FALLBACK,
+                "duration_seconds": len(srt_source.samples) / FPS_FALLBACK,
+            }
             if source_video is not None:
-                metadata = _inspect_video(source_video)
-                fps = float(metadata["fps"])
+                metadata = inspect_source_video(source_video)
                 assert (int(metadata["width_px"]), int(metadata["height_px"])) == (
                     calibration.width_px,
                     calibration.height_px,
                 )
                 video_metadata_source = "source_mp4"
+            fps = float(metadata["fps"])
 
             points, reference, excluded_frame_count = _load_points(
                 annotation_path,
                 dvm_video,
                 srt_frame_count=len(srt_source.samples),
             )
-            video_id = str(uuid4())
+            monkeypatch.setattr(
+                video_assets_module,
+                "_inspect_video",
+                lambda _: dict(metadata),
+            )
             with session_factory() as session:
-                project = ProjectService(session, settings).get_project(project_id)
-                telemetry_meta, airdata_meta = _managed_telemetry(
-                    settings,
-                    project.storage_root,
-                    video_id,
-                    srt_path,
-                    airdata_path,
-                )
-                video = VideoAsset(
-                    id=video_id,
-                    project_id=project_id,
-                    original_filename=video_name,
-                    managed_path=f"{project.storage_root}/videos/originals/{video_id}.mp4",
-                    sha256=sha256(video_name.encode()).hexdigest(),
-                    media_type="video/mp4",
-                    width_px=calibration.width_px,
-                    height_px=calibration.height_px,
-                    frame_count=len(srt_source.samples),
-                    fps=fps,
-                    duration_seconds=len(srt_source.samples) / fps,
-                    metadata_json={
-                        "telemetry": telemetry_meta.model_dump(mode="json"),
-                        "airdata_telemetry": airdata_meta.model_dump(mode="json"),
-                        "airdata_alignment": {
-                            "time_offset_s": offset_s,
-                            "evidence": evidence,
-                        },
-                    },
-                    status="imported",
-                )
-                session.add(video)
-                session.commit()
+                with (
+                    srt_path.open("rb") as srt_stream,
+                    airdata_path.open("rb") as airdata_stream,
+                ):
+                    imported = VideoAssetService(session, settings).import_video(
+                        project_id,
+                        filename=video_name,
+                        stream=io.BytesIO(("WhaleDrone-E2E:" + video_name).encode()),
+                        media_type="video/mp4",
+                        telemetry_filename=srt_path.name,
+                        telemetry_stream=srt_stream,
+                        airdata_filename=airdata_path.name,
+                        airdata_stream=airdata_stream,
+                        airdata_time_offset_s=offset_s,
+                        airdata_time_offset_evidence=evidence,
+                    )
+            video_id = imported.id
 
             with session_factory() as session:
                 service = VideoAssetService(session, settings)
@@ -320,6 +275,14 @@ def test_whaledrone_airdata_end_to_end(tmp_path: Path, request: pytest.FixtureRe
                 assert persisted.telemetry.available
                 assert persisted.airdata_alignment.time_offset_s == pytest.approx(offset_s)
                 assert persisted.airdata_alignment.evidence == evidence
+                assert persisted.telemetry.source_path is not None
+                assert persisted.airdata_telemetry.source_path is not None
+                assert resolve_managed_project_path(
+                    settings, persisted.telemetry.source_path
+                ).is_file()
+                assert resolve_managed_project_path(
+                    settings, persisted.airdata_telemetry.source_path
+                ).is_file()
 
                 project = ProjectService(session, settings).get_project(project_id)
                 assert project.georeference_height_offset_m == pytest.approx(5.0)
@@ -420,6 +383,7 @@ def test_whaledrone_airdata_end_to_end(tmp_path: Path, request: pytest.FixtureRe
         destination.mkdir(parents=True, exist_ok=True)
         output = destination / "summary.json"
         output.write_text(json.dumps(summaries, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        assert json.loads(output.read_text(encoding="utf-8")) == summaries
         print(json.dumps(summaries, indent=2, sort_keys=True))
     finally:
         engine.dispose()
