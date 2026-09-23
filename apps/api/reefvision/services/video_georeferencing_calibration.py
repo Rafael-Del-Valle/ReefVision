@@ -17,8 +17,8 @@ from reefvision.schemas.video_georeferencing_calibration import (
     VideoGeoreferencingCalibrationSetRequest,
 )
 
-GEOREREFERENCING_CALIBRATION_METADATA_KEY = "georeferencing_camera_calibration"
-GEOREREFERENCING_CALIBRATION_SCHEMA_VERSION = "video-georeferencing-calibration-0001"
+GEOREFERENCING_CALIBRATION_METADATA_KEY = "georeferencing_camera_calibration"
+GEOREFERENCING_CALIBRATION_SCHEMA_VERSION = "video-georeferencing-calibration-0001"
 
 
 def _canonical_geometry(
@@ -64,7 +64,7 @@ class VideoGeoreferencingCalibrationService:
     @staticmethod
     def _response_from_video(video: VideoAsset) -> VideoGeoreferencingCalibrationResponse:
         metadata = dict(video.metadata_json or {})
-        raw = metadata.get(GEOREREFERENCING_CALIBRATION_METADATA_KEY)
+        raw = metadata.get(GEOREFERENCING_CALIBRATION_METADATA_KEY)
         if not isinstance(raw, dict):
             raise NotFoundError("Video georeferencing camera calibration has not been set")
         try:
@@ -115,7 +115,7 @@ class VideoGeoreferencingCalibrationService:
             raise ValidationError("Stored georeferencing calibration provenance is incomplete")
 
         return VideoGeoreferencingCalibrationResponse(
-            schema_version=GEOREREFERENCING_CALIBRATION_SCHEMA_VERSION,
+            schema_version=GEOREFERENCING_CALIBRATION_SCHEMA_VERSION,
             video_id=video.id,
             width_px=calibration.width_px,
             height_px=calibration.height_px,
@@ -155,12 +155,12 @@ class VideoGeoreferencingCalibrationService:
             camera_mode=payload.camera_mode,
         )
         metadata: dict[str, Any] = dict(video.metadata_json or {})
-        previous = metadata.get(GEOREREFERENCING_CALIBRATION_METADATA_KEY)
+        previous = metadata.get(GEOREFERENCING_CALIBRATION_METADATA_KEY)
         previous_revision = (
             int(previous.get("calibration_revision", 0)) if isinstance(previous, dict) else 0
         )
-        metadata[GEOREREFERENCING_CALIBRATION_METADATA_KEY] = {
-            "schema_version": GEOREREFERENCING_CALIBRATION_SCHEMA_VERSION,
+        metadata[GEOREFERENCING_CALIBRATION_METADATA_KEY] = {
+            "schema_version": GEOREFERENCING_CALIBRATION_SCHEMA_VERSION,
             **geometry,
             "source": payload.source,
             "evidence": payload.evidence,
@@ -180,9 +180,9 @@ class VideoGeoreferencingCalibrationService:
     def clear(self, video_id: str) -> None:
         video = self._video(video_id)
         metadata = dict(video.metadata_json or {})
-        if GEOREREFERENCING_CALIBRATION_METADATA_KEY not in metadata:
+        if GEOREFERENCING_CALIBRATION_METADATA_KEY not in metadata:
             return
-        metadata.pop(GEOREREFERENCING_CALIBRATION_METADATA_KEY, None)
+        metadata.pop(GEOREFERENCING_CALIBRATION_METADATA_KEY, None)
         video.metadata_json = metadata
         video.revision += 1
         self.session.commit()
