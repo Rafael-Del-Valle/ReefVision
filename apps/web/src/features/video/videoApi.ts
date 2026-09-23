@@ -22,6 +22,55 @@ export interface TrackingModelRecord {
   updated_at: string;
 }
 
+export interface VideoTelemetryMetadata {
+  found: boolean;
+  available: boolean;
+  source_type: "dji_srt" | "airdata" | null;
+  source_path: string | null;
+  path_kind: "managed" | "external" | null;
+  sample_count: number;
+  error: string | null;
+}
+
+export interface AirDataAlignmentRecord {
+  time_offset_s: number;
+  evidence: string | null;
+}
+
+export interface VideoGeoreferencingCalibrationRecord {
+  schema_version: "video-georeferencing-calibration-0001";
+  video_id: string;
+  width_px: number;
+  height_px: number;
+  fx_px: number;
+  fy_px: number;
+  cx_px: number;
+  cy_px: number;
+  distortion_coefficients: number[];
+  digital_zoom_ratio: number;
+  camera_mode: string;
+  source: string;
+  evidence: string;
+  checksum_sha256: string;
+  calibration_revision: number;
+  calibration_updated_at: string;
+  video_revision: number;
+}
+
+export interface VideoGeoreferencingCalibrationSetPayload {
+  width_px: number;
+  height_px: number;
+  fx_px: number;
+  fy_px: number;
+  cx_px: number;
+  cy_px: number;
+  distortion_coefficients: number[];
+  digital_zoom_ratio: number;
+  camera_mode: string;
+  source: string;
+  evidence: string;
+}
+
 export interface VideoAssetRecord {
   id: string;
   project_id: string;
@@ -39,6 +88,11 @@ export interface VideoAssetRecord {
   extraction_job_id: string | null;
   status: string;
   revision: number;
+  created_at: string;
+  updated_at: string;
+  telemetry: VideoTelemetryMetadata;
+  airdata_telemetry: VideoTelemetryMetadata;
+  airdata_alignment: AirDataAlignmentRecord;
 }
 
 export interface VideoTrackKeyframe {
@@ -222,6 +276,33 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function requestOptional<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T | null> {
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    ...init,
+    headers: {
+      ...(init?.body && !(init.body instanceof FormData)
+        ? { "Content-Type": "application/json" }
+        : {}),
+      ...init?.headers,
+    },
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    let message = `Video request failed with HTTP ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (typeof payload.detail === "string") message = payload.detail;
+    } catch {
+      // Keep the HTTP fallback.
+    }
+    throw new Error(message);
+  }
+  return (await response.json()) as T;
+}
+
 export function videoContentUrl(videoId: string): string {
   return `${getApiBaseUrl()}/videos/${encodeURIComponent(videoId)}/content`;
 }
@@ -249,6 +330,35 @@ export function importVideo(
   return request<VideoAssetRecord>(
     `/projects/${encodeURIComponent(projectId)}/imports/videos`,
     { method: "POST", body: form },
+  );
+}
+
+export function getVideoGeoreferencingCalibration(
+  videoId: string,
+  signal?: AbortSignal,
+): Promise<VideoGeoreferencingCalibrationRecord | null> {
+  return requestOptional<VideoGeoreferencingCalibrationRecord>(
+    `/videos/${encodeURIComponent(videoId)}/georeferencing-calibration`,
+    { signal },
+  );
+}
+
+export function setVideoGeoreferencingCalibration(
+  videoId: string,
+  payload: VideoGeoreferencingCalibrationSetPayload,
+): Promise<VideoGeoreferencingCalibrationRecord> {
+  return request<VideoGeoreferencingCalibrationRecord>(
+    `/videos/${encodeURIComponent(videoId)}/georeferencing-calibration`,
+    { method: "PUT", body: JSON.stringify(payload) },
+  );
+}
+
+export function clearVideoGeoreferencingCalibration(
+  videoId: string,
+): Promise<void> {
+  return request<void>(
+    `/videos/${encodeURIComponent(videoId)}/georeferencing-calibration`,
+    { method: "DELETE" },
   );
 }
 
