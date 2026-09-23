@@ -513,9 +513,6 @@ export function VideoTrackingWorkspace({
         >
           {uploadMutation.isPending ? "Importing..." : "Import video"}
         </button>
-        {uploadMutation.error && (
-          <p className="error-copy">{uploadMutation.error.message}</p>
-        )}
         <label>
           Video
           <select
