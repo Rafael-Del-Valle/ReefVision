@@ -80,9 +80,17 @@ def _video_start_utc(video_name: str) -> datetime:
     return local.astimezone(UTC)
 
 
-def _derive_airdata_offset(airdata_path: Path, video_name: str) -> tuple[float, dict[str, float]]:
+def _derive_airdata_offset(
+    airdata_path: Path,
+    video_name: str,
+) -> tuple[float, dict[str, float]]:
+    """Anchor video time to AirData flight time from the flight-start UTC stamp."""
+
     video_start = _video_start_utc(video_name)
-    candidates: list[float] = []
+    first_timestamp: datetime | None = None
+    first_flight_time_s: float | None = None
+    timestamp_count = 0
+
     with airdata_path.open(encoding="utf-8-sig", newline="") as stream:
         for row in csv.DictReader(stream):
             timestamp = _parse_utc(row.get("datetime(utc)"))
@@ -92,15 +100,21 @@ def _derive_airdata_offset(airdata_path: Path, video_name: str) -> tuple[float, 
                 flight_time_s = float(row["time(millisecond)"]) / 1000.0
             except (KeyError, TypeError, ValueError):
                 continue
-            candidates.append(flight_time_s + (video_start - timestamp).total_seconds())
-    if not candidates:
-        raise AssertionError("AirData absolute UTC timestamps are unavailable")
-    offset = median(candidates)
-    absolute_deviation = [abs(item - offset) for item in candidates]
+            timestamp_count += 1
+            if first_timestamp is None:
+                first_timestamp = timestamp
+                first_flight_time_s = flight_time_s
+
+    if first_timestamp is None or first_flight_time_s is None:
+        raise AssertionError("AirData flight-start UTC timestamp is unavailable")
+
+    offset = first_flight_time_s + (video_start - first_timestamp).total_seconds()
     return offset, {
-        "candidate_count": float(len(candidates)),
-        "median_absolute_deviation_s": median(absolute_deviation),
-        "max_absolute_deviation_s": max(absolute_deviation),
+        "timestamp_rows_observed": float(timestamp_count),
+        "first_airdata_datetime_utc_epoch_s": first_timestamp.timestamp(),
+        "first_airdata_flight_time_s": first_flight_time_s,
+        "video_start_utc_epoch_s": video_start.timestamp(),
+        "initial_timestamp_offset_s": offset,
     }
 
 
