@@ -16,6 +16,9 @@ from reefvision.api.routes.class_operations import router as class_operations_ro
 from reefvision.api.routes.class_visibility import router as class_visibility_router
 from reefvision.api.routes.classification import router as classification_router
 from reefvision.api.routes.dataset_versions import router as dataset_versions_router
+from reefvision.api.routes.georeferenced_observations import (
+    router as georeferenced_observations_router,
+)
 from reefvision.api.routes.health import router as health_router
 from reefvision.api.routes.images import router as images_router
 from reefvision.api.routes.jobs import router as jobs_router
@@ -45,6 +48,7 @@ api_router.include_router(system_router)
 api_router.include_router(training_router)
 api_router.include_router(classification_router)
 api_router.include_router(videos_router)
+api_router.include_router(georeferenced_observations_router)
 api_router.include_router(video_science_router)
 api_router.include_router(backups_router)
 api_router.include_router(projects_router)

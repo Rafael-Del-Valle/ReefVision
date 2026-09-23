@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -14,6 +15,9 @@ from reefvision.db.models import VideoAsset, VideoTrack
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.georeferenced_observation import (
     GeoReferencedObservation,
+)
+from reefvision.schemas.georeferenced_observation_api import (
+    GeoReferencedObservationSummaryResponse,
 )
 
 
@@ -27,21 +31,19 @@ class GeoReferencedObservationService:
         self,
         observation: GeoReferencedObservation,
     ) -> GeoReferencedObservationRecord:
-        """Stage one canonical observation in the current transaction.
-
-        This method deliberately does not commit. The caller owns the
-        transaction so a tracking job can atomically persist tracks and their
-        geographic observations together.
-        """
+        """Stage one canonical observation in the current transaction."""
 
         project_id = str(observation.project_id)
         video_id = str(observation.video_asset_id)
+
         track_id = str(observation.track_id) if observation.track_id is not None else None
+
         detection_id = (
             str(observation.detection_id) if observation.detection_id is not None else None
         )
 
         video = self.session.get(VideoAsset, video_id)
+
         if video is None:
             raise NotFoundError("Geo-referenced observation video was not found")
 
@@ -107,23 +109,55 @@ class GeoReferencedObservationService:
 
         return record
 
+    def get(
+        self,
+        observation_id: str,
+    ) -> GeoReferencedObservationRecord:
+        record = self.session.get(
+            GeoReferencedObservationRecord,
+            observation_id,
+        )
+
+        if record is None:
+            raise NotFoundError("Geo-referenced observation not found")
+
+        return record
+
     def list_for_video(
         self,
         video_id: str,
+        *,
+        track_id: str | None = None,
+        frame_index: int | None = None,
     ) -> list[GeoReferencedObservationRecord]:
         video = self.session.get(VideoAsset, video_id)
 
         if video is None:
             raise NotFoundError("Video not found")
 
-        statement = (
-            select(GeoReferencedObservationRecord)
-            .where(GeoReferencedObservationRecord.video_id == video_id)
-            .order_by(
-                GeoReferencedObservationRecord.frame_index,
-                GeoReferencedObservationRecord.track_id,
-                GeoReferencedObservationRecord.id,
-            )
+        if frame_index is not None and (frame_index < 0 or frame_index >= video.frame_count):
+            raise ValidationError("Video frame is outside the source frame range")
+
+        if track_id is not None:
+            track = self.session.get(VideoTrack, track_id)
+
+            if track is None or track.video_id != video_id:
+                raise NotFoundError("Video track not found for video")
+
+        statement = select(GeoReferencedObservationRecord).where(
+            GeoReferencedObservationRecord.video_id == video_id
+        )
+
+        if track_id is not None:
+            statement = statement.where(GeoReferencedObservationRecord.track_id == track_id)
+
+        if frame_index is not None:
+            statement = statement.where(GeoReferencedObservationRecord.frame_index == frame_index)
+
+        statement = statement.order_by(
+            GeoReferencedObservationRecord.frame_index,
+            GeoReferencedObservationRecord.track_id,
+            GeoReferencedObservationRecord.id,
         )
 
         return list(self.session.scalars(statement))
@@ -153,27 +187,70 @@ class GeoReferencedObservationService:
         video_id: str,
         frame_index: int,
     ) -> list[GeoReferencedObservationRecord]:
-        video = self.session.get(VideoAsset, video_id)
-
-        if video is None:
-            raise NotFoundError("Video not found")
-
-        if frame_index < 0 or frame_index >= video.frame_count:
-            raise ValidationError("Video frame is outside the source frame range")
-
-        statement = (
-            select(GeoReferencedObservationRecord)
-            .where(
-                GeoReferencedObservationRecord.video_id == video_id,
-                GeoReferencedObservationRecord.frame_index == frame_index,
-            )
-            .order_by(
-                GeoReferencedObservationRecord.track_id,
-                GeoReferencedObservationRecord.id,
-            )
+        return self.list_for_video(
+            video_id,
+            frame_index=frame_index,
         )
 
-        return list(self.session.scalars(statement))
+    @staticmethod
+    def to_summary(
+        record: GeoReferencedObservationRecord,
+    ) -> GeoReferencedObservationSummaryResponse:
+        return GeoReferencedObservationSummaryResponse(
+            id=record.id,
+            project_id=record.project_id,
+            video_asset_id=record.video_id,
+            track_id=record.track_id,
+            detection_id=record.detection_id,
+            frame_index=record.frame_index,
+            frame_width_px=record.frame_width_px,
+            frame_height_px=record.frame_height_px,
+            frame_time_s=record.frame_time_s,
+            bbox={
+                "x_min": record.bbox_x_min,
+                "y_min": record.bbox_y_min,
+                "x_max": record.bbox_x_max,
+                "y_max": record.bbox_y_max,
+            },
+            representative_pixel={
+                "x": record.representative_pixel_x,
+                "y": record.representative_pixel_y,
+                "method": (record.representative_pixel_method),
+            },
+            location={
+                "latitude_deg": record.latitude_deg,
+                "longitude_deg": record.longitude_deg,
+                "crs": record.crs,
+            },
+            uncertainty_available=(record.uncertainty_available),
+            method_version=record.method_version,
+            created_at=record.created_at,
+        )
+
+    @staticmethod
+    def to_response(
+        record: GeoReferencedObservationRecord,
+    ) -> GeoReferencedObservation:
+        """Reconstruct the complete canonical scientific payload."""
+
+        payload = dict(record.payload_json)
+
+        # Database identity/linkage fields are authoritative.
+        payload.update(
+            {
+                "id": record.id,
+                "project_id": record.project_id,
+                "video_asset_id": record.video_id,
+                "track_id": record.track_id,
+                "detection_id": record.detection_id,
+                "created_at": record.created_at,
+            }
+        )
+
+        try:
+            return GeoReferencedObservation.model_validate(payload)
+        except PydanticValidationError as exc:
+            raise ValidationError("Stored geo-referenced observation payload is invalid") from exc
 
     def delete_for_tracks(
         self,
