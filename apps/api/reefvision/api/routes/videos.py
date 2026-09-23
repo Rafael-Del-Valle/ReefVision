@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -67,6 +67,9 @@ def import_video(
     session: DbSession,
     file: Annotated[UploadFile, File()],
     telemetry_file: Annotated[UploadFile | None, File()] = None,
+    airdata_file: Annotated[UploadFile | None, File()] = None,
+    airdata_time_offset_s: Annotated[float, Form()] = 0.0,
+    airdata_time_offset_evidence: Annotated[str | None, Form()] = None,
 ) -> VideoAssetResponse:
     return asset_service(request, session).import_video(
         project_id,
@@ -75,6 +78,10 @@ def import_video(
         media_type=file.content_type,
         telemetry_filename=telemetry_file.filename if telemetry_file is not None else None,
         telemetry_stream=telemetry_file.file if telemetry_file is not None else None,
+        airdata_filename=airdata_file.filename if airdata_file is not None else None,
+        airdata_stream=airdata_file.file if airdata_file is not None else None,
+        airdata_time_offset_s=airdata_time_offset_s,
+        airdata_time_offset_evidence=airdata_time_offset_evidence,
     )
 
 
