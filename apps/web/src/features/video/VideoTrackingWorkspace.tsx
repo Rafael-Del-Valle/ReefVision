@@ -56,6 +56,10 @@ export function VideoTrackingWorkspace({
 }: VideoTrackingWorkspaceProps) {
   const queryClient = useQueryClient();
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [telemetryFile, setTelemetryFile] = useState<File | null>(null);
+  const [airdataFile, setAirdataFile] = useState<File | null>(null);
+  const [airdataTimeOffsetSeconds, setAirdataTimeOffsetSeconds] = useState(0);
+  const [airdataTimeOffsetEvidence, setAirdataTimeOffsetEvidence] = useState("");
   const [selectedVideoId, setSelectedVideoId] = useState("");
   const [everyNFrames, setEveryNFrames] = useState(1);
   const [frameIndex, setFrameIndex] = useState(0);
@@ -180,11 +184,27 @@ export function VideoTrackingWorkspace({
   const uploadMutation = useMutation({
     mutationFn: () => {
       if (!uploadFile) throw new Error("Choose a video file first");
-      return importVideo(project.id, uploadFile);
+      if (
+        airdataFile &&
+        airdataTimeOffsetSeconds !== 0 &&
+        !airdataTimeOffsetEvidence.trim()
+      ) {
+        throw new Error("Nonzero AirData time offsets require alignment evidence");
+      }
+      return importVideo(project.id, uploadFile, {
+        telemetryFile,
+        airdataFile,
+        airdataTimeOffsetSeconds,
+        airdataTimeOffsetEvidence,
+      });
     },
     onSuccess: async (video) => {
       setSelectedVideoId(video.id);
       setUploadFile(null);
+      setTelemetryFile(null);
+      setAirdataFile(null);
+      setAirdataTimeOffsetSeconds(0);
+      setAirdataTimeOffsetEvidence("");
       await queryClient.invalidateQueries({ queryKey: ["videos", project.id] });
     },
   });
@@ -433,11 +453,59 @@ export function VideoTrackingWorkspace({
       <section className="management-card">
         <p className="eyebrow">Research workflow</p>
         <h3>Managed videos</h3>
-        <input
-          type="file"
-          accept="video/*,.avi,.m4v,.mkv,.mov,.mp4,.webm"
-          onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
-        />
+        <label>
+          Video file
+          <input
+            type="file"
+            accept="video/*,.avi,.m4v,.mkv,.mov,.mp4,.webm"
+            onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+          />
+        </label>
+        <label>
+          DJI SRT telemetry (optional)
+          <input
+            type="file"
+            accept=".srt,text/plain,application/x-subrip"
+            onChange={(event) => setTelemetryFile(event.target.files?.[0] ?? null)}
+          />
+        </label>
+        <label>
+          AirData CSV telemetry (optional)
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(event) => setAirdataFile(event.target.files?.[0] ?? null)}
+          />
+        </label>
+        {airdataFile && (
+          <div className="workspace-guide compact">
+            <label>
+              AirData time offset (seconds)
+              <input
+                type="number"
+                step="0.01"
+                value={airdataTimeOffsetSeconds}
+                onChange={(event) =>
+                  setAirdataTimeOffsetSeconds(Number(event.target.value))
+                }
+              />
+            </label>
+            <label>
+              Alignment evidence
+              <textarea
+                value={airdataTimeOffsetEvidence}
+                onChange={(event) =>
+                  setAirdataTimeOffsetEvidence(event.target.value)
+                }
+                placeholder="Describe how this AirData/video offset was established."
+              />
+            </label>
+            <p className="annotation-helper">
+              Use 0 when AirData time already matches video-relative time. Any
+              nonzero offset requires evidence and is persisted with the video.
+            </p>
+          </div>
+        )}
         <button
           type="button"
           disabled={!uploadFile || uploadMutation.isPending}
@@ -445,6 +513,9 @@ export function VideoTrackingWorkspace({
         >
           {uploadMutation.isPending ? "Importing..." : "Import video"}
         </button>
+        {uploadMutation.error && (
+          <p className="error-copy">{uploadMutation.error.message}</p>
+        )}
         <label>
           Video
           <select
@@ -469,6 +540,19 @@ export function VideoTrackingWorkspace({
               {selectedVideo.width_px}×{selectedVideo.height_px} |{" "}
               {selectedVideo.frame_count.toLocaleString()} frames |{" "}
               {selectedVideo.fps.toFixed(3)} fps
+            </p>
+            <p className="annotation-helper">
+              SRT:{" "}
+              {selectedVideo.telemetry.available
+                ? `${selectedVideo.telemetry.sample_count.toLocaleString()} samples`
+                : "not available"}{" "}
+              | AirData:{" "}
+              {selectedVideo.airdata_telemetry.available
+                ? `${selectedVideo.airdata_telemetry.sample_count.toLocaleString()} samples`
+                : "not available"}
+              {selectedVideo.airdata_telemetry.available
+                ? ` | offset ${selectedVideo.airdata_alignment.time_offset_s.toFixed(2)} s`
+                : ""}
             </p>
             <label>
               Extract every N frames
