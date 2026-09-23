@@ -91,12 +91,12 @@ Extend frontend video types for SRT, AirData, alignment, calibration, and readin
 Allow video, SRT, AirData CSV, alignment evidence, and automated source-only
 alignment where supported.
 
-### 8. Add georeferencing readiness/status API and panel — VERIFY
+### 8. Add georeferencing readiness/status API and panel — DONE
 
 Return/display Ready, missing telemetry, missing calibration, missing datum,
 alignment unverified, synchronization failure, and per-field provenance.
 
-### 9. Define organism image-location policy — NEXT
+### 9. Define organism image-location policy — IN PROGRESS
 
 Initial production policy: bbox center unless a more specific point is supplied.
 Preserve the original bbox/pixel and record the point-selection method.
