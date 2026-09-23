@@ -17,6 +17,11 @@ class VideoExtractRequest(BaseModel):
     every_n_frames: int = Field(default=1, ge=1, le=10000)
 
 
+class AirDataAlignment(BaseModel):
+    time_offset_s: FiniteFloat = 0.0
+    evidence: str | None = None
+
+
 class VideoAssetResponse(BaseModel):
     id: str
     project_id: str
@@ -37,12 +42,20 @@ class VideoAssetResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     telemetry: TelemetryMetadata = Field(default_factory=TelemetryMetadata)
+    airdata_telemetry: TelemetryMetadata = Field(default_factory=TelemetryMetadata)
+    airdata_alignment: AirDataAlignment = Field(default_factory=AirDataAlignment)
 
     model_config = {"from_attributes": True}
 
     @model_validator(mode="after")
     def telemetry_from_metadata(self) -> VideoAssetResponse:
         self.telemetry = TelemetryMetadata.model_validate(self.metadata_json.get("telemetry", {}))
+        self.airdata_telemetry = TelemetryMetadata.model_validate(
+            self.metadata_json.get("airdata_telemetry", {})
+        )
+        self.airdata_alignment = AirDataAlignment.model_validate(
+            self.metadata_json.get("airdata_alignment", {})
+        )
         return self
 
 
