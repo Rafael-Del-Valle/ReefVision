@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Project } from "../../api/client";
@@ -17,6 +17,7 @@ vi.mock("./videoApi", async () => {
     getVideoTrackAnalytics: vi.fn(),
     getTrackingModels: vi.fn(),
     getAnnotatedVideoExports: vi.fn(),
+    importVideo: vi.fn(),
   };
 });
 
@@ -128,8 +129,76 @@ describe("VideoTrackingWorkspace", () => {
       mean_bbox_area_pixels: 100,
       occupancy_grid: {},
     });
+    vi.mocked(api.importVideo).mockImplementation(async () => {
+      const videos = await api.getVideos("project-1");
+      return videos[0];
+    });
     vi.mocked(api.getTrackingModels).mockResolvedValue([]);
     vi.mocked(api.getAnnotatedVideoExports).mockResolvedValue([]);
+  });
+
+  it("imports video with optional SRT and AirData alignment inputs", async () => {
+    renderWorkspace();
+    await screen.findByText("Managed videos");
+
+    const video = new File(["video"], "whale.mp4", { type: "video/mp4" });
+    const srt = new File(["1"], "whale.srt", { type: "application/x-subrip" });
+    const airdata = new File(["time(millisecond)"], "flight.csv", {
+      type: "text/csv",
+    });
+
+    fireEvent.change(screen.getByLabelText("Video file"), {
+      target: { files: [video] },
+    });
+    fireEvent.change(screen.getByLabelText("DJI SRT telemetry (optional)"), {
+      target: { files: [srt] },
+    });
+    fireEvent.change(screen.getByLabelText("AirData CSV telemetry (optional)"), {
+      target: { files: [airdata] },
+    });
+    fireEvent.change(await screen.findByLabelText("AirData time offset (seconds)"), {
+      target: { value: "6.19" },
+    });
+    fireEvent.change(screen.getByLabelText("Alignment evidence"), {
+      target: { value: "source-only SRT/AirData alignment" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Import video" }));
+
+    await waitFor(() =>
+      expect(api.importVideo).toHaveBeenCalledWith(project.id, video, {
+        telemetryFile: srt,
+        airdataFile: airdata,
+        airdataTimeOffsetSeconds: 6.19,
+        airdataTimeOffsetEvidence: "source-only SRT/AirData alignment",
+      }),
+    );
+  });
+
+  it("blocks a nonzero AirData offset without evidence", async () => {
+    renderWorkspace();
+    await screen.findByText("Managed videos");
+
+    const video = new File(["video"], "whale.mp4", { type: "video/mp4" });
+    const airdata = new File(["time(millisecond)"], "flight.csv", {
+      type: "text/csv",
+    });
+
+    fireEvent.change(screen.getByLabelText("Video file"), {
+      target: { files: [video] },
+    });
+    fireEvent.change(screen.getByLabelText("AirData CSV telemetry (optional)"), {
+      target: { files: [airdata] },
+    });
+    fireEvent.change(await screen.findByLabelText("AirData time offset (seconds)"), {
+      target: { value: "6.19" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import video" }));
+
+    expect(
+      await screen.findByText("Nonzero AirData time offsets require alignment evidence"),
+    ).toBeInTheDocument();
+    expect(api.importVideo).not.toHaveBeenCalled();
   });
 
   it("shows managed video, frame, track, and automated tracking sections", async () => {
