@@ -135,6 +135,8 @@ function toProjectSummary(value: Project): ProjectSummary {
     description: value.description,
     storage_root: value.storage_root,
     default_annotation_type: value.default_annotation_type,
+    georeference_height_offset_m: value.georeference_height_offset_m,
+    georeference_height_evidence: value.georeference_height_evidence,
     created_at: value.created_at,
     updated_at: value.updated_at,
     archived_at: value.archived_at,
