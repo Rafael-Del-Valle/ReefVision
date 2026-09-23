@@ -12,6 +12,7 @@ vi.mock("./videoApi", async () => {
   return {
     ...actual,
     getVideos: vi.fn(),
+    getVideoGeoreferencingReadiness: vi.fn(),
     getVideoTracks: vi.fn(),
     getVideoTrackInterpolation: vi.fn(),
     getVideoTrackAnalytics: vi.fn(),
@@ -107,6 +108,27 @@ describe("VideoTrackingWorkspace", () => {
         airdata_alignment: { time_offset_s: 0, evidence: null },
       },
     ]);
+    vi.mocked(api.getVideoGeoreferencingReadiness).mockResolvedValue({
+      schema_version: "video-georeferencing-readiness-0001",
+      video_id: "video-1",
+      project_id: project.id,
+      ready: true,
+      state: "ready",
+      issues: [],
+      srt_available: true,
+      airdata_available: true,
+      airdata_alignment_valid: true,
+      surface_reference_configured: true,
+      calibration_available: true,
+      calibration_valid: true,
+      calibration_checksum_sha256: "a".repeat(64),
+      sampled_frame_indices: [0, 75, 150, 224, 299],
+      synchronized_frame_count: 5,
+      sampled_frame_count: 5,
+      maximum_sync_error_s: 0.05,
+      zoom_compatible: true,
+      max_allowed_sync_error_s: 0.1,
+    });
     vi.mocked(api.getVideoTracks).mockResolvedValue([]);
     vi.mocked(api.getVideoTrackInterpolation).mockResolvedValue({
       track_id: "track-1",
@@ -136,6 +158,56 @@ describe("VideoTrackingWorkspace", () => {
     });
     vi.mocked(api.getTrackingModels).mockResolvedValue([]);
     vi.mocked(api.getAnnotatedVideoExports).mockResolvedValue([]);
+  });
+
+  it("renders backend georeferencing readiness blockers", async () => {
+    vi.mocked(api.getVideoGeoreferencingReadiness).mockResolvedValue({
+      schema_version: "video-georeferencing-readiness-0001",
+      video_id: "video-1",
+      project_id: project.id,
+      ready: false,
+      state: "missing_calibration",
+      issues: [
+        {
+          code: "missing_calibration",
+          message: "Video georeferencing camera calibration has not been configured",
+        },
+        {
+          code: "missing_surface_reference",
+          message: "Project georeferencing height datum evidence has not been configured",
+        },
+      ],
+      srt_available: true,
+      airdata_available: false,
+      airdata_alignment_valid: true,
+      surface_reference_configured: false,
+      calibration_available: false,
+      calibration_valid: false,
+      calibration_checksum_sha256: null,
+      sampled_frame_indices: [0, 75, 150, 224, 299],
+      synchronized_frame_count: 0,
+      sampled_frame_count: 5,
+      maximum_sync_error_s: null,
+      zoom_compatible: null,
+      max_allowed_sync_error_s: 0.1,
+    });
+
+    renderWorkspace();
+
+    expect(await screen.findByText("Missing calibration")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Video georeferencing camera calibration has not been configured",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Project georeferencing height datum evidence has not been configured",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Georeferencing readiness")).toHaveTextContent(
+      "0/5 representative frames",
+    );
   });
 
   it("imports video with optional SRT and AirData alignment inputs", async () => {
