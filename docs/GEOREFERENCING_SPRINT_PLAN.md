@@ -71,7 +71,7 @@ Acceptance gate:
 - production callers cannot accidentally omit the configured project datum;
 - missing/unsupported datum state is explicit.
 
-### 5. Persist/select camera calibration — IN PROGRESS
+### 5. Persist/select camera calibration — VERIFY
 
 Add normal project/video calibration attachment and provenance: dimensions,
 intrinsics, distortion, checksum, camera mode, zoom, and evidence.
@@ -82,7 +82,7 @@ Acceptance gate:
 
 ## Sprint B — production data model and API
 
-### 6. Expose typed telemetry/georeferencing state to frontend — TODO
+### 6. Expose typed telemetry/georeferencing state to frontend — NEXT
 
 Extend frontend video types for SRT, AirData, alignment, calibration, and readiness.
 
