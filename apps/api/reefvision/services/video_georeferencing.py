@@ -2,15 +2,31 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from math import isclose, isfinite
+from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.db.models import Project
+from reefvision.db.models import Project, VideoAsset
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.geospatial.models import TelemetryProvenance
 from reefvision.geospatial.projection import SurfaceReference, georeference_pixel
+from reefvision.schemas.georeferenced_observation import (
+    BoundingBoxPixels,
+    CalibrationReference,
+    CameraPose,
+    GeographicLocation,
+    GeoReferencedObservation,
+    GeoreferencingMethod,
+    GeoreferencingUncertainty,
+    ObservationPose,
+    ObservationTimestamp,
+    PlatformPose,
+    RepresentativePixel,
+    TelemetryReference,
+)
 from reefvision.schemas.video_georeferencing import (
     VideoGeoreferenceFailureReason,
     VideoGeoreferenceResponse,
@@ -35,6 +51,369 @@ class VideoGeoreferencingService:
         self.settings = settings
         self.video_assets = VideoAssetService(session, settings)
         self.calibrations = VideoGeoreferencingCalibrationService(session)
+
+    @staticmethod
+    def _required_uuid(
+        value: str | UUID,
+        *,
+        field_name: str,
+    ) -> UUID:
+        if isinstance(value, UUID):
+            return value
+        try:
+            return UUID(str(value))
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise ValidationError(f"{field_name} must be a valid UUID") from exc
+
+    @classmethod
+    def _optional_uuid(
+        cls,
+        value: str | UUID | None,
+        *,
+        field_name: str,
+    ) -> UUID | None:
+        if value is None:
+            return None
+        return cls._required_uuid(value, field_name=field_name)
+
+    @staticmethod
+    def _representative_pixel_for_detection(
+        *,
+        bbox: BoundingBoxPixels,
+        frame_width_px: int,
+        frame_height_px: int,
+        explicit_pixel: tuple[float, float] | list[float] | None,
+    ) -> RepresentativePixel:
+        """Apply Task 9: explicit representative point, else bbox center."""
+
+        coordinates = (
+            bbox.x_min,
+            bbox.y_min,
+            bbox.x_max,
+            bbox.y_max,
+        )
+
+        if not all(isfinite(value) for value in coordinates):
+            raise ValidationError("Detection bounding box must contain finite coordinates")
+
+        if not (
+            0.0 <= bbox.x_min < bbox.x_max <= frame_width_px
+            and 0.0 <= bbox.y_min < bbox.y_max <= frame_height_px
+        ):
+            raise ValidationError("Detection bounding box must lie within the native video frame")
+
+        if explicit_pixel is not None:
+            if len(explicit_pixel) != 2:
+                raise ValidationError("Explicit representative pixel must contain x and y")
+
+            try:
+                x = float(explicit_pixel[0])
+                y = float(explicit_pixel[1])
+            except (TypeError, ValueError) as exc:
+                raise ValidationError("Explicit representative pixel must be numeric") from exc
+
+            method = "explicit"
+
+            if not (bbox.x_min <= x <= bbox.x_max and bbox.y_min <= y <= bbox.y_max):
+                raise ValidationError(
+                    "Explicit representative pixel must lie within the detection bounding box"
+                )
+        else:
+            x = (bbox.x_min + bbox.x_max) / 2.0
+            y = (bbox.y_min + bbox.y_max) / 2.0
+            method = "bbox_center"
+
+        if not (
+            isfinite(x) and isfinite(y) and 0.0 <= x < frame_width_px and 0.0 <= y < frame_height_px
+        ):
+            raise ValidationError("Representative pixel must lie within the native video frame")
+
+        return RepresentativePixel(
+            x=x,
+            y=y,
+            method=method,
+        )
+
+    @staticmethod
+    def _telemetry_reference_identity(
+        video: VideoAsset,
+        provenance: TelemetryProvenance | None,
+    ) -> tuple[
+        str,
+        str,
+        dict[str, str | float | None] | None,
+    ]:
+        """Resolve user-facing telemetry identity without losing merged provenance."""
+
+        metadata = dict(video.metadata_json or {})
+
+        field_provenance = provenance.model_dump(mode="json") if provenance is not None else None
+
+        used_sources: set[str] = set()
+
+        if provenance is not None:
+            for source in (
+                provenance.position_source,
+                provenance.relative_altitude_source,
+                provenance.gimbal_yaw_source,
+                provenance.gimbal_pitch_source,
+                provenance.gimbal_roll_source,
+            ):
+                if source is not None:
+                    used_sources.add(source)
+
+        def source_path(key: str) -> str | None:
+            raw = metadata.get(key)
+            if not isinstance(raw, dict):
+                return None
+            value = raw.get("source_path")
+            if value is None:
+                return None
+            rendered = str(value).strip()
+            return rendered or None
+
+        if used_sources == {"dji_srt"}:
+            source_type = "dji_srt"
+            source_id = source_path("telemetry") or f"dji_srt:{video.id}"
+        elif used_sources == {"airdata"}:
+            source_type = "csv"
+            source_id = source_path("airdata_telemetry") or f"airdata:{video.id}"
+        elif len(used_sources) > 1:
+            source_type = "other"
+
+            paths = [
+                path
+                for path in (
+                    source_path("airdata_telemetry"),
+                    source_path("telemetry"),
+                )
+                if path is not None
+            ]
+
+            source_id = "merged:" + "|".join(paths) if paths else f"merged:{video.id}"
+        else:
+            telemetry_path = source_path("telemetry")
+            airdata_path = source_path("airdata_telemetry")
+
+            if telemetry_path is not None:
+                source_type = "dji_srt"
+                source_id = telemetry_path
+            elif airdata_path is not None:
+                source_type = "csv"
+                source_id = airdata_path
+            else:
+                source_type = "other"
+                source_id = f"telemetry:{video.id}"
+
+        return source_type, source_id, field_provenance
+
+    def georeference_detection(
+        self,
+        video_id: str,
+        *,
+        frame_index: int,
+        bbox: BoundingBoxPixels,
+        representative_pixel: (tuple[float, float] | list[float] | None) = None,
+        detection_id: str | UUID | None = None,
+        track_id: str | UUID | None = None,
+        max_delta_s: float = DEFAULT_MAX_TELEMETRY_DELTA_S,
+    ) -> GeoReferencedObservation:
+        """Create one reproducible geographic observation from a detection.
+
+        Representative-pixel policy:
+        1. Explicit representative pixel, when supplied.
+        2. Native-frame bounding-box center otherwise.
+
+        Projection remains delegated to georeference_point(), so detection
+        georeferencing cannot diverge from ReefVision's canonical production
+        projection implementation.
+        """
+
+        video = self.video_assets.get_record(video_id)
+
+        selected_pixel = self._representative_pixel_for_detection(
+            bbox=bbox,
+            frame_width_px=video.width_px,
+            frame_height_px=video.height_px,
+            explicit_pixel=representative_pixel,
+        )
+
+        response = self.georeference_point(
+            video.id,
+            frame_index=frame_index,
+            pixel_x=selected_pixel.x,
+            pixel_y=selected_pixel.y,
+            max_delta_s=max_delta_s,
+        )
+
+        if response.status != "success" or response.result is None:
+            reason = response.failure_reason or "unknown"
+            message = response.message or "Unknown georeferencing failure"
+            raise ValidationError(f"Detection georeferencing failed ({reason}): {message}")
+
+        result = response.result
+
+        # Resolve the same persisted calibration used by georeference_point().
+        calibration_record = self.calibrations.get(video.id)
+
+        # Re-resolve the synchronized sample so the observation stores the
+        # actual pose and telemetry provenance used by projection.
+        telemetry_source = self.video_assets.telemetry_source(video.id)
+
+        if telemetry_source is None:
+            raise ValidationError(
+                "Telemetry source became unavailable while constructing "
+                "the geo-referenced observation"
+            )
+
+        telemetry_match = telemetry_source.sample_for_frame(
+            frame_index,
+            video.fps,
+            max_delta_s=max_delta_s,
+        )
+
+        if telemetry_match is None:
+            raise ValidationError(
+                "Telemetry synchronization changed while constructing "
+                "the geo-referenced observation"
+            )
+
+        sample = telemetry_match.sample
+
+        if sample.latitude is None or sample.longitude is None:
+            raise ValidationError("Successful georeferencing did not retain a GPS position")
+
+        if (
+            sample.gimbal_yaw_deg is None
+            or sample.gimbal_pitch_deg is None
+            or sample.gimbal_roll_deg is None
+        ):
+            raise ValidationError(
+                "Successful georeferencing did not retain complete gimbal attitude"
+            )
+
+        (
+            telemetry_source_type,
+            telemetry_source_id,
+            field_provenance,
+        ) = self._telemetry_reference_identity(
+            video,
+            telemetry_match.provenance,
+        )
+
+        if sample.relative_altitude_m is not None:
+            stored_altitude_m = sample.relative_altitude_m
+            stored_altitude_datum = "relative_takeoff"
+        elif sample.absolute_altitude_m is not None:
+            stored_altitude_m = sample.absolute_altitude_m
+            stored_altitude_datum = "absolute_telemetry"
+        else:
+            stored_altitude_m = None
+            stored_altitude_datum = None
+
+        telemetry_reference = TelemetryReference.model_validate(
+            {
+                "source_id": telemetry_source_id,
+                "source_type": telemetry_source_type,
+                "sample_index": sample.sample_index,
+                "synchronization_method": "nearest",
+                "telemetry_time_s": sample.time_s,
+                "telemetry_utc": None,
+                "signed_time_delta_ms": (telemetry_match.delta_s * 1000.0),
+                "absolute_time_error_ms": (abs(telemetry_match.delta_s) * 1000.0),
+                "within_sync_tolerance": (abs(telemetry_match.delta_s) <= max_delta_s),
+                "sync_tolerance_ms": max_delta_s * 1000.0,
+                "field_provenance": field_provenance,
+            }
+        )
+
+        calibration_id = (
+            result.calibration_source_id or f"sha256:{calibration_record.checksum_sha256}"
+        )
+
+        return GeoReferencedObservation(
+            id=uuid4(),
+            project_id=self._required_uuid(
+                video.project_id,
+                field_name="project_id",
+            ),
+            video_asset_id=self._required_uuid(
+                video.id,
+                field_name="video_asset_id",
+            ),
+            detection_id=self._optional_uuid(
+                detection_id,
+                field_name="detection_id",
+            ),
+            track_id=self._optional_uuid(
+                track_id,
+                field_name="track_id",
+            ),
+            frame_index=frame_index,
+            frame_width_px=video.width_px,
+            frame_height_px=video.height_px,
+            bbox=bbox,
+            representative_pixel=selected_pixel,
+            timestamp=ObservationTimestamp(
+                frame_time_s=frame_index / video.fps,
+                utc=None,
+                source="frame_index_fps",
+                fps=video.fps,
+            ),
+            pose=ObservationPose(
+                platform=PlatformPose(
+                    latitude_deg=sample.latitude,
+                    longitude_deg=sample.longitude,
+                    altitude_m=stored_altitude_m,
+                    altitude_datum=stored_altitude_datum,
+                    height_above_surface_m=result.camera_height_m,
+                    yaw_deg=sample.aircraft_yaw_deg,
+                    pitch_deg=sample.aircraft_pitch_deg,
+                    roll_deg=sample.aircraft_roll_deg,
+                    heading_reference="unknown",
+                ),
+                camera=CameraPose(
+                    yaw_deg=sample.gimbal_yaw_deg,
+                    pitch_deg=sample.gimbal_pitch_deg,
+                    roll_deg=sample.gimbal_roll_deg,
+                    orientation_source="gimbal_telemetry",
+                ),
+            ),
+            calibration=CalibrationReference(
+                calibration_id=calibration_id,
+                calibration_version=str(calibration_record.calibration_revision),
+                checksum_sha256=(calibration_record.checksum_sha256),
+                camera_model=calibration_record.camera_mode,
+                image_width_px=calibration_record.width_px,
+                image_height_px=calibration_record.height_px,
+                focal_length_x_px=calibration_record.fx_px,
+                focal_length_y_px=calibration_record.fy_px,
+                principal_point_x_px=calibration_record.cx_px,
+                principal_point_y_px=calibration_record.cy_px,
+                distortion_model=(
+                    "opencv_coefficients" if calibration_record.distortion_coefficients else "none"
+                ),
+                zoom_state=calibration_record.digital_zoom_ratio,
+            ),
+            telemetry=telemetry_reference,
+            location=GeographicLocation(
+                latitude_deg=result.latitude,
+                longitude_deg=result.longitude,
+            ),
+            uncertainty=GeoreferencingUncertainty(
+                available=False,
+                method="not_estimated",
+                reason_unavailable=("Formal uncertainty propagation is not yet implemented."),
+            ),
+            method=GeoreferencingMethod(
+                version=result.method,
+                surface_model="local_horizontal_plane",
+                representative_pixel_policy_version="1.0.0",
+                synchronization_version="nearest-frame-time-v1",
+                pose_convention_version=("absolute-gimbal-ned-to-enu-v1"),
+            ),
+            created_at=datetime.now(UTC),
+        )
 
     @staticmethod
     def _failure(

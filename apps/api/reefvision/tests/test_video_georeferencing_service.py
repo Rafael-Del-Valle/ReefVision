@@ -8,8 +8,10 @@ from reefvision.config import Settings
 from reefvision.db.base import Base
 from reefvision.db.models import Project, VideoAsset
 from reefvision.db.session import create_database_engine, create_session_factory
+from reefvision.domain.errors import ValidationError
 from reefvision.geospatial.models import TelemetrySample
 from reefvision.geospatial.synchronization import IndexedTelemetrySource, PreferredTelemetrySource
+from reefvision.schemas.georeferenced_observation import BoundingBoxPixels
 from reefvision.schemas.video_georeferencing_calibration import (
     VideoGeoreferencingCalibrationSetRequest,
 )
@@ -537,3 +539,138 @@ def test_georeferencing_readiness_reports_zoom_mismatch(
     assert readiness.synchronized_frame_count == 5
     assert readiness.zoom_compatible is False
     assert {issue.code for issue in readiness.issues} == {"calibration_zoom_mismatch"}
+
+
+def test_georeference_detection_prefers_explicit_representative_pixel(
+    service_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings, factory, video_id = service_context
+
+    with factory() as session:
+        service = VideoGeoreferencingService(session, settings)
+
+        preferred = PreferredTelemetrySource(
+            airdata=_source(),
+            srt=None,
+        )
+
+        monkeypatch.setattr(
+            service.video_assets,
+            "telemetry_source",
+            lambda _: preferred,
+        )
+
+        observation = service.georeference_detection(
+            video_id,
+            frame_index=0,
+            bbox=BoundingBoxPixels(
+                x_min=400.0,
+                y_min=300.0,
+                x_max=600.0,
+                y_max=500.0,
+            ),
+            representative_pixel=(520.0, 410.0),
+        )
+
+    assert observation.representative_pixel.method == "explicit"
+    assert observation.representative_pixel.x == pytest.approx(520.0)
+    assert observation.representative_pixel.y == pytest.approx(410.0)
+
+    assert observation.bbox.x_min == pytest.approx(400.0)
+    assert observation.bbox.x_max == pytest.approx(600.0)
+
+    assert observation.frame_width_px == 1000
+    assert observation.frame_height_px == 800
+
+    assert observation.telemetry.source_type == "csv"
+    assert observation.telemetry.field_provenance is not None
+    assert observation.telemetry.field_provenance["position_source"] == "airdata"
+
+    assert observation.calibration.checksum_sha256 is not None
+    assert str(observation.calibration.calibration_id).startswith("sha256:")
+
+    assert observation.method.version == ("opencv-dji-enu-flat-wgs84-v1")
+
+
+def test_georeference_detection_falls_back_to_bbox_center(
+    service_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings, factory, video_id = service_context
+
+    with factory() as session:
+        service = VideoGeoreferencingService(session, settings)
+
+        preferred = PreferredTelemetrySource(
+            airdata=_source(),
+            srt=None,
+        )
+
+        monkeypatch.setattr(
+            service.video_assets,
+            "telemetry_source",
+            lambda _: preferred,
+        )
+
+        observation = service.georeference_detection(
+            video_id,
+            frame_index=0,
+            bbox=BoundingBoxPixels(
+                x_min=400.0,
+                y_min=300.0,
+                x_max=600.0,
+                y_max=500.0,
+            ),
+        )
+
+    assert observation.representative_pixel.method == "bbox_center"
+    assert observation.representative_pixel.x == pytest.approx(500.0)
+    assert observation.representative_pixel.y == pytest.approx(400.0)
+
+    # Center of the synthetic nadir camera projects directly below it.
+    assert observation.location.latitude_deg == pytest.approx(
+        0.0,
+        abs=1e-12,
+    )
+    assert observation.location.longitude_deg == pytest.approx(
+        0.0,
+        abs=1e-12,
+    )
+
+
+def test_georeference_detection_rejects_explicit_pixel_outside_bbox(
+    service_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings, factory, video_id = service_context
+
+    with factory() as session:
+        service = VideoGeoreferencingService(session, settings)
+
+        preferred = PreferredTelemetrySource(
+            airdata=_source(),
+            srt=None,
+        )
+
+        monkeypatch.setattr(
+            service.video_assets,
+            "telemetry_source",
+            lambda _: preferred,
+        )
+
+        with pytest.raises(
+            ValidationError,
+            match="must lie within the detection bounding box",
+        ):
+            service.georeference_detection(
+                video_id,
+                frame_index=0,
+                bbox=BoundingBoxPixels(
+                    x_min=400.0,
+                    y_min=300.0,
+                    x_max=600.0,
+                    y_max=500.0,
+                ),
+                representative_pixel=(700.0, 410.0),
+            )
