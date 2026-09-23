@@ -61,7 +61,8 @@ describe("video georeferencing API", () => {
       issues: [
         {
           code: "missing_calibration",
-          message: "Video georeferencing camera calibration has not been configured",
+          message:
+            "Video georeferencing camera calibration has not been configured",
         },
       ],
       srt_available: true,
