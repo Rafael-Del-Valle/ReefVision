@@ -26,8 +26,8 @@ DEFAULT_MAX_TELEMETRY_DELTA_S = 0.100
 class VideoGeoreferencingService:
     """Resolve video/telemetry state and execute the shared projection contract.
 
-    The project surface datum is resolved automatically. Camera calibration remains
-    explicit until Task 5 wires persisted full calibration into this service.
+    Project surface datum and the selected full camera calibration are resolved
+    automatically from persisted ReefVision state.
     """
 
     def __init__(self, session: Session, settings: Settings) -> None:
