@@ -25,6 +25,7 @@ from reefvision.services.video_observation_location import (
     select_video_observation_image_location,
 )
 
+
 def _keyframe_payload(item: VideoTrackKeyframe) -> dict[str, object]:
     return {
         "frame": item.frame,
