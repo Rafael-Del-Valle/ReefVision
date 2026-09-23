@@ -29,6 +29,22 @@ def test_airdata_parser_maps_gimbal_and_aircraft_heading_separately() -> None:
     assert samples[0].latitude == 22.892814
 
 
+def test_airdata_parser_normalizes_whitespace_padded_headers() -> None:
+    text = (
+        "time(millisecond), latitude, longitude, height_above_takeoff(meters),"
+        " compass_heading(degrees), gimbal_heading(degrees),"
+        " gimbal_pitch(degrees), gimbal_roll(degrees) \n"
+        "0,22.892852,-109.840439,0.0,248.9,308.0,-90.0,0.0\n"
+    )
+    samples = parse_airdata_csv(text)
+    assert len(samples) == 1
+    assert samples[0].latitude == 22.892852
+    assert samples[0].longitude == -109.840439
+    assert samples[0].aircraft_yaw_deg == 248.9
+    assert samples[0].gimbal_yaw_deg == 308.0
+    assert samples[0].gimbal_pitch_deg == -90.0
+
+
 def test_airdata_parser_skips_bad_rows_but_requires_valid_telemetry() -> None:
     text = """time(millisecond),gimbal_heading(degrees)
 bad,200
