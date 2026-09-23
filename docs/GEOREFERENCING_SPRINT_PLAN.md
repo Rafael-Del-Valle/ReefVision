@@ -16,7 +16,7 @@ gate passes; later work must not silently weaken an earlier contract.
 
 ## Sprint A — validated backend foundation
 
-### 1. Finish AirData branch cleanup — VERIFY
+### 1. Finish AirData branch cleanup — DONE
 
 Scope:
 - normalize real AirData CSV header whitespace;
