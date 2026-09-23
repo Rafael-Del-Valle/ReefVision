@@ -272,7 +272,25 @@ def test_project_exchange_round_trip_preserves_restart_safe_metric_3d_science(
         },
     )
     assert intrinsics.status_code == 200, intrinsics.text
-    source_video_revision = int(intrinsics.json()["video_revision"])
+    georeferencing_calibration = client.put(
+        f"/api/v1/videos/{source_video_id}/georeferencing-calibration",
+        json={
+            "width_px": 200,
+            "height_px": 100,
+            "fx_px": 100,
+            "fy_px": 100,
+            "cx_px": 5,
+            "cy_px": 5,
+            "distortion_coefficients": [0.01, -0.02, 0.0, 0.0, 0.005],
+            "digital_zoom_ratio": 1.0,
+            "camera_mode": "synthetic-wide",
+            "source": "round-trip fixture",
+            "evidence": "Full georeferencing calibration preserved across exchange",
+        },
+    )
+    assert georeferencing_calibration.status_code == 200, georeferencing_calibration.text
+    source_georeferencing_checksum = georeferencing_calibration.json()["checksum_sha256"]
+    source_video_revision = int(georeferencing_calibration.json()["video_revision"])
 
     depth_parameters: dict[str, Any] = {
         "unit": "m",
@@ -432,17 +450,23 @@ def test_project_exchange_round_trip_preserves_restart_safe_metric_3d_science(
 
     public_calibration = client.get(f"/api/v1/videos/{imported_video_id}/calibration")
     public_intrinsics = client.get(f"/api/v1/videos/{imported_video_id}/camera-intrinsics")
+    public_georeferencing = client.get(
+        f"/api/v1/videos/{imported_video_id}/georeferencing-calibration"
+    )
     assert public_calibration.status_code == 200, public_calibration.text
     assert public_intrinsics.status_code == 200, public_intrinsics.text
+    assert public_georeferencing.status_code == 200, public_georeferencing.text
     assert public_calibration.json()["pixels_per_unit"] == pytest.approx(10.0)
     assert public_intrinsics.json()["fx_px"] == pytest.approx(100.0)
     assert public_intrinsics.json()["video_revision"] == source_video_revision
+    assert public_georeferencing.json()["checksum_sha256"] == source_georeferencing_checksum
 
     with app.state.session_factory() as session:
         imported_video_row = session.get(VideoAsset, imported_video_id)
         assert imported_video_row is not None
         assert "spatial_calibration" in imported_video_row.metadata_json
         assert "camera_intrinsics" in imported_video_row.metadata_json
+        assert "georeferencing_camera_calibration" in imported_video_row.metadata_json
         imported_track_row = session.get(VideoTrack, imported_track_id)
         assert imported_track_row is not None
         assert imported_track_row.video_id == imported_video_id
@@ -542,6 +566,13 @@ def test_project_exchange_round_trip_preserves_restart_safe_metric_3d_science(
         assert (
             restarted.get(f"/api/v1/videos/{imported_video_id}/camera-intrinsics").status_code
             == 200
+        )
+        reopened_georeferencing = restarted.get(
+            f"/api/v1/videos/{imported_video_id}/georeferencing-calibration"
+        )
+        assert reopened_georeferencing.status_code == 200
+        assert reopened_georeferencing.json()["checksum_sha256"] == (
+            source_georeferencing_checksum
         )
         reopened_run = restarted.get(f"/api/v1/workflow-runs/{imported_run_id}")
         assert reopened_run.status_code == 200, reopened_run.text
