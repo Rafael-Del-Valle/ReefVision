@@ -130,6 +130,8 @@ def test_georeference_point_success(
     assert response.result.surface_reference.evidence == (
         "Synthetic takeoff point is 5 m above the surface"
     )
+    assert response.result.calibration_source_id is not None
+    assert response.result.calibration_source_id.startswith("sha256:")
     assert response.sync_error_s == pytest.approx(0.0)
     assert response.telemetry_provenance is not None
     assert response.telemetry_provenance.position_source == "airdata"
