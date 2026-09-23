@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
 from reefvision.geospatial.calibration import CameraCalibration
+from reefvision.geospatial.models import TelemetryProvenance
 from reefvision.geospatial.projection import SurfaceReference, georeference_pixel
 from reefvision.schemas.video_georeferencing import (
     VideoGeoreferenceFailureReason,
@@ -45,7 +46,7 @@ class VideoGeoreferencingService:
         message: str,
         sync_error_s: float | None = None,
         telemetry_delta_s: float | None = None,
-        telemetry_provenance: object | None = None,
+        telemetry_provenance: TelemetryProvenance | None = None,
     ) -> VideoGeoreferenceResponse:
         return VideoGeoreferenceResponse.model_validate(
             {
@@ -76,11 +77,10 @@ class VideoGeoreferencingService:
         max_delta_s: float = DEFAULT_MAX_TELEMETRY_DELTA_S,
     ) -> VideoGeoreferenceResponse:
         video = self.video_assets.get_record(video_id)
-        timestamp_seconds = (
-            frame_index / video.fps
-            if isinstance(frame_index, int) and not isinstance(frame_index, bool) and frame_index >= 0
-            else 0.0
+        valid_nonnegative_frame = (
+            isinstance(frame_index, int) and not isinstance(frame_index, bool) and frame_index >= 0
         )
+        timestamp_seconds = frame_index / video.fps if valid_nonnegative_frame else 0.0
 
         if (
             isinstance(frame_index, bool)
