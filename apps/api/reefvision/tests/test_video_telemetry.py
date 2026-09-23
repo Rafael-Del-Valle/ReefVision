@@ -206,6 +206,14 @@ def test_uploaded_airdata_is_preferred_over_srt_and_persists_alignment(client, m
         assert match.provenance is not None
         assert match.provenance.gimbal_yaw_source == "airdata"
 
+        airdata_path.unlink()
+        fallback = VideoAssetService(session, settings).telemetry_source(video["id"])
+        assert fallback is not None
+        fallback_match = fallback.sample_for_frame(1, 10)
+        assert fallback_match is not None
+        assert fallback_match.provenance is None
+        assert fallback_match.sample.latitude == 25.126
+
 
 def test_airdata_nonzero_offset_requires_evidence_and_does_not_import(client, monkeypatch):
     monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
