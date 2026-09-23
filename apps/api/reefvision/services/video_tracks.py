@@ -22,6 +22,9 @@ from reefvision.schemas.videos import (
     VideoTrackUpdate,
 )
 
+from reefvision.services.video_observation_location import (
+    select_video_observation_image_location,
+)
 
 def _keyframe_payload(item: VideoTrackKeyframe) -> dict[str, object]:
     return {
@@ -161,26 +164,34 @@ class VideoTrackService:
                     first.bbox[2] + (second.bbox[2] - first.bbox[2]) * ratio,
                     first.bbox[3] + (second.bbox[3] - first.bbox[3]) * ratio,
                 )
-                x, y, width, height = bbox
+                location = select_video_observation_image_location(
+                    bbox=bbox,
+                    image_width_px=video.width_px,
+                    image_height_px=video.height_px,
+                )
                 frames.append(
                     InterpolatedTrackFrame(
                         frame=frame,
                         timestamp_seconds=frame / video.fps,
                         bbox=bbox,
-                        center_x=x + width / 2.0,
-                        center_y=y + height / 2.0,
+                        center_x=location.pixel_x,
+                        center_y=location.pixel_y,
                         source="keyframe" if frame in by_frame else "interpolated",
                     )
                 )
         last = keyframes[-1]
-        x, y, width, height = last.bbox
+        location = select_video_observation_image_location(
+            bbox=last.bbox,
+            image_width_px=video.width_px,
+            image_height_px=video.height_px,
+        )
         frames.append(
             InterpolatedTrackFrame(
                 frame=last.frame,
                 timestamp_seconds=last.frame / video.fps,
                 bbox=last.bbox,
-                center_x=x + width / 2.0,
-                center_y=y + height / 2.0,
+                center_x=location.pixel_x,
+                center_y=location.pixel_y,
                 source="keyframe",
             )
         )
