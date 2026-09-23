@@ -5,7 +5,10 @@ import pytest
 from reefvision.domain.errors import ValidationError
 from reefvision.geospatial.airdata import parse_airdata_csv
 from reefvision.geospatial.models import TelemetrySample
-from reefvision.geospatial.synchronization import IndexedTelemetrySource, PreferredTelemetrySource
+from reefvision.geospatial.synchronization import (
+    IndexedTelemetrySource,
+    PreferredTelemetrySource,
+)
 
 
 AIRDATA = (
