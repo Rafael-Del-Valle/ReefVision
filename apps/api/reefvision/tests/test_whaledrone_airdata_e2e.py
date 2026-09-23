@@ -234,7 +234,7 @@ def _refine_airdata_offset_from_source_telemetry(
 
     comparisons = [
         sample
-        for sample in srt.samples[::30]
+        for sample in srt.samples[::300]
         if sample.gimbal_yaw_deg is not None
         and sample.latitude is not None
         and sample.longitude is not None
@@ -252,55 +252,60 @@ def _refine_airdata_offset_from_source_telemetry(
     if offset_max < offset_min:
         raise AssertionError("AirData flight log is shorter than the SRT clip")
 
-    best: tuple[float, float, float, float, int] | None = None
-    coarse_start = int(offset_min * 10)
-    coarse_end = int(offset_max * 10)
-    for tick in range(coarse_start, coarse_end + 1):
-        offset_s = tick / 10.0
-        score = _source_alignment_score(
-            airdata=airdata,
-            srt_samples=comparisons,
-            offset_s=offset_s,
-        )
-        if score is None:
-            continue
-        median_heading, median_position, mean_heading, count = score
-        candidate = (
-            median_heading,
-            median_position,
-            mean_heading,
-            offset_s,
-            count,
-        )
-        if best is None or candidate[:3] < best[:3]:
-            best = candidate
+    def search(
+        start_s: float,
+        end_s: float,
+        step_s: float,
+        *,
+        current: tuple[float, float, float, float, int] | None = None,
+    ) -> tuple[float, float, float, float, int] | None:
+        best = current
+        steps = int(round((end_s - start_s) / step_s))
+        for index in range(steps + 1):
+            offset_s = start_s + index * step_s
+            if not offset_min <= offset_s <= offset_max:
+                continue
+            score = _source_alignment_score(
+                airdata=airdata,
+                srt_samples=comparisons,
+                offset_s=offset_s,
+            )
+            if score is None:
+                continue
+            median_heading, median_position, mean_heading, count = score
+            candidate = (
+                median_heading,
+                median_position,
+                mean_heading,
+                offset_s,
+                count,
+            )
+            if best is None or candidate[:3] < best[:3]:
+                best = candidate
+        return best
 
+    # Hierarchical search keeps the alignment source-only while avoiding millions
+    # of repeated telemetry lookups across the full flight.
+    best = search(offset_min, offset_max, 1.0)
     if best is None:
         raise AssertionError("Could not coarsely align AirData and SRT source telemetry")
 
     coarse_offset = best[3]
-    refined_best = best
-    for tick in range(-20, 21):
-        offset_s = coarse_offset + tick / 100.0
-        if not offset_min <= offset_s <= offset_max:
-            continue
-        score = _source_alignment_score(
-            airdata=airdata,
-            srt_samples=comparisons,
-            offset_s=offset_s,
-        )
-        if score is None:
-            continue
-        median_heading, median_position, mean_heading, count = score
-        candidate = (
-            median_heading,
-            median_position,
-            mean_heading,
-            offset_s,
-            count,
-        )
-        if candidate[:3] < refined_best[:3]:
-            refined_best = candidate
+    best = search(
+        max(offset_min, coarse_offset - 2.0),
+        min(offset_max, coarse_offset + 2.0),
+        0.1,
+        current=best,
+    )
+    assert best is not None
+    tenth_offset = best[3]
+    refined_best = search(
+        max(offset_min, tenth_offset - 0.2),
+        min(offset_max, tenth_offset + 0.2),
+        0.01,
+        current=best,
+    )
+    assert refined_best is not None
 
     median_heading, median_position, mean_heading, offset_s, count = refined_best
     return offset_s, {
@@ -308,6 +313,7 @@ def _refine_airdata_offset_from_source_telemetry(
         "feasible_offset_min_s": offset_min,
         "feasible_offset_max_s": offset_max,
         "coarse_offset_s": coarse_offset,
+        "tenth_second_offset_s": tenth_offset,
         "refined_offset_s": offset_s,
         "source_comparisons": float(count),
         "median_srt_vs_airdata_heading_error_deg": median_heading,
