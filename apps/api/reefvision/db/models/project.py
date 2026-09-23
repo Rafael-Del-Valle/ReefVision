@@ -14,6 +14,7 @@ from reefvision.db.base import Base
 if TYPE_CHECKING:
     from reefvision.db.models.dataset_version import DatasetVersion
     from reefvision.db.models.export_record import ExportRecord
+    from reefvision.db.models.geo_referenced_observation import GeoReferencedObservation
     from reefvision.db.models.image import ImageAsset
     from reefvision.db.models.label_class import LabelClass
     from reefvision.db.models.model_registration import ModelRegistration
@@ -62,4 +63,8 @@ class Project(Base):
     )
     exports: Mapped[list[ExportRecord]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
+    )
+    geo_referenced_observations: Mapped[list[GeoReferencedObservation]] = relationship(
+        back_populates="project",
+        passive_deletes=True,
     )

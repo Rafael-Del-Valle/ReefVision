@@ -12,6 +12,7 @@ from reefvision.db.models.dataset_version import DatasetVersion
 from reefvision.db.models.dataset_version_item import DatasetVersionItem
 from reefvision.db.models.experiment_record import ExperimentRecord
 from reefvision.db.models.export_record import ExportRecord
+from reefvision.db.models.geo_referenced_observation import GeoReferencedObservation
 from reefvision.db.models.image import ImageAsset
 from reefvision.db.models.image_label import ImageLabel
 from reefvision.db.models.job import Job
@@ -51,6 +52,7 @@ __all__ = [
     "DatasetVersionItem",
     "ExperimentRecord",
     "ExportRecord",
+    "GeoReferencedObservation",
     "ImageAsset",
     "ImageLabel",
     "Job",

@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from reefvision.db.base import Base
 from reefvision.db.models.project import utc_now
+
+if TYPE_CHECKING:
+    from reefvision.db.models.geo_referenced_observation import (
+        GeoReferencedObservation,
+    )
 
 
 class VideoAsset(Base):
@@ -41,4 +46,9 @@ class VideoAsset(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
+    )
+
+    geo_referenced_observations: Mapped[list[GeoReferencedObservation]] = relationship(
+        back_populates="video",
+        passive_deletes=True,
     )
