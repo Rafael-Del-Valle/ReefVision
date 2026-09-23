@@ -537,5 +537,3 @@ def test_georeferencing_readiness_reports_zoom_mismatch(
     assert readiness.synchronized_frame_count == 5
     assert readiness.zoom_compatible is False
     assert {issue.code for issue in readiness.issues} == {"calibration_zoom_mismatch"}
-
-
