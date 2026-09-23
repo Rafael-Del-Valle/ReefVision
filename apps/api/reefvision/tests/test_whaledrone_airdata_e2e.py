@@ -22,8 +22,8 @@ from reefvision.geospatial.validation import (
     evaluate_georeferencing,
 )
 from reefvision.schemas.projects import ProjectCreate
-from reefvision.services.projects import ProjectService
 from reefvision.services import video_assets as video_assets_module
+from reefvision.services.projects import ProjectService
 from reefvision.services.video_assets import VideoAssetService
 from reefvision.storage.georeferencing import load_camera_calibration
 from reefvision.storage.projects import resolve_managed_project_path
@@ -33,7 +33,7 @@ from reefvision.tests.whaledrone import get_whaledrone_root
 FPS_FALLBACK = 29.97002997002997
 AIRDATA_NAME = "Jan-16th-2026-02-49PM-Flight-Airdata.csv"
 ANNOTATION_NAME = "annotations_Jan-16th-2026-02-49PM-Flight-Airdata.csv"
-CLIPS = {
+CLIPS: dict[str, dict[str, str | int]] = {
     "0001": {
         "video": "DJI_20260116154954_0001_V.MP4",
         "dvm_video": "yggdln0thMY.mp4",
@@ -310,7 +310,7 @@ def test_whaledrone_airdata_end_to_end(
             assert report.failed_count == 0
             assert report.statistics is not None
 
-            provenance = Counter()
+            provenance: Counter[tuple[str | None, ...]] = Counter()
             yaw_errors: list[float] = []
             height_errors: list[float] = []
             sync_errors: list[float] = []
