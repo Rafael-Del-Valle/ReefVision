@@ -13,7 +13,9 @@ VideoGeoreferenceFailureReason = Literal[
     "frame_out_of_range",
     "telemetry_unavailable",
     "telemetry_out_of_sync",
+    "calibration_unavailable",
     "calibration_mismatch",
+    "calibration_zoom_mismatch",
     "surface_reference_unavailable",
     "projection_failed",
 ]
