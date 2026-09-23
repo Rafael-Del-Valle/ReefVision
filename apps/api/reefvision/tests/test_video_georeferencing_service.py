@@ -8,10 +8,16 @@ from reefvision.config import Settings
 from reefvision.db.base import Base
 from reefvision.db.models import Project, VideoAsset
 from reefvision.db.session import create_database_engine, create_session_factory
-from reefvision.geospatial.calibration import CameraCalibration
 from reefvision.geospatial.models import TelemetrySample
 from reefvision.geospatial.synchronization import IndexedTelemetrySource, PreferredTelemetrySource
+from reefvision.schemas.video_georeferencing_calibration import (
+    VideoGeoreferencingCalibrationSetRequest,
+)
 from reefvision.services.video_georeferencing import VideoGeoreferencingService
+from reefvision.services.video_georeferencing_calibration import (
+    GEOREREFERENCING_CALIBRATION_METADATA_KEY,
+    VideoGeoreferencingCalibrationService,
+)
 
 
 @pytest.fixture
@@ -51,7 +57,23 @@ def service_context(tmp_path: Path):
             status="imported",
         )
         session.add(video)
-        session.commit()
+        session.flush()
+        VideoGeoreferencingCalibrationService(session).set(
+            video.id,
+            VideoGeoreferencingCalibrationSetRequest(
+                width_px=1000,
+                height_px=800,
+                fx_px=500,
+                fy_px=500,
+                cx_px=500,
+                cy_px=400,
+                distortion_coefficients=(),
+                digital_zoom_ratio=digital_zoom_ratio,
+                camera_mode="synthetic-wide",
+                source="Synthetic unit-test calibration",
+                evidence="Known pinhole parameters for service contract tests",
+            ),
+        )
         video_id = video.id
     try:
         yield settings, factory, video_id
@@ -59,21 +81,12 @@ def service_context(tmp_path: Path):
         engine.dispose()
 
 
-@pytest.fixture
-def calibration() -> CameraCalibration:
-    return CameraCalibration(
-        width_px=1000,
-        height_px=800,
-        fx_px=500,
-        fy_px=500,
-        cx_px=500,
-        cy_px=400,
-        distortion_coefficients=(),
-        source_id="synthetic",
-    )
-
-
-def _source(*, time_s: float = 0.0, roll: float | None = 0.0) -> IndexedTelemetrySource:
+def _source(
+    *,
+    time_s: float = 0.0,
+    roll: float | None = 0.0,
+    digital_zoom_ratio: float = 1.0,
+) -> IndexedTelemetrySource:
     return IndexedTelemetrySource(
         [
             TelemetrySample(
@@ -93,7 +106,6 @@ def _source(*, time_s: float = 0.0, roll: float | None = 0.0) -> IndexedTelemetr
 
 def test_georeference_point_success(
     service_context,
-    calibration: CameraCalibration,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -106,7 +118,6 @@ def test_georeference_point_success(
             frame_index=0,
             pixel_x=500.0,
             pixel_y=400.0,
-            calibration=calibration,
         )
 
     assert response.status == "success"
@@ -127,7 +138,6 @@ def test_georeference_point_success(
 
 def test_georeference_point_requires_project_surface_evidence(
     service_context,
-    calibration: CameraCalibration,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -146,7 +156,6 @@ def test_georeference_point_requires_project_surface_evidence(
             frame_index=0,
             pixel_x=500.0,
             pixel_y=400.0,
-            calibration=calibration,
         )
 
     assert response.status == "failed"
@@ -157,7 +166,6 @@ def test_georeference_point_requires_project_surface_evidence(
 
 def test_georeference_point_reports_missing_telemetry(
     service_context,
-    calibration: CameraCalibration,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -169,7 +177,6 @@ def test_georeference_point_reports_missing_telemetry(
             frame_index=0,
             pixel_x=500.0,
             pixel_y=400.0,
-            calibration=calibration,
         )
 
     assert response.status == "failed"
@@ -178,7 +185,6 @@ def test_georeference_point_reports_missing_telemetry(
 
 def test_georeference_point_reports_out_of_sync_telemetry(
     service_context,
-    calibration: CameraCalibration,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -190,7 +196,6 @@ def test_georeference_point_reports_out_of_sync_telemetry(
             frame_index=0,
             pixel_x=500.0,
             pixel_y=400.0,
-            calibration=calibration,
         )
 
     assert response.status == "failed"
@@ -199,7 +204,6 @@ def test_georeference_point_reports_out_of_sync_telemetry(
 
 def test_georeference_point_rejects_frame_outside_video(
     service_context,
-    calibration: CameraCalibration,
 ) -> None:
     settings, factory, video_id = service_context
     with factory() as session:
@@ -208,35 +212,80 @@ def test_georeference_point_rejects_frame_outside_video(
             frame_index=300,
             pixel_x=500.0,
             pixel_y=400.0,
-            calibration=calibration,
         )
 
     assert response.status == "failed"
     assert response.failure_reason == "frame_out_of_range"
 
 
-def test_georeference_point_rejects_calibration_dimension_mismatch(
+def test_georeference_point_reports_missing_calibration(
     service_context,
-    calibration: CameraCalibration,
 ) -> None:
     settings, factory, video_id = service_context
-    wrong = calibration.model_copy(update={"width_px": 999})
     with factory() as session:
+        service = VideoGeoreferencingService(session, settings)
+        service.calibrations.clear(video_id)
+        response = service.georeference_point(
+            video_id,
+            frame_index=0,
+            pixel_x=500.0,
+            pixel_y=400.0,
+        )
+
+    assert response.status == "failed"
+    assert response.failure_reason == "calibration_unavailable"
+
+
+def test_georeference_point_reports_corrupt_calibration_resolution(
+    service_context,
+) -> None:
+    settings, factory, video_id = service_context
+    with factory() as session:
+        video = session.get(VideoAsset, video_id)
+        assert video is not None
+        metadata = dict(video.metadata_json)
+        raw = dict(metadata[GEOREREFERENCING_CALIBRATION_METADATA_KEY])
+        raw["width_px"] = 999
+        metadata[GEOREREFERENCING_CALIBRATION_METADATA_KEY] = raw
+        video.metadata_json = metadata
+        session.commit()
+
         response = VideoGeoreferencingService(session, settings).georeference_point(
             video_id,
             frame_index=0,
             pixel_x=500.0,
             pixel_y=400.0,
-            calibration=wrong,
         )
 
     assert response.status == "failed"
     assert response.failure_reason == "calibration_mismatch"
 
 
+def test_georeference_point_reports_zoom_mismatch(
+    service_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings, factory, video_id = service_context
+    with factory() as session:
+        service = VideoGeoreferencingService(session, settings)
+        monkeypatch.setattr(
+            service.video_assets,
+            "telemetry_source",
+            lambda _: _source(digital_zoom_ratio=2.0),
+        )
+        response = service.georeference_point(
+            video_id,
+            frame_index=0,
+            pixel_x=500.0,
+            pixel_y=400.0,
+        )
+
+    assert response.status == "failed"
+    assert response.failure_reason == "calibration_zoom_mismatch"
+
+
 def test_georeference_point_returns_projection_failure(
     service_context,
-    calibration: CameraCalibration,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -252,7 +301,6 @@ def test_georeference_point_returns_projection_failure(
             frame_index=0,
             pixel_x=500.0,
             pixel_y=400.0,
-            calibration=calibration,
         )
 
     assert response.status == "failed"
