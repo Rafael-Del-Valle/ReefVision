@@ -10,6 +10,7 @@ import {
   deleteVideoTrack,
   extractVideoFrames,
   getTrackingModels,
+  getVideoGeoreferencingReadiness,
   getVideoTrackAnalytics,
   getVideoTrackInterpolation,
   getVideoTrackingRuns,
@@ -35,6 +36,20 @@ function trackerLabel(value: string): string {
   if (value.toLowerCase().includes("botsort")) return "BoT-SORT";
   if (value.toLowerCase().includes("bytetrack")) return "ByteTrack";
   return value.replace(/\.ya?ml$/i, "");
+}
+
+function georeferencingReadinessLabel(state: string): string {
+  const labels: Record<string, string> = {
+    ready: "Ready",
+    missing_calibration: "Missing calibration",
+    invalid_calibration: "Invalid calibration",
+    missing_surface_reference: "Missing datum",
+    missing_telemetry: "Missing telemetry",
+    alignment_problem: "Alignment problem",
+    synchronization_problem: "Synchronization problem",
+    zoom_mismatch: "Zoom mismatch",
+  };
+  return labels[state] ?? state;
 }
 
 function trackingPercent(current: number, total: number): number {
@@ -97,6 +112,13 @@ export function VideoTrackingWorkspace({
   const selectedVideo = videosQuery.data?.find(
     (video) => video.id === selectedVideoId,
   );
+  const georeferencingReadinessQuery = useQuery({
+    queryKey: ["video-georeferencing-readiness", selectedVideoId],
+    queryFn: ({ signal }) =>
+      getVideoGeoreferencingReadiness(selectedVideoId, signal),
+    enabled: Boolean(selectedVideoId),
+    refetchInterval: 3000,
+  });
   const tracksQuery = useQuery({
     queryKey: ["video-tracks", selectedVideoId],
     queryFn: ({ signal }) => getVideoTracks(selectedVideoId, signal),
@@ -558,6 +580,57 @@ export function VideoTrackingWorkspace({
                 ? ` | offset ${selectedVideo.airdata_alignment.time_offset_s.toFixed(2)} s`
                 : ""}
             </p>
+            <div
+              className="workspace-guide compact"
+              aria-label="Georeferencing readiness"
+            >
+              <div>
+                <strong>Georeferencing</strong>
+                {georeferencingReadinessQuery.isLoading && (
+                  <p className="annotation-helper">Checking readiness...</p>
+                )}
+                {georeferencingReadinessQuery.error && (
+                  <p className="error-copy">
+                    {georeferencingReadinessQuery.error.message}
+                  </p>
+                )}
+                {georeferencingReadinessQuery.data && (
+                  <>
+                    <p className="annotation-helper">
+                      Status:{" "}
+                      <strong>
+                        {georeferencingReadinessLabel(
+                          georeferencingReadinessQuery.data.state,
+                        )}
+                      </strong>
+                    </p>
+                    <p className="annotation-helper">
+                      Sync:{" "}
+                      {
+                        georeferencingReadinessQuery.data
+                          .synchronized_frame_count
+                      }
+                      /{georeferencingReadinessQuery.data.sampled_frame_count}{" "}
+                      representative frames
+                      {georeferencingReadinessQuery.data.maximum_sync_error_s !==
+                      null
+                        ? ` | max ${(
+                            georeferencingReadinessQuery.data
+                              .maximum_sync_error_s * 1000
+                          ).toFixed(1)} ms`
+                        : ""}
+                    </p>
+                    {georeferencingReadinessQuery.data.issues.length > 0 && (
+                      <ul>
+                        {georeferencingReadinessQuery.data.issues.map((issue) => (
+                          <li key={issue.code}>{issue.message}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
             <label>
               Extract every N frames
               <input
