@@ -36,6 +36,7 @@ class Project(Base):
     storage_root: Mapped[str] = mapped_column(String(500), nullable=False, unique=True)
     default_annotation_type: Mapped[str] = mapped_column(String(30), default="bbox", nullable=False)
     georeference_height_offset_m: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    georeference_height_evidence: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
