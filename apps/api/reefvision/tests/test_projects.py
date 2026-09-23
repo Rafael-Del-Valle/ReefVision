@@ -552,21 +552,44 @@ def test_project_georeference_height_offset_is_configurable(client: TestClient) 
         client,
         template="blank",
         georeference_height_offset_m=5.0,
+        georeference_height_evidence="Surveyed takeoff pad is 5 m above the water surface",
     )
     assert project["georeference_height_offset_m"] == 5.0
+    assert project["georeference_height_evidence"] == (
+        "Surveyed takeoff pad is 5 m above the water surface"
+    )
 
     updated = client.patch(
         f"/api/v1/projects/{project['id']}",
-        json={"georeference_height_offset_m": -1.25},
+        json={
+            "georeference_height_offset_m": -1.25,
+            "georeference_height_evidence": (
+                "Updated surveyed surface datum places takeoff 1.25 m below reference"
+            ),
+        },
     )
     assert updated.status_code == 200, updated.text
     assert updated.json()["georeference_height_offset_m"] == -1.25
+    assert updated.json()["georeference_height_evidence"].startswith("Updated surveyed")
 
     fetched = client.get(f"/api/v1/projects/{project['id']}")
     assert fetched.status_code == 200
     assert fetched.json()["georeference_height_offset_m"] == -1.25
+    assert fetched.json()["georeference_height_evidence"].startswith("Updated surveyed")
 
 
-def test_project_georeference_height_offset_defaults_to_zero(client: TestClient) -> None:
+def test_project_height_offset_update_requires_evidence(client: TestClient) -> None:
+    project = create_project(client, template="blank")
+    response = client.patch(
+        f"/api/v1/projects/{project['id']}",
+        json={"georeference_height_offset_m": 5.0},
+    )
+    assert response.status_code == 422
+
+
+def test_project_georeference_height_offset_defaults_to_unconfigured(
+    client: TestClient,
+) -> None:
     project = create_project(client, template="blank")
     assert project["georeference_height_offset_m"] == 0.0
+    assert project["georeference_height_evidence"] is None
