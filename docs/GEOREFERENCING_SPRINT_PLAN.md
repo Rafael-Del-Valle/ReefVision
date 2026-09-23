@@ -86,12 +86,12 @@ Acceptance gate:
 
 Extend frontend video types for SRT, AirData, alignment, calibration, and readiness.
 
-### 7. Upgrade video import UI for SRT + AirData — IN PROGRESS
+### 7. Upgrade video import UI for SRT + AirData — VERIFY
 
 Allow video, SRT, AirData CSV, alignment evidence, and automated source-only
 alignment where supported.
 
-### 8. Add georeferencing readiness/status API and panel — TODO
+### 8. Add georeferencing readiness/status API and panel — NEXT
 
 Return/display Ready, missing telemetry, missing calibration, missing datum,
 alignment unverified, synchronization failure, and per-field provenance.
