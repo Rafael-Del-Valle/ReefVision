@@ -118,14 +118,13 @@ class PreferredTelemetrySource:
         air = air_match.sample if air_match is not None else None
         srt = srt_match.sample if srt_match is not None else None
 
-        position_source: TelemetryFieldSource | None
+        latitude: float | None = None
+        longitude: float | None = None
+        position_source: TelemetryFieldSource | None = None
         if air is not None and air.latitude is not None and air.longitude is not None:
             latitude, longitude, position_source = air.latitude, air.longitude, "airdata"
         elif srt is not None and srt.latitude is not None and srt.longitude is not None:
             latitude, longitude, position_source = srt.latitude, srt.longitude, "dji_srt"
-        else:
-            latitude = longitude = None
-            position_source = None
 
         relative_altitude, altitude_source = _pick(
             air.relative_altitude_m if air is not None else None,
