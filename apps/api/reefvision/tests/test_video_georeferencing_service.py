@@ -155,7 +155,6 @@ def test_georeference_point_requires_project_surface_evidence(
     assert "datum evidence" in response.message.casefold()
 
 
-
 def test_georeference_point_reports_missing_telemetry(
     service_context,
     calibration: CameraCalibration,
