@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from math import isfinite
+from math import isclose, isfinite
 
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
 from reefvision.db.models import Project
 from reefvision.domain.errors import NotFoundError, ValidationError
-from reefvision.geospatial.calibration import CameraCalibration
 from reefvision.geospatial.models import TelemetryProvenance
 from reefvision.geospatial.projection import SurfaceReference, georeference_pixel
 from reefvision.schemas.video_georeferencing import (
@@ -17,6 +16,9 @@ from reefvision.schemas.video_georeferencing import (
     VideoGeoreferenceResponse,
 )
 from reefvision.services.video_assets import VideoAssetService
+from reefvision.services.video_georeferencing_calibration import (
+    VideoGeoreferencingCalibrationService,
+)
 
 DEFAULT_MAX_TELEMETRY_DELTA_S = 0.100
 
@@ -32,6 +34,7 @@ class VideoGeoreferencingService:
         self.session = session
         self.settings = settings
         self.video_assets = VideoAssetService(session, settings)
+        self.calibrations = VideoGeoreferencingCalibrationService(session)
 
     @staticmethod
     def _failure(
@@ -72,7 +75,6 @@ class VideoGeoreferencingService:
         frame_index: int,
         pixel_x: float,
         pixel_y: float,
-        calibration: CameraCalibration,
         max_delta_s: float = DEFAULT_MAX_TELEMETRY_DELTA_S,
     ) -> VideoGeoreferenceResponse:
         video = self.video_assets.get_record(video_id)
@@ -101,7 +103,20 @@ class VideoGeoreferencingService:
         if not isfinite(max_delta_s) or max_delta_s < 0:
             raise ValidationError("Maximum telemetry delta must be finite and nonnegative")
 
-        if (calibration.width_px, calibration.height_px) != (video.width_px, video.height_px):
+        try:
+            calibration = self.calibrations.camera_calibration(video.id)
+        except NotFoundError:
+            return self._failure(
+                video_id=video.id,
+                project_id=video.project_id,
+                frame_index=frame_index,
+                timestamp_seconds=timestamp_seconds,
+                pixel_x=pixel_x,
+                pixel_y=pixel_y,
+                reason="calibration_unavailable",
+                message="Video georeferencing camera calibration has not been configured",
+            )
+        except ValidationError as exc:
             return self._failure(
                 video_id=video.id,
                 project_id=video.project_id,
@@ -110,7 +125,7 @@ class VideoGeoreferencingService:
                 pixel_x=pixel_x,
                 pixel_y=pixel_y,
                 reason="calibration_mismatch",
-                message="Camera calibration dimensions do not match the source video",
+                message=str(exc),
             )
 
         project = self.session.get(Project, video.project_id)
@@ -161,6 +176,26 @@ class VideoGeoreferencingService:
                 pixel_y=pixel_y,
                 reason="telemetry_out_of_sync",
                 message="No telemetry sample falls within the synchronization limit",
+            )
+
+        telemetry_zoom = telemetry_match.sample.digital_zoom_ratio
+        if telemetry_zoom is not None and not isclose(
+            telemetry_zoom,
+            calibration.digital_zoom_ratio,
+            rel_tol=1e-6,
+        ):
+            return self._failure(
+                video_id=video.id,
+                project_id=video.project_id,
+                frame_index=frame_index,
+                timestamp_seconds=timestamp_seconds,
+                pixel_x=pixel_x,
+                pixel_y=pixel_y,
+                reason="calibration_zoom_mismatch",
+                message="Telemetry zoom does not match the selected georeferencing calibration",
+                sync_error_s=telemetry_match.error_s,
+                telemetry_delta_s=telemetry_match.delta_s,
+                telemetry_provenance=telemetry_match.provenance,
             )
 
         try:
