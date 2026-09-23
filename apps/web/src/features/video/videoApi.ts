@@ -321,12 +321,34 @@ export function getVideos(
   );
 }
 
+export interface VideoImportOptions {
+  telemetryFile?: File | null;
+  airdataFile?: File | null;
+  airdataTimeOffsetSeconds?: number;
+  airdataTimeOffsetEvidence?: string | null;
+}
+
 export function importVideo(
   projectId: string,
   file: File,
+  options: VideoImportOptions = {},
 ): Promise<VideoAssetRecord> {
   const form = new FormData();
   form.append("file", file);
+  if (options.telemetryFile) {
+    form.append("telemetry_file", options.telemetryFile);
+  }
+  if (options.airdataFile) {
+    form.append("airdata_file", options.airdataFile);
+    form.append(
+      "airdata_time_offset_s",
+      String(options.airdataTimeOffsetSeconds ?? 0),
+    );
+    const evidence = options.airdataTimeOffsetEvidence?.trim();
+    if (evidence) {
+      form.append("airdata_time_offset_evidence", evidence);
+    }
+  }
   return request<VideoAssetRecord>(
     `/projects/${encodeURIComponent(projectId)}/imports/videos`,
     { method: "POST", body: form },
