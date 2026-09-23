@@ -15,12 +15,12 @@ from reefvision.config import Settings
 from reefvision.db.models import Job, ModelRegistration
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.jobs import JobResponse
+from reefvision.schemas.video_georeferencing_readiness import (
+    VideoGeoreferencingReadinessResponse,
+)
 from reefvision.schemas.video_track_exchange import (
     VideoTrackExchangeFormat,
     VideoTrackImportResponse,
-)
-from reefvision.schemas.video_georeferencing_readiness import (
-    VideoGeoreferencingReadinessResponse,
 )
 from reefvision.schemas.videos import (
     AnnotatedVideoExportCreateRequest,
