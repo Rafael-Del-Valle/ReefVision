@@ -206,6 +206,8 @@ export interface Project {
   description: string | null;
   storage_root: string;
   default_annotation_type: string;
+  georeference_height_offset_m: number;
+  georeference_height_evidence: string | null;
   created_at: string;
   updated_at: string;
   archived_at: string | null;
@@ -219,6 +221,8 @@ export interface ProjectSummary {
   description: string | null;
   storage_root: string;
   default_annotation_type: string;
+  georeference_height_offset_m: number;
+  georeference_height_evidence: string | null;
   created_at: string;
   updated_at: string;
   archived_at: string | null;
@@ -229,6 +233,8 @@ export interface ProjectSummary {
 export interface ProjectCreate {
   name: string;
   description?: string;
+  georeference_height_offset_m?: number;
+  georeference_height_evidence?: string;
   template: "blank" | "octocoral";
 }
 
