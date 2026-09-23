@@ -105,9 +105,10 @@ class PreferredTelemetrySource:
         if max_delta_s is not None and (not isfinite(max_delta_s) or max_delta_s < 0):
             raise ValidationError("Maximum telemetry delta must be finite and nonnegative")
 
+        airdata_time_s = time_s + self.airdata_time_offset_s
         air_match = (
-            self.airdata.sample_for_time(time_s + self.airdata_time_offset_s)
-            if self.airdata is not None
+            self.airdata.sample_for_time(airdata_time_s)
+            if self.airdata is not None and airdata_time_s >= 0
             else None
         )
         srt_match = self.srt.sample_for_time(time_s) if self.srt is not None else None
