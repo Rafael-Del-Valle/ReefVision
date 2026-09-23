@@ -1,7 +1,7 @@
 import { AnnotatedVideoExportPanel } from "./AnnotatedVideoExportPanel";
 import { GeoreferencedMapPanel } from "./GeoreferencedMapPanel";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { cancelJob, retryJob, type Project } from "../../api/client";
 import {
@@ -24,6 +24,11 @@ import {
   type VideoTrackKeyframe,
 } from "./videoApi";
 import { trackingBenchmarkCsv, trackingBenchmarkJson } from "./trackingReport";
+import {
+  frameIndexForVideoTime,
+  videoTimeMatchesPendingSeek,
+  type PendingVideoMapSeek,
+} from "./videoMapSynchronization";
 
 interface VideoTrackingWorkspaceProps {
   project: Project;
@@ -71,6 +76,9 @@ export function VideoTrackingWorkspace({
   project,
 }: VideoTrackingWorkspaceProps) {
   const queryClient = useQueryClient();
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const pendingMapSeekRef = useRef<PendingVideoMapSeek | null>(null);
+  const mapSeekSequenceRef = useRef(0);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [telemetryFile, setTelemetryFile] = useState<File | null>(null);
   const [airdataFile, setAirdataFile] = useState<File | null>(null);
@@ -172,6 +180,7 @@ export function VideoTrackingWorkspace({
     }
   }, [selectedVideoId, videosQuery.data]);
   useEffect(() => {
+    pendingMapSeekRef.current = null;
     setFrameIndex(0);
     setSelectedTrackId("");
     setKeyframes([]);
@@ -430,6 +439,69 @@ export function VideoTrackingWorkspace({
     setCopiedReport(kind);
   }
 
+  function synchronizeFrameFromVideoTime(currentTimeSeconds: number) {
+    if (!selectedVideo) return;
+
+    const pending = pendingMapSeekRef.current;
+
+    if (
+      !videoTimeMatchesPendingSeek(
+        pending,
+        currentTimeSeconds,
+        selectedVideo.fps,
+      )
+    ) {
+      return;
+    }
+
+    if (pending) {
+      pendingMapSeekRef.current = null;
+    }
+
+    setFrameIndex(
+      frameIndexForVideoTime(
+        currentTimeSeconds,
+        selectedVideo.fps,
+        selectedVideo.frame_count,
+      ),
+    );
+  }
+
+  function seekVideoFromMap(
+    selectedFrameIndex: number,
+    frameTimeSeconds: number,
+  ) {
+    if (!selectedVideo) return;
+
+    mapSeekSequenceRef.current += 1;
+
+    pendingMapSeekRef.current = {
+      sequence: mapSeekSequenceRef.current,
+      frameIndex: selectedFrameIndex,
+      frameTimeSeconds,
+    };
+
+    setFrameIndex(
+      Math.min(
+        Math.max(0, selectedFrameIndex),
+        Math.max(0, selectedVideo.frame_count - 1),
+      ),
+    );
+
+    const video = videoRef.current;
+
+    if (!video || !Number.isFinite(frameTimeSeconds)) {
+      return;
+    }
+
+    const maximumTime =
+      selectedVideo.duration_seconds > 0
+        ? selectedVideo.duration_seconds
+        : frameTimeSeconds;
+
+    video.currentTime = Math.min(Math.max(0, frameTimeSeconds), maximumTime);
+  }
+
   return (
     <div className="management-grid" data-testid="video-tracking-workspace">
       <section className="management-card workspace-guide-card">
@@ -559,8 +631,15 @@ export function VideoTrackingWorkspace({
         {selectedVideo && (
           <>
             <video
+              ref={videoRef}
               controls
               src={videoContentUrl(selectedVideo.id)}
+              onTimeUpdate={(event) =>
+                synchronizeFrameFromVideoTime(event.currentTarget.currentTime)
+              }
+              onSeeked={(event) =>
+                synchronizeFrameFromVideoTime(event.currentTarget.currentTime)
+              }
               style={{ width: "100%", maxHeight: 360 }}
             />
             <p className="annotation-helper">
@@ -730,8 +809,9 @@ export function VideoTrackingWorkspace({
         <GeoreferencedMapPanel
           key={selectedVideo.id}
           videoId={selectedVideo.id}
-          onFrameSelect={(selectedFrameIndex) => {
-            setFrameIndex(selectedFrameIndex);
+          activeFrameIndex={frameIndex}
+          onFrameSelect={(selectedFrameIndex, frameTimeSeconds) => {
+            seekVideoFromMap(selectedFrameIndex, frameTimeSeconds);
           }}
         />
       )}

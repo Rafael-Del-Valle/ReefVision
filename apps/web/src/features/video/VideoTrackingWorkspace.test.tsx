@@ -7,10 +7,24 @@ import { VideoTrackingWorkspace } from "./VideoTrackingWorkspace";
 import * as api from "./videoApi";
 
 vi.mock("./GeoreferencedMapPanel", () => ({
-  GeoreferencedMapPanel: ({ videoId }: { videoId: string }) => (
+  GeoreferencedMapPanel: ({
+    videoId,
+    activeFrameIndex,
+    onFrameSelect,
+  }: {
+    videoId: string;
+    activeFrameIndex?: number | null;
+    onFrameSelect?: (frameIndex: number, frameTimeSeconds: number) => void;
+  }) => (
     <section data-testid="mock-georeferenced-map-panel">
       <h3>Geographic observations</h3>
       <span>{videoId}</span>
+      <span data-testid="mock-active-map-frame">
+        {activeFrameIndex ?? "none"}
+      </span>
+      <button type="button" onClick={() => onFrameSelect?.(42, 1.4)}>
+        Select map observation
+      </button>
     </section>
   ),
 }));
@@ -311,5 +325,50 @@ describe("VideoTrackingWorkspace", () => {
     ).toBeInTheDocument();
     expect(await screen.findByText(/fish\.mp4/)).toBeInTheDocument();
     expect(await screen.findByText(/300 frames/)).toBeInTheDocument();
+  });
+  it("seeks the video from map selection and ignores stale pre-seek playback updates", async () => {
+    renderWorkspace();
+
+    await screen.findByText(/fish\.mp4/);
+
+    const mapPanel = await screen.findByTestId("mock-georeferenced-map-panel");
+
+    expect(mapPanel).toBeInTheDocument();
+
+    const video = document.querySelector("video") as HTMLVideoElement | null;
+
+    expect(video).not.toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Select map observation",
+      }),
+    );
+
+    expect(screen.getByTestId("mock-active-map-frame")).toHaveTextContent("42");
+
+    expect(video?.currentTime).toBeCloseTo(1.4);
+
+    if (!video) {
+      throw new Error("Expected managed video element");
+    }
+
+    video.currentTime = 0.2;
+
+    fireEvent.timeUpdate(video);
+
+    expect(screen.getByTestId("mock-active-map-frame")).toHaveTextContent("42");
+
+    video.currentTime = 1.4;
+
+    fireEvent.timeUpdate(video);
+
+    expect(screen.getByTestId("mock-active-map-frame")).toHaveTextContent("42");
+
+    video.currentTime = 2;
+
+    fireEvent.timeUpdate(video);
+
+    expect(screen.getByTestId("mock-active-map-frame")).toHaveTextContent("60");
   });
 });

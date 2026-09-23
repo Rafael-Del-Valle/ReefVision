@@ -315,4 +315,45 @@ describe("GeoreferencedMapPanel", () => {
       }),
     ).toBeInTheDocument();
   });
+
+  it("highlights the playback-active observation and track without loading detail", async () => {
+    const first = summary("observation-10", 10, "track-1");
+
+    const second = summary("observation-20", 20, "track-1");
+
+    vi.mocked(api.getVideoGeoreferencedObservations).mockResolvedValue({
+      items: [first, second],
+      count: 2,
+    });
+
+    const { rerender } = render(
+      <GeoreferencedMapPanel videoId="video-1" activeFrameIndex={18} />,
+    );
+
+    await screen.findByRole("button", {
+      name: "Observation at frame 20",
+    });
+
+    expect(
+      document.querySelector('[data-active-observation-id="observation-20"]'),
+    ).not.toBeNull();
+
+    expect(
+      document.querySelector(
+        'polyline[data-track-id="track-1"][data-active-track="true"]',
+      ),
+    ).not.toBeNull();
+
+    expect(api.getGeoreferencedObservation).not.toHaveBeenCalled();
+
+    rerender(<GeoreferencedMapPanel videoId="video-1" activeFrameIndex={11} />);
+
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-active-observation-id="observation-10"]'),
+      ).not.toBeNull();
+    });
+
+    expect(api.getGeoreferencedObservation).not.toHaveBeenCalled();
+  });
 });

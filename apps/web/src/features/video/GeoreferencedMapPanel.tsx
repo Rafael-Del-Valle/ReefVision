@@ -12,8 +12,11 @@ import {
   groupGeoObservationsByTrack,
 } from "./videoGeoreferencedObservationsState";
 
+import { activeObservationForFrame } from "./videoMapSynchronization";
+
 interface GeoreferencedMapPanelProps {
   videoId: string;
+  activeFrameIndex?: number | null;
   onFrameSelect?: (frameIndex: number, frameTimeSeconds: number) => void;
 }
 
@@ -82,6 +85,7 @@ function projectObservations(
 
 export function GeoreferencedMapPanel({
   videoId,
+  activeFrameIndex = null,
   onFrameSelect,
 }: GeoreferencedMapPanelProps) {
   const [state, dispatch] = useReducer(
@@ -157,6 +161,13 @@ export function GeoreferencedMapPanel({
     () => groupGeoObservationsByTrack(state.observations),
     [state.observations],
   );
+
+  const activeObservation = useMemo(
+    () => activeObservationForFrame(state.observations, activeFrameIndex),
+    [activeFrameIndex, state.observations],
+  );
+
+  const activeTrackId = activeObservation?.track_id ?? null;
 
   const selectedSummary = useMemo(
     () =>
@@ -443,10 +454,18 @@ export function GeoreferencedMapPanel({
                         key={trackId}
                         points={points}
                         fill="none"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                        opacity={0.35}
+                        stroke={
+                          activeTrackId === trackId
+                            ? "var(--accent-color, #2563eb)"
+                            : "currentColor"
+                        }
+                        strokeWidth={activeTrackId === trackId ? 4 : 2}
+                        opacity={activeTrackId === trackId ? 0.9 : 0.3}
                         vectorEffect="non-scaling-stroke"
+                        data-track-id={trackId}
+                        data-active-track={
+                          activeTrackId === trackId ? "true" : "false"
+                        }
                       />
                     );
                   },
@@ -456,39 +475,61 @@ export function GeoreferencedMapPanel({
                   const selected =
                     state.selectedObservationId === observation.id;
 
-                  return (
-                    <circle
-                      key={observation.id}
-                      cx={x}
-                      cy={y}
-                      r={selected ? 9 : 6}
-                      fill={
-                        selected
-                          ? "var(--accent-color, #2563eb)"
-                          : "currentColor"
-                      }
-                      opacity={selected ? 1 : 0.75}
-                      stroke={selected ? "currentColor" : "none"}
-                      strokeWidth={selected ? 2 : 0}
-                      vectorEffect="non-scaling-stroke"
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Observation at frame ${observation.frame_index}`}
-                      aria-pressed={selected}
-                      style={{
-                        cursor: "pointer",
-                      }}
-                      onClick={() => {
-                        void selectObservation(observation);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
+                  const active = activeObservation?.id === observation.id;
 
-                          void selectObservation(observation);
+                  return (
+                    <>
+                      {active && (
+                        <circle
+                          cx={x}
+                          cy={y}
+                          r={11}
+                          fill="none"
+                          stroke="var(--accent-color, #2563eb)"
+                          strokeWidth={4}
+                          opacity={0.9}
+                          vectorEffect="non-scaling-stroke"
+                          pointerEvents="none"
+                          data-playback-active-halo="true"
+                          data-active-observation="true"
+                          data-active-observation-id={observation.id}
+                          data-active-track-id={observation.track_id ?? ""}
+                        />
+                      )}
+
+                      <circle
+                        key={observation.id}
+                        cx={x}
+                        cy={y}
+                        r={selected ? 9 : 6}
+                        fill={
+                          selected
+                            ? "var(--accent-color, #2563eb)"
+                            : "currentColor"
                         }
-                      }}
-                    />
+                        opacity={selected ? 1 : 0.75}
+                        stroke={selected ? "currentColor" : "none"}
+                        strokeWidth={selected ? 2 : 0}
+                        vectorEffect="non-scaling-stroke"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Observation at frame ${observation.frame_index}`}
+                        aria-pressed={selected}
+                        style={{
+                          cursor: "pointer",
+                        }}
+                        onClick={() => {
+                          void selectObservation(observation);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+
+                            void selectObservation(observation);
+                          }
+                        }}
+                      />
+                    </>
                   );
                 })}
 
