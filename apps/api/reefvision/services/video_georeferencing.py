@@ -7,7 +7,8 @@ from math import isfinite
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.domain.errors import ValidationError
+from reefvision.db.models import Project
+from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.geospatial.calibration import CameraCalibration
 from reefvision.geospatial.models import TelemetryProvenance
 from reefvision.geospatial.projection import SurfaceReference, georeference_pixel
@@ -23,9 +24,8 @@ DEFAULT_MAX_TELEMETRY_DELTA_S = 0.100
 class VideoGeoreferencingService:
     """Resolve video/telemetry state and execute the shared projection contract.
 
-    Calibration and surface reference remain explicit dependencies for Task 3.
-    Task 4 wires the project surface datum automatically; Task 5 wires persisted
-    full camera calibration automatically.
+    The project surface datum is resolved automatically. Camera calibration remains
+    explicit until Task 5 wires persisted full calibration into this service.
     """
 
     def __init__(self, session: Session, settings: Settings) -> None:
@@ -73,7 +73,6 @@ class VideoGeoreferencingService:
         pixel_x: float,
         pixel_y: float,
         calibration: CameraCalibration,
-        surface: SurfaceReference,
         max_delta_s: float = DEFAULT_MAX_TELEMETRY_DELTA_S,
     ) -> VideoGeoreferenceResponse:
         video = self.video_assets.get_record(video_id)
@@ -113,6 +112,26 @@ class VideoGeoreferencingService:
                 reason="calibration_mismatch",
                 message="Camera calibration dimensions do not match the source video",
             )
+
+        project = self.session.get(Project, video.project_id)
+        if project is None:
+            raise NotFoundError("Project not found")
+        evidence = (project.georeference_height_evidence or "").strip()
+        if not evidence:
+            return self._failure(
+                video_id=video.id,
+                project_id=video.project_id,
+                frame_index=frame_index,
+                timestamp_seconds=timestamp_seconds,
+                pixel_x=pixel_x,
+                pixel_y=pixel_y,
+                reason="surface_reference_unavailable",
+                message="Project georeferencing height datum evidence has not been configured",
+            )
+        surface = SurfaceReference(
+            takeoff_height_above_surface_m=project.georeference_height_offset_m,
+            evidence=evidence,
+        )
 
         telemetry_source = self.video_assets.telemetry_source(video.id)
         if telemetry_source is None:
