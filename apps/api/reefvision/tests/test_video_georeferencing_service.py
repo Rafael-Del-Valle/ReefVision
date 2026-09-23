@@ -10,7 +10,6 @@ from reefvision.db.models import Project, VideoAsset
 from reefvision.db.session import create_database_engine, create_session_factory
 from reefvision.geospatial.calibration import CameraCalibration
 from reefvision.geospatial.models import TelemetrySample
-from reefvision.geospatial.projection import SurfaceReference
 from reefvision.geospatial.synchronization import IndexedTelemetrySource, PreferredTelemetrySource
 from reefvision.services.video_georeferencing import VideoGeoreferencingService
 
@@ -32,7 +31,8 @@ def service_context(tmp_path: Path):
             name="Geo",
             slug="geo",
             storage_root="projects/geo",
-            georeference_height_offset_m=0.0,
+            georeference_height_offset_m=5.0,
+            georeference_height_evidence="Synthetic takeoff point is 5 m above the surface",
         )
         session.add(project)
         session.flush()
@@ -73,14 +73,6 @@ def calibration() -> CameraCalibration:
     )
 
 
-@pytest.fixture
-def surface() -> SurfaceReference:
-    return SurfaceReference(
-        takeoff_height_above_surface_m=0.0,
-        evidence="Synthetic takeoff plane equals projected surface",
-    )
-
-
 def _source(*, time_s: float = 0.0, roll: float | None = 0.0) -> IndexedTelemetrySource:
     return IndexedTelemetrySource(
         [
@@ -102,7 +94,6 @@ def _source(*, time_s: float = 0.0, roll: float | None = 0.0) -> IndexedTelemetr
 def test_georeference_point_success(
     service_context,
     calibration: CameraCalibration,
-    surface: SurfaceReference,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -116,7 +107,6 @@ def test_georeference_point_success(
             pixel_x=500.0,
             pixel_y=400.0,
             calibration=calibration,
-            surface=surface,
         )
 
     assert response.status == "success"
@@ -124,16 +114,51 @@ def test_georeference_point_success(
     assert response.result is not None
     assert response.result.latitude == pytest.approx(0.0, abs=1e-12)
     assert response.result.longitude == pytest.approx(0.0, abs=1e-12)
+    assert response.result.camera_height_m == pytest.approx(105.0)
+    assert response.result.surface_reference.takeoff_height_above_surface_m == pytest.approx(5.0)
+    assert response.result.surface_reference.evidence == (
+        "Synthetic takeoff point is 5 m above the surface"
+    )
     assert response.sync_error_s == pytest.approx(0.0)
     assert response.telemetry_provenance is not None
     assert response.telemetry_provenance.position_source == "airdata"
     assert response.telemetry_provenance.gimbal_yaw_source == "airdata"
 
 
+def test_georeference_point_requires_project_surface_evidence(
+    service_context,
+    calibration: CameraCalibration,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings, factory, video_id = service_context
+    with factory() as session:
+        video = session.get(VideoAsset, video_id)
+        assert video is not None
+        project = session.get(Project, video.project_id)
+        assert project is not None
+        project.georeference_height_evidence = None
+        session.commit()
+
+        service = VideoGeoreferencingService(session, settings)
+        monkeypatch.setattr(service.video_assets, "telemetry_source", lambda _: _source())
+        response = service.georeference_point(
+            video_id,
+            frame_index=0,
+            pixel_x=500.0,
+            pixel_y=400.0,
+            calibration=calibration,
+        )
+
+    assert response.status == "failed"
+    assert response.failure_reason == "surface_reference_unavailable"
+    assert response.message is not None
+    assert "datum evidence" in response.message.casefold()
+
+
+
 def test_georeference_point_reports_missing_telemetry(
     service_context,
     calibration: CameraCalibration,
-    surface: SurfaceReference,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -146,7 +171,6 @@ def test_georeference_point_reports_missing_telemetry(
             pixel_x=500.0,
             pixel_y=400.0,
             calibration=calibration,
-            surface=surface,
         )
 
     assert response.status == "failed"
@@ -156,7 +180,6 @@ def test_georeference_point_reports_missing_telemetry(
 def test_georeference_point_reports_out_of_sync_telemetry(
     service_context,
     calibration: CameraCalibration,
-    surface: SurfaceReference,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -169,7 +192,6 @@ def test_georeference_point_reports_out_of_sync_telemetry(
             pixel_x=500.0,
             pixel_y=400.0,
             calibration=calibration,
-            surface=surface,
         )
 
     assert response.status == "failed"
@@ -179,7 +201,6 @@ def test_georeference_point_reports_out_of_sync_telemetry(
 def test_georeference_point_rejects_frame_outside_video(
     service_context,
     calibration: CameraCalibration,
-    surface: SurfaceReference,
 ) -> None:
     settings, factory, video_id = service_context
     with factory() as session:
@@ -189,7 +210,6 @@ def test_georeference_point_rejects_frame_outside_video(
             pixel_x=500.0,
             pixel_y=400.0,
             calibration=calibration,
-            surface=surface,
         )
 
     assert response.status == "failed"
@@ -199,7 +219,6 @@ def test_georeference_point_rejects_frame_outside_video(
 def test_georeference_point_rejects_calibration_dimension_mismatch(
     service_context,
     calibration: CameraCalibration,
-    surface: SurfaceReference,
 ) -> None:
     settings, factory, video_id = service_context
     wrong = calibration.model_copy(update={"width_px": 999})
@@ -210,7 +229,6 @@ def test_georeference_point_rejects_calibration_dimension_mismatch(
             pixel_x=500.0,
             pixel_y=400.0,
             calibration=wrong,
-            surface=surface,
         )
 
     assert response.status == "failed"
@@ -220,7 +238,6 @@ def test_georeference_point_rejects_calibration_dimension_mismatch(
 def test_georeference_point_returns_projection_failure(
     service_context,
     calibration: CameraCalibration,
-    surface: SurfaceReference,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -237,7 +254,6 @@ def test_georeference_point_returns_projection_failure(
             pixel_x=500.0,
             pixel_y=400.0,
             calibration=calibration,
-            surface=surface,
         )
 
     assert response.status == "failed"
