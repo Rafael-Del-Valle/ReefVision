@@ -65,6 +65,7 @@ function renderWorkspace() {
 
 describe("VideoTrackingWorkspace", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.mocked(api.getVideos).mockResolvedValue([
       {
         id: "video-1",
