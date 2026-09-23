@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearVideoGeoreferencingCalibration,
   getVideoGeoreferencingCalibration,
+  importVideo,
   setVideoGeoreferencingCalibration,
 } from "./videoApi";
 
@@ -12,6 +13,43 @@ afterEach(() => {
 });
 
 describe("video georeferencing API", () => {
+  it("sends SRT, AirData, offset, and evidence in the video multipart import", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("{}", {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const video = new File(["video"], "clip.mp4", { type: "video/mp4" });
+    const srt = new File(["1"], "clip.srt", { type: "application/x-subrip" });
+    const airdata = new File(["time(millisecond)"], "flight.csv", {
+      type: "text/csv",
+    });
+
+    await importVideo("project-1", video, {
+      telemetryFile: srt,
+      airdataFile: airdata,
+      airdataTimeOffsetSeconds: 6.19,
+      airdataTimeOffsetEvidence: "  source-only SRT/AirData alignment  ",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeInstanceOf(FormData);
+
+    const form = init.body as FormData;
+    expect((form.get("file") as File).name).toBe("clip.mp4");
+    expect((form.get("telemetry_file") as File).name).toBe("clip.srt");
+    expect((form.get("airdata_file") as File).name).toBe("flight.csv");
+    expect(form.get("airdata_time_offset_s")).toBe("6.19");
+    expect(form.get("airdata_time_offset_evidence")).toBe(
+      "source-only SRT/AirData alignment",
+    );
+  });
+
   it("returns null when no selected calibration exists", async () => {
     const fetchMock = vi
       .fn()
