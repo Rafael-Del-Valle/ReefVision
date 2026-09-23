@@ -6,10 +6,12 @@ from pathlib import Path
 from typing import BinaryIO
 
 from reefvision.domain.errors import ValidationError
+from reefvision.geospatial.airdata import parse_airdata_csv
 from reefvision.geospatial.dji_srt import parse_dji_srt
 from reefvision.geospatial.synchronization import IndexedTelemetrySource
 
 MAX_SRT_BYTES = 32 * 1024 * 1024
+MAX_AIRDATA_BYTES = 64 * 1024 * 1024
 
 
 def matching_srt_name(video_name: str, telemetry_name: str) -> bool:
@@ -54,6 +56,34 @@ def load_dji_srt(path: Path) -> IndexedTelemetrySource:
             return read_srt_stream(stream)[1]
     except OSError as exc:
         raise ValidationError("SRT telemetry source is missing or unreadable") from exc
+
+
+def read_airdata_stream(stream: BinaryIO) -> tuple[bytes, IndexedTelemetrySource]:
+    data = stream.read(MAX_AIRDATA_BYTES + 1)
+    if len(data) > MAX_AIRDATA_BYTES:
+        raise ValidationError("AirData telemetry exceeds the 64 MiB limit")
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeError as exc:
+        raise ValidationError("AirData telemetry must use UTF-8") from exc
+    return data, IndexedTelemetrySource(parse_airdata_csv(text))
+
+
+def load_airdata_csv(path: Path) -> IndexedTelemetrySource:
+    try:
+        with path.open("rb") as stream:
+            return read_airdata_stream(stream)[1]
+    except OSError as exc:
+        raise ValidationError("AirData telemetry source is missing or unreadable") from exc
+
+
+def write_airdata(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+
+
+def remove_airdata(path: Path) -> None:
+    path.unlink(missing_ok=True)
 
 
 def write_srt(path: Path, data: bytes) -> None:
