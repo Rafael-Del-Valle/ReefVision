@@ -6,6 +6,15 @@ import type { Project } from "../../api/client";
 import { VideoTrackingWorkspace } from "./VideoTrackingWorkspace";
 import * as api from "./videoApi";
 
+vi.mock("./GeoreferencedMapPanel", () => ({
+  GeoreferencedMapPanel: ({ videoId }: { videoId: string }) => (
+    <section data-testid="mock-georeferenced-map-panel">
+      <h3>Geographic observations</h3>
+      <span>{videoId}</span>
+    </section>
+  ),
+}));
+
 vi.mock("./videoApi", async () => {
   const actual =
     await vi.importActual<typeof import("./videoApi")>("./videoApi");
@@ -297,6 +306,9 @@ describe("VideoTrackingWorkspace", () => {
     expect(screen.getByText("Source-coordinate overlay")).toBeInTheDocument();
     expect(screen.getByText("Identities and keyframes")).toBeInTheDocument();
     expect(screen.getByText("Detector + tracker")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Geographic observations"),
+    ).toBeInTheDocument();
     expect(await screen.findByText(/fish\.mp4/)).toBeInTheDocument();
     expect(await screen.findByText(/300 frames/)).toBeInTheDocument();
   });

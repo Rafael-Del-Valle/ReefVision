@@ -1,4 +1,5 @@
 import { AnnotatedVideoExportPanel } from "./AnnotatedVideoExportPanel";
+import { GeoreferencedMapPanel } from "./GeoreferencedMapPanel";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
@@ -724,6 +725,16 @@ export function VideoTrackingWorkspace({
           <p className="annotation-helper">Import a video to begin.</p>
         )}
       </section>
+
+      {selectedVideo && (
+        <GeoreferencedMapPanel
+          key={selectedVideo.id}
+          videoId={selectedVideo.id}
+          onFrameSelect={(selectedFrameIndex) => {
+            setFrameIndex(selectedFrameIndex);
+          }}
+        />
+      )}
 
       <section className="management-card">
         <p className="eyebrow">Track editor</p>
