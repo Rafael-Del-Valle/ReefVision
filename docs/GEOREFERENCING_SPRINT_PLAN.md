@@ -52,7 +52,7 @@ Acceptance gate:
 - two-clip operational AirData validation still passes;
 - DVM agreement remains explicitly labeled conditional reference agreement.
 
-### 3. Add production VideoGeoreferencingService — VERIFY
+### 3. Add production VideoGeoreferencingService — DONE
 
 Create one canonical service taking video ID, frame index, and native pixel. It
 must resolve the video, telemetry source, calibration, project datum, timing gate,
@@ -62,7 +62,7 @@ Acceptance gate:
 - service returns a typed successful result or explicit typed failure;
 - callers do not manually assemble telemetry/surface/calibration state.
 
-### 4. Wire project height datum automatically — NEXT
+### 4. Wire project height datum automatically — VERIFY
 
 Use persisted project `georeference_height_offset_m` when constructing
 `SurfaceReference`. Persist datum evidence/description alongside the value.
@@ -71,7 +71,7 @@ Acceptance gate:
 - production callers cannot accidentally omit the configured project datum;
 - missing/unsupported datum state is explicit.
 
-### 5. Persist/select camera calibration — TODO
+### 5. Persist/select camera calibration — NEXT
 
 Add normal project/video calibration attachment and provenance: dimensions,
 intrinsics, distortion, checksum, camera mode, zoom, and evidence.
