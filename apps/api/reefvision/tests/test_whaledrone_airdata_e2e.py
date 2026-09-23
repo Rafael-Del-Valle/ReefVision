@@ -260,7 +260,7 @@ def _refine_airdata_offset_from_source_telemetry(
         current: tuple[float, float, float, float, int] | None = None,
     ) -> tuple[float, float, float, float, int] | None:
         best = current
-        steps = int(round((end_s - start_s) / step_s))
+        steps = round((end_s - start_s) / step_s)
         for index in range(steps + 1):
             offset_s = start_s + index * step_s
             if not offset_min <= offset_s <= offset_max:
