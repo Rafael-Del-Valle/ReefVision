@@ -154,12 +154,18 @@ describe("VideoTrackingWorkspace", () => {
     fireEvent.change(screen.getByLabelText("DJI SRT telemetry (optional)"), {
       target: { files: [srt] },
     });
-    fireEvent.change(screen.getByLabelText("AirData CSV telemetry (optional)"), {
-      target: { files: [airdata] },
-    });
-    fireEvent.change(await screen.findByLabelText("AirData time offset (seconds)"), {
-      target: { value: "6.19" },
-    });
+    fireEvent.change(
+      screen.getByLabelText("AirData CSV telemetry (optional)"),
+      {
+        target: { files: [airdata] },
+      },
+    );
+    fireEvent.change(
+      await screen.findByLabelText("AirData time offset (seconds)"),
+      {
+        target: { value: "6.19" },
+      },
+    );
     fireEvent.change(screen.getByLabelText("Alignment evidence"), {
       target: { value: "source-only SRT/AirData alignment" },
     });
@@ -197,7 +203,9 @@ describe("VideoTrackingWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import video" }));
 
     expect(
-      await screen.findByText("Nonzero AirData time offsets require alignment evidence"),
+      await screen.findByText(
+        "Nonzero AirData time offsets require alignment evidence",
+      ),
     ).toBeInTheDocument();
     expect(api.importVideo).not.toHaveBeenCalled();
   });
