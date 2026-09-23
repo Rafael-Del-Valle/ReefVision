@@ -190,9 +190,7 @@ def test_georeferencing_readiness_api_reports_missing_prerequisites(
     project = create_project(client, "Georeferencing readiness")
     video = _video(client, str(project["id"]), monkeypatch)
 
-    response = client.get(
-        f"/api/v1/videos/{video['id']}/georeferencing-readiness"
-    )
+    response = client.get(f"/api/v1/videos/{video['id']}/georeferencing-readiness")
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["ready"] is False
