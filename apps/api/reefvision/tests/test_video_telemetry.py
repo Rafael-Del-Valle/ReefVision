@@ -153,3 +153,86 @@ def test_failed_database_commit_removes_new_managed_media(client, monkeypatch):
             )
     assert list(settings.resolved_data_dir.rglob("*.srt")) == []
     assert list(settings.resolved_data_dir.rglob("*.mp4")) == []
+
+
+AIRDATA_CSV = b"""time(millisecond),latitude,longitude,height_above_takeoff(meters),gimbal_heading(degrees),gimbal_pitch(degrees),gimbal_roll(degrees),compass_heading(degrees)
+10000,22.892814,-109.840571,83.4,265.1,-23.4,0,248.9
+10100,22.892808,-109.840590,83.5,265.6,-23.4,0,249.3
+"""
+
+
+def test_uploaded_airdata_is_preferred_over_srt_and_persists_alignment(client, monkeypatch):
+    monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
+    project = create_project(client, "AirData precedence")
+    files = {
+        "file": ("fish.mp4", io.BytesIO(b"fake-video"), "video/mp4"),
+        "telemetry_file": (
+            "fish.SRT",
+            io.BytesIO((FIXTURES / "modern.SRT").read_bytes()),
+            "application/x-subrip",
+        ),
+        "airdata_file": ("flight-Airdata.csv", io.BytesIO(AIRDATA_CSV), "text/csv"),
+    }
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/imports/videos",
+        files=files,
+        data={
+            "airdata_time_offset_s": "10.0",
+            "airdata_time_offset_evidence": "Known flight-log/video start alignment",
+        },
+    )
+    assert response.status_code == 201, response.text
+    video = response.json()
+    assert video["telemetry"]["source_type"] == "dji_srt"
+    assert video["airdata_telemetry"]["source_type"] == "airdata"
+    assert video["airdata_telemetry"]["sample_count"] == 2
+    assert video["airdata_alignment"]["time_offset_s"] == 10.0
+    assert video["airdata_alignment"]["evidence"]
+
+    settings = client.app.state.settings
+    airdata_path = resolve_managed_project_path(
+        settings, video["airdata_telemetry"]["source_path"]
+    )
+    assert airdata_path.is_file()
+    with client.app.state.session_factory() as session:
+        source = VideoAssetService(session, settings).telemetry_source(video["id"])
+        assert source is not None
+        match = source.sample_for_frame(1, 10)
+        assert match is not None
+        assert match.sample.gimbal_yaw_deg == 265.6
+        assert match.provenance is not None
+        assert match.provenance.gimbal_yaw_source == "airdata"
+
+
+def test_airdata_nonzero_offset_requires_evidence_and_does_not_import(client, monkeypatch):
+    monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
+    project = create_project(client, "AirData evidence")
+    files = {
+        "file": ("fish.mp4", io.BytesIO(b"fake-video"), "video/mp4"),
+        "airdata_file": ("flight.csv", io.BytesIO(AIRDATA_CSV), "text/csv"),
+    }
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/imports/videos",
+        files=files,
+        data={"airdata_time_offset_s": "10.0"},
+    )
+    assert response.status_code == 400, response.text
+    assert client.get(f"/api/v1/projects/{project['id']}/videos").json() == []
+
+
+def test_failed_video_import_removes_managed_airdata(client, monkeypatch):
+    from reefvision.domain.errors import ValidationError
+
+    def fail(_):
+        raise ValidationError("bad video")
+
+    monkeypatch.setattr(video_assets_module, "_inspect_video", fail)
+    project = create_project(client, "AirData rollback")
+    files = {
+        "file": ("fish.mp4", io.BytesIO(b"fake-video"), "video/mp4"),
+        "airdata_file": ("flight.csv", io.BytesIO(AIRDATA_CSV), "text/csv"),
+    }
+    response = client.post(f"/api/v1/projects/{project['id']}/imports/videos", files=files)
+    assert response.status_code == 400
+    settings = client.app.state.settings
+    assert list(settings.resolved_data_dir.rglob("*.airdata.csv")) == []
