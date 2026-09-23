@@ -467,3 +467,79 @@ def test_georeferencing_readiness_reports_airdata_alignment_problem(
     assert {issue.code for issue in readiness.issues} == {"invalid_airdata_alignment"}
 
 
+
+
+def test_georeferencing_readiness_reports_synchronization_problem(
+    service_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings, factory, video_id = service_context
+    with factory() as session:
+        video = session.get(VideoAsset, video_id)
+        assert video is not None
+        metadata = dict(video.metadata_json)
+        metadata["telemetry"] = {
+            "found": True,
+            "available": True,
+            "source_type": "dji_srt",
+            "source_path": "synthetic.srt",
+            "path_kind": "managed",
+            "sample_count": 1,
+            "error": None,
+        }
+        video.metadata_json = metadata
+        session.commit()
+
+        service = VideoGeoreferencingReadinessService(session, settings)
+        monkeypatch.setattr(
+            service.video_assets,
+            "telemetry_source",
+            lambda _: _source(time_s=0.0),
+        )
+        readiness = service.evaluate(video_id)
+
+    assert readiness.ready is False
+    assert readiness.state == "synchronization_problem"
+    assert readiness.synchronized_frame_count == 1
+    assert readiness.sampled_frame_count == 5
+    assert {issue.code for issue in readiness.issues} == {"telemetry_out_of_sync"}
+
+
+def test_georeferencing_readiness_reports_zoom_mismatch(
+    service_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings, factory, video_id = service_context
+    with factory() as session:
+        video = session.get(VideoAsset, video_id)
+        assert video is not None
+        metadata = dict(video.metadata_json)
+        metadata["telemetry"] = {
+            "found": True,
+            "available": True,
+            "source_type": "dji_srt",
+            "source_path": "synthetic.srt",
+            "path_kind": "managed",
+            "sample_count": 5,
+            "error": None,
+        }
+        video.metadata_json = metadata
+        session.commit()
+
+        service = VideoGeoreferencingReadinessService(session, settings)
+        monkeypatch.setattr(
+            service.video_assets,
+            "telemetry_source",
+            lambda _: _source_for_video(digital_zoom_ratio=2.0),
+        )
+        readiness = service.evaluate(video_id)
+
+    assert readiness.ready is False
+    assert readiness.state == "zoom_mismatch"
+    assert readiness.synchronized_frame_count == 5
+    assert readiness.zoom_compatible is False
+    assert {issue.code for issue in readiness.issues} == {
+        "calibration_zoom_mismatch"
+    }
+
+
