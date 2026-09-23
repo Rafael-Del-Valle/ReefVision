@@ -40,7 +40,7 @@ Acceptance gate:
 - mypy passes;
 - working tree is clean after any formatter changes are intentionally committed.
 
-### 2. Resolve/document ReefVision↔DVM projection convention — NEXT
+### 2. Resolve/document ReefVision↔DVM projection convention — VERIFY
 
 Compare ReefVision's camera-ray/body/world transform directly with DVM's published
 implementation using the same AirData pose, height, calibration, pixel, and frame.
@@ -52,7 +52,7 @@ Acceptance gate:
 - two-clip operational AirData validation still passes;
 - DVM agreement remains explicitly labeled conditional reference agreement.
 
-### 3. Add production VideoGeoreferencingService — TODO
+### 3. Add production VideoGeoreferencingService — NEXT
 
 Create one canonical service taking video ID, frame index, and native pixel. It
 must resolve the video, telemetry source, calibration, project datum, timing gate,
