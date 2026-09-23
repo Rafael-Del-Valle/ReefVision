@@ -37,6 +37,52 @@ export interface AirDataAlignmentRecord {
   evidence: string | null;
 }
 
+export type VideoGeoreferencingReadinessState =
+  | "ready"
+  | "missing_calibration"
+  | "invalid_calibration"
+  | "missing_surface_reference"
+  | "missing_telemetry"
+  | "alignment_problem"
+  | "synchronization_problem"
+  | "zoom_mismatch";
+
+export type VideoGeoreferencingReadinessIssueCode =
+  | "missing_calibration"
+  | "invalid_calibration"
+  | "missing_surface_reference"
+  | "missing_telemetry"
+  | "invalid_airdata_alignment"
+  | "telemetry_out_of_sync"
+  | "calibration_zoom_mismatch";
+
+export interface VideoGeoreferencingReadinessIssue {
+  code: VideoGeoreferencingReadinessIssueCode;
+  message: string;
+}
+
+export interface VideoGeoreferencingReadinessRecord {
+  schema_version: "video-georeferencing-readiness-0001";
+  video_id: string;
+  project_id: string;
+  ready: boolean;
+  state: VideoGeoreferencingReadinessState;
+  issues: VideoGeoreferencingReadinessIssue[];
+  srt_available: boolean;
+  airdata_available: boolean;
+  airdata_alignment_valid: boolean;
+  surface_reference_configured: boolean;
+  calibration_available: boolean;
+  calibration_valid: boolean;
+  calibration_checksum_sha256: string | null;
+  sampled_frame_indices: number[];
+  synchronized_frame_count: number;
+  sampled_frame_count: number;
+  maximum_sync_error_s: number | null;
+  zoom_compatible: boolean | null;
+  max_allowed_sync_error_s: number;
+}
+
 export interface VideoGeoreferencingCalibrationRecord {
   schema_version: "video-georeferencing-calibration-0001";
   video_id: string;
@@ -352,6 +398,16 @@ export function importVideo(
   return request<VideoAssetRecord>(
     `/projects/${encodeURIComponent(projectId)}/imports/videos`,
     { method: "POST", body: form },
+  );
+}
+
+export function getVideoGeoreferencingReadiness(
+  videoId: string,
+  signal?: AbortSignal,
+): Promise<VideoGeoreferencingReadinessRecord> {
+  return request<VideoGeoreferencingReadinessRecord>(
+    `/videos/${encodeURIComponent(videoId)}/georeferencing-readiness`,
+    { signal, cache: "no-store" },
   );
 }
 
