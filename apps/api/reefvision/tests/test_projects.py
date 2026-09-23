@@ -547,7 +547,6 @@ def test_project_update_and_not_found(client: TestClient) -> None:
     assert client.get("/api/v1/projects/missing").status_code == 404
 
 
-
 def test_project_georeference_height_offset_is_configurable(client: TestClient) -> None:
     project = create_project(
         client,
