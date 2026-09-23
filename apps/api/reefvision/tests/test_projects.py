@@ -545,3 +545,28 @@ def test_project_update_and_not_found(client: TestClient) -> None:
     assert response.status_code == 200
     assert response.json()["name"] == "Updated Study"
     assert client.get("/api/v1/projects/missing").status_code == 404
+
+
+def test_project_georeference_height_offset_is_configurable(client: TestClient) -> None:
+    project = create_project(
+        client,
+        template="blank",
+        georeference_height_offset_m=5.0,
+    )
+    assert project["georeference_height_offset_m"] == 5.0
+
+    updated = client.patch(
+        f"/api/v1/projects/{project['id']}",
+        json={"georeference_height_offset_m": -1.25},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["georeference_height_offset_m"] == -1.25
+
+    fetched = client.get(f"/api/v1/projects/{project['id']}")
+    assert fetched.status_code == 200
+    assert fetched.json()["georeference_height_offset_m"] == -1.25
+
+
+def test_project_georeference_height_offset_defaults_to_zero(client: TestClient) -> None:
+    project = create_project(client, template="blank")
+    assert project["georeference_height_offset_m"] == 0.0
