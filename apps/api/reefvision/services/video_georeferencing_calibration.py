@@ -88,19 +88,19 @@ class VideoGeoreferencingCalibrationService:
             raise ValidationError("Stored georeferencing camera calibration is invalid") from exc
 
         try:
-            calibration = CameraCalibration(
-                width_px=int(geometry["width_px"]),
-                height_px=int(geometry["height_px"]),
-                fx_px=float(geometry["fx_px"]),
-                fy_px=float(geometry["fy_px"]),
-                cx_px=float(geometry["cx_px"]),
-                cy_px=float(geometry["cy_px"]),
-                distortion_coefficients=tuple(
-                    float(value) for value in geometry["distortion_coefficients"]  # type: ignore[arg-type]
-                ),
-                digital_zoom_ratio=float(geometry["digital_zoom_ratio"]),
+            calibration = CameraCalibration.model_validate(
+                {
+                    "width_px": geometry["width_px"],
+                    "height_px": geometry["height_px"],
+                    "fx_px": geometry["fx_px"],
+                    "fy_px": geometry["fy_px"],
+                    "cx_px": geometry["cx_px"],
+                    "cy_px": geometry["cy_px"],
+                    "distortion_coefficients": geometry["distortion_coefficients"],
+                    "digital_zoom_ratio": geometry["digital_zoom_ratio"],
+                }
             )
-        except Exception as exc:
+        except ValueError as exc:
             raise ValidationError("Stored georeferencing camera calibration is invalid") from exc
 
         if (calibration.width_px, calibration.height_px) != (video.width_px, video.height_px):
