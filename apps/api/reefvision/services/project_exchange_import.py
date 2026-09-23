@@ -285,6 +285,10 @@ def import_project_exchange(
             )
         except (TypeError, ValueError) as exc:
             raise ValidationError("Exchange project georeference height offset is invalid") from exc
+        raw_height_evidence = source_project.get("georeference_height_evidence")
+        georeference_height_evidence = (
+            str(raw_height_evidence).strip() if raw_height_evidence is not None else None
+        ) or None
 
         project = ProjectService(session, settings).create_project(
             ProjectCreate(
@@ -294,10 +298,14 @@ def import_project_exchange(
                     if source_project.get("description") is not None
                     else None
                 ),
-                georeference_height_offset_m=georeference_height_offset_m,
                 template="blank",
             )
         )
+        # Preserve legacy numeric offsets even when older packages have no datum evidence.
+        # Such projects remain intentionally unavailable for production georeferencing
+        # until evidence is supplied.
+        project.georeference_height_offset_m = georeference_height_offset_m
+        project.georeference_height_evidence = georeference_height_evidence
         project.default_annotation_type = str(
             source_project.get("default_annotation_type") or project.default_annotation_type
         )
