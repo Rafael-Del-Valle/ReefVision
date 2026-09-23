@@ -155,10 +155,13 @@ def test_failed_database_commit_removes_new_managed_media(client, monkeypatch):
     assert list(settings.resolved_data_dir.rglob("*.mp4")) == []
 
 
-AIRDATA_CSV = b"""time(millisecond),latitude,longitude,height_above_takeoff(meters),gimbal_heading(degrees),gimbal_pitch(degrees),gimbal_roll(degrees),compass_heading(degrees)
-10000,22.892814,-109.840571,83.4,265.1,-23.4,0,248.9
-10100,22.892808,-109.840590,83.5,265.6,-23.4,0,249.3
-"""
+AIRDATA_CSV = (
+    b"time(millisecond),latitude,longitude,height_above_takeoff(meters),"
+    b"gimbal_heading(degrees),gimbal_pitch(degrees),gimbal_roll(degrees),"
+    b"compass_heading(degrees)\n"
+    b"10000,22.892814,-109.840571,83.4,265.1,-23.4,0,248.9\n"
+    b"10100,22.892808,-109.840590,83.5,265.6,-23.4,0,249.3\n"
+)
 
 
 def test_uploaded_airdata_is_preferred_over_srt_and_persists_alignment(client, monkeypatch):
