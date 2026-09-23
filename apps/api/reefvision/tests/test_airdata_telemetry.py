@@ -10,7 +10,6 @@ from reefvision.geospatial.synchronization import (
     PreferredTelemetrySource,
 )
 
-
 AIRDATA = (
     "time(millisecond),latitude,longitude,height_above_takeoff(meters),"
     "gimbal_heading(degrees),gimbal_pitch(degrees),gimbal_roll(degrees),"

@@ -176,9 +176,7 @@ class VideoAssetService:
                     current_metadata["telemetry"] = telemetry.model_dump(mode="json")
                     changed = True
                 if airdata.found and not existing_airdata.available:
-                    airdata_path = self._store_airdata(
-                        project, duplicate.id, airdata, airdata_data
-                    )
+                    airdata_path = self._store_airdata(project, duplicate.id, airdata, airdata_data)
                     current_metadata["airdata_telemetry"] = airdata.model_dump(mode="json")
                     current_metadata["airdata_alignment"] = airdata_alignment
                     changed = True

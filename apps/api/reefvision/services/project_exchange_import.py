@@ -284,9 +284,7 @@ def import_project_exchange(
                 0.0 if raw_height_offset is None else float(raw_height_offset)
             )
         except (TypeError, ValueError) as exc:
-            raise ValidationError(
-                "Exchange project georeference height offset is invalid"
-            ) from exc
+            raise ValidationError("Exchange project georeference height offset is invalid") from exc
 
         project = ProjectService(session, settings).create_project(
             ProjectCreate(

@@ -193,9 +193,7 @@ def test_uploaded_airdata_is_preferred_over_srt_and_persists_alignment(client, m
     assert video["airdata_alignment"]["evidence"]
 
     settings = client.app.state.settings
-    airdata_path = resolve_managed_project_path(
-        settings, video["airdata_telemetry"]["source_path"]
-    )
+    airdata_path = resolve_managed_project_path(settings, video["airdata_telemetry"]["source_path"])
     assert airdata_path.is_file()
     with client.app.state.session_factory() as session:
         source = VideoAssetService(session, settings).telemetry_source(video["id"])
