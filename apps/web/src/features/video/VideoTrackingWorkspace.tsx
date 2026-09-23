@@ -59,7 +59,8 @@ export function VideoTrackingWorkspace({
   const [telemetryFile, setTelemetryFile] = useState<File | null>(null);
   const [airdataFile, setAirdataFile] = useState<File | null>(null);
   const [airdataTimeOffsetSeconds, setAirdataTimeOffsetSeconds] = useState(0);
-  const [airdataTimeOffsetEvidence, setAirdataTimeOffsetEvidence] = useState("");
+  const [airdataTimeOffsetEvidence, setAirdataTimeOffsetEvidence] =
+    useState("");
   const [selectedVideoId, setSelectedVideoId] = useState("");
   const [everyNFrames, setEveryNFrames] = useState(1);
   const [frameIndex, setFrameIndex] = useState(0);
@@ -189,7 +190,9 @@ export function VideoTrackingWorkspace({
         airdataTimeOffsetSeconds !== 0 &&
         !airdataTimeOffsetEvidence.trim()
       ) {
-        throw new Error("Nonzero AirData time offsets require alignment evidence");
+        throw new Error(
+          "Nonzero AirData time offsets require alignment evidence",
+        );
       }
       return importVideo(project.id, uploadFile, {
         telemetryFile,
@@ -466,7 +469,9 @@ export function VideoTrackingWorkspace({
           <input
             type="file"
             accept=".srt,text/plain,application/x-subrip"
-            onChange={(event) => setTelemetryFile(event.target.files?.[0] ?? null)}
+            onChange={(event) =>
+              setTelemetryFile(event.target.files?.[0] ?? null)
+            }
           />
         </label>
         <label>
@@ -474,7 +479,9 @@ export function VideoTrackingWorkspace({
           <input
             type="file"
             accept=".csv,text/csv"
-            onChange={(event) => setAirdataFile(event.target.files?.[0] ?? null)}
+            onChange={(event) =>
+              setAirdataFile(event.target.files?.[0] ?? null)
+            }
           />
         </label>
         {airdataFile && (
