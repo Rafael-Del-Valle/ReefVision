@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearVideoGeoreferencingCalibration,
   getVideoGeoreferencingCalibration,
+  getVideoGeoreferencingReadiness,
   importVideo,
   setVideoGeoreferencingCalibration,
 } from "./videoApi";
@@ -47,6 +48,51 @@ describe("video georeferencing API", () => {
     expect(form.get("airdata_time_offset_s")).toBe("6.19");
     expect(form.get("airdata_time_offset_evidence")).toBe(
       "source-only SRT/AirData alignment",
+    );
+  });
+
+  it("fetches authoritative georeferencing readiness without caches", async () => {
+    const response = {
+      schema_version: "video-georeferencing-readiness-0001",
+      video_id: "video-1",
+      project_id: "project-1",
+      ready: false,
+      state: "missing_calibration",
+      issues: [
+        {
+          code: "missing_calibration",
+          message: "Video georeferencing camera calibration has not been configured",
+        },
+      ],
+      srt_available: true,
+      airdata_available: false,
+      airdata_alignment_valid: true,
+      surface_reference_configured: true,
+      calibration_available: false,
+      calibration_valid: false,
+      calibration_checksum_sha256: null,
+      sampled_frame_indices: [0, 75, 150, 224, 299],
+      synchronized_frame_count: 0,
+      sampled_frame_count: 5,
+      maximum_sync_error_s: null,
+      zoom_compatible: null,
+      max_allowed_sync_error_s: 0.1,
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const signal = new AbortController().signal;
+
+    await expect(
+      getVideoGeoreferencingReadiness("video-1", signal),
+    ).resolves.toEqual(response);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/videos\/video-1\/georeferencing-readiness$/),
+      expect.objectContaining({ cache: "no-store", signal }),
     );
   });
 
