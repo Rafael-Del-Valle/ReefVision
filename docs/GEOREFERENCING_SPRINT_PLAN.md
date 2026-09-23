@@ -62,7 +62,7 @@ Acceptance gate:
 - service returns a typed successful result or explicit typed failure;
 - callers do not manually assemble telemetry/surface/calibration state.
 
-### 4. Wire project height datum automatically — VERIFY
+### 4. Wire project height datum automatically — DONE
 
 Use persisted project `georeference_height_offset_m` when constructing
 `SurfaceReference`. Persist datum evidence/description alongside the value.
@@ -71,7 +71,7 @@ Acceptance gate:
 - production callers cannot accidentally omit the configured project datum;
 - missing/unsupported datum state is explicit.
 
-### 5. Persist/select camera calibration — NEXT
+### 5. Persist/select camera calibration — IN PROGRESS
 
 Add normal project/video calibration attachment and provenance: dimensions,
 intrinsics, distortion, checksum, camera mode, zoom, and evidence.
