@@ -245,3 +245,22 @@ this increment; Task 1's earlier verification is recorded separately.
   SRT fixtures (315 and 550 bytes). No videos, real SRTs, annotations, calibration
   assets, dataset indexes, or download directories were added. No commits were made.
 - The existing non-failing Starlette/httpx deprecation warning remains.
+
+
+## AirData integration and project height datum
+
+Task 2 now accepts a merged telemetry source. When aligned AirData is available,
+its gimbal heading/pitch/roll, GPS position, and height-above-takeoff are preferred;
+missing fields fall back to the existing DJI SRT parser. SRT-only behavior is
+unchanged.
+
+AirData flight-relative time must be aligned to video time explicitly; nonzero
+alignment offsets require independent evidence and are never fitted from DVM
+geographic residuals. Validation observations retain telemetry-source provenance.
+
+Projects persist `georeference_height_offset_m`, defaulting to 0.0 m. This is a
+project/survey datum value, not a DJI constant. Callers that use relative
+telemetry altitude should pass that project value to
+`SurfaceReference.takeoff_height_above_surface_m` together with evidence for the
+surface datum. The WhaleDrone +5.0 m DVM setting is therefore represented as
+project configuration rather than hard-coded projection behavior.
