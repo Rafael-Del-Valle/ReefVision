@@ -19,6 +19,9 @@ from reefvision.schemas.video_track_exchange import (
     VideoTrackExchangeFormat,
     VideoTrackImportResponse,
 )
+from reefvision.schemas.video_georeferencing_readiness import (
+    VideoGeoreferencingReadinessResponse,
+)
 from reefvision.schemas.videos import (
     AnnotatedVideoExportCreateRequest,
     Scientific3DCalibrationValidationRequest,
@@ -39,6 +42,9 @@ from reefvision.schemas.videos import (
 )
 from reefvision.services.scientific_3d_calibration import Scientific3DCalibrationValidationService
 from reefvision.services.video_assets import VideoAssetService
+from reefvision.services.video_georeferencing_readiness import (
+    VideoGeoreferencingReadinessService,
+)
 from reefvision.services.video_metric_depth_preview import VideoMetricDepthPreviewService
 from reefvision.services.video_track_exchange import VideoTrackExchangeService
 from reefvision.services.video_tracking_benchmark import VideoTrackingBenchmarkService
@@ -97,6 +103,19 @@ def list_videos(
 @router.get("/videos/{video_id}", response_model=VideoAssetResponse)
 def get_video(video_id: str, request: Request, session: DbSession) -> VideoAssetResponse:
     return asset_service(request, session).get(video_id)
+
+
+@router.get(
+    "/videos/{video_id}/georeferencing-readiness",
+    response_model=VideoGeoreferencingReadinessResponse,
+)
+def georeferencing_readiness(
+    video_id: str,
+    request: Request,
+    session: DbSession,
+) -> VideoGeoreferencingReadinessResponse:
+    settings: Settings = request.app.state.settings
+    return VideoGeoreferencingReadinessService(session, settings).evaluate(video_id)
 
 
 @router.get("/videos/{video_id}/content", response_class=FileResponse)
