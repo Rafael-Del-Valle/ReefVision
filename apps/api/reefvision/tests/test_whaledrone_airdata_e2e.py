@@ -356,6 +356,9 @@ def test_whaledrone_airdata_end_to_end(
                     name="WhaleDrone AirData E2E",
                     template="blank",
                     georeference_height_offset_m=5.0,
+                    georeference_height_evidence=(
+                        "WhaleDrone/DVM height = AirData takeoff height + 5.0 m"
+                    ),
                 )
             )
             project_id = project.id
@@ -452,6 +455,9 @@ def test_whaledrone_airdata_end_to_end(
 
                 project = ProjectService(session, settings).get_project(project_id)
                 assert project.georeference_height_offset_m == pytest.approx(5.0)
+                assert project.georeference_height_evidence == (
+                    "WhaleDrone/DVM height = AirData takeoff height + 5.0 m"
+                )
                 source = service.telemetry_source(video_id)
                 assert source is not None
 
@@ -462,7 +468,7 @@ def test_whaledrone_airdata_end_to_end(
                     fps=fps,
                     surface=SurfaceReference(
                         takeoff_height_above_surface_m=project.georeference_height_offset_m,
-                        evidence="WhaleDrone/DVM height = AirData takeoff height + 5.0 m",
+                        evidence=project.georeference_height_evidence,
                     ),
                     max_delta_s=0.100,
                 )
