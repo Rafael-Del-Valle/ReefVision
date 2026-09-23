@@ -8,10 +8,13 @@ from reefvision.geospatial.models import TelemetrySample
 from reefvision.geospatial.synchronization import IndexedTelemetrySource, PreferredTelemetrySource
 
 
-AIRDATA = """time(millisecond),latitude,longitude,height_above_takeoff(meters),gimbal_heading(degrees),gimbal_pitch(degrees),gimbal_roll(degrees),compass_heading(degrees)
-10000,22.892814,-109.840571,83.4,265.1,-23.4,0,248.9
-10100,22.892808,-109.840590,83.5,265.6,-23.4,0,249.3
-"""
+AIRDATA = (
+    "time(millisecond),latitude,longitude,height_above_takeoff(meters),"
+    "gimbal_heading(degrees),gimbal_pitch(degrees),gimbal_roll(degrees),"
+    "compass_heading(degrees)\n"
+    "10000,22.892814,-109.840571,83.4,265.1,-23.4,0,248.9\n"
+    "10100,22.892808,-109.840590,83.5,265.6,-23.4,0,249.3\n"
+)
 
 
 def test_airdata_parser_maps_gimbal_and_aircraft_heading_separately() -> None:
