@@ -16,6 +16,10 @@ from reefvision.schemas.video_georeferencing_calibration import (
     VideoGeoreferencingCalibrationResponse,
     VideoGeoreferencingCalibrationSetRequest,
 )
+from reefvision.services.georeferencing_invalidation import (
+    STALE_REASON_CALIBRATION_CHANGED,
+    GeoreferencingInvalidationService,
+)
 
 GEOREFERENCING_CALIBRATION_METADATA_KEY = "georeferencing_camera_calibration"
 GEOREFERENCING_CALIBRATION_SCHEMA_VERSION = "video-georeferencing-calibration-0001"
@@ -170,6 +174,11 @@ class VideoGeoreferencingCalibrationService:
         }
         video.metadata_json = metadata
         video.revision += 1
+        GeoreferencingInvalidationService(self.session).mark_video_stale(
+            video.id,
+            reason=STALE_REASON_CALIBRATION_CHANGED,
+        )
+
         self.session.commit()
         self.session.refresh(video)
         return self._response_from_video(video)
@@ -185,6 +194,11 @@ class VideoGeoreferencingCalibrationService:
         metadata.pop(GEOREFERENCING_CALIBRATION_METADATA_KEY, None)
         video.metadata_json = metadata
         video.revision += 1
+        GeoreferencingInvalidationService(self.session).mark_video_stale(
+            video.id,
+            reason=STALE_REASON_CALIBRATION_CHANGED,
+        )
+
         self.session.commit()
 
     def camera_calibration(self, video_id: str) -> CameraCalibration:

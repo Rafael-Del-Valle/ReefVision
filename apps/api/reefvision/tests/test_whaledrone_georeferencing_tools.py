@@ -97,6 +97,13 @@ def test_ambiguous_index_mapping_is_never_guessed(tmp_path):
         select_validation_clip(tmp_path)
 
 
+def test_explicit_video_resolves_ambiguous_index_mapping(tmp_path):
+    _dataset(tmp_path, ambiguous=True)
+    clip = select_validation_clip(tmp_path, video_name="synthetic.mp4")
+    assert clip.video_path.name == "synthetic.mp4"
+    assert clip.srt_path.name == "synthetic.SRT"
+
+
 def test_malformed_annotation_is_not_silently_dropped(tmp_path):
     annotation = _dataset(tmp_path)
     text = annotation.read_text().replace("500", "not-a-number")

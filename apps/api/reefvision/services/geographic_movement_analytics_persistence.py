@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from typing import TypeVar
+from typing import TypeVar, cast
 
 from reefvision.schemas.geographic_movement_analytics import (
     GeographicMovementObservation,
@@ -26,7 +26,7 @@ def _read_value(
     if isinstance(source, Mapping):
         for name in names:
             if name in source:
-                return source[name]
+                return cast(object | None, source[name])
 
     for name in names:
         value = getattr(
@@ -52,7 +52,8 @@ def _read_optional_value(
     if isinstance(source, Mapping):
         for name in names:
             if name in source:
-                return source[name]
+                value: object | None = source[name]
+                return value
 
     for name in names:
         value = getattr(
@@ -106,6 +107,11 @@ def _required_int(
         raise PersistedObservationMappingError(f"{field_name} must be an integer.")
 
     try:
+        if not isinstance(
+            value,
+            (str, bytes, bytearray, int, float),
+        ):
+            raise TypeError("Persisted numeric value has unsupported type")
         result = int(value)
     except (TypeError, ValueError) as exc:
         raise PersistedObservationMappingError(f"{field_name} must be an integer.") from exc
@@ -122,6 +128,11 @@ def _required_float(
         raise PersistedObservationMappingError(f"{field_name} must be numeric.")
 
     try:
+        if not isinstance(
+            value,
+            (str, bytes, bytearray, int, float),
+        ):
+            raise TypeError("Persisted numeric value has unsupported type")
         result = float(value)
     except (TypeError, ValueError) as exc:
         raise PersistedObservationMappingError(f"{field_name} must be numeric.") from exc

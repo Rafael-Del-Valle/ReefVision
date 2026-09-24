@@ -279,7 +279,12 @@ class FakeGeoPersistence:
     def __init__(self) -> None:
         self.observations: list[object] = []
 
-    def persist(self, observation: object) -> object:
+    def persist(
+        self,
+        observation: object,
+        *,
+        configuration_hash: str | None = None,
+    ) -> None:
         self.observations.append(observation)
         return observation
 
@@ -303,6 +308,15 @@ def test_task11_yolo_bbox_is_fed_to_georeferencing() -> None:
     class FakeGeoreferencingService:
         def __init__(self) -> None:
             self.calls: list[dict[str, object]] = []
+
+        def configuration_hash(
+            self,
+            _video_id: str,
+            *,
+            max_delta_s: float = 0.1,
+        ) -> str:
+            assert max_delta_s == 0.1
+            return "d" * 64
 
         def georeference_detection(
             self,
@@ -364,6 +378,15 @@ def test_task11_invalid_yolo_bbox_is_counted_as_failure() -> None:
     )
 
     class FakeGeoreferencingService:
+        def configuration_hash(
+            self,
+            _video_id: str,
+            *,
+            max_delta_s: float = 0.1,
+        ) -> str:
+            assert max_delta_s == 0.1
+            return "d" * 64
+
         def georeference_detection(
             self,
             video_id: str,
@@ -416,6 +439,15 @@ def test_task12b_tracking_job_persists_geographic_observations(
         def __init__(self, session, settings) -> None:
             self.session = session
             self.settings = settings
+
+        def configuration_hash(
+            self,
+            _video_id: str,
+            *,
+            max_delta_s: float = 0.1,
+        ) -> str:
+            assert max_delta_s == 0.1
+            return "d" * 64
 
         def georeference_detection(
             self,
@@ -658,6 +690,12 @@ def test_task12b_tracking_job_persists_geographic_observations(
 
         assert all(item.representative_pixel_method == "bbox_center" for item in by_track)
 
+        assert all(item.configuration_hash == "d" * 64 for item in by_track)
+
+        assert all(item.is_stale is False for item in by_track)
+
+        assert all(item.stale_reason is None for item in by_track)
+
         assert (
             len(
                 persistence.list_for_frame(
@@ -684,3 +722,147 @@ def test_task12b_tracking_job_persists_geographic_observations(
         assert result["georeferenced_observation_count"] == 3
 
         assert result["georeferencing_failure_count"] == 0
+
+
+def test_task20c_tracking_without_georeferencing_readiness_creates_no_coordinates(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Phase 6 tracker")
+    video = _import_video(client, str(project["id"]), monkeypatch)
+    classes = cast(list[dict[str, object]], project["label_classes"])
+    label_class_id = str(classes[0]["id"])
+    app = cast(FastAPI, client.app)
+    model_id = "b4c0e265-28f4-43c8-bda8-1d73d48ff34b"
+    managed_relative = f"{project['storage_root']}/models/{model_id}.pt"
+    managed_path = resolve_managed_project_path(app.state.settings, managed_relative)
+    managed_path.parent.mkdir(parents=True, exist_ok=True)
+    managed_path.write_bytes(b"fake-detector")
+    with app.state.session_factory() as session:
+        session.add(
+            ModelRegistration(
+                id=model_id,
+                project_id=str(project["id"]),
+                purpose="detector",
+                display_name="Fish detector",
+                source_filename="fish.pt",
+                managed_path=managed_relative,
+                sha256="a" * 64,
+                file_size_bytes=len(b"fake-detector"),
+                framework="ultralytics",
+                task="detect",
+                provider_name="ultralytics",
+                provider_version="test",
+                class_map_json={"labels": ["fish"], "mapping": {"fish": label_class_id}},
+                input_size_json={"width": 640, "height": 640},
+                metadata_json={},
+            )
+        )
+        session.commit()
+
+    monkeypatch.setattr(
+        tracking_module,
+        "video_tracking_provider_for_name",
+        lambda _name: FakeVideoTrackingProvider(),
+    )
+    queued = client.post(
+        f"/api/v1/videos/{video['id']}/tracking-jobs",
+        json={
+            "model_id": model_id,
+            "tracker": "bytetrack.yaml",
+            "confidence": 0.2,
+            "iou": 0.4,
+            "device": "cpu",
+            "minimum_track_frames": 2,
+        },
+    )
+    assert queued.status_code == 200, queued.text
+    assert tracking_module.process_video_tracking_job(
+        app.state.settings,
+        app.state.session_factory,
+        queued.json()["id"],
+    )
+    tracks = client.get(f"/api/v1/videos/{video['id']}/tracks")
+    assert tracks.status_code == 200, tracks.text
+    job_id = queued.json()["id"]
+
+    runs = client.get(f"/api/v1/videos/{video['id']}/tracking-runs")
+    assert runs.status_code == 200, runs.text
+    run = next(item for item in runs.json() if item["job_id"] == job_id)
+
+    assert run["progress_current"] == 30
+    assert run["progress_total"] == 30
+    assert run["stage"] == "completed"
+    assert run["live_detection_count"] == 3
+    assert run["live_observation_count"] == 3
+    assert run["live_tracks_seen"] == 1
+    assert run["heartbeat_at"] is not None
+    assert run["stale"] is False
+
+    machine_tracks = [item for item in tracks.json() if item["source_job_id"] == job_id]
+    assert len(machine_tracks) == 1
+    machine = machine_tracks[0]
+    assert machine["source_model_id"] == model_id
+    assert machine["status"] == "machine_generated"
+    assert len(machine["keyframes_json"]) == 3
+    assert machine["metadata_json"]["provider_track_id"] == 7
+
+    updated = client.put(
+        f"/api/v1/video-tracks/{machine['id']}",
+        json={
+            "base_revision": machine["revision"],
+            "label_class_id": label_class_id,
+            "keyframes": machine["keyframes_json"],
+            "interpolation": "linear",
+            "status": "verified",
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["revision"] == machine["revision"] + 1
+    assert updated.json()["status"] == "verified"
+
+    # Task 20C production-path acceptance:
+    # this ordinary tracking job has no complete geographic
+    # readiness setup. Tracking itself must still succeed,
+    # while no geographic observations are fabricated.
+
+    from reefvision.services.georeferenced_observations import (
+        GeoReferencedObservationService,
+    )
+
+    app = client.app
+
+    assert isinstance(app, FastAPI)
+
+    with app.state.session_factory() as session:
+        persistence = GeoReferencedObservationService(session)
+
+        geographic = persistence.list_for_video(str(video["id"]))
+
+        assert geographic == []
+
+        job = session.get(
+            tracking_module.Job,
+            job_id,
+        )
+
+        assert job is not None
+
+        result = dict(job.result_json or {})
+
+        assert result["georeferencing_ready"] is False
+
+        assert result["georeferencing_attempted_count"] == 0
+
+        assert result["georeferenced_observation_count"] == 0
+
+        assert result["georeferencing_failure_count"] == 0
+
+        issue_codes = result["georeferencing_issue_codes"]
+
+        assert isinstance(
+            issue_codes,
+            list,
+        )
+
+        assert issue_codes

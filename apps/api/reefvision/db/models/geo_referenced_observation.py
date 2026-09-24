@@ -53,6 +53,11 @@ class GeoReferencedObservation(Base):
             "track_id",
             "frame_index",
         ),
+        Index(
+            "ix_geo_referenced_observations_video_stale",
+            "video_id",
+            "is_stale",
+        ),
     )
 
     id: Mapped[str] = mapped_column(
@@ -210,6 +215,27 @@ class GeoReferencedObservation(Base):
         Boolean,
         nullable=False,
         default=False,
+    )
+
+    configuration_hash: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+
+    is_stale: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+    )
+
+    stale_reason: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    stale_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )
 
     payload_json: Mapped[dict[str, Any]] = mapped_column(

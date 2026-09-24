@@ -1,5 +1,8 @@
-import { AnnotatedVideoExportPanel } from "./AnnotatedVideoExportPanel";
+﻿import { AnnotatedVideoExportPanel } from "./AnnotatedVideoExportPanel";
 import { GeoreferencedMapPanel } from "./GeoreferencedMapPanel";
+import { GeographicExportPanel } from "./GeographicExportPanel";
+import { GeographicMovementAnalyticsPanel } from "./GeographicMovementAnalyticsPanel";
+import { useGeographicMovementAnalytics } from "./useGeographicMovementAnalytics";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -89,6 +92,13 @@ export function VideoTrackingWorkspace({
   const [everyNFrames, setEveryNFrames] = useState(1);
   const [frameIndex, setFrameIndex] = useState(0);
   const [selectedTrackId, setSelectedTrackId] = useState("");
+
+  // Task 16E: load only for the explicitly selected track.
+  // Playback-active map tracks do not drive this request.
+  const {
+    state: geographicMovementAnalyticsState,
+    reload: reloadGeographicMovementAnalytics,
+  } = useGeographicMovementAnalytics(selectedTrackId || null);
   const [labelClassId, setLabelClassId] = useState(
     project.label_classes[0]?.id ?? "",
   );
@@ -502,8 +512,23 @@ export function VideoTrackingWorkspace({
     video.currentTime = Math.min(Math.max(0, frameTimeSeconds), maximumTime);
   }
 
+  const handleGeographicFrameSelect: (
+    frameIndex: number,
+    frameTimeSeconds: number,
+  ) => void = (selectedFrameIndex, frameTimeSeconds) => {
+    seekVideoFromMap(selectedFrameIndex, frameTimeSeconds);
+  };
+
   return (
-    <div className="management-grid" data-testid="video-tracking-workspace">
+    <div
+      className="management-grid"
+      data-testid="video-tracking-workspace"
+
+      data-geographic-analytics-status={geographicMovementAnalyticsState.status}
+      data-geographic-analytics-track-id={
+        geographicMovementAnalyticsState.trackId ?? ""
+      }
+    >
       <section className="management-card workspace-guide-card">
         <div>
           <p className="eyebrow">Video &amp; tracking</p>
@@ -810,9 +835,7 @@ export function VideoTrackingWorkspace({
           key={selectedVideo.id}
           videoId={selectedVideo.id}
           activeFrameIndex={frameIndex}
-          onFrameSelect={(selectedFrameIndex, frameTimeSeconds) => {
-            seekVideoFromMap(selectedFrameIndex, frameTimeSeconds);
-          }}
+          onFrameSelect={handleGeographicFrameSelect}
         />
       )}
 
@@ -1191,6 +1214,18 @@ export function VideoTrackingWorkspace({
           </div>
         )}
       </section>
+
+      <GeographicMovementAnalyticsPanel
+        state={geographicMovementAnalyticsState}
+        onReload={reloadGeographicMovementAnalytics}
+        activeFrameIndex={frameIndex}
+        onFrameSelect={handleGeographicFrameSelect}
+      />
+
+      <GeographicExportPanel
+        videoId={selectedVideoId || null}
+        selectedTrackId={selectedTrackId || null}
+      />
 
       <AnnotatedVideoExportPanel
         videoId={selectedVideoId || null}

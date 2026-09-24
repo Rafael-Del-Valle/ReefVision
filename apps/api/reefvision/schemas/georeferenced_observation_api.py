@@ -34,6 +34,17 @@ class GeoReferencedObservationSummaryResponse(BaseModel):
 
     uncertainty_available: bool
     method_version: str
+
+    configuration_hash: str | None = Field(
+        default=None,
+        min_length=64,
+        max_length=64,
+        pattern=r"^[0-9a-f]{64}$",
+    )
+    is_stale: bool
+    stale_reason: str | None = None
+    stale_at: datetime | None = None
+
     created_at: datetime
 
 
@@ -42,3 +53,31 @@ class GeoReferencedObservationListResponse(BaseModel):
 
     items: list[GeoReferencedObservationSummaryResponse]
     count: int = Field(ge=0)
+
+
+class GeoReferencedObservationRecomputeReplacement(BaseModel):
+    """One immutable stale observation replaced by a fresh derivation."""
+
+    old_observation_id: UUID
+    new_observation_id: UUID
+    frame_index: int = Field(ge=0)
+    track_id: UUID | None = None
+
+
+class GeoReferencedObservationRecomputeResponse(BaseModel):
+    """Result of one atomic video-level georeferencing recomputation."""
+
+    video_id: UUID
+    configuration_hash: str | None = Field(
+        default=None,
+        min_length=64,
+        max_length=64,
+        pattern=r"^[0-9a-f]{64}$",
+    )
+
+    invalidated_count: int = Field(ge=0)
+    stale_count: int = Field(ge=0)
+    recomputed_count: int = Field(ge=0)
+    unchanged_count: int = Field(ge=0)
+
+    replacements: list[GeoReferencedObservationRecomputeReplacement]

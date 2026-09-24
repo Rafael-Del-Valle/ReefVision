@@ -2,6 +2,45 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("./OpenStreetMapView", () => ({
+  OpenStreetMapView: ({
+    observations,
+    activeObservationId,
+    selectedObservationId,
+    onObservationSelect,
+    onTileFailure,
+  }: {
+    observations: GeoReferencedObservationSummary[];
+    activeObservationId?: string | null;
+    selectedObservationId?: string | null;
+    onObservationSelect?: (
+      observation: GeoReferencedObservationSummary,
+    ) => void;
+    onTileFailure?: () => void;
+  }) => (
+    <div
+      data-testid="mock-openstreetmap-view"
+      data-active-observation-id={activeObservationId ?? ""}
+      data-selected-observation-id={selectedObservationId ?? ""}
+    >
+      <button type="button" onClick={() => onTileFailure?.()}>
+        Simulate tile failure
+      </button>
+
+      {observations.map((observation) => (
+        <button
+          key={observation.id}
+          type="button"
+          aria-label={`OSM observation at frame ${observation.frame_index}`}
+          onClick={() => onObservationSelect?.(observation)}
+        >
+          Frame {observation.frame_index}
+        </button>
+      ))}
+    </div>
+  ),
+}));
+
 import { GeoreferencedMapPanel } from "./GeoreferencedMapPanel";
 
 import type {
@@ -144,6 +183,13 @@ function detail(
     created_at: "2026-09-23T12:00:00Z",
   };
 }
+
+beforeEach(() => {
+  Object.defineProperty(window.navigator, "onLine", {
+    configurable: true,
+    value: false,
+  });
+});
 
 describe("GeoreferencedMapPanel", () => {
   beforeEach(() => {
@@ -355,5 +401,423 @@ describe("GeoreferencedMapPanel", () => {
     });
 
     expect(api.getGeoreferencedObservation).not.toHaveBeenCalled();
+  });
+
+  it("shows selected observation uncertainty without refetching on playback", async () => {
+    const observation = summary("observation-17", 12);
+
+    vi.mocked(api.getVideoGeoreferencedObservations).mockResolvedValue({
+      items: [observation],
+      count: 1,
+    });
+
+    vi.mocked(api.getGeoreferencedObservation).mockResolvedValue(
+      detail(observation),
+    );
+
+    const { rerender } = render(
+      <GeoreferencedMapPanel videoId="video-1" activeFrameIndex={10} />,
+    );
+
+    expect(
+      screen.queryByTestId("georeferencing-uncertainty-panel"),
+    ).not.toBeInTheDocument();
+
+    const point = await screen.findByRole("button", {
+      name: "Observation at frame 12",
+    });
+
+    fireEvent.click(point);
+
+    const panel = await screen.findByTestId("georeferencing-uncertainty-panel");
+
+    expect(panel).toHaveAttribute("data-uncertainty-available", "false");
+
+    expect(panel).toHaveTextContent(
+      "Formal positional uncertainty: Not estimated",
+    );
+
+    expect(panel).toHaveTextContent("Test observation.");
+
+    expect(panel).toHaveTextContent("Uncertainty method");
+
+    expect(panel).toHaveTextContent("Calibration version");
+
+    expect(api.getGeoreferencedObservation).toHaveBeenCalledTimes(1);
+
+    // Playback should affect the active map observation, not
+    // the selected-detail request or its uncertainty panel.
+    rerender(<GeoreferencedMapPanel videoId="video-1" activeFrameIndex={20} />);
+
+    expect(
+      screen.getByTestId("georeferencing-uncertainty-panel"),
+    ).toHaveTextContent("Formal positional uncertainty: Not estimated");
+
+    expect(api.getGeoreferencedObservation).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Task 17E selected uncertainty overlay", () => {
+  it("renders persisted 95% geometry and preserves it during playback", async () => {
+    // TASK17E_RESET_MOCKS: isolate calls and one-time implementations.
+    vi.mocked(api.getVideoGeoreferencedObservations).mockReset();
+    vi.mocked(api.getGeoreferencedObservation).mockReset();
+
+    const first = summary("overlay-first", 10);
+    const second = summary("overlay-second", 20);
+    const firstDetail = detail(first);
+    const secondDetail = detail(second);
+
+    vi.mocked(api.getVideoGeoreferencedObservations).mockResolvedValue({
+      items: [first, second],
+      count: 2,
+    });
+
+    vi.mocked(api.getGeoreferencedObservation)
+      .mockResolvedValueOnce({
+        ...firstDetail,
+        uncertainty: {
+          ...firstDetail.uncertainty,
+          available: true,
+          method: "empirical_validation",
+          reason_unavailable: null,
+          horizontal_95_m: 10,
+        },
+      })
+      .mockResolvedValueOnce({
+        ...secondDetail,
+        uncertainty: {
+          ...secondDetail.uncertainty,
+          available: false,
+          horizontal_95_m: 10,
+        },
+      });
+
+    const { rerender } = render(
+      <GeoreferencedMapPanel videoId="video-1" activeFrameIndex={10} />,
+    );
+
+    expect(
+      screen.queryByTestId("georeferenced-uncertainty-radius"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Observation at frame 10",
+      }),
+    );
+
+    const overlay = await screen.findByTestId(
+      "georeferenced-uncertainty-radius",
+    );
+
+    expect(overlay).toHaveAttribute("data-observation-id", "overlay-first");
+    expect(overlay).toHaveAttribute("data-radius-meters", "10");
+
+    const horizontal = Number(overlay.getAttribute("rx"));
+    const vertical = Number(overlay.getAttribute("ry"));
+
+    expect(horizontal).toBeGreaterThan(0);
+    expect(vertical).toBeGreaterThan(0);
+    expect(horizontal).not.toBeCloseTo(vertical);
+
+    expect(api.getGeoreferencedObservation).toHaveBeenCalledTimes(1);
+
+    rerender(<GeoreferencedMapPanel videoId="video-1" activeFrameIndex={20} />);
+
+    expect(
+      screen.getByTestId("georeferenced-uncertainty-radius"),
+    ).toHaveAttribute("data-observation-id", "overlay-first");
+
+    expect(api.getGeoreferencedObservation).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Observation at frame 20",
+      }),
+    );
+
+    await screen.findByText("Test observation.");
+
+    expect(
+      screen.queryByTestId("georeferenced-uncertainty-radius"),
+    ).not.toBeInTheDocument();
+
+    expect(api.getGeoreferencedObservation).toHaveBeenCalledTimes(2);
+    expect(api.getVideoGeoreferencedObservations).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not draw a radius when an available detail lacks its value", async () => {
+    // TASK17E_RESET_MOCKS: isolate calls and one-time implementations.
+    vi.mocked(api.getVideoGeoreferencedObservations).mockReset();
+    vi.mocked(api.getGeoreferencedObservation).mockReset();
+
+    const first = summary("overlay-missing", 10);
+    const second = summary("overlay-reference", 20);
+    const firstDetail = detail(first);
+
+    vi.mocked(api.getVideoGeoreferencedObservations).mockResolvedValue({
+      items: [first, second],
+      count: 2,
+    });
+
+    vi.mocked(api.getGeoreferencedObservation).mockResolvedValue({
+      ...firstDetail,
+      uncertainty: {
+        ...firstDetail.uncertainty,
+        available: true,
+        method: "propagated_1sigma",
+        reason_unavailable: null,
+        horizontal_95_m: null,
+      },
+    });
+
+    render(<GeoreferencedMapPanel videoId="video-1" />);
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Observation at frame 10",
+      }),
+    );
+
+    await screen.findByTestId("georeferencing-numeric-uncertainty");
+
+    expect(
+      screen.queryByTestId("georeferenced-uncertainty-radius"),
+    ).not.toBeInTheDocument();
+
+    expect(api.getGeoreferencedObservation).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses persisted detail rather than the summary availability flag", async () => {
+    // TASK17E_RESET_MOCKS: isolate calls and one-time implementations.
+    vi.mocked(api.getVideoGeoreferencedObservations).mockReset();
+    vi.mocked(api.getGeoreferencedObservation).mockReset();
+
+    const first = {
+      ...summary("overlay-summary", 10),
+      uncertainty_available: true,
+    };
+    const second = summary("overlay-reference", 20);
+    const firstDetail = detail(first);
+
+    vi.mocked(api.getVideoGeoreferencedObservations).mockResolvedValue({
+      items: [first, second],
+      count: 2,
+    });
+
+    vi.mocked(api.getGeoreferencedObservation).mockResolvedValue({
+      ...firstDetail,
+      uncertainty: {
+        ...firstDetail.uncertainty,
+        available: false,
+        horizontal_95_m: 10,
+      },
+    });
+
+    render(<GeoreferencedMapPanel videoId="video-1" />);
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Observation at frame 10",
+      }),
+    );
+
+    const panel = await screen.findByTestId("georeferencing-uncertainty-panel");
+
+    expect(panel).toHaveAttribute("data-uncertainty-available", "false");
+
+    expect(
+      screen.queryByTestId("georeferenced-uncertainty-radius"),
+    ).not.toBeInTheDocument();
+
+    expect(api.getGeoreferencedObservation).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Task 17F uncertainty legend", () => {
+  beforeEach(() => {
+    vi.mocked(api.getVideoGeoreferencedObservations).mockReset();
+    vi.mocked(api.getGeoreferencedObservation).mockReset();
+  });
+
+  it("explains the persisted radius when the overlay appears", async () => {
+    const first = summary("legend-first", 10);
+    const second = summary("legend-second", 20);
+    const firstDetail = detail(first);
+
+    vi.mocked(api.getVideoGeoreferencedObservations).mockResolvedValue({
+      items: [first, second],
+      count: 2,
+    });
+
+    vi.mocked(api.getGeoreferencedObservation).mockResolvedValue({
+      ...firstDetail,
+      uncertainty: {
+        ...firstDetail.uncertainty,
+        available: true,
+        method: "empirical_validation",
+        reason_unavailable: null,
+        horizontal_95_m: 10,
+      },
+    });
+
+    render(<GeoreferencedMapPanel videoId="video-1" />);
+
+    const legend = await screen.findByTestId(
+      "georeferenced-uncertainty-legend",
+    );
+
+    expect(legend).toHaveAttribute("data-uncertainty-overlay", "hidden");
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Observation at frame 10",
+      }),
+    );
+
+    await screen.findByTestId("georeferenced-uncertainty-radius");
+
+    expect(legend).toHaveAttribute("data-uncertainty-overlay", "shown");
+    expect(legend).toHaveTextContent(
+      "persisted 95% horizontal uncertainty radius",
+    );
+    expect(legend).toHaveTextContent(
+      "not independently validated geographic accuracy",
+    );
+  });
+
+  it("explains why no overlay is shown without available uncertainty", async () => {
+    const first = summary("legend-unavailable", 10);
+    const second = summary("legend-reference", 20);
+    const firstDetail = detail(first);
+
+    vi.mocked(api.getVideoGeoreferencedObservations).mockResolvedValue({
+      items: [first, second],
+      count: 2,
+    });
+
+    vi.mocked(api.getGeoreferencedObservation).mockResolvedValue({
+      ...firstDetail,
+      uncertainty: {
+        ...firstDetail.uncertainty,
+        available: false,
+        horizontal_95_m: 10,
+      },
+    });
+
+    render(<GeoreferencedMapPanel videoId="video-1" />);
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Observation at frame 10",
+      }),
+    );
+
+    await screen.findByTestId("georeferencing-uncertainty-panel");
+
+    const legend = screen.getByTestId("georeferenced-uncertainty-legend");
+
+    expect(legend).toHaveAttribute("data-uncertainty-overlay", "hidden");
+    expect(legend).toHaveTextContent(
+      "temporal synchronization is not geographic accuracy",
+    );
+
+    expect(
+      screen.queryByTestId("georeferenced-uncertainty-radius"),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("Map enhancement M2", () => {
+  beforeEach(() => {
+    vi.mocked(api.getVideoGeoreferencedObservations).mockReset();
+
+    vi.mocked(api.getGeoreferencedObservation).mockReset();
+
+    Object.defineProperty(window.navigator, "onLine", {
+      configurable: true,
+      value: true,
+    });
+  });
+
+  it("uses OpenStreetMap by default and falls back when tiles fail", async () => {
+    const first = summary("osm-first", 10);
+    const second = summary("osm-second", 20);
+
+    vi.mocked(api.getVideoGeoreferencedObservations).mockResolvedValue({
+      items: [first, second],
+      count: 2,
+    });
+
+    render(<GeoreferencedMapPanel videoId="video-osm" />);
+
+    expect(
+      await screen.findByTestId("mock-openstreetmap-view"),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByRole("button", {
+        name: "OpenStreetMap",
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Simulate tile failure",
+      }),
+    );
+
+    expect(
+      await screen.findByTestId("georeferenced-scientific-plot"),
+    ).toBeInTheDocument();
+
+    expect(screen.getByTestId("osm-offline-fallback")).toHaveTextContent(
+      "OpenStreetMap tiles could not be loaded",
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: "Scientific plot",
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("allows manual switching between map views", async () => {
+    const first = summary("manual-first", 10);
+    const second = summary("manual-second", 20);
+
+    vi.mocked(api.getVideoGeoreferencedObservations).mockResolvedValue({
+      items: [first, second],
+      count: 2,
+    });
+
+    render(<GeoreferencedMapPanel videoId="video-manual" />);
+
+    await screen.findByTestId("mock-openstreetmap-view");
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Scientific plot",
+      }),
+    );
+
+    expect(
+      screen.getByTestId("georeferenced-scientific-plot"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "OpenStreetMap",
+      }),
+    );
+
+    expect(
+      await screen.findByTestId("mock-openstreetmap-view"),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.queryByTestId("osm-offline-fallback"),
+    ).not.toBeInTheDocument();
   });
 });

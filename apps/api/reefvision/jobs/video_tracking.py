@@ -113,6 +113,8 @@ def _georeference_track_observations(
         (successful_count, failed_count)
     """
 
+    configuration_hash = service.configuration_hash(video_id)
+
     successful = 0
     failed = 0
 
@@ -137,7 +139,10 @@ def _georeference_track_observations(
             # Persistence failures are intentionally not swallowed here.
             # A database/provenance mismatch should fail the transaction
             # rather than report a geographic point that was never stored.
-            persistence.persist(geo_observation)
+            persistence.persist(
+                geo_observation,
+                configuration_hash=configuration_hash,
+            )
             successful += 1
 
     return successful, failed

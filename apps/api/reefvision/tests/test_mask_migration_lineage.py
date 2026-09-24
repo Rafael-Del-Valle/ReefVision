@@ -6,7 +6,7 @@ def test_mask_migrations_form_one_linear_head() -> None:
     config = Config("apps/api/alembic.ini")
     scripts = ScriptDirectory.from_config(config)
 
-    assert scripts.get_heads() == ["0024"]
+    assert scripts.get_heads() == ["0028"]
     editable_masks = scripts.get_revision("0015")
     mask_datasets = scripts.get_revision("0016")
     segmentation_proposals = scripts.get_revision("0017")

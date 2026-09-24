@@ -21,6 +21,10 @@ from reefvision.geospatial.models import TelemetryMetadata
 from reefvision.geospatial.synchronization import PreferredTelemetrySource, TelemetrySource
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.videos import VideoAssetResponse, VideoExtractRequest
+from reefvision.services.georeferencing_invalidation import (
+    STALE_REASON_TELEMETRY_CONFIGURATION_CHANGED,
+    GeoreferencingInvalidationService,
+)
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.storage.telemetry import (
     find_paired_srt,
@@ -183,6 +187,11 @@ class VideoAssetService:
                 if changed:
                     duplicate.metadata_json = current_metadata
                     duplicate.revision += 1
+                    GeoreferencingInvalidationService(self.session).mark_video_stale(
+                        duplicate.id,
+                        reason=(STALE_REASON_TELEMETRY_CONFIGURATION_CHANGED),
+                    )
+
                     self.session.commit()
                     self.session.refresh(duplicate)
                 staging.unlink(missing_ok=True)

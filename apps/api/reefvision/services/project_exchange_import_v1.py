@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import zipfile
+from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from typing import Any, BinaryIO
 
@@ -18,6 +19,7 @@ from reefvision.db.models import (
     ClassVisibilityPreference,
     DatasetVersion,
     ExportRecord,
+    GeoReferencedObservation,
     MaskAnnotationEvent,
     Project,
     ProjectClassVisibilityDefault,
@@ -25,6 +27,7 @@ from reefvision.db.models import (
     ReviewQueue,
     ReviewQueueItem,
     TrainingDraft,
+    VideoAsset,
 )
 from reefvision.schemas.project_exchange import ProjectExchangeImportResponse
 from reefvision.services import project_exchange_import as base_import
@@ -49,6 +52,7 @@ def _register_v1_sections() -> None:
             "class_visibility_preferences": ClassVisibilityPreference,
             "class_operations": ClassOperation,
             "exports": ExportRecord,
+            "georeferenced_observations": GeoReferencedObservation,
         }
     )
     _insert_after("project_class_visibility_defaults", "label_classes")
@@ -58,11 +62,154 @@ def _register_v1_sections() -> None:
     _insert_after("exports", "dataset_version_items")
     _insert_after("annotation_events", "annotations")
     _insert_after("mask_annotation_events", "mask_annotations")
+    _insert_after("georeferenced_observations", "video_tracks")
 
 
 def _safe_relative_path(value: str) -> bool:
     path = PurePosixPath(value.replace("\\", "/"))
     return bool(value) and not path.is_absolute() and ".." not in path.parts
+
+
+def _restore_telemetry_sidecars(
+    source: BinaryIO,
+    *,
+    project: Project,
+    session: Session,
+    settings: Settings,
+    manifest: dict[str, object],
+) -> int:
+    """Restore portable SRT/AirData sources and rewrite imported metadata paths."""
+
+    raw_descriptors = manifest.get(
+        "telemetry_sidecars",
+        [],
+    )
+
+    if not isinstance(raw_descriptors, list):
+        raise ValueError("Telemetry sidecar inventory must be a list")
+
+    descriptors: dict[
+        tuple[str, str],
+        dict[str, Any],
+    ] = {}
+
+    for index, value in enumerate(raw_descriptors):
+        if not isinstance(value, dict):
+            raise ValueError(f"Telemetry sidecar descriptor {index} is invalid")
+
+        metadata_key = value.get("metadata_key")
+        source_path = value.get("source_path")
+
+        if metadata_key not in {
+            "telemetry",
+            "airdata_telemetry",
+        }:
+            raise ValueError(f"Telemetry sidecar metadata key is invalid: {index}")
+
+        if not isinstance(source_path, str) or not source_path:
+            raise ValueError(f"Telemetry sidecar source path is invalid: {index}")
+
+        descriptors[
+            (
+                str(metadata_key),
+                source_path,
+            )
+        ] = value
+
+    if not descriptors:
+        return 0
+
+    copied = 0
+
+    videos = list(session.scalars(select(VideoAsset).where(VideoAsset.project_id == project.id)))
+
+    source.seek(0)
+
+    with zipfile.ZipFile(source, "r") as archive:
+        for video in videos:
+            metadata = dict(video.metadata_json or {})
+            changed = False
+
+            for metadata_key in (
+                "telemetry",
+                "airdata_telemetry",
+            ):
+                raw_metadata = metadata.get(metadata_key)
+
+                if not isinstance(
+                    raw_metadata,
+                    dict,
+                ):
+                    continue
+
+                old_source = raw_metadata.get("source_path")
+
+                if not isinstance(
+                    old_source,
+                    str,
+                ):
+                    continue
+
+                descriptor = descriptors.get(
+                    (
+                        metadata_key,
+                        old_source,
+                    )
+                )
+
+                if descriptor is None:
+                    continue
+
+                archive_member = str(descriptor.get("path", ""))
+                restore_relative = str(
+                    descriptor.get(
+                        "source_relative_path",
+                        "",
+                    )
+                )
+
+                if not _safe_relative_path(restore_relative):
+                    raise ValueError("Telemetry sidecar restore path is unsafe")
+
+                destination_relative = f"{project.storage_root}/{restore_relative}"
+
+                destination = resolve_managed_project_path(
+                    settings,
+                    destination_relative,
+                )
+
+                destination.parent.mkdir(
+                    parents=True,
+                    exist_ok=True,
+                )
+
+                with (
+                    archive.open(
+                        archive_member,
+                        "r",
+                    ) as input_stream,
+                    destination.open("wb") as output_stream,
+                ):
+                    shutil.copyfileobj(
+                        input_stream,
+                        output_stream,
+                    )
+
+                updated = dict(raw_metadata)
+                updated["source_path"] = destination_relative
+                updated["path_kind"] = "managed"
+
+                metadata[metadata_key] = updated
+
+                changed = True
+                copied += 1
+
+            if changed:
+                video.metadata_json = metadata
+
+    session.flush()
+
+    return copied
 
 
 def _restore_generated_artifacts(
@@ -287,6 +434,53 @@ def _refresh_active_learning_checksums(session: Session, project_id: str) -> Non
     session.flush()
 
 
+def _mark_imported_georeferencing_stale(
+    session: Session,
+    project_id: str,
+) -> None:
+    """Retain imported coordinates while invalidating source configuration freshness."""
+
+    observations = list(
+        session.scalars(
+            select(GeoReferencedObservation).where(
+                GeoReferencedObservation.project_id == project_id
+            )
+        )
+    )
+
+    if not observations:
+        return
+
+    stale_at = datetime.now(UTC)
+
+    for observation in observations:
+        # The source configuration hash is retained as provenance, but cannot
+        # represent the imported project's current configuration because
+        # project/video/track identities are remapped during exchange import.
+        observation.is_stale = True
+        observation.stale_reason = "exchange_import_id_remap"
+        observation.stale_at = stale_at
+
+        payload = dict(observation.payload_json or {})
+
+        # The scalar DB linkage is authoritative after ID remapping. Keep the
+        # canonical payload internally consistent so later detail reads and
+        # explicit recomputation operate on imported identities only.
+        payload.update(
+            {
+                "id": observation.id,
+                "project_id": observation.project_id,
+                "video_asset_id": observation.video_id,
+                "track_id": observation.track_id,
+                "detection_id": observation.detection_id,
+            }
+        )
+
+        observation.payload_json = payload
+
+    session.flush()
+
+
 def import_project_exchange_v1(
     source: BinaryIO,
     session: Session,
@@ -308,9 +502,18 @@ def import_project_exchange_v1(
         raise RuntimeError("Imported project disappeared before artifact restoration")
 
     try:
+        _mark_imported_georeferencing_stale(session, project.id)
         _refresh_class_operation_checksums(session, project.id)
         _refresh_review_queue_checksums(session, project.id)
         _refresh_active_learning_checksums(session, project.id)
+        copied_telemetry_sidecars = _restore_telemetry_sidecars(
+            source,
+            project=project,
+            session=session,
+            settings=settings,
+            manifest=dict(result.package.manifest_json),
+        )
+
         copied_generated = _restore_generated_artifacts(
             source,
             project=project,
@@ -323,6 +526,7 @@ def import_project_exchange_v1(
         package.options_json = {
             **dict(package.options_json or {}),
             "copied_generated_artifact_count": copied_generated,
+            "copied_telemetry_sidecar_count": copied_telemetry_sidecars,
         }
         session.commit()
         session.refresh(package)

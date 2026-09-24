@@ -162,6 +162,38 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                     "relinking files"
                 )
 
+            telemetry_sidecars = _validate_file_inventory(
+                archive=archive,
+                name_set=name_set,
+                descriptors=manifest.get(
+                    "telemetry_sidecars",
+                    [],
+                ),
+                label="telemetry sidecar",
+                require_source_relative_path=True,
+                errors=errors,
+            )
+
+            for index, descriptor in enumerate(telemetry_sidecars):
+                metadata_key = descriptor.get("metadata_key")
+
+                if metadata_key not in {
+                    "telemetry",
+                    "airdata_telemetry",
+                }:
+                    errors.append(f"Telemetry sidecar metadata key is invalid: {index}")
+
+                source_path = descriptor.get("source_path")
+
+                if (
+                    not isinstance(
+                        source_path,
+                        str,
+                    )
+                    or not source_path.strip()
+                ):
+                    errors.append(f"Telemetry sidecar source path is invalid: {index}")
+
             generated = _validate_file_inventory(
                 archive=archive,
                 name_set=name_set,

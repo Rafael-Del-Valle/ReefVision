@@ -1,4 +1,12 @@
-﻿import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+﻿import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 
 import {
   getGeoreferencedObservation,
@@ -13,6 +21,12 @@ import {
 } from "./videoGeoreferencedObservationsState";
 
 import { activeObservationForFrame } from "./videoMapSynchronization";
+
+import { GeoreferencingUncertaintyPanel } from "./GeoreferencingUncertaintyPanel";
+
+import { projectHorizontal95Radius } from "./videoGeoreferencingUncertaintyOverlay";
+
+import { OpenStreetMapView } from "./OpenStreetMapView";
 
 interface GeoreferencedMapPanelProps {
   videoId: string;
@@ -94,6 +108,48 @@ export function GeoreferencedMapPanel({
     createGeoMapState,
   );
 
+  const initialMapView =
+    typeof navigator !== "undefined" && navigator.onLine === false
+      ? "scientific"
+      : "osm";
+
+  const [mapView, setMapView] = useState<"osm" | "scientific">(initialMapView);
+
+  const [osmFallbackReason, setOsmFallbackReason] = useState<string | null>(
+    initialMapView === "scientific"
+      ? "Internet access is unavailable. ReefVision is showing the offline scientific plot."
+      : null,
+  );
+
+  useEffect(() => {
+    const online =
+      typeof navigator === "undefined" || navigator.onLine !== false;
+
+    setMapView(online ? "osm" : "scientific");
+
+    setOsmFallbackReason(
+      online
+        ? null
+        : "Internet access is unavailable. ReefVision is showing the offline scientific plot.",
+    );
+  }, [videoId]);
+
+  useEffect(() => {
+    const handleOffline = () => {
+      setOsmFallbackReason(
+        "Internet access was lost. ReefVision switched to the offline scientific plot.",
+      );
+
+      setMapView("scientific");
+    };
+
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
   const collectionAbortRef = useRef<AbortController | null>(null);
 
   const detailAbortRef = useRef<AbortController | null>(null);
@@ -157,6 +213,40 @@ export function GeoreferencedMapPanel({
     [projected],
   );
 
+  const selectedUncertaintyRadius = useMemo(() => {
+    const detail =
+      state.detailStatus === "success" ? state.selectedObservation : null;
+
+    const point = detail ? projectedById.get(detail.id) : null;
+
+    if (
+      !detail ||
+      !point ||
+      detail.id !== state.selectedObservationId ||
+      !detail.uncertainty.available
+    ) {
+      return null;
+    }
+
+    return projectHorizontal95Radius(
+      state.observations.map((item) => item.location),
+      point.observation.location.latitude_deg,
+      detail.uncertainty.horizontal_95_m,
+      { x: point.x, y: point.y },
+      {
+        width: MAP_WIDTH,
+        height: MAP_HEIGHT,
+        padding: MAP_PADDING,
+      },
+    );
+  }, [
+    projectedById,
+    state.detailStatus,
+    state.observations,
+    state.selectedObservation,
+    state.selectedObservationId,
+  ]);
+
   const trackGroups = useMemo(
     () => groupGeoObservationsByTrack(state.observations),
     [state.observations],
@@ -176,6 +266,25 @@ export function GeoreferencedMapPanel({
       ) ?? null,
     [state.observations, state.selectedObservationId],
   );
+
+  const selectedHorizontal95M =
+    state.detailStatus === "success" &&
+    state.selectedObservation &&
+    state.selectedObservation.id === state.selectedObservationId &&
+    state.selectedObservation.uncertainty.available &&
+    typeof state.selectedObservation.uncertainty.horizontal_95_m === "number" &&
+    Number.isFinite(state.selectedObservation.uncertainty.horizontal_95_m) &&
+    state.selectedObservation.uncertainty.horizontal_95_m > 0
+      ? state.selectedObservation.uncertainty.horizontal_95_m
+      : null;
+
+  const handleOsmTileFailure = useCallback(() => {
+    setOsmFallbackReason(
+      "OpenStreetMap tiles could not be loaded. ReefVision switched to the offline scientific plot.",
+    );
+
+    setMapView("scientific");
+  }, []);
 
   const selectObservation = useCallback(
     async (observation: GeoReferencedObservationSummary) => {
@@ -378,6 +487,50 @@ export function GeoreferencedMapPanel({
           </p>
 
           <div
+            data-testid="georeferenced-map-view-controls"
+            role="group"
+            aria-label="Map view"
+            className="annotation-editor-inline-actions"
+            style={{
+              marginBottom: 10,
+            }}
+          >
+            <button
+              type="button"
+              className="secondary"
+              aria-pressed={mapView === "osm"}
+              onClick={() => {
+                setOsmFallbackReason(null);
+                setMapView("osm");
+              }}
+            >
+              OpenStreetMap
+            </button>
+
+            <button
+              type="button"
+              className="secondary"
+              aria-pressed={mapView === "scientific"}
+              onClick={() => {
+                setOsmFallbackReason(null);
+                setMapView("scientific");
+              }}
+            >
+              Scientific plot
+            </button>
+          </div>
+
+          {osmFallbackReason && (
+            <p
+              data-testid="osm-offline-fallback"
+              role="status"
+              className="annotation-helper"
+            >
+              {osmFallbackReason}
+            </p>
+          )}
+
+          <div
             style={{
               display: "grid",
               gridTemplateColumns: "minmax(0, 1.6fr) minmax(240px, 1fr)",
@@ -385,193 +538,253 @@ export function GeoreferencedMapPanel({
               alignItems: "start",
             }}
           >
-            <div
-              style={{
-                minWidth: 0,
-                overflowX: "auto",
-              }}
-            >
-              <svg
-                viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
-                aria-label="Georeferenced observations map"
-                role="img"
+            {mapView === "osm" ? (
+              <div
                 style={{
-                  display: "block",
-                  width: "100%",
-                  minWidth: 320,
-                  border: "1px solid var(--border-color, #cbd5e1)",
-                  borderRadius: 8,
-                  background: "var(--panel-background, #f8fafc)",
+                  minWidth: 0,
                 }}
               >
-                <rect
-                  x={0}
-                  y={0}
-                  width={MAP_WIDTH}
-                  height={MAP_HEIGHT}
-                  fill="transparent"
+                <OpenStreetMapView
+                  observations={state.observations}
+                  activeObservationId={activeObservation?.id ?? null}
+                  selectedObservationId={state.selectedObservationId}
+                  selectedUncertaintyRadiusM={selectedHorizontal95M}
+                  onObservationSelect={(observation) => {
+                    void selectObservation(observation);
+                  }}
+                  onTileFailure={handleOsmTileFailure}
                 />
 
-                {[1, 2, 3].map((division) => (
-                  <g key={division}>
-                    <line
-                      x1={(MAP_WIDTH / 4) * division}
-                      y1={0}
-                      x2={(MAP_WIDTH / 4) * division}
-                      y2={MAP_HEIGHT}
-                      stroke="currentColor"
-                      opacity={0.08}
+                <p className="annotation-helper">
+                  OpenStreetMap provides the online basemap. Geographic
+                  coordinates, tracking data, synchronization, uncertainty, and
+                  GIS exports remain ReefVision data and are independent of the
+                  basemap service.
+                </p>
+              </div>
+            ) : (
+              <div
+                data-testid="georeferenced-scientific-plot"
+                style={{
+                  minWidth: 0,
+                  overflowX: "auto",
+                }}
+              >
+                <svg
+                  viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
+                  aria-label="Georeferenced observations map"
+                  role="img"
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    minWidth: 320,
+                    border: "1px solid var(--border-color, #cbd5e1)",
+                    borderRadius: 8,
+                    background: "var(--panel-background, #f8fafc)",
+                  }}
+                >
+                  <rect
+                    x={0}
+                    y={0}
+                    width={MAP_WIDTH}
+                    height={MAP_HEIGHT}
+                    fill="transparent"
+                  />
+
+                  {[1, 2, 3].map((division) => (
+                    <g key={division}>
+                      <line
+                        x1={(MAP_WIDTH / 4) * division}
+                        y1={0}
+                        x2={(MAP_WIDTH / 4) * division}
+                        y2={MAP_HEIGHT}
+                        stroke="currentColor"
+                        opacity={0.08}
+                      />
+
+                      <line
+                        x1={0}
+                        y1={(MAP_HEIGHT / 4) * division}
+                        x2={MAP_WIDTH}
+                        y2={(MAP_HEIGHT / 4) * division}
+                        stroke="currentColor"
+                        opacity={0.08}
+                      />
+                    </g>
+                  ))}
+
+                  {Array.from(trackGroups.tracked.entries()).map(
+                    ([trackId, observations]) => {
+                      const points = observations
+                        .map((observation) => projectedById.get(observation.id))
+                        .filter(
+                          (item): item is ProjectedObservation =>
+                            item !== undefined,
+                        )
+                        .map((item) => `${item.x},${item.y}`)
+                        .join(" ");
+
+                      if (observations.length < 2 || !points) {
+                        return null;
+                      }
+
+                      return (
+                        <polyline
+                          key={trackId}
+                          points={points}
+                          fill="none"
+                          stroke={
+                            activeTrackId === trackId
+                              ? "var(--accent-color, #2563eb)"
+                              : "currentColor"
+                          }
+                          strokeWidth={activeTrackId === trackId ? 4 : 2}
+                          opacity={activeTrackId === trackId ? 0.9 : 0.3}
+                          vectorEffect="non-scaling-stroke"
+                          data-track-id={trackId}
+                          data-active-track={
+                            activeTrackId === trackId ? "true" : "false"
+                          }
+                        />
+                      );
+                    },
+                  )}
+
+                  {selectedUncertaintyRadius && (
+                    <ellipse
+                      data-testid="georeferenced-uncertainty-radius"
+                      data-observation-id={state.selectedObservationId ?? ""}
+                      data-radius-meters={
+                        selectedUncertaintyRadius.radiusMeters
+                      }
+                      cx={selectedUncertaintyRadius.cx}
+                      cy={selectedUncertaintyRadius.cy}
+                      rx={selectedUncertaintyRadius.rx}
+                      ry={selectedUncertaintyRadius.ry}
+                      fill="var(--accent-color, #2563eb)"
+                      fillOpacity={0.08}
+                      stroke="var(--accent-color, #2563eb)"
+                      strokeWidth={1.5}
+                      strokeDasharray="5 3"
+                      vectorEffect="non-scaling-stroke"
+                      pointerEvents="none"
+                      aria-label={`Persisted 95% horizontal uncertainty radius: ${selectedUncertaintyRadius.radiusMeters.toFixed(2)} m`}
                     />
+                  )}
 
-                    <line
-                      x1={0}
-                      y1={(MAP_HEIGHT / 4) * division}
-                      x2={MAP_WIDTH}
-                      y2={(MAP_HEIGHT / 4) * division}
-                      stroke="currentColor"
-                      opacity={0.08}
-                    />
-                  </g>
-                ))}
+                  {projected.map(({ observation, x, y }) => {
+                    const selected =
+                      state.selectedObservationId === observation.id;
 
-                {Array.from(trackGroups.tracked.entries()).map(
-                  ([trackId, observations]) => {
-                    const points = observations
-                      .map((observation) => projectedById.get(observation.id))
-                      .filter(
-                        (item): item is ProjectedObservation =>
-                          item !== undefined,
-                      )
-                      .map((item) => `${item.x},${item.y}`)
-                      .join(" ");
-
-                    if (observations.length < 2 || !points) {
-                      return null;
-                    }
+                    const active = activeObservation?.id === observation.id;
 
                     return (
-                      <polyline
-                        key={trackId}
-                        points={points}
-                        fill="none"
-                        stroke={
-                          activeTrackId === trackId
-                            ? "var(--accent-color, #2563eb)"
-                            : "currentColor"
-                        }
-                        strokeWidth={activeTrackId === trackId ? 4 : 2}
-                        opacity={activeTrackId === trackId ? 0.9 : 0.3}
-                        vectorEffect="non-scaling-stroke"
-                        data-track-id={trackId}
-                        data-active-track={
-                          activeTrackId === trackId ? "true" : "false"
-                        }
-                      />
-                    );
-                  },
-                )}
+                      <Fragment key={observation.id}>
+                        {active && (
+                          <circle
+                            cx={x}
+                            cy={y}
+                            r={11}
+                            fill="none"
+                            stroke="var(--accent-color, #2563eb)"
+                            strokeWidth={4}
+                            opacity={0.9}
+                            vectorEffect="non-scaling-stroke"
+                            pointerEvents="none"
+                            data-playback-active-halo="true"
+                            data-active-observation="true"
+                            data-active-observation-id={observation.id}
+                            data-active-track-id={observation.track_id ?? ""}
+                          />
+                        )}
 
-                {projected.map(({ observation, x, y }) => {
-                  const selected =
-                    state.selectedObservationId === observation.id;
-
-                  const active = activeObservation?.id === observation.id;
-
-                  return (
-                    <>
-                      {active && (
                         <circle
+                          key={observation.id}
                           cx={x}
                           cy={y}
-                          r={11}
-                          fill="none"
-                          stroke="var(--accent-color, #2563eb)"
-                          strokeWidth={4}
-                          opacity={0.9}
-                          vectorEffect="non-scaling-stroke"
-                          pointerEvents="none"
-                          data-playback-active-halo="true"
-                          data-active-observation="true"
-                          data-active-observation-id={observation.id}
-                          data-active-track-id={observation.track_id ?? ""}
-                        />
-                      )}
-
-                      <circle
-                        key={observation.id}
-                        cx={x}
-                        cy={y}
-                        r={selected ? 9 : 6}
-                        fill={
-                          selected
-                            ? "var(--accent-color, #2563eb)"
-                            : "currentColor"
-                        }
-                        opacity={selected ? 1 : 0.75}
-                        stroke={selected ? "currentColor" : "none"}
-                        strokeWidth={selected ? 2 : 0}
-                        vectorEffect="non-scaling-stroke"
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`Observation at frame ${observation.frame_index}`}
-                        aria-pressed={selected}
-                        style={{
-                          cursor: "pointer",
-                        }}
-                        onClick={() => {
-                          void selectObservation(observation);
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-
-                            void selectObservation(observation);
+                          r={selected ? 9 : 6}
+                          fill={
+                            selected
+                              ? "var(--accent-color, #2563eb)"
+                              : "currentColor"
                           }
-                        }}
-                      />
-                    </>
-                  );
-                })}
+                          opacity={selected ? 1 : 0.75}
+                          stroke={selected ? "currentColor" : "none"}
+                          strokeWidth={selected ? 2 : 0}
+                          vectorEffect="non-scaling-stroke"
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Observation at frame ${observation.frame_index}`}
+                          aria-pressed={selected}
+                          style={{
+                            cursor: "pointer",
+                          }}
+                          onClick={() => {
+                            void selectObservation(observation);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
 
-                <text
-                  x={12}
-                  y={22}
-                  fontSize={12}
-                  fill="currentColor"
-                  opacity={0.72}
+                              void selectObservation(observation);
+                            }
+                          }}
+                        />
+                      </Fragment>
+                    );
+                  })}
+
+                  <text
+                    x={12}
+                    y={22}
+                    fontSize={12}
+                    fill="currentColor"
+                    opacity={0.72}
+                  >
+                    Geographic observation extent
+                  </text>
+
+                  <text
+                    x={12}
+                    y={MAP_HEIGHT - 10}
+                    fontSize={11}
+                    fill="currentColor"
+                    opacity={0.6}
+                  >
+                    Longitude →
+                  </text>
+
+                  <text
+                    x={MAP_WIDTH - 12}
+                    y={22}
+                    textAnchor="end"
+                    fontSize={11}
+                    fill="currentColor"
+                    opacity={0.6}
+                  >
+                    Latitude ↑
+                  </text>
+                </svg>
+                <p
+                  className="annotation-helper"
+                  data-testid="georeferenced-uncertainty-legend"
+                  data-uncertainty-overlay={
+                    selectedUncertaintyRadius ? "shown" : "hidden"
+                  }
                 >
-                  Geographic observation extent
-                </text>
+                  {selectedUncertaintyRadius
+                    ? "Dashed outline: persisted 95% horizontal uncertainty radius for the selected observation. This is a positional estimate, not independently validated geographic accuracy. The outline is locally approximated using latitude and longitude scales."
+                    : "No 95% positional uncertainty overlay is shown. An authoritative radius and a supported map extent are required; temporal synchronization is not geographic accuracy."}
+                </p>
 
-                <text
-                  x={12}
-                  y={MAP_HEIGHT - 10}
-                  fontSize={11}
-                  fill="currentColor"
-                  opacity={0.6}
-                >
-                  Longitude →
-                </text>
-
-                <text
-                  x={MAP_WIDTH - 12}
-                  y={22}
-                  textAnchor="end"
-                  fontSize={11}
-                  fill="currentColor"
-                  opacity={0.6}
-                >
-                  Latitude ↑
-                </text>
-              </svg>
-
-              <p className="annotation-helper">
-                Points are plotted from persisted latitude and longitude. Lines
-                connect observations that share a track ID in frame order. No
-                uncertainty radius is shown unless the backend provides one in a
-                later task.
-              </p>
-            </div>
+                <p className="annotation-helper">
+                  Points are plotted from persisted latitude and longitude.
+                  Lines connect observations that share a track ID in frame
+                  order. Positional uncertainty is shown only when an
+                  authoritative persisted backend estimate is available.
+                </p>
+              </div>
+            )}
 
             <aside
               aria-label="Georeferenced observation inspector"
@@ -867,6 +1080,18 @@ export function GeoreferencedMapPanel({
                             {state.selectedObservation.created_at}
                           </dd>
                         </dl>
+
+                        <GeoreferencingUncertaintyPanel
+                          uncertainty={state.selectedObservation.uncertainty}
+                          telemetry={state.selectedObservation.telemetry}
+                          calibrationVersion={
+                            state.selectedObservation.calibration
+                              .calibration_version
+                          }
+                          projectionMethodVersion={
+                            state.selectedObservation.method.version
+                          }
+                        />
                       </details>
                     )}
                 </>

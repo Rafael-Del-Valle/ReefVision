@@ -68,7 +68,7 @@ def select_validation_clip(
     for original, internal, flight in sorted(set(candidates)):
         if video_name is not None and original.casefold() != video_name.casefold():
             continue
-        if len(mappings[(flight, internal)]) != 1:
+        if video_name is None and len(mappings[(flight, internal)]) != 1:
             ambiguity = True
             continue
         locations = [

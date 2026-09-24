@@ -16,6 +16,9 @@ from reefvision.api.routes.class_operations import router as class_operations_ro
 from reefvision.api.routes.class_visibility import router as class_visibility_router
 from reefvision.api.routes.classification import router as classification_router
 from reefvision.api.routes.dataset_versions import router as dataset_versions_router
+from reefvision.api.routes.geographic_movement_analytics import (
+    router as geographic_movement_analytics_router,
+)
 from reefvision.api.routes.georeferenced_observations import (
     router as georeferenced_observations_router,
 )
@@ -42,6 +45,7 @@ from reefvision.services.workflow_v1_install import install_workflow_v1_extensio
 install_workflow_v1_extensions()
 
 api_router = APIRouter(prefix="/api/v1")
+api_router.include_router(geographic_movement_analytics_router)
 api_router.include_router(health_router)
 api_router.include_router(capabilities_router)
 api_router.include_router(system_router)

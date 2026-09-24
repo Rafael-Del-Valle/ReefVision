@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import UTC, datetime
 
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import delete, select
@@ -27,9 +28,29 @@ class GeoReferencedObservationService:
     def __init__(self, session: Session) -> None:
         self.session = session
 
+    @staticmethod
+    def _configuration_hash(
+        value: str | None,
+    ) -> str | None:
+        if value is None:
+            return None
+
+        rendered = value.strip().lower()
+
+        if len(rendered) != 64 or any(
+            character not in "0123456789abcdef" for character in rendered
+        ):
+            raise ValidationError(
+                "Georeferencing configuration hash must be a 64-character SHA-256 value"
+            )
+
+        return rendered
+
     def persist(
         self,
         observation: GeoReferencedObservation,
+        *,
+        configuration_hash: str | None = None,
     ) -> GeoReferencedObservationRecord:
         """Stage one canonical observation in the current transaction."""
 
@@ -70,6 +91,12 @@ class GeoReferencedObservationService:
                     "Geo-referenced observation track does not belong to the video"
                 )
 
+        normalized_configuration_hash = self._configuration_hash(configuration_hash)
+
+        is_stale = normalized_configuration_hash is None
+        stale_reason = "configuration_not_recorded" if is_stale else None
+        stale_at = datetime.now(UTC) if is_stale else None
+
         record = GeoReferencedObservationRecord(
             id=str(observation.id),
             project_id=project_id,
@@ -101,6 +128,10 @@ class GeoReferencedObservationService:
             telemetry_sample_index=(observation.telemetry.sample_index),
             signed_time_delta_ms=(observation.telemetry.signed_time_delta_ms),
             uncertainty_available=(observation.uncertainty.available),
+            configuration_hash=normalized_configuration_hash,
+            is_stale=is_stale,
+            stale_reason=stale_reason,
+            stale_at=stale_at,
             payload_json=observation.model_dump(mode="json"),
             created_at=observation.created_at,
         )
@@ -224,6 +255,10 @@ class GeoReferencedObservationService:
             },
             uncertainty_available=(record.uncertainty_available),
             method_version=record.method_version,
+            configuration_hash=record.configuration_hash,
+            is_stale=record.is_stale,
+            stale_reason=record.stale_reason,
+            stale_at=record.stale_at,
             created_at=record.created_at,
         )
 

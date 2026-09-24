@@ -22,12 +22,14 @@ from reefvision.db.models import (
     ClassOperation,
     ClassVisibilityPreference,
     ExportRecord,
+    GeoReferencedObservation,
     ImageAsset,
     Job,
     MaskAnnotationEvent,
     Project,
     ProjectClassVisibilityDefault,
     TrainingDraft,
+    VideoAsset,
     WorkflowArtifact,
     WorkflowGraphRecord,
     WorkflowNodeRun,
@@ -118,6 +120,13 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             if image_ids
             else []
         )
+        georeferenced_observations = list(
+            self.session.scalars(
+                select(GeoReferencedObservation).where(
+                    GeoReferencedObservation.project_id == project.id
+                )
+            )
+        )
         sections.update(
             {
                 "jobs": list(
@@ -159,6 +168,7 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                         select(ExportRecord).where(ExportRecord.project_id == project.id)
                     )
                 ),
+                "georeferenced_observations": georeferenced_observations,
                 "workflow_graphs": list(
                     self.session.scalars(
                         select(WorkflowGraphRecord).where(
@@ -183,6 +193,83 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         )
         return sections
 
+    def _telemetry_sidecars(
+        self,
+        project: Project,
+        records: Mapping[str, Sequence[Base]],
+    ) -> list[tuple[dict[str, object], Path]]:
+        """Collect persisted SRT/AirData sources needed to reproduce georeferencing."""
+
+        result: list[tuple[dict[str, object], Path]] = []
+
+        for video in cast(
+            Sequence[VideoAsset],
+            records.get("videos", []),
+        ):
+            metadata = dict(video.metadata_json or {})
+
+            for metadata_key, sidecar_kind in (
+                ("telemetry", "dji_srt"),
+                ("airdata_telemetry", "airdata_csv"),
+            ):
+                raw = metadata.get(metadata_key)
+
+                if not isinstance(raw, dict):
+                    continue
+
+                if not bool(raw.get("available", False)):
+                    continue
+
+                source_value = raw.get("source_path")
+
+                if not isinstance(source_value, str) or not source_value.strip():
+                    continue
+
+                source_path_value = source_value.strip()
+                path_kind = str(raw.get("path_kind") or "managed")
+
+                if path_kind == "external":
+                    source_path = Path(source_path_value)
+                else:
+                    source_path = resolve_managed_project_path(
+                        self.settings,
+                        source_path_value,
+                    )
+
+                if not source_path.is_file():
+                    raise FileNotFoundError(
+                        f"Georeferencing telemetry sidecar is missing: {source_path_value}"
+                    )
+
+                suffix = source_path.suffix.lower()
+
+                if not suffix:
+                    suffix = ".srt" if metadata_key == "telemetry" else ".csv"
+
+                restore_relative = f"videos/telemetry/{video.id}-{metadata_key}{suffix}"
+
+                archive_member = f"telemetry/{video.id}/{metadata_key}{suffix}"
+
+                descriptor: dict[str, object] = {
+                    "kind": sidecar_kind,
+                    "video_id": video.id,
+                    "metadata_key": metadata_key,
+                    "source_path": source_path_value,
+                    "source_relative_path": restore_relative,
+                    "path": archive_member,
+                    "sha256": _file_sha256(source_path),
+                    "size_bytes": source_path.stat().st_size,
+                }
+
+                result.append(
+                    (
+                        descriptor,
+                        source_path,
+                    )
+                )
+
+        return result
+
     def _generated_artifacts(
         self,
         project: Project,
@@ -191,6 +278,30 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         if not records:
             return []
         original_paths: set[str] = set()
+
+        for video in cast(
+            Sequence[VideoAsset],
+            records.get("videos", []),
+        ):
+            metadata = dict(video.metadata_json or {})
+
+            for metadata_key in (
+                "telemetry",
+                "airdata_telemetry",
+            ):
+                raw = metadata.get(metadata_key)
+
+                if not isinstance(raw, dict):
+                    continue
+
+                if str(raw.get("path_kind") or "managed") != "managed":
+                    continue
+
+                source_path = raw.get("source_path")
+
+                if isinstance(source_path, str) and source_path.strip():
+                    original_paths.add(source_path.strip())
+
         for section_name in ("images", "videos", "models"):
             for record in records.get(section_name, []):
                 managed_path = getattr(record, "managed_path", None)
@@ -228,11 +339,16 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         project = self._project(package.project_id)
         manifest = dict(package.manifest_json)
         records = self._records(project)
+        telemetry_sidecars = self._telemetry_sidecars(
+            project,
+            records,
+        )
         generated = (
             self._generated_artifacts(project, records)
             if bool(package.options_json.get("include_generated_artifacts", False))
             else []
         )
+        manifest["telemetry_sidecars"] = [descriptor for descriptor, _ in telemetry_sidecars]
         manifest["generated_artifacts"] = [descriptor for descriptor, _ in generated]
         manifest["import_policy"] = {
             "mode": "import_as_new_project",
@@ -253,8 +369,17 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                     if info.filename == MANIFEST_NAME:
                         continue
                     target_archive.writestr(info, source_archive.read(info.filename))
+                for descriptor, source_path in telemetry_sidecars:
+                    target_archive.write(
+                        source_path,
+                        arcname=str(descriptor["path"]),
+                    )
+
                 for descriptor, source_path in generated:
-                    target_archive.write(source_path, arcname=str(descriptor["path"]))
+                    target_archive.write(
+                        source_path,
+                        arcname=str(descriptor["path"]),
+                    )
                 target_archive.writestr(
                     MANIFEST_NAME,
                     json.dumps(manifest, indent=2, sort_keys=True).encode("utf-8"),

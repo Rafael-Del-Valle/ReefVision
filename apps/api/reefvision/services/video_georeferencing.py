@@ -32,6 +32,11 @@ from reefvision.schemas.video_georeferencing import (
     VideoGeoreferenceFailureReason,
     VideoGeoreferenceResponse,
 )
+from reefvision.services.georeferencing_configuration import (
+    GeoreferencingConfigurationError,
+    GeoreferencingConfigurationSnapshot,
+    georeferencing_configuration_hash,
+)
 from reefvision.services.video_assets import VideoAssetService
 from reefvision.services.video_georeferencing_calibration import (
     VideoGeoreferencingCalibrationService,
@@ -64,6 +69,107 @@ class VideoGeoreferencingService:
             self._telemetry_source_cache[video_id] = self.video_assets.telemetry_source(video_id)
 
         return self._telemetry_source_cache[video_id]
+
+    def configuration_hash(
+        self,
+        video_id: str,
+        *,
+        max_delta_s: float = DEFAULT_MAX_TELEMETRY_DELTA_S,
+    ) -> str:
+        """Fingerprint the persisted configuration used for projection."""
+        if not isfinite(max_delta_s) or max_delta_s < 0:
+            raise ValidationError("Maximum telemetry delta must be finite and nonnegative")
+
+        video = self.video_assets.get_record(video_id)
+
+        project = self.session.get(
+            Project,
+            video.project_id,
+        )
+
+        if project is None:
+            raise NotFoundError("Project not found")
+
+        calibration = self.calibrations.get(video.id)
+
+        metadata = dict(video.metadata_json or {})
+
+        def telemetry_identity(
+            key: str,
+        ) -> tuple[str | None, int | None]:
+            raw_metadata = metadata.get(key)
+
+            if not isinstance(raw_metadata, dict):
+                return None, None
+
+            raw_source_id = raw_metadata.get("source_path")
+
+            source_id = str(raw_source_id).strip() if raw_source_id is not None else None
+
+            if not source_id:
+                source_id = None
+
+            sample_count = raw_metadata.get("sample_count")
+
+            if sample_count is not None and (
+                isinstance(sample_count, bool) or not isinstance(sample_count, int)
+            ):
+                raise ValidationError(f"Stored {key} sample count is invalid")
+
+            return source_id, sample_count
+
+        srt_source_id, srt_sample_count = telemetry_identity("telemetry")
+
+        (
+            airdata_source_id,
+            airdata_sample_count,
+        ) = telemetry_identity("airdata_telemetry")
+
+        raw_alignment = metadata.get("airdata_alignment")
+
+        if raw_alignment is None:
+            alignment: dict[str, object] = {}
+        elif isinstance(raw_alignment, dict):
+            alignment = raw_alignment
+        else:
+            raise ValidationError("Stored AirData alignment metadata is invalid")
+
+        raw_offset = alignment.get(
+            "time_offset_s",
+            0.0,
+        )
+
+        if isinstance(raw_offset, bool) or not isinstance(
+            raw_offset,
+            (int, float),
+        ):
+            raise ValidationError("Stored AirData time offset is invalid")
+
+        raw_evidence = alignment.get("evidence")
+
+        alignment_evidence = str(raw_evidence) if raw_evidence is not None else None
+
+        try:
+            snapshot = GeoreferencingConfigurationSnapshot(
+                video_id=str(video.id),
+                video_sha256=str(video.sha256),
+                video_fps=float(video.fps),
+                srt_source_id=srt_source_id,
+                srt_sample_count=srt_sample_count,
+                airdata_source_id=airdata_source_id,
+                airdata_sample_count=airdata_sample_count,
+                airdata_time_offset_s=float(raw_offset),
+                airdata_alignment_evidence=alignment_evidence,
+                calibration_checksum_sha256=(calibration.checksum_sha256),
+                calibration_revision=(calibration.calibration_revision),
+                project_height_offset_m=float(project.georeference_height_offset_m),
+                project_height_evidence=(project.georeference_height_evidence or ""),
+                max_telemetry_delta_s=max_delta_s,
+            )
+
+            return georeferencing_configuration_hash(snapshot)
+        except GeoreferencingConfigurationError as exc:
+            raise ValidationError(f"Georeferencing configuration is invalid: {exc}") from exc
 
     @staticmethod
     def _required_uuid(

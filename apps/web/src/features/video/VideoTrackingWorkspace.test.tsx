@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Project } from "../../api/client";
 import { VideoTrackingWorkspace } from "./VideoTrackingWorkspace";
 import * as api from "./videoApi";
+import * as geographicApi from "./videoGeographicMovementAnalyticsApi";
+import type { GeographicTrackAnalytics } from "./videoGeographicMovementAnalyticsApi";
 
 vi.mock("./GeoreferencedMapPanel", () => ({
   GeoreferencedMapPanel: ({
@@ -28,6 +30,17 @@ vi.mock("./GeoreferencedMapPanel", () => ({
     </section>
   ),
 }));
+
+vi.mock("./videoGeographicMovementAnalyticsApi", async () => {
+  const actual = await vi.importActual<
+    typeof import("./videoGeographicMovementAnalyticsApi")
+  >("./videoGeographicMovementAnalyticsApi");
+
+  return {
+    ...actual,
+    getVideoTrackGeographicAnalytics: vi.fn(),
+  };
+});
 
 vi.mock("./videoApi", async () => {
   const actual =
@@ -370,5 +383,172 @@ describe("VideoTrackingWorkspace", () => {
     fireEvent.timeUpdate(video);
 
     expect(screen.getByTestId("mock-active-map-frame")).toHaveTextContent("60");
+  });
+
+  it("connects geographic segment seeking to video and map without refetching analytics", async () => {
+    vi.mocked(api.getVideoTracks).mockResolvedValue([
+      {
+        id: "track-1",
+        video_id: "video-1",
+        label_class_id: "class-1",
+        track_number: 1,
+        geometry_kind: "bbox",
+        keyframes_json: [
+          {
+            frame: 10,
+            bbox: [10, 10, 30, 30],
+            confidence: null,
+          },
+        ],
+        interpolation: "linear",
+        status: "verified",
+        source_model_id: null,
+        source_job_id: null,
+        metadata_json: null,
+        revision: 1,
+      },
+    ]);
+
+    const location = {
+      latitude_deg: 32.75,
+      longitude_deg: -79.93,
+      crs: "EPSG:4326",
+    };
+
+    const geographicData: GeographicTrackAnalytics = {
+      track_id: "track-1",
+      video_asset_id: "video-1",
+      observation_count: 2,
+      segment_count: 1,
+      first_frame_index: 10,
+      last_frame_index: 20,
+      first_frame_time_s: 1,
+      last_frame_time_s: 2,
+      elapsed_time_s: 1,
+      total_distance_m: 5,
+      net_displacement_m: 5,
+      mean_speed_m_s: 5,
+      max_segment_speed_m_s: 5,
+      start_location: location,
+      end_location: location,
+      segments: [
+        {
+          track_id: "track-1",
+          video_asset_id: "video-1",
+          start_observation_id: "observation-10",
+          end_observation_id: "observation-20",
+          start_frame_index: 10,
+          end_frame_index: 20,
+          start_frame_time_s: 1,
+          end_frame_time_s: 2,
+          elapsed_time_s: 1,
+          start_location: location,
+          end_location: location,
+          distance_m: 5,
+          speed_m_s: 5,
+          cumulative_distance_m: 5,
+          speed_valid: true,
+          invalid_reason: null,
+        },
+      ],
+    };
+
+    vi.mocked(geographicApi.getVideoTrackGeographicAnalytics).mockResolvedValue(
+      geographicData,
+    );
+
+    const { container } = renderWorkspace();
+
+    await screen.findByRole("option", {
+      name: /Track 1/,
+    });
+
+    const selector = screen.getByLabelText(
+      "Existing track",
+    ) as HTMLSelectElement;
+
+    expect(
+      geographicApi.getVideoTrackGeographicAnalytics,
+    ).not.toHaveBeenCalled();
+
+    fireEvent.change(selector, {
+      target: { value: "track-1" },
+    });
+
+    const seekButton = await screen.findByRole("button", {
+      name: "Seek to frame 20",
+    });
+
+    await waitFor(() => {
+      expect(
+        geographicApi.getVideoTrackGeographicAnalytics,
+      ).toHaveBeenCalledTimes(1);
+    });
+
+    expect(geographicApi.getVideoTrackGeographicAnalytics).toHaveBeenCalledWith(
+      "track-1",
+      expect.any(AbortSignal),
+    );
+
+    const video = container.querySelector("video");
+
+    expect(video).not.toBeNull();
+
+    if (!video) {
+      throw new Error("Expected managed video element was not rendered.");
+    }
+
+    // Segment navigation must use the persisted endpoint's
+    // frame index and timestamp through the Task 15 handler.
+
+    fireEvent.click(seekButton);
+
+    expect(video.currentTime).toBe(2);
+
+    expect(screen.getByTestId("mock-active-map-frame")).toHaveTextContent("20");
+
+    expect(
+      screen
+        .getByTestId("geographic-movement-analytics-panel")
+        .querySelector('tr[data-active-segment="true"]'),
+    ).not.toBeNull();
+
+    expect(selector.value).toBe("track-1");
+
+    expect(
+      geographicApi.getVideoTrackGeographicAnalytics,
+    ).toHaveBeenCalledTimes(1);
+
+    // Existing map selection must still use the same seek path.
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Select map observation",
+      }),
+    );
+
+    expect(video.currentTime).toBe(1.4);
+
+    expect(screen.getByTestId("mock-active-map-frame")).toHaveTextContent("42");
+
+    expect(
+      screen
+        .getByTestId("geographic-movement-analytics-panel")
+        .querySelector('tr[data-active-segment="true"]'),
+    ).toBeNull();
+
+    // Seeking or playback must never change the explicit
+    // selected track or request analytics again.
+
+    fireEvent.seeked(video);
+
+    video.currentTime = 3;
+    fireEvent.timeUpdate(video);
+
+    expect(selector.value).toBe("track-1");
+
+    expect(
+      geographicApi.getVideoTrackGeographicAnalytics,
+    ).toHaveBeenCalledTimes(1);
   });
 });

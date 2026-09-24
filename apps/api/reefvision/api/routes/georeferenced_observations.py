@@ -2,18 +2,31 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.db.models import GeoReferencedObservation as GeoReferencedObservationRecord
+from reefvision.domain.errors import ValidationError
 from reefvision.schemas.georeferenced_observation import (
     GeoReferencedObservation,
 )
 from reefvision.schemas.georeferenced_observation_api import (
     GeoReferencedObservationListResponse,
+    GeoReferencedObservationRecomputeResponse,
+)
+from reefvision.services.geographic_gis_export import (
+    GeographicGISExportError,
+    csv_bytes,
+    geojson_bytes,
+)
+from reefvision.services.geographic_gis_export_enrichment import (
+    build_geographic_export_enrichments,
+)
+from reefvision.services.georeferenced_observation_recomputation import (
+    GeoreferencedObservationRecomputationService,
 )
 from reefvision.services.georeferenced_observations import (
     GeoReferencedObservationService,
@@ -112,3 +125,68 @@ def list_frame_georeferenced_observations(
             frame_index,
         ),
     )
+
+
+@router.get("/videos/{video_id}/geographic-export")
+def export_video_geographic_observations(
+    video_id: str,
+    session: DbSession,
+    export_format: Annotated[
+        Literal["geojson", "csv"],
+        Query(alias="format"),
+    ] = "geojson",
+    track_id: Annotated[str | None, Query()] = None,
+) -> Response:
+    """Download canonical persisted observations without recalculation."""
+    service = GeoReferencedObservationService(session)
+
+    records = service.list_for_video(
+        video_id,
+        track_id=track_id,
+    )
+
+    observations = [service.to_response(record) for record in records]
+
+    enrichments = build_geographic_export_enrichments(
+        session,
+        observations,
+    )
+
+    try:
+        if export_format == "geojson":
+            content = geojson_bytes(observations, enrichments)
+            media_type = "application/geo+json"
+            extension = "geojson"
+        else:
+            content = csv_bytes(observations, enrichments)
+            media_type = "text/csv"
+            extension = "csv"
+    except GeographicGISExportError as exc:
+        raise ValidationError(str(exc)) from exc
+
+    filename = f"reefvision-geographic-observations.{extension}"
+
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.post(
+    "/videos/{video_id}/georeferenced-observations/recompute",
+    response_model=GeoReferencedObservationRecomputeResponse,
+)
+def recompute_video_georeferenced_observations(
+    video_id: str,
+    request: Request,
+    session: DbSession,
+) -> GeoReferencedObservationRecomputeResponse:
+    """Atomically replace stale geographic observations."""
+    return GeoreferencedObservationRecomputationService(
+        session,
+        request.app.state.settings,
+    ).recompute_video(video_id)

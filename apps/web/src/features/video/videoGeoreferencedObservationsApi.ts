@@ -135,7 +135,17 @@ export interface GeoReferencedObservationDetail {
   calibration: GeoCalibrationReference;
   telemetry: GeoTelemetryReference;
   location: GeoLocation;
-  uncertainty: GeoGeoreferencingUncertainty;
+  uncertainty: GeoGeoreferencingUncertainty & {
+    horizontal_sigma_m?: number | null;
+    horizontal_95_m?: number | null;
+    major_axis_95_m?: number | null;
+    minor_axis_95_m?: number | null;
+    major_axis_bearing_deg?: number | null;
+    telemetry_component_m?: number | null;
+    pose_component_m?: number | null;
+    height_component_m?: number | null;
+    calibration_component_m?: number | null;
+  };
   method: GeoGeoreferencingMethod;
   created_at: string;
 }

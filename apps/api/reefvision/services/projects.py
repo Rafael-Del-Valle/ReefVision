@@ -43,6 +43,10 @@ from reefvision.schemas.projects import (
     ProjectUpdate,
 )
 from reefvision.services.annotations import annotation_snapshot
+from reefvision.services.georeferencing_invalidation import (
+    STALE_REASON_PROJECT_SURFACE_REFERENCE_CHANGED,
+    GeoreferencingInvalidationService,
+)
 from reefvision.storage.projects import (
     create_managed_project_directory,
     remove_empty_project_directory,
@@ -208,6 +212,13 @@ class ProjectService:
     def update_project(self, project_id: str, payload: ProjectUpdate) -> Project:
         project = self.get_project(project_id)
         changes = payload.model_dump(exclude_unset=True)
+        georeferencing_changed = any(
+            field in changes and changes[field] != getattr(project, field)
+            for field in (
+                "georeference_height_offset_m",
+                "georeference_height_evidence",
+            )
+        )
         if "slug" in changes:
             requested_slug = slugify(changes["slug"])
             if self.projects.slug_exists(requested_slug, exclude_project_id=project_id):
@@ -215,6 +226,12 @@ class ProjectService:
             changes["slug"] = requested_slug
         for key, value in changes.items():
             setattr(project, key, value)
+        if georeferencing_changed:
+            GeoreferencingInvalidationService(self.session).mark_project_stale(
+                project_id,
+                reason=(STALE_REASON_PROJECT_SURFACE_REFERENCE_CHANGED),
+            )
+
         try:
             self.session.commit()
         except IntegrityError as exc:
