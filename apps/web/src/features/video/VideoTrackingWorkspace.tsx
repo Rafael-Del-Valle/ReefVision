@@ -1,5 +1,6 @@
 ﻿import { AnnotatedVideoExportPanel } from "./AnnotatedVideoExportPanel";
 import { GeoreferencedMapPanel } from "./GeoreferencedMapPanel";
+import { GeoreferencingSetupPanel } from "./GeoreferencingSetupPanel";
 import { GeographicExportPanel } from "./GeographicExportPanel";
 import { GeographicMovementAnalyticsPanel } from "./GeographicMovementAnalyticsPanel";
 import { useGeographicMovementAnalytics } from "./useGeographicMovementAnalytics";
@@ -761,6 +762,10 @@ export function VideoTrackingWorkspace({
           </>
         )}
       </section>
+
+      {selectedVideo && (
+        <GeoreferencingSetupPanel project={project} video={selectedVideo} />
+      )}
 
       <section className="management-card">
         <p className="eyebrow">Frame review</p>

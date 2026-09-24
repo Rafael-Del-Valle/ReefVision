@@ -513,3 +513,100 @@ def create_tracking_job(
     session.commit()
     session.refresh(job)
     return JobResponse.model_validate(job)
+
+@router.post("/videos/{video_id}/georeference-tracks")
+def georeference_existing_video_tracks(
+    video_id: str,
+    request: Request,
+    session: DbSession,
+) -> dict[str, object]:
+    """Recompute geographic observations for active video tracks."""
+
+    from sqlalchemy import select
+
+    from reefvision.db.models import VideoTrack
+    from reefvision.schemas.georeferenced_observation import BoundingBoxPixels
+    from reefvision.services.georeferenced_observations import (
+        GeoReferencedObservationService,
+    )
+    from reefvision.services.video_georeferencing import VideoGeoreferencingService
+    from reefvision.services.video_georeferencing_readiness import (
+        VideoGeoreferencingReadinessService,
+    )
+
+    settings: Settings = request.app.state.settings
+    readiness = VideoGeoreferencingReadinessService(session, settings).evaluate(video_id)
+    if not readiness.ready:
+        blockers = "; ".join(issue.message for issue in readiness.issues)
+        raise ValidationError(
+            "Georeferencing is not ready" + (f": {blockers}" if blockers else "")
+        )
+
+    tracks = list(
+        session.scalars(
+            select(VideoTrack)
+            .where(
+                VideoTrack.video_id == video_id,
+                VideoTrack.deleted_at.is_(None),
+            )
+            .order_by(VideoTrack.track_number, VideoTrack.created_at, VideoTrack.id)
+        )
+    )
+    if not tracks:
+        raise ValidationError("No active video tracks are available to georeference")
+
+    service = VideoGeoreferencingService(session, settings)
+    persistence = GeoReferencedObservationService(session)
+    configuration_hash = service.configuration_hash(video_id)
+
+    persistence.delete_for_tracks(str(track.id) for track in tracks)
+
+    attempted = 0
+    succeeded = 0
+    failed = 0
+
+    for track in tracks:
+        for raw in list(track.keyframes_json or []):
+            attempted += 1
+            try:
+                frame = int(raw["frame"])
+                bbox = raw["bbox"]
+                if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+                    raise ValidationError(
+                        "Track keyframe bbox must contain x, y, width, height"
+                    )
+                x, y, width, height = (float(value) for value in bbox)
+                if width <= 0 or height <= 0:
+                    raise ValidationError(
+                        "Track keyframe bbox requires positive dimensions"
+                    )
+
+                observation = service.georeference_detection(
+                    video_id,
+                    frame_index=frame,
+                    bbox=BoundingBoxPixels(
+                        x_min=x,
+                        y_min=y,
+                        x_max=x + width,
+                        y_max=y + height,
+                    ),
+                    track_id=str(track.id),
+                )
+                persistence.persist(
+                    observation,
+                    configuration_hash=configuration_hash,
+                )
+            except (KeyError, TypeError, ValueError, ValidationError):
+                failed += 1
+            else:
+                succeeded += 1
+
+    session.commit()
+    return {
+        "video_id": video_id,
+        "track_count": len(tracks),
+        "attempted_count": attempted,
+        "georeferenced_observation_count": succeeded,
+        "failure_count": failed,
+        "configuration_hash": configuration_hash,
+    }
