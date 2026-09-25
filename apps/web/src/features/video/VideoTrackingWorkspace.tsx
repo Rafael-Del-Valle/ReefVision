@@ -13,9 +13,12 @@ import {
   benchmarkVideoTracking,
   createVideoTrack,
   createVideoTrackingJob,
+  deleteTrackingModel,
   deleteVideoTrack,
+  deleteVideoTracks,
   extractVideoFrames,
   getTrackingModels,
+  getVideoFrameSpatialMetrics,
   getVideoGeoreferencingReadiness,
   getVideoTrackAnalytics,
   getVideoTrackInterpolation,
@@ -120,6 +123,10 @@ export function VideoTrackingWorkspace({
   const [trackingIou, setTrackingIou] = useState(0.5);
   const [trackingDevice, setTrackingDevice] = useState("auto");
   const [minimumTrackFrames, setMinimumTrackFrames] = useState(2);
+  const [linkDetections, setLinkDetections] = useState(true);
+  const [showMovementLines, setShowMovementLines] = useState(true);
+  const [sourceOverlayEnabled, setSourceOverlayEnabled] = useState(false);
+  const [previewFrameIndex, setPreviewFrameIndex] = useState(0);
 
   const [groundTruthTrackIds, setGroundTruthTrackIds] = useState<string[]>([]);
   const [benchmarkJobIds, setBenchmarkJobIds] = useState<string[]>([]);
@@ -174,6 +181,12 @@ export function VideoTrackingWorkspace({
     queryKey: ["video-tracking-models", project.id],
     queryFn: ({ signal }) => getTrackingModels(project.id, signal),
   });
+  const spatialMetricsQuery = useQuery({
+    queryKey: ["video-frame-spatial-metrics", selectedVideoId, previewFrameIndex],
+    queryFn: ({ signal }) =>
+      getVideoFrameSpatialMetrics(selectedVideoId, previewFrameIndex, signal),
+    enabled: Boolean(selectedVideoId) && sourceOverlayEnabled,
+  });
 
   const manualGroundTruthTracks = useMemo(
     () =>
@@ -198,6 +211,7 @@ export function VideoTrackingWorkspace({
   useEffect(() => {
     pendingMapSeekRef.current = null;
     setFrameIndex(0);
+    setPreviewFrameIndex(0);
     setSelectedTrackId("");
     setKeyframes([]);
     setGroundTruthTrackIds([]);
@@ -216,6 +230,14 @@ export function VideoTrackingWorkspace({
       setTrackingModelId(modelsQuery.data[0].id);
     }
   }, [modelsQuery.data, trackingModelId]);
+
+  useEffect(() => {
+    if (!sourceOverlayEnabled) return;
+    const timer = window.setTimeout(() => {
+      setPreviewFrameIndex(frameIndex);
+    }, 140);
+    return () => window.clearTimeout(timer);
+  }, [frameIndex, sourceOverlayEnabled]);
   useEffect(() => {
     if (!selectedTrack) {
       setKeyframes([]);
@@ -360,6 +382,36 @@ export function VideoTrackingWorkspace({
       });
     },
   });
+  const deleteMachineTracksMutation = useMutation({
+    mutationFn: () => {
+      if (!selectedVideoId) throw new Error("Select a video first");
+      return deleteVideoTracks(selectedVideoId, true);
+    },
+    onSuccess: async () => {
+      setSelectedTrackId("");
+      setKeyframes([]);
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["video-tracks", selectedVideoId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["video-frame-spatial-metrics", selectedVideoId],
+        }),
+      ]);
+    },
+  });
+  const deleteModelMutation = useMutation({
+    mutationFn: () => {
+      if (!trackingModelId) throw new Error("Select a model first");
+      return deleteTrackingModel(trackingModelId);
+    },
+    onSuccess: async () => {
+      setTrackingModelId("");
+      await queryClient.invalidateQueries({
+        queryKey: ["video-tracking-models", project.id],
+      });
+    },
+  });
   const trackingMutation = useMutation({
     mutationFn: () => {
       if (trackingConfidence < 0 || trackingConfidence > 1) {
@@ -368,7 +420,7 @@ export function VideoTrackingWorkspace({
       if (trackingIou < 0 || trackingIou > 1) {
         throw new Error("Tracking IoU must be between 0 and 1");
       }
-      if (minimumTrackFrames < 1) {
+      if (linkDetections && minimumTrackFrames < 1) {
         throw new Error("Minimum track frames must be at least 1");
       }
       return createVideoTrackingJob(selectedVideoId, {
@@ -377,7 +429,8 @@ export function VideoTrackingWorkspace({
         confidence: trackingConfidence,
         iou: trackingIou,
         device: trackingDevice,
-        minimum_track_frames: minimumTrackFrames,
+        minimum_track_frames: linkDetections ? minimumTrackFrames : 1,
+        link_detections: linkDetections,
       });
     },
     onSuccess: async () => {
@@ -452,9 +505,9 @@ export function VideoTrackingWorkspace({
   const overlayFrame = useMemo(
     () =>
       interpolationQuery.data?.frames.find(
-        (frame) => frame.frame === frameIndex,
+        (frame) => frame.frame === previewFrameIndex,
       ),
-    [frameIndex, interpolationQuery.data?.frames],
+    [previewFrameIndex, interpolationQuery.data?.frames],
   );
   const extractionStride = Number(
     selectedVideo?.metadata_json.extraction_every_n_frames ?? everyNFrames,
@@ -464,6 +517,9 @@ export function VideoTrackingWorkspace({
     extractionMutation.error ??
     saveTrackMutation.error ??
     deleteTrackMutation.error ??
+    deleteMachineTracksMutation.error ??
+    deleteModelMutation.error ??
+    spatialMetricsQuery.error ??
     trackingMutation.error ??
     cancelTrackingMutation.error ??
     retryTrackingMutation.error ??
@@ -844,7 +900,23 @@ export function VideoTrackingWorkspace({
       <section className="management-card">
         <p className="eyebrow">Frame review</p>
         <h3>Source-coordinate overlay</h3>
-        {selectedVideo ? (
+        <label className="annotation-selection-row">
+          <input
+            type="checkbox"
+            checked={sourceOverlayEnabled}
+            onChange={(event) => {
+              setSourceOverlayEnabled(event.target.checked);
+              if (event.target.checked) setPreviewFrameIndex(frameIndex);
+            }}
+          />
+          <span>Enable source-coordinate overlay</span>
+        </label>
+        <p className="annotation-helper">
+          Disabled by default to avoid repeatedly loading full-resolution still
+          frames while the video or frame slider is moving. Preview loads are
+          debounced while enabled.
+        </p>
+        {selectedVideo && sourceOverlayEnabled ? (
           <>
             <label>
               Frame {frameIndex}
@@ -857,6 +929,11 @@ export function VideoTrackingWorkspace({
                 onChange={(event) => setFrameIndex(Number(event.target.value))}
               />
             </label>
+            {previewFrameIndex !== frameIndex && (
+              <p className="annotation-helper">
+                Loading preview for frame {frameIndex}…
+              </p>
+            )}
             {selectedVideo.frame_directory_path ? (
               <div
                 style={{
@@ -866,46 +943,100 @@ export function VideoTrackingWorkspace({
                 }}
               >
                 <img
-                  src={videoFrameUrl(selectedVideo.id, frameIndex)}
-                  alt={`Frame ${frameIndex}`}
+                  src={videoFrameUrl(selectedVideo.id, previewFrameIndex)}
+                  alt={`Frame ${previewFrameIndex}`}
+                  loading="lazy"
+                  decoding="async"
                   style={{
                     width: "100%",
                     height: "100%",
                     objectFit: "contain",
                   }}
                 />
-                {overlayFrame && (
-                  <svg
-                    viewBox={`0 0 ${selectedVideo.width_px} ${selectedVideo.height_px}`}
-                    preserveAspectRatio="none"
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      width: "100%",
-                      height: "100%",
-                    }}
-                  >
+                <svg
+                  viewBox={`0 0 ${selectedVideo.width_px} ${selectedVideo.height_px}`}
+                  preserveAspectRatio="none"
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                  }}
+                >
+                  {(spatialMetricsQuery.data?.objects ?? []).map((object) => (
                     <rect
-                      x={overlayFrame.bbox[0]}
-                      y={overlayFrame.bbox[1]}
-                      width={overlayFrame.bbox[2]}
-                      height={overlayFrame.bbox[3]}
+                      key={object.track_id}
+                      x={object.bbox[0]}
+                      y={object.bbox[1]}
+                      width={object.bbox[2]}
+                      height={object.bbox[3]}
                       fill="none"
-                      stroke="#ffd43b"
-                      strokeWidth={3}
+                      stroke={
+                        object.track_id === selectedTrackId
+                          ? "var(--accent-color, #2563eb)"
+                          : "#ffd43b"
+                      }
+                      strokeWidth={object.track_id === selectedTrackId ? 4 : 2}
                       vectorEffect="non-scaling-stroke"
                     />
-                  </svg>
-                )}
+                  ))}
+                  {overlayFrame &&
+                    !(spatialMetricsQuery.data?.objects ?? []).some(
+                      (object) => object.track_id === selectedTrackId,
+                    ) && (
+                      <rect
+                        x={overlayFrame.bbox[0]}
+                        y={overlayFrame.bbox[1]}
+                        width={overlayFrame.bbox[2]}
+                        height={overlayFrame.bbox[3]}
+                        fill="none"
+                        stroke="var(--accent-color, #2563eb)"
+                        strokeWidth={4}
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    )}
+                </svg>
               </div>
             ) : (
               <p className="annotation-helper">
                 Extract frames to review keyframes against still images.
               </p>
             )}
+            {spatialMetricsQuery.data && (
+              <div className="annotation-selection-list">
+                <div className="annotation-selection-row">
+                  <strong>Objects on frame</strong>
+                  <span>{spatialMetricsQuery.data.object_count}</span>
+                </div>
+                <div className="annotation-selection-row">
+                  <strong>Mean nearest neighbor</strong>
+                  <span>
+                    {spatialMetricsQuery.data.mean_nearest_neighbor_distance_pixels === null
+                      ? "—"
+                      : `${spatialMetricsQuery.data.mean_nearest_neighbor_distance_pixels.toFixed(2)} px`}
+                    {spatialMetricsQuery.data.mean_nearest_neighbor_distance_meters === null
+                      ? ""
+                      : ` · ${spatialMetricsQuery.data.mean_nearest_neighbor_distance_meters.toFixed(2)} m`}
+                  </span>
+                </div>
+                <div className="annotation-selection-row">
+                  <strong>Minimum nearest neighbor</strong>
+                  <span>
+                    {spatialMetricsQuery.data.minimum_nearest_neighbor_distance_pixels === null
+                      ? "—"
+                      : `${spatialMetricsQuery.data.minimum_nearest_neighbor_distance_pixels.toFixed(2)} px`}
+                    {spatialMetricsQuery.data.minimum_nearest_neighbor_distance_meters === null
+                      ? ""
+                      : ` · ${spatialMetricsQuery.data.minimum_nearest_neighbor_distance_meters.toFixed(2)} m`}
+                  </span>
+                </div>
+              </div>
+            )}
           </>
         ) : (
-          <p className="annotation-helper">Import a video to begin.</p>
+          <p className="annotation-helper">
+            Enable the overlay when you need frame-level box and spacing review.
+          </p>
         )}
       </section>
 
@@ -914,6 +1045,7 @@ export function VideoTrackingWorkspace({
           key={selectedVideo.id}
           videoId={selectedVideo.id}
           activeFrameIndex={frameIndex}
+          showTrackLines={showMovementLines}
           onFrameSelect={handleGeographicFrameSelect}
         />
       )}
@@ -1066,6 +1198,26 @@ export function VideoTrackingWorkspace({
           >
             Delete track
           </button>
+          <button
+            type="button"
+            className="danger-ghost"
+            disabled={
+              !selectedVideoId ||
+              deleteMachineTracksMutation.isPending ||
+              !(tracksQuery.data ?? []).some((track) => track.source_job_id)
+            }
+            onClick={() => {
+              if (
+                window.confirm(
+                  "Remove all machine-generated tracks for this video? Manual tracks are preserved.",
+                )
+              ) {
+                deleteMachineTracksMutation.mutate();
+              }
+            }}
+          >
+            Remove machine tracks
+          </button>
         </div>
       </section>
 
@@ -1085,10 +1237,45 @@ export function VideoTrackingWorkspace({
             ))}
           </select>
         </label>
+        <div className="annotation-editor-inline-actions">
+          <button
+            type="button"
+            className="danger-ghost"
+            disabled={!trackingModelId || deleteModelMutation.isPending}
+            onClick={() => {
+              const model = (modelsQuery.data ?? []).find(
+                (item) => item.id === trackingModelId,
+              );
+              if (
+                window.confirm(
+                  `Remove model "${model?.display_name ?? trackingModelId}" from this project?`,
+                )
+              ) {
+                deleteModelMutation.mutate();
+              }
+            }}
+          >
+            Remove selected model
+          </button>
+        </div>
+        <label className="annotation-selection-row">
+          <input
+            type="checkbox"
+            checked={linkDetections}
+            onChange={(event) => setLinkDetections(event.target.checked)}
+          />
+          <span>Link detections across frames (movement tracking)</span>
+        </label>
+        <p className="annotation-helper">
+          Turn this off for independent per-frame instance detection. Each
+          detection remains reviewable, but ReefVision will not assign a
+          cross-frame identity or movement trajectory.
+        </p>
         <label>
           Tracker
           <select
             value={trackerName}
+            disabled={!linkDetections}
             onChange={(event) => setTrackerName(event.target.value)}
           >
             <option value="bytetrack.yaml">ByteTrack</option>
@@ -1136,7 +1323,8 @@ export function VideoTrackingWorkspace({
             type="number"
             min={1}
             step={1}
-            value={minimumTrackFrames}
+            disabled={!linkDetections}
+            value={linkDetections ? minimumTrackFrames : 1}
             onChange={(event) =>
               setMinimumTrackFrames(Number(event.target.value))
             }
@@ -1151,8 +1339,18 @@ export function VideoTrackingWorkspace({
         >
           {trackingMutation.isPending
             ? "Queuing..."
-            : `Run ${trackerLabel(trackerName)}`}
+            : linkDetections
+              ? `Run ${trackerLabel(trackerName)}`
+              : "Run instance detection"}
         </button>
+        <label className="annotation-selection-row">
+          <input
+            type="checkbox"
+            checked={showMovementLines}
+            onChange={(event) => setShowMovementLines(event.target.checked)}
+          />
+          <span>Show movement lines on geographic maps</span>
+        </label>
         {trackingMutation.data && (
           <p className="annotation-helper">
             Tracking job {trackingMutation.data.id.slice(0, 8)} queued. Run
@@ -1187,7 +1385,11 @@ export function VideoTrackingWorkspace({
                   return (
                     <tr key={run.job_id}>
                       <td>{run.job_id.slice(0, 8)}</td>
-                      <td>{trackerLabel(run.tracker)}</td>
+                      <td>
+                        {run.link_detections
+                          ? trackerLabel(run.tracker)
+                          : "Instances only"}
+                      </td>
                       <td>
                         {run.stale ? <strong>Stalled</strong> : run.stage}
                         {run.stale && (

@@ -9,6 +9,7 @@ interface OpenStreetMapViewProps {
   observations: GeoReferencedObservationSummary[];
   activeObservationId?: string | null;
   selectedObservationId?: string | null;
+  showTrackLines?: boolean;
   selectedUncertaintyRadiusM?: number | null;
   onObservationSelect?: (observation: GeoReferencedObservationSummary) => void;
   onTileFailure?: () => void;
@@ -30,6 +31,7 @@ export function OpenStreetMapView({
   observations,
   activeObservationId = null,
   selectedObservationId = null,
+  showTrackLines = true,
   selectedUncertaintyRadiusM = null,
   onObservationSelect,
   onTileFailure,
@@ -157,21 +159,23 @@ export function OpenStreetMapView({
 
     const positions = observations.map(observationPosition);
 
-    for (const [trackId, trackObservations] of tracks) {
-      if (trackObservations.length < 2) {
-        continue;
+    if (showTrackLines) {
+      for (const [trackId, trackObservations] of tracks) {
+        if (trackObservations.length < 2) {
+          continue;
+        }
+
+        const activeTrack = trackObservations.some(
+          (observation) => observation.id === activeObservationId,
+        );
+
+        L.polyline(trackObservations.map(observationPosition), {
+          weight: activeTrack ? 5 : 3,
+          opacity: activeTrack ? 1 : 0.7,
+        })
+          .bindTooltip(`Track ${trackId}`)
+          .addTo(overlays);
       }
-
-      const activeTrack = trackObservations.some(
-        (observation) => observation.id === activeObservationId,
-      );
-
-      L.polyline(trackObservations.map(observationPosition), {
-        weight: activeTrack ? 5 : 3,
-        opacity: activeTrack ? 1 : 0.7,
-      })
-        .bindTooltip(`Track ${trackId}`)
-        .addTo(overlays);
     }
 
     for (const observation of observations) {
@@ -234,6 +238,7 @@ export function OpenStreetMapView({
     observations,
     selectedObservationId,
     selectedUncertaintyRadiusM,
+    showTrackLines,
     tracks,
   ]);
 

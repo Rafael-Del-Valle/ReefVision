@@ -195,6 +195,29 @@ export interface VideoTrackAnalytics {
   occupancy_grid: Record<string, number>;
 }
 
+export interface VideoFrameObjectMetric {
+  track_id: string;
+  track_number: number;
+  label_class_id: string;
+  bbox: [number, number, number, number];
+  center_x: number;
+  center_y: number;
+  nearest_neighbor_track_id: string | null;
+  nearest_neighbor_distance_pixels: number | null;
+  nearest_neighbor_distance_meters: number | null;
+}
+
+export interface VideoFrameSpatialMetrics {
+  video_id: string;
+  frame_index: number;
+  object_count: number;
+  mean_nearest_neighbor_distance_pixels: number | null;
+  minimum_nearest_neighbor_distance_pixels: number | null;
+  mean_nearest_neighbor_distance_meters: number | null;
+  minimum_nearest_neighbor_distance_meters: number | null;
+  objects: VideoFrameObjectMetric[];
+}
+
 export interface VideoTrackingRun {
   job_id: string;
   project_id: string;
@@ -203,6 +226,8 @@ export interface VideoTrackingRun {
   stage: string;
   tracker: string;
   model_id: string;
+  link_detections: boolean;
+  link_detections: boolean;
   confidence: number;
   iou: number;
   device: string;
@@ -526,6 +551,27 @@ export function deleteVideoTrack(trackId: string): Promise<void> {
   });
 }
 
+export function deleteVideoTracks(
+  videoId: string,
+  machineOnly = true,
+): Promise<{ deleted_tracks: number }> {
+  return request<{ deleted_tracks: number }>(
+    `/videos/${encodeURIComponent(videoId)}/tracks?machine_only=${machineOnly}`,
+    { method: "DELETE" },
+  );
+}
+
+export function getVideoFrameSpatialMetrics(
+  videoId: string,
+  frameIndex: number,
+  signal?: AbortSignal,
+): Promise<VideoFrameSpatialMetrics> {
+  return request<VideoFrameSpatialMetrics>(
+    `/videos/${encodeURIComponent(videoId)}/spatial-metrics?frame=${frameIndex}`,
+    { signal },
+  );
+}
+
 export function getVideoTrackInterpolation(
   trackId: string,
   signal?: AbortSignal,
@@ -606,12 +652,19 @@ export function createVideoTrackingJob(
     iou: number;
     device: string;
     minimum_track_frames: number;
+    link_detections: boolean;
   },
 ): Promise<JobRecord> {
   return request<JobRecord>(
     `/videos/${encodeURIComponent(videoId)}/tracking-jobs`,
     { method: "POST", body: JSON.stringify(payload) },
   );
+}
+
+export function deleteTrackingModel(modelId: string): Promise<void> {
+  return request<void>(`/models/${encodeURIComponent(modelId)}`, {
+    method: "DELETE",
+  });
 }
 
 export type AnnotatedVideoPreset = "clean_tracking" | "full_review";

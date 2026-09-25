@@ -31,6 +31,7 @@ import { OpenStreetMapView } from "./OpenStreetMapView";
 interface GeoreferencedMapPanelProps {
   videoId: string;
   activeFrameIndex?: number | null;
+  showTrackLines?: boolean;
   onFrameSelect?: (frameIndex: number, frameTimeSeconds: number) => void;
 }
 
@@ -100,6 +101,7 @@ function projectObservations(
 export function GeoreferencedMapPanel({
   videoId,
   activeFrameIndex = null,
+  showTrackLines = true,
   onFrameSelect,
 }: GeoreferencedMapPanelProps) {
   const [state, dispatch] = useReducer(
@@ -779,8 +781,10 @@ export function GeoreferencedMapPanel({
 
                 <p className="annotation-helper">
                   Points are plotted from persisted latitude and longitude.
-                  Lines connect observations that share a track ID in frame
-                  order. Positional uncertainty is shown only when an
+                  {showTrackLines
+                    ? " Lines connect observations that share a track ID in frame order."
+                    : " Movement lines are hidden; observations are shown as independent points."}
+                  {" "}Positional uncertainty is shown only when an
                   authoritative persisted backend estimate is available.
                 </p>
               </div>
