@@ -234,10 +234,31 @@ export function VideoTrackingWorkspace({
   useEffect(() => {
     if (!sourceOverlayEnabled) return;
     const timer = window.setTimeout(() => {
-      setPreviewFrameIndex(frameIndex);
-    }, 140);
+      const stride = Math.max(
+        1,
+        Number(
+          selectedVideo?.metadata_json.extraction_every_n_frames ??
+            everyNFrames,
+        ),
+      );
+      const maximumFrame = Math.max(
+        0,
+        (selectedVideo?.frame_count ?? 1) - 1,
+      );
+      const snappedFrame = Math.min(
+        maximumFrame,
+        Math.max(0, Math.round(frameIndex / stride) * stride),
+      );
+      setPreviewFrameIndex(snappedFrame);
+    }, 180);
     return () => window.clearTimeout(timer);
-  }, [frameIndex, sourceOverlayEnabled]);
+  }, [
+    everyNFrames,
+    frameIndex,
+    selectedVideo?.frame_count,
+    selectedVideo?.metadata_json.extraction_every_n_frames,
+    sourceOverlayEnabled,
+  ]);
   useEffect(() => {
     if (!selectedTrack) {
       setKeyframes([]);

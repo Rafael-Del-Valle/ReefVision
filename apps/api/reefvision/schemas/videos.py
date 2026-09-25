@@ -168,6 +168,7 @@ class VideoFrameObjectMetric(BaseModel):
     center_y: float
     nearest_neighbor_track_id: str | None = None
     nearest_neighbor_distance_pixels: float | None = None
+    nearest_neighbor_track_id_meters: str | None = None
     nearest_neighbor_distance_meters: float | None = None
 
 

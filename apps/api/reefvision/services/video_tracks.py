@@ -145,6 +145,7 @@ class VideoTrackService:
     def delete(self, track_id: str) -> None:
         track = self._track(track_id)
         video = self._video(track.video_id)
+        GeoReferencedObservationService(self.session).delete_for_tracks([track.id])
         track.deleted_at = utc_now()
         track.revision += 1
         video.revision += 1
@@ -169,6 +170,11 @@ class VideoTrackService:
         for item in keyframes:
             if item.frame == frame_index:
                 return item.bbox
+
+        # Machine outputs represent actual detector/tracker observations.
+        # Do not invent on-screen instances between missed detections.
+        if track.source_job_id is not None:
+            return None
 
         for first, second in pairwise(keyframes):
             if first.frame < frame_index < second.frame:
@@ -290,6 +296,7 @@ class VideoTrackService:
                     nearest_track_id = other_track.id
 
             nearest_meters: float | None = None
+            nearest_track_id_meters: str | None = None
             source_geo = geographic.get(track.id)
             if source_geo is not None:
                 for other in objects:
@@ -308,6 +315,7 @@ class VideoTrackService:
                     )
                     if nearest_meters is None or distance_m < nearest_meters:
                         nearest_meters = distance_m
+                        nearest_track_id_meters = other_track.id
 
             if nearest_pixels is not None:
                 pixel_nearest.append(nearest_pixels)
@@ -324,6 +332,7 @@ class VideoTrackService:
                     center_y=float(item["center_y"]),
                     nearest_neighbor_track_id=nearest_track_id,
                     nearest_neighbor_distance_pixels=nearest_pixels,
+                    nearest_neighbor_track_id_meters=nearest_track_id_meters,
                     nearest_neighbor_distance_meters=nearest_meters,
                 )
             )

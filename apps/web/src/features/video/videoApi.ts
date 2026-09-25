@@ -204,6 +204,7 @@ export interface VideoFrameObjectMetric {
   center_y: number;
   nearest_neighbor_track_id: string | null;
   nearest_neighbor_distance_pixels: number | null;
+  nearest_neighbor_track_id_meters: string | null;
   nearest_neighbor_distance_meters: number | null;
 }
 
