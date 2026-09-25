@@ -38,6 +38,7 @@ class FakeVideoTrackingProvider:
         confidence: float,
         iou: float,
         device: str,
+        link_detections: bool = True,
         on_progress: VideoTrackingProgressCallback | None = None,
         should_cancel: VideoTrackingCancellationCheck | None = None,
     ) -> list[TrackObservation]:
@@ -47,6 +48,7 @@ class FakeVideoTrackingProvider:
         assert confidence == pytest.approx(0.2)
         assert iou == pytest.approx(0.4)
         assert device == "cpu"
+        assert link_detections is True
 
         observations = [
             TrackObservation(

@@ -164,9 +164,9 @@ AIRDATA_CSV = (
 )
 
 
-def test_uploaded_airdata_is_preferred_over_srt_and_persists_alignment(client, monkeypatch):
+def test_uploaded_srt_is_primary_and_aligned_airdata_fills_missing_fields(client, monkeypatch):
     monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
-    project = create_project(client, "AirData precedence")
+    project = create_project(client, "SRT precedence")
     files = {
         "file": ("fish.mp4", io.BytesIO(b"fake-video"), "video/mp4"),
         "telemetry_file": (
@@ -198,11 +198,19 @@ def test_uploaded_airdata_is_preferred_over_srt_and_persists_alignment(client, m
     with client.app.state.session_factory() as session:
         source = VideoAssetService(session, settings).telemetry_source(video["id"])
         assert source is not None
-        match = source.sample_for_frame(1, 10)
-        assert match is not None
-        assert match.sample.gimbal_yaw_deg == 265.6
-        assert match.provenance is not None
-        assert match.provenance.gimbal_yaw_source == "airdata"
+        primary_match = source.sample_for_frame(0, 10)
+        assert primary_match is not None
+        assert primary_match.sample.gimbal_yaw_deg == 179
+        assert primary_match.provenance is not None
+        assert primary_match.provenance.gimbal_yaw_source == "dji_srt"
+        assert primary_match.provenance.position_source == "dji_srt"
+
+        fallback_match = source.sample_for_frame(1, 10)
+        assert fallback_match is not None
+        assert fallback_match.sample.gimbal_yaw_deg == 265.6
+        assert fallback_match.provenance is not None
+        assert fallback_match.provenance.gimbal_yaw_source == "airdata"
+        assert fallback_match.provenance.position_source == "dji_srt"
 
         airdata_path.unlink()
         fallback = VideoAssetService(session, settings).telemetry_source(video["id"])

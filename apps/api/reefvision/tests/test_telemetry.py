@@ -5,7 +5,7 @@ import pytest
 from reefvision.domain.errors import ValidationError
 from reefvision.geospatial.dji_srt import parse_dji_srt
 from reefvision.geospatial.models import TelemetrySample
-from reefvision.geospatial.synchronization import IndexedTelemetrySource
+from reefvision.geospatial.synchronization import IndexedTelemetrySource, PreferredTelemetrySource
 from reefvision.storage.telemetry import find_paired_srt, load_dji_srt
 
 FIXTURES = Path(__file__).parent / "fixtures" / "telemetry"
@@ -88,6 +88,64 @@ def test_nearest_time_endpoints_ties_and_gap(time_s, matched, delta):
     assert match.sample.time_s == matched
     assert match.delta_s == pytest.approx(delta)
     assert match.error_s == pytest.approx(abs(delta))
+
+
+def test_srt_is_primary_and_airdata_requires_explicit_alignment_for_fallback():
+    srt = IndexedTelemetrySource(
+        [
+            TelemetrySample(
+                sample_index=1,
+                time_s=0,
+                latitude=25.0,
+                longitude=-80.0,
+                gimbal_pitch_deg=-80.0,
+            )
+        ]
+    )
+    airdata = IndexedTelemetrySource(
+        [
+            TelemetrySample(
+                sample_index=2,
+                time_s=0,
+                latitude=30.0,
+                longitude=-70.0,
+                gimbal_pitch_deg=-20.0,
+                gimbal_yaw_deg=123.0,
+            )
+        ]
+    )
+
+    unaligned = PreferredTelemetrySource(
+        airdata=airdata,
+        srt=srt,
+        airdata_time_offset_s=0.0,
+        airdata_time_offset_evidence=None,
+    )
+    unaligned_match = unaligned.sample_for_time(0)
+    assert unaligned_match is not None
+    assert (unaligned_match.sample.latitude, unaligned_match.sample.longitude) == (25.0, -80.0)
+    assert unaligned_match.sample.gimbal_pitch_deg == -80.0
+    assert unaligned_match.sample.gimbal_yaw_deg is None
+    assert unaligned_match.provenance is not None
+    assert unaligned_match.provenance.position_source == "dji_srt"
+    assert unaligned_match.provenance.gimbal_pitch_source == "dji_srt"
+    assert unaligned_match.provenance.gimbal_yaw_source is None
+
+    aligned = PreferredTelemetrySource(
+        airdata=airdata,
+        srt=srt,
+        airdata_time_offset_s=0.0,
+        airdata_time_offset_evidence="Independent video/flight alignment",
+    )
+    aligned_match = aligned.sample_for_time(0)
+    assert aligned_match is not None
+    assert (aligned_match.sample.latitude, aligned_match.sample.longitude) == (25.0, -80.0)
+    assert aligned_match.sample.gimbal_pitch_deg == -80.0
+    assert aligned_match.sample.gimbal_yaw_deg == 123.0
+    assert aligned_match.provenance is not None
+    assert aligned_match.provenance.position_source == "dji_srt"
+    assert aligned_match.provenance.gimbal_pitch_source == "dji_srt"
+    assert aligned_match.provenance.gimbal_yaw_source == "airdata"
 
 
 def test_non_integer_fps_and_first_sample_after_video_start():

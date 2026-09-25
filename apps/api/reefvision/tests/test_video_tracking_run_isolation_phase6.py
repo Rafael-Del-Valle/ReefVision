@@ -36,11 +36,13 @@ class MultiTrackerProvider:
         confidence: float,
         iou: float,
         device: str,
+        link_detections: bool = True,
         on_progress: VideoTrackingProgressCallback | None = None,
         should_cancel: VideoTrackingCancellationCheck | None = None,
     ) -> list[TrackObservation]:
         assert checkpoint_path.read_bytes() == b"detector"
         assert video_path.read_bytes() == b"video"
+        assert link_detections is True
 
         provider_track_id = 7 if tracker == "bytetrack.yaml" else 8
         x = 10 if tracker == "bytetrack.yaml" else 20

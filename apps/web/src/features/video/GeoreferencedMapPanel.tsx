@@ -550,6 +550,7 @@ export function GeoreferencedMapPanel({
                   observations={state.observations}
                   activeObservationId={activeObservation?.id ?? null}
                   selectedObservationId={state.selectedObservationId}
+                  showTrackLines={showTrackLines}
                   selectedUncertaintyRadiusM={selectedHorizontal95M}
                   onObservationSelect={(observation) => {
                     void selectObservation(observation);
@@ -615,7 +616,8 @@ export function GeoreferencedMapPanel({
                     </g>
                   ))}
 
-                  {Array.from(trackGroups.tracked.entries()).map(
+                  {showTrackLines &&
+                    Array.from(trackGroups.tracked.entries()).map(
                     ([trackId, observations]) => {
                       const points = observations
                         .map((observation) => projectedById.get(observation.id))

@@ -12,13 +12,18 @@ vi.mock("./GeoreferencedMapPanel", () => ({
   GeoreferencedMapPanel: ({
     videoId,
     activeFrameIndex,
+    showTrackLines,
     onFrameSelect,
   }: {
     videoId: string;
     activeFrameIndex?: number | null;
+    showTrackLines?: boolean;
     onFrameSelect?: (frameIndex: number, frameTimeSeconds: number) => void;
   }) => (
-    <section data-testid="mock-georeferenced-map-panel">
+    <section
+      data-testid="mock-georeferenced-map-panel"
+      data-show-track-lines={showTrackLines === false ? "false" : "true"}
+    >
       <h3>Geographic observations</h3>
       <span>{videoId}</span>
       <span data-testid="mock-active-map-frame">
