@@ -160,6 +160,31 @@ def test_annotated_export_job_and_download(
 
     monkeypatch.setattr(export_job_module, "render_annotated_video", fake_render)
 
+    def fake_verify(
+        path: Path,
+        **kwargs,
+    ) -> dict[str, object]:
+        assert path.is_file()
+        return {
+            "codec": "h264",
+            "container": "mp4",
+            "fourcc": "h264",
+            "encoder_backend": "imageio-ffmpeg/libx264",
+            "crf": 20,
+            "encoder_preset": "fast",
+            "pixel_format": "yuv420p",
+            "verified_frame_count": 3,
+            "verified_fps": 10.0,
+            "verified_width_px": 100,
+            "verified_height_px": 60,
+        }
+
+    monkeypatch.setattr(
+        export_job_module,
+        "verify_annotated_video",
+        fake_verify,
+    )
+
     queued = client.post(
         f"/api/v1/videos/{video_id}/annotated-video-exports",
         json={
@@ -193,6 +218,10 @@ def test_annotated_export_job_and_download(
     assert payload["result_json"]["overlays"]["trails"] is True
     assert payload["result_json"]["track_count"] == 1
     assert payload["result_json"]["observation_count"] == 2
+    assert payload["result_json"]["codec"] == "h264"
+    assert payload["result_json"]["container"] == "mp4"
+    assert payload["result_json"]["encoder_backend"] == "imageio-ffmpeg/libx264"
+    assert payload["result_json"]["verified_frame_count"] == 3
     assert payload["result_json"]["audio_preserved"] is False
     assert captured["trail_length"] == 42
 

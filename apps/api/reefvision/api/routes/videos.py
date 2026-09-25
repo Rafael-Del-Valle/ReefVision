@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Annotated
 from urllib.parse import quote
 
@@ -88,6 +89,31 @@ def import_video(
         airdata_stream=airdata_file.file if airdata_file is not None else None,
         airdata_time_offset_s=airdata_time_offset_s,
         airdata_time_offset_evidence=airdata_time_offset_evidence,
+    )
+
+
+@router.post(
+    "/projects/{project_id}/imports/videos/path",
+    response_model=VideoAssetResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def import_video_path(
+    project_id: str,
+    request: Request,
+    session: DbSession,
+    source_path: Annotated[str, Form()],
+) -> VideoAssetResponse:
+    path = Path(source_path).expanduser()
+
+    if not path.is_absolute():
+        raise ValidationError("Desktop video source path must be absolute")
+
+    if not path.is_file():
+        raise ValidationError("Desktop video source path does not exist")
+
+    return asset_service(request, session).import_video_path(
+        project_id,
+        path,
     )
 
 
@@ -514,6 +540,7 @@ def create_tracking_job(
     session.refresh(job)
     return JobResponse.model_validate(job)
 
+
 @router.post("/videos/{video_id}/georeference-tracks")
 def georeference_existing_video_tracks(
     video_id: str,
@@ -538,9 +565,7 @@ def georeference_existing_video_tracks(
     readiness = VideoGeoreferencingReadinessService(session, settings).evaluate(video_id)
     if not readiness.ready:
         blockers = "; ".join(issue.message for issue in readiness.issues)
-        raise ValidationError(
-            "Georeferencing is not ready" + (f": {blockers}" if blockers else "")
-        )
+        raise ValidationError("Georeferencing is not ready" + (f": {blockers}" if blockers else ""))
 
     tracks = list(
         session.scalars(
@@ -563,6 +588,7 @@ def georeference_existing_video_tracks(
 
     attempted = 0
     succeeded = 0
+    skipped_zoom_mismatch = 0
     failed = 0
 
     for track in tracks:
@@ -572,14 +598,10 @@ def georeference_existing_video_tracks(
                 frame = int(raw["frame"])
                 bbox = raw["bbox"]
                 if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
-                    raise ValidationError(
-                        "Track keyframe bbox must contain x, y, width, height"
-                    )
+                    raise ValidationError("Track keyframe bbox must contain x, y, width, height")
                 x, y, width, height = (float(value) for value in bbox)
                 if width <= 0 or height <= 0:
-                    raise ValidationError(
-                        "Track keyframe bbox requires positive dimensions"
-                    )
+                    raise ValidationError("Track keyframe bbox requires positive dimensions")
 
                 observation = service.georeference_detection(
                     video_id,
@@ -596,7 +618,12 @@ def georeference_existing_video_tracks(
                     observation,
                     configuration_hash=configuration_hash,
                 )
-            except (KeyError, TypeError, ValueError, ValidationError):
+            except ValidationError as exc:
+                if "zoom does not match" in str(exc).casefold():
+                    skipped_zoom_mismatch += 1
+                else:
+                    failed += 1
+            except (KeyError, TypeError, ValueError):
                 failed += 1
             else:
                 succeeded += 1
@@ -607,6 +634,7 @@ def georeference_existing_video_tracks(
         "track_count": len(tracks),
         "attempted_count": attempted,
         "georeferenced_observation_count": succeeded,
+        "skipped_zoom_mismatch_count": skipped_zoom_mismatch,
         "failure_count": failed,
         "configuration_hash": configuration_hash,
     }

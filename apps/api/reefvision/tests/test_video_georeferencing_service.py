@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from starlette.requests import Request
 
+from reefvision.api.routes.videos import georeference_existing_video_tracks
 from reefvision.config import Settings
 from reefvision.db.base import Base
-from reefvision.db.models import Project, VideoAsset
+from reefvision.db.models import LabelClass, Project, VideoAsset, VideoTrack
 from reefvision.db.session import create_database_engine, create_session_factory
 from reefvision.domain.errors import ValidationError
 from reefvision.geospatial.models import TelemetrySample
@@ -15,6 +18,8 @@ from reefvision.schemas.georeferenced_observation import BoundingBoxPixels
 from reefvision.schemas.video_georeferencing_calibration import (
     VideoGeoreferencingCalibrationSetRequest,
 )
+from reefvision.services.georeferenced_observations import GeoReferencedObservationService
+from reefvision.services.video_assets import VideoAssetService
 from reefvision.services.video_georeferencing import VideoGeoreferencingService
 from reefvision.services.video_georeferencing_calibration import (
     GEOREFERENCING_CALIBRATION_METADATA_KEY,
@@ -505,7 +510,7 @@ def test_georeferencing_readiness_reports_synchronization_problem(
     assert {issue.code for issue in readiness.issues} == {"telemetry_out_of_sync"}
 
 
-def test_georeferencing_readiness_reports_zoom_mismatch(
+def test_georeferencing_readiness_allows_zoom_mismatch(
     service_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -534,11 +539,114 @@ def test_georeferencing_readiness_reports_zoom_mismatch(
         )
         readiness = service.evaluate(video_id)
 
-    assert readiness.ready is False
-    assert readiness.state == "zoom_mismatch"
+    assert readiness.ready is True
+    assert readiness.state == "ready"
     assert readiness.synchronized_frame_count == 5
     assert readiness.zoom_compatible is False
-    assert {issue.code for issue in readiness.issues} == {"calibration_zoom_mismatch"}
+    assert readiness.issues == []
+
+
+@pytest.mark.parametrize(
+    ("zooms", "missing_roll_frame", "expected_frames", "skipped", "failed"),
+    [
+        ((1.0, 2.0, 1.0, 2.0, 1.0), None, [0, 150, 299], 2, 0),
+        ((2.0, 2.0, 2.0, 2.0, 2.0), None, [], 5, 0),
+        ((1.0, 1.0, 1.0, 1.0, 1.0), None, [0, 75, 150, 224, 299], 0, 0),
+        ((1.0000005, 1.000002, 1.0, 2.0, 1.0), None, [0, 150, 299], 2, 0),
+        ((1.0, 2.0, 1.0, 2.0, 1.0), 150, [0, 299], 2, 1),
+    ],
+    ids=["mixed", "all-wrong", "all-matching", "zoom-tolerance", "other-failure"],
+)
+def test_georeference_tracks_skips_only_zoom_mismatches(
+    service_context,
+    monkeypatch: pytest.MonkeyPatch,
+    zooms,
+    missing_roll_frame,
+    expected_frames,
+    skipped,
+    failed,
+) -> None:
+    settings, factory, video_id = service_context
+    frames = [0, 75, 150, 224, 299]
+    source = PreferredTelemetrySource(
+        airdata=None,
+        srt=IndexedTelemetrySource(
+            [
+                TelemetrySample(
+                    sample_index=index,
+                    time_s=frame / 30.0,
+                    latitude=0.0,
+                    longitude=0.0,
+                    relative_altitude_m=100.0,
+                    gimbal_yaw_deg=0.0,
+                    gimbal_pitch_deg=-90.0,
+                    gimbal_roll_deg=None if frame == missing_roll_frame else 0.0,
+                    digital_zoom_ratio=zoom,
+                )
+                for index, (frame, zoom) in enumerate(zip(frames, zooms, strict=True))
+            ]
+        ),
+    )
+    monkeypatch.setattr(VideoAssetService, "telemetry_source", lambda self, _: source)
+    with factory() as session:
+        video = session.get(VideoAsset, video_id)
+        video.metadata_json = {
+            **video.metadata_json,
+            "telemetry": {
+                "found": True,
+                "available": True,
+                "source_type": "dji_srt",
+                "source_path": "synthetic.srt",
+                "path_kind": "managed",
+                "sample_count": 5,
+            },
+        }
+        label = LabelClass(
+            project_id=video.project_id,
+            name="Fish",
+            class_index=0,
+            display_order=0,
+            display_color="#ffffff",
+        )
+        session.add(label)
+        session.flush()
+        session.add(
+            VideoTrack(
+                video_id=video_id,
+                label_class_id=label.id,
+                track_number=1,
+                keyframes_json=[{"frame": frame, "bbox": [490, 390, 20, 20]} for frame in frames],
+            )
+        )
+        session.commit()
+
+        readiness = VideoGeoreferencingReadinessService(session, settings).evaluate(video_id)
+        assert readiness.ready is True
+        request = Request(
+            {
+                "type": "http",
+                "app": SimpleNamespace(
+                    state=SimpleNamespace(settings=settings),
+                ),
+            }
+        )
+        response = georeference_existing_video_tracks(video_id, request, session)
+        assert response["attempted_count"] == 5
+        assert response["georeferenced_observation_count"] == len(expected_frames)
+        assert response["skipped_zoom_mismatch_count"] == skipped
+        assert response["failure_count"] == failed
+
+    with factory() as session:
+        persistence = GeoReferencedObservationService(session)
+        stored = persistence.list_for_video(video_id)
+        assert [row.frame_index for row in stored] == expected_frames
+        for row in stored:
+            assert row.latitude_deg == pytest.approx(0.0, abs=1e-12)
+            assert row.longitude_deg == pytest.approx(0.0, abs=1e-12)
+            assert row.configuration_hash == response["configuration_hash"]
+            observation = persistence.to_response(row)
+            assert observation.calibration.zoom_state == 1.0
+            assert observation.telemetry.field_provenance["position_source"] == "dji_srt"
 
 
 def test_georeference_detection_prefers_explicit_representative_pixel(

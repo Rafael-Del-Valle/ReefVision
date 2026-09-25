@@ -401,6 +401,19 @@ export function importVideo(
   );
 }
 
+export function importVideoPath(
+  projectId: string,
+  sourcePath: string,
+): Promise<VideoAssetRecord> {
+  const form = new FormData();
+  form.append("source_path", sourcePath);
+
+  return request<VideoAssetRecord>(
+    `/projects/${encodeURIComponent(projectId)}/imports/videos/path`,
+    { method: "POST", body: form },
+  );
+}
+
 export function getVideoGeoreferencingReadiness(
   videoId: string,
   signal?: AbortSignal,

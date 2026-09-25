@@ -245,3 +245,143 @@ def test_failed_video_import_removes_managed_airdata(client, monkeypatch):
     assert response.status_code == 400
     settings = client.app.state.settings
     assert list(settings.resolved_data_dir.rglob("*.airdata.csv")) == []
+
+
+def test_path_import_auto_discovers_unique_airdata(
+    client,
+    monkeypatch,
+    tmp_path,
+):
+    project = create_project(client, "Automatic AirData discovery")
+
+    monkeypatch.setattr(
+        "reefvision.services.video_assets._inspect_video",
+        lambda _path: {
+            "width_px": 1920,
+            "height_px": 1080,
+            "frame_count": 30,
+            "fps": 30.0,
+            "duration_seconds": 1.0,
+        },
+    )
+
+    video_path = tmp_path / "DJI_0001.MP4"
+    video_path.write_bytes(b"synthetic-video")
+
+    airdata_path = tmp_path / "Flight-Airdata.csv"
+    airdata_path.write_bytes(AIRDATA_CSV)
+
+    # A non-AirData CSV must not interfere with discovery.
+    (tmp_path / "annotations_Flight-Airdata.csv").write_text(
+        "frame,label\n0,whale\n",
+        encoding="utf-8",
+    )
+
+    settings = client.app.state.settings
+
+    with client.app.state.session_factory() as session:
+        video = VideoAssetService(
+            session,
+            settings,
+        ).import_video_path(
+            project["id"],
+            video_path,
+        )
+
+        assert video.airdata_telemetry.found is True
+        assert video.airdata_telemetry.available is True
+        assert video.airdata_telemetry.source_type == "airdata"
+        assert video.airdata_telemetry.path_kind == "external"
+        assert video.airdata_telemetry.source_path == str(airdata_path.resolve())
+
+
+def test_path_import_does_not_guess_between_multiple_airdata_logs(
+    client,
+    monkeypatch,
+    tmp_path,
+):
+    project = create_project(client, "Ambiguous AirData discovery")
+
+    monkeypatch.setattr(
+        "reefvision.services.video_assets._inspect_video",
+        lambda _path: {
+            "width_px": 1920,
+            "height_px": 1080,
+            "frame_count": 30,
+            "fps": 30.0,
+            "duration_seconds": 1.0,
+        },
+    )
+
+    video_path = tmp_path / "DJI_0001.MP4"
+    video_path.write_bytes(b"synthetic-video")
+
+    (tmp_path / "Flight-A-Airdata.csv").write_bytes(AIRDATA_CSV)
+    (tmp_path / "Flight-B-Airdata.csv").write_bytes(AIRDATA_CSV)
+
+    settings = client.app.state.settings
+
+    with client.app.state.session_factory() as session:
+        video = VideoAssetService(
+            session,
+            settings,
+        ).import_video_path(
+            project["id"],
+            video_path,
+        )
+
+        assert video.airdata_telemetry.found is False
+        assert video.airdata_telemetry.available is False
+        assert video.airdata_telemetry.source_path is None
+
+
+def test_path_import_api_auto_discovers_sibling_telemetry(
+    client,
+    monkeypatch,
+    tmp_path,
+):
+    project = create_project(
+        client,
+        "Desktop automatic telemetry import",
+    )
+
+    monkeypatch.setattr(
+        "reefvision.services.video_assets._inspect_video",
+        lambda _path: {
+            "width_px": 1920,
+            "height_px": 1080,
+            "frame_count": 30,
+            "fps": 30.0,
+            "duration_seconds": 1.0,
+        },
+    )
+
+    video_path = tmp_path / "DJI.MP4"
+    video_path.write_bytes(b"synthetic-video")
+
+    srt_path = tmp_path / "DJI.SRT"
+    srt_path.write_bytes((FIXTURES / "modern.SRT").read_bytes())
+
+    airdata_path = tmp_path / "Flight-Airdata.csv"
+    airdata_path.write_bytes(AIRDATA_CSV)
+
+    response = client.post(
+        (f"/api/v1/projects/{project['id']}/imports/videos/path"),
+        data={
+            "source_path": str(video_path.resolve()),
+        },
+    )
+
+    assert response.status_code == 201
+
+    video = response.json()
+
+    assert video["telemetry"]["available"] is True
+    assert video["telemetry"]["source_type"] == "dji_srt"
+    assert video["telemetry"]["path_kind"] == "external"
+    assert video["telemetry"]["source_path"] == str(srt_path.resolve())
+
+    assert video["airdata_telemetry"]["available"] is True
+    assert video["airdata_telemetry"]["source_type"] == "airdata"
+    assert video["airdata_telemetry"]["path_kind"] == "external"
+    assert video["airdata_telemetry"]["source_path"] == str(airdata_path.resolve())

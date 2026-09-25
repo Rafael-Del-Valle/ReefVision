@@ -514,6 +514,7 @@ fn main() {
     };
 
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![desktop_context])
         .setup(|app| {
             let data_dir = resolve_desktop_data_dir(app.handle())?;

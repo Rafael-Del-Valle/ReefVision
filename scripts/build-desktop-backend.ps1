@@ -287,6 +287,16 @@ if (-not $VdaTemporalText.Contains("motion_module_kwargs = dict(")) {
     throw "Pinned Video Depth Anything compatibility patch is missing."
 }
 
+$Mavic3TCalibrationPath = Join-Path $ApiRoot "reefvision\data\camera_calibrations"
+$Mavic3TWideCalibration = Join-Path $Mavic3TCalibrationPath "camera_calibration_DJIM3T_RGBwide.json"
+$Mavic3TTeleCalibration = Join-Path $Mavic3TCalibrationPath "camera_calibration_DJIM3T_RGBtele.json"
+
+foreach ($CalibrationFile in @($Mavic3TWideCalibration, $Mavic3TTeleCalibration)) {
+    if (-not (Test-Path -LiteralPath $CalibrationFile -PathType Leaf)) {
+        throw "Required Mavic 3T calibration resource is missing: $CalibrationFile"
+    }
+}
+
 $ResolvedProviderRuntimePath = (Resolve-Path $ProviderRuntimePath).Path
 $Arguments = @(
     "--noconfirm",
@@ -313,6 +323,10 @@ $Arguments = @(
     "multipart",
     "--collect-submodules",
     "python_multipart",
+    "--collect-all",
+    "imageio_ffmpeg",
+    "--copy-metadata",
+    "imageio-ffmpeg",
     "--hidden-import",
     "uvicorn.logging",
     "--hidden-import",
@@ -333,6 +347,8 @@ $Arguments = @(
     "${TrackerCatalogFile};config",
     "--add-data",
     "${VdaRuntimeRoot};provider-runtime/video-depth-anything",
+    "--add-data",
+    "${Mavic3TCalibrationPath};reefvision/data/camera_calibrations",
     $DesktopEntrypoint
 )
 
@@ -379,6 +395,12 @@ try {
         throw "Pinned advanced-provider runtime preflight failed. Rerun .\scripts\bootstrap.ps1."
     }
 
+    Write-ReefVisionStep "Checking annotated-video H.264 encoder before packaging"
+    & $VenvPython -c "from reefvision.desktop import require_annotated_video_encoder_runtime; require_annotated_video_encoder_runtime(); print('Annotated-video libx264 runtime OK')"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Annotated-video libx264 runtime preflight failed."
+    }
+
     Write-ReefVisionStep "Building the packaged FastAPI sidecar with PyInstaller"
     & $PyInstaller @Arguments
     if ($LASTEXITCODE -ne 0) {
@@ -408,6 +430,17 @@ if (-not (Test-Path $SourceBundle -PathType Container)) {
 $PyInstallerCatalog = Join-Path $SourceBundle "_internal\config\model_catalog.json"
 Assert-ReefVisionModelCatalog -Path $PyInstallerCatalog
 
+$PyInstallerMavicCalibrationPath = Join-Path $SourceBundle "_internal\reefvision\data\camera_calibrations"
+foreach ($CalibrationName in @(
+    "camera_calibration_DJIM3T_RGBwide.json",
+    "camera_calibration_DJIM3T_RGBtele.json"
+)) {
+    $PackagedCalibration = Join-Path $PyInstallerMavicCalibrationPath $CalibrationName
+    if (-not (Test-Path -LiteralPath $PackagedCalibration -PathType Leaf)) {
+        throw "PyInstaller omitted Mavic 3T calibration resource: $PackagedCalibration"
+    }
+}
+
 $PyInstallerVdaRoot = Join-Path $SourceBundle "_internal\provider-runtime\video-depth-anything"
 $PyInstallerVdaSource = Join-Path $PyInstallerVdaRoot "source\video_depth_anything\video_depth.py"
 $PyInstallerVdaManifest = Join-Path $PyInstallerVdaRoot "source-manifest.json"
@@ -420,6 +453,24 @@ if (-not (Test-Path -LiteralPath $PyInstallerVdaManifest -PathType Leaf)) {
 
 Write-ReefVisionStep "Trimming packaged desktop runtime to the supported installed-app footprint"
 Remove-ReefVisionPackagingDebris -BundlePath $SourceBundle
+
+$PyInstallerFfmpegRoot = Join-Path $SourceBundle "_internal\imageio_ffmpeg\binaries"
+$PyInstallerFfmpeg = @(
+    Get-ChildItem `
+        -LiteralPath $PyInstallerFfmpegRoot `
+        -Filter "ffmpeg*.exe" `
+        -File `
+        -ErrorAction SilentlyContinue
+)
+
+if ($PyInstallerFfmpeg.Count -lt 1) {
+    throw "PyInstaller/trim step omitted the imageio-ffmpeg executable."
+}
+
+Write-Host (
+    "Packaged annotated-video FFmpeg: " +
+    $PyInstallerFfmpeg[0].FullName
+) -ForegroundColor DarkGray
 $TorchLibPath = Join-Path $SourceBundle "_internal\torch\lib"
 if (Test-Path $TorchLibPath -PathType Container) {
     foreach ($pattern in $BundledTorchDevelopmentPatterns) {
@@ -440,6 +491,35 @@ if (Test-Path $LegacyTargetExe -PathType Leaf) {
 Copy-Item -LiteralPath $SourceBundle -Destination $PackagedBackendPath -Recurse
 $StagedCatalog = Join-Path $PackagedBackendPath "_internal\config\model_catalog.json"
 Assert-ReefVisionModelCatalog -Path $StagedCatalog
+
+$StagedMavicCalibrationPath = Join-Path $PackagedBackendPath "_internal\reefvision\data\camera_calibrations"
+foreach ($CalibrationName in @(
+    "camera_calibration_DJIM3T_RGBwide.json",
+    "camera_calibration_DJIM3T_RGBtele.json"
+)) {
+    $StagedCalibration = Join-Path $StagedMavicCalibrationPath $CalibrationName
+    if (-not (Test-Path -LiteralPath $StagedCalibration -PathType Leaf)) {
+        throw "Staged backend omitted Mavic 3T calibration resource: $StagedCalibration"
+    }
+}
+
+$StagedFfmpegRoot = Join-Path $PackagedBackendPath "_internal\imageio_ffmpeg\binaries"
+$StagedFfmpeg = @(
+    Get-ChildItem `
+        -LiteralPath $StagedFfmpegRoot `
+        -Filter "ffmpeg*.exe" `
+        -File `
+        -ErrorAction SilentlyContinue
+)
+
+if ($StagedFfmpeg.Count -lt 1) {
+    throw "Staged desktop backend omitted the imageio-ffmpeg executable."
+}
+
+Write-Host (
+    "Staged annotated-video FFmpeg: " +
+    $StagedFfmpeg[0].FullName
+) -ForegroundColor DarkGray
 $StagedVdaRoot = Join-Path $PackagedBackendPath "_internal\provider-runtime\video-depth-anything"
 $StagedVdaSource = Join-Path $StagedVdaRoot "source\video_depth_anything\video_depth.py"
 $StagedVdaManifest = Join-Path $StagedVdaRoot "source-manifest.json"

@@ -27,6 +27,7 @@ from reefvision.services.georeferencing_invalidation import (
 )
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.storage.telemetry import (
+    find_paired_airdata,
     find_paired_srt,
     load_airdata_csv,
     load_dji_srt,
@@ -147,6 +148,7 @@ class VideoAssetService:
         airdata, airdata_data, airdata_alignment = self._prepare_airdata(
             airdata_filename,
             airdata_stream,
+            source_path=source_path,
             airdata_time_offset_s=airdata_time_offset_s,
             airdata_time_offset_evidence=airdata_time_offset_evidence,
         )
@@ -282,6 +284,7 @@ class VideoAssetService:
         airdata_filename: str | None,
         airdata_stream: BinaryIO | None,
         *,
+        source_path: Path | None,
         airdata_time_offset_s: float,
         airdata_time_offset_evidence: str | None,
     ) -> tuple[TelemetryMetadata, bytes | None, dict[str, object]]:
@@ -293,6 +296,35 @@ class VideoAssetService:
         if airdata_stream is None:
             if airdata_filename is not None or airdata_time_offset_s or evidence is not None:
                 raise ValidationError("AirData alignment settings require an AirData CSV")
+
+            if source_path is not None:
+                paired = find_paired_airdata(source_path)
+
+                if paired is not None:
+                    try:
+                        source = load_airdata_csv(paired)
+                    except ValidationError as exc:
+                        LOGGER.warning(
+                            "Optional AirData telemetry unavailable: %s",
+                            exc,
+                        )
+                    else:
+                        return (
+                            TelemetryMetadata(
+                                found=True,
+                                available=True,
+                                source_type="airdata",
+                                source_path=str(paired.resolve()),
+                                path_kind="external",
+                                sample_count=len(source.samples),
+                            ),
+                            None,
+                            {
+                                "time_offset_s": 0.0,
+                                "evidence": None,
+                            },
+                        )
+
             return TelemetryMetadata(), None, {"time_offset_s": 0.0, "evidence": None}
         if Path(airdata_filename or "").suffix.casefold() != ".csv":
             raise ValidationError("AirData telemetry must be a CSV file")

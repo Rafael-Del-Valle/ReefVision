@@ -38,6 +38,46 @@ def find_paired_srt(video_path: Path) -> Path | None:
     return matches[0] if matches else None
 
 
+def find_paired_airdata(video_path: Path) -> Path | None:
+    """Return one unambiguous parseable sibling AirData CSV.
+
+    Candidate selection is content-based rather than filename-only.
+    This prevents files such as annotation CSVs from being selected
+    merely because their filename contains 'AirData'.
+
+    If zero or more than one sibling CSV parses as AirData telemetry,
+    no automatic selection is made.
+    """
+    parent = video_path.parent
+
+    try:
+        candidates = sorted(
+            (
+                candidate
+                for candidate in parent.iterdir()
+                if candidate.is_file() and candidate.suffix.casefold() == ".csv"
+            ),
+            key=lambda candidate: candidate.name.casefold(),
+        )
+    except OSError:
+        return None
+
+    valid: list[Path] = []
+
+    for candidate in candidates:
+        try:
+            load_airdata_csv(candidate)
+        except ValidationError:
+            continue
+
+        valid.append(candidate)
+
+        if len(valid) > 1:
+            return None
+
+    return valid[0] if valid else None
+
+
 def read_srt_stream(stream: BinaryIO) -> tuple[bytes, IndexedTelemetrySource]:
     data = stream.read(MAX_SRT_BYTES + 1)
     if len(data) > MAX_SRT_BYTES:

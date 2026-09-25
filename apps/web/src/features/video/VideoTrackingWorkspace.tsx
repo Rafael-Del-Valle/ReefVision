@@ -1,3 +1,4 @@
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 ﻿import { AnnotatedVideoExportPanel } from "./AnnotatedVideoExportPanel";
 import { GeoreferencedMapPanel } from "./GeoreferencedMapPanel";
 import { GeoreferencingSetupPanel } from "./GeoreferencingSetupPanel";
@@ -22,6 +23,7 @@ import {
   getVideoTracks,
   getVideos,
   importVideo,
+  importVideoPath,
   updateVideoTrack,
   videoContentUrl,
   videoFrameUrl,
@@ -80,6 +82,9 @@ export function VideoTrackingWorkspace({
   project,
 }: VideoTrackingWorkspaceProps) {
   const queryClient = useQueryClient();
+  const desktopMode =
+    typeof window !== "undefined" &&
+    "__TAURI_INTERNALS__" in window;
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const pendingMapSeekRef = useRef<PendingVideoMapSeek | null>(null);
   const mapSeekSequenceRef = useRef(0);
@@ -224,6 +229,48 @@ export function VideoTrackingWorkspace({
     setTrackStatus(selectedTrack.status);
     setKeyframes(sortedKeyframes(selectedTrack.keyframes_json));
   }, [selectedTrack]);
+
+  const desktopPathMutation = useMutation({
+    mutationFn: (sourcePath: string) =>
+      importVideoPath(project.id, sourcePath),
+    onSuccess: async (video) => {
+      setSelectedVideoId(video.id);
+      setUploadFile(null);
+      setTelemetryFile(null);
+      setAirdataFile(null);
+      setAirdataTimeOffsetSeconds(0);
+      setAirdataTimeOffsetEvidence("");
+      await queryClient.invalidateQueries({
+        queryKey: ["videos", project.id],
+      });
+    },
+  });
+
+  async function chooseDesktopVideo(): Promise<void> {
+    const selection = await openFileDialog({
+      multiple: false,
+      directory: false,
+      filters: [
+        {
+          name: "Video",
+          extensions: [
+            "avi",
+            "m4v",
+            "mkv",
+            "mov",
+            "mp4",
+            "webm",
+          ],
+        },
+      ],
+    });
+
+    if (typeof selection !== "string") {
+      return;
+    }
+
+    desktopPathMutation.mutate(selection);
+  }
 
   const uploadMutation = useMutation({
     mutationFn: () => {
@@ -577,6 +624,33 @@ export function VideoTrackingWorkspace({
       <section className="management-card">
         <p className="eyebrow">Research workflow</p>
         <h3>Managed videos</h3>
+        {desktopMode && (
+          <div className="workspace-guide compact">
+            <div>
+              <strong>Automatic telemetry import</strong>
+              <p className="annotation-helper">
+                Select a local video and ReefVision will automatically
+                attach its matching DJI SRT and the single valid sibling
+                AirData CSV when available. Manual inputs below remain
+                available as overrides.
+              </p>
+              <button
+                type="button"
+                onClick={() => void chooseDesktopVideo()}
+                disabled={desktopPathMutation.isPending}
+              >
+                {desktopPathMutation.isPending
+                  ? "Importing video..."
+                  : "Choose video ? auto SRT/AirData"}
+              </button>
+              {desktopPathMutation.error && (
+                <p className="form-error">
+                  {desktopPathMutation.error.message}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
         <label>
           Video file
           <input

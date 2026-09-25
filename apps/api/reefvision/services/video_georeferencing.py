@@ -11,6 +11,11 @@ from sqlalchemy.orm import Session
 from reefvision.config import Settings
 from reefvision.db.models import Project, VideoAsset
 from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.geospatial.mavic3t_camera import (
+    MAVIC3T_DYNAMIC_CAMERA_VERSION,
+    mavic3t_calibration_bundle_sha256,
+    resolve_mavic3t_frame_camera,
+)
 from reefvision.geospatial.models import TelemetryProvenance
 from reefvision.geospatial.projection import SurfaceReference, georeference_pixel
 from reefvision.geospatial.synchronization import TelemetrySource
@@ -162,6 +167,8 @@ class VideoGeoreferencingService:
                 airdata_alignment_evidence=alignment_evidence,
                 calibration_checksum_sha256=(calibration.checksum_sha256),
                 calibration_revision=(calibration.calibration_revision),
+                mavic3t_dynamic_camera_version=MAVIC3T_DYNAMIC_CAMERA_VERSION,
+                mavic3t_calibration_bundle_sha256=(mavic3t_calibration_bundle_sha256()),
                 project_height_offset_m=float(project.georeference_height_offset_m),
                 project_height_evidence=(project.georeference_height_evidence or ""),
                 max_telemetry_delta_s=max_delta_s,
@@ -399,6 +406,21 @@ class VideoGeoreferencingService:
 
         sample = telemetry_match.sample
 
+        observation_mavic3t_state = resolve_mavic3t_frame_camera(
+            sample,
+            pixel_x=selected_pixel.x,
+            pixel_y=selected_pixel.y,
+        )
+
+        if observation_mavic3t_state is not None:
+            observation_calibration = observation_mavic3t_state.calibration
+            observation_camera_model = observation_mavic3t_state.camera_model
+            observation_zoom_state = observation_mavic3t_state.digital_zoom_ratio
+        else:
+            observation_calibration = None
+            observation_camera_model = calibration_record.camera_mode
+            observation_zoom_state = calibration_record.digital_zoom_ratio
+
         if sample.latitude is None or sample.longitude is None:
             raise ValidationError("Successful georeferencing did not retain a GPS position")
 
@@ -450,6 +472,25 @@ class VideoGeoreferencingService:
             result.calibration_source_id or f"sha256:{calibration_record.checksum_sha256}"
         )
 
+        observation_calibration_version = str(calibration_record.calibration_revision)
+        observation_calibration_checksum = calibration_record.checksum_sha256
+
+        if observation_calibration is not None:
+            dynamic_source_id = observation_calibration.source_id
+
+            if (
+                dynamic_source_id is None
+                or not dynamic_source_id.startswith("sha256:")
+                or len(dynamic_source_id) != 71
+            ):
+                raise ValidationError(
+                    "Dynamic Mavic 3T calibration did not retain a SHA-256 source identity"
+                )
+
+            calibration_id = dynamic_source_id
+            observation_calibration_version = MAVIC3T_DYNAMIC_CAMERA_VERSION
+            observation_calibration_checksum = dynamic_source_id.removeprefix("sha256:")
+
         return GeoReferencedObservation(
             id=uuid4(),
             project_id=self._required_uuid(
@@ -500,19 +541,49 @@ class VideoGeoreferencingService:
             ),
             calibration=CalibrationReference(
                 calibration_id=calibration_id,
-                calibration_version=str(calibration_record.calibration_revision),
-                checksum_sha256=(calibration_record.checksum_sha256),
-                camera_model=calibration_record.camera_mode,
-                image_width_px=calibration_record.width_px,
-                image_height_px=calibration_record.height_px,
-                focal_length_x_px=calibration_record.fx_px,
-                focal_length_y_px=calibration_record.fy_px,
-                principal_point_x_px=calibration_record.cx_px,
-                principal_point_y_px=calibration_record.cy_px,
-                distortion_model=(
-                    "opencv_coefficients" if calibration_record.distortion_coefficients else "none"
+                calibration_version=observation_calibration_version,
+                checksum_sha256=observation_calibration_checksum,
+                camera_model=observation_camera_model,
+                image_width_px=(
+                    observation_calibration.width_px
+                    if observation_calibration is not None
+                    else calibration_record.width_px
                 ),
-                zoom_state=calibration_record.digital_zoom_ratio,
+                image_height_px=(
+                    observation_calibration.height_px
+                    if observation_calibration is not None
+                    else calibration_record.height_px
+                ),
+                focal_length_x_px=(
+                    observation_calibration.fx_px
+                    if observation_calibration is not None
+                    else calibration_record.fx_px
+                ),
+                focal_length_y_px=(
+                    observation_calibration.fy_px
+                    if observation_calibration is not None
+                    else calibration_record.fy_px
+                ),
+                principal_point_x_px=(
+                    observation_calibration.cx_px
+                    if observation_calibration is not None
+                    else calibration_record.cx_px
+                ),
+                principal_point_y_px=(
+                    observation_calibration.cy_px
+                    if observation_calibration is not None
+                    else calibration_record.cy_px
+                ),
+                distortion_model=(
+                    "opencv_coefficients"
+                    if (
+                        observation_calibration.distortion_coefficients
+                        if observation_calibration is not None
+                        else calibration_record.distortion_coefficients
+                    )
+                    else "none"
+                ),
+                zoom_state=observation_zoom_state,
             ),
             telemetry=telemetry_reference,
             location=GeographicLocation(
@@ -676,12 +747,18 @@ class VideoGeoreferencingService:
                 message="No telemetry sample falls within the synchronization limit",
             )
 
-        telemetry_zoom = telemetry_match.sample.digital_zoom_ratio
-        if telemetry_zoom is not None and not isclose(
-            telemetry_zoom,
-            calibration.digital_zoom_ratio,
-            rel_tol=1e-6,
-        ):
+        projection_calibration = calibration
+        projection_pixel_x = pixel_x
+        projection_pixel_y = pixel_y
+        projection_telemetry = telemetry_match.sample
+
+        try:
+            mavic3t_state = resolve_mavic3t_frame_camera(
+                telemetry_match.sample,
+                pixel_x=pixel_x,
+                pixel_y=pixel_y,
+            )
+        except ValidationError as exc:
             return self._failure(
                 video_id=video.id,
                 project_id=video.project_id,
@@ -689,19 +766,57 @@ class VideoGeoreferencingService:
                 timestamp_seconds=timestamp_seconds,
                 pixel_x=pixel_x,
                 pixel_y=pixel_y,
-                reason="calibration_zoom_mismatch",
-                message="Telemetry zoom does not match the selected georeferencing calibration",
+                reason="calibration_mismatch",
+                message=str(exc),
                 sync_error_s=telemetry_match.error_s,
                 telemetry_delta_s=telemetry_match.delta_s,
                 telemetry_provenance=telemetry_match.provenance,
             )
 
+        if mavic3t_state is not None:
+            projection_calibration = mavic3t_state.calibration
+            projection_pixel_x = mavic3t_state.native_pixel_x
+            projection_pixel_y = mavic3t_state.native_pixel_y
+
+            # Mavic 3T digital zoom has already been undone by mapping the
+            # displayed pixel back into the native 1x optical-camera frame.
+            #
+            # georeference_pixel() still validates telemetry zoom against the
+            # calibration, so provide a projection-only telemetry copy whose
+            # zoom matches the selected base calibration. The original sample
+            # remains untouched and is retained for observation provenance.
+            projection_telemetry = telemetry_match.sample.model_copy(
+                update={"digital_zoom_ratio": projection_calibration.digital_zoom_ratio}
+            )
+        else:
+            telemetry_zoom = telemetry_match.sample.digital_zoom_ratio
+            if telemetry_zoom is not None and not isclose(
+                telemetry_zoom,
+                calibration.digital_zoom_ratio,
+                rel_tol=1e-6,
+            ):
+                return self._failure(
+                    video_id=video.id,
+                    project_id=video.project_id,
+                    frame_index=frame_index,
+                    timestamp_seconds=timestamp_seconds,
+                    pixel_x=pixel_x,
+                    pixel_y=pixel_y,
+                    reason="calibration_zoom_mismatch",
+                    message=(
+                        "Telemetry zoom does not match the selected georeferencing calibration"
+                    ),
+                    sync_error_s=telemetry_match.error_s,
+                    telemetry_delta_s=telemetry_match.delta_s,
+                    telemetry_provenance=telemetry_match.provenance,
+                )
+
         try:
             result = georeference_pixel(
-                pixel_x=pixel_x,
-                pixel_y=pixel_y,
-                telemetry=telemetry_match.sample,
-                calibration=calibration,
+                pixel_x=projection_pixel_x,
+                pixel_y=projection_pixel_y,
+                telemetry=projection_telemetry,
+                calibration=projection_calibration,
                 surface=surface,
             )
         except ValidationError as exc:

@@ -20,6 +20,7 @@ from reefvision.services.video_annotated_export import (
     RenderObservation,
     render_annotated_video,
     resolve_overlay_options,
+    verify_annotated_video,
 )
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -279,6 +280,13 @@ def process_video_annotated_export_job(
             on_progress=on_progress,
             should_cancel=should_cancel,
         )
+        verification = verify_annotated_video(
+            temporary_path,
+            expected_width=width_px,
+            expected_height=height_px,
+            expected_fps=fps,
+            expected_frames=frame_count,
+        )
         os.replace(temporary_path, output_path)
 
         with factory() as session:
@@ -302,7 +310,7 @@ def process_video_annotated_export_job(
                 "output_path": output_relative,
                 "filename": filename,
                 "file_size_bytes": output_path.stat().st_size,
-                "codec": "mp4v",
+                **verification,
                 "audio_preserved": False,
                 "track_count": len(tracks),
                 "observation_count": len(observations),

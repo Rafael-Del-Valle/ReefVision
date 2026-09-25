@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import cv2
+import imageio_ffmpeg
 
 AnnotatedVideoPreset = Literal["clean_tracking", "full_review"]
 
@@ -167,6 +168,151 @@ def _draw_label(
     )
 
 
+class _FfmpegH264Writer:
+    """Small adapter around imageio-ffmpeg's streaming writer."""
+
+    def __init__(
+        self,
+        destination_path: Path,
+        *,
+        width_px: int,
+        height_px: int,
+        fps: float,
+    ) -> None:
+        if width_px % 2 or height_px % 2:
+            raise RuntimeError(
+                "H.264 yuv420p export requires even video dimensions; "
+                f"received {width_px}x{height_px}"
+            )
+
+        self._writer = imageio_ffmpeg.write_frames(
+            str(destination_path),
+            (int(width_px), int(height_px)),
+            pix_fmt_in="bgr24",
+            pix_fmt_out="yuv420p",
+            fps=float(fps),
+            quality=None,
+            bitrate=None,
+            codec="libx264",
+            macro_block_size=1,
+            ffmpeg_log_level="warning",
+            output_params=[
+                "-crf",
+                "20",
+                "-preset",
+                "fast",
+                "-movflags",
+                "+faststart",
+            ],
+        )
+        self._closed = False
+        self._writer.send(None)
+
+    def write(self, frame: object) -> None:
+        if self._closed:
+            raise RuntimeError("H.264 writer is already closed")
+        self._writer.send(frame)
+
+    def release(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._writer.close()
+
+
+def _open_h264_writer(
+    destination_path: Path,
+    *,
+    width_px: int,
+    height_px: int,
+    fps: float,
+) -> _FfmpegH264Writer:
+    """Open a controlled libx264 MP4 writer."""
+
+    return _FfmpegH264Writer(
+        destination_path,
+        width_px=width_px,
+        height_px=height_px,
+        fps=fps,
+    )
+
+
+def verify_annotated_video(
+    path: Path,
+    *,
+    expected_width: int,
+    expected_height: int,
+    expected_fps: float,
+    expected_frames: int,
+) -> dict[str, object]:
+    """Validate the completed MP4 before an export may be marked successful."""
+
+    if not path.is_file() or path.stat().st_size <= 0:
+        raise RuntimeError("Annotated-video export file was not created")
+
+    capture = cv2.VideoCapture(str(path))
+    if not capture.isOpened():
+        raise RuntimeError("Annotated-video export could not be reopened")
+
+    try:
+        actual_width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+        actual_height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        actual_fps = float(capture.get(cv2.CAP_PROP_FPS))
+        actual_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        fourcc_value = int(capture.get(cv2.CAP_PROP_FOURCC))
+        fourcc = "".join(chr((fourcc_value >> (8 * index)) & 0xFF) for index in range(4))
+
+        if actual_width != expected_width or actual_height != expected_height:
+            raise RuntimeError(
+                "Annotated-video export resolution mismatch: "
+                f"expected {expected_width}x{expected_height}, "
+                f"got {actual_width}x{actual_height}"
+            )
+
+        if abs(actual_fps - expected_fps) > 0.05:
+            raise RuntimeError(
+                "Annotated-video export FPS mismatch: "
+                f"expected {expected_fps:.6f}, got {actual_fps:.6f}"
+            )
+
+        if actual_frames != expected_frames:
+            raise RuntimeError(
+                "Annotated-video export frame-count mismatch: "
+                f"expected {expected_frames}, got {actual_frames}"
+            )
+
+        if fourcc.strip().lower() not in {"h264", "avc1"}:
+            raise RuntimeError(
+                f"Annotated-video export codec mismatch: expected H.264, got {fourcc!r}"
+            )
+
+        if expected_frames > 0:
+            capture.set(
+                cv2.CAP_PROP_POS_FRAMES,
+                float(expected_frames - 1),
+            )
+            ok, _ = capture.read()
+            if not ok:
+                raise RuntimeError("Annotated-video export final frame could not be decoded")
+
+        return {
+            "codec": "h264",
+            "container": "mp4",
+            "fourcc": fourcc,
+            "encoder_backend": "imageio-ffmpeg/libx264",
+            "crf": 20,
+            "encoder_preset": "fast",
+            "pixel_format": "yuv420p",
+            "verified_frame_count": actual_frames,
+            "verified_fps": actual_fps,
+            "verified_width_px": actual_width,
+            "verified_height_px": actual_height,
+        }
+    finally:
+        capture.release()
+
+
 def render_annotated_video(
     source_path: Path,
     destination_path: Path,
@@ -192,16 +338,16 @@ def render_annotated_video(
     if not capture.isOpened():
         raise RuntimeError(f"Could not open source video: {source_path}")
 
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # type: ignore[attr-defined]
-    writer = cv2.VideoWriter(
-        str(destination_path),
-        fourcc,
-        float(fps),
-        (int(width_px), int(height_px)),
-    )
-    if not writer.isOpened():
+    try:
+        writer = _open_h264_writer(
+            destination_path,
+            width_px=width_px,
+            height_px=height_px,
+            fps=fps,
+        )
+    except Exception:
         capture.release()
-        raise RuntimeError("OpenCV could not initialize MP4 video encoding")
+        raise
 
     by_frame: dict[int, list[RenderObservation]] = defaultdict(list)
     for observation in observations:

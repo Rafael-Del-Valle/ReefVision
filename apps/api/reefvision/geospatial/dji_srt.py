@@ -99,16 +99,42 @@ def _fields(body: str, gps_order: Literal["lon_lat", "lat_lon"]) -> dict[str, ob
     for field, aliases in _ALIASES.items():
         for alias in aliases:
             if alias in raw:
-                parsed = _value(raw[alias], field)
+                raw_value = raw[alias]
+
+                # Legacy focal_length values without an explicit unit are
+                # intentionally retained as raw-only. Modern DJI focal_len
+                # is handled separately below because M3T SRT uses bare
+                # numeric focal indicators.
+                if (
+                    field == "focal_length_mm"
+                    and alias == "focal_length"
+                    and not raw_value.casefold().endswith("mm")
+                ):
+                    continue
+
+                parsed = _value(raw_value, field)
                 if parsed is not None:
                     values[field] = parsed
                     break
     if "shutter_speed_s" not in values and "ss" in raw:
         values["shutter_speed_s"] = _value(f"1/{raw['ss']}", "shutter_speed_s")
-    focal = raw.get("focal_len", raw.get("focal_length", raw.get("focal_length_mm")))
+    focal_source = next(
+        (key for key in ("focal_len", "focal_length", "focal_length_mm") if key in raw),
+        None,
+    )
+    focal = raw.get(focal_source) if focal_source is not None else None
+
     if focal is not None:
         values["focal_length_raw"] = focal
-        if "focal_length_mm" not in values and focal.casefold().endswith("mm"):
+
+        # DJI focal_len may be a bare numeric focal indicator.
+        # Legacy focal_length remains raw-only unless it has an
+        # explicit mm suffix.
+        if "focal_length_mm" not in values and (
+            focal_source == "focal_len"
+            or focal_source == "focal_length_mm"
+            or focal.casefold().endswith("mm")
+        ):
             values["focal_length_mm"] = _value(focal, "focal_length_mm")
     gps = re.search(r"\bGPS\s*\(([^)]+)\)", body, re.I)
     if gps:
@@ -128,6 +154,16 @@ def _fields(body: str, gps_order: Literal["lon_lat", "lat_lon"]) -> dict[str, ob
                 value = _value(component, field)
                 if value is not None:
                     values.setdefault(field, value)
+    # Preserve legacy DJI bare focal_len semantics. M3T-style bare
+    # focal_len is only numerically useful when paired with digital-zoom
+    # telemetry, which allows base focal = focal_len / dzoom_ratio.
+    if (
+        "focal_len" in raw
+        and values.get("digital_zoom_ratio") is None
+        and not raw["focal_len"].casefold().endswith("mm")
+    ):
+        values.pop("focal_length_mm", None)
+
     return values
 
 

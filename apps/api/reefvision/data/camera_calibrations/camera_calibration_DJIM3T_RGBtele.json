@@ -1,0 +1,79 @@
+﻿{
+    "drone_model":  "DJI Mavic 3T",
+    "camera":  "RGB Tele",
+    "calibration_type":  "camera-model-derived",
+    "calibration_quality":  "provisional",
+    "calibration_note":  "Derived from the Theta/OpenAthena DJI Mavic 3T 1/2-in telephoto camera model.\nThis is NOT a measured checkerboard or DJI DewarpData calibration.\nUse until a measured tele calibration from the same aircraft/camera is available.\nThe 3840x2160 model preserves source pixel pitch and treats 16:9 video as a\nvertical crop rather than independently resizing the 4000x3000 source geometry.",
+    "source":  {
+                   "database":  "Theta-Limited DroneModels",
+                   "make_model":  "djiM3T",
+                   "comment":  "DJI Mavic 3T 1/2-in. Telephoto camera",
+                   "focal_length_mm":  29.9,
+                   "native_width_px":  4000,
+                   "native_height_px":  3000
+               },
+    "image_resolution":  {
+                             "width_px":  3840,
+                             "height_px":  2160,
+                             "source_width_px":  4000,
+                             "source_height_px":  3000,
+                             "video_geometry":  "centered_vertical_crop_after_uniform_scale"
+                         },
+    "physical_camera":  {
+                            "focal_length_mm":  29.9,
+                            "sensor_width_mm":  6.4,
+                            "sensor_height_mm":  4.8,
+                            "pixel_pitch_mm":  0.0016
+                        },
+    "field_of_view":  {
+                          "horizontal_deg":  12.217475,
+                          "vertical_deg":  6.890173
+                      },
+    "camera_matrix":  {
+                          "description":  "Provisional 3840x2160 intrinsic matrix for DJI Mavic 3T RGB Tele.",
+                          "fx":  17940,
+                          "fy":  17940,
+                          "cx":  1920,
+                          "cy":  1080,
+                          "matrix_row_major":  [
+                                                   [
+                                                       17940,
+                                                       0,
+                                                       1920
+                                                   ],
+                                                   [
+                                                       0,
+                                                       17940,
+                                                       1080
+                                                   ],
+                                                   [
+                                                       0,
+                                                       0,
+                                                       1
+                                                   ]
+                                               ]
+                      },
+    "distortion_coefficients":  {
+                                    "description":  "Theta source model reports zero distortion. These are not measured tele-camera distortion coefficients.",
+                                    "k1":  0,
+                                    "k2":  0,
+                                    "p1":  0,
+                                    "p2":  0,
+                                    "k3":  0,
+                                    "vector_opencv_order":  [
+                                                                0,
+                                                                0,
+                                                                0,
+                                                                0,
+                                                                0
+                                                            ]
+                                },
+    "zoom_handling":  {
+                          "optical_camera":  "tele",
+                          "nominal_35mm_equivalent_mm":  162,
+                          "telemetry_source":  "DJI SRT",
+                          "zoom_field":  "dzoom_ratio",
+                          "focal_field":  "focal_len",
+                          "rule":  "Identify optical camera from focal_len/dzoom_ratio, then apply digital zoom."
+                      }
+}

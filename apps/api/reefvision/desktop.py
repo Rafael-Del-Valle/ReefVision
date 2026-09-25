@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import os
+import subprocess
 import sys
 import threading
 from collections.abc import Sequence
@@ -317,6 +318,55 @@ def run_single_annotated_video_export_job(
         engine.dispose()
 
 
+def require_annotated_video_encoder_runtime() -> None:
+    """Require ReefVision's packaged libx264 annotated-video encoder."""
+
+    try:
+        import imageio_ffmpeg
+    except ImportError as exc:
+        raise RuntimeError(
+            "Packaged ReefVision is missing imageio-ffmpeg required "
+            "for H.264 annotated-video exports"
+        ) from exc
+
+    executable = Path(imageio_ffmpeg.get_ffmpeg_exe())
+
+    if not executable.is_file():
+        raise RuntimeError(
+            f"Packaged ReefVision could not locate its FFmpeg executable: {executable}"
+        )
+
+    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+
+    result = subprocess.run(
+        [
+            str(executable),
+            "-hide_banner",
+            "-encoders",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        creationflags=creationflags,
+    )
+
+    inventory = f"{result.stdout}\n{result.stderr}"
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Packaged ReefVision FFmpeg encoder inventory failed "
+            f"with exit code {result.returncode}"
+        )
+
+    if "libx264" not in inventory:
+        raise RuntimeError("Packaged ReefVision FFmpeg runtime does not provide libx264")
+
+    LOGGER.info(
+        "Annotated-video encoder runtime validated: %s",
+        executable,
+    )
+
+
 def run_self_test(settings: Settings) -> int:
     """Exercise packaged resources and providers without opening a server socket."""
 
@@ -341,6 +391,7 @@ def run_self_test(settings: Settings) -> int:
     configure_provider_runtime(data_dir=provider_runtime)
     require_all_implemented_providers_ready()
     require_scale_assistant_marker_runtime()
+    require_annotated_video_encoder_runtime()
     resolve_video_depth_anything_source(settings)
 
     from reefvision.main import create_app

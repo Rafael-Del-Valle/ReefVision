@@ -1,0 +1,62 @@
+{
+  "drone_model": "DJI Mavic 3T",
+  "camera": "RGB Wide",
+  "calibration_tool": "DroneVideoMeasure (DVM) v2 — SDU UAS Center",
+  "calibration_note": "Calibrated using a checkerboard pattern. Parameters follow the OpenCV camera model convention.",
+
+  "image_resolution": {
+    "width_px": 3840,
+    "height_px": 2160,
+    "note": "4K UHD. Verify against your specific footage if resolution differs."
+  },
+
+  "field_of_view": {
+    "horizontal_deg": 65.76,
+    "vertical_deg": 39.96
+  },
+
+  "camera_matrix": {
+    "description": "Intrinsic matrix K = [[fx, 0, cx], [0, fy, cy], [0, 0, 1]]. Units: pixels.",
+    "fx": 2969.4,
+    "fy": 2970.3,
+    "cx": 1968.5,
+    "cy": 1116.9,
+    "matrix_row_major": [
+      [2969.4,    0.0, 1968.5],
+      [   0.0, 2970.3, 1116.9],
+      [   0.0,    0.0,    1.0]
+    ]
+  },
+
+  "distortion_coefficients": {
+    "description": "OpenCV distortion model: [k1, k2, p1, p2, k3]. k1/k2/k3 = radial distortion, p1/p2 = tangential distortion.",
+    "k1":  0.26049,
+    "k2": -0.83362,
+    "p1":  0.00045,
+    "p2": -0.00025,
+    "k3":  0.73529,
+    "vector_opencv_order": [0.26049, -0.83362, 0.00045, -0.00025, 0.73529],
+    "distortion_note": "k1 = 0.26 indicates significant barrel distortion. Undistortion is important for accurate metric measurements, especially near frame edges. DVM applies this correction internally before computing geo-projected coordinates."
+  },
+
+  "opencv_usage_example": {
+    "note": "Python snippet to undistort a frame using these parameters.",
+    "code": [
+      "import cv2",
+      "import numpy as np",
+      "",
+      "K = np.array([[2969.4, 0, 1968.5],",
+      "               [0, 2970.3, 1116.9],",
+      "               [0, 0, 1.0]])",
+      "",
+      "dist = np.array([0.26049, -0.83362, 0.00045, -0.00025, 0.73529])",
+      "",
+      "# Undistort a full frame",
+      "frame_undistorted = cv2.undistort(frame, K, dist)",
+      "",
+      "# OR: undistort pixel coordinates only (e.g. annotation points)",
+      "pts = np.array([[[image_x, image_y]]], dtype=np.float32)",
+      "pts_undistorted = cv2.undistortPoints(pts, K, dist, P=K)"
+    ]
+  }
+}

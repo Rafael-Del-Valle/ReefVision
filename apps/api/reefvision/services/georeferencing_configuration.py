@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from math import isfinite
 from string import hexdigits
 
-GEOREFERENCING_CONFIGURATION_SCHEMA_VERSION = "georeferencing-configuration-0001"
+GEOREFERENCING_CONFIGURATION_SCHEMA_VERSION = "georeferencing-configuration-0002"
 
 GEOREFERENCING_ALGORITHM_NAME = "camera_ray_surface_intersection"
-GEOREFERENCING_ALGORITHM_VERSION = "opencv-dji-enu-flat-wgs84-v1"
+GEOREFERENCING_ALGORITHM_VERSION = "opencv-dji-enu-flat-wgs84-v2"
 GEOREFERENCING_SURFACE_MODEL = "local_horizontal_plane"
 GEOREFERENCING_REPRESENTATIVE_PIXEL_POLICY_VERSION = "1.0.0"
 GEOREFERENCING_SYNCHRONIZATION_VERSION = "nearest-frame-time-v1"
@@ -41,6 +41,9 @@ class GeoreferencingConfigurationSnapshot:
 
     calibration_checksum_sha256: str
     calibration_revision: int
+
+    mavic3t_dynamic_camera_version: str
+    mavic3t_calibration_bundle_sha256: str
 
     project_height_offset_m: float
     project_height_evidence: str
@@ -171,6 +174,16 @@ def canonical_configuration_payload(
                 field_name="calibration_checksum_sha256",
             ),
             "revision": snapshot.calibration_revision,
+        },
+        "dynamic_camera": {
+            "mavic3t_version": _required_text(
+                snapshot.mavic3t_dynamic_camera_version,
+                field_name="mavic3t_dynamic_camera_version",
+            ),
+            "mavic3t_calibration_bundle_sha256": _sha256_text(
+                snapshot.mavic3t_calibration_bundle_sha256,
+                field_name="mavic3t_calibration_bundle_sha256",
+            ),
         },
         "surface_reference": {
             "height_offset_m": _finite_float(

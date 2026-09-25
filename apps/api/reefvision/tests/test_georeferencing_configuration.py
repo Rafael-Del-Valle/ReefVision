@@ -27,6 +27,8 @@ def snapshot() -> GeoreferencingConfigurationSnapshot:
         airdata_alignment_evidence="Independent source alignment",
         calibration_checksum_sha256="b" * 64,
         calibration_revision=3,
+        mavic3t_dynamic_camera_version=("mavic3t-focal-over-dzoom-centered-crop-v1"),
+        mavic3t_calibration_bundle_sha256="c" * 64,
         project_height_offset_m=5.0,
         project_height_evidence="Surveyed takeoff height",
         max_telemetry_delta_s=0.1,
@@ -44,8 +46,13 @@ def test_hash_is_deterministic() -> None:
 @pytest.mark.parametrize(
     ("field_name", "new_value"),
     [
-        ("calibration_checksum_sha256", "c" * 64),
+        ("calibration_checksum_sha256", "d" * 64),
         ("calibration_revision", 4),
+        (
+            "mavic3t_dynamic_camera_version",
+            "mavic3t-focal-over-dzoom-centered-crop-v2",
+        ),
+        ("mavic3t_calibration_bundle_sha256", "e" * 64),
         ("project_height_offset_m", 6.0),
         (
             "project_height_evidence",
@@ -58,7 +65,7 @@ def test_hash_is_deterministic() -> None:
         ),
         (
             "algorithm_version",
-            "opencv-dji-enu-flat-wgs84-v2",
+            "opencv-dji-enu-flat-wgs84-v3",
         ),
         (
             "synchronization_version",
@@ -151,6 +158,18 @@ def test_payload_exposes_versioned_algorithm_contract() -> None:
     algorithm = payload["algorithm"]
 
     assert isinstance(algorithm, dict)
-    assert algorithm["version"] == ("opencv-dji-enu-flat-wgs84-v1")
+    assert algorithm["version"] == ("opencv-dji-enu-flat-wgs84-v2")
     assert algorithm["surface_model"] == ("local_horizontal_plane")
     assert algorithm["synchronization_version"] == ("nearest-frame-time-v1")
+
+
+def test_payload_exposes_mavic3t_dynamic_camera_identity() -> None:
+    payload = canonical_configuration_payload(snapshot())
+
+    assert payload["schema_version"] == "georeferencing-configuration-0002"
+
+    dynamic_camera = payload["dynamic_camera"]
+
+    assert isinstance(dynamic_camera, dict)
+    assert dynamic_camera["mavic3t_version"] == ("mavic3t-focal-over-dzoom-centered-crop-v1")
+    assert dynamic_camera["mavic3t_calibration_bundle_sha256"] == "c" * 64

@@ -51,7 +51,6 @@ class VideoGeoreferencingReadinessService:
             ("missing_telemetry", "missing_telemetry"),
             ("invalid_airdata_alignment", "alignment_problem"),
             ("telemetry_out_of_sync", "synchronization_problem"),
-            ("calibration_zoom_mismatch", "zoom_mismatch"),
         )
         issue_codes = {issue.code for issue in issues}
         for code, state in priority:
@@ -184,15 +183,6 @@ class VideoGeoreferencingReadinessService:
 
         if zoom_checks:
             zoom_compatible = all(zoom_checks)
-            if not zoom_compatible:
-                issues.append(
-                    VideoGeoreferencingReadinessIssue(
-                        code="calibration_zoom_mismatch",
-                        message=(
-                            "Telemetry zoom does not match the selected georeferencing calibration"
-                        ),
-                    )
-                )
 
         state = self._primary_state(issues)
         return VideoGeoreferencingReadinessResponse(
