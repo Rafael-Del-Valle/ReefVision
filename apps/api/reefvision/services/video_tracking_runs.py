@@ -110,6 +110,7 @@ class VideoTrackingRunService:
                     stage=str(result.get("stage", job.status)),
                     tracker=str(request.get("tracker", "bytetrack.yaml")),
                     model_id=str(request.get("model_id", "")),
+                    link_detections=bool(request.get("link_detections", True)),
                     confidence=float(request.get("confidence", 0.25)),
                     iou=float(request.get("iou", 0.5)),
                     device=str(request.get("device", "auto")),

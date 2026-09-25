@@ -9,11 +9,18 @@ from math import hypot
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from reefvision.db.models import LabelClass, VideoAsset, VideoTrack
+from reefvision.db.models import (
+    GeoReferencedObservation,
+    LabelClass,
+    VideoAsset,
+    VideoTrack,
+)
 from reefvision.db.models.project import utc_now
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.schemas.videos import (
     InterpolatedTrackFrame,
+    VideoFrameObjectMetric,
+    VideoFrameSpatialMetricsResponse,
     VideoTrackAnalyticsResponse,
     VideoTrackCreate,
     VideoTrackInterpolationResponse,
@@ -21,6 +28,8 @@ from reefvision.schemas.videos import (
     VideoTrackResponse,
     VideoTrackUpdate,
 )
+from reefvision.geospatial.geodesy import geodesic_distance_m
+from reefvision.services.georeferenced_observations import GeoReferencedObservationService
 from reefvision.services.video_observation_location import (
     select_video_observation_image_location,
 )
@@ -147,6 +156,196 @@ class VideoTrackService:
             return [VideoTrackKeyframe.model_validate(item) for item in track.keyframes_json]
         except ValueError as exc:
             raise ValidationError("Stored video track keyframes are invalid") from exc
+
+    @staticmethod
+    def _bbox_at_frame(
+        track: VideoTrack,
+        frame_index: int,
+    ) -> tuple[float, float, float, float] | None:
+        keyframes = VideoTrackService._keyframes(track)
+        if not keyframes or frame_index < keyframes[0].frame or frame_index > keyframes[-1].frame:
+            return None
+
+        for item in keyframes:
+            if item.frame == frame_index:
+                return item.bbox
+
+        for first, second in pairwise(keyframes):
+            if first.frame < frame_index < second.frame:
+                if track.interpolation == "hold":
+                    return first.bbox
+                span = second.frame - first.frame
+                ratio = (frame_index - first.frame) / span
+                return (
+                    first.bbox[0] + (second.bbox[0] - first.bbox[0]) * ratio,
+                    first.bbox[1] + (second.bbox[1] - first.bbox[1]) * ratio,
+                    first.bbox[2] + (second.bbox[2] - first.bbox[2]) * ratio,
+                    first.bbox[3] + (second.bbox[3] - first.bbox[3]) * ratio,
+                )
+        return None
+
+    def delete_for_video(
+        self,
+        video_id: str,
+        *,
+        machine_only: bool = True,
+    ) -> int:
+        video = self._video(video_id)
+        statement = select(VideoTrack).where(
+            VideoTrack.video_id == video_id,
+            VideoTrack.deleted_at.is_(None),
+        )
+        if machine_only:
+            statement = statement.where(VideoTrack.source_job_id.is_not(None))
+
+        tracks = list(self.session.scalars(statement))
+        if not tracks:
+            return 0
+
+        GeoReferencedObservationService(self.session).delete_for_tracks(
+            track.id for track in tracks
+        )
+        now = utc_now()
+        for track in tracks:
+            track.deleted_at = now
+            track.revision += 1
+
+        video.revision += 1
+        self.session.commit()
+        return len(tracks)
+
+    def frame_spatial_metrics(
+        self,
+        video_id: str,
+        frame_index: int,
+    ) -> VideoFrameSpatialMetricsResponse:
+        video = self._video(video_id)
+        if frame_index < 0 or frame_index >= video.frame_count:
+            raise ValidationError("Video frame is outside the source frame range")
+
+        active_tracks = list(
+            self.session.scalars(
+                select(VideoTrack)
+                .where(
+                    VideoTrack.video_id == video_id,
+                    VideoTrack.deleted_at.is_(None),
+                )
+                .order_by(VideoTrack.track_number, VideoTrack.id)
+            )
+        )
+
+        objects: list[dict[str, object]] = []
+        for track in active_tracks:
+            bbox = self._bbox_at_frame(track, frame_index)
+            if bbox is None:
+                continue
+            location = select_video_observation_image_location(
+                bbox=bbox,
+                image_width_px=video.width_px,
+                image_height_px=video.height_px,
+            )
+            objects.append(
+                {
+                    "track": track,
+                    "bbox": bbox,
+                    "center_x": location.pixel_x,
+                    "center_y": location.pixel_y,
+                }
+            )
+
+        geographic = {
+            item.track_id: item
+            for item in self.session.scalars(
+                select(GeoReferencedObservation).where(
+                    GeoReferencedObservation.video_id == video_id,
+                    GeoReferencedObservation.frame_index == frame_index,
+                    GeoReferencedObservation.is_stale.is_(False),
+                    GeoReferencedObservation.track_id.is_not(None),
+                )
+            )
+            if item.track_id is not None
+        }
+
+        results: list[VideoFrameObjectMetric] = []
+        pixel_nearest: list[float] = []
+        meter_nearest: list[float] = []
+
+        for index, item in enumerate(objects):
+            track = item["track"]
+            assert isinstance(track, VideoTrack)
+            nearest_track_id: str | None = None
+            nearest_pixels: float | None = None
+
+            for other_index, other in enumerate(objects):
+                if index == other_index:
+                    continue
+                distance = hypot(
+                    float(item["center_x"]) - float(other["center_x"]),
+                    float(item["center_y"]) - float(other["center_y"]),
+                )
+                if nearest_pixels is None or distance < nearest_pixels:
+                    nearest_pixels = distance
+                    other_track = other["track"]
+                    assert isinstance(other_track, VideoTrack)
+                    nearest_track_id = other_track.id
+
+            nearest_meters: float | None = None
+            source_geo = geographic.get(track.id)
+            if source_geo is not None:
+                for other in objects:
+                    other_track = other["track"]
+                    assert isinstance(other_track, VideoTrack)
+                    if other_track.id == track.id:
+                        continue
+                    target_geo = geographic.get(other_track.id)
+                    if target_geo is None:
+                        continue
+                    distance_m = geodesic_distance_m(
+                        source_geo.latitude_deg,
+                        source_geo.longitude_deg,
+                        target_geo.latitude_deg,
+                        target_geo.longitude_deg,
+                    )
+                    if nearest_meters is None or distance_m < nearest_meters:
+                        nearest_meters = distance_m
+
+            if nearest_pixels is not None:
+                pixel_nearest.append(nearest_pixels)
+            if nearest_meters is not None:
+                meter_nearest.append(nearest_meters)
+
+            results.append(
+                VideoFrameObjectMetric(
+                    track_id=track.id,
+                    track_number=track.track_number,
+                    label_class_id=track.label_class_id,
+                    bbox=item["bbox"],
+                    center_x=float(item["center_x"]),
+                    center_y=float(item["center_y"]),
+                    nearest_neighbor_track_id=nearest_track_id,
+                    nearest_neighbor_distance_pixels=nearest_pixels,
+                    nearest_neighbor_distance_meters=nearest_meters,
+                )
+            )
+
+        return VideoFrameSpatialMetricsResponse(
+            video_id=video_id,
+            frame_index=frame_index,
+            object_count=len(results),
+            mean_nearest_neighbor_distance_pixels=(
+                sum(pixel_nearest) / len(pixel_nearest) if pixel_nearest else None
+            ),
+            minimum_nearest_neighbor_distance_pixels=(
+                min(pixel_nearest) if pixel_nearest else None
+            ),
+            mean_nearest_neighbor_distance_meters=(
+                sum(meter_nearest) / len(meter_nearest) if meter_nearest else None
+            ),
+            minimum_nearest_neighbor_distance_meters=(
+                min(meter_nearest) if meter_nearest else None
+            ),
+            objects=results,
+        )
 
     def interpolate(self, track_id: str) -> VideoTrackInterpolationResponse:
         track = self._track(track_id)

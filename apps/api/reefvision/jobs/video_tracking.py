@@ -344,7 +344,12 @@ def process_video_tracking_job(
             )
         )
 
-        tracker_name = str(request.get("tracker", "bytetrack.yaml"))
+        link_detections = bool(request.get("link_detections", True))
+        tracker_name = (
+            str(request.get("tracker", "bytetrack.yaml"))
+            if link_detections
+            else "instances-only"
+        )
         confidence = float(request.get("confidence", 0.25))
         iou = float(request.get("iou", 0.5))
         device = str(request.get("device", "auto"))
@@ -356,6 +361,7 @@ def process_video_tracking_job(
             confidence=confidence,
             iou=iou,
             device=device,
+            link_detections=link_detections,
             on_progress=report_progress,
             should_cancel=should_cancel,
         )
@@ -387,7 +393,11 @@ def process_video_tracking_job(
                 continue
             grouped[(item.provider_track_id, label_class_id)].append(item)
 
-        minimum_frames = max(1, int(request.get("minimum_track_frames", 2)))
+        minimum_frames = (
+            max(1, int(request.get("minimum_track_frames", 2)))
+            if link_detections
+            else 1
+        )
 
         with factory() as session:
             video = session.get(VideoAsset, video_id)
@@ -471,6 +481,7 @@ def process_video_tracking_job(
                         "provider_name": provider.provider_id,
                         "provider_version": provider.provider_version,
                         "tracker": tracker_name,
+                        "link_detections": link_detections,
                         "mean_confidence": mean(item.confidence for item in ordered),
                     },
                 )
@@ -521,6 +532,7 @@ def process_video_tracking_job(
                 "model_id": model_id,
                 "source_job_id": job_id,
                 "tracker": tracker_name,
+                "link_detections": link_detections,
                 "confidence": confidence,
                 "iou": iou,
                 "device": device,

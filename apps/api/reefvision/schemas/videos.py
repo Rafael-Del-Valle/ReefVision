@@ -159,6 +159,29 @@ class VideoTrackAnalyticsResponse(BaseModel):
     occupancy_grid: dict[str, int]
 
 
+class VideoFrameObjectMetric(BaseModel):
+    track_id: str
+    track_number: int
+    label_class_id: str
+    bbox: tuple[float, float, float, float]
+    center_x: float
+    center_y: float
+    nearest_neighbor_track_id: str | None = None
+    nearest_neighbor_distance_pixels: float | None = None
+    nearest_neighbor_distance_meters: float | None = None
+
+
+class VideoFrameSpatialMetricsResponse(BaseModel):
+    video_id: str
+    frame_index: int
+    object_count: int
+    mean_nearest_neighbor_distance_pixels: float | None = None
+    minimum_nearest_neighbor_distance_pixels: float | None = None
+    mean_nearest_neighbor_distance_meters: float | None = None
+    minimum_nearest_neighbor_distance_meters: float | None = None
+    objects: list[VideoFrameObjectMetric]
+
+
 class VideoTrackingCreateRequest(BaseModel):
     model_id: str = Field(min_length=1, max_length=36)
     tracker: str = Field(default="bytetrack.yaml", min_length=1, max_length=200)
@@ -166,6 +189,7 @@ class VideoTrackingCreateRequest(BaseModel):
     iou: float = Field(default=0.5, ge=0, le=1)
     device: str = Field(default="auto", min_length=1, max_length=60)
     minimum_track_frames: int = Field(default=2, ge=1, le=1000000)
+    link_detections: bool = True
 
 
 class AnnotatedVideoOverlayOptions(BaseModel):
@@ -213,6 +237,7 @@ class VideoTrackingRunResponse(BaseModel):
     stage: str
     tracker: str
     model_id: str | None
+    link_detections: bool
     confidence: float
     iou: float
     device: str

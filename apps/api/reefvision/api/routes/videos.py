@@ -29,6 +29,7 @@ from reefvision.schemas.videos import (
     VideoAssetResponse,
     VideoExtractRequest,
     VideoMetricDepth3DCreateRequest,
+    VideoFrameSpatialMetricsResponse,
     VideoTrackAnalyticsResponse,
     VideoTrackCreate,
     VideoTrackingBenchmarkRequest,
@@ -185,6 +186,31 @@ def video_frame(
 @router.get("/videos/{video_id}/tracks", response_model=list[VideoTrackResponse])
 def list_tracks(video_id: str, session: DbSession) -> list[VideoTrackResponse]:
     return VideoTrackService(session).list(video_id)
+
+
+@router.delete("/videos/{video_id}/tracks")
+def delete_video_tracks(
+    video_id: str,
+    session: DbSession,
+    machine_only: Annotated[bool, Query()] = True,
+) -> dict[str, int]:
+    deleted = VideoTrackService(session).delete_for_video(
+        video_id,
+        machine_only=machine_only,
+    )
+    return {"deleted_tracks": deleted}
+
+
+@router.get(
+    "/videos/{video_id}/spatial-metrics",
+    response_model=VideoFrameSpatialMetricsResponse,
+)
+def frame_spatial_metrics(
+    video_id: str,
+    session: DbSession,
+    frame: Annotated[int, Query(ge=0)],
+) -> VideoFrameSpatialMetricsResponse:
+    return VideoTrackService(session).frame_spatial_metrics(video_id, frame)
 
 
 @router.post(

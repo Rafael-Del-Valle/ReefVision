@@ -59,22 +59,26 @@ class IndexedTelemetrySource:
 
 
 def _pick(
-    airdata_value: object | None,
     srt_value: object | None,
+    airdata_value: object | None,
+    *,
+    allow_airdata_fallback: bool,
 ) -> tuple[object | None, TelemetryFieldSource | None]:
-    if airdata_value is not None:
-        return airdata_value, "airdata"
+    """Prefer video-synchronized DJI SRT and use AirData only as an explicit fallback."""
     if srt_value is not None:
         return srt_value, "dji_srt"
+    if allow_airdata_fallback and airdata_value is not None:
+        return airdata_value, "airdata"
     return None, None
 
 
 class PreferredTelemetrySource:
-    """Merge aligned AirData and SRT telemetry with AirData camera pose preferred.
+    """Merge telemetry with DJI SRT as the authoritative video-time source.
 
-    airdata_time_offset_s maps video-relative time to AirData flight-relative
-    time: airdata_time = video_time + airdata_time_offset_s. A nonzero offset
-    requires independent evidence and is never fitted from geographic residuals.
+    SRT fields are always preferred when present. AirData is consulted only for
+    fields missing from SRT and only when explicit independent alignment evidence
+    has been recorded. This prevents flight-relative AirData samples from silently
+    overriding video-synchronized SRT pose values.
     """
 
     def __init__(
@@ -96,6 +100,7 @@ class PreferredTelemetrySource:
         self.srt = srt
         self.airdata_time_offset_s = airdata_time_offset_s
         self.airdata_time_offset_evidence = evidence or None
+        self.allow_airdata_fallback = bool(self.airdata_time_offset_evidence)
 
     def sample_for_time(
         self, time_s: float, *, max_delta_s: float | None = None
@@ -105,51 +110,65 @@ class PreferredTelemetrySource:
         if max_delta_s is not None and (not isfinite(max_delta_s) or max_delta_s < 0):
             raise ValidationError("Maximum telemetry delta must be finite and nonnegative")
 
-        airdata_time_s = time_s + self.airdata_time_offset_s
-        air_match = (
-            self.airdata.sample_for_time(airdata_time_s)
-            if self.airdata is not None and airdata_time_s >= 0
-            else None
-        )
         srt_match = self.srt.sample_for_time(time_s) if self.srt is not None else None
-        if air_match is None and srt_match is None:
+
+        air_match = None
+        if self.allow_airdata_fallback and self.airdata is not None:
+            airdata_time_s = time_s + self.airdata_time_offset_s
+            if airdata_time_s >= 0:
+                air_match = self.airdata.sample_for_time(airdata_time_s)
+
+        if srt_match is None and air_match is None:
             return None
 
-        air = air_match.sample if air_match is not None else None
         srt = srt_match.sample if srt_match is not None else None
+        air = air_match.sample if air_match is not None else None
 
         latitude: float | None = None
         longitude: float | None = None
         position_source: TelemetryFieldSource | None = None
-        if air is not None and air.latitude is not None and air.longitude is not None:
-            latitude, longitude, position_source = air.latitude, air.longitude, "airdata"
-        elif srt is not None and srt.latitude is not None and srt.longitude is not None:
+        if srt is not None and srt.latitude is not None and srt.longitude is not None:
             latitude, longitude, position_source = srt.latitude, srt.longitude, "dji_srt"
+        elif (
+            self.allow_airdata_fallback
+            and air is not None
+            and air.latitude is not None
+            and air.longitude is not None
+        ):
+            latitude, longitude, position_source = air.latitude, air.longitude, "airdata"
 
         relative_altitude, altitude_source = _pick(
-            air.relative_altitude_m if air is not None else None,
             srt.relative_altitude_m if srt is not None else None,
+            air.relative_altitude_m if air is not None else None,
+            allow_airdata_fallback=self.allow_airdata_fallback,
         )
         gimbal_yaw, yaw_source = _pick(
-            air.gimbal_yaw_deg if air is not None else None,
             srt.gimbal_yaw_deg if srt is not None else None,
+            air.gimbal_yaw_deg if air is not None else None,
+            allow_airdata_fallback=self.allow_airdata_fallback,
         )
         gimbal_pitch, pitch_source = _pick(
-            air.gimbal_pitch_deg if air is not None else None,
             srt.gimbal_pitch_deg if srt is not None else None,
+            air.gimbal_pitch_deg if air is not None else None,
+            allow_airdata_fallback=self.allow_airdata_fallback,
         )
         gimbal_roll, roll_source = _pick(
-            air.gimbal_roll_deg if air is not None else None,
             srt.gimbal_roll_deg if srt is not None else None,
+            air.gimbal_roll_deg if air is not None else None,
+            allow_airdata_fallback=self.allow_airdata_fallback,
         )
 
         def prefer(field: str) -> object | None:
-            air_value = getattr(air, field) if air is not None else None
             srt_value = getattr(srt, field) if srt is not None else None
-            return air_value if air_value is not None else srt_value
+            if srt_value is not None:
+                return srt_value
+            if not self.allow_airdata_fallback:
+                return None
+            return getattr(air, field) if air is not None else None
 
-        base_sample = air if air is not None else srt
+        base_sample = srt if srt is not None else air
         assert base_sample is not None
+
         merged = TelemetrySample.model_validate(
             {
                 "sample_index": base_sample.sample_index,
@@ -199,18 +218,20 @@ class PreferredTelemetrySource:
             if source is not None
         }
         deltas: list[float] = []
-        if "airdata" in used_sources and air_match is not None:
-            deltas.append(air_match.delta_s)
         if "dji_srt" in used_sources and srt_match is not None:
             deltas.append(srt_match.delta_s)
+        if "airdata" in used_sources and air_match is not None:
+            deltas.append(air_match.delta_s)
         if not deltas:
-            if air_match is not None:
-                deltas.append(air_match.delta_s)
-            elif srt_match is not None:
+            if srt_match is not None:
                 deltas.append(srt_match.delta_s)
+            elif air_match is not None:
+                deltas.append(air_match.delta_s)
+
         delta_s = max(deltas, key=abs)
         if max_delta_s is not None and abs(delta_s) > max_delta_s:
             return None
+
         return TelemetryMatch(
             sample=merged,
             requested_time_s=time_s,
