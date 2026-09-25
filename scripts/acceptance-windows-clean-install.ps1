@@ -102,6 +102,8 @@ function Wait-BackendPort(
     throw "Backend did not publish its port within $Seconds seconds: $Path"
 }
 function Start-AcceptanceDesktop {
+    $BackendPortPath = Join-Path $DataRoot 'runtime\backend-port.txt'
+    Remove-Item -LiteralPath $BackendPortPath -Force -ErrorAction SilentlyContinue
     $env:REEFVISION_WINDOWS_ACCEPTANCE = '1'
     $env:REEFVISION_ACCEPTANCE_DATA_DIR = $DataRoot
     try { return Start-Process -FilePath (Join-Path $InstallRoot 'ReefVision.exe') -PassThru }
