@@ -228,7 +228,6 @@ export interface VideoTrackingRun {
   tracker: string;
   model_id: string;
   link_detections: boolean;
-  link_detections: boolean;
   confidence: number;
   iou: number;
   device: string;
