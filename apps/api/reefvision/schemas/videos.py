@@ -212,6 +212,7 @@ class VideoTrackingRunResponse(BaseModel):
     video_id: str
     status: str
     stage: str
+    mode: Literal["track", "detect_only"] = "track"
     tracker: str
     model_id: str | None
     confidence: float
