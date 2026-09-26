@@ -136,10 +136,48 @@ class VideoTrackService:
     def delete(self, track_id: str) -> None:
         track = self._track(track_id)
         video = self._video(track.video_id)
+
+        from reefvision.services.georeferenced_observations import (
+            GeoReferencedObservationService,
+        )
+
+        GeoReferencedObservationService(self.session).delete_for_tracks([track.id])
         track.deleted_at = utc_now()
         track.revision += 1
         video.revision += 1
         self.session.commit()
+
+    def delete_all(self, video_id: str) -> int:
+        """Soft-delete all active tracks and remove their derived map observations."""
+        video = self._video(video_id)
+        tracks = list(
+            self.session.scalars(
+                select(VideoTrack).where(
+                    VideoTrack.video_id == video_id,
+                    VideoTrack.deleted_at.is_(None),
+                )
+            )
+        )
+
+        if not tracks:
+            return 0
+
+        from reefvision.services.georeferenced_observations import (
+            GeoReferencedObservationService,
+        )
+
+        GeoReferencedObservationService(self.session).delete_for_tracks(
+            track.id for track in tracks
+        )
+
+        deleted_at = utc_now()
+        for track in tracks:
+            track.deleted_at = deleted_at
+            track.revision += 1
+
+        video.revision += 1
+        self.session.commit()
+        return len(tracks)
 
     @staticmethod
     def _keyframes(track: VideoTrack) -> builtins.list[VideoTrackKeyframe]:
