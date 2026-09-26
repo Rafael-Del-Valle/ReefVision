@@ -35,6 +35,7 @@ class FakeVideoTrackingProvider:
         video_path: Path,
         *,
         tracker: str,
+        mode: str,
         confidence: float,
         iou: float,
         device: str,
@@ -44,6 +45,7 @@ class FakeVideoTrackingProvider:
         assert checkpoint_path.read_bytes() == b"fake-detector"
         assert video_path.read_bytes() == b"fake-video"
         assert tracker == "bytetrack.yaml"
+        assert mode == "track"
         assert confidence == pytest.approx(0.2)
         assert iou == pytest.approx(0.4)
         assert device == "cpu"
@@ -222,6 +224,7 @@ def test_fake_detector_tracker_creates_editable_machine_track(
         f"/api/v1/videos/{video['id']}/tracking-jobs",
         json={
             "model_id": model_id,
+            "mode": "track",
             "tracker": "bytetrack.yaml",
             "confidence": 0.2,
             "iou": 0.4,
@@ -646,6 +649,7 @@ def test_task12b_tracking_job_persists_geographic_observations(
         f"/api/v1/videos/{video['id']}/tracking-jobs",
         json={
             "model_id": model_id,
+            "mode": "track",
             "tracker": "bytetrack.yaml",
             "confidence": 0.2,
             "iou": 0.4,
@@ -769,6 +773,7 @@ def test_task20c_tracking_without_georeferencing_readiness_creates_no_coordinate
         f"/api/v1/videos/{video['id']}/tracking-jobs",
         json={
             "model_id": model_id,
+            "mode": "track",
             "tracker": "bytetrack.yaml",
             "confidence": 0.2,
             "iou": 0.4,
