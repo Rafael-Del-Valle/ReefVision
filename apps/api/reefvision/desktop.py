@@ -19,6 +19,8 @@ from typing import Protocol, TextIO, cast
 import uvicorn
 from alembic import command
 from alembic.config import Config
+from alembic.runtime.migration import MigrationContext
+from alembic.script import ScriptDirectory
 
 from reefvision.config import Settings, clear_settings_cache, get_settings
 from reefvision.logging_utils import configure_rotating_json_logging
@@ -214,6 +216,26 @@ def run_pending_migrations(settings: Settings) -> None:
     config.attributes["configure_logger"] = False
     config.set_main_option("script_location", str(migrations_dir))
     config.set_main_option("sqlalchemy.url", settings.resolved_database_url)
+
+    from reefvision.db.session import create_database_engine
+
+    script = ScriptDirectory.from_config(config)
+    expected_revision = script.get_current_head()
+
+    engine = create_database_engine(settings)
+    try:
+        with engine.connect() as connection:
+            current_revision = MigrationContext.configure(connection).get_current_revision()
+    finally:
+        engine.dispose()
+
+    if expected_revision is not None and current_revision == expected_revision:
+        LOGGER.info(
+            "Database schema already at Alembic head %s; skipping upgrade",
+            expected_revision,
+        )
+        return
+
     command.upgrade(config, "head")
 
 

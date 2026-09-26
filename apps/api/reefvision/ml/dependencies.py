@@ -147,6 +147,8 @@ def provider_runtime_dir(settings: Settings | None = None, data_dir: Path | None
         base_dir = data_dir
     elif settings is not None:
         base_dir = settings.resolved_data_dir
+    elif configured_data_dir := os.environ.get("REEFVISION_DATA_DIR"):
+        base_dir = Path(configured_data_dir).expanduser().resolve()
     else:
         base_dir = Path.cwd() / ".reefvision"
     return base_dir / DEFAULT_PROVIDER_RUNTIME_DIRNAME

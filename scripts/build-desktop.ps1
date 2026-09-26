@@ -151,6 +151,50 @@ catch {
     Build-ReefVisionSplitCabinetMsi -TargetTriple $TargetTriple
 }
 
+# WiX emits external cabinets in the generated wix directory. Windows
+# Installer requires every non-embedded cabinet referenced by the MSI Media
+# table to be distributed beside the MSI.
+$GeneratedCabFiles = @(
+    Get-ChildItem `
+        -LiteralPath $GeneratedWixDirectory `
+        -Filter '*.cab' `
+        -File `
+        -ErrorAction SilentlyContinue
+)
+
+foreach ($GeneratedCab in $GeneratedCabFiles) {
+    $DestinationCab = Join-Path $InstallerDirectory $GeneratedCab.Name
+
+    if (Test-Path -LiteralPath $DestinationCab -PathType Leaf) {
+        $SourceHash = (
+            Get-FileHash `
+                -LiteralPath $GeneratedCab.FullName `
+                -Algorithm SHA256
+        ).Hash
+
+        $DestinationHash = (
+            Get-FileHash `
+                -LiteralPath $DestinationCab `
+                -Algorithm SHA256
+        ).Hash
+
+        if ($SourceHash -ne $DestinationHash) {
+            throw "Generated CAB conflicts with MSI output: $($GeneratedCab.Name)"
+        }
+
+        Remove-Item `
+            -LiteralPath $GeneratedCab.FullName `
+            -Force
+    }
+    else {
+        Move-Item `
+            -LiteralPath $GeneratedCab.FullName `
+            -Destination $DestinationCab
+    }
+
+    Write-Host "External cabinet output: $DestinationCab" -ForegroundColor Green
+}
+
 $StagedCatalog = Join-Path $Root "apps\web\src-tauri\binaries\reefvision-api\_internal\config\model_catalog.json"
 if (-not (Test-Path $StagedCatalog -PathType Leaf)) {
     throw "Desktop packaging lost the required Model Hub catalog: $StagedCatalog"
@@ -160,6 +204,53 @@ if ($Installers.Count -eq 0) {
     throw "Tauri did not produce an MSI installer in $InstallerDirectory"
 }
 Write-Host "Desktop installer output: $InstallerDirectory" -ForegroundColor Green
+
+if ($Installers.Count -ne 1) {
+    throw "Expected exactly one MSI in $InstallerDirectory but found $($Installers.Count)."
+}
+
+$InstallerCom = New-Object -ComObject WindowsInstaller.Installer
+$MsiDatabase = $InstallerCom.OpenDatabase($Installers[0].FullName, 0)
+$MediaView = $MsiDatabase.OpenView(
+    "SELECT ``DiskId``, ``Cabinet`` FROM ``Media`` ORDER BY ``DiskId``"
+)
+$MediaView.Execute()
+
+$MissingExternalCabinets = @()
+
+while ($true) {
+    $MediaRecord = $MediaView.Fetch()
+
+    if ($null -eq $MediaRecord) {
+        break
+    }
+
+    $Cabinet = [string]$MediaRecord.StringData(2)
+
+    if (
+        [string]::IsNullOrWhiteSpace($Cabinet) -or
+        $Cabinet.StartsWith("#")
+    ) {
+        continue
+    }
+
+    $ExpectedCabinet = Join-Path $InstallerDirectory $Cabinet
+
+    if (-not (Test-Path -LiteralPath $ExpectedCabinet -PathType Leaf)) {
+        $MissingExternalCabinets += $Cabinet
+    }
+}
+
+$MediaView.Close()
+
+if ($MissingExternalCabinets.Count -gt 0) {
+    throw (
+        "MSI references missing external cabinets: " +
+        ($MissingExternalCabinets -join ", ")
+    )
+}
+
+Write-Host "MSI external cabinet dependency check passed." -ForegroundColor Green
 
 if (-not $SkipMsiVerification) {
     Write-ReefVisionStep "Verifying the Windows MSI and packaged backend"
