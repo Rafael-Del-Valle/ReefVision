@@ -526,6 +526,15 @@ export function deleteVideoTrack(trackId: string): Promise<void> {
   });
 }
 
+export function deleteAllVideoTracks(
+  videoId: string,
+): Promise<{ deleted_count: number }> {
+  return request<{ deleted_count: number }>(
+    `/videos/${encodeURIComponent(videoId)}/tracks`,
+    { method: "DELETE" },
+  );
+}
+
 export function getVideoTrackInterpolation(
   trackId: string,
   signal?: AbortSignal,
