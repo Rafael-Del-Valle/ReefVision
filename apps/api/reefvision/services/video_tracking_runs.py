@@ -108,6 +108,12 @@ class VideoTrackingRunService:
                     video_id=video_id,
                     status=job.status,
                     stage=str(result.get("stage", job.status)),
+                    mode=(
+                        "detect_only"
+                        if str(request.get("mode", "track")).strip().casefold()
+                        == "detect_only"
+                        else "track"
+                    ),
                     tracker=str(request.get("tracker", "bytetrack.yaml")),
                     model_id=str(request.get("model_id", "")),
                     confidence=float(request.get("confidence", 0.25)),
