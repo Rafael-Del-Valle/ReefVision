@@ -393,7 +393,7 @@ class VideoAssetService:
         return None
 
     def telemetry_source(self, video_id: str) -> TelemetrySource | None:
-        """Load aligned telemetry once per job; AirData pose wins, SRT is fallback."""
+        """Load telemetry once per job; SRT is primary and aligned AirData fills gaps."""
         video = self.get(video_id)
         srt_source: TelemetrySource | None = None
         airdata_source: TelemetrySource | None = None
