@@ -601,6 +601,7 @@ export function createVideoTrackingJob(
   videoId: string,
   payload: {
     model_id: string;
+    mode: "track" | "detect_only";
     tracker: string;
     confidence: number;
     iou: number;
