@@ -346,9 +346,7 @@ def process_video_tracking_job(
 
         link_detections = bool(request.get("link_detections", True))
         tracker_name = (
-            str(request.get("tracker", "bytetrack.yaml"))
-            if link_detections
-            else "instances-only"
+            str(request.get("tracker", "bytetrack.yaml")) if link_detections else "instances-only"
         )
         confidence = float(request.get("confidence", 0.25))
         iou = float(request.get("iou", 0.5))
@@ -394,9 +392,7 @@ def process_video_tracking_job(
             grouped[(item.provider_track_id, label_class_id)].append(item)
 
         minimum_frames = (
-            max(1, int(request.get("minimum_track_frames", 2)))
-            if link_detections
-            else 1
+            max(1, int(request.get("minimum_track_frames", 2))) if link_detections else 1
         )
 
         with factory() as session:

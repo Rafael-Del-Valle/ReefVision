@@ -40,11 +40,7 @@ def _collection(
     service: GeoReferencedObservationService,
     records: list[GeoReferencedObservationRecord],
 ) -> GeoReferencedObservationListResponse:
-    items = [
-        service.to_summary(record)
-        for record in records
-        if not record.is_stale
-    ]
+    items = [service.to_summary(record) for record in records if not record.is_stale]
 
     return GeoReferencedObservationListResponse(
         items=items,
@@ -149,11 +145,7 @@ def export_video_geographic_observations(
         track_id=track_id,
     )
 
-    observations = [
-        service.to_response(record)
-        for record in records
-        if not record.is_stale
-    ]
+    observations = [service.to_response(record) for record in records if not record.is_stale]
 
     enrichments = build_geographic_export_enrichments(
         session,
