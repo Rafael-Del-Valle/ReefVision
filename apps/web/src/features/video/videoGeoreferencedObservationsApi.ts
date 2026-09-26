@@ -42,6 +42,15 @@ export interface GeoReferencedObservationListResponse {
   count: number;
 }
 
+export interface GeoReferencedObservationRecomputeResponse {
+  video_id: string;
+  configuration_hash: string | null;
+  invalidated_count: number;
+  stale_count: number;
+  recomputed_count: number;
+  unchanged_count: number;
+}
+
 export interface GeoObservationTimestamp {
   frame_time_s: number;
   utc: string | null;
@@ -239,4 +248,22 @@ export function getGeoreferencedObservation(
     `/georeferenced-observations/${encodeURIComponent(observationId)}`,
     signal,
   );
+}
+
+export async function recomputeVideoGeoreferencedObservations(
+  videoId: string,
+): Promise<GeoReferencedObservationRecomputeResponse> {
+  const response = await fetch(
+    `${getApiBaseUrl()}/videos/${encodeURIComponent(videoId)}/georeferenced-observations/recompute`,
+    {
+      method: "POST",
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(await responseError(response));
+  }
+
+  return (await response.json()) as GeoReferencedObservationRecomputeResponse;
 }
