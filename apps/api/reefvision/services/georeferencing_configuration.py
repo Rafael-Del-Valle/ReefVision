@@ -16,7 +16,7 @@ GEOREFERENCING_SURFACE_MODEL = "local_horizontal_plane"
 GEOREFERENCING_REPRESENTATIVE_PIXEL_POLICY_VERSION = "1.0.0"
 GEOREFERENCING_SYNCHRONIZATION_VERSION = "nearest-frame-time-v1"
 GEOREFERENCING_POSE_CONVENTION_VERSION = "absolute-gimbal-ned-to-enu-v1"
-GEOREFERENCING_TELEMETRY_SELECTION_VERSION = "airdata-pose-srt-fallback-v1"
+GEOREFERENCING_TELEMETRY_SELECTION_VERSION = "srt-primary-aligned-airdata-fallback-v2"
 
 
 class GeoreferencingConfigurationError(ValueError):
