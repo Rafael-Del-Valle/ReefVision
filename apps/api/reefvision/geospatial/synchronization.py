@@ -59,18 +59,24 @@ class IndexedTelemetrySource:
 
 
 def _pick(
-    airdata_value: object | None,
     srt_value: object | None,
+    airdata_value: object | None,
 ) -> tuple[object | None, TelemetryFieldSource | None]:
-    if airdata_value is not None:
-        return airdata_value, "airdata"
+    """Prefer video-synchronous DJI SRT; use aligned AirData only as fallback."""
     if srt_value is not None:
         return srt_value, "dji_srt"
+    if airdata_value is not None:
+        return airdata_value, "airdata"
     return None, None
 
 
 class PreferredTelemetrySource:
-    """Merge aligned AirData and SRT telemetry with AirData camera pose preferred.
+    """Use DJI SRT as the primary video-synchronous telemetry source.
+
+    AirData is consulted only as an explicit field-level fallback after an
+    independent AirData-to-video alignment has been documented. This prevents
+    flight-relative AirData samples from overriding SRT values that are already
+    synchronized to the video cue timeline.
 
     airdata_time_offset_s maps video-relative time to AirData flight-relative
     time: airdata_time = video_time + airdata_time_offset_s. A nonzero offset
@@ -106,9 +112,13 @@ class PreferredTelemetrySource:
             raise ValidationError("Maximum telemetry delta must be finite and nonnegative")
 
         airdata_time_s = time_s + self.airdata_time_offset_s
+        airdata_fallback_enabled = (
+            self.airdata is not None
+            and self.airdata_time_offset_evidence is not None
+        )
         air_match = (
             self.airdata.sample_for_time(airdata_time_s)
-            if self.airdata is not None and airdata_time_s >= 0
+            if airdata_fallback_enabled and airdata_time_s >= 0
             else None
         )
         srt_match = self.srt.sample_for_time(time_s) if self.srt is not None else None
@@ -121,40 +131,44 @@ class PreferredTelemetrySource:
         latitude: float | None = None
         longitude: float | None = None
         position_source: TelemetryFieldSource | None = None
-        if air is not None and air.latitude is not None and air.longitude is not None:
-            latitude, longitude, position_source = air.latitude, air.longitude, "airdata"
-        elif srt is not None and srt.latitude is not None and srt.longitude is not None:
+        if srt is not None and srt.latitude is not None and srt.longitude is not None:
             latitude, longitude, position_source = srt.latitude, srt.longitude, "dji_srt"
+        elif air is not None and air.latitude is not None and air.longitude is not None:
+            latitude, longitude, position_source = air.latitude, air.longitude, "airdata"
 
         relative_altitude, altitude_source = _pick(
-            air.relative_altitude_m if air is not None else None,
             srt.relative_altitude_m if srt is not None else None,
+            air.relative_altitude_m if air is not None else None,
         )
         gimbal_yaw, yaw_source = _pick(
-            air.gimbal_yaw_deg if air is not None else None,
             srt.gimbal_yaw_deg if srt is not None else None,
+            air.gimbal_yaw_deg if air is not None else None,
         )
         gimbal_pitch, pitch_source = _pick(
-            air.gimbal_pitch_deg if air is not None else None,
             srt.gimbal_pitch_deg if srt is not None else None,
+            air.gimbal_pitch_deg if air is not None else None,
         )
         gimbal_roll, roll_source = _pick(
-            air.gimbal_roll_deg if air is not None else None,
             srt.gimbal_roll_deg if srt is not None else None,
+            air.gimbal_roll_deg if air is not None else None,
         )
 
         def prefer(field: str) -> object | None:
-            air_value = getattr(air, field) if air is not None else None
             srt_value = getattr(srt, field) if srt is not None else None
-            return air_value if air_value is not None else srt_value
+            air_value = getattr(air, field) if air is not None else None
+            return srt_value if srt_value is not None else air_value
 
-        base_sample = air if air is not None else srt
+        base_sample = srt if srt is not None else air
         assert base_sample is not None
         merged = TelemetrySample.model_validate(
             {
                 "sample_index": base_sample.sample_index,
                 "time_s": time_s,
-                "frame_number": srt.frame_number if srt is not None else None,
+                "frame_number": (
+                    srt.frame_number
+                    if srt is not None and srt.frame_number is not None
+                    else (air.frame_number if air is not None else None)
+                ),
                 "latitude": latitude,
                 "longitude": longitude,
                 "relative_altitude_m": relative_altitude,
