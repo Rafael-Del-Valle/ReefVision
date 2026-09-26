@@ -11,6 +11,7 @@
 import {
   getGeoreferencedObservation,
   getVideoGeoreferencedObservations,
+  recomputeVideoGeoreferencedObservations,
   type GeoReferencedObservationSummary,
 } from "./videoGeoreferencedObservationsApi";
 
@@ -33,6 +34,8 @@ interface GeoreferencedMapPanelProps {
   activeFrameIndex?: number | null;
   showTrackLines?: boolean;
   onFrameSelect?: (frameIndex: number, frameTimeSeconds: number) => void;
+  classOptions?: Array<{ id: string; name: string }>;
+  trackClassById?: Record<string, string>;
 }
 
 interface ProjectedObservation {
@@ -103,6 +106,8 @@ export function GeoreferencedMapPanel({
   activeFrameIndex = null,
   showTrackLines = true,
   onFrameSelect,
+  classOptions = [],
+  trackClassById = {},
 }: GeoreferencedMapPanelProps) {
   const [state, dispatch] = useReducer(
     geoMapReducer,
@@ -116,6 +121,13 @@ export function GeoreferencedMapPanel({
       : "osm";
 
   const [mapView, setMapView] = useState<"osm" | "scientific">(initialMapView);
+  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
+  const [recomputeState, setRecomputeState] = useState<
+    | { status: "idle" }
+    | { status: "running" }
+    | { status: "success"; message: string }
+    | { status: "error"; message: string }
+  >({ status: "idle" });
 
   const [osmFallbackReason, setOsmFallbackReason] = useState<string | null>(
     initialMapView === "scientific"
@@ -205,9 +217,27 @@ export function GeoreferencedMapPanel({
     };
   }, [loadCollection]);
 
+  const visibleObservations = useMemo(() => {
+    if (selectedClassIds.length === 0) {
+      return state.observations;
+    }
+
+    const selected = new Set(selectedClassIds);
+
+    return state.observations.filter((observation) => {
+      if (!observation.track_id) {
+        return false;
+      }
+
+      const classId = trackClassById[observation.track_id];
+
+      return classId ? selected.has(classId) : false;
+    });
+  }, [selectedClassIds, state.observations, trackClassById]);
+
   const projected = useMemo(
-    () => projectObservations(state.observations),
-    [state.observations],
+    () => projectObservations(visibleObservations),
+    [visibleObservations],
   );
 
   const projectedById = useMemo(
@@ -231,7 +261,7 @@ export function GeoreferencedMapPanel({
     }
 
     return projectHorizontal95Radius(
-      state.observations.map((item) => item.location),
+      visibleObservations.map((item) => item.location),
       point.observation.location.latitude_deg,
       detail.uncertainty.horizontal_95_m,
       { x: point.x, y: point.y },
@@ -244,19 +274,19 @@ export function GeoreferencedMapPanel({
   }, [
     projectedById,
     state.detailStatus,
-    state.observations,
+    visibleObservations,
     state.selectedObservation,
     state.selectedObservationId,
   ]);
 
   const trackGroups = useMemo(
-    () => groupGeoObservationsByTrack(state.observations),
-    [state.observations],
+    () => groupGeoObservationsByTrack(visibleObservations),
+    [visibleObservations],
   );
 
   const activeObservation = useMemo(
-    () => activeObservationForFrame(state.observations, activeFrameIndex),
-    [activeFrameIndex, state.observations],
+    () => activeObservationForFrame(visibleObservations, activeFrameIndex),
+    [activeFrameIndex, visibleObservations],
   );
 
   const activeTrackId = activeObservation?.track_id ?? null;
@@ -377,19 +407,62 @@ export function GeoreferencedMapPanel({
           </p>
         </div>
 
-        <button
-          type="button"
-          className="secondary"
-          disabled={state.collectionStatus === "loading"}
-          onClick={() => {
-            void loadCollection();
-          }}
-        >
-          {state.collectionStatus === "loading"
-            ? "Refreshing..."
-            : "Refresh map"}
-        </button>
+        <div className="annotation-editor-inline-actions">
+          <button
+            type="button"
+            className="secondary"
+            disabled={state.collectionStatus === "loading"}
+            onClick={() => {
+              void loadCollection();
+            }}
+          >
+            {state.collectionStatus === "loading"
+              ? "Refreshing..."
+              : "Refresh map"}
+          </button>
+
+          <button
+            type="button"
+            className="secondary"
+            disabled={recomputeState.status === "running"}
+            onClick={() => {
+              setRecomputeState({ status: "running" });
+
+              void recomputeVideoGeoreferencedObservations(videoId)
+                .then((result) => {
+                  setRecomputeState({
+                    status: "success",
+                    message: `Recomputed ${result.recomputed_count} observation${result.recomputed_count === 1 ? "" : "s"}; ${result.unchanged_count} unchanged.`,
+                  });
+
+                  return loadCollection();
+                })
+                .catch((error: unknown) => {
+                  setRecomputeState({
+                    status: "error",
+                    message: errorMessage(error),
+                  });
+                });
+            }}
+          >
+            {recomputeState.status === "running"
+              ? "Recomputing..."
+              : "Recompute geographic observations"}
+          </button>
+        </div>
       </div>
+
+      {recomputeState.status === "success" && (
+        <p className="annotation-helper" role="status">
+          {recomputeState.message}
+        </p>
+      )}
+
+      {recomputeState.status === "error" && (
+        <p className="error-copy" role="alert">
+          {recomputeState.message}
+        </p>
+      )}
 
       {initialLoading && (
         <div
@@ -484,9 +557,55 @@ export function GeoreferencedMapPanel({
           )}
 
           <p className="annotation-helper">
+            {visibleObservations.length.toLocaleString()} of{" "}
             {state.observations.length.toLocaleString()} persisted observation
-            {state.observations.length === 1 ? "" : "s"}
+            {state.observations.length === 1 ? "" : "s"} shown
           </p>
+
+          {classOptions.length > 0 && (
+            <div
+              className="workspace-guide compact"
+              aria-label="Geographic class filters"
+              style={{ marginBottom: 10 }}
+            >
+              <strong>Map classes</strong>
+              <p className="annotation-helper">
+                Choose one or more classes to visualize. Show all clears the
+                class filter.
+              </p>
+              <div className="annotation-editor-inline-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setSelectedClassIds([])}
+                >
+                  Show all
+                </button>
+
+                {classOptions.map((labelClass) => {
+                  const selected = selectedClassIds.includes(labelClass.id);
+
+                  return (
+                    <button
+                      key={labelClass.id}
+                      type="button"
+                      className="secondary"
+                      aria-pressed={selected}
+                      onClick={() =>
+                        setSelectedClassIds((current) =>
+                          selected
+                            ? current.filter((id) => id !== labelClass.id)
+                            : [...current, labelClass.id],
+                        )
+                      }
+                    >
+                      {labelClass.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div
             data-testid="georeferenced-map-view-controls"
@@ -547,7 +666,7 @@ export function GeoreferencedMapPanel({
                 }}
               >
                 <OpenStreetMapView
-                  observations={state.observations}
+                  observations={visibleObservations}
                   activeObservationId={activeObservation?.id ?? null}
                   selectedObservationId={state.selectedObservationId}
                   showTrackLines={showTrackLines}
