@@ -256,11 +256,11 @@ def test_production_service_happy_path_creates_fresh_persisted_observation(
 
         assert restored.calibration.image_height_px == restored.frame_height_px
 
-        assert restored.telemetry.source_type == "csv"
+        assert restored.telemetry.source_type == "dji_srt"
 
         assert restored.telemetry.field_provenance is not None
 
-        assert restored.telemetry.field_provenance["position_source"] == "airdata"
+        assert restored.telemetry.field_provenance["position_source"] == "dji_srt"
 
         assert restored.method.version == ("opencv-dji-enu-flat-wgs84-v1")
 
