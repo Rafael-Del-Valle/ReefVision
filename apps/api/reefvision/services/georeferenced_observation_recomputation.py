@@ -81,7 +81,7 @@ class GeoreferencedObservationRecomputationService:
         video_id: str,
     ) -> GeoReferencedObservationRecomputeResponse:
         """Atomically replace stale/hash-mismatched observations."""
-        initial_records = self.persistence.list_for_video(video_id)
+        initial_records = self.persistence.list_for_video(video_id, include_stale=True)
 
         # A video with no derived observations is a valid no-op and
         # should not require calibration/telemetry merely to say so.
@@ -106,7 +106,7 @@ class GeoreferencedObservationRecomputationService:
 
             # Re-read after the UPDATE so the selected lifecycle state
             # is authoritative for this transaction.
-            records = self.persistence.list_for_video(video_id)
+            records = self.persistence.list_for_video(video_id, include_stale=True)
 
             stale_records = [record for record in records if record.is_stale]
 
