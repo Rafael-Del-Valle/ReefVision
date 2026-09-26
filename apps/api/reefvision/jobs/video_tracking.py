@@ -344,6 +344,10 @@ def process_video_tracking_job(
             )
         )
 
+        tracking_mode = str(request.get("mode", "track")).strip().casefold()
+        if tracking_mode not in {"track", "detect_only"}:
+            raise ValidationError("Video inference mode must be track or detect_only")
+
         tracker_name = str(request.get("tracker", "bytetrack.yaml"))
         confidence = float(request.get("confidence", 0.25))
         iou = float(request.get("iou", 0.5))
@@ -353,6 +357,7 @@ def process_video_tracking_job(
             resolve_managed_project_path(settings, model_path),
             resolve_managed_project_path(settings, video_path),
             tracker=tracker_name,
+            mode=tracking_mode,
             confidence=confidence,
             iou=iou,
             device=device,
@@ -387,7 +392,11 @@ def process_video_tracking_job(
                 continue
             grouped[(item.provider_track_id, label_class_id)].append(item)
 
-        minimum_frames = max(1, int(request.get("minimum_track_frames", 2)))
+        minimum_frames = (
+            1
+            if tracking_mode == "detect_only"
+            else max(1, int(request.get("minimum_track_frames", 2)))
+        )
 
         with factory() as session:
             video = session.get(VideoAsset, video_id)
@@ -470,7 +479,9 @@ def process_video_tracking_job(
                         "provider_track_id": provider_track_id,
                         "provider_name": provider.provider_id,
                         "provider_version": provider.provider_version,
-                        "tracker": tracker_name,
+                        "tracker": tracker_name if tracking_mode == "track" else None,
+                        "mode": tracking_mode,
+                        "instance_only": tracking_mode == "detect_only",
                         "mean_confidence": mean(item.confidence for item in ordered),
                     },
                 )
@@ -521,6 +532,7 @@ def process_video_tracking_job(
                 "model_id": model_id,
                 "source_job_id": job_id,
                 "tracker": tracker_name,
+                "mode": tracking_mode,
                 "confidence": confidence,
                 "iou": iou,
                 "device": device,
