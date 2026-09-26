@@ -164,7 +164,7 @@ AIRDATA_CSV = (
 )
 
 
-def test_uploaded_airdata_is_preferred_over_srt_and_persists_alignment(client, monkeypatch):
+def test_uploaded_airdata_is_aligned_fallback_to_srt_and_persists_alignment(client, monkeypatch):
     monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
     project = create_project(client, "AirData precedence")
     files = {
@@ -200,9 +200,20 @@ def test_uploaded_airdata_is_preferred_over_srt_and_persists_alignment(client, m
         assert source is not None
         match = source.sample_for_frame(1, 10)
         assert match is not None
-        assert match.sample.gimbal_yaw_deg == 265.6
+        # SRT remains authoritative for fields it contains.
+        assert match.sample.latitude == 25.126
+        assert match.sample.longitude == -80.251
+        assert match.sample.relative_altitude_m == 13.0
         assert match.provenance is not None
+        assert match.provenance.position_source == "dji_srt"
+        assert match.provenance.relative_altitude_source == "dji_srt"
+
+        # The second SRT cue lacks gimbal attitude, so independently aligned
+        # AirData is allowed to fill only those missing fields.
+        assert match.sample.gimbal_yaw_deg == 265.6
+        assert match.sample.gimbal_pitch_deg == -23.4
         assert match.provenance.gimbal_yaw_source == "airdata"
+        assert match.provenance.gimbal_pitch_source == "airdata"
 
         airdata_path.unlink()
         fallback = VideoAssetService(session, settings).telemetry_source(video["id"])
@@ -385,3 +396,16 @@ def test_path_import_api_auto_discovers_sibling_telemetry(
     assert video["airdata_telemetry"]["source_type"] == "airdata"
     assert video["airdata_telemetry"]["path_kind"] == "external"
     assert video["airdata_telemetry"]["source_path"] == str(airdata_path.resolve())
+
+    # Auto-discovered AirData has no independent alignment evidence, so it
+    # must not override or fill SRT fields during georeferencing.
+    with client.app.state.session_factory() as session:
+        source = VideoAssetService(session, client.app.state.settings).telemetry_source(
+            video["id"]
+        )
+        assert source is not None
+        match = source.sample_for_frame(1, 10)
+        assert match is not None
+        assert match.sample.latitude == 25.126
+        assert match.sample.gimbal_yaw_deg is None
+        assert match.provenance is None
