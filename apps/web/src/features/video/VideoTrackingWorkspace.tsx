@@ -1255,9 +1255,9 @@ export function VideoTrackingWorkspace({
         </button>
         {trackingMutation.data && (
           <p className="annotation-helper">
-            Tracking job {trackingMutation.data.id.slice(0, 8)} queued. Run
-            history retains independent ByteTrack and BoT-SORT outputs,
-            including zero-track results.
+            Video inference job {trackingMutation.data.id.slice(0, 8)} queued.
+            Run history retains detector-only, ByteTrack, and BoT-SORT outputs,
+            including zero-result runs.
           </p>
         )}
         {(trackingRunsQuery.data ?? []).length > 0 && (
@@ -1287,7 +1287,11 @@ export function VideoTrackingWorkspace({
                   return (
                     <tr key={run.job_id}>
                       <td>{run.job_id.slice(0, 8)}</td>
-                      <td>{trackerLabel(run.tracker)}</td>
+                      <td>
+                        {run.mode === "detect_only"
+                          ? "Detector only"
+                          : trackerLabel(run.tracker)}
+                      </td>
                       <td>
                         {run.stale ? <strong>Stalled</strong> : run.stage}
                         {run.stale && (
