@@ -685,6 +685,7 @@ export function GeoreferencedMapPanel({
                   activeObservationId={activeObservation?.id ?? null}
                   selectedObservationId={state.selectedObservationId}
                   selectedUncertaintyRadiusM={selectedHorizontal95M}
+                  showMovementPaths={showMovementPaths}
                   onObservationSelect={(observation) => {
                     void selectObservation(observation);
                   }}
