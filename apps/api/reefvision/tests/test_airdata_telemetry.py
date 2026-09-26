@@ -59,7 +59,7 @@ bad,200
         parse_airdata_csv("time(millisecond),unknown\n0,1\n")
 
 
-def test_preferred_source_uses_airdata_pose_and_srt_fallback_fields() -> None:
+def test_preferred_source_prefers_srt_when_both_sources_have_fields() -> None:
     airdata = IndexedTelemetrySource(parse_airdata_csv(AIRDATA))
     srt = IndexedTelemetrySource(
         [
@@ -99,18 +99,21 @@ def test_preferred_source_uses_airdata_pose_and_srt_fallback_fields() -> None:
     match = source.sample_for_frame(1, 10)
     assert match is not None
     assert match.sample.time_s == 0.1
-    assert match.sample.gimbal_yaw_deg == 265.6
-    assert match.sample.gimbal_pitch_deg == -23.4
-    assert match.sample.latitude == 22.892808
-    assert match.sample.relative_altitude_m == 83.5
+    assert match.sample.gimbal_yaw_deg == 241
+    assert match.sample.gimbal_pitch_deg == -21
+    assert match.sample.latitude == 22.1
+    assert match.sample.longitude == -109.1
+    assert match.sample.relative_altitude_m == 81
     assert match.sample.focal_length_mm == 24
     assert match.provenance is not None
-    assert match.provenance.gimbal_yaw_source == "airdata"
-    assert match.provenance.position_source == "airdata"
+    assert match.provenance.gimbal_yaw_source == "dji_srt"
+    assert match.provenance.gimbal_pitch_source == "dji_srt"
+    assert match.provenance.position_source == "dji_srt"
+    assert match.provenance.relative_altitude_source == "dji_srt"
     assert match.provenance.airdata_time_offset_s == 10.0
 
 
-def test_preferred_source_falls_back_to_srt_only_for_missing_airdata_field() -> None:
+def test_preferred_source_uses_aligned_airdata_only_for_missing_srt_field() -> None:
     airdata = IndexedTelemetrySource(
         [
             TelemetrySample(
@@ -133,7 +136,7 @@ def test_preferred_source_falls_back_to_srt_only_for_missing_airdata_field() -> 
                 longitude=-108.0,
                 relative_altitude_m=80,
                 gimbal_yaw_deg=249.3,
-                gimbal_pitch_deg=-20,
+                gimbal_pitch_deg=None,
                 gimbal_roll_deg=1,
             )
         ]
@@ -148,11 +151,14 @@ def test_preferred_source_falls_back_to_srt_only_for_missing_airdata_field() -> 
     assert match is not None
     assert match.sample.gimbal_yaw_deg == 249.3
     assert match.sample.gimbal_pitch_deg == -23.4
-    assert match.sample.latitude == 22.0
+    assert match.sample.latitude == 21.0
+    assert match.sample.longitude == -108.0
+    assert match.sample.relative_altitude_m == 80
     assert match.provenance is not None
     assert match.provenance.gimbal_yaw_source == "dji_srt"
     assert match.provenance.gimbal_pitch_source == "airdata"
-    assert match.provenance.position_source == "airdata"
+    assert match.provenance.position_source == "dji_srt"
+    assert match.provenance.relative_altitude_source == "dji_srt"
 
 
 def test_preferred_source_uses_worst_contributing_sync_delta() -> None:

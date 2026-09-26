@@ -9,6 +9,7 @@ from pydantic import ValidationError as SchemaError
 from reefvision.domain.errors import ValidationError
 from reefvision.geospatial.calibration import CameraCalibration, calibration_from_mapping
 from reefvision.geospatial.geodesy import geodesic_distance_m, offset_to_geographic
+from reefvision.geospatial.georeferencing_policy import MINIMUM_RAY_DEPRESSION_DEG
 from reefvision.geospatial.models import TelemetrySample
 from reefvision.geospatial.projection import (
     SurfaceReference,
@@ -209,6 +210,51 @@ def test_explicit_surface_datum_and_range_limit(calibration, telemetry):
     ] == pytest.approx(10.5)
     with pytest.raises(ValidationError, match="distance"):
         project_pixel_to_local_surface(550, 400, calibration, telemetry, surface, max_distance_m=10)
+
+
+@pytest.mark.parametrize(
+    ("pitch_deg", "accepted"),
+    [
+        (-7.999, False),
+        (-8.000, True),
+        (-8.001, True),
+    ],
+)
+def test_minimum_ray_depression_stability_guard(
+    calibration,
+    telemetry,
+    surface,
+    pitch_deg,
+    accepted,
+):
+    pose = telemetry.model_copy(update={"gimbal_pitch_deg": pitch_deg})
+
+    if accepted:
+        east, north = project_pixel_to_local_surface(
+            500,
+            400,
+            calibration,
+            pose,
+            surface,
+        )
+        assert math.isfinite(east)
+        assert math.isfinite(north)
+    else:
+        with pytest.raises(
+            ValidationError,
+            match="minimum required for stable flat-surface projection",
+        ):
+            project_pixel_to_local_surface(
+                500,
+                400,
+                calibration,
+                pose,
+                surface,
+            )
+
+
+def test_default_minimum_ray_depression_is_eight_degrees():
+    assert pytest.approx(8.0) == MINIMUM_RAY_DEPRESSION_DEG
 
 
 @pytest.mark.parametrize("pitch", [0, 45, -0.0000001])

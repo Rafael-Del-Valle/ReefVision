@@ -95,6 +95,7 @@ def _source(
     *,
     time_s: float = 0.0,
     roll: float | None = 0.0,
+    pitch: float = -90.0,
     digital_zoom_ratio: float = 1.0,
 ) -> IndexedTelemetrySource:
     return IndexedTelemetrySource(
@@ -106,7 +107,7 @@ def _source(
                 longitude=0.0,
                 relative_altitude_m=100.0,
                 gimbal_yaw_deg=0.0,
-                gimbal_pitch_deg=-90.0,
+                gimbal_pitch_deg=pitch,
                 gimbal_roll_deg=roll,
                 digital_zoom_ratio=digital_zoom_ratio,
             )
@@ -352,6 +353,43 @@ def test_georeference_point_reports_zoom_mismatch(
 
     assert response.status == "failed"
     assert response.failure_reason == "calibration_zoom_mismatch"
+
+
+def test_georeference_point_rejects_unstable_near_horizon_projection(
+    service_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings, factory, video_id = service_context
+
+    with factory() as session:
+        service = VideoGeoreferencingService(
+            session,
+            settings,
+        )
+
+        preferred = PreferredTelemetrySource(
+            airdata=None,
+            srt=_source(pitch=-7.5),
+        )
+
+        monkeypatch.setattr(
+            service.video_assets,
+            "telemetry_source",
+            lambda _: preferred,
+        )
+
+        response = service.georeference_point(
+            video_id,
+            frame_index=0,
+            pixel_x=500.0,
+            pixel_y=400.0,
+        )
+
+    assert response.status == "failed"
+    assert response.failure_reason == "projection_failed"
+    assert response.message is not None
+    assert "minimum required for stable flat-surface projection" in response.message
+    assert "8.000" in response.message
 
 
 def test_georeference_point_returns_projection_failure(
@@ -698,7 +736,7 @@ def test_georeference_detection_prefers_explicit_representative_pixel(
     assert observation.calibration.checksum_sha256 is not None
     assert str(observation.calibration.calibration_id).startswith("sha256:")
 
-    assert observation.method.version == ("opencv-dji-enu-flat-wgs84-v1")
+    assert observation.method.version == ("opencv-dji-enu-flat-wgs84-v2")
 
 
 def test_georeference_detection_falls_back_to_bbox_center(

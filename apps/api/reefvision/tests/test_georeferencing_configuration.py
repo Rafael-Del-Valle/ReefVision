@@ -65,7 +65,11 @@ def test_hash_is_deterministic() -> None:
         ),
         (
             "algorithm_version",
-            "opencv-dji-enu-flat-wgs84-v3",
+            "opencv-dji-enu-flat-wgs84-v4",
+        ),
+        (
+            "minimum_ray_depression_deg",
+            9.0,
         ),
         (
             "synchronization_version",
@@ -158,15 +162,16 @@ def test_payload_exposes_versioned_algorithm_contract() -> None:
     algorithm = payload["algorithm"]
 
     assert isinstance(algorithm, dict)
-    assert algorithm["version"] == ("opencv-dji-enu-flat-wgs84-v2")
+    assert algorithm["version"] == ("opencv-dji-enu-flat-wgs84-v3")
     assert algorithm["surface_model"] == ("local_horizontal_plane")
+    assert algorithm["minimum_ray_depression_deg"] == pytest.approx(8.0)
     assert algorithm["synchronization_version"] == ("nearest-frame-time-v1")
 
 
 def test_payload_exposes_mavic3t_dynamic_camera_identity() -> None:
     payload = canonical_configuration_payload(snapshot())
 
-    assert payload["schema_version"] == "georeferencing-configuration-0002"
+    assert payload["schema_version"] == "georeferencing-configuration-0003"
 
     dynamic_camera = payload["dynamic_camera"]
 

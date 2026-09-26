@@ -8,10 +8,14 @@ from dataclasses import dataclass
 from math import isfinite
 from string import hexdigits
 
-GEOREFERENCING_CONFIGURATION_SCHEMA_VERSION = "georeferencing-configuration-0002"
+from reefvision.geospatial.georeferencing_policy import (
+    MINIMUM_RAY_DEPRESSION_DEG,
+)
+
+GEOREFERENCING_CONFIGURATION_SCHEMA_VERSION = "georeferencing-configuration-0003"
 
 GEOREFERENCING_ALGORITHM_NAME = "camera_ray_surface_intersection"
-GEOREFERENCING_ALGORITHM_VERSION = "opencv-dji-enu-flat-wgs84-v2"
+GEOREFERENCING_ALGORITHM_VERSION = "opencv-dji-enu-flat-wgs84-v3"
 GEOREFERENCING_SURFACE_MODEL = "local_horizontal_plane"
 GEOREFERENCING_REPRESENTATIVE_PIXEL_POLICY_VERSION = "1.0.0"
 GEOREFERENCING_SYNCHRONIZATION_VERSION = "nearest-frame-time-v1"
@@ -50,6 +54,7 @@ class GeoreferencingConfigurationSnapshot:
 
     max_telemetry_delta_s: float
 
+    minimum_ray_depression_deg: float = MINIMUM_RAY_DEPRESSION_DEG
     algorithm_name: str = GEOREFERENCING_ALGORITHM_NAME
     algorithm_version: str = GEOREFERENCING_ALGORITHM_VERSION
     surface_model: str = GEOREFERENCING_SURFACE_MODEL
@@ -207,6 +212,10 @@ def canonical_configuration_payload(
             "surface_model": _required_text(
                 snapshot.surface_model,
                 field_name="surface_model",
+            ),
+            "minimum_ray_depression_deg": _finite_float(
+                snapshot.minimum_ray_depression_deg,
+                field_name="minimum_ray_depression_deg",
             ),
             "representative_pixel_policy_version": (
                 _required_text(

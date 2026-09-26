@@ -1,6 +1,6 @@
 """Native OpenCV pixels -> absolute-gimbal attitude -> ENU horizontal surface."""
 
-from math import cos, hypot, isclose, isfinite, radians, sin
+from math import atan2, cos, degrees, hypot, isclose, isfinite, radians, sin
 from typing import Literal, Self
 
 import cv2
@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field, FiniteFloat, model_validator
 from reefvision.domain.errors import ValidationError
 from reefvision.geospatial.calibration import CameraCalibration
 from reefvision.geospatial.geodesy import offset_to_geographic
+from reefvision.geospatial.georeferencing_policy import (
+    MINIMUM_RAY_DEPRESSION_DEG,
+)
 from reefvision.geospatial.models import TelemetrySample
 
 Vector3 = tuple[float, float, float]
@@ -55,7 +58,7 @@ class GeoreferenceResult(BaseModel):
     camera_height_m: FiniteFloat
     calibration_source_id: str | None
     surface_reference: SurfaceReference
-    method: Literal["opencv-dji-enu-flat-wgs84-v1"] = "opencv-dji-enu-flat-wgs84-v1"
+    method: Literal["opencv-dji-enu-flat-wgs84-v2"] = "opencv-dji-enu-flat-wgs84-v2"
 
 
 def _check_pixel(x: float, y: float, width: int, height: int) -> None:
@@ -181,9 +184,16 @@ def project_pixel_to_local_surface(
     surface: SurfaceReference,
     *,
     max_distance_m: float = 10000,
+    minimum_ray_depression_deg: float = MINIMUM_RAY_DEPRESSION_DEG,
 ) -> tuple[float, float]:
     if not isfinite(max_distance_m) or max_distance_m <= 0:
         raise ValidationError("Maximum flat-surface distance must be finite and positive")
+    if (
+        not isfinite(minimum_ray_depression_deg)
+        or minimum_ray_depression_deg <= 0
+        or minimum_ray_depression_deg >= 90
+    ):
+        raise ValidationError("Minimum ray depression must be finite and between 0 and 90 degrees")
     if telemetry.digital_zoom_ratio is not None and not isclose(
         telemetry.digital_zoom_ratio,
         calibration.digital_zoom_ratio,
@@ -191,9 +201,28 @@ def project_pixel_to_local_surface(
     ):
         raise ValidationError("Telemetry zoom does not match camera calibration")
     height = surface.height_for(telemetry)
-    east, north, up = camera_ray_to_enu(pixel_to_camera_ray(x_px, y_px, calibration), telemetry)
-    if up >= -1e-6:
-        raise ValidationError("Camera ray faces upward or is too nearly parallel to the surface")
+    east, north, up = camera_ray_to_enu(
+        pixel_to_camera_ray(x_px, y_px, calibration),
+        telemetry,
+    )
+
+    if up >= 0:
+        raise ValidationError("Camera ray faces upward or is parallel to the surface")
+
+    ray_depression_deg = degrees(
+        atan2(
+            -up,
+            hypot(east, north),
+        )
+    )
+
+    if ray_depression_deg + 1e-9 < minimum_ray_depression_deg:
+        raise ValidationError(
+            f"Camera ray depression {ray_depression_deg:.3f} degrees is below "
+            f"the {minimum_ray_depression_deg:.3f}-degree minimum required "
+            "for stable flat-surface projection"
+        )
+
     scale = -height / up
     offset = east * scale, north * scale
     if not all(isfinite(v) for v in offset) or hypot(*offset) > max_distance_m:

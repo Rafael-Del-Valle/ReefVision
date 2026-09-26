@@ -223,7 +223,7 @@ def test_georeferenced_observation_read_routes(
 
             observation_ids.append(str(observation.id))
 
-            service.persist(observation)
+            service.persist(observation, configuration_hash="a" * 64)
 
         session.commit()
 

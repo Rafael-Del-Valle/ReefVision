@@ -262,7 +262,7 @@ def test_production_service_happy_path_creates_fresh_persisted_observation(
 
         assert restored.telemetry.field_provenance["position_source"] == "dji_srt"
 
-        assert restored.method.version == ("opencv-dji-enu-flat-wgs84-v1")
+        assert restored.method.version == ("opencv-dji-enu-flat-wgs84-v2")
 
         assert restored.method.surface_model == ("local_horizontal_plane")
 
