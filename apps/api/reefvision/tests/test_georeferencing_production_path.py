@@ -493,11 +493,11 @@ def test_project_datum_change_invalidates_and_recomputes_observation(
         assert recomputed.location.crs == "EPSG:4326"
 
 
-def test_persisted_airdata_is_preferred_over_srt_in_production_path(
+def test_persisted_srt_is_primary_with_aligned_airdata_field_fallback(
     production_georeferencing_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Load real managed SRT/AirData files and prefer aligned AirData."""
+    """Load real SRT/AirData files; keep SRT primary and use aligned AirData only for gaps."""
     (
         settings,
         factory,
@@ -590,13 +590,15 @@ def test_persisted_airdata_is_preferred_over_srt_in_production_path(
 
         assert match is not None
 
-        # 10 Hz frame 1 is video time 0.1 s. The persisted
-        # +10 s AirData alignment selects the 10.1 s row.
-        assert match.sample.latitude == pytest.approx(22.892808)
+        # 10 Hz frame 1 is video time 0.1 s. The SRT cue at 0.1 s
+        # contains position and relative altitude, so those fields must remain
+        # authoritative. The aligned AirData row at 10.1 s fills only the
+        # gimbal fields omitted from that SRT cue.
+        assert match.sample.latitude == pytest.approx(25.126)
 
-        assert match.sample.longitude == pytest.approx(-109.840590)
+        assert match.sample.longitude == pytest.approx(-80.251)
 
-        assert match.sample.relative_altitude_m == pytest.approx(83.5)
+        assert match.sample.relative_altitude_m == pytest.approx(13.0)
 
         assert match.sample.gimbal_yaw_deg == pytest.approx(265.6)
 
@@ -604,9 +606,9 @@ def test_persisted_airdata_is_preferred_over_srt_in_production_path(
 
         assert match.provenance is not None
 
-        assert match.provenance.position_source == "airdata"
+        assert match.provenance.position_source == "dji_srt"
 
-        assert match.provenance.relative_altitude_source == "airdata"
+        assert match.provenance.relative_altitude_source == "dji_srt"
 
         assert match.provenance.gimbal_yaw_source == "airdata"
 
