@@ -49,6 +49,7 @@ class VideoTrackingProvider(Protocol):
         video_path: Path,
         *,
         tracker: str,
+        mode: str = "track",
         confidence: float,
         iou: float,
         device: str,
@@ -89,6 +90,7 @@ class UltralyticsVideoTrackingProvider:
         video_path: Path,
         *,
         tracker: str,
+        mode: str = "track",
         confidence: float,
         iou: float,
         device: str,
@@ -120,16 +122,30 @@ class UltralyticsVideoTrackingProvider:
         report_stage("model_loaded")
         report_stage("starting_stream")
 
-        stream = model.track(
-            source=str(video_path),
-            stream=True,
-            persist=True,
-            tracker=tracker,
-            conf=confidence,
-            iou=iou,
-            device=self._device(device),
-            verbose=False,
-        )
+        normalized_mode = mode.strip().casefold()
+        if normalized_mode not in {"track", "detect_only"}:
+            raise ValidationError("Video inference mode must be track or detect_only")
+
+        if normalized_mode == "detect_only":
+            stream = model.predict(
+                source=str(video_path),
+                stream=True,
+                conf=confidence,
+                iou=iou,
+                device=self._device(device),
+                verbose=False,
+            )
+        else:
+            stream = model.track(
+                source=str(video_path),
+                stream=True,
+                persist=True,
+                tracker=tracker,
+                conf=confidence,
+                iou=iou,
+                device=self._device(device),
+                verbose=False,
+            )
 
         report_stage("waiting_for_first_frame")
 
@@ -137,6 +153,7 @@ class UltralyticsVideoTrackingProvider:
         detections_seen = 0
         tracked_observations_seen = 0
         unique_track_ids: set[int] = set()
+        next_instance_id = 1
 
         for frame_index, result in enumerate(stream):
             if should_cancel is not None and should_cancel():
@@ -146,12 +163,19 @@ class UltralyticsVideoTrackingProvider:
             detection_count = 0 if boxes is None else len(boxes)
             detections_seen += detection_count
 
-            if boxes is not None and getattr(boxes, "id", None) is not None:
-                ids = boxes.id.int().cpu().tolist()
+            if boxes is not None:
                 classes = boxes.cls.int().cpu().tolist()
                 confidences = boxes.conf.cpu().tolist()
                 coordinates = boxes.xywh.cpu().tolist()
                 names = dict(getattr(result, "names", {}))
+
+                if normalized_mode == "detect_only":
+                    ids = list(range(next_instance_id, next_instance_id + len(classes)))
+                    next_instance_id += len(classes)
+                elif getattr(boxes, "id", None) is not None:
+                    ids = boxes.id.int().cpu().tolist()
+                else:
+                    ids = []
 
                 tracked_observations_seen += len(ids)
                 unique_track_ids.update(int(track_id) for track_id in ids)
