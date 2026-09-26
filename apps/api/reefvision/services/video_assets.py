@@ -393,7 +393,13 @@ class VideoAssetService:
         return None
 
     def telemetry_source(self, video_id: str) -> TelemetrySource | None:
-        """Load aligned telemetry once per job; AirData pose wins, SRT is fallback."""
+        """Load video-synchronous telemetry; SRT is primary and AirData is fallback.
+
+        AirData is only eligible when an independent AirData-to-video alignment
+        is documented. Even then, PreferredTelemetrySource keeps every
+        available SRT field authoritative and consults AirData only for fields
+        missing from the SRT sample.
+        """
         video = self.get(video_id)
         srt_source: TelemetrySource | None = None
         airdata_source: TelemetrySource | None = None
@@ -414,12 +420,23 @@ class VideoAssetService:
 
         if airdata_source is None:
             return srt_source
+
+        alignment_evidence = (video.airdata_alignment.evidence or "").strip()
+        if not alignment_evidence:
+            if srt_source is None:
+                LOGGER.warning(
+                    "Video %s has AirData telemetry but no independent video alignment; "
+                    "AirData-only georeferencing is disabled",
+                    video_id,
+                )
+            return srt_source
+
         try:
             return PreferredTelemetrySource(
                 airdata=airdata_source,
                 srt=srt_source,
                 airdata_time_offset_s=video.airdata_alignment.time_offset_s,
-                airdata_time_offset_evidence=video.airdata_alignment.evidence,
+                airdata_time_offset_evidence=alignment_evidence,
             )
         except ValidationError as exc:
             LOGGER.warning("Video %s AirData alignment unavailable: %s", video_id, exc)
