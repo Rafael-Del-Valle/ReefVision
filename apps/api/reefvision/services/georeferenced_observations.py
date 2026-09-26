@@ -160,6 +160,7 @@ class GeoReferencedObservationService:
         *,
         track_id: str | None = None,
         frame_index: int | None = None,
+        include_stale: bool = False,
     ) -> list[GeoReferencedObservationRecord]:
         video = self.session.get(VideoAsset, video_id)
 
@@ -179,6 +180,11 @@ class GeoReferencedObservationService:
             GeoReferencedObservationRecord.video_id == video_id
         )
 
+        if not include_stale:
+            statement = statement.where(
+                GeoReferencedObservationRecord.is_stale.is_(False)
+            )
+
         if track_id is not None:
             statement = statement.where(GeoReferencedObservationRecord.track_id == track_id)
 
@@ -196,19 +202,26 @@ class GeoReferencedObservationService:
     def list_for_track(
         self,
         track_id: str,
+        *,
+        include_stale: bool = False,
     ) -> list[GeoReferencedObservationRecord]:
         track = self.session.get(VideoTrack, track_id)
 
         if track is None:
             raise NotFoundError("Video track not found")
 
-        statement = (
-            select(GeoReferencedObservationRecord)
-            .where(GeoReferencedObservationRecord.track_id == track_id)
-            .order_by(
-                GeoReferencedObservationRecord.frame_index,
-                GeoReferencedObservationRecord.id,
+        statement = select(GeoReferencedObservationRecord).where(
+            GeoReferencedObservationRecord.track_id == track_id
+        )
+
+        if not include_stale:
+            statement = statement.where(
+                GeoReferencedObservationRecord.is_stale.is_(False)
             )
+
+        statement = statement.order_by(
+            GeoReferencedObservationRecord.frame_index,
+            GeoReferencedObservationRecord.id,
         )
 
         return list(self.session.scalars(statement))
