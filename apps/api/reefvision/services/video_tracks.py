@@ -17,6 +17,7 @@ from reefvision.db.models import (
 )
 from reefvision.db.models.project import utc_now
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
+from reefvision.geospatial.geodesy import geodesic_distance_m
 from reefvision.schemas.videos import (
     InterpolatedTrackFrame,
     VideoFrameObjectMetric,
@@ -28,7 +29,6 @@ from reefvision.schemas.videos import (
     VideoTrackResponse,
     VideoTrackUpdate,
 )
-from reefvision.geospatial.geodesy import geodesic_distance_m
 from reefvision.services.georeferenced_observations import GeoReferencedObservationService
 from reefvision.services.video_observation_location import (
     select_video_observation_image_location,
