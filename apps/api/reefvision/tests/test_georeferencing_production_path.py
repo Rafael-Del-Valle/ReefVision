@@ -158,8 +158,8 @@ def test_production_service_happy_path_creates_fresh_persisted_observation(
     # Task 20B separately exercises the real persisted AirData/SRT
     # selection and fallback path.
     preferred = PreferredTelemetrySource(
-        airdata=_source(),
-        srt=None,
+        airdata=None,
+        srt=_source(),
     )
 
     with factory() as session:
@@ -294,8 +294,8 @@ def test_project_datum_change_invalidates_and_recomputes_observation(
     # project, projection, invalidation, persistence, hashing,
     # and recomputation services.
     preferred = PreferredTelemetrySource(
-        airdata=_source(),
-        srt=None,
+        airdata=None,
+        srt=_source(),
     )
 
     monkeypatch.setattr(
@@ -723,8 +723,8 @@ def test_recomputation_rolls_back_partial_replacement_in_real_database(
     ) = production_georeferencing_context
 
     preferred = PreferredTelemetrySource(
-        airdata=_source(),
-        srt=None,
+        airdata=None,
+        srt=_source(),
     )
 
     monkeypatch.setattr(
@@ -917,8 +917,8 @@ def test_production_geojson_export_uses_persisted_coordinates_without_recalculat
     ) = production_georeferencing_context
 
     preferred = PreferredTelemetrySource(
-        airdata=_source(),
-        srt=None,
+        airdata=None,
+        srt=_source(),
     )
 
     monkeypatch.setattr(
@@ -1186,8 +1186,8 @@ def test_calibration_change_invalidates_and_recomputes_observation(
     ) = production_georeferencing_context
 
     preferred = PreferredTelemetrySource(
-        airdata=_source(),
-        srt=None,
+        airdata=None,
+        srt=_source(),
     )
 
     monkeypatch.setattr(
