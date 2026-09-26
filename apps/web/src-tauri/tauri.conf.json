@@ -28,9 +28,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": [
-      "msi"
-    ],
+    "targets": ["msi"],
     "shortDescription": "Local-first scientific image annotation and computer vision platform.",
     "resources": {
       "binaries/": "backend/",

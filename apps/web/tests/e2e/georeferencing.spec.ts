@@ -881,6 +881,16 @@ test("renders geographic path, synchronizes frames, selects a track, and exposes
     })
     .locator("xpath=ancestor::section[1]");
 
+  const sourceOverlayToggle = frameSection.getByRole("checkbox", {
+    name: "Enable source-coordinate overlay",
+  });
+
+  await expect(sourceOverlayToggle).not.toBeChecked();
+
+  await sourceOverlayToggle.check();
+
+  await expect(sourceOverlayToggle).toBeChecked();
+
   await expect(frameSection.locator('input[type="range"]')).toHaveValue("20");
 
   await expect(trackPath).toHaveAttribute("data-active-track", "true");

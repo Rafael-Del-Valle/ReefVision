@@ -914,9 +914,9 @@ describe("Georeferenced map class filters and recomputation", () => {
       await screen.findByText(/Recomputed 1 observation; 0 unchanged/i),
     ).toBeInTheDocument();
 
-    expect(
-      api.recomputeVideoGeoreferencedObservations,
-    ).toHaveBeenCalledWith("video-recompute");
+    expect(api.recomputeVideoGeoreferencedObservations).toHaveBeenCalledWith(
+      "video-recompute",
+    );
     expect(api.getVideoGeoreferencedObservations).toHaveBeenCalledTimes(2);
   });
 });

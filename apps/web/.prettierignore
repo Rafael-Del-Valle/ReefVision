@@ -9,3 +9,4 @@ src-tauri/binaries
 
 test-results
 playwright-report
+src-tauri/windows/wix/*.wxs

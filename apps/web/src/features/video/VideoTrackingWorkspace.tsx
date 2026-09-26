@@ -1,5 +1,5 @@
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
-﻿import { AnnotatedVideoExportPanel } from "./AnnotatedVideoExportPanel";
+import { AnnotatedVideoExportPanel } from "./AnnotatedVideoExportPanel";
 import { GeoreferencedMapPanel } from "./GeoreferencedMapPanel";
 import { GeoreferencingSetupPanel } from "./GeoreferencingSetupPanel";
 import { GeographicExportPanel } from "./GeographicExportPanel";
@@ -86,8 +86,7 @@ export function VideoTrackingWorkspace({
 }: VideoTrackingWorkspaceProps) {
   const queryClient = useQueryClient();
   const desktopMode =
-    typeof window !== "undefined" &&
-    "__TAURI_INTERNALS__" in window;
+    typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const pendingMapSeekRef = useRef<PendingVideoMapSeek | null>(null);
   const mapSeekSequenceRef = useRef(0);
@@ -182,7 +181,11 @@ export function VideoTrackingWorkspace({
     queryFn: ({ signal }) => getTrackingModels(project.id, signal),
   });
   const spatialMetricsQuery = useQuery({
-    queryKey: ["video-frame-spatial-metrics", selectedVideoId, previewFrameIndex],
+    queryKey: [
+      "video-frame-spatial-metrics",
+      selectedVideoId,
+      previewFrameIndex,
+    ],
     queryFn: ({ signal }) =>
       getVideoFrameSpatialMetrics(selectedVideoId, previewFrameIndex, signal),
     enabled: Boolean(selectedVideoId) && sourceOverlayEnabled,
@@ -252,10 +255,7 @@ export function VideoTrackingWorkspace({
             everyNFrames,
         ),
       );
-      const maximumFrame = Math.max(
-        0,
-        (selectedVideo?.frame_count ?? 1) - 1,
-      );
+      const maximumFrame = Math.max(0, (selectedVideo?.frame_count ?? 1) - 1);
       const snappedFrame = Math.min(
         maximumFrame,
         Math.max(0, Math.round(frameIndex / stride) * stride),
@@ -285,8 +285,7 @@ export function VideoTrackingWorkspace({
   }, [selectedTrack]);
 
   const desktopPathMutation = useMutation({
-    mutationFn: (sourcePath: string) =>
-      importVideoPath(project.id, sourcePath),
+    mutationFn: (sourcePath: string) => importVideoPath(project.id, sourcePath),
     onSuccess: async (video) => {
       setSelectedVideoId(video.id);
       setUploadFile(null);
@@ -307,14 +306,7 @@ export function VideoTrackingWorkspace({
       filters: [
         {
           name: "Video",
-          extensions: [
-            "avi",
-            "m4v",
-            "mkv",
-            "mov",
-            "mp4",
-            "webm",
-          ],
+          extensions: ["avi", "m4v", "mkv", "mov", "mp4", "webm"],
         },
       ],
     });
@@ -717,10 +709,10 @@ export function VideoTrackingWorkspace({
             <div>
               <strong>Automatic telemetry import</strong>
               <p className="annotation-helper">
-                Select a local video and ReefVision will automatically
-                attach its matching DJI SRT and the single valid sibling
-                AirData CSV when available. Manual inputs below remain
-                available as overrides.
+                Select a local video and ReefVision will automatically attach
+                its matching DJI SRT and the single valid sibling AirData CSV
+                when available. Manual inputs below remain available as
+                overrides.
               </p>
               <button
                 type="button"
@@ -1043,10 +1035,12 @@ export function VideoTrackingWorkspace({
                 <div className="annotation-selection-row">
                   <strong>Mean nearest neighbor</strong>
                   <span>
-                    {spatialMetricsQuery.data.mean_nearest_neighbor_distance_pixels === null
+                    {spatialMetricsQuery.data
+                      .mean_nearest_neighbor_distance_pixels === null
                       ? "—"
                       : `${spatialMetricsQuery.data.mean_nearest_neighbor_distance_pixels.toFixed(2)} px`}
-                    {spatialMetricsQuery.data.mean_nearest_neighbor_distance_meters === null
+                    {spatialMetricsQuery.data
+                      .mean_nearest_neighbor_distance_meters === null
                       ? ""
                       : ` · ${spatialMetricsQuery.data.mean_nearest_neighbor_distance_meters.toFixed(2)} m`}
                   </span>
@@ -1054,10 +1048,12 @@ export function VideoTrackingWorkspace({
                 <div className="annotation-selection-row">
                   <strong>Minimum nearest neighbor</strong>
                   <span>
-                    {spatialMetricsQuery.data.minimum_nearest_neighbor_distance_pixels === null
+                    {spatialMetricsQuery.data
+                      .minimum_nearest_neighbor_distance_pixels === null
                       ? "—"
                       : `${spatialMetricsQuery.data.minimum_nearest_neighbor_distance_pixels.toFixed(2)} px`}
-                    {spatialMetricsQuery.data.minimum_nearest_neighbor_distance_meters === null
+                    {spatialMetricsQuery.data
+                      .minimum_nearest_neighbor_distance_meters === null
                       ? ""
                       : ` · ${spatialMetricsQuery.data.minimum_nearest_neighbor_distance_meters.toFixed(2)} m`}
                   </span>

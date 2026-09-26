@@ -14,8 +14,7 @@ export interface VideoGeoreferencingCalibrationPayload {
   evidence: string;
 }
 
-export interface VideoGeoreferencingCalibration
-  extends VideoGeoreferencingCalibrationPayload {
+export interface VideoGeoreferencingCalibration extends VideoGeoreferencingCalibrationPayload {
   schema_version: "video-georeferencing-calibration-0001";
   video_id: string;
   checksum_sha256: string;
@@ -52,7 +51,9 @@ export async function getVideoGeoreferencingCalibration(
   );
   if (response.status === 404) return null;
   if (!response.ok) {
-    throw new Error(await detail(response, `Calibration request failed (${response.status})`));
+    throw new Error(
+      await detail(response, `Calibration request failed (${response.status})`),
+    );
   }
   return (await response.json()) as VideoGeoreferencingCalibration;
 }
@@ -70,7 +71,9 @@ export async function setVideoGeoreferencingCalibration(
     },
   );
   if (!response.ok) {
-    throw new Error(await detail(response, `Calibration update failed (${response.status})`));
+    throw new Error(
+      await detail(response, `Calibration update failed (${response.status})`),
+    );
   }
   return (await response.json()) as VideoGeoreferencingCalibration;
 }
@@ -92,7 +95,12 @@ export async function setProjectGeoreferencingSurface(
     },
   );
   if (!response.ok) {
-    throw new Error(await detail(response, `Surface reference update failed (${response.status})`));
+    throw new Error(
+      await detail(
+        response,
+        `Surface reference update failed (${response.status})`,
+      ),
+    );
   }
 }
 
@@ -104,7 +112,9 @@ export async function startVideoGeoreferencing(
     { method: "POST" },
   );
   if (!response.ok) {
-    throw new Error(await detail(response, `Georeferencing failed (${response.status})`));
+    throw new Error(
+      await detail(response, `Georeferencing failed (${response.status})`),
+    );
   }
   return (await response.json()) as VideoGeoreferencingRunResult;
 }

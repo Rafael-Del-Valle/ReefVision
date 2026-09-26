@@ -737,41 +737,43 @@ export function GeoreferencedMapPanel({
 
                   {showTrackLines &&
                     Array.from(trackGroups.tracked.entries()).map(
-                    ([trackId, observations]) => {
-                      const points = observations
-                        .map((observation) => projectedById.get(observation.id))
-                        .filter(
-                          (item): item is ProjectedObservation =>
-                            item !== undefined,
-                        )
-                        .map((item) => `${item.x},${item.y}`)
-                        .join(" ");
+                      ([trackId, observations]) => {
+                        const points = observations
+                          .map((observation) =>
+                            projectedById.get(observation.id),
+                          )
+                          .filter(
+                            (item): item is ProjectedObservation =>
+                              item !== undefined,
+                          )
+                          .map((item) => `${item.x},${item.y}`)
+                          .join(" ");
 
-                      if (observations.length < 2 || !points) {
-                        return null;
-                      }
+                        if (observations.length < 2 || !points) {
+                          return null;
+                        }
 
-                      return (
-                        <polyline
-                          key={trackId}
-                          points={points}
-                          fill="none"
-                          stroke={
-                            activeTrackId === trackId
-                              ? "var(--accent-color, #2563eb)"
-                              : "currentColor"
-                          }
-                          strokeWidth={activeTrackId === trackId ? 4 : 2}
-                          opacity={activeTrackId === trackId ? 0.9 : 0.3}
-                          vectorEffect="non-scaling-stroke"
-                          data-track-id={trackId}
-                          data-active-track={
-                            activeTrackId === trackId ? "true" : "false"
-                          }
-                        />
-                      );
-                    },
-                  )}
+                        return (
+                          <polyline
+                            key={trackId}
+                            points={points}
+                            fill="none"
+                            stroke={
+                              activeTrackId === trackId
+                                ? "var(--accent-color, #2563eb)"
+                                : "currentColor"
+                            }
+                            strokeWidth={activeTrackId === trackId ? 4 : 2}
+                            opacity={activeTrackId === trackId ? 0.9 : 0.3}
+                            vectorEffect="non-scaling-stroke"
+                            data-track-id={trackId}
+                            data-active-track={
+                              activeTrackId === trackId ? "true" : "false"
+                            }
+                          />
+                        );
+                      },
+                    )}
 
                   {selectedUncertaintyRadius && (
                     <ellipse
@@ -904,9 +906,9 @@ export function GeoreferencedMapPanel({
                   Points are plotted from persisted latitude and longitude.
                   {showTrackLines
                     ? " Lines connect observations that share a track ID in frame order."
-                    : " Movement lines are hidden; observations are shown as independent points."}
-                  {" "}Positional uncertainty is shown only when an
-                  authoritative persisted backend estimate is available.
+                    : " Movement lines are hidden; observations are shown as independent points."}{" "}
+                  Positional uncertainty is shown only when an authoritative
+                  persisted backend estimate is available.
                 </p>
               </div>
             )}

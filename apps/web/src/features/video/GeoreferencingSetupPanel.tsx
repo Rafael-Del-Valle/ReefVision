@@ -70,7 +70,10 @@ function parseCalibration(
   if ("image_resolution" in raw && "camera_matrix" in raw) {
     const resolution = objectValue(raw.image_resolution, "image_resolution");
     const matrix = objectValue(raw.camera_matrix, "camera_matrix");
-    const d = objectValue(raw.distortion_coefficients, "distortion_coefficients");
+    const d = objectValue(
+      raw.distortion_coefficients,
+      "distortion_coefficients",
+    );
     width = integerValue(resolution.width_px, "image_resolution.width_px");
     height = integerValue(resolution.height_px, "image_resolution.height_px");
     fx = numberValue(matrix.fx, "camera_matrix.fx");
@@ -100,7 +103,9 @@ function parseCalibration(
     );
   }
   if (![0, 4, 5, 8, 12, 14].includes(distortion.length)) {
-    throw new Error("Distortion must contain 0, 4, 5, 8, 12, or 14 OpenCV coefficients.");
+    throw new Error(
+      "Distortion must contain 0, 4, 5, 8, 12, or 14 OpenCV coefficients.",
+    );
   }
 
   const stem = fileName.replace(/\.[^.]+$/, "") || "camera-calibration";
@@ -142,7 +147,9 @@ export function GeoreferencingSetupPanel({ project, video }: Props) {
   const [heightEvidence, setHeightEvidence] = useState(
     project.georeference_height_evidence ?? "",
   );
-  const [result, setResult] = useState<VideoGeoreferencingRunResult | null>(null);
+  const [result, setResult] = useState<VideoGeoreferencingRunResult | null>(
+    null,
+  );
 
   useEffect(() => {
     setParsed(null);
@@ -160,7 +167,8 @@ export function GeoreferencingSetupPanel({ project, video }: Props) {
 
   const calibration = useQuery({
     queryKey: ["video-georeferencing-calibration", video.id],
-    queryFn: ({ signal }) => getVideoGeoreferencingCalibration(video.id, signal),
+    queryFn: ({ signal }) =>
+      getVideoGeoreferencingCalibration(video.id, signal),
   });
 
   const saveCalibration = useMutation({
@@ -224,7 +232,10 @@ export function GeoreferencingSetupPanel({ project, video }: Props) {
   }
 
   return (
-    <section className="management-card" data-testid="georeferencing-setup-panel">
+    <section
+      className="management-card"
+      data-testid="georeferencing-setup-panel"
+    >
       <p className="eyebrow">Georeferencing</p>
       <h3>Calibration & geographic tracking</h3>
 
@@ -238,7 +249,9 @@ export function GeoreferencingSetupPanel({ project, video }: Props) {
       </label>
 
       <p className="annotation-helper">
-        {calibration.isLoading ? "Checking saved calibration..." : calibrationSummary}
+        {calibration.isLoading
+          ? "Checking saved calibration..."
+          : calibrationSummary}
       </p>
 
       {parseError && <p className="error-copy">{parseError}</p>}
@@ -355,7 +368,8 @@ export function GeoreferencingSetupPanel({ project, video }: Props) {
 
           {!readiness.data?.ready && !readiness.isLoading && (
             <p className="annotation-helper">
-              The button stays visible and unlocks when the readiness blockers are resolved.
+              The button stays visible and unlocks when the readiness blockers
+              are resolved.
             </p>
           )}
 
@@ -364,7 +378,8 @@ export function GeoreferencingSetupPanel({ project, video }: Props) {
           {result && (
             <p className="annotation-helper" role="status">
               Georeferenced {result.georeferenced_observation_count} of{" "}
-              {result.attempted_count} observations across {result.track_count} tracks.
+              {result.attempted_count} observations across {result.track_count}{" "}
+              tracks.
               {result.failure_count
                 ? ` ${result.failure_count} projections failed.`
                 : " All projections succeeded."}{" "}
