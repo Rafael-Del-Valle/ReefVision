@@ -161,6 +161,7 @@ class VideoTrackAnalyticsResponse(BaseModel):
 
 class VideoTrackingCreateRequest(BaseModel):
     model_id: str = Field(min_length=1, max_length=36)
+    mode: Literal["track", "detect_only"] = "track"
     tracker: str = Field(default="bytetrack.yaml", min_length=1, max_length=200)
     confidence: float = Field(default=0.25, ge=0, le=1)
     iou: float = Field(default=0.5, ge=0, le=1)
