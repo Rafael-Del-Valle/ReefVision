@@ -28,10 +28,18 @@ import { projectHorizontal95Radius } from "./videoGeoreferencingUncertaintyOverl
 
 import { OpenStreetMapView } from "./OpenStreetMapView";
 
+export interface GeoreferencedMapClassOption {
+  id: string;
+  name: string;
+  color?: string | null;
+}
+
 interface GeoreferencedMapPanelProps {
   videoId: string;
   activeFrameIndex?: number | null;
   onFrameSelect?: (frameIndex: number, frameTimeSeconds: number) => void;
+  classOptions?: GeoreferencedMapClassOption[];
+  trackClassById?: Record<string, string>;
 }
 
 interface ProjectedObservation {
@@ -56,6 +64,52 @@ function formatCoordinate(value: number): string {
 
 function formatSeconds(value: number): string {
   return `${value.toFixed(3)} s`;
+}
+
+function geographicDistanceMeters(
+  first: GeoReferencedObservationSummary,
+  second: GeoReferencedObservationSummary,
+): number {
+  const radiusM = 6_371_008.8;
+  const toRadians = (value: number) => (value * Math.PI) / 180;
+  const latitude1 = toRadians(first.location.latitude_deg);
+  const latitude2 = toRadians(second.location.latitude_deg);
+  const latitudeDelta = latitude2 - latitude1;
+  const longitudeDelta = toRadians(
+    second.location.longitude_deg - first.location.longitude_deg,
+  );
+  const a =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(latitude1) *
+      Math.cos(latitude2) *
+      Math.sin(longitudeDelta / 2) ** 2;
+  return 2 * radiusM * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+function activeFrameNearestNeighbor(
+  observations: GeoReferencedObservationSummary[],
+): { count: number; meanM: number; minimumM: number } | null {
+  if (observations.length < 2) {
+    return null;
+  }
+
+  const nearest = observations.map((observation, index) => {
+    let minimum = Number.POSITIVE_INFINITY;
+    observations.forEach((candidate, candidateIndex) => {
+      if (candidateIndex === index) return;
+      minimum = Math.min(
+        minimum,
+        geographicDistanceMeters(observation, candidate),
+      );
+    });
+    return minimum;
+  });
+
+  return {
+    count: observations.length,
+    meanM: nearest.reduce((sum, value) => sum + value, 0) / nearest.length,
+    minimumM: Math.min(...nearest),
+  };
 }
 
 function projectObservations(
@@ -101,6 +155,8 @@ export function GeoreferencedMapPanel({
   videoId,
   activeFrameIndex = null,
   onFrameSelect,
+  classOptions = [],
+  trackClassById = {},
 }: GeoreferencedMapPanelProps) {
   const [state, dispatch] = useReducer(
     geoMapReducer,
@@ -114,6 +170,8 @@ export function GeoreferencedMapPanel({
       : "osm";
 
   const [mapView, setMapView] = useState<"osm" | "scientific">(initialMapView);
+  const [showTrackLines, setShowTrackLines] = useState(true);
+  const [selectedClassId, setSelectedClassId] = useState("all");
 
   const [osmFallbackReason, setOsmFallbackReason] = useState<string | null>(
     initialMapView === "scientific"
@@ -203,9 +261,40 @@ export function GeoreferencedMapPanel({
     };
   }, [loadCollection]);
 
+  const filteredObservations = useMemo(
+    () =>
+      selectedClassId === "all"
+        ? state.observations
+        : state.observations.filter(
+            (observation) =>
+              observation.track_id !== null &&
+              trackClassById[observation.track_id] === selectedClassId,
+          ),
+    [selectedClassId, state.observations, trackClassById],
+  );
+
+  const classColorById = useMemo(
+    () =>
+      Object.fromEntries(
+        classOptions.map((item) => [item.id, item.color || "#2563eb"]),
+      ),
+    [classOptions],
+  );
+
+  const trackColors = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(trackClassById).map(([trackId, classId]) => [
+          trackId,
+          classColorById[classId] || "#2563eb",
+        ]),
+      ),
+    [classColorById, trackClassById],
+  );
+
   const projected = useMemo(
-    () => projectObservations(state.observations),
-    [state.observations],
+    () => projectObservations(filteredObservations),
+    [filteredObservations],
   );
 
   const projectedById = useMemo(
@@ -229,7 +318,7 @@ export function GeoreferencedMapPanel({
     }
 
     return projectHorizontal95Radius(
-      state.observations.map((item) => item.location),
+      filteredObservations.map((item) => item.location),
       point.observation.location.latitude_deg,
       detail.uncertainty.horizontal_95_m,
       { x: point.x, y: point.y },
@@ -242,29 +331,44 @@ export function GeoreferencedMapPanel({
   }, [
     projectedById,
     state.detailStatus,
-    state.observations,
+    filteredObservations,
     state.selectedObservation,
     state.selectedObservationId,
   ]);
 
   const trackGroups = useMemo(
-    () => groupGeoObservationsByTrack(state.observations),
-    [state.observations],
+    () => groupGeoObservationsByTrack(filteredObservations),
+    [filteredObservations],
   );
 
   const activeObservation = useMemo(
-    () => activeObservationForFrame(state.observations, activeFrameIndex),
-    [activeFrameIndex, state.observations],
+    () => activeObservationForFrame(filteredObservations, activeFrameIndex),
+    [activeFrameIndex, filteredObservations],
+  );
+
+  const activeFrameObservations = useMemo(
+    () =>
+      activeFrameIndex === null
+        ? []
+        : filteredObservations.filter(
+            (observation) => observation.frame_index === activeFrameIndex,
+          ),
+    [activeFrameIndex, filteredObservations],
+  );
+
+  const nearestNeighbor = useMemo(
+    () => activeFrameNearestNeighbor(activeFrameObservations),
+    [activeFrameObservations],
   );
 
   const activeTrackId = activeObservation?.track_id ?? null;
 
   const selectedSummary = useMemo(
     () =>
-      state.observations.find(
+      filteredObservations.find(
         (item) => item.id === state.selectedObservationId,
       ) ?? null,
-    [state.observations, state.selectedObservationId],
+    [filteredObservations, state.selectedObservationId],
   );
 
   const selectedHorizontal95M =
@@ -482,9 +586,53 @@ export function GeoreferencedMapPanel({
           )}
 
           <p className="annotation-helper">
+            {filteredObservations.length.toLocaleString()} visible of{" "}
             {state.observations.length.toLocaleString()} persisted observation
             {state.observations.length === 1 ? "" : "s"}
           </p>
+
+          <div
+            className="annotation-editor-inline-actions"
+            style={{ marginBottom: 10, alignItems: "end" }}
+          >
+            <label>
+              Class
+              <select
+                aria-label="Georeference class filter"
+                value={selectedClassId}
+                onChange={(event) => setSelectedClassId(event.target.value)}
+              >
+                <option value="all">All classes</option>
+                {classOptions.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <input
+                type="checkbox"
+                checked={showTrackLines}
+                onChange={(event) => setShowTrackLines(event.target.checked)}
+              />{" "}
+              Show movement paths
+            </label>
+          </div>
+
+          <p className="annotation-helper">
+            Turn movement paths off to visualize detections as independent
+            instance points without connecting lines.
+          </p>
+
+          {nearestNeighbor && activeFrameIndex !== null && (
+            <p className="annotation-helper" data-testid="geographic-nearest-neighbor">
+              Frame {activeFrameIndex}: {nearestNeighbor.count} visible instances ·
+              mean nearest-neighbor {nearestNeighbor.meanM.toFixed(2)} m ·
+              minimum nearest-neighbor {nearestNeighbor.minimumM.toFixed(2)} m
+            </p>
+          )}
 
           <div
             data-testid="georeferenced-map-view-controls"
@@ -545,10 +693,12 @@ export function GeoreferencedMapPanel({
                 }}
               >
                 <OpenStreetMapView
-                  observations={state.observations}
+                  observations={filteredObservations}
                   activeObservationId={activeObservation?.id ?? null}
                   selectedObservationId={state.selectedObservationId}
                   selectedUncertaintyRadiusM={selectedHorizontal95M}
+                  showTrackLines={showTrackLines}
+                  trackColors={trackColors}
                   onObservationSelect={(observation) => {
                     void selectObservation(observation);
                   }}
@@ -613,7 +763,8 @@ export function GeoreferencedMapPanel({
                     </g>
                   ))}
 
-                  {Array.from(trackGroups.tracked.entries()).map(
+                  {showTrackLines &&
+                    Array.from(trackGroups.tracked.entries()).map(
                     ([trackId, observations]) => {
                       const points = observations
                         .map((observation) => projectedById.get(observation.id))
@@ -636,7 +787,7 @@ export function GeoreferencedMapPanel({
                           stroke={
                             activeTrackId === trackId
                               ? "var(--accent-color, #2563eb)"
-                              : "currentColor"
+                              : trackColors[trackId] || "currentColor"
                           }
                           strokeWidth={activeTrackId === trackId ? 4 : 2}
                           opacity={activeTrackId === trackId ? 0.9 : 0.3}
@@ -706,7 +857,9 @@ export function GeoreferencedMapPanel({
                           fill={
                             selected
                               ? "var(--accent-color, #2563eb)"
-                              : "currentColor"
+                              : (observation.track_id &&
+                                  trackColors[observation.track_id]) ||
+                                "currentColor"
                           }
                           opacity={selected ? 1 : 0.75}
                           stroke={selected ? "currentColor" : "none"}
@@ -779,8 +932,8 @@ export function GeoreferencedMapPanel({
 
                 <p className="annotation-helper">
                   Points are plotted from persisted latitude and longitude.
-                  Lines connect observations that share a track ID in frame
-                  order. Positional uncertainty is shown only when an
+                  Movement paths can optionally connect observations that share
+                  a track ID in frame order. Positional uncertainty is shown only when an
                   authoritative persisted backend estimate is available.
                 </p>
               </div>
