@@ -871,3 +871,147 @@ def test_task20c_tracking_without_georeferencing_readiness_creates_no_coordinate
         )
 
         assert issue_codes
+
+class FakeDetectionOnlyProvider(FakeVideoTrackingProvider):
+    def track(
+        self,
+        checkpoint_path: Path,
+        video_path: Path,
+        *,
+        tracker: str,
+        mode: str,
+        confidence: float,
+        iou: float,
+        device: str,
+        on_progress: VideoTrackingProgressCallback | None = None,
+        should_cancel: VideoTrackingCancellationCheck | None = None,
+    ) -> list[TrackObservation]:
+        assert checkpoint_path.read_bytes() == b"fake-detector"
+        assert video_path.read_bytes() == b"fake-video"
+        assert mode == "detect_only"
+
+        observations = [
+            TrackObservation(
+                frame=0,
+                provider_track_id=101,
+                class_name="fish",
+                confidence=0.91,
+                bbox=(10, 10, 20, 10),
+            ),
+            TrackObservation(
+                frame=1,
+                provider_track_id=102,
+                class_name="fish",
+                confidence=0.88,
+                bbox=(20, 10, 20, 10),
+            ),
+            TrackObservation(
+                frame=2,
+                provider_track_id=103,
+                class_name="fish",
+                confidence=0.86,
+                bbox=(30, 10, 20, 10),
+            ),
+        ]
+
+        if on_progress is not None:
+            for index in range(3):
+                on_progress(
+                    VideoTrackingProgress(
+                        frames_processed=index + 1,
+                        detections_seen=index + 1,
+                        tracked_observations_seen=index + 1,
+                        unique_tracks_seen=index + 1,
+                    )
+                )
+
+        return observations
+
+
+def test_detector_only_mode_persists_unconnected_single_frame_instances(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Phase 6 detector only")
+    video = _import_video(client, str(project["id"]), monkeypatch)
+    classes = cast(list[dict[str, object]], project["label_classes"])
+    label_class_id = str(classes[0]["id"])
+    app = cast(FastAPI, client.app)
+
+    model_id = "a41a620a-1f52-469a-95aa-b27668feec30"
+    managed_relative = f"{project['storage_root']}/models/{model_id}.pt"
+    managed_path = resolve_managed_project_path(app.state.settings, managed_relative)
+    managed_path.parent.mkdir(parents=True, exist_ok=True)
+    managed_path.write_bytes(b"fake-detector")
+
+    with app.state.session_factory() as session:
+        session.add(
+            ModelRegistration(
+                id=model_id,
+                project_id=str(project["id"]),
+                purpose="detector",
+                display_name="Fish detector",
+                source_filename="fish.pt",
+                managed_path=managed_relative,
+                sha256="a" * 64,
+                file_size_bytes=len(b"fake-detector"),
+                framework="ultralytics",
+                task="detect",
+                provider_name="ultralytics",
+                provider_version="test",
+                class_map_json={"labels": ["fish"], "mapping": {"fish": label_class_id}},
+                input_size_json={"width": 640, "height": 640},
+                metadata_json={},
+            )
+        )
+        session.commit()
+
+    monkeypatch.setattr(
+        tracking_module,
+        "video_tracking_provider_for_name",
+        lambda _name: FakeDetectionOnlyProvider(),
+    )
+
+    queued = client.post(
+        f"/api/v1/videos/{video['id']}/tracking-jobs",
+        json={
+            "model_id": model_id,
+            "mode": "detect_only",
+            "tracker": "bytetrack.yaml",
+            "confidence": 0.2,
+            "iou": 0.4,
+            "device": "cpu",
+            "minimum_track_frames": 99,
+        },
+    )
+    assert queued.status_code == 200, queued.text
+
+    job_id = queued.json()["id"]
+    assert tracking_module.process_video_tracking_job(
+        app.state.settings,
+        app.state.session_factory,
+        job_id,
+    )
+
+    tracks_response = client.get(f"/api/v1/videos/{video['id']}/tracks")
+    assert tracks_response.status_code == 200, tracks_response.text
+    instances = [
+        item
+        for item in tracks_response.json()
+        if item["source_job_id"] == job_id
+    ]
+
+    assert len(instances) == 3
+    assert {len(item["keyframes_json"]) for item in instances} == {1}
+    assert {item["keyframes_json"][0]["frame"] for item in instances} == {0, 1, 2}
+    assert all(item["metadata_json"]["instance_only"] is True for item in instances)
+    assert all(item["metadata_json"]["mode"] == "detect_only" for item in instances)
+    assert all(item["metadata_json"]["tracker"] is None for item in instances)
+
+    runs = client.get(f"/api/v1/videos/{video['id']}/tracking-runs")
+    assert runs.status_code == 200, runs.text
+    run = next(item for item in runs.json() if item["job_id"] == job_id)
+    assert run["mode"] == "detect_only"
+    assert run["track_count"] == 3
+    assert run["observation_count"] == 3
+
