@@ -59,22 +59,30 @@ class IndexedTelemetrySource:
 
 
 def _pick(
-    airdata_value: object | None,
     srt_value: object | None,
+    airdata_value: object | None,
+    *,
+    allow_airdata_fallback: bool,
 ) -> tuple[object | None, TelemetryFieldSource | None]:
-    if airdata_value is not None:
-        return airdata_value, "airdata"
+    """Prefer video-synchronized DJI SRT and use aligned AirData only as fallback."""
+
     if srt_value is not None:
         return srt_value, "dji_srt"
+    if allow_airdata_fallback and airdata_value is not None:
+        return airdata_value, "airdata"
     return None, None
 
 
 class PreferredTelemetrySource:
-    """Merge aligned AirData and SRT telemetry with AirData camera pose preferred.
+    """Merge SRT and AirData telemetry with SRT as the authoritative primary source.
+
+    DJI SRT is video-relative and remains primary for every projection field it
+    contains. AirData is flight-relative and may fill only fields absent from
+    SRT, and only when explicit alignment evidence has been persisted.
 
     airdata_time_offset_s maps video-relative time to AirData flight-relative
-    time: airdata_time = video_time + airdata_time_offset_s. A nonzero offset
-    requires independent evidence and is never fitted from geographic residuals.
+    time: airdata_time = video_time + airdata_time_offset_s. The offset is
+    never inferred from geographic residuals.
     """
 
     def __init__(
@@ -96,6 +104,10 @@ class PreferredTelemetrySource:
         self.srt = srt
         self.airdata_time_offset_s = airdata_time_offset_s
         self.airdata_time_offset_evidence = evidence or None
+        # AirData timestamps are flight-relative. Never allow AirData to
+        # influence projection unless the video/flight alignment was explicitly
+        # established and documented.
+        self.allow_airdata_fallback = airdata is not None and bool(evidence)
 
     def sample_for_time(
         self, time_s: float, *, max_delta_s: float | None = None
@@ -108,7 +120,9 @@ class PreferredTelemetrySource:
         airdata_time_s = time_s + self.airdata_time_offset_s
         air_match = (
             self.airdata.sample_for_time(airdata_time_s)
-            if self.airdata is not None and airdata_time_s >= 0
+            if self.allow_airdata_fallback
+            and self.airdata is not None
+            and airdata_time_s >= 0
             else None
         )
         srt_match = self.srt.sample_for_time(time_s) if self.srt is not None else None
@@ -121,34 +135,46 @@ class PreferredTelemetrySource:
         latitude: float | None = None
         longitude: float | None = None
         position_source: TelemetryFieldSource | None = None
-        if air is not None and air.latitude is not None and air.longitude is not None:
-            latitude, longitude, position_source = air.latitude, air.longitude, "airdata"
-        elif srt is not None and srt.latitude is not None and srt.longitude is not None:
+        if srt is not None and srt.latitude is not None and srt.longitude is not None:
             latitude, longitude, position_source = srt.latitude, srt.longitude, "dji_srt"
+        elif (
+            self.allow_airdata_fallback
+            and air is not None
+            and air.latitude is not None
+            and air.longitude is not None
+        ):
+            latitude, longitude, position_source = air.latitude, air.longitude, "airdata"
 
         relative_altitude, altitude_source = _pick(
-            air.relative_altitude_m if air is not None else None,
             srt.relative_altitude_m if srt is not None else None,
+            air.relative_altitude_m if air is not None else None,
+            allow_airdata_fallback=self.allow_airdata_fallback,
         )
         gimbal_yaw, yaw_source = _pick(
-            air.gimbal_yaw_deg if air is not None else None,
             srt.gimbal_yaw_deg if srt is not None else None,
+            air.gimbal_yaw_deg if air is not None else None,
+            allow_airdata_fallback=self.allow_airdata_fallback,
         )
         gimbal_pitch, pitch_source = _pick(
-            air.gimbal_pitch_deg if air is not None else None,
             srt.gimbal_pitch_deg if srt is not None else None,
+            air.gimbal_pitch_deg if air is not None else None,
+            allow_airdata_fallback=self.allow_airdata_fallback,
         )
         gimbal_roll, roll_source = _pick(
-            air.gimbal_roll_deg if air is not None else None,
             srt.gimbal_roll_deg if srt is not None else None,
+            air.gimbal_roll_deg if air is not None else None,
+            allow_airdata_fallback=self.allow_airdata_fallback,
         )
 
         def prefer(field: str) -> object | None:
-            air_value = getattr(air, field) if air is not None else None
             srt_value = getattr(srt, field) if srt is not None else None
-            return air_value if air_value is not None else srt_value
+            if srt_value is not None:
+                return srt_value
+            if self.allow_airdata_fallback and air is not None:
+                return getattr(air, field)
+            return None
 
-        base_sample = air if air is not None else srt
+        base_sample = srt if srt is not None else air
         assert base_sample is not None
         merged = TelemetrySample.model_validate(
             {
