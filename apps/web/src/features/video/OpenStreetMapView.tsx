@@ -12,6 +12,8 @@ interface OpenStreetMapViewProps {
   selectedUncertaintyRadiusM?: number | null;
   onObservationSelect?: (observation: GeoReferencedObservationSummary) => void;
   onTileFailure?: () => void;
+  showTrackLines?: boolean;
+  trackColors?: Record<string, string>;
 }
 
 const DEFAULT_CENTER: L.LatLngExpression = [0, 0];
@@ -33,6 +35,8 @@ export function OpenStreetMapView({
   selectedUncertaintyRadiusM = null,
   onObservationSelect,
   onTileFailure,
+  showTrackLines = true,
+  trackColors = {},
 }: OpenStreetMapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -157,28 +161,37 @@ export function OpenStreetMapView({
 
     const positions = observations.map(observationPosition);
 
-    for (const [trackId, trackObservations] of tracks) {
-      if (trackObservations.length < 2) {
-        continue;
+    if (showTrackLines) {
+      for (const [trackId, trackObservations] of tracks) {
+        if (trackObservations.length < 2) {
+          continue;
+        }
+
+        const activeTrack = trackObservations.some(
+          (observation) => observation.id === activeObservationId,
+        );
+
+        L.polyline(trackObservations.map(observationPosition), {
+          color: trackColors[trackId],
+          weight: activeTrack ? 5 : 3,
+          opacity: activeTrack ? 1 : 0.7,
+        })
+          .bindTooltip(`Track ${trackId}`)
+          .addTo(overlays);
       }
-
-      const activeTrack = trackObservations.some(
-        (observation) => observation.id === activeObservationId,
-      );
-
-      L.polyline(trackObservations.map(observationPosition), {
-        weight: activeTrack ? 5 : 3,
-        opacity: activeTrack ? 1 : 0.7,
-      })
-        .bindTooltip(`Track ${trackId}`)
-        .addTo(overlays);
     }
 
     for (const observation of observations) {
       const active = observation.id === activeObservationId;
       const selected = observation.id === selectedObservationId;
 
+      const markerColor =
+        (observation.track_id && trackColors[observation.track_id]) ||
+        "#2563eb";
+
       const marker = L.circleMarker(observationPosition(observation), {
+        color: markerColor,
+        fillColor: markerColor,
         radius: active ? 8 : selected ? 7 : 5,
         weight: active || selected ? 3 : 1.5,
         fillOpacity: active ? 1 : 0.75,
@@ -234,6 +247,8 @@ export function OpenStreetMapView({
     observations,
     selectedObservationId,
     selectedUncertaintyRadiusM,
+    showTrackLines,
+    trackColors,
     tracks,
   ]);
 
