@@ -108,17 +108,27 @@ class VideoGeoreferencingReadinessService:
 
         srt_available = video.telemetry.available
         airdata_available = video.airdata_telemetry.available
-        airdata_alignment_valid = True
+        airdata_alignment_evidence = (
+            video.airdata_alignment.evidence or ""
+        ).strip()
+        airdata_alignment_valid = (
+            not airdata_available or bool(airdata_alignment_evidence)
+        )
+
+        # SRT is authoritative and can georeference independently. An AirData
+        # alignment problem is blocking only when AirData would be required.
         if (
-            airdata_available
-            and video.airdata_alignment.time_offset_s != 0
-            and not (video.airdata_alignment.evidence or "").strip()
+            not srt_available
+            and airdata_available
+            and not airdata_alignment_valid
         ):
-            airdata_alignment_valid = False
             issues.append(
                 VideoGeoreferencingReadinessIssue(
                     code="invalid_airdata_alignment",
-                    message="Nonzero AirData alignment offset requires evidence",
+                    message=(
+                        "AirData-only georeferencing requires explicit "
+                        "video/flight alignment evidence"
+                    ),
                 )
             )
 
@@ -126,7 +136,7 @@ class VideoGeoreferencingReadinessService:
             issues.append(
                 VideoGeoreferencingReadinessIssue(
                     code="missing_telemetry",
-                    message="Video has no available SRT or AirData telemetry",
+                    message="Video has no available SRT or aligned AirData telemetry",
                 )
             )
 
@@ -136,7 +146,7 @@ class VideoGeoreferencingReadinessService:
         zoom_compatible: bool | None = None
 
         telemetry_source = None
-        if (srt_available or airdata_available) and airdata_alignment_valid:
+        if srt_available or (airdata_available and airdata_alignment_valid):
             telemetry_source = self.video_assets.telemetry_source(video.id)
             if telemetry_source is None:
                 issues.append(
