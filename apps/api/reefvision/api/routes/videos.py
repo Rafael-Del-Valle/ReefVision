@@ -32,15 +32,15 @@ from reefvision.schemas.videos import (
     VideoMetricDepth3DCreateRequest,
     VideoTrackAnalyticsResponse,
     VideoTrackCreate,
-    VideoTrackInterpolationResponse,
-    VideoTrackResponse,
-    VideoTrackUpdate,
     VideoTrackingBenchmarkRequest,
     VideoTrackingBenchmarkResponse,
     VideoTrackingCreateRequest,
     VideoTrackingEvaluationRequest,
     VideoTrackingEvaluationResponse,
     VideoTrackingRunResponse,
+    VideoTrackInterpolationResponse,
+    VideoTrackResponse,
+    VideoTrackUpdate,
 )
 from reefvision.services.scientific_3d_calibration import Scientific3DCalibrationValidationService
 from reefvision.services.video_assets import VideoAssetService
