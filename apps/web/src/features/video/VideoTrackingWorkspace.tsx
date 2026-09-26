@@ -170,7 +170,7 @@ export function VideoTrackingWorkspace({
     queryKey: ["video-track-interpolation", selectedTrackId],
     queryFn: ({ signal }) =>
       getVideoTrackInterpolation(selectedTrackId, signal),
-    enabled: Boolean(selectedTrackId),
+    enabled: Boolean(selectedTrackId) && sourceOverlayEnabled,
   });
   const analyticsQuery = useQuery({
     queryKey: ["video-track-analytics", selectedTrackId],
@@ -201,6 +201,17 @@ export function VideoTrackingWorkspace({
         (run) => run.status === "succeeded",
       ),
     [trackingRunsQuery.data],
+  );
+
+  const trackClassById = useMemo(
+    () =>
+      Object.fromEntries(
+        (tracksQuery.data ?? []).map((track) => [
+          track.id,
+          track.label_class_id,
+        ]),
+      ),
+    [tracksQuery.data],
   );
 
   useEffect(() => {
@@ -1068,6 +1079,11 @@ export function VideoTrackingWorkspace({
           activeFrameIndex={frameIndex}
           showTrackLines={showMovementLines}
           onFrameSelect={handleGeographicFrameSelect}
+          classOptions={project.label_classes.map((labelClass) => ({
+            id: labelClass.id,
+            name: labelClass.name,
+          }))}
+          trackClassById={trackClassById}
         />
       )}
 
