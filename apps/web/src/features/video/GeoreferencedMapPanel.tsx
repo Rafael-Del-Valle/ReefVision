@@ -11,6 +11,7 @@
 import {
   getGeoreferencedObservation,
   getVideoGeoreferencedObservations,
+  recomputeVideoGeoreferencedObservations,
   type GeoReferencedObservationSummary,
 } from "./videoGeoreferencedObservationsApi";
 
@@ -144,6 +145,12 @@ export function GeoreferencedMapPanel({
   const [mapView, setMapView] = useState<"osm" | "scientific">(initialMapView);
   const [showMovementPaths, setShowMovementPaths] = useState(true);
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
+  const [recomputeState, setRecomputeState] = useState<
+    | { status: "idle" }
+    | { status: "running" }
+    | { status: "success"; message: string }
+    | { status: "error"; message: string }
+  >({ status: "idle" });
 
   const [osmFallbackReason, setOsmFallbackReason] = useState<string | null>(
     initialMapView === "scientific"
@@ -449,19 +456,58 @@ export function GeoreferencedMapPanel({
           </p>
         </div>
 
-        <button
-          type="button"
-          className="secondary"
-          disabled={state.collectionStatus === "loading"}
-          onClick={() => {
-            void loadCollection();
-          }}
-        >
-          {state.collectionStatus === "loading"
-            ? "Refreshing..."
-            : "Refresh map"}
-        </button>
+        <div className="annotation-editor-inline-actions">
+          <button
+            type="button"
+            className="secondary"
+            disabled={state.collectionStatus === "loading"}
+            onClick={() => {
+              void loadCollection();
+            }}
+          >
+            {state.collectionStatus === "loading"
+              ? "Refreshing..."
+              : "Refresh map"}
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={recomputeState.status === "running"}
+            onClick={() => {
+              setRecomputeState({ status: "running" });
+              void recomputeVideoGeoreferencedObservations(videoId)
+                .then((result) => {
+                  setRecomputeState({
+                    status: "success",
+                    message: `Recomputed ${result.recomputed_count} observation${result.recomputed_count === 1 ? "" : "s"}; ${result.unchanged_count} unchanged.`,
+                  });
+                  return loadCollection();
+                })
+                .catch((error: unknown) => {
+                  setRecomputeState({
+                    status: "error",
+                    message: errorMessage(error),
+                  });
+                });
+            }}
+          >
+            {recomputeState.status === "running"
+              ? "Recomputing..."
+              : "Recompute geographic observations"}
+          </button>
+        </div>
       </div>
+
+      {recomputeState.status === "success" && (
+        <p className="annotation-helper" role="status">
+          {recomputeState.message}
+        </p>
+      )}
+      {recomputeState.status === "error" && (
+        <p className="error-copy" role="alert">
+          {recomputeState.message}
+        </p>
+      )}
 
       {initialLoading && (
         <div
