@@ -201,6 +201,7 @@ export interface VideoTrackingRun {
   video_id: string;
   status: string;
   stage: string;
+  mode: "track" | "detect_only";
   tracker: string;
   model_id: string;
   confidence: number;
