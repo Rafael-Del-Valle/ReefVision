@@ -152,7 +152,7 @@ def test_georeference_point_success(
     settings, factory, video_id = service_context
     with factory() as session:
         service = VideoGeoreferencingService(session, settings)
-        preferred = PreferredTelemetrySource(airdata=_source(), srt=None)
+        preferred = PreferredTelemetrySource(airdata=None, srt=_source())
         monkeypatch.setattr(service.video_assets, "telemetry_source", lambda _: preferred)
         response = service.georeference_point(
             video_id,
@@ -175,8 +175,8 @@ def test_georeference_point_success(
     assert response.result.calibration_source_id.startswith("sha256:")
     assert response.sync_error_s == pytest.approx(0.0)
     assert response.telemetry_provenance is not None
-    assert response.telemetry_provenance.position_source == "airdata"
-    assert response.telemetry_provenance.gimbal_yaw_source == "airdata"
+    assert response.telemetry_provenance.position_source == "dji_srt"
+    assert response.telemetry_provenance.gimbal_yaw_source == "dji_srt"
 
 
 def test_georeference_point_requires_project_surface_evidence(
@@ -659,8 +659,8 @@ def test_georeference_detection_prefers_explicit_representative_pixel(
         service = VideoGeoreferencingService(session, settings)
 
         preferred = PreferredTelemetrySource(
-            airdata=_source(),
-            srt=None,
+            airdata=None,
+            srt=_source(),
         )
 
         monkeypatch.setattr(
@@ -691,9 +691,9 @@ def test_georeference_detection_prefers_explicit_representative_pixel(
     assert observation.frame_width_px == 1000
     assert observation.frame_height_px == 800
 
-    assert observation.telemetry.source_type == "csv"
+    assert observation.telemetry.source_type == "dji_srt"
     assert observation.telemetry.field_provenance is not None
-    assert observation.telemetry.field_provenance["position_source"] == "airdata"
+    assert observation.telemetry.field_provenance["position_source"] == "dji_srt"
 
     assert observation.calibration.checksum_sha256 is not None
     assert str(observation.calibration.calibration_id).startswith("sha256:")
@@ -711,8 +711,8 @@ def test_georeference_detection_falls_back_to_bbox_center(
         service = VideoGeoreferencingService(session, settings)
 
         preferred = PreferredTelemetrySource(
-            airdata=_source(),
-            srt=None,
+            airdata=None,
+            srt=_source(),
         )
 
         monkeypatch.setattr(
@@ -757,8 +757,8 @@ def test_georeference_detection_rejects_explicit_pixel_outside_bbox(
         service = VideoGeoreferencingService(session, settings)
 
         preferred = PreferredTelemetrySource(
-            airdata=_source(),
-            srt=None,
+            airdata=None,
+            srt=_source(),
         )
 
         monkeypatch.setattr(
