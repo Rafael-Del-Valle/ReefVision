@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import ClassVar
 from unittest.mock import Mock
 
@@ -65,7 +66,7 @@ def test_geojson_download_uses_persisted_observations(
     monkeypatch: pytest.MonkeyPatch,
     fake_service: type[FakeObservationService],
 ) -> None:
-    record = object()
+    record = SimpleNamespace(is_stale=False)
     fake_service.records = [record]
 
     serializer = Mock(return_value=b'{"type":"FeatureCollection","features":[]}')
