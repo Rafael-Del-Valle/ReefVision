@@ -13,6 +13,7 @@ import {
   benchmarkVideoTracking,
   createVideoTrack,
   createVideoTrackingJob,
+  deleteAllVideoTracks,
   deleteVideoTrack,
   extractVideoFrames,
   getTrackingModels,
@@ -98,6 +99,7 @@ export function VideoTrackingWorkspace({
   const [everyNFrames, setEveryNFrames] = useState(1);
   const [frameIndex, setFrameIndex] = useState(0);
   const [selectedTrackId, setSelectedTrackId] = useState("");
+  const [sourceOverlayEnabled, setSourceOverlayEnabled] = useState(false);
 
   // Task 16E: load only for the explicitly selected track.
   // Playback-active map tracks do not drive this request.
@@ -159,11 +161,30 @@ export function VideoTrackingWorkspace({
   const selectedTrack = tracksQuery.data?.find(
     (track) => track.id === selectedTrackId,
   );
+  const trackClassById = useMemo(
+    () =>
+      Object.fromEntries(
+        (tracksQuery.data ?? []).map((track) => [
+          track.id,
+          track.label_class_id,
+        ]),
+      ),
+    [tracksQuery.data],
+  );
+  const georeferenceClassOptions = useMemo(
+    () =>
+      project.label_classes.map((labelClass) => ({
+        id: labelClass.id,
+        name: labelClass.name,
+        color: labelClass.display_color,
+      })),
+    [project.label_classes],
+  );
   const interpolationQuery = useQuery({
     queryKey: ["video-track-interpolation", selectedTrackId],
     queryFn: ({ signal }) =>
       getVideoTrackInterpolation(selectedTrackId, signal),
-    enabled: Boolean(selectedTrackId),
+    enabled: Boolean(selectedTrackId) && sourceOverlayEnabled,
   });
   const analyticsQuery = useQuery({
     queryKey: ["video-track-analytics", selectedTrackId],
@@ -199,6 +220,7 @@ export function VideoTrackingWorkspace({
     pendingMapSeekRef.current = null;
     setFrameIndex(0);
     setSelectedTrackId("");
+    setSourceOverlayEnabled(false);
     setKeyframes([]);
     setGroundTruthTrackIds([]);
     setBenchmarkJobIds([]);
@@ -355,9 +377,33 @@ export function VideoTrackingWorkspace({
     onSuccess: async () => {
       setSelectedTrackId("");
       setKeyframes([]);
-      await queryClient.invalidateQueries({
-        queryKey: ["video-tracks", selectedVideoId],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["video-tracks", selectedVideoId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["video-georeferenced-observations", selectedVideoId],
+        }),
+      ]);
+    },
+  });
+  const deleteAllTracksMutation = useMutation({
+    mutationFn: () => {
+      if (!selectedVideoId) throw new Error("Select a video first");
+      return deleteAllVideoTracks(selectedVideoId);
+    },
+    onSuccess: async () => {
+      setSelectedTrackId("");
+      setKeyframes([]);
+      setSourceOverlayEnabled(false);
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["video-tracks", selectedVideoId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["video-georeferenced-observations", selectedVideoId],
+        }),
+      ]);
     },
   });
   const trackingMutation = useMutation({
@@ -449,13 +495,19 @@ export function VideoTrackingWorkspace({
     onSuccess: () => setCopiedReport(null),
   });
 
-  const overlayFrame = useMemo(
+  const overlayFramesByIndex = useMemo(
     () =>
-      interpolationQuery.data?.frames.find(
-        (frame) => frame.frame === frameIndex,
+      new Map(
+        (interpolationQuery.data?.frames ?? []).map((frame) => [
+          frame.frame,
+          frame,
+        ]),
       ),
-    [frameIndex, interpolationQuery.data?.frames],
+    [interpolationQuery.data?.frames],
   );
+  const overlayFrame = sourceOverlayEnabled
+    ? overlayFramesByIndex.get(frameIndex)
+    : undefined;
   const extractionStride = Number(
     selectedVideo?.metadata_json.extraction_every_n_frames ?? everyNFrames,
   );
@@ -464,6 +516,7 @@ export function VideoTrackingWorkspace({
     extractionMutation.error ??
     saveTrackMutation.error ??
     deleteTrackMutation.error ??
+    deleteAllTracksMutation.error ??
     trackingMutation.error ??
     cancelTrackingMutation.error ??
     retryTrackingMutation.error ??
@@ -847,61 +900,83 @@ export function VideoTrackingWorkspace({
         {selectedVideo ? (
           <>
             <label>
-              Frame {frameIndex}
               <input
-                type="range"
-                min={0}
-                max={Math.max(0, selectedVideo.frame_count - 1)}
-                step={Math.max(1, extractionStride)}
-                value={frameIndex}
-                onChange={(event) => setFrameIndex(Number(event.target.value))}
-              />
+                type="checkbox"
+                checked={sourceOverlayEnabled}
+                onChange={(event) =>
+                  setSourceOverlayEnabled(event.target.checked)
+                }
+              />{" "}
+              Enable source-coordinate overlay
             </label>
-            {selectedVideo.frame_directory_path ? (
-              <div
-                style={{
-                  position: "relative",
-                  width: "100%",
-                  aspectRatio: `${selectedVideo.width_px} / ${selectedVideo.height_px}`,
-                }}
-              >
-                <img
-                  src={videoFrameUrl(selectedVideo.id, frameIndex)}
-                  alt={`Frame ${frameIndex}`}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "contain",
-                  }}
-                />
-                {overlayFrame && (
-                  <svg
-                    viewBox={`0 0 ${selectedVideo.width_px} ${selectedVideo.height_px}`}
-                    preserveAspectRatio="none"
+            <p className="annotation-helper">
+              Disabled by default to avoid loading a review image and the full
+              interpolated track on every frame change.
+            </p>
+            {sourceOverlayEnabled && (
+              <>
+                <label>
+                  Frame {frameIndex}
+                  <input
+                    type="range"
+                    min={0}
+                    max={Math.max(0, selectedVideo.frame_count - 1)}
+                    step={Math.max(1, extractionStride)}
+                    value={frameIndex}
+                    onChange={(event) =>
+                      setFrameIndex(Number(event.target.value))
+                    }
+                  />
+                </label>
+                {selectedVideo.frame_directory_path ? (
+                  <div
                     style={{
-                      position: "absolute",
-                      inset: 0,
+                      position: "relative",
                       width: "100%",
-                      height: "100%",
+                      aspectRatio: `${selectedVideo.width_px} / ${selectedVideo.height_px}`,
                     }}
                   >
-                    <rect
-                      x={overlayFrame.bbox[0]}
-                      y={overlayFrame.bbox[1]}
-                      width={overlayFrame.bbox[2]}
-                      height={overlayFrame.bbox[3]}
-                      fill="none"
-                      stroke="#ffd43b"
-                      strokeWidth={3}
-                      vectorEffect="non-scaling-stroke"
+                    <img
+                      src={videoFrameUrl(selectedVideo.id, frameIndex)}
+                      alt={`Frame ${frameIndex}`}
+                      loading="lazy"
+                      decoding="async"
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                      }}
                     />
-                  </svg>
+                    {overlayFrame && (
+                      <svg
+                        viewBox={`0 0 ${selectedVideo.width_px} ${selectedVideo.height_px}`}
+                        preserveAspectRatio="none"
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          width: "100%",
+                          height: "100%",
+                        }}
+                      >
+                        <rect
+                          x={overlayFrame.bbox[0]}
+                          y={overlayFrame.bbox[1]}
+                          width={overlayFrame.bbox[2]}
+                          height={overlayFrame.bbox[3]}
+                          fill="none"
+                          stroke="#ffd43b"
+                          strokeWidth={3}
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      </svg>
+                    )}
+                  </div>
+                ) : (
+                  <p className="annotation-helper">
+                    Extract frames to review keyframes against still images.
+                  </p>
                 )}
-              </div>
-            ) : (
-              <p className="annotation-helper">
-                Extract frames to review keyframes against still images.
-              </p>
+              </>
             )}
           </>
         ) : (
@@ -915,6 +990,8 @@ export function VideoTrackingWorkspace({
           videoId={selectedVideo.id}
           activeFrameIndex={frameIndex}
           onFrameSelect={handleGeographicFrameSelect}
+          classOptions={georeferenceClassOptions}
+          trackClassById={trackClassById}
         />
       )}
 
@@ -1065,6 +1142,28 @@ export function VideoTrackingWorkspace({
             onClick={() => deleteTrackMutation.mutate()}
           >
             Delete track
+          </button>
+          <button
+            type="button"
+            className="danger-ghost"
+            disabled={
+              (tracksQuery.data?.length ?? 0) === 0 ||
+              deleteAllTracksMutation.isPending
+            }
+            onClick={() => {
+              const count = tracksQuery.data?.length ?? 0;
+              if (
+                window.confirm(
+                  `Remove all ${count} active video tracks and their derived georeference points? This does not delete the source video or models.`,
+                )
+              ) {
+                deleteAllTracksMutation.mutate();
+              }
+            }}
+          >
+            {deleteAllTracksMutation.isPending
+              ? "Removing tracks..."
+              : "Remove all video tracks"}
           </button>
         </div>
       </section>
