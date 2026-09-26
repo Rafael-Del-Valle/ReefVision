@@ -59,6 +59,7 @@ vi.mock("./videoGeoreferencedObservationsApi", async () => {
     ...actual,
     getVideoGeoreferencedObservations: vi.fn(),
     getGeoreferencedObservation: vi.fn(),
+    recomputeVideoGeoreferencedObservations: vi.fn(),
   };
 });
 
@@ -819,5 +820,103 @@ describe("Map enhancement M2", () => {
     expect(
       screen.queryByTestId("osm-offline-fallback"),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("Georeferenced map class filters and recomputation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.defineProperty(window.navigator, "onLine", {
+      configurable: true,
+      value: false,
+    });
+  });
+
+  it("filters mapped observations by class and restores all observations", async () => {
+    const whale = summary("whale-observation", 10, "track-whale");
+    const dolphin = summary("dolphin-observation", 20, "track-dolphin");
+
+    vi.mocked(api.getVideoGeoreferencedObservations).mockResolvedValue({
+      items: [whale, dolphin],
+      count: 2,
+    });
+
+    render(
+      <GeoreferencedMapPanel
+        videoId="video-classes"
+        classOptions={[
+          { id: "class-whale", name: "Whale" },
+          { id: "class-dolphin", name: "Dolphin" },
+        ]}
+        trackClassById={{
+          "track-whale": "class-whale",
+          "track-dolphin": "class-dolphin",
+        }}
+      />,
+    );
+
+    await screen.findByRole("button", {
+      name: "Observation at frame 10",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Whale" }));
+
+    expect(
+      screen.getByRole("button", {
+        name: "Observation at frame 10",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: "Observation at frame 20",
+      }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+
+    expect(
+      screen.getByRole("button", {
+        name: "Observation at frame 20",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("recomputes stale geographic observations and refreshes the map", async () => {
+    const observation = summary("recompute-observation", 12, "track-1");
+
+    vi.mocked(api.getVideoGeoreferencedObservations).mockResolvedValue({
+      items: [observation],
+      count: 1,
+    });
+
+    vi.mocked(api.recomputeVideoGeoreferencedObservations).mockResolvedValue({
+      video_id: "video-recompute",
+      configuration_hash: "a".repeat(64),
+      invalidated_count: 1,
+      stale_count: 1,
+      recomputed_count: 1,
+      unchanged_count: 0,
+    });
+
+    render(<GeoreferencedMapPanel videoId="video-recompute" />);
+
+    await screen.findByRole("button", {
+      name: "Observation at frame 12",
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Recompute geographic observations",
+      }),
+    );
+
+    expect(
+      await screen.findByText(/Recomputed 1 observation; 0 unchanged/i),
+    ).toBeInTheDocument();
+
+    expect(
+      api.recomputeVideoGeoreferencedObservations,
+    ).toHaveBeenCalledWith("video-recompute");
+    expect(api.getVideoGeoreferencedObservations).toHaveBeenCalledTimes(2);
   });
 });
