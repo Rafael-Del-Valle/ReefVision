@@ -271,6 +271,13 @@ def delete_track(track_id: str, session: DbSession) -> Response:
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.delete("/videos/{video_id}/tracks")
+def delete_all_tracks(video_id: str, session: DbSession) -> dict[str, int]:
+    """Remove all active tracks for a video and their derived map observations."""
+    deleted_count = VideoTrackService(session).delete_all(video_id)
+    return {"deleted_count": deleted_count}
+
+
 @router.get(
     "/video-tracks/{track_id}/interpolation",
     response_model=VideoTrackInterpolationResponse,
