@@ -98,6 +98,8 @@ export function VideoTrackingWorkspace({
   const [everyNFrames, setEveryNFrames] = useState(1);
   const [frameIndex, setFrameIndex] = useState(0);
   const [selectedTrackId, setSelectedTrackId] = useState("");
+  const [showSourceCoordinateOverlay, setShowSourceCoordinateOverlay] =
+    useState(false);
 
   // Task 16E: load only for the explicitly selected track.
   // Playback-active map tracks do not drive this request.
@@ -115,6 +117,9 @@ export function VideoTrackingWorkspace({
   const [keyframes, setKeyframes] = useState<VideoTrackKeyframe[]>([]);
 
   const [trackingModelId, setTrackingModelId] = useState("");
+  const [trackingMode, setTrackingMode] = useState<"track" | "detect_only">(
+    "track",
+  );
   const [trackerName, setTrackerName] = useState("bytetrack.yaml");
   const [trackingConfidence, setTrackingConfidence] = useState(0.25);
   const [trackingIou, setTrackingIou] = useState(0.5);
@@ -163,7 +168,7 @@ export function VideoTrackingWorkspace({
     queryKey: ["video-track-interpolation", selectedTrackId],
     queryFn: ({ signal }) =>
       getVideoTrackInterpolation(selectedTrackId, signal),
-    enabled: Boolean(selectedTrackId),
+    enabled: Boolean(selectedTrackId) && showSourceCoordinateOverlay,
   });
   const analyticsQuery = useQuery({
     queryKey: ["video-track-analytics", selectedTrackId],
@@ -360,6 +365,22 @@ export function VideoTrackingWorkspace({
       });
     },
   });
+  const deleteMachineTracksMutation = useMutation({
+    mutationFn: async () => {
+      const machineTracks = (tracksQuery.data ?? []).filter(
+        (track) => track.status === "machine_generated",
+      );
+      await Promise.all(machineTracks.map((track) => deleteVideoTrack(track.id)));
+      return machineTracks.length;
+    },
+    onSuccess: async () => {
+      setSelectedTrackId("");
+      setKeyframes([]);
+      await queryClient.invalidateQueries({
+        queryKey: ["video-tracks", selectedVideoId],
+      });
+    },
+  });
   const trackingMutation = useMutation({
     mutationFn: () => {
       if (trackingConfidence < 0 || trackingConfidence > 1) {
@@ -373,11 +394,13 @@ export function VideoTrackingWorkspace({
       }
       return createVideoTrackingJob(selectedVideoId, {
         model_id: trackingModelId,
+        mode: trackingMode,
         tracker: trackerName,
         confidence: trackingConfidence,
         iou: trackingIou,
         device: trackingDevice,
-        minimum_track_frames: minimumTrackFrames,
+        minimum_track_frames:
+          trackingMode === "detect_only" ? 1 : minimumTrackFrames,
       });
     },
     onSuccess: async () => {
@@ -451,10 +474,27 @@ export function VideoTrackingWorkspace({
 
   const overlayFrame = useMemo(
     () =>
-      interpolationQuery.data?.frames.find(
-        (frame) => frame.frame === frameIndex,
+      showSourceCoordinateOverlay
+        ? interpolationQuery.data?.frames.find(
+            (frame) => frame.frame === frameIndex,
+          )
+        : undefined,
+    [
+      frameIndex,
+      interpolationQuery.data?.frames,
+      showSourceCoordinateOverlay,
+    ],
+  );
+
+  const trackClassById = useMemo(
+    () =>
+      Object.fromEntries(
+        (tracksQuery.data ?? []).map((track) => [
+          track.id,
+          track.label_class_id,
+        ]),
       ),
-    [frameIndex, interpolationQuery.data?.frames],
+    [tracksQuery.data],
   );
   const extractionStride = Number(
     selectedVideo?.metadata_json.extraction_every_n_frames ?? everyNFrames,
@@ -464,6 +504,7 @@ export function VideoTrackingWorkspace({
     extractionMutation.error ??
     saveTrackMutation.error ??
     deleteTrackMutation.error ??
+    deleteMachineTracksMutation.error ??
     trackingMutation.error ??
     cancelTrackingMutation.error ??
     retryTrackingMutation.error ??
@@ -844,6 +885,20 @@ export function VideoTrackingWorkspace({
       <section className="management-card">
         <p className="eyebrow">Frame review</p>
         <h3>Source-coordinate overlay</h3>
+        <label>
+          <input
+            type="checkbox"
+            checked={showSourceCoordinateOverlay}
+            onChange={(event) =>
+              setShowSourceCoordinateOverlay(event.target.checked)
+            }
+          />{" "}
+          Enable source-coordinate overlay
+        </label>
+        <p className="annotation-helper">
+          Leave this off during normal playback for better responsiveness.
+          Interpolated track frames are loaded only while the overlay is enabled.
+        </p>
         {selectedVideo ? (
           <>
             <label>
@@ -857,7 +912,12 @@ export function VideoTrackingWorkspace({
                 onChange={(event) => setFrameIndex(Number(event.target.value))}
               />
             </label>
-            {selectedVideo.frame_directory_path ? (
+            {!showSourceCoordinateOverlay ? (
+              <p className="annotation-helper">
+                Overlay paused. Enable it above when you need frame-by-frame
+                source-coordinate inspection.
+              </p>
+            ) : selectedVideo.frame_directory_path ? (
               <div
                 style={{
                   position: "relative",
@@ -915,6 +975,11 @@ export function VideoTrackingWorkspace({
           videoId={selectedVideo.id}
           activeFrameIndex={frameIndex}
           onFrameSelect={handleGeographicFrameSelect}
+          classOptions={project.label_classes.map((labelClass) => ({
+            id: labelClass.id,
+            name: labelClass.name,
+          }))}
+          trackClassById={trackClassById}
         />
       )}
 
@@ -1066,6 +1131,21 @@ export function VideoTrackingWorkspace({
           >
             Delete track
           </button>
+          <button
+            type="button"
+            className="danger-ghost"
+            disabled={
+              deleteMachineTracksMutation.isPending ||
+              !(tracksQuery.data ?? []).some(
+                (track) => track.status === "machine_generated",
+              )
+            }
+            onClick={() => deleteMachineTracksMutation.mutate()}
+          >
+            {deleteMachineTracksMutation.isPending
+              ? "Removing..."
+              : "Delete machine-generated tracks"}
+          </button>
         </div>
       </section>
 
@@ -1086,9 +1166,26 @@ export function VideoTrackingWorkspace({
           </select>
         </label>
         <label>
+          Inference mode
+          <select
+            value={trackingMode}
+            onChange={(event) =>
+              setTrackingMode(
+                event.target.value === "detect_only" ? "detect_only" : "track",
+              )
+            }
+          >
+            <option value="track">Detect + track identities</option>
+            <option value="detect_only">
+              Detect instances only (no cross-frame identities)
+            </option>
+          </select>
+        </label>
+        <label>
           Tracker
           <select
             value={trackerName}
+            disabled={trackingMode === "detect_only"}
             onChange={(event) => setTrackerName(event.target.value)}
           >
             <option value="bytetrack.yaml">ByteTrack</option>
@@ -1136,7 +1233,8 @@ export function VideoTrackingWorkspace({
             type="number"
             min={1}
             step={1}
-            value={minimumTrackFrames}
+            value={trackingMode === "detect_only" ? 1 : minimumTrackFrames}
+            disabled={trackingMode === "detect_only"}
             onChange={(event) =>
               setMinimumTrackFrames(Number(event.target.value))
             }
@@ -1151,7 +1249,9 @@ export function VideoTrackingWorkspace({
         >
           {trackingMutation.isPending
             ? "Queuing..."
-            : `Run ${trackerLabel(trackerName)}`}
+            : trackingMode === "detect_only"
+              ? "Run detector only"
+              : `Run ${trackerLabel(trackerName)}`}
         </button>
         {trackingMutation.data && (
           <p className="annotation-helper">
