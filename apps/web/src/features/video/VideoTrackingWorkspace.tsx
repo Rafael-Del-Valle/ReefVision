@@ -27,9 +27,12 @@ import {
   getVideos,
   importVideo,
   importVideoPath,
+  poseLandmarkSchemaFromMetadata,
+  setPoseLandmarkSchema,
   updateVideoTrack,
   videoContentUrl,
   videoFrameUrl,
+  type PoseLandmarkGroup,
   type VideoTrackKeyframe,
 } from "./videoApi";
 import { trackingBenchmarkCsv, trackingBenchmarkJson } from "./trackingReport";
@@ -123,6 +126,9 @@ export function VideoTrackingWorkspace({
   const [trackingDevice, setTrackingDevice] = useState("auto");
   const [minimumTrackFrames, setMinimumTrackFrames] = useState(2);
   const [linkDetections, setLinkDetections] = useState(true);
+  const [poseLandmarkGroups, setPoseLandmarkGroups] = useState<
+    PoseLandmarkGroup[]
+  >([]);
   const [showMovementLines, setShowMovementLines] = useState(true);
   const [sourceOverlayEnabled, setSourceOverlayEnabled] = useState(false);
   const [previewFrameIndex, setPreviewFrameIndex] = useState(0);
@@ -184,6 +190,27 @@ export function VideoTrackingWorkspace({
     (model) => model.id === trackingModelId,
   );
   const poseTrackingSelected = selectedTrackingModel?.task === "pose";
+  const rawPoseKeypointShape =
+    selectedTrackingModel?.metadata_json.pose_keypoint_shape;
+  const poseExpectedLandmarkCount =
+    Array.isArray(rawPoseKeypointShape) &&
+    typeof rawPoseKeypointShape[0] === "number"
+      ? rawPoseKeypointShape[0]
+      : null;
+  const poseConfiguredLandmarkCount = poseLandmarkGroups.reduce(
+    (total, group) => total + group.count,
+    0,
+  );
+  const poseLandmarkSchemaValid =
+    poseLandmarkGroups.length > 0 &&
+    poseLandmarkGroups.every(
+      (group) => group.name.trim().length > 0 && group.count >= 1,
+    ) &&
+    (poseExpectedLandmarkCount === null ||
+      poseConfiguredLandmarkCount === poseExpectedLandmarkCount);
+  const selectedTrackPoseSchema = poseLandmarkSchemaFromMetadata(
+    selectedTrack?.metadata_json,
+  );
   const spatialMetricsQuery = useQuery({
     queryKey: [
       "video-frame-spatial-metrics",
@@ -248,6 +275,20 @@ export function VideoTrackingWorkspace({
       setTrackingModelId(modelsQuery.data[0].id);
     }
   }, [modelsQuery.data, trackingModelId]);
+  useEffect(() => {
+    if (!poseTrackingSelected) {
+      setPoseLandmarkGroups([]);
+      return;
+    }
+    const schema = poseLandmarkSchemaFromMetadata(
+      selectedTrackingModel?.metadata_json,
+    );
+    setPoseLandmarkGroups(schema?.groups ?? []);
+  }, [
+    poseTrackingSelected,
+    selectedTrackingModel?.id,
+    selectedTrackingModel?.updated_at,
+  ]);
 
   useEffect(() => {
     if (!sourceOverlayEnabled) return;
@@ -440,6 +481,32 @@ export function VideoTrackingWorkspace({
       });
     },
   });
+  const poseSchemaMutation = useMutation({
+    mutationFn: () => {
+      if (!trackingModelId || !poseTrackingSelected) {
+        throw new Error("Select a pose model first");
+      }
+      if (!poseLandmarkSchemaValid) {
+        throw new Error(
+          "Landmark groups must be named and match the checkpoint keypoint count",
+        );
+      }
+      return setPoseLandmarkSchema(
+        trackingModelId,
+        poseLandmarkGroups.map((group) => ({
+          name: group.name.trim(),
+          count: group.count,
+        })),
+      );
+    },
+    onSuccess: async (model) => {
+      const schema = poseLandmarkSchemaFromMetadata(model.metadata_json);
+      setPoseLandmarkGroups(schema?.groups ?? []);
+      await queryClient.invalidateQueries({
+        queryKey: ["video-tracking-models", project.id],
+      });
+    },
+  });
   const trackingMutation = useMutation({
     mutationFn: () => {
       if (trackingConfidence < 0 || trackingConfidence > 1) {
@@ -551,6 +618,7 @@ export function VideoTrackingWorkspace({
     deleteTrackMutation.error ??
     deleteMachineTracksMutation.error ??
     deleteModelMutation.error ??
+    poseSchemaMutation.error ??
     spatialMetricsQuery.error ??
     trackingMutation.error ??
     cancelTrackingMutation.error ??
@@ -1039,7 +1107,14 @@ export function VideoTrackingWorkspace({
                         stroke="white"
                         strokeWidth={1.5}
                         vectorEffect="non-scaling-stroke"
-                      />
+                      >
+                        <title>
+                          {`${
+                            selectedTrackPoseSchema?.expanded_labels[index] ??
+                            `landmark ${index + 1}`
+                          } · confidence ${point[2].toFixed(3)}`}
+                        </title>
+                      </circle>
                     ))}
                 </svg>
               </div>
@@ -1049,9 +1124,19 @@ export function VideoTrackingWorkspace({
               </p>
             )}
             {(poseFrame?.keypoints?.length ?? 0) > 0 && (
-              <p className="annotation-helper">
-                Pose landmarks on this frame: {poseFrame?.keypoints?.length ?? 0}
-              </p>
+              <>
+                <p className="annotation-helper">
+                  Pose landmarks on this frame: {poseFrame?.keypoints?.length ?? 0}
+                </p>
+                {selectedTrackPoseSchema && (
+                  <p className="annotation-helper">
+                    Landmark schema:{" "}
+                    {selectedTrackPoseSchema.groups
+                      .map((group) => `${group.name} × ${group.count}`)
+                      .join(" · ")}
+                  </p>
+                )}
+              </>
             )}
             {spatialMetricsQuery.data && (
               <div className="annotation-selection-list">
@@ -1297,6 +1382,122 @@ export function VideoTrackingWorkspace({
             ))}
           </select>
         </label>
+        {poseTrackingSelected && (
+          <div className="workspace-guide compact">
+            <div>
+              <strong>Pose landmark schema</strong>
+              <p className="annotation-helper">
+                Define semantic landmark types once. Use Count &gt; 1 for
+                repeatable structures, such as tentacle × 8. Repeated landmarks
+                share the same biological label instead of requiring artificial
+                names such as tentacle_1 through tentacle_8.
+              </p>
+              {poseExpectedLandmarkCount !== null && (
+                <p className="annotation-helper">
+                  Checkpoint landmarks: {poseExpectedLandmarkCount} · configured:{" "}
+                  {poseConfiguredLandmarkCount}
+                </p>
+              )}
+              {poseLandmarkGroups.map((group, index) => (
+                <div
+                  key={`pose-landmark-group-${index}`}
+                  className="annotation-editor-inline-actions"
+                >
+                  <label>
+                    Landmark type
+                    <input
+                      type="text"
+                      value={group.name}
+                      placeholder="e.g. tentacle"
+                      onChange={(event) =>
+                        setPoseLandmarkGroups((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? { ...item, name: event.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                  <label>
+                    Count
+                    <input
+                      type="number"
+                      min={1}
+                      max={1000}
+                      step={1}
+                      value={group.count}
+                      onChange={(event) =>
+                        setPoseLandmarkGroups((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? {
+                                  ...item,
+                                  count: Math.max(
+                                    1,
+                                    Number(event.target.value) || 1,
+                                  ),
+                                }
+                              : item,
+                          ),
+                        )
+                      }
+                      style={{ width: 88 }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="danger-ghost"
+                    onClick={() =>
+                      setPoseLandmarkGroups((current) =>
+                        current.filter(
+                          (_item, itemIndex) => itemIndex !== index,
+                        ),
+                      )
+                    }
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <div className="annotation-editor-inline-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() =>
+                    setPoseLandmarkGroups((current) => [
+                      ...current,
+                      { name: "", count: 1 },
+                    ])
+                  }
+                >
+                  Add landmark type
+                </button>
+                <button
+                  type="button"
+                  disabled={
+                    !poseLandmarkSchemaValid || poseSchemaMutation.isPending
+                  }
+                  onClick={() => poseSchemaMutation.mutate()}
+                >
+                  {poseSchemaMutation.isPending
+                    ? "Saving landmark schema..."
+                    : "Save landmark schema"}
+                </button>
+              </div>
+              {!poseLandmarkSchemaValid && poseLandmarkGroups.length > 0 && (
+                <p className="annotation-helper">
+                  Every landmark type needs a name
+                  {poseExpectedLandmarkCount !== null
+                    ? ` and the counts must total ${poseExpectedLandmarkCount}`
+                    : ""}
+                  .
+                </p>
+              )}
+            </div>
+          </div>
+        )}
         <div className="annotation-editor-inline-actions">
           <button
             type="button"
