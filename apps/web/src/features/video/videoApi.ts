@@ -11,7 +11,7 @@ export interface TrackingModelRecord {
   sha256: string;
   file_size_bytes: number;
   framework: string;
-  task: "detect" | "segment" | string;
+  task: "detect" | "segment" | "pose" | string;
   provider_name: string;
   provider_version: string;
   class_map_json: Record<string, unknown>;
