@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from reefvision.jobs.video_tracking import _keyframes
 from reefvision.ml.video_tracking import TrackObservation
+from reefvision.schemas.models import PoseLandmarkSchemaUpdateRequest
 from reefvision.schemas.videos import VideoTrackKeyframe
 from reefvision.services.video_tracks import _keyframe_payload
 
@@ -72,4 +73,28 @@ def test_non_pose_tracking_keyframes_remain_backward_compatible() -> None:
             "bbox": [0.0, 0.0, 10.0, 10.0],
             "confidence": 0.8,
         }
+    ]
+
+
+
+def test_repeatable_pose_landmark_group_expands_to_shared_semantic_labels() -> None:
+    schema = PoseLandmarkSchemaUpdateRequest.model_validate(
+        {
+            "groups": [
+                {"name": "bell_center", "count": 1},
+                {"name": "tentacle", "count": 8},
+            ]
+        }
+    )
+
+    assert schema.expanded_labels == [
+        "bell_center",
+        "tentacle",
+        "tentacle",
+        "tentacle",
+        "tentacle",
+        "tentacle",
+        "tentacle",
+        "tentacle",
+        "tentacle",
     ]
