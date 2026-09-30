@@ -131,7 +131,12 @@ def test_annotated_export_job_and_download(
                 track_number=1,
                 geometry_kind="bbox",
                 keyframes_json=[
-                    {"frame": 0, "bbox": [5, 5, 20, 10], "confidence": 0.9},
+                    {
+                        "frame": 0,
+                        "bbox": [5, 5, 20, 10],
+                        "confidence": 0.9,
+                        "keypoints": [[8, 8, 0.95], [12, 9, 0.75]],
+                    },
                     {"frame": 1, "bbox": [10, 5, 20, 10], "confidence": 0.8},
                 ],
                 interpolation="linear",
@@ -224,6 +229,11 @@ def test_annotated_export_job_and_download(
     assert payload["result_json"]["verified_frame_count"] == 3
     assert payload["result_json"]["audio_preserved"] is False
     assert captured["trail_length"] == 42
+    observations = cast(list[renderer.RenderObservation], captured["observations"])
+    assert observations[0].keypoints == (
+        (8.0, 8.0, 0.95),
+        (12.0, 9.0, 0.75),
+    )
 
     exports = client.get(f"/api/v1/videos/{video_id}/annotated-video-exports")
     assert exports.status_code == 200, exports.text
