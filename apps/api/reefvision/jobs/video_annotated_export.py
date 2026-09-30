@@ -87,6 +87,21 @@ def _render_observations(
                 if isinstance(confidence, (int, float)) and not isinstance(confidence, bool)
                 else None
             )
+            parsed_keypoints: list[tuple[float, float, float]] = []
+            raw_keypoints = raw.get("keypoints")
+            if isinstance(raw_keypoints, (list, tuple)):
+                for point in raw_keypoints:
+                    if not isinstance(point, (list, tuple)) or len(point) < 2:
+                        continue
+                    try:
+                        point_x = float(point[0])
+                        point_y = float(point[1])
+                        point_confidence = float(point[2]) if len(point) >= 3 else 1.0
+                    except (TypeError, ValueError):
+                        continue
+                    parsed_keypoints.append(
+                        (point_x, point_y, point_confidence)
+                    )
             observations.append(
                 RenderObservation(
                     frame=frame,
@@ -96,6 +111,7 @@ def _render_observations(
                     confidence=parsed_confidence,
                     bbox=parsed_bbox,
                     display_color=display_color,
+                    keypoints=tuple(parsed_keypoints) or None,
                 )
             )
     return observations
