@@ -3,6 +3,7 @@ from __future__ import annotations
 from reefvision.jobs.video_tracking import _keyframes
 from reefvision.ml.video_tracking import TrackObservation
 from reefvision.schemas.videos import VideoTrackKeyframe
+from reefvision.services.video_tracks import _keyframe_payload
 
 
 def test_pose_keypoints_are_persisted_in_machine_track_keyframes() -> None:
@@ -44,10 +45,15 @@ def test_pose_keypoints_survive_track_edit_schema_validation() -> None:
     )
 
     dumped = keyframe.model_dump()
+    persisted = _keyframe_payload(keyframe)
 
     assert dumped["keypoints"] == [
         (5.0, 6.0, 0.9),
         (7.0, 8.0, 0.4),
+    ]
+    assert persisted["keypoints"] == [
+        [5.0, 6.0, 0.9],
+        [7.0, 8.0, 0.4],
     ]
 
 
