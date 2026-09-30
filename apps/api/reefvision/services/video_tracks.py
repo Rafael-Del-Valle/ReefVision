@@ -75,6 +75,11 @@ class VideoTrackService:
             x, y, width, height = keyframe.bbox
             if x + width > video.width_px or y + height > video.height_px:
                 raise ValidationError("Track boxes cannot extend outside the source video bounds")
+            for keypoint_x, keypoint_y, _confidence in keyframe.keypoints or []:
+                if keypoint_x > video.width_px or keypoint_y > video.height_px:
+                    raise ValidationError(
+                        "Pose keypoints cannot extend outside the source video bounds"
+                    )
 
     def list(self, video_id: str) -> list[VideoTrackResponse]:
         self._video(video_id)
