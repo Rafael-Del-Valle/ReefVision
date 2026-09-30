@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator, model_validator
 
 
 def _strip(value: str | None) -> str | None:
@@ -36,6 +36,39 @@ class ModelRegistrationResponse(BaseModel):
     notes: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class PoseLandmarkGroupRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    count: int = Field(default=1, ge=1, le=1000)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def strip_name(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = value.strip()
+        return value
+
+
+class PoseLandmarkSchemaUpdateRequest(BaseModel):
+    groups: list[PoseLandmarkGroupRequest] = Field(min_length=1, max_length=1000)
+
+    @model_validator(mode="after")
+    def unique_group_names(self) -> PoseLandmarkSchemaUpdateRequest:
+        normalized = [group.name.casefold() for group in self.groups]
+        if len(normalized) != len(set(normalized)):
+            raise ValueError(
+                "Pose landmark group names must be unique; use count for repeated landmarks"
+            )
+        return self
+
+    @property
+    def expanded_labels(self) -> list[str]:
+        return [
+            group.name
+            for group in self.groups
+            for _ in range(group.count)
+        ]
 
 
 class InferenceJobCreateRequest(BaseModel):
