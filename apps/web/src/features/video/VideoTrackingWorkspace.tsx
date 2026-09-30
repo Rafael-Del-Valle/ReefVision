@@ -1095,9 +1095,8 @@ export function VideoTrackingWorkspace({
                         vectorEffect="non-scaling-stroke"
                       />
                     )}
-                  {(poseFrame?.keypoints ?? [])
-                    .filter((point) => point[2] > 0)
-                    .map((point, index) => (
+                  {(poseFrame?.keypoints ?? []).map((point, index) =>
+                    point[2] > 0 ? (
                       <circle
                         key={`pose-${previewFrameIndex}-${index}`}
                         cx={point[0]}
@@ -1115,7 +1114,8 @@ export function VideoTrackingWorkspace({
                           } · confidence ${point[2].toFixed(3)}`}
                         </title>
                       </circle>
-                    ))}
+                    ) : null,
+                  )}
                 </svg>
               </div>
             ) : (
