@@ -180,6 +180,10 @@ export function VideoTrackingWorkspace({
     queryKey: ["video-tracking-models", project.id],
     queryFn: ({ signal }) => getTrackingModels(project.id, signal),
   });
+  const selectedTrackingModel = modelsQuery.data?.find(
+    (model) => model.id === trackingModelId,
+  );
+  const poseTrackingSelected = selectedTrackingModel?.task === "pose";
   const spatialMetricsQuery = useQuery({
     queryKey: [
       "video-frame-spatial-metrics",
@@ -532,6 +536,10 @@ export function VideoTrackingWorkspace({
         (frame) => frame.frame === previewFrameIndex,
       ),
     [previewFrameIndex, interpolationQuery.data?.frames],
+  );
+  const poseFrame = useMemo(
+    () => keyframes.find((frame) => frame.frame === previewFrameIndex),
+    [keyframes, previewFrameIndex],
   );
   const extractionStride = Number(
     selectedVideo?.metadata_json.extraction_every_n_frames ?? everyNFrames,
@@ -1019,11 +1027,30 @@ export function VideoTrackingWorkspace({
                         vectorEffect="non-scaling-stroke"
                       />
                     )}
+                  {(poseFrame?.keypoints ?? [])
+                    .filter((point) => point[2] > 0)
+                    .map((point, index) => (
+                      <circle
+                        key={`pose-${previewFrameIndex}-${index}`}
+                        cx={point[0]}
+                        cy={point[1]}
+                        r={5}
+                        fill="var(--accent-color, #2563eb)"
+                        stroke="white"
+                        strokeWidth={1.5}
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    ))}
                 </svg>
               </div>
             ) : (
               <p className="annotation-helper">
                 Extract frames to review keyframes against still images.
+              </p>
+            )}
+            {(poseFrame?.keypoints?.length ?? 0) > 0 && (
+              <p className="annotation-helper">
+                Pose landmarks on this frame: {poseFrame?.keypoints?.length ?? 0}
               </p>
             )}
             {spatialMetricsQuery.data && (
@@ -1256,16 +1283,16 @@ export function VideoTrackingWorkspace({
 
       <section className="management-card">
         <p className="eyebrow">Automated tracking</p>
-        <h3>Detector + tracker</h3>
+        <h3>Detection / pose + tracker</h3>
         <label>
-          Detection model
+          Detection or pose model
           <select
             value={trackingModelId}
             onChange={(event) => setTrackingModelId(event.target.value)}
           >
             {(modelsQuery.data ?? []).map((model) => (
               <option key={model.id} value={model.id}>
-                {model.display_name}
+                {model.display_name} ({model.task})
               </option>
             ))}
           </select>
@@ -1303,6 +1330,9 @@ export function VideoTrackingWorkspace({
           Turn this off for independent per-frame instance detection. Each
           detection remains reviewable, but ReefVision will not assign a
           cross-frame identity or movement trajectory.
+          {poseTrackingSelected
+            ? " Pose checkpoints retain model-native landmark coordinates and confidence values for every retained observation."
+            : ""}
         </p>
         <label>
           Tracker
@@ -1373,8 +1403,12 @@ export function VideoTrackingWorkspace({
           {trackingMutation.isPending
             ? "Queuing..."
             : linkDetections
-              ? `Run ${trackerLabel(trackerName)}`
-              : "Run instance detection"}
+              ? poseTrackingSelected
+                ? `Run pose + ${trackerLabel(trackerName)}`
+                : `Run ${trackerLabel(trackerName)}`
+              : poseTrackingSelected
+                ? "Run pose inference"
+                : "Run instance detection"}
         </button>
         <label className="annotation-selection-row">
           <input
