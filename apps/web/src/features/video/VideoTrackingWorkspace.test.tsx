@@ -337,7 +337,7 @@ describe("VideoTrackingWorkspace", () => {
     expect(await screen.findByText("Managed videos")).toBeInTheDocument();
     expect(screen.getByText("Source-coordinate overlay")).toBeInTheDocument();
     expect(screen.getByText("Identities and keyframes")).toBeInTheDocument();
-    expect(screen.getByText("Detector + tracker")).toBeInTheDocument();
+    expect(screen.getByText("Detection / pose + tracker")).toBeInTheDocument();
     expect(
       await screen.findByText("Geographic observations"),
     ).toBeInTheDocument();
