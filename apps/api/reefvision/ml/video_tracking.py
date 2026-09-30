@@ -18,6 +18,7 @@ class TrackObservation:
     class_name: str
     confidence: float
     bbox: tuple[float, float, float, float]
+    keypoints: tuple[tuple[float, float, float], ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -164,6 +165,12 @@ class UltralyticsVideoTrackingProvider:
                 confidences = boxes.conf.cpu().tolist()
                 coordinates = boxes.xywh.cpu().tolist()
                 names = dict(getattr(result, "names", {}))
+                keypoints = getattr(result, "keypoints", None)
+                keypoint_data = getattr(keypoints, "data", None)
+                if keypoint_data is None:
+                    keypoint_rows: list[list[list[float]] | None] = [None] * len(classes)
+                else:
+                    keypoint_rows = keypoint_data.cpu().tolist()
 
                 if link_detections:
                     if getattr(boxes, "id", None) is None:
@@ -177,14 +184,31 @@ class UltralyticsVideoTrackingProvider:
                 tracked_observations_seen += len(ids)
                 unique_track_ids.update(int(track_id) for track_id in ids)
 
-                for track_id, class_index, score, xywh in zip(
+                for track_id, class_index, score, xywh, raw_keypoints in zip(
                     ids,
                     classes,
                     confidences,
                     coordinates,
+                    keypoint_rows,
                     strict=False,
                 ):
                     center_x, center_y, width, height = (float(value) for value in xywh)
+                    normalized_keypoints: tuple[tuple[float, float, float], ...] | None = None
+                    if raw_keypoints is not None:
+                        points: list[tuple[float, float, float]] = []
+                        for point in raw_keypoints:
+                            if len(point) < 2:
+                                continue
+                            point_confidence = float(point[2]) if len(point) >= 3 else 1.0
+                            points.append(
+                                (
+                                    float(point[0]),
+                                    float(point[1]),
+                                    point_confidence,
+                                )
+                            )
+                        normalized_keypoints = tuple(points)
+
                     observations.append(
                         TrackObservation(
                             frame=frame_index,
@@ -197,6 +221,7 @@ class UltralyticsVideoTrackingProvider:
                                 width,
                                 height,
                             ),
+                            keypoints=normalized_keypoints,
                         )
                     )
 
