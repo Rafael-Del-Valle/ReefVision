@@ -36,11 +36,14 @@ from reefvision.services.video_observation_location import (
 
 
 def _keyframe_payload(item: VideoTrackKeyframe) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "frame": item.frame,
         "bbox": list(item.bbox),
         "confidence": item.confidence,
     }
+    if item.keypoints is not None:
+        payload["keypoints"] = [list(point) for point in item.keypoints]
+    return payload
 
 
 class VideoTrackService:
