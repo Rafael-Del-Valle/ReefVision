@@ -63,6 +63,10 @@ class VideoTrackKeyframe(BaseModel):
     frame: int = Field(ge=0)
     bbox: tuple[float, float, float, float]
     confidence: float | None = Field(default=None, ge=0, le=1)
+    keypoints: list[tuple[FiniteFloat, FiniteFloat, FiniteFloat]] | None = Field(
+        default=None,
+        max_length=1000,
+    )
 
     @field_validator("bbox")
     @classmethod
@@ -73,6 +77,21 @@ class VideoTrackKeyframe(BaseModel):
         x, y, width, height = value
         if x < 0 or y < 0 or width <= 0 or height <= 0:
             raise ValueError("Track boxes require nonnegative origins and positive dimensions")
+        return value
+
+    @field_validator("keypoints")
+    @classmethod
+    def valid_keypoints(
+        cls,
+        value: list[tuple[FiniteFloat, FiniteFloat, FiniteFloat]] | None,
+    ) -> list[tuple[FiniteFloat, FiniteFloat, FiniteFloat]] | None:
+        if value is None:
+            return None
+        for x, y, confidence in value:
+            if x < 0 or y < 0:
+                raise ValueError("Pose keypoint coordinates must be nonnegative")
+            if confidence < 0 or confidence > 1:
+                raise ValueError("Pose keypoint confidence must be between 0 and 1")
         return value
 
 
