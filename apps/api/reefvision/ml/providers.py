@@ -268,11 +268,13 @@ class UltralyticsDetectionProvider:
 
         model = YOLO(str(model_path))
         task = str(getattr(model, "task", "detect") or "detect")
-        if task not in {"detect", "segment"}:
+        if task not in {"detect", "segment", "pose"}:
             raise ValidationError(
-                "This ReefVision release currently supports only Ultralytics "
-                "detect and segment checkpoints"
+                "This ReefVision release currently supports Ultralytics "
+                "detect, segment, and pose checkpoints"
             )
+        model_yaml = getattr(getattr(model, "model", None), "yaml", {}) or {}
+        keypoint_shape = model_yaml.get("kpt_shape") if isinstance(model_yaml, dict) else None
         names = (
             getattr(model, "names", None)
             or getattr(getattr(model, "model", None), "names", None)
@@ -295,8 +297,13 @@ class UltralyticsDetectionProvider:
                 "automatic_downloads_disabled": True,
                 "explicit_checkpoint_required": True,
                 "registered_execution_runtime": "pytorch",
-                "proposal_geometry": "bounding_box",
+                "proposal_geometry": "keypoints+bbox" if task == "pose" else "bounding_box",
                 "segmentation_masks_exposed_in_editor": False,
+                "pose_keypoint_shape": (
+                    list(keypoint_shape)
+                    if task == "pose" and isinstance(keypoint_shape, (list, tuple))
+                    else None
+                ),
             },
         )
 
