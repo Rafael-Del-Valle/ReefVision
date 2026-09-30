@@ -552,8 +552,11 @@ def create_tracking_job(
     if model.purpose not in {"detector", "segmenter"} or model.task not in {
         "detect",
         "segment",
+        "pose",
     }:
-        raise ValidationError("Video tracking requires a detection or instance model")
+        raise ValidationError(
+            "Video tracking requires a detection, instance, or pose model"
+        )
     job = Job(
         project_id=video.project_id,
         job_type="video_tracking",
