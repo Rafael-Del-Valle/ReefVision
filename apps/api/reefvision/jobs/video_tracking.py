@@ -486,6 +486,12 @@ def process_video_tracking_job(
                         "tracker": tracker_name,
                         "link_detections": link_detections,
                         "mean_confidence": mean(item.confidence for item in ordered),
+                        "model_task": model_task,
+                        "pose_tracking": model_task == "pose",
+                        "pose_keypoint_count": max(
+                            (len(item.keypoints or ()) for item in ordered),
+                            default=0,
+                        ),
                     },
                 )
 
