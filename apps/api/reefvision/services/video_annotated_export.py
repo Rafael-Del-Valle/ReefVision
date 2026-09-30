@@ -48,6 +48,7 @@ class RenderObservation:
     confidence: float | None
     bbox: tuple[float, float, float, float]
     display_color: str
+    keypoints: tuple[tuple[float, float, float], ...] | None = None
 
 
 class AnnotatedVideoExportCancelled(RuntimeError):
@@ -407,6 +408,20 @@ def render_annotated_video(
                         (right, bottom),
                         color,
                         line_thickness,
+                    )
+
+                for keypoint_x, keypoint_y, keypoint_confidence in observation.keypoints or ():
+                    if keypoint_confidence <= 0:
+                        continue
+                    point_x = max(0, min(width_px - 1, round(keypoint_x)))
+                    point_y = max(0, min(height_px - 1, round(keypoint_y)))
+                    cv2.circle(
+                        frame,
+                        (point_x, point_y),
+                        max(2, line_thickness + 1),
+                        color,
+                        cv2.FILLED,
+                        cv2.LINE_AA,
                     )
 
                 label_parts: list[str] = []
