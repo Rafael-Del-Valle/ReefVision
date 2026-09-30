@@ -20,6 +20,7 @@ from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.models import (
     InferenceJobCreateRequest,
     ModelRegistrationResponse,
+    PoseLandmarkSchemaUpdateRequest,
     RegisterModelFromRunRequest,
 )
 from reefvision.services.segmentation_models import SegmentationModelService
@@ -157,6 +158,49 @@ class SemanticModelService(SegmentationModelService):
             self.session.rollback()
             destination.unlink(missing_ok=True)
             raise
+
+    def set_pose_landmark_schema(
+        self,
+        model_id: str,
+        payload: PoseLandmarkSchemaUpdateRequest,
+    ) -> ModelRegistrationResponse:
+        model = self._model(model_id)
+        if model.task != "pose":
+            raise ValidationError("Landmark schemas can only be assigned to pose models")
+
+        expanded_labels = payload.expanded_labels
+        metadata = dict(model.metadata_json or {})
+        raw_shape = metadata.get("pose_keypoint_shape")
+        expected_count: int | None = None
+        if (
+            isinstance(raw_shape, list)
+            and raw_shape
+            and isinstance(raw_shape[0], int)
+        ):
+            expected_count = int(raw_shape[0])
+
+        if expected_count is not None and len(expanded_labels) != expected_count:
+            raise ValidationError(
+                "Pose landmark schema defines "
+                f"{len(expanded_labels)} landmarks but the checkpoint expects "
+                f"{expected_count}"
+            )
+
+        groups = [
+            {"name": group.name, "count": group.count}
+            for group in payload.groups
+        ]
+        metadata["pose_landmark_schema"] = {
+            "schema_version": "pose-landmarks-0001",
+            "groups": groups,
+            "expanded_labels": expanded_labels,
+            "keypoint_count": len(expanded_labels),
+            "allows_repeated_labels": any(group.count > 1 for group in payload.groups),
+        }
+        model.metadata_json = metadata
+        self.session.commit()
+        self.session.refresh(model)
+        return ModelRegistrationResponse.model_validate(model)
 
     def create_inference_job(
         self,
