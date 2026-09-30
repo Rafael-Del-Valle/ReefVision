@@ -141,10 +141,13 @@ export interface VideoAssetRecord {
   airdata_alignment: AirDataAlignmentRecord;
 }
 
+export type VideoPoseKeypoint = [number, number, number];
+
 export interface VideoTrackKeyframe {
   frame: number;
   bbox: [number, number, number, number];
   confidence?: number | null;
+  keypoints?: VideoPoseKeypoint[] | null;
 }
 
 export interface VideoTrackRecord {
