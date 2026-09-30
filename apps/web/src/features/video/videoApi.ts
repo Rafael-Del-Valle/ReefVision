@@ -22,6 +22,69 @@ export interface TrackingModelRecord {
   updated_at: string;
 }
 
+
+export interface PoseLandmarkGroup {
+  name: string;
+  count: number;
+}
+
+export interface PoseLandmarkSchema {
+  schema_version: "pose-landmarks-0001";
+  groups: PoseLandmarkGroup[];
+  expanded_labels: string[];
+  keypoint_count: number;
+  allows_repeated_labels: boolean;
+}
+
+export function poseLandmarkSchemaFromMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+): PoseLandmarkSchema | null {
+  const raw = metadata?.pose_landmark_schema;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const schema = raw as Record<string, unknown>;
+  if (schema.schema_version !== "pose-landmarks-0001") return null;
+  if (!Array.isArray(schema.groups) || !Array.isArray(schema.expanded_labels)) {
+    return null;
+  }
+
+  const groups: PoseLandmarkGroup[] = [];
+  for (const rawGroup of schema.groups) {
+    if (!rawGroup || typeof rawGroup !== "object" || Array.isArray(rawGroup)) {
+      return null;
+    }
+    const group = rawGroup as Record<string, unknown>;
+    if (
+      typeof group.name !== "string" ||
+      typeof group.count !== "number" ||
+      !Number.isInteger(group.count) ||
+      group.count < 1
+    ) {
+      return null;
+    }
+    groups.push({ name: group.name, count: group.count });
+  }
+
+  const expandedLabels = schema.expanded_labels.filter(
+    (label): label is string => typeof label === "string",
+  );
+  if (expandedLabels.length !== schema.expanded_labels.length) return null;
+
+  const keypointCount =
+    typeof schema.keypoint_count === "number"
+      ? schema.keypoint_count
+      : expandedLabels.length;
+
+  return {
+    schema_version: "pose-landmarks-0001",
+    groups,
+    expanded_labels: expandedLabels,
+    keypoint_count: keypointCount,
+    allows_repeated_labels:
+      schema.allows_repeated_labels === true ||
+      groups.some((group) => group.count > 1),
+  };
+}
+
 export interface VideoTelemetryMetadata {
   found: boolean;
   available: boolean;
@@ -661,6 +724,19 @@ export function createVideoTrackingJob(
   return request<JobRecord>(
     `/videos/${encodeURIComponent(videoId)}/tracking-jobs`,
     { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export function setPoseLandmarkSchema(
+  modelId: string,
+  groups: PoseLandmarkGroup[],
+): Promise<TrackingModelRecord> {
+  return request<TrackingModelRecord>(
+    `/models/${encodeURIComponent(modelId)}/pose-landmark-schema`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ groups }),
+    },
   );
 }
 
