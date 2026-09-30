@@ -35,6 +35,7 @@ from reefvision.schemas.models import (
     ModelProviderCapabilityMatrixResponse,
     ModelProviderResponse,
     ModelRegistrationResponse,
+    PoseLandmarkSchemaUpdateRequest,
     ProviderDependencyPackageResponse,
     ProviderDependencyPreflightResponse,
     ProviderDependencyStatusResponse,
@@ -236,6 +237,19 @@ def register_model_from_run(
     session: DbSession,
 ) -> ModelRegistrationResponse:
     return service(request, session).register_model_from_run(project_id, payload)
+
+
+@router.put(
+    "/models/{model_id}/pose-landmark-schema",
+    response_model=ModelRegistrationResponse,
+)
+def set_pose_landmark_schema(
+    model_id: str,
+    payload: PoseLandmarkSchemaUpdateRequest,
+    request: Request,
+    session: DbSession,
+) -> ModelRegistrationResponse:
+    return service(request, session).set_pose_landmark_schema(model_id, payload)
 
 
 @router.delete("/models/{model_id}", status_code=204)
