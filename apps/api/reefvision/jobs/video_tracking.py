@@ -67,14 +67,17 @@ def _project_class_mapping(model: ModelRegistration) -> dict[str, str]:
 
 
 def _keyframes(observations: list[TrackObservation]) -> list[dict[str, object]]:
-    return [
-        {
+    keyframes: list[dict[str, object]] = []
+    for item in observations:
+        payload: dict[str, object] = {
             "frame": item.frame,
             "bbox": list(item.bbox),
             "confidence": item.confidence,
         }
-        for item in observations
-    ]
+        if item.keypoints is not None:
+            payload["keypoints"] = [list(point) for point in item.keypoints]
+        keyframes.append(payload)
+    return keyframes
 
 
 def _bounding_box_pixels(
@@ -194,9 +197,12 @@ def process_video_tracking_job(
         if model.purpose not in {"detector", "segmenter"} or model.task not in {
             "detect",
             "segment",
+            "pose",
         }:
             job.status = "failed"
-            job.error_message = "Video tracking requires a registered detection or instance model"
+            job.error_message = (
+                "Video tracking requires a registered detection, instance, or pose model"
+            )
             job.completed_at = datetime.now(UTC)
             session.commit()
             return False
@@ -225,6 +231,7 @@ def process_video_tracking_job(
         project_id = video.project_id
         video_id = video.id
         model_id = model.id
+        model_task = model.task
         total_frames = video.frame_count
 
     LOGGER.info(
@@ -526,6 +533,8 @@ def process_video_tracking_job(
                 "project_id": project_id,
                 "video_id": video_id,
                 "model_id": model_id,
+                "model_task": model_task,
+                "pose_tracking": model_task == "pose",
                 "source_job_id": job_id,
                 "tracker": tracker_name,
                 "link_detections": link_detections,
