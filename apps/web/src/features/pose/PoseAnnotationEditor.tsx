@@ -22,6 +22,7 @@ import {
   clonePose,
   movePoseObservation,
   placedCount,
+  poseSkeletonSegments,
   removePoseObservation,
   validatePoseAgainstSchema,
 } from "./poseEditorState";
@@ -124,6 +125,10 @@ export function PoseAnnotationEditor({
   const persistedPose = persistedById[selectedPoseId] ?? null;
   const saveState = saveStateById[selectedPoseId] ?? "idle";
   const saveMessage = saveMessageById[selectedPoseId] ?? null;
+  const skeletonSegments = useMemo(
+    () => (selectedPose ? poseSkeletonSegments(selectedPose, schema) : []),
+    [schema, selectedPose],
+  );
 
   const setPoseDraft = (
     poseId: string,
@@ -453,6 +458,20 @@ export function PoseAnnotationEditor({
             height={imageHeight}
             preserveAspectRatio="none"
           />
+          {skeletonSegments.map((segment) => (
+            <line
+              key={segment.key}
+              data-testid={`pose-skeleton-${segment.key}`}
+              x1={segment.from.x}
+              y1={segment.from.y}
+              x2={segment.to.x}
+              y2={segment.to.y}
+              stroke="currentColor"
+              strokeWidth={2 / view.scale}
+              opacity={0.55}
+              pointerEvents="none"
+            />
+          ))}
           {selectedPose.observations.map((observation) => {
             const selected = observation.id === selectedObservationId;
             return (
