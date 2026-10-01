@@ -445,11 +445,14 @@ describe("PoseAnnotationEditor", () => {
       />,
     );
 
-    fireEvent.pointerDown(screen.getByTestId("pose-landmark-model-status-bell"), {
-      button: 0,
-      clientX: 450,
-      clientY: 300,
-    });
+    fireEvent.pointerDown(
+      screen.getByTestId("pose-landmark-model-status-bell"),
+      {
+        button: 0,
+        clientX: 450,
+        clientY: 300,
+      },
+    );
     fireEvent.change(screen.getByLabelText("Landmark status"), {
       target: { value: "occluded" },
     });

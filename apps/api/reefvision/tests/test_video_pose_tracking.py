@@ -76,7 +76,6 @@ def test_non_pose_tracking_keyframes_remain_backward_compatible() -> None:
     ]
 
 
-
 def test_repeatable_pose_landmark_group_expands_to_shared_semantic_labels() -> None:
     schema = PoseLandmarkSchemaUpdateRequest.model_validate(
         {

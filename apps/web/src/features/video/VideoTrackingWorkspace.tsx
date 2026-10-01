@@ -1224,9 +1224,9 @@ export function VideoTrackingWorkspace({
                     <strong>Pose review editor</strong>
                     <p className="annotation-helper">
                       Model landmarks are editable here. Moving a model landmark
-                      marks it corrected; saving writes both compatible keypoints
-                      and the richer corrected observation record back to this
-                      track keyframe.
+                      marks it corrected; saving writes both compatible
+                      keypoints and the richer corrected observation record back
+                      to this track keyframe.
                     </p>
                   </div>
                   <PoseAnnotationEditor

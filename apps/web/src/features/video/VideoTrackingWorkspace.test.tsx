@@ -465,13 +465,9 @@ describe("VideoTrackingWorkspace", () => {
       }),
     );
 
-    expect(
-      await screen.findByText("Pose review editor"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Pose review editor")).toBeInTheDocument();
     expect(screen.getByText("tentacle 1 / 2")).toBeInTheDocument();
-    expect(
-      screen.queryByLabelText("tentacle 2"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("tentacle 2")).not.toBeInTheDocument();
 
     const stage = screen.getByTestId("pose-stage") as unknown as SVGSVGElement;
     Object.defineProperty(stage, "getBoundingClientRect", {

@@ -107,11 +107,11 @@ export function correctedVideoKeyframeFromPoseSave(
     if (!observation || observation.status === "absent") {
       return [0, 0, 0] as [number, number, number];
     }
-    return [
-      observation.x,
-      observation.y,
-      observation.confidence ?? 1,
-    ] as [number, number, number];
+    return [observation.x, observation.y, observation.confidence ?? 1] as [
+      number,
+      number,
+      number,
+    ];
   });
 
   return {

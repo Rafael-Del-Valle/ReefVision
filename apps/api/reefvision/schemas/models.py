@@ -64,11 +64,7 @@ class PoseLandmarkSchemaUpdateRequest(BaseModel):
 
     @property
     def expanded_labels(self) -> list[str]:
-        return [
-            group.name
-            for group in self.groups
-            for _ in range(group.count)
-        ]
+        return [group.name for group in self.groups for _ in range(group.count)]
 
 
 class InferenceJobCreateRequest(BaseModel):

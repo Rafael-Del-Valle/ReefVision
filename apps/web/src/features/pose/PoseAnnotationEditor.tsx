@@ -402,7 +402,9 @@ export function PoseAnnotationEditor({
         created.schema_id !== schema.id ||
         created.schema_revision !== schema.revision
       ) {
-        throw new Error("New pose was not created on the current schema revision");
+        throw new Error(
+          "New pose was not created on the current schema revision",
+        );
       }
       setPersistedById((current) => ({
         ...current,
@@ -421,12 +423,12 @@ export function PoseAnnotationEditor({
         ...current,
         [created.id]: "idle",
       }));
-      setCreationMessage(
-        `Created pose on schema revision ${schema.revision}`,
-      );
+      setCreationMessage(`Created pose on schema revision ${schema.revision}`);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unknown pose creation failure";
+        error instanceof Error
+          ? error.message
+          : "Unknown pose creation failure";
       setCreationMessage(`Pose creation failed: ${message}`);
     } finally {
       setCreatingPose(false);
@@ -576,7 +578,8 @@ export function PoseAnnotationEditor({
             Source: {selectedObservation.source}
           </span>
           <span data-testid="selected-landmark-confidence">
-            Confidence: {selectedObservation.confidence === null
+            Confidence:{" "}
+            {selectedObservation.confidence === null
               ? "n/a"
               : selectedObservation.confidence.toFixed(3)}
           </span>

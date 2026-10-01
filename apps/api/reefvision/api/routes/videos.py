@@ -554,9 +554,7 @@ def create_tracking_job(
         "segment",
         "pose",
     }:
-        raise ValidationError(
-            "Video tracking requires a detection, instance, or pose model"
-        )
+        raise ValidationError("Video tracking requires a detection, instance, or pose model")
     job = Job(
         project_id=video.project_id,
         job_type="video_tracking",

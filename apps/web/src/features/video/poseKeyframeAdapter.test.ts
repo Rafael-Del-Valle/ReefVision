@@ -137,7 +137,11 @@ describe("poseKeyframeAdapter", () => {
       ],
     };
 
-    const updated = correctedVideoKeyframeFromPoseSave(keyframe, schema, request);
+    const updated = correctedVideoKeyframeFromPoseSave(
+      keyframe,
+      schema,
+      request,
+    );
 
     expect(updated.keypoints).toEqual([
       [55, 65, 0.95],

@@ -99,9 +99,7 @@ def _render_observations(
                         point_confidence = float(point[2]) if len(point) >= 3 else 1.0
                     except (TypeError, ValueError):
                         continue
-                    parsed_keypoints.append(
-                        (point_x, point_y, point_confidence)
-                    )
+                    parsed_keypoints.append((point_x, point_y, point_confidence))
             observations.append(
                 RenderObservation(
                     frame=frame,

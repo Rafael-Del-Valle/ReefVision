@@ -232,13 +232,9 @@ def process_video_tracking_job(
         video_id = video.id
         model_id = model.id
         model_task = model.task
-        raw_pose_landmark_schema = dict(model.metadata_json or {}).get(
-            "pose_landmark_schema"
-        )
+        raw_pose_landmark_schema = dict(model.metadata_json or {}).get("pose_landmark_schema")
         pose_landmark_schema = (
-            dict(raw_pose_landmark_schema)
-            if isinstance(raw_pose_landmark_schema, dict)
-            else None
+            dict(raw_pose_landmark_schema) if isinstance(raw_pose_landmark_schema, dict) else None
         )
         total_frames = video.frame_count
 
@@ -501,9 +497,7 @@ def process_video_tracking_job(
                             default=0,
                         ),
                         "pose_landmark_schema": (
-                            dict(pose_landmark_schema)
-                            if pose_landmark_schema is not None
-                            else None
+                            dict(pose_landmark_schema) if pose_landmark_schema is not None else None
                         ),
                     },
                 )
@@ -555,9 +549,7 @@ def process_video_tracking_job(
                 "model_task": model_task,
                 "pose_tracking": model_task == "pose",
                 "pose_landmark_schema": (
-                    dict(pose_landmark_schema)
-                    if pose_landmark_schema is not None
-                    else None
+                    dict(pose_landmark_schema) if pose_landmark_schema is not None else None
                 ),
                 "source_job_id": job_id,
                 "tracker": tracker_name,

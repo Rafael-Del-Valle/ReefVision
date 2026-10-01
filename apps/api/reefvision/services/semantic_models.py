@@ -172,11 +172,7 @@ class SemanticModelService(SegmentationModelService):
         metadata = dict(model.metadata_json or {})
         raw_shape = metadata.get("pose_keypoint_shape")
         expected_count: int | None = None
-        if (
-            isinstance(raw_shape, list)
-            and raw_shape
-            and isinstance(raw_shape[0], int)
-        ):
+        if isinstance(raw_shape, list) and raw_shape and isinstance(raw_shape[0], int):
             expected_count = int(raw_shape[0])
 
         if expected_count is not None and len(expanded_labels) != expected_count:
@@ -186,10 +182,7 @@ class SemanticModelService(SegmentationModelService):
                 f"{expected_count}"
             )
 
-        groups = [
-            {"name": group.name, "count": group.count}
-            for group in payload.groups
-        ]
+        groups = [{"name": group.name, "count": group.count} for group in payload.groups]
         metadata["pose_landmark_schema"] = {
             "schema_version": "pose-landmarks-0001",
             "groups": groups,

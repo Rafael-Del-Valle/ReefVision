@@ -372,9 +372,7 @@ def test_pose_review_update_round_trips_repeated_and_absent_landmarks(
     reloaded_frame = reloaded["keyframes_json"][0]
 
     repeated = [
-        item
-        for item in reloaded_frame["pose_observations"]
-        if item["semantic_label"] == "tentacle"
+        item for item in reloaded_frame["pose_observations"] if item["semantic_label"] == "tentacle"
     ]
     assert [item["occurrence_index"] for item in repeated] == [0, 1]
     assert repeated[0]["source"] == "corrected"
