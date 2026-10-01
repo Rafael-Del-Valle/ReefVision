@@ -252,6 +252,90 @@ describe("PoseAnnotationEditor", () => {
     expect(tentacles[0].y).toBeCloseTo(tentacles[1].y, 5);
   });
 
+  it("marks dragged model landmarks as corrected and saves source-image coordinates", async () => {
+    const modelPose: PoseInstance = {
+      ...poseA,
+      id: "pose-model",
+      observations: [
+        {
+          ...poseA.observations[0],
+          id: "model-bell",
+          confidence: 0.94,
+          source: "model",
+        },
+      ],
+    };
+    const onSave = vi.fn(async (request: PoseSaveRequest) =>
+      savedPose(request),
+    );
+    render(
+      <PoseAnnotationEditor
+        imageUrl="data:image/png;base64,"
+        imageWidth={900}
+        imageHeight={600}
+        schema={schema}
+        poses={[modelPose]}
+        onSave={onSave}
+      />,
+    );
+    const stage = installStageBounds();
+
+    fireEvent.pointerDown(screen.getByTestId("pose-landmark-model-bell"), {
+      button: 0,
+      clientX: 450,
+      clientY: 300,
+    });
+    fireEvent.pointerMove(stage, {
+      buttons: 1,
+      clientX: 540,
+      clientY: 350,
+    });
+    fireEvent.pointerUp(stage, {
+      button: 0,
+      clientX: 540,
+      clientY: 350,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save pose" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    const corrected = onSave.mock.calls[0][0].observations[0];
+    expect(corrected.source).toBe("corrected");
+    expect(corrected.confidence).toBe(0.94);
+    expect(corrected.x).toBeGreaterThan(450);
+    expect(corrected.y).toBeGreaterThan(300);
+    expect(corrected.x).toBeLessThanOrEqual(900);
+    expect(corrected.y).toBeLessThanOrEqual(600);
+  });
+
+  it("deletes a selected landmark from the saved pose draft", async () => {
+    const onSave = vi.fn(async (request: PoseSaveRequest) =>
+      savedPose(request),
+    );
+    render(
+      <PoseAnnotationEditor
+        imageUrl="data:image/png;base64,"
+        imageWidth={900}
+        imageHeight={600}
+        schema={schema}
+        poses={[poseA]}
+        onSave={onSave}
+      />,
+    );
+
+    fireEvent.pointerDown(screen.getByTestId("pose-landmark-bell-a"), {
+      button: 0,
+      clientX: 450,
+      clientY: 300,
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete selected landmark" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save pose" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave.mock.calls[0][0].observations).toEqual([]);
+  });
+
   it("changes visibility status without conflating it with confidence", async () => {
     const onSave = vi.fn(async (request: PoseSaveRequest) =>
       savedPose(request),
