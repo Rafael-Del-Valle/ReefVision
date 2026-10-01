@@ -344,7 +344,7 @@ def require_annotated_video_encoder_runtime() -> None:
     """Require ReefVision's packaged libx264 annotated-video encoder."""
 
     try:
-        import imageio_ffmpeg
+        import imageio_ffmpeg  # type: ignore[import-untyped]
     except ImportError as exc:
         raise RuntimeError(
             "Packaged ReefVision is missing imageio-ffmpeg required "
@@ -358,7 +358,9 @@ def require_annotated_video_encoder_runtime() -> None:
             f"Packaged ReefVision could not locate its FFmpeg executable: {executable}"
         )
 
-    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    creationflags = (
+        int(getattr(subprocess, "CREATE_NO_WINDOW", 0)) if sys.platform == "win32" else 0
+    )
 
     result = subprocess.run(
         [
