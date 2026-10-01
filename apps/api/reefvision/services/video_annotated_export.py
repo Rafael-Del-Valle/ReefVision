@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import cv2
-import imageio_ffmpeg
+import imageio_ffmpeg  # type: ignore[import-untyped]
 
 AnnotatedVideoPreset = Literal["clean_tracking", "full_review"]
 
