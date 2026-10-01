@@ -9,6 +9,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { cancelJob, retryJob, type Project } from "../../api/client";
+import { PoseAnnotationEditor } from "../pose/PoseAnnotationEditor";
+import type { PoseSaveRequest } from "../pose/types";
+import {
+  correctedVideoKeyframeFromPoseSave,
+  editorSchemaForVideoTrack,
+  poseInstanceFromVideoKeyframe,
+} from "./poseKeyframeAdapter";
 import {
   benchmarkVideoTracking,
   createVideoTrack,
@@ -608,6 +615,24 @@ export function VideoTrackingWorkspace({
     () => keyframes.find((frame) => frame.frame === previewFrameIndex),
     [keyframes, previewFrameIndex],
   );
+  const poseEditorSchema = useMemo(
+    () =>
+      selectedTrack && selectedTrackPoseSchema
+        ? editorSchemaForVideoTrack(selectedTrack, selectedTrackPoseSchema)
+        : null,
+    [selectedTrack, selectedTrackPoseSchema],
+  );
+  const poseEditorPose = useMemo(
+    () =>
+      selectedTrack && poseFrame && selectedTrackPoseSchema
+        ? poseInstanceFromVideoKeyframe(
+            selectedTrack,
+            poseFrame,
+            selectedTrackPoseSchema,
+          )
+        : null,
+    [poseFrame, selectedTrack, selectedTrackPoseSchema],
+  );
   const extractionStride = Number(
     selectedVideo?.metadata_json.extraction_every_n_frames ?? everyNFrames,
   );
@@ -625,6 +650,54 @@ export function VideoTrackingWorkspace({
     retryTrackingMutation.error ??
     benchmarkMutation.error ??
     trackingRunsQuery.error;
+
+  async function savePoseFrameReview(request: PoseSaveRequest) {
+    if (!selectedTrack || !selectedTrackPoseSchema || !poseFrame) {
+      throw new Error("Select a persisted pose track keyframe first");
+    }
+
+    const correctedFrame = correctedVideoKeyframeFromPoseSave(
+      poseFrame,
+      selectedTrackPoseSchema,
+      request,
+    );
+    const correctedFrames = sortedKeyframes(
+      keyframes.map((frame) =>
+        frame.frame === poseFrame.frame ? correctedFrame : frame,
+      ),
+    );
+    const updatedTrack = await updateVideoTrack(selectedTrack.id, {
+      base_revision: request.base_revision,
+      label_class_id: selectedTrack.label_class_id,
+      keyframes: correctedFrames,
+      interpolation: selectedTrack.interpolation === "hold" ? "hold" : "linear",
+      status: selectedTrack.status,
+    });
+    const persistedFrame = updatedTrack.keyframes_json.find(
+      (frame) => frame.frame === poseFrame.frame,
+    );
+    if (!persistedFrame) {
+      throw new Error("Saved track did not return the corrected pose keyframe");
+    }
+
+    setKeyframes(sortedKeyframes(updatedTrack.keyframes_json));
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["video-tracks", selectedVideoId],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["video-track-interpolation", selectedTrack.id],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["video-track-analytics", selectedTrack.id],
+      }),
+    ]);
+    return poseInstanceFromVideoKeyframe(
+      updatedTrack,
+      persistedFrame,
+      selectedTrackPoseSchema,
+    );
+  }
 
   function updateKeyframe(
     index: number,
@@ -1139,6 +1212,39 @@ export function VideoTrackingWorkspace({
                 )}
               </>
             )}
+            {selectedVideo.frame_directory_path &&
+              selectedTrack &&
+              selectedTrackPoseSchema &&
+              poseEditorSchema &&
+              poseEditorPose &&
+              ((poseFrame?.keypoints?.length ?? 0) > 0 ||
+                (poseFrame?.pose_observations?.length ?? 0) > 0) && (
+                <div className="workspace-guide compact">
+                  <div>
+                    <strong>Pose review editor</strong>
+                    <p className="annotation-helper">
+                      Model landmarks are editable here. Moving a model landmark
+                      marks it corrected; saving writes both compatible keypoints
+                      and the richer corrected observation record back to this
+                      track keyframe.
+                    </p>
+                  </div>
+                  <PoseAnnotationEditor
+                    key={`${selectedTrack.id}:${poseFrame?.frame}`}
+                    imageUrl={videoFrameUrl(
+                      selectedVideo.id,
+                      previewFrameIndex,
+                    )}
+                    imageWidth={selectedVideo.width_px}
+                    imageHeight={selectedVideo.height_px}
+                    schema={poseEditorSchema}
+                    poses={[poseEditorPose]}
+                    viewportWidth={800}
+                    viewportHeight={520}
+                    onSave={savePoseFrameReview}
+                  />
+                </div>
+              )}
             {spatialMetricsQuery.data && (
               <div className="annotation-selection-list">
                 <div className="annotation-selection-row">
