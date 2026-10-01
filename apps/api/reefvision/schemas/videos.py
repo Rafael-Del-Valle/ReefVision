@@ -59,11 +59,26 @@ class VideoAssetResponse(BaseModel):
         return self
 
 
+class VideoPoseObservation(BaseModel):
+    id: str = Field(min_length=1, max_length=200)
+    semantic_label: str = Field(min_length=1, max_length=100)
+    occurrence_index: int = Field(ge=0, le=999)
+    x: FiniteFloat = Field(ge=0)
+    y: FiniteFloat = Field(ge=0)
+    confidence: FiniteFloat | None = Field(default=None, ge=0, le=1)
+    status: Literal["visible", "occluded", "uncertain", "absent"] = "visible"
+    source: Literal["model", "manual", "corrected"] = "model"
+
+
 class VideoTrackKeyframe(BaseModel):
     frame: int = Field(ge=0)
     bbox: tuple[float, float, float, float]
     confidence: float | None = Field(default=None, ge=0, le=1)
     keypoints: list[tuple[FiniteFloat, FiniteFloat, FiniteFloat]] | None = Field(
+        default=None,
+        max_length=1000,
+    )
+    pose_observations: list[VideoPoseObservation] | None = Field(
         default=None,
         max_length=1000,
     )
