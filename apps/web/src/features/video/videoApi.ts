@@ -22,7 +22,6 @@ export interface TrackingModelRecord {
   updated_at: string;
 }
 
-
 export interface PoseLandmarkGroup {
   name: string;
   count: number;
