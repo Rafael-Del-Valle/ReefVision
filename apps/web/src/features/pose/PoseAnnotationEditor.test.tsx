@@ -15,6 +15,7 @@ const schema: PoseLandmarkSchema = {
     { name: "bell_center", count: 1 },
     { name: "tentacle", count: 8 },
   ],
+  edges: [{ from: "bell_center", to: "tentacle" }],
 };
 
 const poseA: PoseInstance = {
@@ -117,6 +118,7 @@ describe("PoseAnnotationEditor", () => {
     expect(
       screen.getByRole("button", { name: "Place tentacle" }),
     ).toBeDisabled();
+    expect(screen.getAllByTestId(/pose-skeleton-/)).toHaveLength(8);
 
     fireEvent.click(screen.getByRole("button", { name: "Save pose" }));
 
