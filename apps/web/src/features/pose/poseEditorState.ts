@@ -140,6 +140,8 @@ export function setPoseObservationStatus(
         ? {
             ...observation,
             status,
+            source:
+              observation.source === "model" ? "corrected" : observation.source,
           }
         : observation,
     ),
