@@ -16,6 +16,12 @@ export interface PoseLandmarkSchema {
   edges?: PoseSkeletonEdge[];
 }
 
+export type PoseLandmarkStatus =
+  | "visible"
+  | "occluded"
+  | "uncertain"
+  | "absent";
+
 export interface PoseLandmarkObservation {
   id: string;
   semantic_label: string;
@@ -23,6 +29,7 @@ export interface PoseLandmarkObservation {
   x: number;
   y: number;
   confidence: number | null;
+  status: PoseLandmarkStatus;
   source: string;
 }
 
