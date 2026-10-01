@@ -6,6 +6,12 @@ import type {
   PoseSaveRequest,
 } from "./types";
 
+export interface PoseSkeletonSegment {
+  key: string;
+  from: PoseLandmarkObservation;
+  to: PoseLandmarkObservation;
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -116,6 +122,37 @@ export function removePoseObservation(
       (observation) => observation.id !== observationId,
     ),
   };
+}
+
+export function poseSkeletonSegments(
+  pose: PoseInstance,
+  schema: PoseLandmarkSchema,
+): PoseSkeletonSegment[] {
+  const segments: PoseSkeletonSegment[] = [];
+
+  (schema.edges ?? []).forEach((edge, edgeIndex) => {
+    const fromObservations = pose.observations.filter(
+      (observation) => observation.semantic_label === edge.from,
+    );
+    const toObservations = pose.observations.filter(
+      (observation) => observation.semantic_label === edge.to,
+    );
+
+    fromObservations.forEach((from) => {
+      toObservations.forEach((to) => {
+        if (from.id === to.id) {
+          return;
+        }
+        segments.push({
+          key: `${edgeIndex}:${from.id}:${to.id}`,
+          from,
+          to,
+        });
+      });
+    });
+  });
+
+  return segments;
 }
 
 export function validatePoseAgainstSchema(
