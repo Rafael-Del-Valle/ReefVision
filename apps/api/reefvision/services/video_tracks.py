@@ -5,6 +5,7 @@ from __future__ import annotations
 import builtins
 from itertools import pairwise
 from math import hypot
+from typing import TypedDict
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -33,6 +34,13 @@ from reefvision.services.georeferenced_observations import GeoReferencedObservat
 from reefvision.services.video_observation_location import (
     select_video_observation_image_location,
 )
+
+
+class _FrameSpatialObject(TypedDict):
+    track: VideoTrack
+    bbox: tuple[float, float, float, float]
+    center_x: float
+    center_y: float
 
 
 def _keyframe_payload(item: VideoTrackKeyframe) -> dict[str, object]:
@@ -257,7 +265,7 @@ class VideoTrackService:
             )
         )
 
-        objects: list[dict[str, object]] = []
+        objects: list[_FrameSpatialObject] = []
         for track in active_tracks:
             bbox = self._bbox_at_frame(track, frame_index)
             if bbox is None:
