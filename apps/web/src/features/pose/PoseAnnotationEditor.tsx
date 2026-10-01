@@ -136,6 +136,10 @@ export function PoseAnnotationEditor({
     : null;
   const saveState = saveStateById[selectedPoseId] ?? "idle";
   const saveMessage = saveMessageById[selectedPoseId] ?? null;
+  const effectiveActiveLabel =
+    selectedSchema?.groups.some((group) => group.name === activeLabel) === true
+      ? activeLabel
+      : (selectedSchema?.groups[0]?.name ?? "");
   const selectedObservation =
     selectedPose?.observations.find(
       (observation) => observation.id === selectedObservationId,
@@ -196,6 +200,17 @@ export function PoseAnnotationEditor({
       return;
     }
 
+    const activeGroup = selectedSchema.groups.find(
+      (group) => group.name === effectiveActiveLabel,
+    );
+    if (
+      !activeGroup ||
+      placedCount(selectedPose.observations, effectiveActiveLabel) >=
+        activeGroup.count
+    ) {
+      return;
+    }
+
     const point = clientPointToImage(event.clientX, event.clientY);
     if (
       point.x < 0 ||
@@ -210,7 +225,7 @@ export function PoseAnnotationEditor({
       addPoseObservation(
         pose,
         selectedSchema,
-        activeLabel,
+        effectiveActiveLabel,
         point,
         imageSize,
         makeObservationId(),
@@ -509,7 +524,7 @@ export function PoseAnnotationEditor({
               key={group.name}
               type="button"
               aria-label={`Place ${group.name}`}
-              aria-pressed={activeLabel === group.name}
+              aria-pressed={effectiveActiveLabel === group.name}
               disabled={count >= group.count}
               onClick={() => {
                 setActiveLabel(group.name);
