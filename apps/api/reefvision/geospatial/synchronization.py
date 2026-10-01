@@ -3,7 +3,7 @@
 from bisect import bisect_left
 from collections.abc import Iterable
 from math import isfinite
-from typing import Protocol
+from typing import Protocol, cast
 
 from reefvision.domain.errors import ValidationError
 from reefvision.geospatial.models import (
@@ -164,7 +164,7 @@ class PreferredTelemetrySource:
                 return srt_value
             if not self.allow_airdata_fallback:
                 return None
-            return getattr(air, field) if air is not None else None
+            return cast(object | None, getattr(air, field)) if air is not None else None
 
         base_sample = srt if srt is not None else air
         assert base_sample is not None
