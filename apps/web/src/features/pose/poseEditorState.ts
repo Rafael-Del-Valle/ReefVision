@@ -3,6 +3,7 @@ import type {
   PoseInstance,
   PoseLandmarkObservation,
   PoseLandmarkSchema,
+  PoseLandmarkStatus,
   PoseSaveRequest,
 } from "./types";
 
@@ -84,6 +85,7 @@ export function addPoseObservation(
         x: clamp(point.x, 0, imageSize.width),
         y: clamp(point.y, 0, imageSize.height),
         confidence: null,
+        status: "visible",
         source: "manual",
       },
     ],
@@ -106,6 +108,24 @@ export function movePoseObservation(
             y: clamp(point.y, 0, imageSize.height),
             source:
               observation.source === "model" ? "corrected" : observation.source,
+          }
+        : observation,
+    ),
+  };
+}
+
+export function setPoseObservationStatus(
+  pose: PoseInstance,
+  observationId: string,
+  status: PoseLandmarkStatus,
+): PoseInstance {
+  return {
+    ...pose,
+    observations: pose.observations.map((observation) =>
+      observation.id === observationId
+        ? {
+            ...observation,
+            status,
           }
         : observation,
     ),
