@@ -252,6 +252,54 @@ describe("PoseAnnotationEditor", () => {
     expect(tentacles[0].y).toBeCloseTo(tentacles[1].y, 5);
   });
 
+  it("shows model provenance and confidence for the selected landmark", () => {
+    const modelPose: PoseInstance = {
+      ...poseA,
+      id: "pose-model-details",
+      observations: [
+        {
+          ...poseA.observations[0],
+          id: "model-bell-details",
+          confidence: 0.9472,
+          source: "model",
+        },
+      ],
+    };
+    const onSave = vi.fn(async (request: PoseSaveRequest) =>
+      savedPose(request),
+    );
+
+    render(
+      <PoseAnnotationEditor
+        imageUrl="data:image/png;base64,"
+        imageWidth={900}
+        imageHeight={600}
+        schema={schema}
+        poses={[modelPose]}
+        onSave={onSave}
+      />,
+    );
+
+    fireEvent.pointerDown(
+      screen.getByTestId("pose-landmark-model-bell-details"),
+      {
+        button: 0,
+        clientX: 450,
+        clientY: 300,
+      },
+    );
+
+    expect(screen.getByTestId("selected-landmark-source")).toHaveTextContent(
+      "Source: model",
+    );
+    expect(
+      screen.getByTestId("selected-landmark-confidence"),
+    ).toHaveTextContent("Confidence: 0.947");
+    expect(screen.getByTestId("selected-landmark-status")).toHaveTextContent(
+      "Status: visible",
+    );
+  });
+
   it("marks dragged model landmarks as corrected and saves source-image coordinates", async () => {
     const modelPose: PoseInstance = {
       ...poseA,
