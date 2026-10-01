@@ -120,7 +120,11 @@ export function correctedVideoKeyframeFromPoseSave(
     pose_observations: request.observations.map((observation) => ({
       ...observation,
       source:
-        observation.source === "model" ? "model" : observation.source,
+        observation.source === "model"
+          ? "model"
+          : observation.source === "manual"
+            ? "manual"
+            : "corrected",
     })),
   };
 }
