@@ -31,7 +31,9 @@ describe("poseLandmarkSchemaFromMetadata", () => {
       { name: "bell_center", count: 1 },
       { name: "tentacle", count: 8 },
     ]);
-    expect(schema?.expanded_labels.filter((label) => label === "tentacle")).toHaveLength(8);
+    expect(
+      schema?.expanded_labels.filter((label) => label === "tentacle"),
+    ).toHaveLength(8);
     expect(schema?.allows_repeated_labels).toBe(true);
   });
 });
