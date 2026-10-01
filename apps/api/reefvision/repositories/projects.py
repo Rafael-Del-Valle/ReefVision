@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import builtins
-from typing import NamedTuple
+from typing import NamedTuple, cast
 
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, selectinload
@@ -46,11 +46,11 @@ class ProjectRepository:
         rows = self.session.execute(statement).all()
         return [
             ProjectSummaryRow(
-                project=project,
-                label_class_count=int(label_class_count or 0),
-                active_label_class_count=int(active_label_class_count or 0),
+                project=cast(Project, row[0]),
+                label_class_count=int(cast(int | None, row[1]) or 0),
+                active_label_class_count=int(cast(int | None, row[2]) or 0),
             )
-            for project, label_class_count, active_label_class_count in rows
+            for row in rows
         ]
 
     def get(self, project_id: str) -> Project | None:
