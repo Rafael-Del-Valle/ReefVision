@@ -57,6 +57,8 @@ vi.mock("./videoApi", async () => {
     getVideoTracks: vi.fn(),
     getVideoTrackInterpolation: vi.fn(),
     getVideoTrackAnalytics: vi.fn(),
+    getVideoFrameSpatialMetrics: vi.fn(),
+    getVideoTrackingRuns: vi.fn(),
     getTrackingModels: vi.fn(),
     getAnnotatedVideoExports: vi.fn(),
     importVideo: vi.fn(),
@@ -194,6 +196,17 @@ describe("VideoTrackingWorkspace", () => {
       mean_bbox_area_pixels: 100,
       occupancy_grid: {},
     });
+    vi.mocked(api.getVideoFrameSpatialMetrics).mockResolvedValue({
+      video_id: "video-1",
+      frame_index: 0,
+      object_count: 0,
+      mean_nearest_neighbor_distance_pixels: null,
+      minimum_nearest_neighbor_distance_pixels: null,
+      mean_nearest_neighbor_distance_meters: null,
+      minimum_nearest_neighbor_distance_meters: null,
+      objects: [],
+    });
+    vi.mocked(api.getVideoTrackingRuns).mockResolvedValue([]);
     vi.mocked(api.importVideo).mockImplementation(async () => {
       const videos = await api.getVideos("project-1");
       return videos[0];
