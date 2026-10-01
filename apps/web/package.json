@@ -14,7 +14,7 @@
     "test": "vitest run --config vite.config.mjs --configLoader runner",
     "test:watch": "vitest --config vite.config.mjs --configLoader runner",
     "format": "prettier --write .",
-    "format:check": "prettier --write src/features/pose/PoseAnnotationEditor.tsx src/features/pose/PoseAnnotationEditor.test.tsx src/features/pose/types.ts src/features/video/videoApi.test.ts src/features/video/videoApi.ts src/features/video/VideoTrackingWorkspace.tsx && git diff -- src/features/pose/PoseAnnotationEditor.tsx src/features/pose/PoseAnnotationEditor.test.tsx src/features/pose/types.ts src/features/video/videoApi.test.ts src/features/video/videoApi.ts src/features/video/VideoTrackingWorkspace.tsx && exit 1",
+    "format:check": "prettier --check .",
     "test:e2e": "npm run ui:build && playwright test",
     "ui:dev": "vite --config vite.config.mjs --configLoader runner",
     "ui:build": "tsc -b && vite build --config vite.config.mjs --configLoader runner"
