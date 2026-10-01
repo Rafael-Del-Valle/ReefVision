@@ -43,6 +43,10 @@ def _keyframe_payload(item: VideoTrackKeyframe) -> dict[str, object]:
     }
     if item.keypoints is not None:
         payload["keypoints"] = [list(point) for point in item.keypoints]
+    if item.pose_observations is not None:
+        payload["pose_observations"] = [
+            observation.model_dump(mode="json") for observation in item.pose_observations
+        ]
     return payload
 
 
@@ -79,6 +83,11 @@ class VideoTrackService:
                 if keypoint_x > video.width_px or keypoint_y > video.height_px:
                     raise ValidationError(
                         "Pose keypoints cannot extend outside the source video bounds"
+                    )
+            for observation in keyframe.pose_observations or []:
+                if observation.x > video.width_px or observation.y > video.height_px:
+                    raise ValidationError(
+                        "Pose observations cannot extend outside the source video bounds"
                     )
 
     def list(self, video_id: str) -> list[VideoTrackResponse]:
