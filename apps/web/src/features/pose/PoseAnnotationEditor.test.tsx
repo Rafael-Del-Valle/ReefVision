@@ -31,6 +31,7 @@ const poseA: PoseInstance = {
       x: 450,
       y: 300,
       confidence: null,
+      status: "visible",
       source: "manual",
     },
   ],
@@ -49,6 +50,7 @@ const poseB: PoseInstance = {
       x: 300,
       y: 250,
       confidence: null,
+      status: "visible",
       source: "manual",
     },
   ],
@@ -215,6 +217,39 @@ describe("PoseAnnotationEditor", () => {
     expect(tentacles).toHaveLength(2);
     expect(tentacles[0].x).toBeCloseTo(tentacles[1].x, 5);
     expect(tentacles[0].y).toBeCloseTo(tentacles[1].y, 5);
+  });
+
+  it("changes visibility status without conflating it with confidence", async () => {
+    const onSave = vi.fn(async (request: PoseSaveRequest) =>
+      savedPose(request),
+    );
+    render(
+      <PoseAnnotationEditor
+        imageUrl="data:image/png;base64,"
+        imageWidth={900}
+        imageHeight={600}
+        schema={schema}
+        poses={[poseA]}
+        onSave={onSave}
+      />,
+    );
+
+    fireEvent.pointerDown(screen.getByTestId("pose-landmark-bell-a"), {
+      button: 0,
+      clientX: 450,
+      clientY: 300,
+    });
+    fireEvent.change(screen.getByLabelText("Landmark status"), {
+      target: { value: "occluded" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save pose" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    const bell = onSave.mock.calls[0][0].observations.find(
+      (observation) => observation.id === "bell-a",
+    );
+    expect(bell?.status).toBe("occluded");
+    expect(bell?.confidence).toBeNull();
   });
 
   it("does not advance the base revision after a failed save", async () => {
