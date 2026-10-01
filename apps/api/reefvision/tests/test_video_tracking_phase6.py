@@ -277,6 +277,111 @@ def test_fake_detector_tracker_creates_editable_machine_track(
     assert updated.json()["status"] == "verified"
 
 
+def test_pose_review_update_round_trips_repeated_and_absent_landmarks(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Pose review persistence smoke")
+    video = _import_video(client, str(project["id"]), monkeypatch)
+    classes = cast(list[dict[str, object]], project["label_classes"])
+    label_class_id = str(classes[0]["id"])
+
+    created = client.post(
+        f"/api/v1/videos/{video['id']}/tracks",
+        json={
+            "label_class_id": label_class_id,
+            "keyframes": [
+                {
+                    "frame": 0,
+                    "bbox": [10, 10, 40, 30],
+                    "keypoints": [
+                        [20, 20, 0.98],
+                        [25, 30, 0.84],
+                        [0, 0, 0],
+                    ],
+                }
+            ],
+            "interpolation": "linear",
+            "status": "machine_generated",
+        },
+    )
+    assert created.status_code == 201, created.text
+    track = created.json()
+
+    corrected_keyframe = {
+        "frame": 0,
+        "bbox": [10, 10, 40, 30],
+        "keypoints": [
+            [20, 20, 0.98],
+            [28, 32, 0.84],
+            [0, 0, 0],
+        ],
+        "pose_observations": [
+            {
+                "id": "track:0:0",
+                "semantic_label": "bell_center",
+                "occurrence_index": 0,
+                "x": 20,
+                "y": 20,
+                "confidence": 0.98,
+                "status": "visible",
+                "source": "model",
+            },
+            {
+                "id": "track:0:1",
+                "semantic_label": "tentacle",
+                "occurrence_index": 0,
+                "x": 28,
+                "y": 32,
+                "confidence": 0.84,
+                "status": "visible",
+                "source": "corrected",
+            },
+            {
+                "id": "track:0:2",
+                "semantic_label": "tentacle",
+                "occurrence_index": 1,
+                "x": 0,
+                "y": 0,
+                "confidence": 0.0,
+                "status": "absent",
+                "source": "model",
+            },
+        ],
+    }
+
+    updated = client.put(
+        f"/api/v1/video-tracks/{track['id']}",
+        json={
+            "base_revision": track["revision"],
+            "label_class_id": label_class_id,
+            "keyframes": [corrected_keyframe],
+            "interpolation": "linear",
+            "status": "verified",
+        },
+    )
+    assert updated.status_code == 200, updated.text
+
+    persisted = updated.json()["keyframes_json"][0]
+    assert persisted["keypoints"] == corrected_keyframe["keypoints"]
+    assert persisted["pose_observations"] == corrected_keyframe["pose_observations"]
+
+    listed = client.get(f"/api/v1/videos/{video['id']}/tracks")
+    assert listed.status_code == 200, listed.text
+    reloaded = next(item for item in listed.json() if item["id"] == track["id"])
+    reloaded_frame = reloaded["keyframes_json"][0]
+
+    repeated = [
+        item
+        for item in reloaded_frame["pose_observations"]
+        if item["semantic_label"] == "tentacle"
+    ]
+    assert [item["occurrence_index"] for item in repeated] == [0, 1]
+    assert repeated[0]["source"] == "corrected"
+    assert repeated[1]["status"] == "absent"
+    assert reloaded_frame["keypoints"][2] == [0.0, 0.0, 0.0]
+
+
 class FakeGeoPersistence:
     def __init__(self) -> None:
         self.observations: list[object] = []
