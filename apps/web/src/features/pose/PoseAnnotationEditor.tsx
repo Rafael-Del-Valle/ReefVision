@@ -24,6 +24,7 @@ import {
   placedCount,
   poseSkeletonSegments,
   removePoseObservation,
+  schemaForPose,
   setPoseObservationStatus,
   validatePoseAgainstSchema,
 } from "./poseEditorState";
@@ -42,11 +43,13 @@ interface PoseAnnotationEditorProps {
   imageWidth: number;
   imageHeight: number;
   schema: PoseLandmarkSchema;
+  schemaRevisions?: PoseLandmarkSchema[];
   poses: PoseInstance[];
   initialPoseId?: string;
   viewportWidth?: number;
   viewportHeight?: number;
   onSave: (request: PoseSaveRequest) => Promise<PoseInstance>;
+  onCreatePose?: (schema: PoseLandmarkSchema) => Promise<PoseInstance>;
 }
 
 interface PanInteraction {
@@ -75,11 +78,13 @@ export function PoseAnnotationEditor({
   imageWidth,
   imageHeight,
   schema,
+  schemaRevisions = [],
   poses,
   initialPoseId,
   viewportWidth = 900,
   viewportHeight = 600,
   onSave,
+  onCreatePose,
 }: PoseAnnotationEditorProps) {
   const imageSize: ImageSize = useMemo(
     () => ({ width: imageWidth, height: imageHeight }),
@@ -101,6 +106,7 @@ export function PoseAnnotationEditor({
     () => indexPoses(poses),
   );
   const firstPoseId = initialPoseId ?? poses[0]?.id ?? "";
+  const [poseIds, setPoseIds] = useState(() => poses.map((pose) => pose.id));
   const [selectedPoseId, setSelectedPoseId] = useState(firstPoseId);
   const [selectedObservationId, setSelectedObservationId] = useState<
     string | null
@@ -119,10 +125,15 @@ export function PoseAnnotationEditor({
   const [saveMessageById, setSaveMessageById] = useState<
     Record<string, string | null>
   >({});
+  const [creatingPose, setCreatingPose] = useState(false);
+  const [creationMessage, setCreationMessage] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
   const selectedPose = draftsById[selectedPoseId] ?? null;
   const persistedPose = persistedById[selectedPoseId] ?? null;
+  const selectedSchema = selectedPose
+    ? schemaForPose(selectedPose, schema, schemaRevisions)
+    : null;
   const saveState = saveStateById[selectedPoseId] ?? "idle";
   const saveMessage = saveMessageById[selectedPoseId] ?? null;
   const selectedObservation =
@@ -130,8 +141,11 @@ export function PoseAnnotationEditor({
       (observation) => observation.id === selectedObservationId,
     ) ?? null;
   const skeletonSegments = useMemo(
-    () => (selectedPose ? poseSkeletonSegments(selectedPose, schema) : []),
-    [schema, selectedPose],
+    () =>
+      selectedPose && selectedSchema
+        ? poseSkeletonSegments(selectedPose, selectedSchema)
+        : [],
+    [selectedPose, selectedSchema],
   );
 
   const setPoseDraft = (
@@ -171,7 +185,7 @@ export function PoseAnnotationEditor({
     screenToImage(localScreenPoint(clientX, clientY), view);
 
   const handleStagePointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
-    if (!selectedPose) {
+    if (!selectedPose || !selectedSchema) {
       return;
     }
     if (tool === "pan") {
@@ -195,7 +209,7 @@ export function PoseAnnotationEditor({
     setPoseDraft(selectedPose.id, (pose) =>
       addPoseObservation(
         pose,
-        schema,
+        selectedSchema,
         activeLabel,
         point,
         imageSize,
@@ -291,11 +305,14 @@ export function PoseAnnotationEditor({
   };
 
   const handleSave = async () => {
-    if (!selectedPose || !persistedPose) {
+    if (!selectedPose || !persistedPose || !selectedSchema) {
       return;
     }
 
-    const validationErrors = validatePoseAgainstSchema(selectedPose, schema);
+    const validationErrors = validatePoseAgainstSchema(
+      selectedPose,
+      selectedSchema,
+    );
     if (validationErrors.length > 0) {
       setSaveStateById((current) => ({
         ...current,
@@ -308,7 +325,11 @@ export function PoseAnnotationEditor({
       return;
     }
 
-    const request = buildPoseSaveRequest(persistedPose, selectedPose, schema);
+    const request = buildPoseSaveRequest(
+      persistedPose,
+      selectedPose,
+      selectedSchema,
+    );
     setSaveStateById((current) => ({
       ...current,
       [selectedPose.id]: "saving",
@@ -354,8 +375,75 @@ export function PoseAnnotationEditor({
     }
   };
 
+  const handleCreatePose = async () => {
+    if (!onCreatePose || creatingPose) {
+      return;
+    }
+    setCreatingPose(true);
+    setCreationMessage(null);
+    try {
+      const created = await onCreatePose(schema);
+      if (
+        created.schema_id !== schema.id ||
+        created.schema_revision !== schema.revision
+      ) {
+        throw new Error("New pose was not created on the current schema revision");
+      }
+      setPersistedById((current) => ({
+        ...current,
+        [created.id]: clonePose(created),
+      }));
+      setDraftsById((current) => ({
+        ...current,
+        [created.id]: clonePose(created),
+      }));
+      setPoseIds((current) =>
+        current.includes(created.id) ? current : [...current, created.id],
+      );
+      setSelectedPoseId(created.id);
+      setSelectedObservationId(null);
+      setSaveStateById((current) => ({
+        ...current,
+        [created.id]: "idle",
+      }));
+      setCreationMessage(
+        `Created pose on schema revision ${schema.revision}`,
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown pose creation failure";
+      setCreationMessage(`Pose creation failed: ${message}`);
+    } finally {
+      setCreatingPose(false);
+    }
+  };
+
   if (!selectedPose || !persistedPose) {
-    return <div>No poses available for editing.</div>;
+    return (
+      <div>
+        <p>No poses available for editing.</p>
+        {onCreatePose && (
+          <button
+            type="button"
+            disabled={creatingPose}
+            onClick={() => void handleCreatePose()}
+          >
+            Create pose
+          </button>
+        )}
+        {creationMessage && <span role="status">{creationMessage}</span>}
+      </div>
+    );
+  }
+
+  if (!selectedSchema) {
+    return (
+      <div role="alert">
+        Pose {selectedPose.id} requires schema {selectedPose.schema_id} revision{" "}
+        {selectedPose.schema_revision}, but that exact immutable revision is not
+        available.
+      </div>
+    );
   }
 
   return (
@@ -371,9 +459,9 @@ export function PoseAnnotationEditor({
               setSelectedObservationId(null);
             }}
           >
-            {poses.map((pose) => (
-              <option key={pose.id} value={pose.id}>
-                {pose.id}
+            {poseIds.map((poseId) => (
+              <option key={poseId} value={poseId}>
+                {poseId}
               </option>
             ))}
           </select>
@@ -381,6 +469,19 @@ export function PoseAnnotationEditor({
         <span data-testid="pose-revision">
           Revision {persistedPose.revision}
         </span>
+        <span data-testid="pose-schema-revision">
+          Schema revision {selectedSchema.revision}
+        </span>
+        {onCreatePose && (
+          <button
+            type="button"
+            disabled={creatingPose}
+            onClick={() => void handleCreatePose()}
+          >
+            Create pose
+          </button>
+        )}
+        {creationMessage && <span role="status">{creationMessage}</span>}
       </header>
 
       <div aria-label="Pose tools">
@@ -401,7 +502,7 @@ export function PoseAnnotationEditor({
         <button type="button" onClick={() => setView(initialView)}>
           Reset view
         </button>
-        {schema.groups.map((group) => {
+        {selectedSchema.groups.map((group) => {
           const count = placedCount(selectedPose.observations, group.name);
           return (
             <button
@@ -516,7 +617,7 @@ export function PoseAnnotationEditor({
                   pointerEvents="none"
                 >
                   {observation.semantic_label}
-                  {schema.groups.find(
+                  {selectedSchema.groups.find(
                     (group) =>
                       group.name === observation.semantic_label &&
                       group.count > 1,
