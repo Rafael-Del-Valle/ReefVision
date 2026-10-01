@@ -9,6 +9,10 @@ on:
       - ".github/workflows/pose-workflow-validation.yml"
   workflow_dispatch:
 
+concurrency:
+  group: pose-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend-pose:
     runs-on: ubuntu-latest
