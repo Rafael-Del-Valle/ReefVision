@@ -18,6 +18,45 @@ const schema: PoseLandmarkSchema = {
   edges: [{ from: "bell_center", to: "tentacle" }],
 };
 
+const oldSchema: PoseLandmarkSchema = {
+  id: "jellyfish-schema",
+  revision: 2,
+  groups: [
+    { name: "bell_center", count: 1 },
+    { name: "tentacle", count: 4 },
+  ],
+  edges: [{ from: "bell_center", to: "tentacle" }],
+};
+
+const oldPose: PoseInstance = {
+  id: "pose-old",
+  revision: 2,
+  schema_id: oldSchema.id,
+  schema_revision: oldSchema.revision,
+  observations: [
+    {
+      id: "old-bell",
+      semantic_label: "bell_center",
+      occurrence_index: 0,
+      x: 450,
+      y: 250,
+      confidence: null,
+      status: "visible",
+      source: "manual",
+    },
+    ...Array.from({ length: 4 }, (_, index) => ({
+      id: `old-tentacle-${index}`,
+      semantic_label: "tentacle",
+      occurrence_index: index,
+      x: 300 + index * 50,
+      y: 350,
+      confidence: null,
+      status: "visible" as const,
+      source: "manual",
+    })),
+  ],
+};
+
 const poseA: PoseInstance = {
   id: "pose-a",
   revision: 4,
@@ -244,6 +283,92 @@ describe("PoseAnnotationEditor", () => {
     );
     expect(bell?.status).toBe("occluded");
     expect(bell?.confidence).toBeNull();
+  });
+
+  it("pins existing poses to their exact immutable schema revision", async () => {
+    const onSave = vi.fn(async (request: PoseSaveRequest) =>
+      savedPose(request),
+    );
+    render(
+      <PoseAnnotationEditor
+        imageUrl="data:image/png;base64,"
+        imageWidth={900}
+        imageHeight={600}
+        schema={schema}
+        schemaRevisions={[oldSchema]}
+        poses={[oldPose, poseA]}
+        initialPoseId={oldPose.id}
+        onSave={onSave}
+      />,
+    );
+
+    expect(screen.getByTestId("pose-schema-revision")).toHaveTextContent(
+      "Schema revision 2",
+    );
+    expect(screen.getByText("tentacle 4 / 4")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Place tentacle" }),
+    ).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save pose" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave.mock.calls[0][0].schema_revision).toBe(2);
+  });
+
+  it("refuses to reinterpret an old pose with the current schema revision", () => {
+    const onSave = vi.fn(async (request: PoseSaveRequest) =>
+      savedPose(request),
+    );
+    render(
+      <PoseAnnotationEditor
+        imageUrl="data:image/png;base64,"
+        imageWidth={900}
+        imageHeight={600}
+        schema={schema}
+        poses={[oldPose]}
+        onSave={onSave}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "requires schema jellyfish-schema revision 2",
+    );
+    expect(screen.queryByRole("button", { name: "Save pose" })).toBeNull();
+  });
+
+  it("creates new poses on the current schema revision", async () => {
+    const onSave = vi.fn(async (request: PoseSaveRequest) =>
+      savedPose(request),
+    );
+    const onCreatePose = vi.fn(async (currentSchema: PoseLandmarkSchema) => ({
+      id: "pose-new",
+      revision: 0,
+      schema_id: currentSchema.id,
+      schema_revision: currentSchema.revision,
+      observations: [],
+    }));
+
+    render(
+      <PoseAnnotationEditor
+        imageUrl="data:image/png;base64,"
+        imageWidth={900}
+        imageHeight={600}
+        schema={schema}
+        schemaRevisions={[oldSchema]}
+        poses={[]}
+        onSave={onSave}
+        onCreatePose={onCreatePose}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Create pose" }));
+    await waitFor(() => expect(onCreatePose).toHaveBeenCalledTimes(1));
+    expect(onCreatePose.mock.calls[0][0].revision).toBe(3);
+    await screen.findByText("Created pose on schema revision 3");
+    expect(screen.getByTestId("pose-schema-revision")).toHaveTextContent(
+      "Schema revision 3",
+    );
+    expect(screen.getByText("tentacle 0 / 8")).toBeInTheDocument();
   });
 
   it("does not advance the base revision after a failed save", async () => {
