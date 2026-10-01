@@ -417,6 +417,52 @@ describe("PoseAnnotationEditor", () => {
     expect(bell?.confidence).toBeNull();
   });
 
+  it("marks model status edits as corrected provenance", async () => {
+    const modelPose: PoseInstance = {
+      ...poseA,
+      id: "pose-model-status",
+      observations: [
+        {
+          ...poseA.observations[0],
+          id: "model-status-bell",
+          confidence: 0.88,
+          source: "model",
+        },
+      ],
+    };
+    const onSave = vi.fn(async (request: PoseSaveRequest) =>
+      savedPose(request),
+    );
+
+    render(
+      <PoseAnnotationEditor
+        imageUrl="data:image/png;base64,"
+        imageWidth={900}
+        imageHeight={600}
+        schema={schema}
+        poses={[modelPose]}
+        onSave={onSave}
+      />,
+    );
+
+    fireEvent.pointerDown(screen.getByTestId("pose-landmark-model-status-bell"), {
+      button: 0,
+      clientX: 450,
+      clientY: 300,
+    });
+    fireEvent.change(screen.getByLabelText("Landmark status"), {
+      target: { value: "occluded" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save pose" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave.mock.calls[0][0].observations[0]).toMatchObject({
+      status: "occluded",
+      source: "corrected",
+      confidence: 0.88,
+    });
+  });
+
   it("pins existing poses to their exact immutable schema revision", async () => {
     const onSave = vi.fn(async (request: PoseSaveRequest) =>
       savedPose(request),
