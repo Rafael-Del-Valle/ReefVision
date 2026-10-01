@@ -24,11 +24,13 @@ import {
   placedCount,
   poseSkeletonSegments,
   removePoseObservation,
+  setPoseObservationStatus,
   validatePoseAgainstSchema,
 } from "./poseEditorState";
 import type {
   PoseInstance,
   PoseLandmarkSchema,
+  PoseLandmarkStatus,
   PoseSaveRequest,
 } from "./types";
 
@@ -125,6 +127,10 @@ export function PoseAnnotationEditor({
   const persistedPose = persistedById[selectedPoseId] ?? null;
   const saveState = saveStateById[selectedPoseId] ?? "idle";
   const saveMessage = saveMessageById[selectedPoseId] ?? null;
+  const selectedObservation =
+    selectedPose?.observations.find(
+      (observation) => observation.id === selectedObservationId,
+    ) ?? null;
   const skeletonSegments = useMemo(
     () => (selectedPose ? poseSkeletonSegments(selectedPose, schema) : []),
     [schema, selectedPose],
@@ -430,6 +436,32 @@ export function PoseAnnotationEditor({
         >
           Delete selected landmark
         </button>
+        <label>
+          Landmark status
+          <select
+            aria-label="Landmark status"
+            disabled={!selectedObservation}
+            value={selectedObservation?.status ?? "visible"}
+            onChange={(event) => {
+              if (!selectedPose || !selectedObservation) {
+                return;
+              }
+              const status = event.target.value as PoseLandmarkStatus;
+              setPoseDraft(selectedPose.id, (pose) =>
+                setPoseObservationStatus(
+                  pose,
+                  selectedObservation.id,
+                  status,
+                ),
+              );
+            }}
+          >
+            <option value="visible">visible</option>
+            <option value="occluded">occluded</option>
+            <option value="uncertain">uncertain</option>
+            <option value="absent">absent</option>
+          </select>
+        </label>
       </div>
 
       <svg
