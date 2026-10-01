@@ -105,9 +105,7 @@ describe("PoseAnnotationEditor", () => {
     );
     const stage = installStageBounds();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Place tentacle" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Place tentacle" }));
     for (let index = 0; index < 8; index += 1) {
       fireEvent.pointerDown(stage, {
         button: 0,
@@ -151,9 +149,7 @@ describe("PoseAnnotationEditor", () => {
     );
     const stage = installStageBounds();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Place tentacle" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Place tentacle" }));
     fireEvent.pointerDown(stage, {
       button: 0,
       clientX: 450,
@@ -188,9 +184,7 @@ describe("PoseAnnotationEditor", () => {
     );
     const stage = installStageBounds();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Place tentacle" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Place tentacle" }));
     fireEvent.pointerDown(stage, {
       button: 0,
       clientX: 450,
@@ -272,9 +266,7 @@ describe("PoseAnnotationEditor", () => {
     );
     const stage = installStageBounds();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Place tentacle" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Place tentacle" }));
     fireEvent.pointerDown(stage, {
       button: 0,
       clientX: 450,
@@ -292,8 +284,6 @@ describe("PoseAnnotationEditor", () => {
 
     expect(onSave.mock.calls[1][0].base_revision).toBe(4);
     await screen.findByText("Saved revision 5");
-    expect(screen.getByTestId("pose-revision")).toHaveTextContent(
-      "Revision 5",
-    );
+    expect(screen.getByTestId("pose-revision")).toHaveTextContent("Revision 5");
   });
 });
