@@ -205,11 +205,23 @@ export interface VideoAssetRecord {
 
 export type VideoPoseKeypoint = [number, number, number];
 
+export interface VideoPoseObservation {
+  id: string;
+  semantic_label: string;
+  occurrence_index: number;
+  x: number;
+  y: number;
+  confidence: number | null;
+  status: "visible" | "occluded" | "uncertain" | "absent";
+  source: "model" | "manual" | "corrected";
+}
+
 export interface VideoTrackKeyframe {
   frame: number;
   bbox: [number, number, number, number];
   confidence?: number | null;
   keypoints?: VideoPoseKeypoint[] | null;
+  pose_observations?: VideoPoseObservation[] | null;
 }
 
 export interface VideoTrackRecord {
