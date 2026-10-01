@@ -98,3 +98,61 @@ def test_repeatable_pose_landmark_group_expands_to_shared_semantic_labels() -> N
         "tentacle",
         "tentacle",
     ]
+
+
+def test_corrected_pose_observations_round_trip_with_keyframe_payload() -> None:
+    keyframe = VideoTrackKeyframe.model_validate(
+        {
+            "frame": 8,
+            "bbox": [10.0, 20.0, 50.0, 60.0],
+            "keypoints": [[15.0, 25.0, 0.91], [30.0, 40.0, 0.72]],
+            "pose_observations": [
+                {
+                    "id": "track-1:8:0",
+                    "semantic_label": "bell_center",
+                    "occurrence_index": 0,
+                    "x": 15.0,
+                    "y": 25.0,
+                    "confidence": 0.91,
+                    "status": "visible",
+                    "source": "model",
+                },
+                {
+                    "id": "track-1:8:1",
+                    "semantic_label": "tentacle",
+                    "occurrence_index": 0,
+                    "x": 31.0,
+                    "y": 42.0,
+                    "confidence": 0.72,
+                    "status": "occluded",
+                    "source": "corrected",
+                },
+            ],
+        }
+    )
+
+    persisted = _keyframe_payload(keyframe)
+
+    assert persisted["keypoints"] == [[15.0, 25.0, 0.91], [30.0, 40.0, 0.72]]
+    assert persisted["pose_observations"] == [
+        {
+            "id": "track-1:8:0",
+            "semantic_label": "bell_center",
+            "occurrence_index": 0,
+            "x": 15.0,
+            "y": 25.0,
+            "confidence": 0.91,
+            "status": "visible",
+            "source": "model",
+        },
+        {
+            "id": "track-1:8:1",
+            "semantic_label": "tentacle",
+            "occurrence_index": 0,
+            "x": 31.0,
+            "y": 42.0,
+            "confidence": 0.72,
+            "status": "occluded",
+            "source": "corrected",
+        },
+    ]
