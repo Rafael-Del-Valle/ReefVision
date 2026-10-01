@@ -24,6 +24,20 @@ export function clonePose(pose: PoseInstance): PoseInstance {
   };
 }
 
+export function schemaForPose(
+  pose: PoseInstance,
+  currentSchema: PoseLandmarkSchema,
+  historicalSchemas: PoseLandmarkSchema[] = [],
+): PoseLandmarkSchema | null {
+  return (
+    [currentSchema, ...historicalSchemas].find(
+      (candidate) =>
+        candidate.id === pose.schema_id &&
+        candidate.revision === pose.schema_revision,
+    ) ?? null
+  );
+}
+
 export function placedCount(
   observations: PoseLandmarkObservation[],
   semanticLabel: string,
@@ -151,23 +165,31 @@ export function poseSkeletonSegments(
   const segments: PoseSkeletonSegment[] = [];
 
   (schema.edges ?? []).forEach((edge, edgeIndex) => {
-    const fromObservations = pose.observations.filter(
-      (observation) => observation.semantic_label === edge.from,
+    const fromGroup = schema.groups.find((group) => group.name === edge.from);
+    if (!fromGroup || fromGroup.count !== 1) {
+      return;
+    }
+
+    const from = pose.observations.find(
+      (observation) =>
+        observation.semantic_label === edge.from &&
+        observation.occurrence_index === 0,
     );
+    if (!from) {
+      return;
+    }
+
     const toObservations = pose.observations.filter(
       (observation) => observation.semantic_label === edge.to,
     );
-
-    fromObservations.forEach((from) => {
-      toObservations.forEach((to) => {
-        if (from.id === to.id) {
-          return;
-        }
-        segments.push({
-          key: `${edgeIndex}:${from.id}:${to.id}`,
-          from,
-          to,
-        });
+    toObservations.forEach((to) => {
+      if (from.id === to.id) {
+        return;
+      }
+      segments.push({
+        key: `${edgeIndex}:${from.id}:${to.id}`,
+        from,
+        to,
       });
     });
   });
