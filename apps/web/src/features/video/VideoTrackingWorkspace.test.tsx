@@ -60,6 +60,7 @@ vi.mock("./videoApi", async () => {
     getTrackingModels: vi.fn(),
     getAnnotatedVideoExports: vi.fn(),
     importVideo: vi.fn(),
+    updateVideoTrack: vi.fn(),
   };
 });
 
@@ -388,6 +389,152 @@ describe("VideoTrackingWorkspace", () => {
     fireEvent.timeUpdate(video);
 
     expect(screen.getByTestId("mock-active-map-frame")).toHaveTextContent("60");
+  });
+
+  it("smoke-tests pose prediction review with repeated landmarks and absent keypoints", async () => {
+    const poseSchema = {
+      schema_version: "pose-landmarks-0001" as const,
+      groups: [
+        { name: "bell_center", count: 1 },
+        { name: "tentacle", count: 2 },
+      ],
+      expanded_labels: ["bell_center", "tentacle", "tentacle"],
+      keypoint_count: 3,
+      allows_repeated_labels: true,
+    };
+    const machineTrack: api.VideoTrackRecord = {
+      id: "pose-track-1",
+      video_id: "video-1",
+      label_class_id: "class-1",
+      track_number: 7,
+      geometry_kind: "bbox",
+      keyframes_json: [
+        {
+          frame: 0,
+          bbox: [100, 120, 300, 260],
+          confidence: 0.96,
+          keypoints: [
+            [200, 220, 0.98],
+            [240, 300, 0.84],
+            [0, 0, 0],
+          ],
+        },
+      ],
+      interpolation: "linear",
+      status: "machine_generated",
+      source_model_id: "pose-model-1",
+      source_job_id: "pose-job-1",
+      metadata_json: { pose_landmark_schema: poseSchema },
+      revision: 3,
+    };
+
+    vi.mocked(api.getVideoTracks).mockResolvedValue([machineTrack]);
+    vi.mocked(api.updateVideoTrack).mockImplementation(
+      async (_trackId, payload) => ({
+        ...machineTrack,
+        keyframes_json: payload.keyframes,
+        interpolation: payload.interpolation,
+        status: payload.status,
+        revision: payload.base_revision + 1,
+      }),
+    );
+
+    renderWorkspace();
+
+    await screen.findByRole("option", { name: /Track 7/ });
+    fireEvent.change(screen.getByLabelText("Existing track"), {
+      target: { value: machineTrack.id },
+    });
+
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Enable source-coordinate overlay",
+      }),
+    );
+
+    expect(
+      await screen.findByText("Pose review editor"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("tentacle 1 / 2")).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("tentacle 2"),
+    ).not.toBeInTheDocument();
+
+    const stage = screen.getByTestId("pose-stage") as unknown as SVGSVGElement;
+    Object.defineProperty(stage, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        x: 0,
+        y: 0,
+        left: 0,
+        top: 0,
+        right: 800,
+        bottom: 520,
+        width: 800,
+        height: 520,
+        toJSON: () => ({}),
+      }),
+    });
+
+    const tentacle = screen.getByLabelText("tentacle 1");
+    fireEvent.pointerDown(tentacle, {
+      button: 0,
+      clientX: 100,
+      clientY: 100,
+    });
+    fireEvent.pointerMove(stage, {
+      buttons: 1,
+      clientX: 150,
+      clientY: 130,
+    });
+    fireEvent.pointerUp(stage, {
+      button: 0,
+      clientX: 150,
+      clientY: 130,
+    });
+
+    expect(screen.getByTestId("selected-landmark-source")).toHaveTextContent(
+      "Source: corrected",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save pose" }));
+
+    await waitFor(() => expect(api.updateVideoTrack).toHaveBeenCalledTimes(1));
+    const [, payload] = vi.mocked(api.updateVideoTrack).mock.calls[0];
+
+    expect(payload.base_revision).toBe(3);
+    expect(payload.keyframes).toHaveLength(1);
+    const persisted = payload.keyframes[0];
+
+    expect(persisted.keypoints).toHaveLength(3);
+    expect(persisted.keypoints?.[0]).toEqual([200, 220, 0.98]);
+    expect(persisted.keypoints?.[1]?.[2]).toBe(0.84);
+    expect(persisted.keypoints?.[1]?.[0]).not.toBe(240);
+    expect(persisted.keypoints?.[1]?.[1]).not.toBe(300);
+    expect(persisted.keypoints?.[2]).toEqual([0, 0, 0]);
+
+    expect(persisted.pose_observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          semantic_label: "bell_center",
+          occurrence_index: 0,
+          source: "model",
+        }),
+        expect.objectContaining({
+          semantic_label: "tentacle",
+          occurrence_index: 0,
+          confidence: 0.84,
+          source: "corrected",
+        }),
+      ]),
+    );
+    expect(
+      persisted.pose_observations?.some(
+        (observation) =>
+          observation.semantic_label === "tentacle" &&
+          observation.occurrence_index === 1,
+      ),
+    ).toBe(false);
   });
 
   it("connects geographic segment seeking to video and map without refetching analytics", async () => {
