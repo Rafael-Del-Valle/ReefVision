@@ -1126,7 +1126,8 @@ export function VideoTrackingWorkspace({
             {(poseFrame?.keypoints?.length ?? 0) > 0 && (
               <>
                 <p className="annotation-helper">
-                  Pose landmarks on this frame: {poseFrame?.keypoints?.length ?? 0}
+                  Pose landmarks on this frame:{" "}
+                  {poseFrame?.keypoints?.length ?? 0}
                 </p>
                 {selectedTrackPoseSchema && (
                   <p className="annotation-helper">
@@ -1394,8 +1395,8 @@ export function VideoTrackingWorkspace({
               </p>
               {poseExpectedLandmarkCount !== null && (
                 <p className="annotation-helper">
-                  Checkpoint landmarks: {poseExpectedLandmarkCount} · configured:{" "}
-                  {poseConfiguredLandmarkCount}
+                  Checkpoint landmarks: {poseExpectedLandmarkCount} ·
+                  configured: {poseConfiguredLandmarkCount}
                 </p>
               )}
               {poseLandmarkGroups.map((group, index) => (
