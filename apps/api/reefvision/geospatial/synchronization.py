@@ -159,7 +159,9 @@ class PreferredTelemetrySource:
         )
 
         def prefer(field: str) -> object | None:
-            srt_value = getattr(srt, field) if srt is not None else None
+            srt_value = (
+                cast(object | None, getattr(srt, field)) if srt is not None else None
+            )
             if srt_value is not None:
                 return srt_value
             if not self.allow_airdata_fallback:
