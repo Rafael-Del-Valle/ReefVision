@@ -94,9 +94,9 @@ export function PoseAnnotationEditor({
     [imageSize, viewportHeight, viewportWidth],
   );
 
-  const [persistedById, setPersistedById] = useState<Record<string, PoseInstance>>(
-    () => indexPoses(poses),
-  );
+  const [persistedById, setPersistedById] = useState<
+    Record<string, PoseInstance>
+  >(() => indexPoses(poses));
   const [draftsById, setDraftsById] = useState<Record<string, PoseInstance>>(
     () => indexPoses(poses),
   );
@@ -105,9 +105,7 @@ export function PoseAnnotationEditor({
   const [selectedObservationId, setSelectedObservationId] = useState<
     string | null
   >(null);
-  const [activeLabel, setActiveLabel] = useState(
-    schema.groups[0]?.name ?? "",
-  );
+  const [activeLabel, setActiveLabel] = useState(schema.groups[0]?.name ?? "");
   const [tool, setTool] = useState<PoseEditorTool>("landmark");
   const [view, setView] = useState<ViewportTransform>(initialView);
   const [panInteraction, setPanInteraction] = useState<PanInteraction | null>(
@@ -172,9 +170,7 @@ export function PoseAnnotationEditor({
   const clientPointToImage = (clientX: number, clientY: number): Point =>
     screenToImage(localScreenPoint(clientX, clientY), view);
 
-  const handleStagePointerDown = (
-    event: ReactPointerEvent<SVGSVGElement>,
-  ) => {
+  const handleStagePointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
     if (!selectedPose) {
       return;
     }
@@ -208,9 +204,7 @@ export function PoseAnnotationEditor({
     );
   };
 
-  const handleStagePointerMove = (
-    event: ReactPointerEvent<SVGSVGElement>,
-  ) => {
+  const handleStagePointerMove = (event: ReactPointerEvent<SVGSVGElement>) => {
     if (panInteraction) {
       const current = localScreenPoint(event.clientX, event.clientY);
       setView({
@@ -314,11 +308,7 @@ export function PoseAnnotationEditor({
       return;
     }
 
-    const request = buildPoseSaveRequest(
-      persistedPose,
-      selectedPose,
-      schema,
-    );
+    const request = buildPoseSaveRequest(persistedPose, selectedPose, schema);
     setSaveStateById((current) => ({
       ...current,
       [selectedPose.id]: "saving",
@@ -448,11 +438,7 @@ export function PoseAnnotationEditor({
               }
               const status = event.target.value as PoseLandmarkStatus;
               setPoseDraft(selectedPose.id, (pose) =>
-                setPoseObservationStatus(
-                  pose,
-                  selectedObservation.id,
-                  status,
-                ),
+                setPoseObservationStatus(pose, selectedObservation.id, status),
               );
             }}
           >
@@ -478,7 +464,11 @@ export function PoseAnnotationEditor({
         role="img"
         aria-label="Pose annotation canvas"
       >
-        <rect width={viewportWidth} height={viewportHeight} fill="transparent" />
+        <rect
+          width={viewportWidth}
+          height={viewportHeight}
+          fill="transparent"
+        />
         <g
           transform={`translate(${view.offsetX} ${view.offsetY}) scale(${view.scale})`}
         >
