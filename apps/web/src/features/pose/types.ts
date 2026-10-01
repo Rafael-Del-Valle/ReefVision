@@ -4,10 +4,16 @@ export interface PoseLandmarkGroup {
   required?: boolean;
 }
 
+export interface PoseSkeletonEdge {
+  from: string;
+  to: string;
+}
+
 export interface PoseLandmarkSchema {
   id: string;
   revision: number;
   groups: PoseLandmarkGroup[];
+  edges?: PoseSkeletonEdge[];
 }
 
 export interface PoseLandmarkObservation {
