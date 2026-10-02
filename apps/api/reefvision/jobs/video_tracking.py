@@ -298,6 +298,17 @@ def process_video_tracking_job(
         pose_landmark_schema = (
             dict(raw_pose_landmark_schema) if isinstance(raw_pose_landmark_schema, dict) else None
         )
+        if model_task == "pose" and pose_landmark_schema is None:
+            job.status = "failed"
+            job.error_message = (
+                "Pose video inference requires a bound ReefVision landmark schema "
+                "before tracking"
+            )
+            job.completed_at = datetime.now(UTC)
+            video.status = "tracking_failed"
+            video.revision += 1
+            session.commit()
+            return False
         total_frames = video.frame_count
 
     LOGGER.info(
