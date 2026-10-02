@@ -137,6 +137,7 @@ describe("PoseTemporalReviewPanel", () => {
       landmark_tracks: [],
       observations: [],
       association_decisions: [],
+      association_candidates: [],
       identity_breaks: [],
       corrections: [],
     });
@@ -194,6 +195,21 @@ describe("PoseTemporalReviewPanel", () => {
           association_confidence: 0.91,
         },
       ],
+      association_candidates: [
+        {
+          id: "candidate-1",
+          association_decision_id: unresolvedDecision.id,
+          candidate_landmark_track_id: track.id,
+          rank: 1,
+          total_cost: 0.1,
+          normalized_confidence: 0.8,
+          motion_cost: 0.07,
+          geometry_cost: 0.03,
+          appearance_cost: null,
+          ordering_cost: null,
+          shape_cost: null,
+        },
+      ],
       identity_breaks: [],
       corrections: [],
     });
@@ -206,6 +222,13 @@ describe("PoseTemporalReviewPanel", () => {
     expect(
       screen.getByText("unresolved · association confidence n/a · unreviewed"),
     ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByText("Association evidence · 1 candidate"),
+    );
+    expect(screen.getByText(/confidence 0\.800/)).toHaveTextContent(
+      "total 0.100",
+    );
+    expect(screen.getByText(/Candidate margin 0\.010/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Next pose frame" }));
     expect(onFrameChange).toHaveBeenCalledWith(11);
