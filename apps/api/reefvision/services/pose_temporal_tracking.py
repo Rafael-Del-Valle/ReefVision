@@ -1343,15 +1343,26 @@ class PoseTemporalTrackingService:
 
         latest_observations: dict[str, PoseLandmarkObservationResponse] = {}
         for observation in summary.observations:
-            current = latest_observations.get(observation.observation_series_id)
-            if current is None or observation.revision > current.revision:
+            current_observation = latest_observations.get(
+                observation.observation_series_id
+            )
+            if (
+                current_observation is None
+                or observation.revision > current_observation.revision
+            ):
                 latest_observations[observation.observation_series_id] = observation
 
         latest_decisions: dict[str, PoseLandmarkAssociationDecisionResponse] = {}
-        for decision in summary.association_decisions:
-            current = latest_decisions.get(decision.observation_id)
-            if current is None or decision.decision_revision > current.decision_revision:
-                latest_decisions[decision.observation_id] = decision
+        for association_decision in summary.association_decisions:
+            current_decision = latest_decisions.get(association_decision.observation_id)
+            if (
+                current_decision is None
+                or association_decision.decision_revision
+                > current_decision.decision_revision
+            ):
+                latest_decisions[association_decision.observation_id] = (
+                    association_decision
+                )
 
         observations_by_track: dict[
             str,
