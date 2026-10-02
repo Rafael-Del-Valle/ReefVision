@@ -4,12 +4,16 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import type { SkeletonPixel } from "./skeletonAnalysisApi";
+import type {
+  SkeletonGraphNode,
+  SkeletonPixel,
+} from "./skeletonAnalysisApi";
 
 export type SkeletonEditMode = "view" | "add" | "remove";
 
 export interface SkeletonOverlayModel {
   pixels: SkeletonPixel[];
+  nodes: SkeletonGraphNode[];
   addedPixels: SkeletonPixel[];
   removedPixels: SkeletonPixel[];
   editMode: SkeletonEditMode;
@@ -29,6 +33,7 @@ export function SkeletonOverlayLayer({
   width,
   height,
   pixels,
+  nodes,
   addedPixels,
   removedPixels,
   editMode,
@@ -62,7 +67,21 @@ export function SkeletonOverlayLayer({
     for (const point of removedPixels) {
       context.fillRect(point.x, point.y, 1, 1);
     }
-  }, [addedPixels, height, pixels, removedPixels, width]);
+
+    for (const node of nodes) {
+      if (node.kind !== "endpoint" && node.kind !== "junction") continue;
+      context.fillStyle =
+        node.kind === "junction"
+          ? "rgba(244, 114, 182, 0.98)"
+          : "rgba(250, 204, 21, 0.98)";
+      context.fillRect(
+        Math.round(node.x) - 1,
+        Math.round(node.y) - 1,
+        3,
+        3,
+      );
+    }
+  }, [addedPixels, height, nodes, pixels, removedPixels, width]);
 
   function handlePointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
     if (editMode === "view") return;
