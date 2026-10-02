@@ -431,6 +431,8 @@ class PoseTemporalTrackingService:
         self,
         track_id: str,
         payload: PoseTemporalAssociationBuildRequest,
+        *,
+        commit: bool = True,
     ) -> PoseTemporalBuildResponse:
         track = self._track(track_id)
         video = self._video(track.video_id)
@@ -811,7 +813,10 @@ class PoseTemporalTrackingService:
                         )
                     created_decisions += 1
 
-        self.session.commit()
+        if commit:
+            self.session.commit()
+        else:
+            self.session.flush()
         return PoseTemporalBuildResponse(
             parent_video_track_id=track.id,
             created_landmark_tracks=created_tracks,
