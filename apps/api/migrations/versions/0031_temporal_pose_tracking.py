@@ -51,6 +51,18 @@ def upgrade() -> None:
         sa.Column("association_parameters_hash", sa.String(length=64), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("terminated_at", sa.DateTime(timezone=True), nullable=True),
+        sa.CheckConstraint(
+            "first_frame >= 0",
+            name="ck_pose_landmark_tracks_first_frame",
+        ),
+        sa.CheckConstraint(
+            "last_frame IS NULL OR last_frame >= first_frame",
+            name="ck_pose_landmark_tracks_frame_order",
+        ),
+        sa.CheckConstraint(
+            "pose_schema_revision >= 1",
+            name="ck_pose_landmark_tracks_schema_revision",
+        ),
     )
     op.create_index(
         "ix_pose_landmark_tracks_parent_label",
@@ -106,6 +118,36 @@ def upgrade() -> None:
             nullable=True,
         ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint(
+            "revision >= 1",
+            name="ck_pose_landmark_observations_revision",
+        ),
+        sa.CheckConstraint(
+            "frame_index >= 0",
+            name="ck_pose_landmark_observations_frame",
+        ),
+        sa.CheckConstraint(
+            "occurrence_index >= 0",
+            name="ck_pose_landmark_observations_occurrence",
+        ),
+        sa.CheckConstraint(
+            "landmark_confidence IS NULL OR "
+            "(landmark_confidence >= 0 AND landmark_confidence <= 1)",
+            name="ck_pose_landmark_observations_confidence",
+        ),
+        sa.CheckConstraint(
+            "(observed_x_px IS NULL) = (observed_y_px IS NULL)",
+            name="ck_pose_landmark_observations_observed_pair",
+        ),
+        sa.CheckConstraint(
+            "(predicted_x_px IS NULL) = (predicted_y_px IS NULL)",
+            name="ck_pose_landmark_observations_predicted_pair",
+        ),
+        sa.CheckConstraint(
+            "visibility_state NOT IN ('occluded', 'out_of_frame', 'absent') "
+            "OR (observed_x_px IS NULL AND observed_y_px IS NULL)",
+            name="ck_pose_landmark_observations_missing_unobserved",
+        ),
         sa.UniqueConstraint(
             "observation_series_id",
             "revision",
@@ -162,6 +204,22 @@ def upgrade() -> None:
         sa.Column("algorithm_version", sa.String(length=100), nullable=True),
         sa.Column("parameters_hash", sa.String(length=64), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint(
+            "decision_revision >= 1",
+            name="ck_pose_landmark_associations_revision",
+        ),
+        sa.CheckConstraint(
+            "association_confidence IS NULL OR "
+            "(association_confidence >= 0 AND association_confidence <= 1)",
+            name="ck_pose_landmark_associations_confidence",
+        ),
+        sa.CheckConstraint(
+            "((association_state IN ('confirmed', 'provisional')) "
+            "AND selected_landmark_track_id IS NOT NULL) OR "
+            "((association_state IN ('unresolved', 'identity_break')) "
+            "AND selected_landmark_track_id IS NULL)",
+            name="ck_pose_landmark_associations_identity_state",
+        ),
         sa.UniqueConstraint(
             "observation_id",
             "decision_revision",
@@ -197,6 +255,15 @@ def upgrade() -> None:
         sa.Column("appearance_cost", sa.Float(), nullable=True),
         sa.Column("ordering_cost", sa.Float(), nullable=True),
         sa.Column("shape_cost", sa.Float(), nullable=True),
+        sa.CheckConstraint(
+            "rank >= 1",
+            name="ck_pose_landmark_candidates_rank",
+        ),
+        sa.CheckConstraint(
+            "normalized_confidence IS NULL OR "
+            "(normalized_confidence >= 0 AND normalized_confidence <= 1)",
+            name="ck_pose_landmark_candidates_confidence",
+        ),
         sa.UniqueConstraint(
             "association_decision_id",
             "rank",
@@ -229,6 +296,18 @@ def upgrade() -> None:
         sa.Column("after_json", sa.JSON(), nullable=False),
         sa.Column("actor", sa.String(length=100), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint(
+            "frame_start IS NULL OR frame_start >= 0",
+            name="ck_pose_landmark_corrections_frame_start",
+        ),
+        sa.CheckConstraint(
+            "frame_end IS NULL OR frame_end >= 0",
+            name="ck_pose_landmark_corrections_frame_end",
+        ),
+        sa.CheckConstraint(
+            "frame_start IS NULL OR frame_end IS NULL OR frame_end >= frame_start",
+            name="ck_pose_landmark_corrections_frame_order",
+        ),
     )
     op.create_index(
         "ix_pose_landmark_corrections_parent_created",
@@ -270,6 +349,19 @@ def upgrade() -> None:
             nullable=True,
         ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint(
+            "break_after_frame >= 0",
+            name="ck_pose_landmark_identity_breaks_frame",
+        ),
+        sa.CheckConstraint(
+            "successor_start_frame IS NULL OR successor_start_frame > break_after_frame",
+            name="ck_pose_landmark_identity_breaks_successor_frame",
+        ),
+        sa.CheckConstraint(
+            "decision_confidence IS NULL OR "
+            "(decision_confidence >= 0 AND decision_confidence <= 1)",
+            name="ck_pose_landmark_identity_breaks_confidence",
+        ),
     )
     op.create_index(
         "ix_pose_landmark_identity_breaks_parent_frame",
