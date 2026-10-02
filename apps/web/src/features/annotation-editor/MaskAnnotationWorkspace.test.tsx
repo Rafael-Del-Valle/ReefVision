@@ -47,6 +47,12 @@ vi.mock("./rasterMaskApi", () => ({
   rasterMaskContentUrl: () => "",
 }));
 vi.mock("./MaskMeasurementPanel", () => ({ MaskMeasurementPanel: () => null }));
+vi.mock("./SkeletonAnalysisPanel", () => ({
+  SkeletonAnalysisPanel: () => null,
+}));
+vi.mock("./SkeletonOverlayLayer", () => ({
+  SkeletonOverlayLayer: () => null,
+}));
 vi.mock("./CenterlineMeasurementLayer", () => ({
   CenterlineMeasurementLayer: () => null,
 }));
