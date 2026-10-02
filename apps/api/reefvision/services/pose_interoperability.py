@@ -670,6 +670,84 @@ class PoseInteroperabilityService:
                 raise ValidationError("COCO pose image records require file_name")
             cls._validate_archive_member(filename)
 
+    @staticmethod
+    def _placeholder_image(path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            return
+        Image.new("RGB", (1, 1), (0, 0, 0)).save(path)
+
+    @classmethod
+    def _prepare_coco_placeholders(cls, source: Path) -> None:
+        try:
+            document = json.loads(source.read_text(encoding="utf-8-sig"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValidationError("COCO pose import requires valid UTF-8 JSON") from exc
+        if not isinstance(document, dict):
+            raise ValidationError("COCO pose import requires a JSON object")
+        images = document.get("images")
+        if not isinstance(images, list):
+            raise ValidationError("COCO pose import is missing its images array")
+        for image in images:
+            if not isinstance(image, dict):
+                raise ValidationError("COCO pose import contains a malformed image record")
+            filename = image.get("file_name")
+            if not isinstance(filename, str) or not filename.strip():
+                raise ValidationError("COCO pose image records require file_name")
+            relative = cls._validate_archive_member(filename)
+            cls._placeholder_image(source.parent / relative)
+
+    @classmethod
+    def _prepare_dlc_placeholders(cls, source: Path) -> None:
+        try:
+            rows = list(csv.reader(source.read_text(encoding="utf-8-sig").splitlines()))
+        except (OSError, UnicodeDecodeError, csv.Error) as exc:
+            raise ValidationError("DeepLabCut pose import requires valid CSV") from exc
+        image_rows = 0
+        for row in rows:
+            if not row:
+                continue
+            candidate = row[0].strip()
+            lowered = candidate.casefold()
+            if not candidate or not lowered.endswith(
+                (".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff")
+            ):
+                continue
+            relative = cls._validate_archive_member(candidate)
+            cls._placeholder_image(source.parent / relative)
+            image_rows += 1
+        if image_rows == 0:
+            raise ValidationError(
+                "DeepLabCut pose CSV does not contain any image-index rows"
+            )
+
+    @staticmethod
+    def _native_bundle_file(
+        directory: Path,
+        exchange_format: PoseInteroperabilityFormat,
+    ) -> Path:
+        suffixes: dict[PoseInteroperabilityFormat, tuple[str, ...]] = {
+            "slp": (".slp",),
+            "nwb": (".nwb",),
+            "coco": (".json",),
+            "dlc_csv": (".csv",),
+            "ultralytics_pose": (".yaml",),
+        }
+        candidates = [
+            path
+            for path in directory.rglob("*")
+            if path.is_file()
+            and path.name != POSE_BUNDLE_MANIFEST_FILENAME
+            and path.name.casefold().endswith(suffixes[exchange_format])
+        ]
+        if exchange_format == "ultralytics_pose":
+            candidates = [path for path in candidates if path.name == "data.yaml"]
+        if len(candidates) != 1:
+            raise ValidationError(
+                "Pose interoperability bundle must contain exactly one native artifact"
+            )
+        return candidates[0]
+
     def _load_labels(
         self,
         exchange_format: PoseInteroperabilityFormat,
@@ -680,12 +758,23 @@ class PoseInteroperabilityService:
         try:
             with TemporaryDirectory(prefix="reefvision-pose-import-") as temp:
                 root = Path(temp)
+
                 if exchange_format == "ultralytics_pose":
-                    dataset_root = self._extract_ultralytics_zip(
+                    dataset_root = root / "dataset"
+                    dataset_root.mkdir(parents=True, exist_ok=True)
+                    actual_dataset_root = self._extract_ultralytics_zip(
                         content,
-                        root / "dataset",
+                        dataset_root,
                     )
-                    return sio.load_ultralytics(str(dataset_root), split="train")
+                    manifest = self._read_bundle_manifest(
+                        dataset_root,
+                        exchange_format,
+                    )
+                    labels = sio.load_ultralytics(
+                        str(actual_dataset_root),
+                        split="train",
+                    )
+                    return self._inject_bundle_manifest(labels, manifest)
 
                 suffixes: dict[PoseInteroperabilityFormat, str] = {
                     "slp": ".slp",
@@ -694,29 +783,58 @@ class PoseInteroperabilityService:
                     "dlc_csv": ".csv",
                     "ultralytics_pose": ".zip",
                 }
-                filename = Path(
-                    source_filename or f"pose{suffixes[exchange_format]}"
-                ).name
-                if not filename.casefold().endswith(suffixes[exchange_format]):
-                    filename = f"pose{suffixes[exchange_format]}"
-                source = root / filename
-                source.write_bytes(content)
+                manifest: dict[str, object] | None = None
+
+                if exchange_format != "slp" and zipfile.is_zipfile(io.BytesIO(content)):
+                    bundle_root = root / "bundle"
+                    bundle_root.mkdir(parents=True, exist_ok=True)
+                    self._extract_safe_zip(
+                        content,
+                        bundle_root,
+                        label="Pose interoperability import",
+                    )
+                    manifest = self._read_bundle_manifest(
+                        bundle_root,
+                        exchange_format,
+                    )
+                    source = self._native_bundle_file(
+                        bundle_root,
+                        exchange_format,
+                    )
+                else:
+                    filename = Path(
+                        source_filename or f"pose{suffixes[exchange_format]}"
+                    ).name
+                    if not filename.casefold().endswith(suffixes[exchange_format]):
+                        filename = f"pose{suffixes[exchange_format]}"
+                    source = root / filename
+                    source.write_bytes(content)
+
                 if exchange_format == "slp":
-                    return sio.load_slp(str(source), open_videos=False)
-                if exchange_format == "nwb":
-                    return sio.load_nwb(str(source))
-                if exchange_format == "coco":
-                    self._validate_coco_paths(content)
-                    return sio.load_coco(str(source), dataset_root=str(root))
-                if exchange_format == "dlc_csv":
-                    return sio.load_dlc(str(source), config=False)
+                    labels = sio.load_slp(str(source), open_videos=False)
+                elif exchange_format == "nwb":
+                    labels = sio.load_nwb(str(source))
+                elif exchange_format == "coco":
+                    self._validate_coco_paths(source.read_bytes())
+                    self._prepare_coco_placeholders(source)
+                    labels = sio.load_coco(
+                        str(source),
+                        dataset_root=str(source.parent),
+                    )
+                elif exchange_format == "dlc_csv":
+                    self._prepare_dlc_placeholders(source)
+                    labels = sio.load_dlc(str(source), config=False)
+                else:
+                    raise ValidationError(
+                        f"Unsupported pose interoperability format: {exchange_format}"
+                    )
+                return self._inject_bundle_manifest(labels, manifest)
         except ValidationError:
             raise
         except Exception as exc:
             raise ValidationError(
                 f"Could not parse {exchange_format} pose interoperability file: {exc}"
             ) from exc
-        raise ValidationError(f"Unsupported pose interoperability format: {exchange_format}")
 
     @staticmethod
     def _point_arrays(instance: Any, expected_count: int) -> tuple[
