@@ -283,7 +283,7 @@ def _edge_key(
     first: tuple[int, int],
     second: tuple[int, int],
 ) -> tuple[tuple[int, int], tuple[int, int]]:
-    return tuple(sorted((first, second)))  # type: ignore[return-value]
+    return (first, second) if first <= second else (second, first)
 
 
 def _pixel_adjacency(
@@ -430,7 +430,7 @@ def build_initial_branch_graph(
                 target_node_id = pixel_to_node[current]
                 length = sum(
                     hypot(second[0] - first[0], second[1] - first[1])
-                    for first, second in zip(path, path[1:], strict=True)
+                    for first, second in zip(path, path[1:])
                 )
                 traced.append(
                     (
