@@ -1304,148 +1304,6 @@ export function VideoTrackingWorkspace({
                 }}
               />
             )}
-            <div className="workspace-guide compact">
-              <div>
-                <strong>Pose interoperability</strong>
-                <p className="annotation-helper">
-                  Import or export canonical pose data through SLEAP-IO.
-                  ReefVision-exported files must match the target video checksum.
-                  External files without ReefVision provenance require explicit
-                  confirmation that frame indices correspond to this video.
-                </p>
-              </div>
-              {selectedTrack && selectedTrackPoseSchema && (
-                <>
-                  <p className="annotation-helper">
-                    Exports use the scientist-reviewed canonical pose state.
-                    Repeated semantic labels receive stable external node names.
-                    External formats do not contain ReefVision's full immutable
-                    association/correction audit history.
-                  </p>
-                  <div className="workspace-actions">
-                    <a
-                      href={poseInteroperabilityExportUrl(
-                        selectedVideo.id,
-                        "slp",
-                      )}
-                    >
-                      SLEAP SLP
-                    </a>
-                    <a
-                      href={poseInteroperabilityExportUrl(
-                        selectedVideo.id,
-                        "nwb",
-                      )}
-                    >
-                      NWB
-                    </a>
-                    <a
-                      href={poseInteroperabilityExportUrl(
-                        selectedVideo.id,
-                        "coco",
-                      )}
-                    >
-                      COCO pose
-                    </a>
-                    <a
-                      href={poseInteroperabilityExportUrl(
-                        selectedVideo.id,
-                        "dlc_csv",
-                      )}
-                    >
-                      DeepLabCut CSV
-                    </a>
-                    <a
-                      href={poseInteroperabilityExportUrl(
-                        selectedVideo.id,
-                        "ultralytics_pose",
-                      )}
-                    >
-                      Ultralytics pose ZIP
-                    </a>
-                  </div>
-                </>
-              )}
-              <label>
-                Import format
-                <select
-                  aria-label="Pose interoperability import format"
-                  value={poseInteropImportFormat}
-                  onChange={(event) =>
-                    setPoseInteropImportFormat(
-                      event.target.value as PoseInteroperabilityFormat,
-                    )
-                  }
-                >
-                  <option value="slp">SLEAP SLP</option>
-                  <option value="nwb">NWB</option>
-                  <option value="coco">COCO pose JSON</option>
-                  <option value="dlc_csv">DeepLabCut CSV</option>
-                  <option value="ultralytics_pose">
-                    Ultralytics pose ZIP
-                  </option>
-                </select>
-              </label>
-              <label>
-                Pose file
-                <input
-                  aria-label="Pose interoperability import file"
-                  type="file"
-                  accept=".slp,.nwb,.json,.csv,.zip,application/zip"
-                  onChange={(event) =>
-                    setPoseInteropImportFile(event.target.files?.[0] ?? null)
-                  }
-                />
-              </label>
-              <label className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={confirmPoseInteropFrameMapping}
-                  onChange={(event) =>
-                    setConfirmPoseInteropFrameMapping(event.target.checked)
-                  }
-                />
-                I confirm external frame indices correspond to this video when
-                the file has no ReefVision provenance
-              </label>
-              <p className="annotation-helper">
-                Imported instances use the current Identity class selected in the
-                Track editor. External tracked instances keep their grouping;
-                untracked instances are never auto-associated across frames.
-              </p>
-              <button
-                type="button"
-                onClick={() => poseInteropImportMutation.mutate()}
-                disabled={
-                  !poseInteropImportFile ||
-                  !labelClassId ||
-                  poseInteropImportMutation.isPending
-                }
-              >
-                {poseInteropImportMutation.isPending
-                  ? "Importing pose..."
-                  : "Import pose"}
-              </button>
-              {poseInteropImportMutation.error && (
-                <p className="form-error">
-                  {poseInteropImportMutation.error.message}
-                </p>
-              )}
-              {poseInteropImportMutation.data && (
-                <p className="annotation-helper">
-                  Imported {poseInteropImportMutation.data.track_count} track
-                  {poseInteropImportMutation.data.track_count === 1 ? "" : "s"}{" "}
-                  with {poseInteropImportMutation.data.keyframe_count} pose
-                  keyframes. Review is required before treating imported
-                  identities as verified.
-                </p>
-              )}
-              {poseInteropImportMutation.data?.warnings.map((warning) => (
-                <p key={warning} className="annotation-helper">
-                  {warning}
-                </p>
-              ))}
-            </div>
             {spatialMetricsQuery.data && (
               <div className="annotation-selection-list">
                 <div className="annotation-selection-row">
@@ -1487,6 +1345,155 @@ export function VideoTrackingWorkspace({
           </p>
         )}
       </section>
+
+      {selectedVideo && (
+          <section className="management-card">
+            <p className="eyebrow">Pose exchange</p>
+            <h3>Pose interoperability</h3>
+            <div className="workspace-guide compact">
+            <div>
+              <strong>Pose interoperability</strong>
+              <p className="annotation-helper">
+                Import or export canonical pose data through SLEAP-IO.
+                ReefVision-exported files must match the target video checksum.
+                External files without ReefVision provenance require explicit
+                confirmation that frame indices correspond to this video.
+              </p>
+            </div>
+            {selectedTrack && selectedTrackPoseSchema && (
+              <>
+                <p className="annotation-helper">
+                  Exports use the scientist-reviewed canonical pose state.
+                  Repeated semantic labels receive stable external node names.
+                  External formats do not contain ReefVision's full immutable
+                  association/correction audit history.
+                </p>
+                <div className="workspace-actions">
+                  <a
+                    href={poseInteroperabilityExportUrl(
+                      selectedVideo.id,
+                      "slp",
+                    )}
+                  >
+                    SLEAP SLP
+                  </a>
+                  <a
+                    href={poseInteroperabilityExportUrl(
+                      selectedVideo.id,
+                      "nwb",
+                    )}
+                  >
+                    NWB
+                  </a>
+                  <a
+                    href={poseInteroperabilityExportUrl(
+                      selectedVideo.id,
+                      "coco",
+                    )}
+                  >
+                    COCO pose
+                  </a>
+                  <a
+                    href={poseInteroperabilityExportUrl(
+                      selectedVideo.id,
+                      "dlc_csv",
+                    )}
+                  >
+                    DeepLabCut CSV
+                  </a>
+                  <a
+                    href={poseInteroperabilityExportUrl(
+                      selectedVideo.id,
+                      "ultralytics_pose",
+                    )}
+                  >
+                    Ultralytics pose ZIP
+                  </a>
+                </div>
+              </>
+            )}
+            <label>
+              Import format
+              <select
+                aria-label="Pose interoperability import format"
+                value={poseInteropImportFormat}
+                onChange={(event) =>
+                  setPoseInteropImportFormat(
+                    event.target.value as PoseInteroperabilityFormat,
+                  )
+                }
+              >
+                <option value="slp">SLEAP SLP</option>
+                <option value="nwb">NWB</option>
+                <option value="coco">COCO pose JSON</option>
+                <option value="dlc_csv">DeepLabCut CSV</option>
+                <option value="ultralytics_pose">
+                  Ultralytics pose ZIP
+                </option>
+              </select>
+            </label>
+            <label>
+              Pose file
+              <input
+                aria-label="Pose interoperability import file"
+                type="file"
+                accept=".slp,.nwb,.json,.csv,.zip,application/zip"
+                onChange={(event) =>
+                  setPoseInteropImportFile(event.target.files?.[0] ?? null)
+                }
+              />
+            </label>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={confirmPoseInteropFrameMapping}
+                onChange={(event) =>
+                  setConfirmPoseInteropFrameMapping(event.target.checked)
+                }
+              />
+              I confirm external frame indices correspond to this video when
+              the file has no ReefVision provenance
+            </label>
+            <p className="annotation-helper">
+              Imported instances use the current Identity class selected in the
+              Track editor. External tracked instances keep their grouping;
+              untracked instances are never auto-associated across frames.
+            </p>
+            <button
+              type="button"
+              onClick={() => poseInteropImportMutation.mutate()}
+              disabled={
+                !poseInteropImportFile ||
+                !labelClassId ||
+                poseInteropImportMutation.isPending
+              }
+            >
+              {poseInteropImportMutation.isPending
+                ? "Importing pose..."
+                : "Import pose"}
+            </button>
+            {poseInteropImportMutation.error && (
+              <p className="form-error">
+                {poseInteropImportMutation.error.message}
+              </p>
+            )}
+            {poseInteropImportMutation.data && (
+              <p className="annotation-helper">
+                Imported {poseInteropImportMutation.data.track_count} track
+                {poseInteropImportMutation.data.track_count === 1 ? "" : "s"}{" "}
+                with {poseInteropImportMutation.data.keyframe_count} pose
+                keyframes. Review is required before treating imported
+                identities as verified.
+              </p>
+            )}
+            {poseInteropImportMutation.data?.warnings.map((warning) => (
+              <p key={warning} className="annotation-helper">
+                {warning}
+              </p>
+            ))}
+            </div>
+          </section>
+      )}
 
       {selectedVideo && (
         <GeoreferencedMapPanel
