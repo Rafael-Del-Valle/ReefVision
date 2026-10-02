@@ -430,9 +430,18 @@ def process_video_tracking_job(
 
         link_detections = bool(request.get("link_detections", True))
         requested_tracker = str(request.get("tracker", "bytetrack.yaml"))
-        tracker_name = provider.resolve_tracker_name(
-            requested_tracker,
-            link_detections=link_detections,
+        resolve_tracker_name = getattr(provider, "resolve_tracker_name", None)
+        tracker_name = (
+            str(
+                resolve_tracker_name(
+                    requested_tracker,
+                    link_detections=link_detections,
+                )
+            )
+            if callable(resolve_tracker_name)
+            else requested_tracker
+            if link_detections
+            else "instances-only"
         )
         confidence = float(request.get("confidence", 0.25))
         iou = float(request.get("iou", 0.5))
