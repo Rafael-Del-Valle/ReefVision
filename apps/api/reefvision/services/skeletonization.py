@@ -758,7 +758,10 @@ class SkeletonizationService:
         mask = self._mask(record.mask_annotation_id)
         image = self._image(record.image_id)
         current_calibration_sha256 = _calibration_sha256(image)
-        stale_mask = mask.revision != record.mask_revision
+        current_input_mask_sha256 = _binary_mask_sha256(
+            self._binary_mask(mask, image)
+        )
+        stale_mask = current_input_mask_sha256 != record.input_mask_sha256
         stale_calibration = current_calibration_sha256 != record.calibration_sha256
         return SkeletonAnalysisRevisionResponse(
             id=record.id,
