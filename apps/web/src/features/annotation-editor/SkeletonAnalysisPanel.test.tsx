@@ -284,3 +284,62 @@ it("switches visual QC baselines and edits only the final skeleton", async () =>
     expect(overlay.pixels).toHaveLength(3);
   });
 });
+
+
+it("requires approval before building and exposing the verified export", async () => {
+  vi.mocked(reviewSkeletonAnalysis).mockResolvedValue({
+    ...analysis,
+    review_status: "approved",
+    reviewed_by: "local_user",
+    reviewed_at: "2026-10-02T12:05:00Z",
+  });
+  vi.mocked(listSkeletonAnalyses)
+    .mockResolvedValueOnce([analysis])
+    .mockResolvedValue([
+      {
+        ...analysis,
+        review_status: "approved",
+        reviewed_by: "local_user",
+        reviewed_at: "2026-10-02T12:05:00Z",
+      },
+    ]);
+
+  renderPanel();
+  await screen.findByText("12.00 px");
+
+  expect(
+    screen.getByRole("button", { name: "Build verified export" }),
+  ).toBeDisabled();
+
+  fireEvent.click(screen.getByText("Scientific review"));
+  fireEvent.change(screen.getByLabelText("Review note"), {
+    target: { value: "Checked against source image." },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+
+  await waitFor(() =>
+    expect(reviewSkeletonAnalysis).toHaveBeenCalledWith(
+      "analysis-1",
+      "approved",
+      "Checked against source image.",
+    ),
+  );
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Build verified export" }),
+    ).toBeEnabled(),
+  );
+
+  fireEvent.click(
+    screen.getByRole("button", { name: "Build verified export" }),
+  );
+  await waitFor(() =>
+    expect(exportSkeletonAnalysis).toHaveBeenCalledWith("analysis-1"),
+  );
+  expect(
+    await screen.findByText("Verified package: skeleton-analysis.zip"),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "Download skeleton package" }),
+  ).toHaveAttribute("href", "/skeleton/analysis-1/download");
+});
