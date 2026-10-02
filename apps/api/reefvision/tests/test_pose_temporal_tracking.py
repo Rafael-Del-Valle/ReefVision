@@ -290,6 +290,22 @@ def test_human_association_correction_identity_break_and_exports_are_auditable(
     ).json()
     assert len(audited["corrections"]) == 2
     assert len(audited["identity_breaks"]) == 1
+    frame_two_observation = next(
+        item
+        for item in audited["observations"]
+        if item["frame_index"] == 2 and item["occurrence_index"] == 0
+    )
+    frame_two_decision = max(
+        (
+            item
+            for item in audited["association_decisions"]
+            if item["observation_id"] == frame_two_observation["id"]
+        ),
+        key=lambda item: item["decision_revision"],
+    )
+    assert frame_two_decision["association_state"] == "identity_break"
+    assert frame_two_decision["selected_landmark_track_id"] is None
+    assert frame_two_decision["verification_state"] == "human_corrected"
 
     csv_export = client.get(
         f"/api/v1/video-tracks/{source['id']}/pose-temporal/export?format=csv"
