@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import io
 import json
@@ -17,6 +18,7 @@ from uuid import uuid4
 
 import numpy as np
 from numpy.typing import NDArray
+from PIL import Image
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
