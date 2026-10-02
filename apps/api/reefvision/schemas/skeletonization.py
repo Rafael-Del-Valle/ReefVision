@@ -66,6 +66,27 @@ class SkeletonJunctionClusterResponse(BaseModel):
     external_connection_count: int = Field(ge=0)
 
 
+SkeletonGraphNodeKind = Literal["endpoint", "junction", "isolated", "cycle_anchor"]
+
+
+class SkeletonGraphNodeResponse(BaseModel):
+    id: str
+    kind: SkeletonGraphNodeKind
+    x: float = Field(ge=0)
+    y: float = Field(ge=0)
+    source_pixel_count: int = Field(ge=1)
+    external_connection_count: int = Field(ge=0)
+
+
+class SkeletonGraphEdgeResponse(BaseModel):
+    id: str
+    source_node_id: str
+    target_node_id: str
+    path_pixel_count: int = Field(ge=2)
+    boundary_to_boundary_length_pixels: float = Field(gt=0)
+    is_cycle: bool = False
+
+
 class SkeletonizationAnalysisResponse(BaseModel):
     schema_version: Literal["skeleton-analysis-0001"] = "skeleton-analysis-0001"
     mask_annotation_id: str
@@ -90,4 +111,8 @@ class SkeletonizationAnalysisResponse(BaseModel):
     junction_pixel_count: int = Field(ge=0)
     junction_cluster_count: int = Field(ge=0)
     junction_clusters: list[SkeletonJunctionClusterResponse] = Field(default_factory=list)
+    graph_node_count: int = Field(ge=1)
+    graph_edge_count: int = Field(ge=0)
+    graph_nodes: list[SkeletonGraphNodeResponse] = Field(default_factory=list)
+    graph_edges: list[SkeletonGraphEdgeResponse] = Field(default_factory=list)
     feature_pixels: list[SkeletonFeaturePixelResponse] = Field(default_factory=list)
