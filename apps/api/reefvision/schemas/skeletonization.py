@@ -176,5 +176,5 @@ class SkeletonizationAnalysisResponse(BaseModel):
         "scalar_distance_per_pixel",
         "reference_plane_homography",
     ] = "pixel_only"
-    reference_plane_only: bool = True
+    reference_plane_only: bool | None = None
     feature_pixels: list[SkeletonFeaturePixelResponse] = Field(default_factory=list)
