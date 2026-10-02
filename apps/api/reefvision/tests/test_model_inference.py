@@ -462,6 +462,17 @@ class CountingDetectorWorkerProvider(FakeDetectorWorkerProvider):
         return super().predict(image_path, settings)
 
 
+class FailingDetectorWorkerProvider(FakeDetectorWorkerProvider):
+    def __init__(self) -> None:
+        self.predict_calls = 0
+
+    def predict(self, image_path: Any, settings: Any) -> list[DetectionPrediction]:
+        self.predict_calls += 1
+        if self.predict_calls == 2:
+            raise RuntimeError("simulated terminal provider failure")
+        return super().predict(image_path, settings)
+
+
 def test_interrupted_inference_resumes_without_duplicate_proposals(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -563,6 +574,94 @@ def test_interrupted_inference_resumes_without_duplicate_proposals(
     assert completed_job["progress_current"] == 2
     assert completed_job["result_json"]["processed_images"] == 2
     assert completed_job["result_json"]["proposal_count"] == 2
+
+
+def test_terminal_inference_failure_removes_pending_partial_outputs_before_retry(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        ModelService,
+        "_provider_for_purpose",
+        lambda self, purpose: FakeDetectorRegistrationProvider(),
+    )
+
+    project = create_project(client, "Terminal inference failure cleanup")
+    first = import_one(
+        client,
+        project["id"],
+        filename="first-failure.png",
+        relative_path="failure/first.png",
+        size=(80, 60),
+    )
+    second = import_one(
+        client,
+        project["id"],
+        filename="second-failure.png",
+        relative_path="failure/second.png",
+        size=(81, 60),
+    )
+    image_ids = [
+        first["successful"][0]["image_id"],
+        second["successful"][0]["image_id"],
+    ]
+    model = register_model(
+        client,
+        project["id"],
+        purpose="detector",
+        filename="fixture-detector.pt",
+        display_name="Fixture Detector",
+    )
+    job = client.post(
+        f"/api/v1/projects/{project['id']}/inference-jobs",
+        json={"model_id": model["id"], "image_ids": image_ids, "device": "cpu"},
+    ).json()
+
+    failing_provider = FailingDetectorWorkerProvider()
+    monkeypatch.setattr(
+        inference_module,
+        "detection_provider_for_name",
+        lambda provider_name: failing_provider,
+    )
+    app = cast(FastAPI, client.app)
+    assert process_inference_job(
+        app.state.settings,
+        app.state.session_factory,
+        job["id"],
+    ) is False
+
+    failed_job = client.get(f"/api/v1/jobs/{job['id']}").json()
+    assert failed_job["status"] == "failed"
+    assert failed_job["progress_current"] == 1
+    assert failed_job["result_json"]["removed_pending_proposals"] == 1
+    for image_id in image_ids:
+        proposals = client.get(
+            f"/api/v1/images/{image_id}/prediction-proposals"
+        ).json()["items"]
+        assert proposals == []
+
+    retry = client.post(
+        f"/api/v1/projects/{project['id']}/inference-jobs",
+        json={"model_id": model["id"], "image_ids": image_ids, "device": "cpu"},
+    ).json()
+    retry_provider = CountingDetectorWorkerProvider()
+    monkeypatch.setattr(
+        inference_module,
+        "detection_provider_for_name",
+        lambda provider_name: retry_provider,
+    )
+    assert process_inference_job(
+        app.state.settings,
+        app.state.session_factory,
+        retry["id"],
+    ) is True
+
+    assert retry_provider.predict_calls == 2
+    for image_id in image_ids:
+        proposals = client.get(
+            f"/api/v1/images/{image_id}/prediction-proposals"
+        ).json()["items"]
+        assert len(proposals) == 1
 
 
 @pytest.mark.parametrize(
