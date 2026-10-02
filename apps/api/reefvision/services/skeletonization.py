@@ -355,6 +355,9 @@ class SkeletonizationService:
                     junction_id=removal.junction_id,
                     branch_length_pixels=removal.branch_length_pixels,
                     removed_pixel_count=len(removal.removed_pixels),
+                    removed_junction_boundary_pixel_count=(
+                        removal.removed_junction_boundary_pixel_count
+                    ),
                 )
                 for removal in pruning.removals
             ],
