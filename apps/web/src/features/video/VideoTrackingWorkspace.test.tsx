@@ -7,6 +7,7 @@ import { VideoTrackingWorkspace } from "./VideoTrackingWorkspace";
 import * as api from "./videoApi";
 import * as geographicApi from "./videoGeographicMovementAnalyticsApi";
 import type { GeographicTrackAnalytics } from "./videoGeographicMovementAnalyticsApi";
+import * as poseInteropApi from "./poseInteroperabilityApi";
 
 vi.mock("./GeoreferencedMapPanel", () => ({
   GeoreferencedMapPanel: ({
@@ -44,6 +45,17 @@ vi.mock("./videoGeographicMovementAnalyticsApi", async () => {
   return {
     ...actual,
     getVideoTrackGeographicAnalytics: vi.fn(),
+  };
+});
+
+vi.mock("./poseInteroperabilityApi", async () => {
+  const actual =
+    await vi.importActual<typeof import("./poseInteroperabilityApi")>(
+      "./poseInteroperabilityApi",
+    );
+  return {
+    ...actual,
+    importPoseInteroperability: vi.fn(),
   };
 });
 
@@ -496,6 +508,48 @@ describe("VideoTrackingWorkspace", () => {
       "href",
       expect.stringContaining("format=ultralytics_pose"),
     );
+
+    vi.mocked(poseInteropApi.importPoseInteroperability).mockResolvedValue({
+      schema_version: "pose-interoperability-import-0001",
+      video_id: "video-1",
+      format: "slp",
+      created_track_ids: ["imported-track-1"],
+      track_count: 1,
+      keyframe_count: 2,
+      pose_schema_id: "schema-imported",
+      pose_schema_revision: 1,
+      used_reefvision_provenance: false,
+      warnings: ["Frame mapping confirmed."],
+    });
+    const poseFile = new File(["pose"], "external.slp", {
+      type: "application/octet-stream",
+    });
+    fireEvent.change(
+      screen.getByLabelText("Pose interoperability import file"),
+      {
+        target: { files: [poseFile] },
+      },
+    );
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /I confirm external frame indices correspond to this video/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Import pose" }));
+
+    await waitFor(() =>
+      expect(poseInteropApi.importPoseInteroperability).toHaveBeenCalledWith(
+        "video-1",
+        "slp",
+        poseFile,
+        "class-1",
+        true,
+      ),
+    );
+    expect(
+      await screen.findByText(/Imported 1 track with 2 pose keyframes/),
+    ).toBeInTheDocument();
+
     expect(screen.getByText("tentacle 1 / 2")).toBeInTheDocument();
     expect(screen.queryByLabelText("tentacle 2")).not.toBeInTheDocument();
 
