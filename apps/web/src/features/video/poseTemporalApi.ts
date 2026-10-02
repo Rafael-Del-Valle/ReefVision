@@ -306,6 +306,19 @@ export function createTemporalPoseIdentityBreak(
   );
 }
 
+export function reviewTemporalPoseIdentityBreak(
+  identityBreakId: string,
+  payload: {
+    reason_code: string;
+    note?: string | null;
+  },
+): Promise<TemporalPoseIdentityBreak> {
+  return request<TemporalPoseIdentityBreak>(
+    `/pose-landmark-identity-breaks/${encodeURIComponent(identityBreakId)}/review`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
 export function temporalPoseExportUrl(
   trackId: string,
   format: "csv" | "json",
