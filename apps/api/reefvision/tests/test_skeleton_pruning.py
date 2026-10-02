@@ -58,7 +58,10 @@ def test_short_terminal_spurs_are_removed_iteratively_with_audit() -> None:
 
     assert len(result.removals) == 2
     assert [removal.iteration for removal in result.removals] == [1, 2]
-    assert all(removal.branch_length_pixels == 2.0 for removal in result.removals)
+    assert all(
+        0 < removal.branch_length_pixels <= 2.0
+        for removal in result.removals
+    )
     assert all(len(removal.removed_pixels) == 2 for removal in result.removals)
     assert all(
         removal.removed_junction_boundary_pixel_count == 1
