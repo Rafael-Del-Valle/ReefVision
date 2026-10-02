@@ -20,6 +20,12 @@ from reefvision.ml.providers import (
     SegmentAnythingAssistProvider,
     UltralyticsDetectionProvider,
 )
+from reefvision.ml.sleap_nn_provider import (
+    SLEAP_IO_SUPPORTED_VERSION,
+    SLEAP_NN_SUPPORTED_VERSION,
+    SleapNNPoseRegistrationProvider,
+    sleap_nn_runtime_status,
+)
 from reefvision.snapshot_cache import CachedSnapshot, get_cached_snapshot
 
 LIGHTWEIGHT_PROVIDER_CATALOG_TTL_SECONDS = 300
@@ -260,6 +266,99 @@ def _implemented_ultralytics_descriptor(
     )
 
 
+def _sleap_nn_descriptor() -> ModelProviderDescriptor:
+    status = sleap_nn_runtime_status()
+    ready = bool(status["ready"])
+    issues = tuple(str(item) for item in status["issues"])
+    return ModelProviderDescriptor(
+        provider_id="sleap_nn",
+        display_name="SLEAP-NN",
+        provider_version=SLEAP_NN_SUPPORTED_VERSION,
+        package_version=(
+            str(status["sleap_nn_version"])
+            if status["sleap_nn_version"] is not None
+            else None
+        ),
+        supported_model_families=(
+            "SLEAP-NN single-instance pose bundles",
+            "SLEAP-NN bottom-up multi-instance pose bundles",
+            "SLEAP-NN top-down centroid + centered-instance pose bundles",
+        ),
+        supported_tasks=("pose",),
+        supported_input_types=("video",),
+        supported_output_types=("keypoints", "instance_tracks"),
+        cpu_support=True,
+        cuda_support=True,
+        supported_precision_modes=("fp32",),
+        video_support=True,
+        training_support=False,
+        tiling_support=False,
+        supported_execution_runtimes=("pytorch",),
+        required_packages=(
+            ProviderPackageDescriptor(
+                distribution_name="sleap-nn",
+                required_version=SLEAP_NN_SUPPORTED_VERSION,
+                installed_version=(
+                    str(status["sleap_nn_version"])
+                    if status["sleap_nn_version"] is not None
+                    else None
+                ),
+                status=(
+                    "ok"
+                    if status["sleap_nn_version"] == SLEAP_NN_SUPPORTED_VERSION
+                    else "incompatible"
+                    if status["sleap_nn_version"] is not None
+                    else "missing"
+                ),
+            ),
+            ProviderPackageDescriptor(
+                distribution_name="sleap-io",
+                required_version=SLEAP_IO_SUPPORTED_VERSION,
+                installed_version=(
+                    str(status["sleap_io_version"])
+                    if status["sleap_io_version"] is not None
+                    else None
+                ),
+                status=(
+                    "ok"
+                    if status["sleap_io_version"] == SLEAP_IO_SUPPORTED_VERSION
+                    else "incompatible"
+                    if status["sleap_io_version"] is not None
+                    else "missing"
+                ),
+            ),
+        ),
+        required_model_files=(".zip",),
+        code_license="BSD-3-Clause for SLEAP-NN/SLEAP-IO; verify installed package metadata.",
+        weight_license="User-provided trained model weights; redistribution terms depend on the model.",
+        memory_recommendations=(
+            "CUDA is recommended for multi-instance video inference.",
+            "Top-down bundles may contain two model directories and use more GPU memory.",
+        ),
+        known_limitations=(
+            "ReefVision currently registers SLEAP-NN models as explicit managed ZIP bundles.",
+            "SLEAP-NN remains an optional provider and is not required by the base desktop stack.",
+            "ReefVision training does not yet launch SLEAP-NN training jobs.",
+            "SLEAP animal-instance tracking supplies outer video-track continuity; ReefVision remains canonical for repeated-landmark temporal identities.",
+        ),
+        desktop_packaging_state="optional_provider_pack",
+        clean_machine_verification_state=(
+            "runtime_ready"
+            if ready
+            else "optional_dependency_not_ready"
+        ),
+        availability_status="ready" if ready else "dependency_missing",
+        availability_reason=None if ready else "; ".join(issues),
+        default_registration_purpose="detector",
+        registerable=True,
+        capabilities=ProviderCapabilityMatrix(
+            multi_object_tracking=True,
+            cpu_inference=True,
+            cuda_inference=True,
+        ),
+    )
+
+
 def _implemented_segment_anything_descriptor(
     report: ProviderPreflightReport,
 ) -> ModelProviderDescriptor:
@@ -407,6 +506,7 @@ def _list_model_providers_uncached(
     providers = [
         _implemented_ultralytics_descriptor(reports["ultralytics"]),
         _implemented_segment_anything_descriptor(reports["segment_anything"]),
+        _sleap_nn_descriptor(),
         _blocked_descriptor(
             provider_id="rt_detr",
             display_name="RT-DETR",
@@ -918,6 +1018,11 @@ def provider_for_registration(
             }:
                 raise ValidationError("Ultralytics registration is not available")
             return UltralyticsDetectionProvider()
+        if normalized == "sleap_nn":
+            descriptor = get_model_provider("sleap_nn", settings)
+            if not descriptor.registerable:
+                raise ValidationError("SLEAP-NN registration is not available")
+            return SleapNNPoseRegistrationProvider()
         raise ValidationError(f"Unsupported detector provider: {provider_name}")
     if purpose == "assist":
         if normalized in {"", "segment_anything"}:
@@ -937,6 +1042,8 @@ def detection_provider_for_name(provider_name: str) -> DetectionProvider:
     normalized = provider_name.strip().lower()
     if normalized == "ultralytics":
         return UltralyticsDetectionProvider()
+    if normalized == "sleap_nn":
+        return SleapNNPoseRegistrationProvider()
     raise ValidationError(f"Unsupported detection provider: {provider_name}")
 
 
