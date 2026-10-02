@@ -3,6 +3,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
@@ -10,6 +11,7 @@ from reefvision.config import Settings
 from reefvision.schemas.skeletonization import (
     SkeletonAnalysisCorrectionRequest,
     SkeletonAnalysisCreateRequest,
+    SkeletonAnalysisExportResponse,
     SkeletonAnalysisReviewRequest,
     SkeletonAnalysisRevisionResponse,
 )
@@ -98,4 +100,33 @@ def correct_skeleton_analysis(
     return service(request, session).correct_persisted_analysis(
         analysis_id,
         payload,
+    )
+
+
+
+@router.post(
+    "/skeleton-analyses/{analysis_id}/export",
+    response_model=SkeletonAnalysisExportResponse,
+)
+def export_skeleton_analysis(
+    analysis_id: str,
+    request: Request,
+    session: DbSession,
+) -> SkeletonAnalysisExportResponse:
+    return service(request, session).export_persisted_analysis(analysis_id)
+
+
+@router.get("/skeleton-analyses/{analysis_id}/export/download")
+def download_skeleton_analysis_export(
+    analysis_id: str,
+    request: Request,
+    session: DbSession,
+) -> FileResponse:
+    archive = service(request, session).persisted_analysis_archive_path(
+        analysis_id
+    )
+    return FileResponse(
+        archive,
+        media_type="application/zip",
+        filename=archive.name,
     )
