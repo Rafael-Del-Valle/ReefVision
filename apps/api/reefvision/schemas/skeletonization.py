@@ -84,7 +84,16 @@ class SkeletonGraphEdgeResponse(BaseModel):
     target_node_id: str
     path_pixel_count: int = Field(ge=2)
     boundary_to_boundary_length_pixels: float = Field(gt=0)
+    node_to_node_length_pixels: float = Field(gt=0)
+    length_physical: float | None = Field(default=None, gt=0)
     is_cycle: bool = False
+
+
+class SkeletonBranchAngleResponse(BaseModel):
+    junction_id: str
+    first_branch_id: str
+    second_branch_id: str
+    angle_degrees: float = Field(ge=0, le=180)
 
 
 class SkeletonSpurRemovalResponse(BaseModel):
@@ -136,4 +145,28 @@ class SkeletonizationAnalysisResponse(BaseModel):
     pruned_graph_edge_count: int = Field(ge=0)
     pruned_graph_nodes: list[SkeletonGraphNodeResponse] = Field(default_factory=list)
     pruned_graph_edges: list[SkeletonGraphEdgeResponse] = Field(default_factory=list)
+    raw_branch_count: int = Field(ge=0)
+    pruned_branch_count: int = Field(ge=0)
+    raw_total_linear_extension_pixels: float = Field(ge=0)
+    pruned_total_linear_extension_pixels: float = Field(ge=0)
+    raw_total_linear_extension_physical: float | None = Field(default=None, ge=0)
+    pruned_total_linear_extension_physical: float | None = Field(default=None, ge=0)
+    raw_longest_path_pixels: float = Field(ge=0)
+    pruned_longest_path_pixels: float = Field(ge=0)
+    raw_longest_path_physical: float | None = Field(default=None, ge=0)
+    pruned_longest_path_physical: float | None = Field(default=None, ge=0)
+    raw_branch_angles: list[SkeletonBranchAngleResponse] = Field(default_factory=list)
+    pruned_branch_angles: list[SkeletonBranchAngleResponse] = Field(default_factory=list)
+    calibrated: bool = False
+    physical_unit: str | None = None
+    distance_per_pixel: float | None = Field(default=None, gt=0)
+    calibration_source: str | None = None
+    calibration_confidence: float | None = Field(default=None, ge=0, le=1)
+    perspective_corrected: bool = False
+    length_calibration_method: Literal[
+        "pixel_only",
+        "scalar_distance_per_pixel",
+        "reference_plane_homography",
+    ] = "pixel_only"
+    reference_plane_only: bool = True
     feature_pixels: list[SkeletonFeaturePixelResponse] = Field(default_factory=list)
