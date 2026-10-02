@@ -106,6 +106,41 @@ describe("poseKeyframeAdapter", () => {
     });
   });
 
+  it("keeps out-of-frame observations in rich persistence but zeroes compatibility keypoints", () => {
+    const editorSchema = editorSchemaForVideoTrack(track, schema);
+    const request: PoseSaveRequest = {
+      pose_id: "track-1:frame:12",
+      base_revision: 4,
+      schema_id: editorSchema.id,
+      schema_revision: editorSchema.revision,
+      observations: [
+        {
+          id: "track-1:12:2",
+          semantic_label: "tentacle",
+          occurrence_index: 1,
+          x: 0,
+          y: 0,
+          confidence: 0.6,
+          status: "out_of_frame",
+          source: "corrected",
+        },
+      ],
+    };
+
+    const updated = correctedVideoKeyframeFromPoseSave(
+      keyframe,
+      schema,
+      request,
+    );
+
+    expect(updated.keypoints).toEqual([
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+    ]);
+    expect(updated.pose_observations).toEqual(request.observations);
+  });
+
   it("writes edited observations back to compatible keypoints and rich persistence", () => {
     const editorSchema = editorSchemaForVideoTrack(track, schema);
     const request: PoseSaveRequest = {
