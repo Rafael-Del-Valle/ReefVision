@@ -17,12 +17,14 @@ from reefvision.schemas.skeletonization import (
     SkeletonFeaturePixelResponse,
     SkeletonizationAnalysisResponse,
     SkeletonizationReadinessResponse,
+    SkeletonJunctionClusterResponse,
     SkeletonMaskComponentResponse,
     SkeletonResolutionAction,
 )
 from reefvision.services.skeleton_algorithms import (
     BinaryMask,
     classify_skeleton_pixels,
+    consolidate_junction_clusters,
     zhang_suen_thin,
 )
 from reefvision.storage.projects import resolve_managed_project_path
@@ -266,6 +268,7 @@ class SkeletonizationService:
         endpoints = sum(feature.kind == "endpoint" for feature in features)
         paths = sum(feature.kind == "path" for feature in features)
         junctions = sum(feature.kind == "junction" for feature in features)
+        junction_clusters = consolidate_junction_clusters(features)
 
         return SkeletonizationAnalysisResponse(
             mask_annotation_id=mask.id,
@@ -280,6 +283,19 @@ class SkeletonizationService:
             endpoint_count=endpoints,
             path_pixel_count=paths,
             junction_pixel_count=junctions,
+            junction_cluster_count=len(junction_clusters),
+            junction_clusters=[
+                SkeletonJunctionClusterResponse(
+                    id=cluster.id,
+                    pixel_count=len(cluster.pixels),
+                    centroid_x=cluster.centroid_x,
+                    centroid_y=cluster.centroid_y,
+                    representative_x=cluster.representative_x,
+                    representative_y=cluster.representative_y,
+                    external_connection_count=len(cluster.external_connections),
+                )
+                for cluster in junction_clusters
+            ],
             feature_pixels=[
                 SkeletonFeaturePixelResponse(
                     x=feature.x,
