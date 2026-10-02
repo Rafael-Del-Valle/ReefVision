@@ -53,7 +53,8 @@ def dataset_export_relative_paths(
     version_number: int,
     export_id: str,
 ) -> tuple[str, str, str]:
-    relative_output = f"{project_storage_root}/exports/v{version_number:04d}-{export_id}"
+    export_token = _compact_export_identifier(export_id)
+    relative_output = f"{project_storage_root}/exports/v{version_number:04d}-{export_token}"
     manifest_path = f"{relative_output}/export-manifest.json"
     archive_path = f"{relative_output}.zip"
     return relative_output, manifest_path, archive_path
