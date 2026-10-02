@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import suppress
 from datetime import UTC, datetime
 from hashlib import sha256
 from math import isfinite
@@ -110,12 +111,10 @@ def _cleanup_pending_job_proposals(
         )
         for proposal in pending:
             if proposal.mask_path:
-                try:
+                with suppress(OSError, ValidationError):
                     resolve_managed_project_path(settings, proposal.mask_path).unlink(
                         missing_ok=True
                     )
-                except (OSError, ValidationError):
-                    pass
             session.delete(proposal)
         session.commit()
         return len(pending)
