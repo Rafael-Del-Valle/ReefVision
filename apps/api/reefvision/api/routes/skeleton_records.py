@@ -8,7 +8,9 @@ from sqlalchemy.orm import Session
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
 from reefvision.schemas.skeletonization import (
+    SkeletonAnalysisCorrectionRequest,
     SkeletonAnalysisCreateRequest,
+    SkeletonAnalysisReviewRequest,
     SkeletonAnalysisRevisionResponse,
 )
 from reefvision.services.skeletonization import SkeletonizationService
@@ -63,4 +65,37 @@ def list_skeleton_analyses(
 ) -> list[SkeletonAnalysisRevisionResponse]:
     return service(request, session).list_persisted_analyses(
         mask_annotation_id
+    )
+
+
+
+@router.post(
+    "/skeleton-analyses/{analysis_id}/review",
+    response_model=SkeletonAnalysisRevisionResponse,
+)
+def review_skeleton_analysis(
+    analysis_id: str,
+    payload: SkeletonAnalysisReviewRequest,
+    request: Request,
+    session: DbSession,
+) -> SkeletonAnalysisRevisionResponse:
+    return service(request, session).review_persisted_analysis(
+        analysis_id,
+        payload,
+    )
+
+
+@router.post(
+    "/skeleton-analyses/{analysis_id}/corrections",
+    response_model=SkeletonAnalysisRevisionResponse,
+)
+def correct_skeleton_analysis(
+    analysis_id: str,
+    payload: SkeletonAnalysisCorrectionRequest,
+    request: Request,
+    session: DbSession,
+) -> SkeletonAnalysisRevisionResponse:
+    return service(request, session).correct_persisted_analysis(
+        analysis_id,
+        payload,
     )
