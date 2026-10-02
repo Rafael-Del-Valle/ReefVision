@@ -545,9 +545,6 @@ class PoseTemporalTrackingService:
 
                 assignment_by_row: dict[int, _CandidateCost] = {}
                 if assignable_rows and eligible_active:
-                    active_index = {
-                        active.record.id: index for index, active in enumerate(eligible_active)
-                    }
                     unmatched_cost = float(payload.max_normalized_displacement) + 1e-6
                     impossible_cost = unmatched_cost + 1000.0
                     matrix: list[list[float]] = []
