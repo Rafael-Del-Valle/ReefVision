@@ -10,7 +10,6 @@ from fastapi.testclient import TestClient
 
 import reefvision.jobs.inference as inference_module
 from reefvision.config import Settings
-from reefvision.db.base import Base
 from reefvision.jobs.export import process_export_job
 from reefvision.jobs.inference import process_inference_job
 from reefvision.main import create_app
@@ -169,7 +168,6 @@ def test_core_scientist_round_trip_preserves_raw_and_corrected_results(
     assert len(reviewed["annotations"]) == 2
 
     restart_app = create_app(test_settings)
-    Base.metadata.create_all(restart_app.state.engine)
     try:
         with TestClient(restart_app) as reopened:
             reopened_session_response = reopened.get(

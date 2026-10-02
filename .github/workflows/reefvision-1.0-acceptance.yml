@@ -43,6 +43,12 @@ jobs:
             apps/api/reefvision/tests/test_scale_assistant_packaging_contract.py \
             apps/api/reefvision/tests/test_image_scale_project_exchange_v1.py \
             apps/api/reefvision/tests/test_scientist_ready_core_acceptance.py \
+            apps/api/reefvision/tests/test_annotations.py \
+            apps/api/reefvision/tests/test_model_inference.py \
+            apps/api/reefvision/tests/test_segmentation_phase3.py \
+            apps/api/reefvision/tests/test_mask_dataset_exports.py \
+            apps/api/reefvision/tests/test_milestone2_import_acceptance.py \
+            apps/api/reefvision/tests/test_dataset_versions.py \
             apps/api/reefvision/tests/test_workflow_graphs_phase10.py \
             apps/api/reefvision/tests/test_workflow_execution_phase10.py \
             apps/api/reefvision/tests/test_workflow_training_phase10.py \
