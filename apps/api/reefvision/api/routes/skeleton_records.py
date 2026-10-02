@@ -49,3 +49,18 @@ def create_skeleton_analysis(
         mask_annotation_id,
         payload,
     )
+
+
+
+@router.get(
+    "/mask-annotations/{mask_annotation_id}/skeleton-analyses",
+    response_model=list[SkeletonAnalysisRevisionResponse],
+)
+def list_skeleton_analyses(
+    mask_annotation_id: str,
+    request: Request,
+    session: DbSession,
+) -> list[SkeletonAnalysisRevisionResponse]:
+    return service(request, session).list_persisted_analyses(
+        mask_annotation_id
+    )
