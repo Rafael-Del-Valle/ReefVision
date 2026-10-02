@@ -19,6 +19,7 @@ from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.pose_tracking import (
     PoseAssociationCorrectionRequest,
     PoseIdentityBreakCreateRequest,
+    PoseIdentityBreakReviewRequest,
     PoseLandmarkAssociationDecisionResponse,
     PoseLandmarkIdentityBreakResponse,
     PoseTemporalAssociationBuildRequest,
@@ -411,6 +412,21 @@ def create_pose_identity_break(
 ) -> PoseLandmarkIdentityBreakResponse:
     return PoseTemporalTrackingService(session).create_identity_break(
         landmark_track_id,
+        payload,
+    )
+
+
+@router.post(
+    "/pose-landmark-identity-breaks/{identity_break_id}/review",
+    response_model=PoseLandmarkIdentityBreakResponse,
+)
+def review_pose_identity_break(
+    identity_break_id: str,
+    payload: PoseIdentityBreakReviewRequest,
+    session: DbSession,
+) -> PoseLandmarkIdentityBreakResponse:
+    return PoseTemporalTrackingService(session).review_identity_break(
+        identity_break_id,
         payload,
     )
 
