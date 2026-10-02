@@ -173,7 +173,7 @@ class PoseTemporalTrackSummaryResponse(BaseModel):
 class PoseAssociationCorrectionRequest(BaseModel):
     selected_landmark_track_id: str | None = None
     association_state: PoseAssociationState
-    reason_code: str | None = Field(default=None, max_length=100)
+    reason_code: str = Field(min_length=1, max_length=100)
     note: str | None = Field(default=None, max_length=5000)
 
     @model_validator(mode="after")
