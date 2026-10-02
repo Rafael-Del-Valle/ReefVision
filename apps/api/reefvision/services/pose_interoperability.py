@@ -72,6 +72,9 @@ class _ImportedTrack:
     keyframes: tuple[VideoTrackKeyframe, ...]
 
 
+POSE_BUNDLE_MANIFEST_FILENAME = "reefvision-pose-manifest.json"
+
+
 class PoseInteroperabilityService:
     """Translate canonical ReefVision video poses into external pose ecosystems."""
 
@@ -379,6 +382,105 @@ class PoseInteroperabilityService:
                 archive.write(path, path.relative_to(directory).as_posix())
         return buffer.getvalue()
 
+    @classmethod
+    def _bundle_manifest(
+        cls,
+        labels: Any,
+        exchange_format: PoseInteroperabilityFormat,
+    ) -> dict[str, object]:
+        provenance = cls._reefvision_provenance(labels)
+        if provenance is None:
+            raise ValidationError("Canonical ReefVision pose labels are missing provenance")
+        frames: list[dict[str, object]] = []
+        for labeled_frame in sorted(
+            list(getattr(labels, "labeled_frames", []) or []),
+            key=lambda item: int(getattr(item, "frame_idx", -1)),
+        ):
+            frame_index = int(getattr(labeled_frame, "frame_idx", -1))
+            if frame_index < 0:
+                raise ValidationError("Canonical ReefVision pose frame index is invalid")
+            instances: list[dict[str, object]] = []
+            for instance in list(getattr(labeled_frame, "instances", []) or []):
+                track = getattr(instance, "track", None)
+                track_name = (
+                    str(getattr(track, "name", "") or "").strip()
+                    if track is not None
+                    else ""
+                )
+                instances.append(
+                    {"external_track_name": track_name or None}
+                )
+            frames.append(
+                {
+                    "reefvision_frame_index": frame_index,
+                    "instances": instances,
+                }
+            )
+        return {
+            "schema_version": "reefvision-pose-bundle-0001",
+            "format": exchange_format,
+            "reefvision_pose_interoperability": provenance,
+            "frames": frames,
+        }
+
+    @staticmethod
+    def _write_bundle_manifest(
+        directory: Path,
+        manifest: dict[str, object],
+    ) -> None:
+        (directory / POSE_BUNDLE_MANIFEST_FILENAME).write_text(
+            json.dumps(manifest, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+
+    @classmethod
+    def _read_bundle_manifest(
+        cls,
+        directory: Path,
+        exchange_format: PoseInteroperabilityFormat,
+    ) -> dict[str, object] | None:
+        candidates = sorted(directory.rglob(POSE_BUNDLE_MANIFEST_FILENAME))
+        if not candidates:
+            return None
+        if len(candidates) != 1:
+            raise ValidationError("Pose interoperability bundle contains multiple manifests")
+        try:
+            raw = json.loads(candidates[0].read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValidationError("Pose interoperability bundle manifest is invalid") from exc
+        if not isinstance(raw, dict):
+            raise ValidationError("Pose interoperability bundle manifest must be a JSON object")
+        if raw.get("schema_version") != "reefvision-pose-bundle-0001":
+            raise ValidationError("Unsupported ReefVision pose bundle manifest version")
+        if raw.get("format") != exchange_format:
+            raise ValidationError("Pose interoperability bundle format does not match the request")
+        provenance = raw.get("reefvision_pose_interoperability")
+        frames = raw.get("frames")
+        if not isinstance(provenance, dict) or not isinstance(frames, list):
+            raise ValidationError("Pose interoperability bundle manifest is incomplete")
+        return cast(dict[str, object], raw)
+
+    @classmethod
+    def _inject_bundle_manifest(
+        cls,
+        labels: Any,
+        manifest: dict[str, object] | None,
+    ) -> Any:
+        if manifest is None:
+            return labels
+        provenance = manifest.get("reefvision_pose_interoperability")
+        frames = manifest.get("frames")
+        if not isinstance(provenance, dict) or not isinstance(frames, list):
+            raise ValidationError("Pose interoperability bundle manifest is malformed")
+        merged = {str(key): value for key, value in provenance.items()}
+        merged["reefvision_frame_manifest"] = frames
+        raw_labels_provenance = getattr(labels, "provenance", None)
+        if not isinstance(raw_labels_provenance, dict):
+            raw_labels_provenance = {}
+            labels.provenance = raw_labels_provenance
+        raw_labels_provenance["reefvision_pose_interoperability"] = merged
+        return labels
+
     @staticmethod
     def _reefvision_provenance(labels: Any) -> dict[str, object] | None:
         raw_provenance = getattr(labels, "provenance", None)
@@ -500,24 +602,30 @@ class PoseInteroperabilityService:
         return candidate
 
     @classmethod
-    def _extract_ultralytics_zip(cls, content: bytes, destination: Path) -> Path:
+    def _extract_safe_zip(
+        cls,
+        content: bytes,
+        destination: Path,
+        *,
+        label: str,
+    ) -> None:
         try:
             archive = zipfile.ZipFile(io.BytesIO(content))
         except zipfile.BadZipFile as exc:
-            raise ValidationError("Ultralytics pose import requires a valid ZIP archive") from exc
+            raise ValidationError(f"{label} requires a valid ZIP archive") from exc
         with archive:
             members = archive.infolist()
             if len(members) > 20000:
-                raise ValidationError("Ultralytics pose ZIP contains too many files")
+                raise ValidationError(f"{label} ZIP contains too many files")
             expanded_bytes = sum(item.file_size for item in members)
             if expanded_bytes > 512 * 1024 * 1024:
-                raise ValidationError("Ultralytics pose ZIP expands beyond 512 MiB")
+                raise ValidationError(f"{label} ZIP expands beyond 512 MiB")
             root = destination.resolve()
             for item in members:
                 relative = cls._validate_archive_member(item.filename)
                 target = (destination / relative).resolve()
                 if root not in target.parents and target != root:
-                    raise ValidationError("Ultralytics pose ZIP escapes its extraction directory")
+                    raise ValidationError(f"{label} ZIP escapes its extraction directory")
                 if item.is_dir():
                     target.mkdir(parents=True, exist_ok=True)
                     continue
@@ -528,6 +636,14 @@ class PoseInteroperabilityService:
                         if not chunk:
                             break
                         output.write(chunk)
+
+    @classmethod
+    def _extract_ultralytics_zip(cls, content: bytes, destination: Path) -> Path:
+        cls._extract_safe_zip(
+            content,
+            destination,
+            label="Ultralytics pose import",
+        )
         manifests = sorted(destination.rglob("data.yaml"))
         if len(manifests) != 1:
             raise ValidationError(
