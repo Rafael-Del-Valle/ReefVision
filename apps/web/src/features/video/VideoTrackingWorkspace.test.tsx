@@ -466,6 +466,36 @@ describe("VideoTrackingWorkspace", () => {
     );
 
     expect(await screen.findByText("Pose review editor")).toBeInTheDocument();
+    expect(screen.getByText("Pose interoperability")).toBeInTheDocument();
+    const slpExport = screen.getByRole("link", { name: "SLEAP SLP" });
+    const nwbExport = screen.getByRole("link", { name: "NWB" });
+    const cocoExport = screen.getByRole("link", { name: "COCO pose" });
+    const dlcExport = screen.getByRole("link", { name: "DeepLabCut CSV" });
+    const yoloExport = screen.getByRole("link", {
+      name: "Ultralytics pose ZIP",
+    });
+    expect(slpExport).toHaveAttribute(
+      "href",
+      expect.stringContaining(
+        "/videos/video-1/pose-interoperability/export?format=slp",
+      ),
+    );
+    expect(nwbExport).toHaveAttribute(
+      "href",
+      expect.stringContaining("format=nwb"),
+    );
+    expect(cocoExport).toHaveAttribute(
+      "href",
+      expect.stringContaining("format=coco"),
+    );
+    expect(dlcExport).toHaveAttribute(
+      "href",
+      expect.stringContaining("format=dlc_csv"),
+    );
+    expect(yoloExport).toHaveAttribute(
+      "href",
+      expect.stringContaining("format=ultralytics_pose"),
+    );
     expect(screen.getByText("tentacle 1 / 2")).toBeInTheDocument();
     expect(screen.queryByLabelText("tentacle 2")).not.toBeInTheDocument();
 
