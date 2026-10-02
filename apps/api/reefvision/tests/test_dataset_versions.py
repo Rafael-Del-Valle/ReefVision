@@ -391,11 +391,17 @@ def test_interrupted_dataset_export_restarts_from_clean_partial_artifacts(
     assert recovered["status"] == "queued"
     assert recovered["result_json"]["recovery"] == "requeued_on_startup"
 
-    assert process_export_job(
+    processed = process_export_job(
         app.state.settings,
         app.state.session_factory,
         payload["job"]["id"],
-    ) is True
+    )
+    if not processed:
+        job_payload = client.get(f"/api/v1/jobs/{payload['job']['id']}").json()
+        export_state = client.get(f"/api/v1/exports/{payload['export']['id']}").json()
+        raise AssertionError(
+            f"Recovered export job failed unexpectedly: job={job_payload} export={export_state}"
+        )
 
     completed = client.get(f"/api/v1/exports/{payload['export']['id']}").json()
     assert completed["status"] == "succeeded"
