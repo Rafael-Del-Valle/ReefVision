@@ -374,7 +374,13 @@ export function PoseTemporalReviewPanel({
                       track.semantic_label === observation.semantic_label &&
                       track.pose_schema_id === observation.pose_schema_id &&
                       track.pose_schema_revision ===
-                        observation.pose_schema_revision,
+                        observation.pose_schema_revision &&
+                      track.first_frame <= observation.frame_index &&
+                      !(
+                        track.lifecycle_state === "terminated" &&
+                        track.last_frame !== null &&
+                        observation.frame_index > track.last_frame
+                      ),
                   )
                   .sort((first, second) => {
                     const firstRank =
