@@ -18,6 +18,9 @@ class AnnotationRepository:
     def add_event(self, event: AnnotationEvent) -> None:
         self.session.add(event)
 
+    def get(self, annotation_id: str) -> Annotation | None:
+        return self.session.get(Annotation, annotation_id)
+
     def list_for_image(self, image_id: str, *, include_deleted: bool = False) -> list[Annotation]:
         statement = select(Annotation).where(Annotation.image_id == image_id)
         if not include_deleted:

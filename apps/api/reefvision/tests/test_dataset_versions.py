@@ -10,7 +10,9 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from reefvision.config import Settings
+from reefvision.db.models import Job
 from reefvision.jobs.export import process_export_job
+from reefvision.jobs.worker import recover_interrupted_jobs
 from reefvision.tests.test_annotations import create_project
 
 
@@ -322,3 +324,87 @@ def test_dataset_export_uses_frozen_snapshot_after_current_edits(
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["items"][0]["annotation_count"] == 1
     assert manifest["dataset_version_id"] == version["id"]
+
+
+def test_interrupted_dataset_export_restarts_from_clean_partial_artifacts(
+    client: TestClient,
+    test_settings: Settings,
+) -> None:
+    project = create_project(client, "Restart-safe export")
+    report = import_image(
+        client,
+        project["id"],
+        filename="restart-export.png",
+        relative_path="export/restart-export.png",
+        color=(65, 110, 165),
+    )
+    image_id = report["successful"][0]["image_id"]
+    class_id = project["label_classes"][0]["id"]
+
+    save_annotations(
+        client,
+        image_id,
+        base_revision=0,
+        annotation_status="reviewed",
+        annotations=[
+            {
+                "id": "restart-export-ann-1",
+                "label_class_id": class_id,
+                "x_min": 10,
+                "y_min": 5,
+                "x_max": 30,
+                "y_max": 25,
+            }
+        ],
+    )
+    version = create_version(client, project["id"], name="Restart-safe snapshot")
+    created = client.post(
+        f"/api/v1/dataset-versions/{version['id']}/exports",
+        json={"format": "yolo_detection"},
+    )
+    assert created.status_code == 200, created.text
+    payload = created.json()
+
+    output_root = test_settings.resolved_data_dir / Path(
+        payload["export"]["output_path"]
+    )
+    archive_path = test_settings.resolved_data_dir / Path(
+        payload["export"]["archive_path"]
+    )
+    output_root.mkdir(parents=True)
+    stale_file = output_root / "stale-partial-file.txt"
+    stale_file.write_text("interrupted export", encoding="utf-8")
+    archive_path.write_bytes(b"partial zip")
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        job = session.get(Job, payload["job"]["id"])
+        assert job is not None
+        job.status = "running"
+        session.commit()
+
+    assert recover_interrupted_jobs(
+        app.state.session_factory,
+        app.state.settings,
+    ) == 1
+    recovered = client.get(f"/api/v1/jobs/{payload['job']['id']}").json()
+    assert recovered["status"] == "queued"
+    assert recovered["result_json"]["recovery"] == "requeued_on_startup"
+
+    assert process_export_job(
+        app.state.settings,
+        app.state.session_factory,
+        payload["job"]["id"],
+    ) is True
+
+    completed = client.get(f"/api/v1/exports/{payload['export']['id']}").json()
+    assert completed["status"] == "succeeded"
+    assert not stale_file.exists()
+    assert archive_path.read_bytes().startswith(b"PK")
+    manifest = json.loads(
+        (test_settings.resolved_data_dir / Path(completed["manifest_path"])).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert manifest["dataset_version_id"] == version["id"]
+    assert manifest["items"][0]["annotation_count"] == 1

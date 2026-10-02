@@ -355,3 +355,74 @@ def test_annotation_delete_and_restore_record_events(client: TestClient) -> None
             .order_by(AnnotationEvent.created_at, AnnotationEvent.id)
         ]
         assert event_types == ["created", "deleted", "restored"]
+
+
+def test_annotation_id_cannot_be_reused_across_images(client: TestClient) -> None:
+    project = create_project(client, "Cross-image annotation identity")
+    first = import_one(
+        client,
+        project["id"],
+        filename="first.png",
+        relative_path="identity/first.png",
+        size=(80, 60),
+    )
+    second = import_one(
+        client,
+        project["id"],
+        filename="second.png",
+        relative_path="identity/second.png",
+        size=(81, 60),
+    )
+    first_id = first["successful"][0]["image_id"]
+    second_id = second["successful"][0]["image_id"]
+    label_class_id = project["label_classes"][0]["id"]
+    annotation_id = "4ec9d26e-8664-4ff8-b90c-64f8531f8264"
+
+    created = client.put(
+        f"/api/v1/images/{first_id}/annotations",
+        json={
+            "base_revision": 0,
+            "annotation_status": "reviewed",
+            "annotations": [
+                {
+                    "id": annotation_id,
+                    "label_class_id": label_class_id,
+                    "x_min": 10,
+                    "y_min": 8,
+                    "x_max": 30,
+                    "y_max": 28,
+                }
+            ],
+        },
+    )
+    assert created.status_code == 200, created.text
+
+    collision = client.put(
+        f"/api/v1/images/{second_id}/annotations",
+        json={
+            "base_revision": 0,
+            "annotation_status": "reviewed",
+            "annotations": [
+                {
+                    "id": annotation_id,
+                    "label_class_id": label_class_id,
+                    "x_min": 12,
+                    "y_min": 10,
+                    "x_max": 32,
+                    "y_max": 30,
+                }
+            ],
+        },
+    )
+
+    assert collision.status_code == 400, collision.text
+    assert collision.json()["detail"] == (
+        "Annotations may only be saved back to their source image"
+    )
+
+    first_session = client.get(f"/api/v1/images/{first_id}/annotations").json()
+    second_session = client.get(f"/api/v1/images/{second_id}/annotations").json()
+    assert [item["id"] for item in first_session["annotations"]] == [annotation_id]
+    assert first_session["image"]["annotation_revision"] == 1
+    assert second_session["annotations"] == []
+    assert second_session["image"]["annotation_revision"] == 0

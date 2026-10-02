@@ -108,6 +108,11 @@ def process_export_job(
                     )
             output_path = export.output_path
             archive_path = export.archive_path
+            remove_export_artifacts(
+                settings,
+                output_path=export.output_path,
+                archive_path=export.archive_path,
+            )
             if export.format == "yolo_detection":
                 result = write_yolo_detection_export(
                     settings,

@@ -192,6 +192,16 @@ def process_inference_job(
         class_map = dict(model.class_map_json or {})
         model_metadata = dict(model.metadata_json or {})
         project_id = model.project_id
+        processed_images = int(job.progress_current or 0)
+        if processed_images < 0 or processed_images > len(image_ids):
+            job.status = "failed"
+            job.error_message = (
+                "Inference progress is inconsistent with the requested image set"
+            )
+            job.completed_at = _utc_now()
+            session.commit()
+            return False
+        remaining_image_ids = image_ids[processed_images:]
 
     provider: DetectionProvider | SegmentationProvider | None = None
     semantic_provider = None
@@ -212,9 +222,23 @@ def process_inference_job(
         return False
 
     try:
+        if not remaining_image_ids:
+            with factory() as session:
+                job = session.get(Job, job_id)
+                if job is None:
+                    return False
+                job.status = "succeeded"
+                job.progress_current = len(image_ids)
+                job.completed_at = _utc_now()
+                session.commit()
+            return True
+
         if provider is not None:
             provider.load_model(model_path, inference_settings.device)
-        for index, image_id in enumerate(image_ids, start=1):
+        for index, image_id in enumerate(
+            remaining_image_ids,
+            start=processed_images + 1,
+        ):
             with factory() as session:
                 job = session.get(Job, job_id)
                 if job is None:

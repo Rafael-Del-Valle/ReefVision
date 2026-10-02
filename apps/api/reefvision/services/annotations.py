@@ -331,6 +331,11 @@ class AnnotationService:
 
             existing = existing_by_id.get(draft.id)
             if existing is None:
+                conflicting_annotation = self.annotations.get(draft.id)
+                if conflicting_annotation is not None:
+                    raise ValidationError(
+                        "Annotations may only be saved back to their source image"
+                    )
                 annotation = Annotation(
                     id=draft.id,
                     image_id=image_id,

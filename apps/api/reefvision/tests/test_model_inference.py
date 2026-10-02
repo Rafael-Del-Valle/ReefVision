@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 import reefvision.jobs.inference as inference_module
 import reefvision.ml.assist_runtime as assist_runtime_module
 from reefvision.jobs.inference import process_inference_job
+from reefvision.jobs.worker import recover_interrupted_jobs
 from reefvision.ml.providers import (
     AssistModelMetadata,
     AssistPrediction,
@@ -439,3 +440,126 @@ def test_assist_box_prompt_accepts_selected_prediction_as_provenance_source(
     refreshed = client.get(f"/api/v1/images/{image_id}/prediction-proposals").json()["items"][0]
     assert refreshed["review_status"] == "edited_and_accepted"
     assert refreshed["accepted_annotation_id"] == annotation["id"]
+
+
+class InterruptingDetectorWorkerProvider(FakeDetectorWorkerProvider):
+    def __init__(self) -> None:
+        self.predict_calls = 0
+
+    def predict(self, image_path: Any, settings: Any) -> list[DetectionPrediction]:
+        self.predict_calls += 1
+        if self.predict_calls == 2:
+            raise KeyboardInterrupt("simulated abrupt ReefVision shutdown")
+        return super().predict(image_path, settings)
+
+
+class CountingDetectorWorkerProvider(FakeDetectorWorkerProvider):
+    def __init__(self) -> None:
+        self.predict_calls = 0
+
+    def predict(self, image_path: Any, settings: Any) -> list[DetectionPrediction]:
+        self.predict_calls += 1
+        return super().predict(image_path, settings)
+
+
+def test_interrupted_inference_resumes_without_duplicate_proposals(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        ModelService,
+        "_provider_for_purpose",
+        lambda self, purpose: FakeDetectorRegistrationProvider(),
+    )
+
+    project = create_project(client, "Restart-safe inference")
+    first = import_one(
+        client,
+        project["id"],
+        filename="first.png",
+        relative_path="restart/first.png",
+        size=(80, 60),
+    )
+    second = import_one(
+        client,
+        project["id"],
+        filename="second.png",
+        relative_path="restart/second.png",
+        size=(81, 60),
+    )
+    first_id = first["successful"][0]["image_id"]
+    second_id = second["successful"][0]["image_id"]
+    model = register_model(
+        client,
+        project["id"],
+        purpose="detector",
+        filename="fixture-detector.pt",
+        display_name="Fixture Detector",
+    )
+    job = client.post(
+        f"/api/v1/projects/{project['id']}/inference-jobs",
+        json={
+            "model_id": model["id"],
+            "image_ids": [first_id, second_id],
+            "device": "cpu",
+        },
+    ).json()
+
+    interrupted_provider = InterruptingDetectorWorkerProvider()
+    monkeypatch.setattr(
+        inference_module,
+        "detection_provider_for_name",
+        lambda provider_name: interrupted_provider,
+    )
+    app = cast(FastAPI, client.app)
+
+    with pytest.raises(KeyboardInterrupt, match="simulated abrupt ReefVision shutdown"):
+        process_inference_job(
+            app.state.settings,
+            app.state.session_factory,
+            job["id"],
+        )
+
+    interrupted_job = client.get(f"/api/v1/jobs/{job['id']}").json()
+    assert interrupted_job["status"] == "running"
+    assert interrupted_job["progress_current"] == 1
+    assert len(
+        client.get(f"/api/v1/images/{first_id}/prediction-proposals").json()["items"]
+    ) == 1
+    assert (
+        client.get(f"/api/v1/images/{second_id}/prediction-proposals").json()["items"]
+        == []
+    )
+
+    assert recover_interrupted_jobs(
+        app.state.session_factory,
+        app.state.settings,
+    ) == 1
+    recovered_job = client.get(f"/api/v1/jobs/{job['id']}").json()
+    assert recovered_job["status"] == "queued"
+    assert recovered_job["progress_current"] == 1
+    assert recovered_job["result_json"]["recovery"] == "requeued_on_startup"
+
+    resumed_provider = CountingDetectorWorkerProvider()
+    monkeypatch.setattr(
+        inference_module,
+        "detection_provider_for_name",
+        lambda provider_name: resumed_provider,
+    )
+    assert process_inference_job(
+        app.state.settings,
+        app.state.session_factory,
+        job["id"],
+    ) is True
+
+    assert resumed_provider.predict_calls == 1
+    assert len(
+        client.get(f"/api/v1/images/{first_id}/prediction-proposals").json()["items"]
+    ) == 1
+    assert len(
+        client.get(f"/api/v1/images/{second_id}/prediction-proposals").json()["items"]
+    ) == 1
+    completed_job = client.get(f"/api/v1/jobs/{job['id']}").json()
+    assert completed_job["status"] == "succeeded"
+    assert completed_job["progress_current"] == 2
+    assert completed_job["result_json"]["processed_images"] == 2
+    assert completed_job["result_json"]["proposal_count"] == 2
