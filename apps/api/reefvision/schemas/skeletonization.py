@@ -56,6 +56,16 @@ class SkeletonFeaturePixelResponse(BaseModel):
     kind: SkeletonPixelKind
 
 
+class SkeletonJunctionClusterResponse(BaseModel):
+    id: str
+    pixel_count: int = Field(ge=1)
+    centroid_x: float = Field(ge=0)
+    centroid_y: float = Field(ge=0)
+    representative_x: int = Field(ge=0)
+    representative_y: int = Field(ge=0)
+    external_connection_count: int = Field(ge=0)
+
+
 class SkeletonizationAnalysisResponse(BaseModel):
     schema_version: Literal["skeleton-analysis-0001"] = "skeleton-analysis-0001"
     mask_annotation_id: str
@@ -78,4 +88,6 @@ class SkeletonizationAnalysisResponse(BaseModel):
     endpoint_count: int = Field(ge=0)
     path_pixel_count: int = Field(ge=0)
     junction_pixel_count: int = Field(ge=0)
+    junction_cluster_count: int = Field(ge=0)
+    junction_clusters: list[SkeletonJunctionClusterResponse] = Field(default_factory=list)
     feature_pixels: list[SkeletonFeaturePixelResponse] = Field(default_factory=list)
