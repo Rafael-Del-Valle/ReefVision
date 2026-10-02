@@ -145,6 +145,13 @@ class SkeletonizationAnalysisResponse(BaseModel):
     pruned_graph_edge_count: int = Field(ge=0)
     pruned_graph_nodes: list[SkeletonGraphNodeResponse] = Field(default_factory=list)
     pruned_graph_edges: list[SkeletonGraphEdgeResponse] = Field(default_factory=list)
+    tle_definition: Literal["sum_node_to_node_branch_centerlines"] = (
+        "sum_node_to_node_branch_centerlines"
+    )
+    longest_path_method: Literal["weighted_graph_diameter"] = "weighted_graph_diameter"
+    branch_angle_method: Literal["junction_centroid_to_external_branch"] = (
+        "junction_centroid_to_external_branch"
+    )
     raw_branch_count: int = Field(ge=0)
     pruned_branch_count: int = Field(ge=0)
     raw_total_linear_extension_pixels: float = Field(ge=0)
