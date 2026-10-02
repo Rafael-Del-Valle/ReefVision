@@ -1103,6 +1103,7 @@ class PoseTemporalTrackingService:
                 "Identity break cannot occur after the track ends"
             )
         successor: PoseLandmarkTrack | None = None
+        effective_successor_start = payload.successor_start_frame
         if payload.successor_landmark_track_id is not None:
             successor = self.session.get(
                 PoseLandmarkTrack,
@@ -1124,8 +1125,8 @@ class PoseTemporalTrackingService:
             ):
                 raise ValidationError("Successor identity must use the same pose schema revision")
             effective_successor_start = (
-                payload.successor_start_frame
-                if payload.successor_start_frame is not None
+                effective_successor_start
+                if effective_successor_start is not None
                 else successor.first_frame
             )
             if effective_successor_start < successor.first_frame:
@@ -1143,7 +1144,7 @@ class PoseTemporalTrackingService:
             target_type="landmark_track",
             target_id=predecessor.id,
             frame_start=payload.break_after_frame,
-            frame_end=payload.successor_start_frame,
+            frame_end=effective_successor_start,
             reason_code=payload.reason,
             note=payload.note,
             before_json={
@@ -1154,6 +1155,7 @@ class PoseTemporalTrackingService:
                 "lifecycle_state": "terminated",
                 "last_frame": payload.break_after_frame,
                 "successor_landmark_track_id": payload.successor_landmark_track_id,
+                "successor_start_frame": effective_successor_start,
             },
             actor="local_user",
         )
@@ -1164,7 +1166,7 @@ class PoseTemporalTrackingService:
             predecessor_landmark_track_id=predecessor.id,
             successor_landmark_track_id=payload.successor_landmark_track_id,
             break_after_frame=payload.break_after_frame,
-            successor_start_frame=payload.successor_start_frame,
+            successor_start_frame=effective_successor_start,
             reason=payload.reason,
             decision_confidence=(
                 float(payload.decision_confidence)
@@ -1200,8 +1202,8 @@ class PoseTemporalTrackingService:
                 continue
             use_successor = (
                 successor is not None
-                and payload.successor_start_frame is not None
-                and observation.frame_index >= payload.successor_start_frame
+                and effective_successor_start is not None
+                and observation.frame_index >= effective_successor_start
             )
             selected_successor_id = (
                 successor.id if use_successor and successor is not None else None
@@ -1226,6 +1228,34 @@ class PoseTemporalTrackingService:
                 parameters_hash=current.parameters_hash,
             )
             self.session.add(replacement)
+            self.session.flush()
+            current_candidates = list(
+                self.session.scalars(
+                    select(PoseLandmarkAssociationCandidate)
+                    .where(
+                        PoseLandmarkAssociationCandidate.association_decision_id
+                        == current.id
+                    )
+                    .order_by(PoseLandmarkAssociationCandidate.rank)
+                )
+            )
+            for candidate in current_candidates:
+                self.session.add(
+                    PoseLandmarkAssociationCandidate(
+                        association_decision_id=replacement.id,
+                        candidate_landmark_track_id=(
+                            candidate.candidate_landmark_track_id
+                        ),
+                        rank=candidate.rank,
+                        total_cost=candidate.total_cost,
+                        normalized_confidence=candidate.normalized_confidence,
+                        motion_cost=candidate.motion_cost,
+                        geometry_cost=candidate.geometry_cost,
+                        appearance_cost=candidate.appearance_cost,
+                        ordering_cost=candidate.ordering_cost,
+                        shape_cost=candidate.shape_cost,
+                    )
+                )
             if use_successor:
                 successor_previous_observation_id = observation.id
 
