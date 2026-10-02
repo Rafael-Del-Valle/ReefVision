@@ -77,6 +77,7 @@ const analysis = {
   review_note: null,
   created_by: "local_user",
   created_at: "2026-10-02T12:00:00Z",
+  is_latest_revision: true,
   stale_mask: false,
   stale_calibration: false,
   stale: false,
