@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 import shutil
@@ -9,6 +10,7 @@ import zipfile
 from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 from reefvision.config import Settings
 from reefvision.storage.projects import resolve_managed_project_path
@@ -57,12 +59,31 @@ def dataset_export_relative_paths(
     return relative_output, manifest_path, archive_path
 
 
+def _compact_export_identifier(value: str) -> str:
+    """Return a stable compact token while preserving full UUID identity."""
+
+    try:
+        raw = UUID(value).bytes
+    except ValueError:
+        raw = sha256(value.encode("utf-8")).digest()[:16]
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
 def safe_export_filename(image_id: str, original_filename: str) -> str:
+    """Build a collision-resistant export name that stays practical on Windows."""
+
     base = Path(original_filename).name
     sanitized = re.sub(r"[^A-Za-z0-9._-]+", "_", base).strip("._")
     if not sanitized:
         sanitized = "image"
-    return f"{image_id}_{sanitized}"
+
+    parsed = Path(sanitized)
+    suffix = parsed.suffix[:12]
+    stem = parsed.stem or "image"
+    original_budget = 40
+    stem_budget = max(original_budget - len(suffix), 1)
+    compact_original = f"{stem[:stem_budget]}{suffix}"
+    return f"{_compact_export_identifier(image_id)}_{compact_original}"
 
 
 def remove_export_artifacts(
