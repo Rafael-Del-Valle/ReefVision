@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 import numpy as np
 import pytest
@@ -74,7 +74,7 @@ class _FakeCategory:
 
 
 class _FakePredictedInstance:
-    calls: list[dict[str, Any]] = []
+    calls: ClassVar[list[dict[str, Any]]] = []
 
     @classmethod
     def from_numpy(cls, points: np.ndarray, **kwargs: Any) -> SimpleNamespace:
