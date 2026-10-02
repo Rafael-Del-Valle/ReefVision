@@ -9,6 +9,7 @@ from uuid import uuid4
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -33,6 +34,15 @@ class PoseLandmarkTrack(Base):
 
     __tablename__ = "pose_landmark_tracks"
     __table_args__ = (
+        CheckConstraint("first_frame >= 0", name="ck_pose_landmark_tracks_first_frame"),
+        CheckConstraint(
+            "last_frame IS NULL OR last_frame >= first_frame",
+            name="ck_pose_landmark_tracks_frame_order",
+        ),
+        CheckConstraint(
+            "pose_schema_revision >= 1",
+            name="ck_pose_landmark_tracks_schema_revision",
+        ),
         Index(
             "ix_pose_landmark_tracks_parent_label",
             "parent_video_track_id",
@@ -86,6 +96,30 @@ class PoseLandmarkObservation(Base):
 
     __tablename__ = "pose_landmark_observations"
     __table_args__ = (
+        CheckConstraint("revision >= 1", name="ck_pose_landmark_observations_revision"),
+        CheckConstraint("frame_index >= 0", name="ck_pose_landmark_observations_frame"),
+        CheckConstraint(
+            "occurrence_index >= 0",
+            name="ck_pose_landmark_observations_occurrence",
+        ),
+        CheckConstraint(
+            "landmark_confidence IS NULL OR "
+            "(landmark_confidence >= 0 AND landmark_confidence <= 1)",
+            name="ck_pose_landmark_observations_confidence",
+        ),
+        CheckConstraint(
+            "(observed_x_px IS NULL) = (observed_y_px IS NULL)",
+            name="ck_pose_landmark_observations_observed_pair",
+        ),
+        CheckConstraint(
+            "(predicted_x_px IS NULL) = (predicted_y_px IS NULL)",
+            name="ck_pose_landmark_observations_predicted_pair",
+        ),
+        CheckConstraint(
+            "visibility_state NOT IN ('occluded', 'out_of_frame', 'absent') "
+            "OR (observed_x_px IS NULL AND observed_y_px IS NULL)",
+            name="ck_pose_landmark_observations_missing_unobserved",
+        ),
         UniqueConstraint(
             "observation_series_id",
             "revision",
@@ -150,6 +184,22 @@ class PoseLandmarkAssociationDecision(Base):
 
     __tablename__ = "pose_landmark_association_decisions"
     __table_args__ = (
+        CheckConstraint(
+            "decision_revision >= 1",
+            name="ck_pose_landmark_associations_revision",
+        ),
+        CheckConstraint(
+            "association_confidence IS NULL OR "
+            "(association_confidence >= 0 AND association_confidence <= 1)",
+            name="ck_pose_landmark_associations_confidence",
+        ),
+        CheckConstraint(
+            "((association_state IN ('confirmed', 'provisional')) "
+            "AND selected_landmark_track_id IS NOT NULL) OR "
+            "((association_state IN ('unresolved', 'identity_break')) "
+            "AND selected_landmark_track_id IS NULL)",
+            name="ck_pose_landmark_associations_identity_state",
+        ),
         UniqueConstraint(
             "observation_id",
             "decision_revision",
@@ -206,6 +256,12 @@ class PoseLandmarkAssociationCandidate(Base):
 
     __tablename__ = "pose_landmark_association_candidates"
     __table_args__ = (
+        CheckConstraint("rank >= 1", name="ck_pose_landmark_candidates_rank"),
+        CheckConstraint(
+            "normalized_confidence IS NULL OR "
+            "(normalized_confidence >= 0 AND normalized_confidence <= 1)",
+            name="ck_pose_landmark_candidates_confidence",
+        ),
         UniqueConstraint(
             "association_decision_id",
             "rank",
@@ -243,6 +299,18 @@ class PoseLandmarkCorrection(Base):
 
     __tablename__ = "pose_landmark_corrections"
     __table_args__ = (
+        CheckConstraint(
+            "frame_start IS NULL OR frame_start >= 0",
+            name="ck_pose_landmark_corrections_frame_start",
+        ),
+        CheckConstraint(
+            "frame_end IS NULL OR frame_end >= 0",
+            name="ck_pose_landmark_corrections_frame_end",
+        ),
+        CheckConstraint(
+            "frame_start IS NULL OR frame_end IS NULL OR frame_end >= frame_start",
+            name="ck_pose_landmark_corrections_frame_order",
+        ),
         Index(
             "ix_pose_landmark_corrections_parent_created",
             "parent_video_track_id",
@@ -276,6 +344,19 @@ class PoseLandmarkIdentityBreak(Base):
 
     __tablename__ = "pose_landmark_identity_breaks"
     __table_args__ = (
+        CheckConstraint(
+            "break_after_frame >= 0",
+            name="ck_pose_landmark_identity_breaks_frame",
+        ),
+        CheckConstraint(
+            "successor_start_frame IS NULL OR successor_start_frame > break_after_frame",
+            name="ck_pose_landmark_identity_breaks_successor_frame",
+        ),
+        CheckConstraint(
+            "decision_confidence IS NULL OR "
+            "(decision_confidence >= 0 AND decision_confidence <= 1)",
+            name="ck_pose_landmark_identity_breaks_confidence",
+        ),
         Index(
             "ix_pose_landmark_identity_breaks_parent_frame",
             "parent_video_track_id",
