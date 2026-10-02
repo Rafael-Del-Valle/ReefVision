@@ -16,6 +16,7 @@ vi.mock("./poseTemporalApi", async () => {
     buildTemporalPoseAssociations: vi.fn(),
     correctTemporalPoseAssociation: vi.fn(),
     createTemporalPoseIdentityBreak: vi.fn(),
+    reviewTemporalPoseIdentityBreak: vi.fn(),
     temporalPoseExportUrl: vi.fn(
       (trackId: string, format: string) =>
         "/pose-export/" + trackId + "." + format,
@@ -126,6 +127,20 @@ describe("PoseTemporalReviewPanel", () => {
       source: "human",
       human_verified: true,
       correction_id: "correction-1",
+      created_at: "2026-10-02T00:00:00Z",
+    });
+    vi.mocked(poseApi.reviewTemporalPoseIdentityBreak).mockResolvedValue({
+      id: "break-auto",
+      parent_video_track_id: "track-1",
+      predecessor_landmark_track_id: track.id,
+      successor_landmark_track_id: null,
+      break_after_frame: 10,
+      successor_start_frame: null,
+      reason: "occlusion_gap_exceeded",
+      decision_confidence: null,
+      source: "tracker",
+      human_verified: true,
+      correction_id: "correction-break-review",
       created_at: "2026-10-02T00:00:00Z",
     });
   });
@@ -291,4 +306,66 @@ it("does not offer future or expired landmark identities for a frame", async () 
   expect(selector).toHaveTextContent("landmark-");
   expect(selector).not.toHaveTextContent("future");
   expect(selector).not.toHaveTextContent("expired");
+});
+
+
+it("reviews tracker-created identity breaks without offering duplicate breaks", async () => {
+  vi.mocked(poseApi.getTemporalPoseSummary).mockResolvedValue({
+    schema_version: "pose-temporal-summary-0001",
+    parent_video_track_id: "track-1",
+    landmark_tracks: [track],
+    observations: [observation],
+    association_decisions: [
+      {
+        ...unresolvedDecision,
+        selected_landmark_track_id: track.id,
+        association_state: "confirmed",
+        association_confidence: 0.9,
+      },
+    ],
+    association_candidates: [],
+    identity_breaks: [
+      {
+        id: "break-auto",
+        parent_video_track_id: "track-1",
+        predecessor_landmark_track_id: track.id,
+        successor_landmark_track_id: null,
+        break_after_frame: 10,
+        successor_start_frame: null,
+        reason: "occlusion_gap_exceeded",
+        decision_confidence: null,
+        source: "tracker",
+        human_verified: false,
+        correction_id: null,
+        created_at: "2026-10-02T00:00:00Z",
+      },
+    ],
+    corrections: [],
+  });
+
+  renderPanel(10);
+
+  expect(await screen.findByText("Unreviewed identity breaks")).toBeInTheDocument();
+  expect(screen.getByText("1")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Break identity here" }),
+  ).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByText("Identity break review"));
+  expect(screen.getByText(/needs review/)).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Confirm break" }));
+
+  await waitFor(() =>
+    expect(poseApi.reviewTemporalPoseIdentityBreak).toHaveBeenCalledWith(
+      "break-auto",
+      {
+        reason_code: "scientist_verified_identity_break",
+        note: "Scientist confirmed the recorded identity discontinuity.",
+      },
+    ),
+  );
+  expect(
+    await screen.findByText("Identity break marked as human verified."),
+  ).toBeInTheDocument();
 });
