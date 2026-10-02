@@ -5,8 +5,10 @@ import io
 from typing import cast
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from reefvision.db.models import PoseLandmarkTrack
 from reefvision.services import video_assets as video_assets_module
 from reefvision.tests.test_annotations import create_project
 
@@ -483,3 +485,111 @@ def test_temporal_pose_rebuild_requires_explicit_replace(
     replaced = client.post(url, json={"replace_existing": True})
     assert replaced.status_code == 200, replaced.text
     assert replaced.json()["created_observations"] == 6
+
+
+
+def test_human_reassignment_respects_landmark_track_lifetime(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Temporal pose lifetime correction")
+    video = _video(client, str(project["id"]), monkeypatch)
+    source = _track(client, str(video["id"]), _first_class(project))
+    built = client.post(
+        f"/api/v1/video-tracks/{source['id']}/pose-temporal-associations",
+        json={},
+    )
+    assert built.status_code == 200, built.text
+
+    summary = client.get(
+        f"/api/v1/video-tracks/{source['id']}/pose-temporal"
+    ).json()
+    observation = next(
+        item
+        for item in summary["observations"]
+        if item["frame_index"] == 1 and item["occurrence_index"] == 0
+    )
+    selected = next(
+        item
+        for item in summary["association_decisions"]
+        if item["observation_id"] == observation["id"]
+    )["selected_landmark_track_id"]
+    assert selected is not None
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        track = session.get(PoseLandmarkTrack, selected)
+        assert track is not None
+        track.first_frame = 2
+        session.commit()
+
+    future = client.post(
+        f"/api/v1/pose-landmark-observations/{observation['id']}/association-corrections",
+        json={
+            "selected_landmark_track_id": selected,
+            "association_state": "confirmed",
+            "reason_code": "invalid_future_identity",
+        },
+    )
+    assert future.status_code == 400, future.text
+    assert "before its first frame" in future.json()["detail"]
+
+    with app.state.session_factory() as session:
+        track = session.get(PoseLandmarkTrack, selected)
+        assert track is not None
+        track.first_frame = 0
+        track.last_frame = 0
+        track.lifecycle_state = "terminated"
+        session.commit()
+
+    expired = client.post(
+        f"/api/v1/pose-landmark-observations/{observation['id']}/association-corrections",
+        json={
+            "selected_landmark_track_id": selected,
+            "association_state": "confirmed",
+            "reason_code": "invalid_expired_identity",
+        },
+    )
+    assert expired.status_code == 400, expired.text
+    assert "after a terminated track" in expired.json()["detail"]
+
+
+def test_identity_break_respects_track_lifetime_and_rejects_self_successor(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Temporal pose identity break bounds")
+    video = _video(client, str(project["id"]), monkeypatch)
+    source = _track(client, str(video["id"]), _first_class(project))
+    built = client.post(
+        f"/api/v1/video-tracks/{source['id']}/pose-temporal-associations",
+        json={},
+    )
+    assert built.status_code == 200, built.text
+
+    summary = client.get(
+        f"/api/v1/video-tracks/{source['id']}/pose-temporal"
+    ).json()
+    track = summary["landmark_tracks"][0]
+
+    too_late = client.post(
+        f"/api/v1/pose-landmark-tracks/{track['id']}/identity-breaks",
+        json={
+            "break_after_frame": int(track["last_frame"]) + 1,
+            "reason": "manual_split",
+        },
+    )
+    assert too_late.status_code == 400, too_late.text
+    assert "after the track ends" in too_late.json()["detail"]
+
+    self_successor = client.post(
+        f"/api/v1/pose-landmark-tracks/{track['id']}/identity-breaks",
+        json={
+            "successor_landmark_track_id": track["id"],
+            "break_after_frame": track["first_frame"],
+            "successor_start_frame": track["first_frame"] + 1,
+            "reason": "manual_split",
+        },
+    )
+    assert self_successor.status_code == 400, self_successor.text
+    assert "different from the predecessor" in self_successor.json()["detail"]
