@@ -16,6 +16,16 @@ from reefvision.config import Settings
 from reefvision.db.models import Job, ModelRegistration
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.jobs import JobResponse
+from reefvision.schemas.pose_tracking import (
+    PoseAssociationCorrectionRequest,
+    PoseIdentityBreakCreateRequest,
+    PoseLandmarkAssociationDecisionResponse,
+    PoseLandmarkIdentityBreakResponse,
+    PoseTemporalAssociationBuildRequest,
+    PoseTemporalBuildResponse,
+    PoseTemporalExportFormat,
+    PoseTemporalTrackSummaryResponse,
+)
 from reefvision.schemas.video_georeferencing_readiness import (
     VideoGeoreferencingReadinessResponse,
 )
@@ -42,6 +52,7 @@ from reefvision.schemas.videos import (
     VideoTrackResponse,
     VideoTrackUpdate,
 )
+from reefvision.services.pose_temporal_tracking import PoseTemporalTrackingService
 from reefvision.services.scientific_3d_calibration import Scientific3DCalibrationValidationService
 from reefvision.services.video_assets import VideoAssetService
 from reefvision.services.video_georeferencing_readiness import (
@@ -295,6 +306,81 @@ def update_track(
 def delete_track(track_id: str, session: DbSession) -> Response:
     VideoTrackService(session).delete(track_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/video-tracks/{track_id}/pose-temporal-associations",
+    response_model=PoseTemporalBuildResponse,
+)
+def build_pose_temporal_associations(
+    track_id: str,
+    payload: PoseTemporalAssociationBuildRequest,
+    session: DbSession,
+) -> PoseTemporalBuildResponse:
+    return PoseTemporalTrackingService(session).build(track_id, payload)
+
+
+@router.get(
+    "/video-tracks/{track_id}/pose-temporal",
+    response_model=PoseTemporalTrackSummaryResponse,
+)
+def get_pose_temporal_summary(
+    track_id: str,
+    session: DbSession,
+) -> PoseTemporalTrackSummaryResponse:
+    return PoseTemporalTrackingService(session).summary(track_id)
+
+
+@router.get("/video-tracks/{track_id}/pose-temporal/export")
+def export_pose_temporal(
+    track_id: str,
+    session: DbSession,
+    export_format: Annotated[
+        PoseTemporalExportFormat,
+        Query(alias="format"),
+    ] = "csv",
+) -> Response:
+    payload = PoseTemporalTrackingService(session).export(track_id, export_format)
+    encoded_filename = quote(payload.filename, safe="")
+    return Response(
+        content=payload.content,
+        media_type=payload.media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+            "X-ReefVision-Pose-Format": export_format,
+        },
+    )
+
+
+@router.post(
+    "/pose-landmark-observations/{observation_id}/association-corrections",
+    response_model=PoseLandmarkAssociationDecisionResponse,
+)
+def correct_pose_landmark_association(
+    observation_id: str,
+    payload: PoseAssociationCorrectionRequest,
+    session: DbSession,
+) -> PoseLandmarkAssociationDecisionResponse:
+    return PoseTemporalTrackingService(session).correct_association(
+        observation_id,
+        payload,
+    )
+
+
+@router.post(
+    "/pose-landmark-tracks/{landmark_track_id}/identity-breaks",
+    response_model=PoseLandmarkIdentityBreakResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_pose_identity_break(
+    landmark_track_id: str,
+    payload: PoseIdentityBreakCreateRequest,
+    session: DbSession,
+) -> PoseLandmarkIdentityBreakResponse:
+    return PoseTemporalTrackingService(session).create_identity_break(
+        landmark_track_id,
+        payload,
+    )
 
 
 @router.get(
