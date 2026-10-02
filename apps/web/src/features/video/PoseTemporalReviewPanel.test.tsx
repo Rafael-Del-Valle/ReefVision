@@ -203,8 +203,9 @@ describe("PoseTemporalReviewPanel", () => {
     expect(
       await screen.findByText("Unresolved associations"),
     ).toBeInTheDocument();
-    expect(screen.getByText("unresolved · association confidence n/a · unreviewed"))
-      .toBeInTheDocument();
+    expect(
+      screen.getByText("unresolved · association confidence n/a · unreviewed"),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Next pose frame" }));
     expect(onFrameChange).toHaveBeenCalledWith(11);
@@ -223,10 +224,9 @@ describe("PoseTemporalReviewPanel", () => {
       ),
     );
 
-    expect(screen.getByRole("link", { name: "Export pose CSV" })).toHaveAttribute(
-      "href",
-      "/pose-export/track-1.csv",
-    );
+    expect(
+      screen.getByRole("link", { name: "Export pose CSV" }),
+    ).toHaveAttribute("href", "/pose-export/track-1.csv");
     expect(
       screen.getByRole("link", { name: "Export pose audit JSON" }),
     ).toHaveAttribute("href", "/pose-export/track-1.json");

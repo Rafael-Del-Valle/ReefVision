@@ -259,9 +259,7 @@ class SemanticModelService(SegmentationModelService):
                     groups_json=groups,
                     expanded_labels_json=expanded_labels,
                     keypoint_count=len(expanded_labels),
-                    allows_repeated_labels=any(
-                        group.count > 1 for group in payload.groups
-                    ),
+                    allows_repeated_labels=any(group.count > 1 for group in payload.groups),
                     content_hash=content_hash,
                 )
                 self.session.add(existing_revision)

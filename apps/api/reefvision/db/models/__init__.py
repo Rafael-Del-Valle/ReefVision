@@ -20,7 +20,6 @@ from reefvision.db.models.label_class import LabelClass
 from reefvision.db.models.mask_annotation import MaskAnnotation
 from reefvision.db.models.mask_annotation_event import MaskAnnotationEvent
 from reefvision.db.models.model_registration import ModelRegistration
-from reefvision.db.models.prediction_proposal import PredictionProposal
 from reefvision.db.models.pose_schema import (
     PoseLandmarkSchema,
     PoseLandmarkSchemaRevision,
@@ -34,6 +33,7 @@ from reefvision.db.models.pose_tracking import (
     PoseLandmarkObservation,
     PoseLandmarkTrack,
 )
+from reefvision.db.models.prediction_proposal import PredictionProposal
 from reefvision.db.models.project import Project
 from reefvision.db.models.project_class_visibility_default import (
     ProjectClassVisibilityDefault,
@@ -75,7 +75,6 @@ __all__ = [
     "MaskAnnotation",
     "MaskAnnotationEvent",
     "ModelRegistration",
-    "PredictionProposal",
     "PoseLandmarkAssociationCandidate",
     "PoseLandmarkAssociationDecision",
     "PoseLandmarkCorrection",
@@ -85,6 +84,7 @@ __all__ = [
     "PoseLandmarkSchemaRevision",
     "PoseLandmarkTrack",
     "PoseModelSchemaBinding",
+    "PredictionProposal",
     "Project",
     "ProjectClassVisibilityDefault",
     "ProjectExchangePackage",

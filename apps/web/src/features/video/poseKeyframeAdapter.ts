@@ -24,9 +24,7 @@ export function editorSchemaForVideoTrack(
   schema: VideoPoseLandmarkSchema,
 ): PoseLandmarkSchema {
   return {
-    id:
-      schema.schema_id ??
-      `video-track:${track.id}:${schema.schema_version}`,
+    id: schema.schema_id ?? `video-track:${track.id}:${schema.schema_version}`,
     revision: schema.schema_revision ?? 1,
     groups: schema.groups.map((group) => ({
       name: group.name,

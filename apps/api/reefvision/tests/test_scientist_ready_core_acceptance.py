@@ -98,11 +98,14 @@ def test_core_scientist_round_trip_preserves_raw_and_corrected_results(
     job = job_response.json()
 
     app = cast(FastAPI, client.app)
-    assert process_inference_job(
-        app.state.settings,
-        app.state.session_factory,
-        job["id"],
-    ) is True
+    assert (
+        process_inference_job(
+            app.state.settings,
+            app.state.session_factory,
+            job["id"],
+        )
+        is True
+    )
 
     proposals_response = client.get(f"/api/v1/images/{image_id}/prediction-proposals")
     assert proposals_response.status_code == 200, proposals_response.text
@@ -136,9 +139,7 @@ def test_core_scientist_round_trip_preserves_raw_and_corrected_results(
     assert accepted["proposal"]["was_edited"] is True
     assert accepted["annotation"]["source_type"] == "accepted_prediction"
     assert accepted["annotation"]["source_prediction_id"] == proposal["id"]
-    assert accepted["annotation"]["provenance_json"]["original_predicted_box"] == (
-        raw_machine_box
-    )
+    assert accepted["annotation"]["provenance_json"]["original_predicted_box"] == (raw_machine_box)
 
     calibration_response = client.put(
         f"/api/v1/images/{image_id}/measurement-calibration",
@@ -170,9 +171,7 @@ def test_core_scientist_round_trip_preserves_raw_and_corrected_results(
     restart_app = create_app(test_settings)
     try:
         with TestClient(restart_app) as reopened:
-            reopened_session_response = reopened.get(
-                f"/api/v1/images/{image_id}/annotations"
-            )
+            reopened_session_response = reopened.get(f"/api/v1/images/{image_id}/annotations")
             assert reopened_session_response.status_code == 200
             reopened_session = reopened_session_response.json()
             assert reopened_session["image"]["annotation_status"] == "reviewed"
@@ -195,9 +194,7 @@ def test_core_scientist_round_trip_preserves_raw_and_corrected_results(
                 "x_max": 31.0,
                 "y_max": 27.0,
             }
-            assert corrected["provenance_json"]["original_predicted_box"] == (
-                raw_machine_box
-            )
+            assert corrected["provenance_json"]["original_predicted_box"] == (raw_machine_box)
 
             reopened_proposals = reopened.get(
                 f"/api/v1/images/{image_id}/prediction-proposals"
@@ -215,9 +212,7 @@ def test_core_scientist_round_trip_preserves_raw_and_corrected_results(
                 f"/api/v1/images/{image_id}/measurement-calibration"
             )
             assert reopened_calibration.status_code == 200
-            assert reopened_calibration.json()["distance_per_pixel"] == pytest.approx(
-                0.05
-            )
+            assert reopened_calibration.json()["distance_per_pixel"] == pytest.approx(0.05)
             assert reopened_calibration.json()["unit"] == "cm"
 
             version = create_version(
@@ -237,9 +232,7 @@ def test_core_scientist_round_trip_preserves_raw_and_corrected_results(
                 export_payload["job"]["id"],
             )
             if not processed:
-                job_payload = reopened.get(
-                    f"/api/v1/jobs/{export_payload['job']['id']}"
-                ).json()
+                job_payload = reopened.get(f"/api/v1/jobs/{export_payload['job']['id']}").json()
                 export_state = reopened.get(
                     f"/api/v1/exports/{export_payload['export']['id']}"
                 ).json()
@@ -248,14 +241,10 @@ def test_core_scientist_round_trip_preserves_raw_and_corrected_results(
                     f"job={job_payload} export={export_state}"
                 )
 
-            export_record = reopened.get(
-                f"/api/v1/exports/{export_payload['export']['id']}"
-            ).json()
+            export_record = reopened.get(f"/api/v1/exports/{export_payload['export']['id']}").json()
             assert export_record["status"] == "succeeded"
 
-            export_root = test_settings.resolved_data_dir / Path(
-                export_record["output_path"]
-            )
+            export_root = test_settings.resolved_data_dir / Path(export_record["output_path"])
             label_file = next(export_root.glob("labels/*/*.txt"))
             label_lines = set(label_file.read_text(encoding="utf-8").splitlines())
             assert label_lines == {
@@ -263,9 +252,7 @@ def test_core_scientist_round_trip_preserves_raw_and_corrected_results(
                 "0 0.23125000 0.26666667 0.31250000 0.36666667",
             }
 
-            manifest_path = test_settings.resolved_data_dir / Path(
-                export_record["manifest_path"]
-            )
+            manifest_path = test_settings.resolved_data_dir / Path(export_record["manifest_path"])
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             assert manifest["dataset_version_id"] == version["id"]
             assert manifest["items"][0]["annotation_count"] == 2

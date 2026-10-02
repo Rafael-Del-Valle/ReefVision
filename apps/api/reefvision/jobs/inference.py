@@ -285,9 +285,7 @@ def process_inference_job(
         processed_images = int(job.progress_current or 0)
         if processed_images < 0 or processed_images > len(image_ids):
             job.status = "failed"
-            job.error_message = (
-                "Inference progress is inconsistent with the requested image set"
-            )
+            job.error_message = "Inference progress is inconsistent with the requested image set"
             job.completed_at = _utc_now()
             session.commit()
             return False

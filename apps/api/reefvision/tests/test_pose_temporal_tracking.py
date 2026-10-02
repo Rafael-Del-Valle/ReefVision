@@ -131,9 +131,7 @@ def test_temporal_pose_build_persists_repeated_landmark_identity_and_occlusion(
     assert result["created_association_decisions"] == 6
     assert result["unresolved_associations"] == 0
 
-    summary_response = client.get(
-        f"/api/v1/video-tracks/{source['id']}/pose-temporal"
-    )
+    summary_response = client.get(f"/api/v1/video-tracks/{source['id']}/pose-temporal")
     assert summary_response.status_code == 200, summary_response.text
     summary = summary_response.json()
     assert len(summary["landmark_tracks"]) == 2
@@ -154,28 +152,20 @@ def test_temporal_pose_build_persists_repeated_landmark_identity_and_occlusion(
     decisions_by_observation = {
         item["observation_id"]: item for item in summary["association_decisions"]
     }
-    occurrence_zero = [
-        item
-        for item in summary["observations"]
-        if item["occurrence_index"] == 0
-    ]
+    occurrence_zero = [item for item in summary["observations"] if item["occurrence_index"] == 0]
     occurrence_zero_ids = {
         decisions_by_observation[item["id"]]["selected_landmark_track_id"]
         for item in occurrence_zero
     }
     assert len(occurrence_zero_ids) == 1
 
-    metrics_response = client.get(
-        f"/api/v1/video-tracks/{source['id']}/pose-temporal/metrics"
-    )
+    metrics_response = client.get(f"/api/v1/video-tracks/{source['id']}/pose-temporal/metrics")
     assert metrics_response.status_code == 200, metrics_response.text
     metrics = metrics_response.json()
     assert metrics["schema_version"] == "pose-temporal-metrics-0001"
     assert len(metrics["tracklets"]) == 2
     moving_tracklet = next(
-        item
-        for item in metrics["tracklets"]
-        if item["visible_observation_count"] == 3
+        item for item in metrics["tracklets"] if item["visible_observation_count"] == 3
     )
     assert moving_tracklet["path_length_pixels"] == pytest.approx(4.0)
     assert moving_tracklet["displacement_pixels"] == pytest.approx(4.0)
@@ -183,9 +173,7 @@ def test_temporal_pose_build_persists_repeated_landmark_identity_and_occlusion(
     assert moving_tracklet["maximum_speed_pixels_per_second"] == pytest.approx(20.0)
 
     occluded_tracklet = next(
-        item
-        for item in metrics["tracklets"]
-        if item["occluded_observation_count"] == 1
+        item for item in metrics["tracklets"] if item["occluded_observation_count"] == 1
     )
     assert occluded_tracklet["associated_observation_count"] == 3
     assert occluded_tracklet["path_length_pixels"] == pytest.approx(0.0)
@@ -237,14 +225,8 @@ def test_out_of_frame_landmark_is_missing_and_not_spatially_associated(
     assert built.status_code == 200, built.text
     assert built.json()["unresolved_associations"] == 1
 
-    summary = client.get(
-        f"/api/v1/video-tracks/{track['id']}/pose-temporal"
-    ).json()
-    missing = next(
-        item
-        for item in summary["observations"]
-        if item["frame_index"] == 1
-    )
+    summary = client.get(f"/api/v1/video-tracks/{track['id']}/pose-temporal").json()
+    missing = next(item for item in summary["observations"] if item["frame_index"] == 1)
     assert missing["visibility_state"] == "out_of_frame"
     assert missing["observed_x_px"] is None
     assert missing["observed_y_px"] is None
@@ -252,9 +234,7 @@ def test_out_of_frame_landmark_is_missing_and_not_spatially_associated(
     assert missing["predicted_y_px"] is None
 
     decision = next(
-        item
-        for item in summary["association_decisions"]
-        if item["observation_id"] == missing["id"]
+        item for item in summary["association_decisions"] if item["observation_id"] == missing["id"]
     )
     assert decision["association_state"] == "unresolved"
     assert decision["selected_landmark_track_id"] is None
@@ -304,32 +284,22 @@ def test_temporal_pose_ambiguous_crossing_is_not_forced(
     assert built.status_code == 200, built.text
     assert built.json()["unresolved_associations"] == 2
 
-    summary = client.get(
-        f"/api/v1/video-tracks/{track['id']}/pose-temporal"
-    ).json()
-    frame_one_ids = {
-        item["id"] for item in summary["observations"] if item["frame_index"] == 1
-    }
+    summary = client.get(f"/api/v1/video-tracks/{track['id']}/pose-temporal").json()
+    frame_one_ids = {item["id"] for item in summary["observations"] if item["frame_index"] == 1}
     frame_one_decisions = [
-        item
-        for item in summary["association_decisions"]
-        if item["observation_id"] in frame_one_ids
+        item for item in summary["association_decisions"] if item["observation_id"] in frame_one_ids
     ]
     assert len(frame_one_decisions) == 2
     assert all(item["association_state"] == "unresolved" for item in frame_one_decisions)
     assert all(item["selected_landmark_track_id"] is None for item in frame_one_decisions)
 
-    qc_response = client.get(
-        f"/api/v1/video-tracks/{track['id']}/pose-temporal/qc"
-    )
+    qc_response = client.get(f"/api/v1/video-tracks/{track['id']}/pose-temporal/qc")
     assert qc_response.status_code == 200, qc_response.text
     qc = qc_response.json()
     assert qc["schema_version"] == "pose-temporal-qc-0001"
     assert qc["unresolved_identity_count"] == 2
     assert qc["flagged_frame_count"] == 1
-    unresolved_issues = [
-        item for item in qc["issues"] if item["code"] == "unresolved_identity"
-    ]
+    unresolved_issues = [item for item in qc["issues"] if item["code"] == "unresolved_identity"]
     assert len(unresolved_issues) == 2
     assert {item["frame_index"] for item in unresolved_issues} == {1}
 
@@ -347,9 +317,7 @@ def test_human_association_correction_identity_break_and_exports_are_auditable(
     )
     assert build.status_code == 200, build.text
 
-    summary = client.get(
-        f"/api/v1/video-tracks/{source['id']}/pose-temporal"
-    ).json()
+    summary = client.get(f"/api/v1/video-tracks/{source['id']}/pose-temporal").json()
     observation = next(
         item
         for item in summary["observations"]
@@ -393,9 +361,7 @@ def test_human_association_correction_identity_break_and_exports_are_auditable(
     assert identity_break.json()["human_verified"] is True
     assert identity_break.json()["source"] == "human"
 
-    audited = client.get(
-        f"/api/v1/video-tracks/{source['id']}/pose-temporal"
-    ).json()
+    audited = client.get(f"/api/v1/video-tracks/{source['id']}/pose-temporal").json()
     assert len(audited["corrections"]) == 2
     assert len(audited["identity_breaks"]) == 1
     frame_two_observation = next(
@@ -415,16 +381,12 @@ def test_human_association_correction_identity_break_and_exports_are_auditable(
     assert frame_two_decision["selected_landmark_track_id"] is None
     assert frame_two_decision["verification_state"] == "human_corrected"
 
-    csv_export = client.get(
-        f"/api/v1/video-tracks/{source['id']}/pose-temporal/export?format=csv"
-    )
+    csv_export = client.get(f"/api/v1/video-tracks/{source['id']}/pose-temporal/export?format=csv")
     assert csv_export.status_code == 200, csv_export.text
     rows = list(csv.DictReader(io.StringIO(csv_export.text)))
     assert len(rows) == 6
     corrected_row = next(
-        row
-        for row in rows
-        if row["frame_index"] == "1" and row["occurrence_index"] == "0"
+        row for row in rows if row["frame_index"] == "1" and row["occurrence_index"] == "0"
     )
     assert corrected_row["association_state"] == "unresolved"
     assert corrected_row["landmark_track_id"] == ""

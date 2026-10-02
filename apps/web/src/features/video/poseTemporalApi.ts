@@ -1,16 +1,9 @@
 import { getApiBaseUrl } from "../../runtime";
 
 export type PoseVisibilityState =
-  | "visible"
-  | "occluded"
-  | "out_of_frame"
-  | "uncertain"
-  | "absent";
+  "visible" | "occluded" | "out_of_frame" | "uncertain" | "absent";
 export type PoseAssociationState =
-  | "provisional"
-  | "confirmed"
-  | "unresolved"
-  | "identity_break";
+  "provisional" | "confirmed" | "unresolved" | "identity_break";
 
 export interface TemporalPoseLandmarkTrack {
   id: string;
@@ -66,10 +59,7 @@ export interface TemporalPoseAssociationDecision {
   association_state: PoseAssociationState;
   association_confidence: number | null;
   verification_state:
-    | "unreviewed"
-    | "human_confirmed"
-    | "human_corrected"
-    | string;
+    "unreviewed" | "human_confirmed" | "human_corrected" | string;
   association_source: "tracker" | "human" | "import" | string;
   candidate_margin: number | null;
   total_cost: number | null;

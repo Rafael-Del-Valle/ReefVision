@@ -351,17 +351,18 @@ def test_invalid_segmentation_output_fails_before_proposal_persistence(
     job = queued.json()
 
     app = cast(FastAPI, client.app)
-    assert inference_module.process_inference_job(
-        app.state.settings,
-        app.state.session_factory,
-        job["id"],
-    ) is False
+    assert (
+        inference_module.process_inference_job(
+            app.state.settings,
+            app.state.session_factory,
+            job["id"],
+        )
+        is False
+    )
 
     failed_job = client.get(f"/api/v1/jobs/{job['id']}").json()
     assert failed_job["status"] == "failed"
     assert "polygon" in failed_job["error_message"].lower()
     assert "inside the source image" in failed_job["error_message"]
-    proposals = client.get(
-        f"/api/v1/images/{image_id}/prediction-proposals"
-    ).json()["items"]
+    proposals = client.get(f"/api/v1/images/{image_id}/prediction-proposals").json()["items"]
     assert proposals == []

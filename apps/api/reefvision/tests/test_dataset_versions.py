@@ -365,12 +365,8 @@ def test_interrupted_dataset_export_restarts_from_clean_partial_artifacts(
     assert created.status_code == 200, created.text
     payload = created.json()
 
-    output_root = test_settings.resolved_data_dir / Path(
-        payload["export"]["output_path"]
-    )
-    archive_path = test_settings.resolved_data_dir / Path(
-        payload["export"]["archive_path"]
-    )
+    output_root = test_settings.resolved_data_dir / Path(payload["export"]["output_path"])
+    archive_path = test_settings.resolved_data_dir / Path(payload["export"]["archive_path"])
     output_root.mkdir(parents=True)
     stale_file = output_root / "stale-partial-file.txt"
     stale_file.write_text("interrupted export", encoding="utf-8")
@@ -383,10 +379,13 @@ def test_interrupted_dataset_export_restarts_from_clean_partial_artifacts(
         job.status = "running"
         session.commit()
 
-    assert recover_interrupted_jobs(
-        app.state.session_factory,
-        app.state.settings,
-    ) == 1
+    assert (
+        recover_interrupted_jobs(
+            app.state.session_factory,
+            app.state.settings,
+        )
+        == 1
+    )
     recovered = client.get(f"/api/v1/jobs/{payload['job']['id']}").json()
     assert recovered["status"] == "queued"
     assert recovered["result_json"]["recovery"] == "requeued_on_startup"

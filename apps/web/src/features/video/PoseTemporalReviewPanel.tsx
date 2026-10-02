@@ -68,12 +68,14 @@ export function PoseTemporalReviewPanel({
   const qcQuery = useQuery({
     queryKey: ["pose-temporal-qc", trackId],
     queryFn: ({ signal }) => getTemporalPoseQc(trackId, signal),
-    enabled: Boolean(trackId) && (summaryQuery.data?.observations.length ?? 0) > 0,
+    enabled:
+      Boolean(trackId) && (summaryQuery.data?.observations.length ?? 0) > 0,
   });
   const metricsQuery = useQuery({
     queryKey: ["pose-temporal-metrics", trackId],
     queryFn: ({ signal }) => getTemporalPoseMetrics(trackId, signal),
-    enabled: Boolean(trackId) && (summaryQuery.data?.observations.length ?? 0) > 0,
+    enabled:
+      Boolean(trackId) && (summaryQuery.data?.observations.length ?? 0) > 0,
   });
 
   const invalidate = async () => {
@@ -138,10 +140,7 @@ export function PoseTemporalReviewPanel({
   });
 
   const breakMutation = useMutation({
-    mutationFn: (payload: {
-      landmarkTrackId: string;
-      observationId: string;
-    }) =>
+    mutationFn: (payload: { landmarkTrackId: string; observationId: string }) =>
       createTemporalPoseIdentityBreak(payload.landmarkTrackId, {
         break_after_frame: frameIndex,
         reason: "ambiguous_crossing",
@@ -151,7 +150,9 @@ export function PoseTemporalReviewPanel({
           ".",
       }),
     onSuccess: async () => {
-      setStatusMessage("Identity break recorded and preserved in the audit trail.");
+      setStatusMessage(
+        "Identity break recorded and preserved in the audit trail.",
+      );
       await invalidate();
     },
     onError: (error) => {
@@ -206,9 +207,11 @@ export function PoseTemporalReviewPanel({
   ).length;
   const qcFrames = useMemo(
     () =>
-      [...new Set((qcQuery.data?.issues ?? []).map((issue) => issue.frame_index))].sort(
-        (first, second) => first - second,
-      ),
+      [
+        ...new Set(
+          (qcQuery.data?.issues ?? []).map((issue) => issue.frame_index),
+        ),
+      ].sort((first, second) => first - second),
     [qcQuery.data?.issues],
   );
   const nextQcFrame =
@@ -220,8 +223,8 @@ export function PoseTemporalReviewPanel({
       <h3>Repeated-landmark identity review</h3>
       <p className="annotation-helper">
         Tracklet IDs describe temporal continuity, not anatomical numbering.
-        Ambiguous identities remain unresolved until evidence or scientist review
-        supports an assignment.
+        Ambiguous identities remain unresolved until evidence or scientist
+        review supports an assignment.
       </p>
 
       {summaryQuery.isLoading && <p>Loading temporal pose records…</p>}
@@ -394,8 +397,8 @@ export function PoseTemporalReviewPanel({
                           <option value="">Unresolved</option>
                           {compatibleTracks.map((track) => (
                             <option key={track.id} value={track.id}>
-                              {track.semantic_label} · {shortIdentity(track.id)} ·{" "}
-                              {track.lifecycle_state}
+                              {track.semantic_label} · {shortIdentity(track.id)}{" "}
+                              · {track.lifecycle_state}
                             </option>
                           ))}
                         </select>
@@ -466,15 +469,16 @@ export function PoseTemporalReviewPanel({
                       </strong>
                       <div className="annotation-helper">
                         frames {metric.first_frame}–{metric.last_frame} ·{" "}
-                        {metric.associated_observation_count} associated observations
+                        {metric.associated_observation_count} associated
+                        observations
                       </div>
                     </div>
                     <div className="annotation-helper">
-                      path {metric.path_length_pixels.toFixed(1)} px · displacement{" "}
-                      {metric.displacement_pixels.toFixed(1)} px · occluded{" "}
-                      {metric.occluded_observation_count} · out of frame{" "}
-                      {metric.out_of_frame_observation_count} · identity breaks{" "}
-                      {metric.identity_break_count}
+                      path {metric.path_length_pixels.toFixed(1)} px ·
+                      displacement {metric.displacement_pixels.toFixed(1)} px ·
+                      occluded {metric.occluded_observation_count} · out of
+                      frame {metric.out_of_frame_observation_count} · identity
+                      breaks {metric.identity_break_count}
                     </div>
                   </div>
                 ))}

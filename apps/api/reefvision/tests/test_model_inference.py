@@ -533,18 +533,16 @@ def test_interrupted_inference_resumes_without_duplicate_proposals(
     interrupted_job = client.get(f"/api/v1/jobs/{job['id']}").json()
     assert interrupted_job["status"] == "running"
     assert interrupted_job["progress_current"] == 1
-    assert len(
-        client.get(f"/api/v1/images/{first_id}/prediction-proposals").json()["items"]
-    ) == 1
-    assert (
-        client.get(f"/api/v1/images/{second_id}/prediction-proposals").json()["items"]
-        == []
-    )
+    assert len(client.get(f"/api/v1/images/{first_id}/prediction-proposals").json()["items"]) == 1
+    assert client.get(f"/api/v1/images/{second_id}/prediction-proposals").json()["items"] == []
 
-    assert recover_interrupted_jobs(
-        app.state.session_factory,
-        app.state.settings,
-    ) == 1
+    assert (
+        recover_interrupted_jobs(
+            app.state.session_factory,
+            app.state.settings,
+        )
+        == 1
+    )
     recovered_job = client.get(f"/api/v1/jobs/{job['id']}").json()
     assert recovered_job["status"] == "queued"
     assert recovered_job["progress_current"] == 1
@@ -556,19 +554,18 @@ def test_interrupted_inference_resumes_without_duplicate_proposals(
         "detection_provider_for_name",
         lambda provider_name: resumed_provider,
     )
-    assert process_inference_job(
-        app.state.settings,
-        app.state.session_factory,
-        job["id"],
-    ) is True
+    assert (
+        process_inference_job(
+            app.state.settings,
+            app.state.session_factory,
+            job["id"],
+        )
+        is True
+    )
 
     assert resumed_provider.predict_calls == 1
-    assert len(
-        client.get(f"/api/v1/images/{first_id}/prediction-proposals").json()["items"]
-    ) == 1
-    assert len(
-        client.get(f"/api/v1/images/{second_id}/prediction-proposals").json()["items"]
-    ) == 1
+    assert len(client.get(f"/api/v1/images/{first_id}/prediction-proposals").json()["items"]) == 1
+    assert len(client.get(f"/api/v1/images/{second_id}/prediction-proposals").json()["items"]) == 1
     completed_job = client.get(f"/api/v1/jobs/{job['id']}").json()
     assert completed_job["status"] == "succeeded"
     assert completed_job["progress_current"] == 2
@@ -624,20 +621,21 @@ def test_terminal_inference_failure_removes_pending_partial_outputs_before_retry
         lambda provider_name: failing_provider,
     )
     app = cast(FastAPI, client.app)
-    assert process_inference_job(
-        app.state.settings,
-        app.state.session_factory,
-        job["id"],
-    ) is False
+    assert (
+        process_inference_job(
+            app.state.settings,
+            app.state.session_factory,
+            job["id"],
+        )
+        is False
+    )
 
     failed_job = client.get(f"/api/v1/jobs/{job['id']}").json()
     assert failed_job["status"] == "failed"
     assert failed_job["progress_current"] == 1
     assert failed_job["result_json"]["removed_pending_proposals"] == 1
     for image_id in image_ids:
-        proposals = client.get(
-            f"/api/v1/images/{image_id}/prediction-proposals"
-        ).json()["items"]
+        proposals = client.get(f"/api/v1/images/{image_id}/prediction-proposals").json()["items"]
         assert proposals == []
 
     retry = client.post(
@@ -650,17 +648,18 @@ def test_terminal_inference_failure_removes_pending_partial_outputs_before_retry
         "detection_provider_for_name",
         lambda provider_name: retry_provider,
     )
-    assert process_inference_job(
-        app.state.settings,
-        app.state.session_factory,
-        retry["id"],
-    ) is True
+    assert (
+        process_inference_job(
+            app.state.settings,
+            app.state.session_factory,
+            retry["id"],
+        )
+        is True
+    )
 
     assert retry_provider.predict_calls == 2
     for image_id in image_ids:
-        proposals = client.get(
-            f"/api/v1/images/{image_id}/prediction-proposals"
-        ).json()["items"]
+        proposals = client.get(f"/api/v1/images/{image_id}/prediction-proposals").json()["items"]
         assert len(proposals) == 1
 
 
@@ -743,16 +742,17 @@ def test_invalid_detector_outputs_fail_before_proposal_persistence(
     ).json()
 
     app = cast(FastAPI, client.app)
-    assert process_inference_job(
-        app.state.settings,
-        app.state.session_factory,
-        job["id"],
-    ) is False
+    assert (
+        process_inference_job(
+            app.state.settings,
+            app.state.session_factory,
+            job["id"],
+        )
+        is False
+    )
 
     failed_job = client.get(f"/api/v1/jobs/{job['id']}").json()
     assert failed_job["status"] == "failed"
     assert error_fragment in failed_job["error_message"]
-    proposals = client.get(
-        f"/api/v1/images/{image_id}/prediction-proposals"
-    ).json()["items"]
+    proposals = client.get(f"/api/v1/images/{image_id}/prediction-proposals").json()["items"]
     assert proposals == []

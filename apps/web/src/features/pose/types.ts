@@ -17,11 +17,7 @@ export interface PoseLandmarkSchema {
 }
 
 export type PoseLandmarkStatus =
-  | "visible"
-  | "occluded"
-  | "out_of_frame"
-  | "uncertain"
-  | "absent";
+  "visible" | "occluded" | "out_of_frame" | "uncertain" | "absent";
 
 export interface PoseLandmarkObservation {
   id: string;

@@ -522,9 +522,7 @@ def process_video_tracking_job(
                     )
                     pose_landmark_track_count += temporal_result.created_landmark_tracks
                     pose_temporal_observation_count += temporal_result.created_observations
-                    pose_unresolved_association_count += (
-                        temporal_result.unresolved_associations
-                    )
+                    pose_unresolved_association_count += temporal_result.unresolved_associations
                     pose_identity_break_count += temporal_result.identity_breaks
 
                 if georeferencing_service is not None:

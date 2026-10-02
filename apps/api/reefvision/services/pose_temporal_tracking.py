@@ -47,7 +47,6 @@ from reefvision.schemas.pose_tracking import (
 )
 from reefvision.schemas.videos import VideoTrackKeyframe
 
-
 ASSOCIATION_ALGORITHM = "reefvision-temporal-pose"
 ASSOCIATION_ALGORITHM_VERSION = "0001"
 AUDIT_SCHEMA_VERSION = "reefvision-pose-tracks-0001"
@@ -181,8 +180,7 @@ class PoseTemporalTrackingService:
     def _keyframes(track: VideoTrack) -> list[VideoTrackKeyframe]:
         try:
             return [
-                VideoTrackKeyframe.model_validate(item)
-                for item in list(track.keyframes_json or [])
+                VideoTrackKeyframe.model_validate(item) for item in list(track.keyframes_json or [])
             ]
         except ValueError as exc:
             raise ValidationError("Stored video track keyframes are invalid") from exc
@@ -214,8 +212,10 @@ class PoseTemporalTrackingService:
                 if isinstance(schema, dict):
                     version = str(schema.get("schema_version") or "pose-landmarks-0001")
                     labels = schema.get("expanded_labels")
-                    if isinstance(labels, list) and labels and all(
-                        isinstance(item, str) and item for item in labels
+                    if (
+                        isinstance(labels, list)
+                        and labels
+                        and all(isinstance(item, str) and item for item in labels)
                     ):
                         schema_id = schema.get("schema_id")
                         schema_revision = schema.get("schema_revision")
@@ -360,9 +360,7 @@ class PoseTemporalTrackingService:
             )
         )
         self.session.execute(
-            delete(PoseLandmarkTrack).where(
-                PoseLandmarkTrack.parent_video_track_id == track_id
-            )
+            delete(PoseLandmarkTrack).where(PoseLandmarkTrack.parent_video_track_id == track_id)
         )
         self.session.flush()
 
@@ -573,10 +571,8 @@ class PoseTemporalTrackingService:
                     candidates: list[_CandidateCost] = []
                     for active in eligible_active:
                         candidate = self._candidate_cost(active, frame_items[index])
-                        if (
-                            candidate is not None
-                            and candidate.total_cost
-                            <= float(payload.max_normalized_displacement)
+                        if candidate is not None and candidate.total_cost <= float(
+                            payload.max_normalized_displacement
                         ):
                             candidates.append(candidate)
                     candidates.sort(key=lambda item: (item.total_cost, item.track_id))
@@ -691,8 +687,7 @@ class PoseTemporalTrackingService:
                             confidence = max(
                                 0.0,
                                 1.0
-                                - candidate.total_cost
-                                / float(payload.max_normalized_displacement),
+                                - candidate.total_cost / float(payload.max_normalized_displacement),
                             )
                             self.session.add(
                                 PoseLandmarkAssociationCandidate(
@@ -773,9 +768,7 @@ class PoseTemporalTrackingService:
                     gap = max(1, frame_index - active.last_frame)
                     raw_confidence = max(
                         0.0,
-                        1.0
-                        - assigned.total_cost
-                        / float(payload.max_normalized_displacement),
+                        1.0 - assigned.total_cost / float(payload.max_normalized_displacement),
                     )
                     gap_penalty = 1.0 / (1.0 + 0.15 * max(0, gap - 1))
                     association_confidence = raw_confidence * gap_penalty
@@ -830,9 +823,7 @@ class PoseTemporalTrackingService:
                     for rank, candidate in enumerate(candidates, start=1):
                         confidence = max(
                             0.0,
-                            1.0
-                            - candidate.total_cost
-                            / float(payload.max_normalized_displacement),
+                            1.0 - candidate.total_cost / float(payload.max_normalized_displacement),
                         )
                         self.session.add(
                             PoseLandmarkAssociationCandidate(
@@ -893,9 +884,7 @@ class PoseTemporalTrackingService:
             list(
                 self.session.scalars(
                     select(PoseLandmarkAssociationDecision)
-                    .where(
-                        PoseLandmarkAssociationDecision.observation_id.in_(observation_ids)
-                    )
+                    .where(PoseLandmarkAssociationDecision.observation_id.in_(observation_ids))
                     .order_by(
                         PoseLandmarkAssociationDecision.observation_id,
                         PoseLandmarkAssociationDecision.decision_revision,
@@ -921,16 +910,12 @@ class PoseTemporalTrackingService:
         )
         return PoseTemporalTrackSummaryResponse(
             parent_video_track_id=track_id,
-            landmark_tracks=[
-                PoseLandmarkTrackResponse.model_validate(item) for item in tracks
-            ],
+            landmark_tracks=[PoseLandmarkTrackResponse.model_validate(item) for item in tracks],
             observations=[
-                PoseLandmarkObservationResponse.model_validate(item)
-                for item in observations
+                PoseLandmarkObservationResponse.model_validate(item) for item in observations
             ],
             association_decisions=[
-                PoseLandmarkAssociationDecisionResponse.model_validate(item)
-                for item in decisions
+                PoseLandmarkAssociationDecisionResponse.model_validate(item) for item in decisions
             ],
             identity_breaks=[
                 PoseLandmarkIdentityBreakResponse.model_validate(item) for item in breaks
@@ -1014,9 +999,7 @@ class PoseTemporalTrackingService:
             previous_observation_id=current.previous_observation_id,
             association_state=payload.association_state,
             association_confidence=current.association_confidence,
-            verification_state=(
-                "human_confirmed" if unchanged_identity else "human_corrected"
-            ),
+            verification_state=("human_confirmed" if unchanged_identity else "human_corrected"),
             association_source="human",
             candidate_margin=current.candidate_margin,
             total_cost=current.total_cost,
@@ -1111,9 +1094,7 @@ class PoseTemporalTrackingService:
                 .order_by(PoseLandmarkObservation.frame_index, PoseLandmarkObservation.id)
             )
         )
-        latest_future_decisions = self._latest_decisions(
-            [item.id for item in future_observations]
-        )
+        latest_future_decisions = self._latest_decisions([item.id for item in future_observations])
         successor_previous_observation_id: str | None = None
         for observation in future_observations:
             current = latest_future_decisions.get(observation.id)
@@ -1343,13 +1324,8 @@ class PoseTemporalTrackingService:
 
         latest_observations: dict[str, PoseLandmarkObservationResponse] = {}
         for observation in summary.observations:
-            current_observation = latest_observations.get(
-                observation.observation_series_id
-            )
-            if (
-                current_observation is None
-                or observation.revision > current_observation.revision
-            ):
+            current_observation = latest_observations.get(observation.observation_series_id)
+            if current_observation is None or observation.revision > current_observation.revision:
                 latest_observations[observation.observation_series_id] = observation
 
         latest_decisions: dict[str, PoseLandmarkAssociationDecisionResponse] = {}
@@ -1357,12 +1333,9 @@ class PoseTemporalTrackingService:
             current_decision = latest_decisions.get(association_decision.observation_id)
             if (
                 current_decision is None
-                or association_decision.decision_revision
-                > current_decision.decision_revision
+                or association_decision.decision_revision > current_decision.decision_revision
             ):
-                latest_decisions[association_decision.observation_id] = (
-                    association_decision
-                )
+                latest_decisions[association_decision.observation_id] = association_decision
 
         observations_by_track: dict[
             str,
@@ -1404,8 +1377,7 @@ class PoseTemporalTrackingService:
             observed = [
                 item
                 for item in associated
-                if item[0].observed_x_px is not None
-                and item[0].observed_y_px is not None
+                if item[0].observed_x_px is not None and item[0].observed_y_px is not None
             ]
             path_length = 0.0
             speeds: list[float] = []
@@ -1468,14 +1440,11 @@ class PoseTemporalTrackingService:
                     uncertain_observation_count=status_counts["uncertain"],
                     absent_observation_count=status_counts["absent"],
                     human_reviewed_observation_count=sum(
-                        decision.verification_state != "unreviewed"
-                        for _, decision in associated
+                        decision.verification_state != "unreviewed" for _, decision in associated
                     ),
                     path_length_pixels=path_length,
                     displacement_pixels=displacement,
-                    mean_speed_pixels_per_second=(
-                        sum(speeds) / len(speeds) if speeds else None
-                    ),
+                    mean_speed_pixels_per_second=(sum(speeds) / len(speeds) if speeds else None),
                     maximum_speed_pixels_per_second=max(speeds) if speeds else None,
                     mean_association_confidence=(
                         sum(association_confidences) / len(association_confidences)
@@ -1483,9 +1452,7 @@ class PoseTemporalTrackingService:
                         else None
                     ),
                     minimum_association_confidence=(
-                        min(association_confidences)
-                        if association_confidences
-                        else None
+                        min(association_confidences) if association_confidences else None
                     ),
                     identity_break_count=breaks_by_track.get(landmark_track.id, 0),
                 )
@@ -1542,9 +1509,7 @@ class PoseTemporalTrackingService:
                 "landmark_tracks": [
                     item.model_dump(mode="json") for item in summary.landmark_tracks
                 ],
-                "observations": [
-                    item.model_dump(mode="json") for item in summary.observations
-                ],
+                "observations": [item.model_dump(mode="json") for item in summary.observations],
                 "association_decisions": [
                     item.model_dump(mode="json") for item in summary.association_decisions
                 ],
@@ -1567,9 +1532,7 @@ class PoseTemporalTrackingService:
                 "identity_breaks": [
                     item.model_dump(mode="json") for item in summary.identity_breaks
                 ],
-                "human_corrections": [
-                    item.model_dump(mode="json") for item in summary.corrections
-                ],
+                "human_corrections": [item.model_dump(mode="json") for item in summary.corrections],
             }
             return PoseTemporalExportPayload(
                 filename=f"{video.original_filename.rsplit('.', 1)[0]}-pose-tracks.json",
@@ -1603,9 +1566,7 @@ class PoseTemporalTrackingService:
                 item.occurrence_index,
             )
         )
-        latest_decisions = self._latest_decisions(
-            [item.id for item in effective_observations]
-        )
+        latest_decisions = self._latest_decisions([item.id for item in effective_observations])
         breaks = summary.identity_breaks
         break_before = {
             (item.successor_landmark_track_id, item.successor_start_frame)
@@ -1614,8 +1575,7 @@ class PoseTemporalTrackingService:
             and item.successor_start_frame is not None
         }
         break_after = {
-            (item.predecessor_landmark_track_id, item.break_after_frame)
-            for item in breaks
+            (item.predecessor_landmark_track_id, item.break_after_frame) for item in breaks
         }
         corrected_observation_ids = {
             item.observation_id
@@ -1677,24 +1637,16 @@ class PoseTemporalTrackingService:
                     "occurrence_index": observation.occurrence_index,
                     "landmark_track_id": selected_track_id or "",
                     "observed_x_px": (
-                        observation.observed_x_px
-                        if observation.observed_x_px is not None
-                        else ""
+                        observation.observed_x_px if observation.observed_x_px is not None else ""
                     ),
                     "observed_y_px": (
-                        observation.observed_y_px
-                        if observation.observed_y_px is not None
-                        else ""
+                        observation.observed_y_px if observation.observed_y_px is not None else ""
                     ),
                     "predicted_x_px": (
-                        observation.predicted_x_px
-                        if observation.predicted_x_px is not None
-                        else ""
+                        observation.predicted_x_px if observation.predicted_x_px is not None else ""
                     ),
                     "predicted_y_px": (
-                        observation.predicted_y_px
-                        if observation.predicted_y_px is not None
-                        else ""
+                        observation.predicted_y_px if observation.predicted_y_px is not None else ""
                     ),
                     "visibility_state": observation.visibility_state,
                     "landmark_confidence": (
@@ -1707,8 +1659,7 @@ class PoseTemporalTrackingService:
                     ),
                     "association_confidence": (
                         decision.association_confidence
-                        if decision is not None
-                        and decision.association_confidence is not None
+                        if decision is not None and decision.association_confidence is not None
                         else ""
                     ),
                     "verification_state": (
