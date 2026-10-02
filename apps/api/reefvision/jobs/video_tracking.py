@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from collections import defaultdict
 from datetime import UTC, datetime
@@ -68,7 +69,21 @@ def _project_class_mapping(model: ModelRegistration) -> dict[str, str]:
     return {}
 
 
-def _keyframes(observations: list[TrackObservation]) -> list[dict[str, object]]:
+def _keyframes(
+    observations: list[TrackObservation],
+    pose_landmark_schema: dict[str, object] | None = None,
+) -> list[dict[str, object]]:
+    labels_raw = (
+        pose_landmark_schema.get("expanded_labels")
+        if pose_landmark_schema is not None
+        else None
+    )
+    expanded_labels = (
+        [str(item) for item in labels_raw]
+        if isinstance(labels_raw, list)
+        else None
+    )
+
     keyframes: list[dict[str, object]] = []
     for item in observations:
         payload: dict[str, object] = {
@@ -78,6 +93,51 @@ def _keyframes(observations: list[TrackObservation]) -> list[dict[str, object]]:
         }
         if item.keypoints is not None:
             payload["keypoints"] = [list(point) for point in item.keypoints]
+            if expanded_labels is not None:
+                if len(expanded_labels) != len(item.keypoints):
+                    raise ValidationError(
+                        "Pose prediction landmark count does not match the "
+                        "bound ReefVision landmark schema"
+                    )
+                occurrence_counts: dict[str, int] = {}
+                pose_observations: list[dict[str, object]] = []
+                for index, point in enumerate(item.keypoints):
+                    label = expanded_labels[index]
+                    occurrence_index = occurrence_counts.get(label, 0)
+                    occurrence_counts[label] = occurrence_index + 1
+                    x, y, confidence = (
+                        float(point[0]),
+                        float(point[1]),
+                        float(point[2]),
+                    )
+                    visible = (
+                        math.isfinite(x)
+                        and math.isfinite(y)
+                        and math.isfinite(confidence)
+                        and x >= 0
+                        and y >= 0
+                        and confidence > 0
+                    )
+                    pose_observations.append(
+                        {
+                            "id": (
+                                f"provider:{item.provider_track_id}:"
+                                f"frame:{item.frame}:landmark:{index}"
+                            ),
+                            "semantic_label": label,
+                            "occurrence_index": occurrence_index,
+                            "x": x if visible else 0.0,
+                            "y": y if visible else 0.0,
+                            "confidence": (
+                                min(max(confidence, 0.0), 1.0)
+                                if math.isfinite(confidence)
+                                else 0.0
+                            ),
+                            "status": "visible" if visible else "absent",
+                            "source": "model",
+                        }
+                    )
+                payload["pose_observations"] = pose_observations
         keyframes.append(payload)
     return keyframes
 
@@ -358,8 +418,10 @@ def process_video_tracking_job(
         )
 
         link_detections = bool(request.get("link_detections", True))
-        tracker_name = (
-            str(request.get("tracker", "bytetrack.yaml")) if link_detections else "instances-only"
+        requested_tracker = str(request.get("tracker", "bytetrack.yaml"))
+        tracker_name = provider.resolve_tracker_name(
+            requested_tracker,
+            link_detections=link_detections,
         )
         confidence = float(request.get("confidence", 0.25))
         iou = float(request.get("iou", 0.5))
@@ -484,7 +546,7 @@ def process_video_tracking_job(
                     label_class_id=label_class_id,
                     track_number=next_number,
                     geometry_kind="bbox",
-                    keyframes_json=_keyframes(ordered),
+                    keyframes_json=_keyframes(ordered, pose_landmark_schema),
                     interpolation="linear",
                     status="machine_generated",
                     source_model_id=model_id,
