@@ -215,7 +215,7 @@ it("shows raw, pruned, and final skeleton measurements", async () => {
   renderPanel();
 
   expect(await screen.findByText("12.00 px")).toBeInTheDocument();
-  expect(screen.getAllByText("10.00 px")).toHaveLength(2);
+  expect(screen.getAllByText("10.00 px")).toHaveLength(3);
   expect(screen.getByText("automatic pruned")).toBeInTheDocument();
   expect(screen.getByText("unreviewed")).toBeInTheDocument();
 });
