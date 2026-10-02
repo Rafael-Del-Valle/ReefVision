@@ -1092,6 +1092,22 @@ class PoseTemporalTrackingService:
         predecessor = self.session.get(PoseLandmarkTrack, landmark_track_id)
         if predecessor is None:
             raise NotFoundError("Pose landmark track not found")
+        existing_break = self.session.scalar(
+            select(PoseLandmarkIdentityBreak)
+            .where(
+                PoseLandmarkIdentityBreak.predecessor_landmark_track_id
+                == predecessor.id
+            )
+            .order_by(
+                PoseLandmarkIdentityBreak.break_after_frame,
+                PoseLandmarkIdentityBreak.id,
+            )
+            .limit(1)
+        )
+        if existing_break is not None:
+            raise ConflictError(
+                "Landmark identity already has a break; review the existing break instead"
+            )
         if payload.break_after_frame < predecessor.first_frame:
             raise ValidationError(
                 "Identity break cannot occur before the track begins"
