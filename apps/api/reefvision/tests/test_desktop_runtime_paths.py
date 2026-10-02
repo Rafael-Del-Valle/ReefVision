@@ -96,7 +96,7 @@ def test_older_database_revision_still_invokes_alembic_upgrade(
     monkeypatch,
 ) -> None:
     settings = _desktop_settings(tmp_path / "older")
-    _stamp_database(settings, "0031")
+    _stamp_database(settings, "0032")
 
     calls: list[str] = []
 
