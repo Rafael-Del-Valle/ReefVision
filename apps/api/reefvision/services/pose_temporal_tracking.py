@@ -32,6 +32,7 @@ from reefvision.domain.errors import ConflictError, NotFoundError, ValidationErr
 from reefvision.schemas.pose_tracking import (
     PoseAssociationCorrectionRequest,
     PoseIdentityBreakCreateRequest,
+    PoseIdentityBreakReviewRequest,
     PoseLandmarkAssociationCandidateResponse,
     PoseLandmarkAssociationDecisionResponse,
     PoseLandmarkCorrectionResponse,
@@ -1262,6 +1263,52 @@ class PoseTemporalTrackingService:
         self.session.commit()
         self.session.refresh(identity_break)
         return PoseLandmarkIdentityBreakResponse.model_validate(identity_break)
+
+    def review_identity_break(
+        self,
+        identity_break_id: str,
+        payload: PoseIdentityBreakReviewRequest,
+    ) -> PoseLandmarkIdentityBreakResponse:
+        identity_break = self.session.get(
+            PoseLandmarkIdentityBreak,
+            identity_break_id,
+        )
+        if identity_break is None:
+            raise NotFoundError("Pose landmark identity break not found")
+        if identity_break.human_verified:
+            return PoseLandmarkIdentityBreakResponse.model_validate(
+                identity_break
+            )
+
+        correction = PoseLandmarkCorrection(
+            parent_video_track_id=identity_break.parent_video_track_id,
+            action="confirm_identity_break",
+            target_type="identity_break",
+            target_id=identity_break.id,
+            frame_start=identity_break.break_after_frame,
+            frame_end=identity_break.successor_start_frame,
+            reason_code=payload.reason_code,
+            note=payload.note,
+            before_json={
+                "human_verified": identity_break.human_verified,
+                "source": identity_break.source,
+            },
+            after_json={
+                "human_verified": True,
+                "source": identity_break.source,
+            },
+            actor="local_user",
+        )
+        self.session.add(correction)
+        self.session.flush()
+
+        identity_break.human_verified = True
+        identity_break.correction_id = correction.id
+        self.session.commit()
+        self.session.refresh(identity_break)
+        return PoseLandmarkIdentityBreakResponse.model_validate(
+            identity_break
+        )
 
     def _latest_decisions(
         self,
