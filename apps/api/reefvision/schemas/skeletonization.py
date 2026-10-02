@@ -157,6 +157,7 @@ class SkeletonizationAnalysisResponse(BaseModel):
     pruned_longest_path_physical: float | None = Field(default=None, ge=0)
     raw_branch_angles: list[SkeletonBranchAngleResponse] = Field(default_factory=list)
     pruned_branch_angles: list[SkeletonBranchAngleResponse] = Field(default_factory=list)
+    branch_angle_space: Literal["image_pixels", "reference_plane"] = "image_pixels"
     calibrated: bool = False
     physical_unit: str | None = None
     distance_per_pixel: float | None = Field(default=None, gt=0)
