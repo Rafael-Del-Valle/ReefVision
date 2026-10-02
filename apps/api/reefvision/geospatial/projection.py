@@ -113,14 +113,7 @@ def pixel_to_camera_ray(x_px: float, y_px: float, calibration: CameraCalibration
     point = np.array([[[x_px, y_px]]], dtype=np.float64)
     try:
         if distortion.size:
-            normalized = cv2.undistortPointsIter(  # type: ignore[attr-defined]
-                point,
-                k,
-                distortion,
-                np.eye(3, dtype=np.float64),
-                np.eye(3, dtype=np.float64),
-                (cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 100, 1e-12),
-            ).reshape(2)
+            normalized = cv2.undistortPoints(point, k, distortion).reshape(2)
             x, y = float(normalized[0]), float(normalized[1])
         else:
             x = (x_px - calibration.cx_px) / calibration.fx_px
