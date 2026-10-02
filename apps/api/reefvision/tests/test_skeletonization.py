@@ -175,3 +175,58 @@ def test_unverified_mask_is_not_ready_even_when_connected(client: TestClient) ->
     assert payload["ready_for_skeletonization"] is False
     assert payload["blocking_reason"] == "mask_not_verified"
     assert payload["automatic_bridge_applied"] is False
+
+
+
+def test_connected_raster_mask_runs_full_structure_analysis(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Skeleton connected raster analysis")
+    report = import_one(client, project["id"], size=(64, 64))
+    image_id = report["successful"][0]["image_id"]
+    class_id = project["label_classes"][0]["id"]
+    mask_id = "19d879db-01a8-467c-9037-f9d010539ec4"
+
+    app = cast(FastAPI, client.app)
+    relative_path = (
+        f"projects/{project['id']}/masks/{image_id}/{mask_id}-connected.png"
+    )
+    mask_path = app.state.settings.resolved_data_dir / Path(relative_path)
+    mask_path.parent.mkdir(parents=True, exist_ok=True)
+    raster = Image.new("L", (64, 64), 0)
+    for x in range(10, 51):
+        for y in range(28, 35):
+            raster.putpixel((x, y), 255)
+    raster.save(mask_path)
+
+    with app.state.session_factory() as session:
+        session.add(
+            MaskAnnotation(
+                id=mask_id,
+                image_id=image_id,
+                label_class_id=class_id,
+                geometry_kind="raster_mask",
+                mask_path=relative_path,
+                x_min=10,
+                y_min=28,
+                x_max=50,
+                y_max=34,
+                area_pixels=287,
+                status="verified",
+            )
+        )
+        session.commit()
+
+    response = client.get(
+        f"/api/v1/mask-annotations/{mask_id}/structure-analysis"
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["mask_annotation_id"] == mask_id
+    assert payload["raw_skeleton_component_count"] == 1
+    assert payload["topology_preserved"] is True
+    assert payload["raw_skeleton_pixel_count"] > 1
+    assert payload["raw_branch_count"] == 1
+    assert payload["final_branch_count"] == 1
+    assert payload["final_skeleton_source"] == "automatic_pruned"
