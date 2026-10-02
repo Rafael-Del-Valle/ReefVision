@@ -209,16 +209,18 @@ class PoseInteroperabilityService:
                 observations[key] = observation
 
             for index, key in enumerate(cls._slot_keys(schema.expanded_labels)):
-                observation = observations.get(key)
-                if observation is None:
+                current_observation = observations.get(key)
+                if current_observation is None:
                     continue
-                scores[index] = float(observation.confidence or 0.0)
-                if observation.status in {"absent", "out_of_frame"}:
+                scores[index] = float(current_observation.confidence or 0.0)
+                if current_observation.status in {"absent", "out_of_frame"}:
                     continue
-                points[index, 0] = float(observation.x)
-                points[index, 1] = float(observation.y)
+                points[index, 0] = float(current_observation.x)
+                points[index, 1] = float(current_observation.y)
                 points[index, 2] = (
-                    1.0 if observation.status in {"visible", "uncertain"} else 0.0
+                    1.0
+                    if current_observation.status in {"visible", "uncertain"}
+                    else 0.0
                 )
             return points, scores
 
