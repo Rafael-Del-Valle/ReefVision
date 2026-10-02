@@ -16,6 +16,23 @@ vi.mock("./rasterMaskApi", () => ({
   rasterMaskContentUrl: () => "/mask.png",
 }));
 
+vi.mock("./SkeletonAnalysisPanel", () => ({
+  SkeletonAnalysisPanel: ({
+    selectedMask,
+  }: {
+    selectedMask: { id: string; geometry_kind: string } | null;
+  }) => (
+    <div data-testid="raster-skeleton-panel">
+      {selectedMask
+        ? `${selectedMask.id}:${selectedMask.geometry_kind}`
+        : "no-mask"}
+    </div>
+  ),
+}));
+vi.mock("./SkeletonOverlayLayer", () => ({
+  SkeletonOverlayLayer: () => null,
+}));
+
 const session = {
   image: {
     id: "image-1",
@@ -156,4 +173,7 @@ it("reassigns a selected painted mask class immediately and displays the class c
   expect(screen.getByTestId("selected-raster-mask-overlay")).toHaveStyle({
     backgroundColor: "#e76f51",
   });
+  expect(screen.getByTestId("raster-skeleton-panel")).toHaveTextContent(
+    "mask-1:raster_mask",
+  );
 });
