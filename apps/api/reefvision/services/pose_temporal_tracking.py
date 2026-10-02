@@ -32,6 +32,7 @@ from reefvision.domain.errors import ConflictError, NotFoundError, ValidationErr
 from reefvision.schemas.pose_tracking import (
     PoseAssociationCorrectionRequest,
     PoseIdentityBreakCreateRequest,
+    PoseLandmarkAssociationCandidateResponse,
     PoseLandmarkAssociationDecisionResponse,
     PoseLandmarkCorrectionResponse,
     PoseLandmarkIdentityBreakResponse,
@@ -894,6 +895,25 @@ class PoseTemporalTrackingService:
             if observation_ids
             else []
         )
+        decision_ids = [item.id for item in decisions]
+        candidates = (
+            list(
+                self.session.scalars(
+                    select(PoseLandmarkAssociationCandidate)
+                    .where(
+                        PoseLandmarkAssociationCandidate.association_decision_id.in_(
+                            decision_ids
+                        )
+                    )
+                    .order_by(
+                        PoseLandmarkAssociationCandidate.association_decision_id,
+                        PoseLandmarkAssociationCandidate.rank,
+                    )
+                )
+            )
+            if decision_ids
+            else []
+        )
         breaks = list(
             self.session.scalars(
                 select(PoseLandmarkIdentityBreak)
@@ -916,6 +936,10 @@ class PoseTemporalTrackingService:
             ],
             association_decisions=[
                 PoseLandmarkAssociationDecisionResponse.model_validate(item) for item in decisions
+            ],
+            association_candidates=[
+                PoseLandmarkAssociationCandidateResponse.model_validate(item)
+                for item in candidates
             ],
             identity_breaks=[
                 PoseLandmarkIdentityBreakResponse.model_validate(item) for item in breaks
@@ -1009,6 +1033,32 @@ class PoseTemporalTrackingService:
             parameters_hash=current.parameters_hash,
         )
         self.session.add(decision)
+        self.session.flush()
+        source_candidates = list(
+            self.session.scalars(
+                select(PoseLandmarkAssociationCandidate)
+                .where(
+                    PoseLandmarkAssociationCandidate.association_decision_id
+                    == current.id
+                )
+                .order_by(PoseLandmarkAssociationCandidate.rank)
+            )
+        )
+        for candidate in source_candidates:
+            self.session.add(
+                PoseLandmarkAssociationCandidate(
+                    association_decision_id=decision.id,
+                    candidate_landmark_track_id=candidate.candidate_landmark_track_id,
+                    rank=candidate.rank,
+                    total_cost=candidate.total_cost,
+                    normalized_confidence=candidate.normalized_confidence,
+                    motion_cost=candidate.motion_cost,
+                    geometry_cost=candidate.geometry_cost,
+                    appearance_cost=candidate.appearance_cost,
+                    ordering_cost=candidate.ordering_cost,
+                    shape_cost=candidate.shape_cost,
+                )
+            )
         self.session.commit()
         self.session.refresh(decision)
         return PoseLandmarkAssociationDecisionResponse.model_validate(decision)
