@@ -21,7 +21,9 @@ from reefvision.ml.video_tracking import (
     video_tracking_provider_for_name,
 )
 from reefvision.schemas.georeferenced_observation import BoundingBoxPixels
+from reefvision.schemas.pose_tracking import PoseTemporalAssociationBuildRequest
 from reefvision.services.georeferenced_observations import GeoReferencedObservationService
+from reefvision.services.pose_temporal_tracking import PoseTemporalTrackingService
 from reefvision.services.video_georeferencing import VideoGeoreferencingService
 from reefvision.services.video_georeferencing_readiness import VideoGeoreferencingReadinessService
 from reefvision.storage.projects import resolve_managed_project_path
@@ -451,6 +453,10 @@ def process_video_tracking_job(
 
             created = 0
             observation_count = 0
+            pose_landmark_track_count = 0
+            pose_temporal_observation_count = 0
+            pose_unresolved_association_count = 0
+            pose_identity_break_count = 0
 
             georeferencing_readiness = VideoGeoreferencingReadinessService(
                 session,
@@ -508,6 +514,19 @@ def process_video_tracking_job(
                 # constructing GeoReferencedObservation.track_id.
                 session.flush()
 
+                if model_task == "pose" and any(item.keypoints for item in ordered):
+                    temporal_result = PoseTemporalTrackingService(session).build(
+                        track.id,
+                        PoseTemporalAssociationBuildRequest(),
+                        commit=False,
+                    )
+                    pose_landmark_track_count += temporal_result.created_landmark_tracks
+                    pose_temporal_observation_count += temporal_result.created_observations
+                    pose_unresolved_association_count += (
+                        temporal_result.unresolved_associations
+                    )
+                    pose_identity_break_count += temporal_result.identity_breaks
+
                 if georeferencing_service is not None:
                     georeferencing_attempted_count += len(ordered)
 
@@ -548,6 +567,10 @@ def process_video_tracking_job(
                 "model_id": model_id,
                 "model_task": model_task,
                 "pose_tracking": model_task == "pose",
+                "pose_landmark_track_count": pose_landmark_track_count,
+                "pose_temporal_observation_count": pose_temporal_observation_count,
+                "pose_unresolved_association_count": pose_unresolved_association_count,
+                "pose_identity_break_count": pose_identity_break_count,
                 "pose_landmark_schema": (
                     dict(pose_landmark_schema) if pose_landmark_schema is not None else None
                 ),
