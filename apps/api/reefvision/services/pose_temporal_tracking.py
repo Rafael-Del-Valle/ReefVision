@@ -1054,6 +1054,55 @@ class PoseTemporalTrackingService:
         predecessor.last_frame = payload.break_after_frame
         predecessor.terminated_at = utc_now()
         self.session.add(identity_break)
+
+        future_observations = list(
+            self.session.scalars(
+                select(PoseLandmarkObservation)
+                .where(
+                    PoseLandmarkObservation.parent_video_track_id
+                    == predecessor.parent_video_track_id,
+                    PoseLandmarkObservation.semantic_label == predecessor.semantic_label,
+                    PoseLandmarkObservation.frame_index > payload.break_after_frame,
+                )
+                .order_by(PoseLandmarkObservation.frame_index, PoseLandmarkObservation.id)
+            )
+        )
+        latest_future_decisions = self._latest_decisions(
+            [item.id for item in future_observations]
+        )
+        successor_previous_observation_id: str | None = None
+        for observation in future_observations:
+            current = latest_future_decisions.get(observation.id)
+            if current is None or current.selected_landmark_track_id != predecessor.id:
+                continue
+            use_successor = (
+                successor is not None
+                and payload.successor_start_frame is not None
+                and observation.frame_index >= payload.successor_start_frame
+            )
+            replacement = PoseLandmarkAssociationDecision(
+                observation_id=observation.id,
+                decision_revision=current.decision_revision + 1,
+                supersedes_decision_id=current.id,
+                selected_landmark_track_id=successor.id if use_successor else None,
+                previous_observation_id=(
+                    successor_previous_observation_id if use_successor else None
+                ),
+                association_state="confirmed" if use_successor else "identity_break",
+                association_confidence=current.association_confidence,
+                verification_state="human_corrected",
+                association_source="human",
+                candidate_margin=current.candidate_margin,
+                total_cost=current.total_cost,
+                cost_breakdown_json=current.cost_breakdown_json,
+                algorithm=current.algorithm,
+                algorithm_version=current.algorithm_version,
+                parameters_hash=current.parameters_hash,
+            )
+            self.session.add(replacement)
+            if use_successor:
+                successor_previous_observation_id = observation.id
+
         self.session.commit()
         self.session.refresh(identity_break)
         return PoseLandmarkIdentityBreakResponse.model_validate(identity_break)
