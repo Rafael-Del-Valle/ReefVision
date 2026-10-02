@@ -17,6 +17,10 @@ EXPORT_SCHEMA_VERSION = "skeleton-export-0001"
 CHUNK_SIZE = 1024 * 1024
 
 
+def skeleton_export_stem(analysis_id: str) -> str:
+    return f"skeleton-{_token(analysis_id)}"
+
+
 def _token(value: str) -> str:
     import base64
 
@@ -168,7 +172,7 @@ def build_skeleton_export(
     """Create an atomic directory + ZIP with reproducibility metadata."""
 
     export_root.mkdir(parents=True, exist_ok=True)
-    stem = f"skeleton-{_token(record.id)}"
+    stem = skeleton_export_stem(record.id)
     final_dir = export_root / stem
     archive = export_root / f"{stem}.zip"
     shutil.rmtree(final_dir, ignore_errors=True)
