@@ -198,6 +198,11 @@ export function VideoTrackingWorkspace({
     (model) => model.id === trackingModelId,
   );
   const poseTrackingSelected = selectedTrackingModel?.task === "pose";
+  const sleapTrackingSelected =
+    selectedTrackingModel?.provider_name === "sleap_nn";
+  const selectedModelPoseSchema = poseLandmarkSchemaFromMetadata(
+    selectedTrackingModel?.metadata_json,
+  );
   const rawPoseKeypointShape =
     selectedTrackingModel?.metadata_json.pose_keypoint_shape;
   const poseExpectedLandmarkCount =
@@ -525,6 +530,11 @@ export function VideoTrackingWorkspace({
       }
       if (linkDetections && minimumTrackFrames < 1) {
         throw new Error("Minimum track frames must be at least 1");
+      }
+      if (poseTrackingSelected && selectedModelPoseSchema === null) {
+        throw new Error(
+          "Save a ReefVision landmark schema before running pose inference",
+        );
       }
       return createVideoTrackingJob(selectedVideoId, {
         model_id: trackingModelId,
@@ -1648,22 +1658,35 @@ export function VideoTrackingWorkspace({
         <p className="annotation-helper">
           Turn this off for independent per-frame instance detection. Each
           detection remains reviewable, but ReefVision will not assign a
-          cross-frame identity or movement trajectory.
+          cross-frame animal identity or movement trajectory.
           {poseTrackingSelected
-            ? " Pose checkpoints retain model-native landmark coordinates and confidence values for every retained observation."
+            ? " Pose checkpoints retain model-native landmark coordinates and confidence values for every retained observation. ReefVision then performs canonical repeated-landmark temporal association inside each retained animal track."
             : ""}
         </p>
-        <label>
-          Tracker
-          <select
-            value={trackerName}
-            disabled={!linkDetections}
-            onChange={(event) => setTrackerName(event.target.value)}
-          >
-            <option value="bytetrack.yaml">ByteTrack</option>
-            <option value="botsort.yaml">BoT-SORT</option>
-          </select>
-        </label>
+        {sleapTrackingSelected ? (
+          <div className="workspace-guide compact">
+            <div>
+              <strong>SLEAP-NN animal-instance tracking</strong>
+              <p className="annotation-helper">
+                {linkDetections
+                  ? "ReefVision uses SLEAP-NN fixed-window OKS/Hungarian tracking for animal instances. ByteTrack, BoT-SORT, and detector IoU do not apply to this provider."
+                  : "Animal-instance linking is disabled. Each SLEAP-NN instance is retained independently for review."}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <label>
+            Tracker
+            <select
+              value={trackerName}
+              disabled={!linkDetections}
+              onChange={(event) => setTrackerName(event.target.value)}
+            >
+              <option value="bytetrack.yaml">ByteTrack</option>
+              <option value="botsort.yaml">BoT-SORT</option>
+            </select>
+          </label>
+        )
         <label>
           Detection confidence
           <input
@@ -1677,17 +1700,19 @@ export function VideoTrackingWorkspace({
             }
           />
         </label>
-        <label>
-          Detector IoU
-          <input
-            type="number"
-            min={0}
-            max={1}
-            step={0.05}
-            value={trackingIou}
-            onChange={(event) => setTrackingIou(Number(event.target.value))}
-          />
-        </label>
+        {!sleapTrackingSelected && (
+          <label>
+            Detector IoU
+            <input
+              type="number"
+              min={0}
+              max={1}
+              step={0.05}
+              value={trackingIou}
+              onChange={(event) => setTrackingIou(Number(event.target.value))}
+            />
+          </label>
+        )}
         <label>
           Device
           <select
@@ -1715,16 +1740,21 @@ export function VideoTrackingWorkspace({
         <button
           type="button"
           disabled={
-            !selectedVideoId || !trackingModelId || trackingMutation.isPending
+            !selectedVideoId ||
+            !trackingModelId ||
+            trackingMutation.isPending ||
+            (poseTrackingSelected && selectedModelPoseSchema === null)
           }
           onClick={() => trackingMutation.mutate()}
         >
           {trackingMutation.isPending
             ? "Queuing..."
             : linkDetections
-              ? poseTrackingSelected
-                ? `Run pose + ${trackerLabel(trackerName)}`
-                : `Run ${trackerLabel(trackerName)}`
+              ? sleapTrackingSelected
+                ? "Run SLEAP-NN pose + instance tracking"
+                : poseTrackingSelected
+                  ? `Run pose + ${trackerLabel(trackerName)}`
+                  : `Run ${trackerLabel(trackerName)}`
               : poseTrackingSelected
                 ? "Run pose inference"
                 : "Run instance detection"}
