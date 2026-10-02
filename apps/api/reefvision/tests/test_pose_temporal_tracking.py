@@ -396,6 +396,15 @@ def test_human_association_correction_identity_break_and_exports_are_auditable(
     landmark_track_id = decision["selected_landmark_track_id"]
     assert landmark_track_id is not None
 
+    missing_reason = client.post(
+        f"/api/v1/pose-landmark-observations/{observation['id']}/association-corrections",
+        json={
+            "selected_landmark_track_id": None,
+            "association_state": "unresolved",
+        },
+    )
+    assert missing_reason.status_code == 422, missing_reason.text
+
     corrected = client.post(
         f"/api/v1/pose-landmark-observations/{observation['id']}/association-corrections",
         json={
@@ -434,17 +443,54 @@ def test_human_association_correction_identity_break_and_exports_are_auditable(
         for item in audited["observations"]
         if item["frame_index"] == 2 and item["occurrence_index"] == 0
     )
+    frame_two_decisions = [
+        item
+        for item in audited["association_decisions"]
+        if item["observation_id"] == frame_two_observation["id"]
+    ]
     frame_two_decision = max(
-        (
-            item
-            for item in audited["association_decisions"]
-            if item["observation_id"] == frame_two_observation["id"]
-        ),
+        frame_two_decisions,
         key=lambda item: item["decision_revision"],
     )
     assert frame_two_decision["association_state"] == "identity_break"
     assert frame_two_decision["selected_landmark_track_id"] is None
     assert frame_two_decision["verification_state"] == "human_corrected"
+
+    original_frame_two_decision = min(
+        frame_two_decisions,
+        key=lambda item: item["decision_revision"],
+    )
+    original_candidates = sorted(
+        [
+            item
+            for item in audited["association_candidates"]
+            if item["association_decision_id"] == original_frame_two_decision["id"]
+        ],
+        key=lambda item: item["rank"],
+    )
+    replacement_candidates = sorted(
+        [
+            item
+            for item in audited["association_candidates"]
+            if item["association_decision_id"] == frame_two_decision["id"]
+        ],
+        key=lambda item: item["rank"],
+    )
+    assert [
+        (
+            item["candidate_landmark_track_id"],
+            item["rank"],
+            item["total_cost"],
+        )
+        for item in replacement_candidates
+    ] == [
+        (
+            item["candidate_landmark_track_id"],
+            item["rank"],
+            item["total_cost"],
+        )
+        for item in original_candidates
+    ]
 
     csv_export = client.get(f"/api/v1/video-tracks/{source['id']}/pose-temporal/export?format=csv")
     assert csv_export.status_code == 200, csv_export.text
