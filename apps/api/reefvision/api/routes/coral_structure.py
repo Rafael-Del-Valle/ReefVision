@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
@@ -44,5 +44,12 @@ def get_structure_analysis(
     mask_annotation_id: str,
     request: Request,
     session: DbSession,
+    terminal_spur_max_length_pixels: Annotated[
+        float,
+        Query(ge=0, le=10000),
+    ] = 0,
 ) -> SkeletonizationAnalysisResponse:
-    return service(request, session).analysis(mask_annotation_id)
+    return service(request, session).analysis(
+        mask_annotation_id,
+        terminal_spur_max_length_pixels=terminal_spur_max_length_pixels,
+    )
