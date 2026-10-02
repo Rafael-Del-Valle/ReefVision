@@ -924,7 +924,9 @@ class PoseInteroperabilityService:
         if not isinstance(raw_tracks, dict):
             return None
         raw = raw_tracks.get(external_track_name)
-        return dict(raw) if isinstance(raw, dict) else None
+        if not isinstance(raw, dict):
+            return None
+        return {str(key): value for key, value in raw.items()}
 
     def import_bytes(
         self,
