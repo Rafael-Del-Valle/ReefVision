@@ -156,7 +156,7 @@ export interface SkeletonExport {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(\`\${getApiBaseUrl()}\${path}\`, {
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
     headers: {
       ...(init?.body ? { "Content-Type": "application/json" } : {}),
@@ -164,7 +164,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   if (!response.ok) {
-    let message = \`Skeleton analysis request failed with HTTP \${response.status}\`;
+    let message = `Skeleton analysis request failed with HTTP ${response.status}`;
     try {
       const payload = (await response.json()) as { detail?: string };
       if (typeof payload.detail === "string") message = payload.detail;
@@ -181,7 +181,7 @@ export function getSkeletonReadiness(
   signal?: AbortSignal,
 ): Promise<SkeletonReadiness> {
   return request<SkeletonReadiness>(
-    \`/mask-annotations/\${encodeURIComponent(maskId)}/structure-readiness\`,
+    `/mask-annotations/${encodeURIComponent(maskId)}/structure-readiness`,
     { signal, cache: "no-store" },
   );
 }
@@ -191,7 +191,7 @@ export function listSkeletonAnalyses(
   signal?: AbortSignal,
 ): Promise<SkeletonAnalysisRevision[]> {
   return request<SkeletonAnalysisRevision[]>(
-    \`/mask-annotations/\${encodeURIComponent(maskId)}/skeleton-analyses\`,
+    `/mask-annotations/${encodeURIComponent(maskId)}/skeleton-analyses`,
     { signal, cache: "no-store" },
   );
 }
@@ -201,7 +201,7 @@ export function createSkeletonAnalysis(
   terminalSpurMaxLengthPixels: number,
 ): Promise<SkeletonAnalysisRevision> {
   return request<SkeletonAnalysisRevision>(
-    \`/mask-annotations/\${encodeURIComponent(maskId)}/skeleton-analyses\`,
+    `/mask-annotations/${encodeURIComponent(maskId)}/skeleton-analyses`,
     {
       method: "POST",
       body: JSON.stringify({
@@ -217,7 +217,7 @@ export function reviewSkeletonAnalysis(
   note: string | null,
 ): Promise<SkeletonAnalysisRevision> {
   return request<SkeletonAnalysisRevision>(
-    \`/skeleton-analyses/\${encodeURIComponent(analysisId)}/review\`,
+    `/skeleton-analyses/${encodeURIComponent(analysisId)}/review`,
     {
       method: "POST",
       body: JSON.stringify({
@@ -238,7 +238,7 @@ export function correctSkeletonAnalysis(
   },
 ): Promise<SkeletonAnalysisRevision> {
   return request<SkeletonAnalysisRevision>(
-    \`/skeleton-analyses/\${encodeURIComponent(analysisId)}/corrections\`,
+    `/skeleton-analyses/${encodeURIComponent(analysisId)}/corrections`,
     {
       method: "POST",
       body: JSON.stringify(payload),
@@ -250,11 +250,11 @@ export function exportSkeletonAnalysis(
   analysisId: string,
 ): Promise<SkeletonExport> {
   return request<SkeletonExport>(
-    \`/skeleton-analyses/\${encodeURIComponent(analysisId)}/export\`,
+    `/skeleton-analyses/${encodeURIComponent(analysisId)}/export`,
     { method: "POST" },
   );
 }
 
 export function skeletonExportDownloadUrl(analysisId: string): string {
-  return \`\${getApiBaseUrl()}/skeleton-analyses/\${encodeURIComponent(analysisId)}/export/download\`;
+  return `${getApiBaseUrl()}/skeleton-analyses/${encodeURIComponent(analysisId)}/export/download`;
 }
