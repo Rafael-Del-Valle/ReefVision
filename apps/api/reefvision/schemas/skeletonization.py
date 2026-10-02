@@ -253,6 +253,7 @@ class SkeletonAnalysisRevisionResponse(BaseModel):
     review_note: str | None = None
     created_by: str
     created_at: datetime
+    is_latest_revision: bool = True
     stale_mask: bool = False
     stale_calibration: bool = False
     stale: bool = False
