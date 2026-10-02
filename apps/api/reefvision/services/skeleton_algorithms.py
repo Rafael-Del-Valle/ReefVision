@@ -706,7 +706,9 @@ def prune_terminal_spurs(
 
 
 
-def total_graph_length_pixels(edges: list[SkeletonGraphEdge] | tuple[SkeletonGraphEdge, ...]) -> float:
+def total_graph_length_pixels(
+    edges: list[SkeletonGraphEdge] | tuple[SkeletonGraphEdge, ...],
+) -> float:
     return sum(edge.node_to_node_length_pixels for edge in edges)
 
 
