@@ -165,6 +165,32 @@ def test_temporal_pose_build_persists_repeated_landmark_identity_and_occlusion(
     }
     assert len(occurrence_zero_ids) == 1
 
+    metrics_response = client.get(
+        f"/api/v1/video-tracks/{source['id']}/pose-temporal/metrics"
+    )
+    assert metrics_response.status_code == 200, metrics_response.text
+    metrics = metrics_response.json()
+    assert metrics["schema_version"] == "pose-temporal-metrics-0001"
+    assert len(metrics["tracklets"]) == 2
+    moving_tracklet = next(
+        item
+        for item in metrics["tracklets"]
+        if item["visible_observation_count"] == 3
+    )
+    assert moving_tracklet["path_length_pixels"] == pytest.approx(4.0)
+    assert moving_tracklet["displacement_pixels"] == pytest.approx(4.0)
+    assert moving_tracklet["mean_speed_pixels_per_second"] == pytest.approx(20.0)
+    assert moving_tracklet["maximum_speed_pixels_per_second"] == pytest.approx(20.0)
+
+    occluded_tracklet = next(
+        item
+        for item in metrics["tracklets"]
+        if item["occluded_observation_count"] == 1
+    )
+    assert occluded_tracklet["associated_observation_count"] == 3
+    assert occluded_tracklet["path_length_pixels"] == pytest.approx(0.0)
+    assert occluded_tracklet["displacement_pixels"] == pytest.approx(4.0)
+
 
 def test_out_of_frame_landmark_is_missing_and_not_spatially_associated(
     client: TestClient,
@@ -292,6 +318,20 @@ def test_temporal_pose_ambiguous_crossing_is_not_forced(
     assert len(frame_one_decisions) == 2
     assert all(item["association_state"] == "unresolved" for item in frame_one_decisions)
     assert all(item["selected_landmark_track_id"] is None for item in frame_one_decisions)
+
+    qc_response = client.get(
+        f"/api/v1/video-tracks/{track['id']}/pose-temporal/qc"
+    )
+    assert qc_response.status_code == 200, qc_response.text
+    qc = qc_response.json()
+    assert qc["schema_version"] == "pose-temporal-qc-0001"
+    assert qc["unresolved_identity_count"] == 2
+    assert qc["flagged_frame_count"] == 1
+    unresolved_issues = [
+        item for item in qc["issues"] if item["code"] == "unresolved_identity"
+    ]
+    assert len(unresolved_issues) == 2
+    assert {item["frame_index"] for item in unresolved_issues} == {1}
 
 
 def test_human_association_correction_identity_break_and_exports_are_auditable(
