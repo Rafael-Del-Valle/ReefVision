@@ -87,6 +87,16 @@ class SkeletonGraphEdgeResponse(BaseModel):
     is_cycle: bool = False
 
 
+class SkeletonSpurRemovalResponse(BaseModel):
+    iteration: int = Field(ge=1)
+    branch_id: str
+    endpoint_x: int = Field(ge=0)
+    endpoint_y: int = Field(ge=0)
+    junction_id: str
+    branch_length_pixels: float = Field(gt=0)
+    removed_pixel_count: int = Field(ge=1)
+
+
 class SkeletonizationAnalysisResponse(BaseModel):
     schema_version: Literal["skeleton-analysis-0001"] = "skeleton-analysis-0001"
     mask_annotation_id: str
@@ -115,4 +125,14 @@ class SkeletonizationAnalysisResponse(BaseModel):
     graph_edge_count: int = Field(ge=0)
     graph_nodes: list[SkeletonGraphNodeResponse] = Field(default_factory=list)
     graph_edges: list[SkeletonGraphEdgeResponse] = Field(default_factory=list)
+    terminal_spur_max_length_pixels: float = Field(default=0, ge=0)
+    spur_pruning_applied: bool = False
+    spur_pruning_iteration_count: int = Field(default=0, ge=0)
+    removed_spur_count: int = Field(default=0, ge=0)
+    removed_spurs: list[SkeletonSpurRemovalResponse] = Field(default_factory=list)
+    pruned_skeleton_pixel_count: int = Field(ge=1)
+    pruned_graph_node_count: int = Field(ge=1)
+    pruned_graph_edge_count: int = Field(ge=0)
+    pruned_graph_nodes: list[SkeletonGraphNodeResponse] = Field(default_factory=list)
+    pruned_graph_edges: list[SkeletonGraphEdgeResponse] = Field(default_factory=list)
     feature_pixels: list[SkeletonFeaturePixelResponse] = Field(default_factory=list)
