@@ -639,3 +639,105 @@ def test_identity_break_respects_track_lifetime_and_rejects_self_successor(
     )
     assert self_successor.status_code == 400, self_successor.text
     assert "different from the predecessor" in self_successor.json()["detail"]
+
+
+
+def test_tracker_identity_break_can_be_human_verified_without_duplication(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Temporal pose break review")
+    video = _video(client, str(project["id"]), monkeypatch)
+    response = client.post(
+        f"/api/v1/videos/{video['id']}/tracks",
+        json={
+            "label_class_id": _first_class(project),
+            "keyframes": [
+                {
+                    "frame": 0,
+                    "bbox": [0, 0, 100, 100],
+                    "pose_observations": [
+                        _observation("f0", 0, 20, 50, 0.9),
+                    ],
+                },
+                {
+                    "frame": 3,
+                    "bbox": [0, 0, 100, 100],
+                    "pose_observations": [
+                        _observation("f3", 0, 25, 50, 0.9),
+                    ],
+                },
+            ],
+        },
+    )
+    assert response.status_code == 201, response.text
+    source = response.json()
+
+    built = client.post(
+        f"/api/v1/video-tracks/{source['id']}/pose-temporal-associations",
+        json={"max_gap_frames": 1},
+    )
+    assert built.status_code == 200, built.text
+    assert built.json()["identity_breaks"] == 1
+
+    summary = client.get(
+        f"/api/v1/video-tracks/{source['id']}/pose-temporal"
+    ).json()
+    assert len(summary["identity_breaks"]) == 1
+    identity_break = summary["identity_breaks"][0]
+    assert identity_break["source"] == "tracker"
+    assert identity_break["human_verified"] is False
+
+    reviewed = client.post(
+        f"/api/v1/pose-landmark-identity-breaks/{identity_break['id']}/review",
+        json={
+            "reason_code": "scientist_verified_identity_break",
+            "note": "Confirmed after reviewing the occlusion gap.",
+        },
+    )
+    assert reviewed.status_code == 200, reviewed.text
+    reviewed_payload = reviewed.json()
+    assert reviewed_payload["id"] == identity_break["id"]
+    assert reviewed_payload["source"] == "tracker"
+    assert reviewed_payload["human_verified"] is True
+    assert reviewed_payload["correction_id"] is not None
+
+    audited = client.get(
+        f"/api/v1/video-tracks/{source['id']}/pose-temporal"
+    ).json()
+    break_corrections = [
+        item
+        for item in audited["corrections"]
+        if item["action"] == "confirm_identity_break"
+    ]
+    assert len(break_corrections) == 1
+    assert break_corrections[0]["target_id"] == identity_break["id"]
+
+    duplicate = client.post(
+        f"/api/v1/pose-landmark-tracks/{identity_break['predecessor_landmark_track_id']}/identity-breaks",
+        json={
+            "break_after_frame": identity_break["break_after_frame"],
+            "reason": "manual_split",
+        },
+    )
+    assert duplicate.status_code == 409, duplicate.text
+    assert "review the existing break instead" in duplicate.json()["detail"]
+
+    reviewed_again = client.post(
+        f"/api/v1/pose-landmark-identity-breaks/{identity_break['id']}/review",
+        json={"reason_code": "scientist_verified_identity_break"},
+    )
+    assert reviewed_again.status_code == 200, reviewed_again.text
+    audited_again = client.get(
+        f"/api/v1/video-tracks/{source['id']}/pose-temporal"
+    ).json()
+    assert (
+        len(
+            [
+                item
+                for item in audited_again["corrections"]
+                if item["action"] == "confirm_identity_break"
+            ]
+        )
+        == 1
+    )
