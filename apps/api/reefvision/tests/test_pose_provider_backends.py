@@ -343,6 +343,90 @@ def test_provider_catalog_exposes_optional_sleap_pose_backend(
     assert descriptor.required_model_files == (".zip",)
 
 
+def test_provider_catalog_marks_incompatible_sleap_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        provider_hub_module,
+        "sleap_nn_runtime_status",
+        lambda: {
+            "ready": False,
+            "sleap_nn_version": "0.3.2",
+            "sleap_io_version": "0.9.2",
+            "issues": [
+                "sleap-nn 0.3.3 is required (found 0.3.2)",
+            ],
+        },
+    )
+
+    descriptor = provider_hub_module._sleap_nn_descriptor()
+
+    assert descriptor.availability_status == "dependency_incompatible"
+    assert descriptor.availability_reason == (
+        "sleap-nn 0.3.3 is required (found 0.3.2)"
+    )
+    assert descriptor.required_packages[0].status == "incompatible"
+    assert descriptor.required_packages[1].status == "ok"
+
+
+def test_sleap_bundle_rejects_incompatible_provider_version(
+    tmp_path: Path,
+) -> None:
+    bundle = tmp_path / "wrong-version.zip"
+    with zipfile.ZipFile(bundle, "w") as archive:
+        archive.writestr(
+            SLEAP_BUNDLE_MANIFEST,
+            json.dumps(
+                {
+                    "format": SLEAP_BUNDLE_FORMAT,
+                    "provider_id": "sleap_nn",
+                    "provider_version": "0.3.2",
+                    "class_name": "jellyfish",
+                    "instance_mode": "single",
+                    "model_paths": ["model"],
+                    "landmark_labels": ["bell_center"],
+                }
+            ),
+        )
+        archive.writestr("model/training_config.yaml", "model: {}\n")
+        archive.writestr("model/best.ckpt", b"checkpoint")
+
+    with pytest.raises(ValidationError, match="provider_version"):
+        read_sleap_nn_bundle_manifest(bundle)
+
+
+def test_sleap_device_selection_is_strict_and_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        SleapNNVideoTrackingProvider,
+        "_cuda_available",
+        staticmethod(lambda: True),
+    )
+
+    assert SleapNNVideoTrackingProvider._device("auto") == "cuda"
+    assert SleapNNVideoTrackingProvider._device("cpu") == "cpu"
+    assert SleapNNVideoTrackingProvider._device("gpu") == "cuda"
+    assert SleapNNVideoTrackingProvider._device("0") == "cuda:0"
+    assert SleapNNVideoTrackingProvider._device("cuda:01") == "cuda:1"
+
+    with pytest.raises(ValidationError, match="numeric device index"):
+        SleapNNVideoTrackingProvider._device("cuda:banana")
+    with pytest.raises(ValidationError, match="supports auto"):
+        SleapNNVideoTrackingProvider._device("mps")
+
+    monkeypatch.setattr(
+        SleapNNVideoTrackingProvider,
+        "_cuda_available",
+        staticmethod(lambda: False),
+    )
+    assert SleapNNVideoTrackingProvider._device("auto") == "cpu"
+    with pytest.raises(ValidationError, match="CUDA is not available"):
+        SleapNNVideoTrackingProvider._device("cuda")
+    with pytest.raises(ValidationError, match="CUDA is not available"):
+        SleapNNVideoTrackingProvider._device("1")
+
+
 def test_sleap_bundle_registers_without_optional_runtime(
     client: TestClient,
     tmp_path: Path,
