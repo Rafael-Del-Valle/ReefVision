@@ -26,6 +26,7 @@ from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.repositories.mask_annotations import MaskAnnotationRepository
 from reefvision.schemas.measurements import MeasurementCalibrationUpdate
 from reefvision.schemas.skeletonization import (
+    SkeletonAnalysisCorrectionRequest,
     SkeletonAnalysisCreateRequest,
     SkeletonAnalysisReviewRequest,
     SkeletonAnalysisRevisionResponse,
@@ -37,6 +38,7 @@ from reefvision.schemas.skeletonization import (
     SkeletonizationReadinessResponse,
     SkeletonJunctionClusterResponse,
     SkeletonMaskComponentResponse,
+    SkeletonPixelCoordinateResponse,
     SkeletonResolutionAction,
     SkeletonSpurRemovalResponse,
 )
@@ -81,6 +83,16 @@ _NEIGHBORS_8 = (
 
 
 MEASUREMENT_CALIBRATION_KEY = "measurement_calibration"
+
+
+def _pixel_coordinates(mask: BinaryMask) -> list[SkeletonPixelCoordinateResponse]:
+    data, width, height = mask
+    return [
+        SkeletonPixelCoordinateResponse(x=x, y=y)
+        for y in range(height)
+        for x in range(width)
+        if data[y * width + x] > 0
+    ]
 
 
 def _binary_mask_sha256(mask: BinaryMask) -> str:
