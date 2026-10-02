@@ -25,9 +25,7 @@ class ReefVisionTrackExchangeItem(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @field_serializer("keyframes")
-    def serialize_keyframes(
-        self, keyframes: list[VideoTrackKeyframe]
-    ) -> list[dict[str, object]]:
+    def serialize_keyframes(self, keyframes: list[VideoTrackKeyframe]) -> list[dict[str, object]]:
         return [item.model_dump(mode="json", exclude_none=True) for item in keyframes]
 
     @model_validator(mode="after")
