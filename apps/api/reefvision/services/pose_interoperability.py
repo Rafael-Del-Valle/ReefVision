@@ -1421,28 +1421,34 @@ class PoseInteroperabilityService:
                     exchange_format=exchange_format,
                 )
 
+            manifest = self._bundle_manifest(labels, exchange_format)
+            bundle_dir = root / f"{stem}-{exchange_format}-bundle"
+            bundle_dir.mkdir(parents=True, exist_ok=True)
+
             if exchange_format == "nwb":
-                output = root / f"{stem}.pose.nwb"
+                output = bundle_dir / f"{stem}.pose.nwb"
                 sio.save_nwb(labels, output, nwb_format="predictions")
+                self._write_bundle_manifest(bundle_dir, manifest)
                 return PoseInteroperabilityArtifact(
-                    filename=output.name,
-                    media_type="application/x-hdf5",
-                    content=output.read_bytes(),
+                    filename=f"{stem}.pose.nwb.zip",
+                    media_type="application/zip",
+                    content=self._zip_directory(bundle_dir),
                     exchange_format=exchange_format,
                 )
 
             if exchange_format == "coco":
-                output = root / f"{stem}.pose.coco.json"
+                output = bundle_dir / f"{stem}.pose.coco.json"
                 sio.save_coco(labels, str(output), visibility_encoding="ternary")
+                self._write_bundle_manifest(bundle_dir, manifest)
                 return PoseInteroperabilityArtifact(
-                    filename=output.name,
-                    media_type="application/json",
-                    content=output.read_bytes(),
+                    filename=f"{stem}.pose.coco.zip",
+                    media_type="application/zip",
+                    content=self._zip_directory(bundle_dir),
                     exchange_format=exchange_format,
                 )
 
             if exchange_format == "dlc_csv":
-                output = root / f"{stem}.pose.dlc.csv"
+                output = bundle_dir / f"{stem}.pose.dlc.csv"
                 sio.save_csv(
                     labels,
                     str(output),
@@ -1451,15 +1457,16 @@ class PoseInteroperabilityService:
                     scorer="ReefVision",
                     save_metadata=False,
                 )
+                self._write_bundle_manifest(bundle_dir, manifest)
                 return PoseInteroperabilityArtifact(
-                    filename=output.name,
-                    media_type="text/csv; charset=utf-8",
-                    content=output.read_bytes(),
+                    filename=f"{stem}.pose.dlc.zip",
+                    media_type="application/zip",
+                    content=self._zip_directory(bundle_dir),
                     exchange_format=exchange_format,
                 )
 
             if exchange_format == "ultralytics_pose":
-                output_dir = root / f"{stem}-ultralytics-pose"
+                output_dir = bundle_dir / "dataset"
                 sio.save_ultralytics(
                     labels,
                     str(output_dir),
@@ -1468,6 +1475,7 @@ class PoseInteroperabilityService:
                     verbose=False,
                     use_multiprocessing=False,
                 )
+                self._write_bundle_manifest(output_dir, manifest)
                 return PoseInteroperabilityArtifact(
                     filename=f"{stem}.pose.ultralytics.zip",
                     media_type="application/zip",
