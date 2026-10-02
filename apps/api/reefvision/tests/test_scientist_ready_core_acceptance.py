@@ -231,11 +231,22 @@ def test_core_scientist_round_trip_preserves_raw_and_corrected_results(
             )
             assert export_response.status_code == 200, export_response.text
             export_payload = export_response.json()
-            assert process_export_job(
+            processed = process_export_job(
                 restart_app.state.settings,
                 restart_app.state.session_factory,
                 export_payload["job"]["id"],
-            ) is True
+            )
+            if not processed:
+                job_payload = reopened.get(
+                    f"/api/v1/jobs/{export_payload['job']['id']}"
+                ).json()
+                export_state = reopened.get(
+                    f"/api/v1/exports/{export_payload['export']['id']}"
+                ).json()
+                raise AssertionError(
+                    "Round-trip export failed unexpectedly: "
+                    f"job={job_payload} export={export_state}"
+                )
 
             export_record = reopened.get(
                 f"/api/v1/exports/{export_payload['export']['id']}"
