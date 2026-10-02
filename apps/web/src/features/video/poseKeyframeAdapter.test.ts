@@ -50,6 +50,20 @@ const keyframe: VideoTrackKeyframe = {
 };
 
 describe("poseKeyframeAdapter", () => {
+  it("uses canonical pose schema identity when metadata provides it", () => {
+    const canonicalSchema: PoseLandmarkSchema = {
+      ...schema,
+      schema_id: "schema-canonical-1",
+      schema_revision: 4,
+      content_hash: "a".repeat(64),
+    };
+
+    expect(editorSchemaForVideoTrack(track, canonicalSchema)).toMatchObject({
+      id: "schema-canonical-1",
+      revision: 4,
+    });
+  });
+
   it("converts model keypoints into editable semantic observations", () => {
     const pose = poseInstanceFromVideoKeyframe(track, keyframe, schema);
 
