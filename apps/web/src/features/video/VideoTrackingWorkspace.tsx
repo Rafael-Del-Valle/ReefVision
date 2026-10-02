@@ -5,6 +5,7 @@ import { GeoreferencingSetupPanel } from "./GeoreferencingSetupPanel";
 import { GeographicExportPanel } from "./GeographicExportPanel";
 import { GeographicMovementAnalyticsPanel } from "./GeographicMovementAnalyticsPanel";
 import { PoseTemporalReviewPanel } from "./PoseTemporalReviewPanel";
+import { poseInteroperabilityExportUrl } from "./poseInteroperabilityApi";
 import { useGeographicMovementAnalytics } from "./useGeographicMovementAnalytics";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1265,6 +1266,61 @@ export function VideoTrackingWorkspace({
                   setPreviewFrameIndex(nextFrame);
                 }}
               />
+            )}
+            {selectedTrack && selectedTrackPoseSchema && (
+              <div className="workspace-guide compact">
+                <div>
+                  <strong>Pose interoperability</strong>
+                  <p className="annotation-helper">
+                    Export the scientist-reviewed canonical pose state through
+                    SLEAP-IO. Repeated semantic labels receive stable external
+                    node names. External formats do not contain ReefVision's full
+                    immutable association/correction audit history.
+                  </p>
+                </div>
+                <div className="workspace-actions">
+                  <a
+                    href={poseInteroperabilityExportUrl(
+                      selectedVideo.id,
+                      "slp",
+                    )}
+                  >
+                    SLEAP SLP
+                  </a>
+                  <a
+                    href={poseInteroperabilityExportUrl(
+                      selectedVideo.id,
+                      "nwb",
+                    )}
+                  >
+                    NWB
+                  </a>
+                  <a
+                    href={poseInteroperabilityExportUrl(
+                      selectedVideo.id,
+                      "coco",
+                    )}
+                  >
+                    COCO pose
+                  </a>
+                  <a
+                    href={poseInteroperabilityExportUrl(
+                      selectedVideo.id,
+                      "dlc_csv",
+                    )}
+                  >
+                    DeepLabCut CSV
+                  </a>
+                  <a
+                    href={poseInteroperabilityExportUrl(
+                      selectedVideo.id,
+                      "ultralytics_pose",
+                    )}
+                  >
+                    Ultralytics pose ZIP
+                  </a>
+                </div>
+              </div>
             )}
             {spatialMetricsQuery.data && (
               <div className="annotation-selection-list">
