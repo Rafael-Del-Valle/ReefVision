@@ -24,6 +24,7 @@ it("maps pointer coordinates back to source-image skeleton pixels", () => {
         width={100}
         height={50}
         pixels={[{ x: 10, y: 10 }]}
+        nodes={[]}
         addedPixels={[]}
         removedPixels={[]}
         editMode="add"
@@ -62,6 +63,16 @@ it("is non-interactive in view mode while still drawing the skeleton", () => {
       pixels={[
         { x: 2, y: 2 },
         { x: 3, y: 2 },
+      ]}
+      nodes={[
+        {
+          id: "endpoint-0001",
+          kind: "endpoint",
+          x: 2,
+          y: 2,
+          source_pixel_count: 1,
+          external_connection_count: 1,
+        },
       ]}
       addedPixels={[{ x: 4, y: 2 }]}
       removedPixels={[{ x: 2, y: 2 }]}
