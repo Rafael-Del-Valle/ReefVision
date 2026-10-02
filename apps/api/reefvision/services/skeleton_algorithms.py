@@ -58,7 +58,16 @@ class SkeletonGraphEdge:
     target_node_id: str
     pixels: tuple[tuple[int, int], ...]
     boundary_to_boundary_length_pixels: float
+    node_to_node_length_pixels: float
     is_cycle: bool
+
+
+@dataclass(frozen=True, slots=True)
+class SkeletonBranchAngle:
+    junction_id: str
+    first_branch_id: str
+    second_branch_id: str
+    angle_degrees: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -473,20 +482,35 @@ def build_initial_branch_graph(
             item[2][-1][0],
         )
     )
-    edges = [
-        SkeletonGraphEdge(
-            id=f"branch-{index:04d}",
-            source_node_id=source,
-            target_node_id=target,
-            pixels=pixels,
-            boundary_to_boundary_length_pixels=length,
-            is_cycle=is_cycle,
+    node_by_id = {node.id: node for node in nodes}
+    edges: list[SkeletonGraphEdge] = []
+    for index, (source, target, pixels, length, is_cycle) in enumerate(
+        traced,
+        start=1,
+    ):
+        source_node = node_by_id[source]
+        target_node = node_by_id[target]
+        source_offset = hypot(
+            pixels[0][0] - source_node.x,
+            pixels[0][1] - source_node.y,
         )
-        for index, (source, target, pixels, length, is_cycle) in enumerate(
-            traced,
-            start=1,
+        target_offset = hypot(
+            pixels[-1][0] - target_node.x,
+            pixels[-1][1] - target_node.y,
         )
-    ]
+        edges.append(
+            SkeletonGraphEdge(
+                id=f"branch-{index:04d}",
+                source_node_id=source,
+                target_node_id=target,
+                pixels=pixels,
+                boundary_to_boundary_length_pixels=length,
+                node_to_node_length_pixels=(
+                    length + source_offset + target_offset
+                ),
+                is_cycle=is_cycle,
+            )
+        )
     return sorted(nodes, key=lambda item: item.id), edges
 
 
@@ -593,7 +617,7 @@ def prune_terminal_spurs(
             ]
         ] = []
         for edge in edges:
-            if edge.is_cycle or edge.boundary_to_boundary_length_pixels > max_length_pixels:
+            if edge.is_cycle or edge.node_to_node_length_pixels > max_length_pixels:
                 continue
             source = node_by_id[edge.source_node_id]
             target = node_by_id[edge.target_node_id]
@@ -605,7 +629,7 @@ def prune_terminal_spurs(
                 continue
             eligible.append(
                 (
-                    edge.boundary_to_boundary_length_pixels,
+                    edge.node_to_node_length_pixels,
                     edge.id,
                     edge,
                     endpoint,
@@ -660,7 +684,7 @@ def prune_terminal_spurs(
                 endpoint_x=int(endpoint.x),
                 endpoint_y=int(endpoint.y),
                 junction_id=junction.id,
-                branch_length_pixels=edge.boundary_to_boundary_length_pixels,
+                branch_length_pixels=edge.node_to_node_length_pixels,
                 removed_pixels=removed,
                 removed_junction_boundary_pixel_count=boundary_count,
             )
@@ -679,3 +703,108 @@ def prune_terminal_spurs(
         graph_nodes=tuple(final_nodes),
         graph_edges=tuple(final_edges),
     )
+
+
+
+def total_graph_length_pixels(edges: list[SkeletonGraphEdge] | tuple[SkeletonGraphEdge, ...]) -> float:
+    return sum(edge.node_to_node_length_pixels for edge in edges)
+
+
+def graph_diameter_pixels(
+    nodes: list[SkeletonGraphNode] | tuple[SkeletonGraphNode, ...],
+    edges: list[SkeletonGraphEdge] | tuple[SkeletonGraphEdge, ...],
+) -> float:
+    """Return maximum shortest-path distance between graph nodes."""
+
+    if not nodes or not edges:
+        return 0.0
+
+    adjacency: dict[str, list[tuple[str, float]]] = {node.id: [] for node in nodes}
+    cycle_diameter = 0.0
+    for edge in edges:
+        weight = edge.node_to_node_length_pixels
+        if edge.source_node_id == edge.target_node_id:
+            cycle_diameter = max(cycle_diameter, weight / 2.0)
+            continue
+        adjacency[edge.source_node_id].append((edge.target_node_id, weight))
+        adjacency[edge.target_node_id].append((edge.source_node_id, weight))
+
+    maximum = cycle_diameter
+    for source in adjacency:
+        distances = {source: 0.0}
+        unvisited = set(adjacency)
+        while unvisited:
+            current = min(
+                unvisited,
+                key=lambda node_id: distances.get(node_id, float("inf")),
+            )
+            if current not in distances:
+                break
+            unvisited.remove(current)
+            current_distance = distances[current]
+            maximum = max(maximum, current_distance)
+            for neighbor, weight in adjacency[current]:
+                candidate = current_distance + weight
+                if candidate < distances.get(neighbor, float("inf")):
+                    distances[neighbor] = candidate
+    return maximum
+
+
+def branch_angles(
+    nodes: list[SkeletonGraphNode] | tuple[SkeletonGraphNode, ...],
+    edges: list[SkeletonGraphEdge] | tuple[SkeletonGraphEdge, ...],
+) -> list[SkeletonBranchAngle]:
+    """Measure pairwise incident-branch angles at consolidated junction nodes."""
+
+    from math import acos, degrees
+
+    edge_by_junction: dict[str, list[tuple[SkeletonGraphEdge, tuple[float, float]]]] = {}
+    node_by_id = {node.id: node for node in nodes}
+
+    for edge in edges:
+        source = node_by_id[edge.source_node_id]
+        target = node_by_id[edge.target_node_id]
+        if source.kind == "junction" and len(edge.pixels) >= 2:
+            edge_by_junction.setdefault(source.id, []).append(
+                (edge, (float(edge.pixels[1][0]), float(edge.pixels[1][1])))
+            )
+        if target.kind == "junction" and len(edge.pixels) >= 2:
+            edge_by_junction.setdefault(target.id, []).append(
+                (edge, (float(edge.pixels[-2][0]), float(edge.pixels[-2][1])))
+            )
+
+    results: list[SkeletonBranchAngle] = []
+    for junction_id, incident in sorted(edge_by_junction.items()):
+        junction = node_by_id[junction_id]
+        ordered = sorted(incident, key=lambda item: item[0].id)
+        for first_index in range(len(ordered)):
+            first_edge, first_point = ordered[first_index]
+            first_vector = (
+                first_point[0] - junction.x,
+                first_point[1] - junction.y,
+            )
+            first_norm = hypot(*first_vector)
+            if first_norm == 0:
+                continue
+            for second_edge, second_point in ordered[first_index + 1 :]:
+                second_vector = (
+                    second_point[0] - junction.x,
+                    second_point[1] - junction.y,
+                )
+                second_norm = hypot(*second_vector)
+                if second_norm == 0:
+                    continue
+                cosine = (
+                    first_vector[0] * second_vector[0]
+                    + first_vector[1] * second_vector[1]
+                ) / (first_norm * second_norm)
+                cosine = max(-1.0, min(1.0, cosine))
+                results.append(
+                    SkeletonBranchAngle(
+                        junction_id=junction_id,
+                        first_branch_id=first_edge.id,
+                        second_branch_id=second_edge.id,
+                        angle_degrees=degrees(acos(cosine)),
+                    )
+                )
+    return results
