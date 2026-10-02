@@ -255,3 +255,40 @@ describe("PoseTemporalReviewPanel", () => {
     ).toHaveAttribute("href", "/pose-export/track-1.json");
   });
 });
+
+
+it("does not offer future or expired landmark identities for a frame", async () => {
+  const futureTrack = {
+    ...track,
+    id: "landmark-track-future",
+    first_frame: 11,
+    last_frame: 12,
+  };
+  const expiredTrack = {
+    ...track,
+    id: "landmark-track-expired",
+    lifecycle_state: "terminated",
+    first_frame: 0,
+    last_frame: 9,
+  };
+
+  vi.mocked(poseApi.getTemporalPoseSummary).mockResolvedValue({
+    schema_version: "pose-temporal-summary-0001",
+    parent_video_track_id: "track-1",
+    landmark_tracks: [track, futureTrack, expiredTrack],
+    observations: [observation],
+    association_decisions: [unresolvedDecision],
+    association_candidates: [],
+    identity_breaks: [],
+    corrections: [],
+  });
+
+  renderPanel(10);
+  const selector = await screen.findByLabelText(
+    "Temporal identity for tentacle 1",
+  );
+
+  expect(selector).toHaveTextContent("landmark-");
+  expect(selector).not.toHaveTextContent("future");
+  expect(selector).not.toHaveTextContent("expired");
+});
