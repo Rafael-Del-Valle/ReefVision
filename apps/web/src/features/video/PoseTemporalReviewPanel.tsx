@@ -8,6 +8,7 @@ import {
   getTemporalPoseMetrics,
   getTemporalPoseQc,
   getTemporalPoseSummary,
+  reviewTemporalPoseIdentityBreak,
   temporalPoseExportUrl,
   type TemporalPoseAssociationDecision,
   type TemporalPoseObservation,
@@ -162,6 +163,25 @@ export function PoseTemporalReviewPanel({
     },
   });
 
+  const breakReviewMutation = useMutation({
+    mutationFn: (identityBreakId: string) =>
+      reviewTemporalPoseIdentityBreak(identityBreakId, {
+        reason_code: "scientist_verified_identity_break",
+        note: "Scientist confirmed the recorded identity discontinuity.",
+      }),
+    onSuccess: async () => {
+      setStatusMessage("Identity break marked as human verified.");
+      await invalidate();
+    },
+    onError: (error) => {
+      setStatusMessage(
+        error instanceof Error
+          ? error.message
+          : "Identity break review failed.",
+      );
+    },
+  });
+
   const summary = summaryQuery.data;
   const observations = useMemo(
     () => latestObservations(summary?.observations ?? []),
@@ -225,6 +245,18 @@ export function PoseTemporalReviewPanel({
 
   const unresolvedCount = [...decisions.values()].filter(
     (decision) => decision.association_state === "unresolved",
+  ).length;
+  const brokenTrackIds = useMemo(
+    () =>
+      new Set(
+        (summary?.identity_breaks ?? []).map(
+          (item) => item.predecessor_landmark_track_id,
+        ),
+      ),
+    [summary?.identity_breaks],
+  );
+  const unreviewedBreakCount = (summary?.identity_breaks ?? []).filter(
+    (item) => !item.human_verified,
   ).length;
   const qcFrames = useMemo(
     () =>
@@ -290,6 +322,10 @@ export function PoseTemporalReviewPanel({
             <div className="annotation-selection-row">
               <strong>Identity breaks</strong>
               <span>{summary.identity_breaks.length}</span>
+            </div>
+            <div className="annotation-selection-row">
+              <strong>Unreviewed identity breaks</strong>
+              <span>{unreviewedBreakCount}</span>
             </div>
             <div className="annotation-selection-row">
               <strong>Human corrections</strong>
@@ -528,26 +564,70 @@ export function PoseTemporalReviewPanel({
                       >
                         Mark unresolved
                       </button>
-                      {decision?.selected_landmark_track_id && (
-                        <button
-                          type="button"
-                          disabled={breakMutation.isPending}
-                          onClick={() =>
-                            breakMutation.mutate({
-                              landmarkTrackId:
-                                decision.selected_landmark_track_id as string,
-                              observationId: observation.id,
-                            })
-                          }
-                        >
-                          Break identity here
-                        </button>
-                      )}
+                      {decision?.selected_landmark_track_id &&
+                        !brokenTrackIds.has(
+                          decision.selected_landmark_track_id,
+                        ) && (
+                          <button
+                            type="button"
+                            disabled={breakMutation.isPending}
+                            onClick={() =>
+                              breakMutation.mutate({
+                                landmarkTrackId:
+                                  decision.selected_landmark_track_id as string,
+                                observationId: observation.id,
+                              })
+                            }
+                          >
+                            Break identity here
+                          </button>
+                        )}
                     </div>
                   </div>
                 );
               })}
             </div>
+          )}
+
+          {summary.identity_breaks.length > 0 && (
+            <details>
+              <summary>Identity break review</summary>
+              <div className="annotation-selection-list">
+                {summary.identity_breaks.map((identityBreak) => (
+                  <div
+                    className="annotation-selection-row"
+                    key={identityBreak.id}
+                  >
+                    <div>
+                      <strong>
+                        {shortIdentity(
+                          identityBreak.predecessor_landmark_track_id,
+                        )}{" "}
+                        · frame {identityBreak.break_after_frame}
+                      </strong>
+                      <div className="annotation-helper">
+                        {identityBreak.reason.replaceAll("_", " ")} · source{" "}
+                        {identityBreak.source} ·{" "}
+                        {identityBreak.human_verified
+                          ? "human verified"
+                          : "needs review"}
+                      </div>
+                    </div>
+                    {!identityBreak.human_verified && (
+                      <button
+                        type="button"
+                        disabled={breakReviewMutation.isPending}
+                        onClick={() =>
+                          breakReviewMutation.mutate(identityBreak.id)
+                        }
+                      >
+                        Confirm break
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </details>
           )}
 
           {metricsQuery.data && metricsQuery.data.tracklets.length > 0 && (
