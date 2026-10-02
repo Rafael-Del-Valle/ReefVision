@@ -562,6 +562,7 @@ export function PoseAnnotationEditor({
           >
             <option value="visible">visible</option>
             <option value="occluded">occluded</option>
+            <option value="out_of_frame">out of frame</option>
             <option value="uncertain">uncertain</option>
             <option value="absent">absent</option>
           </select>
