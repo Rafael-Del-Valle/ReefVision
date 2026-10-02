@@ -5,6 +5,8 @@ import {
   buildTemporalPoseAssociations,
   correctTemporalPoseAssociation,
   createTemporalPoseIdentityBreak,
+  getTemporalPoseMetrics,
+  getTemporalPoseQc,
   getTemporalPoseSummary,
   temporalPoseExportUrl,
   type TemporalPoseAssociationDecision,
@@ -63,11 +65,29 @@ export function PoseTemporalReviewPanel({
     queryFn: ({ signal }) => getTemporalPoseSummary(trackId, signal),
     enabled: Boolean(trackId),
   });
+  const qcQuery = useQuery({
+    queryKey: ["pose-temporal-qc", trackId],
+    queryFn: ({ signal }) => getTemporalPoseQc(trackId, signal),
+    enabled: Boolean(trackId) && (summaryQuery.data?.observations.length ?? 0) > 0,
+  });
+  const metricsQuery = useQuery({
+    queryKey: ["pose-temporal-metrics", trackId],
+    queryFn: ({ signal }) => getTemporalPoseMetrics(trackId, signal),
+    enabled: Boolean(trackId) && (summaryQuery.data?.observations.length ?? 0) > 0,
+  });
 
   const invalidate = async () => {
-    await queryClient.invalidateQueries({
-      queryKey: ["pose-temporal-summary", trackId],
-    });
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["pose-temporal-summary", trackId],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["pose-temporal-qc", trackId],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["pose-temporal-metrics", trackId],
+      }),
+    ]);
   };
 
   const buildMutation = useMutation({
@@ -184,6 +204,15 @@ export function PoseTemporalReviewPanel({
   const unresolvedCount = [...decisions.values()].filter(
     (decision) => decision.association_state === "unresolved",
   ).length;
+  const qcFrames = useMemo(
+    () =>
+      [...new Set((qcQuery.data?.issues ?? []).map((issue) => issue.frame_index))].sort(
+        (first, second) => first - second,
+      ),
+    [qcQuery.data?.issues],
+  );
+  const nextQcFrame =
+    qcFrames.find((candidate) => candidate > frameIndex) ?? qcFrames[0];
 
   return (
     <section className="management-card" aria-label="Temporal pose review">
@@ -242,6 +271,14 @@ export function PoseTemporalReviewPanel({
               <strong>Human corrections</strong>
               <span>{summary.corrections.length}</span>
             </div>
+            <div className="annotation-selection-row">
+              <strong>QC issues</strong>
+              <span>{qcQuery.data?.issue_count ?? "…"}</span>
+            </div>
+            <div className="annotation-selection-row">
+              <strong>Flagged frames</strong>
+              <span>{qcQuery.data?.flagged_frame_count ?? "…"}</span>
+            </div>
           </div>
 
           <div className="workspace-actions">
@@ -267,6 +304,15 @@ export function PoseTemporalReviewPanel({
             <a href={temporalPoseExportUrl(trackId, "json")}>
               Export pose audit JSON
             </a>
+            <button
+              type="button"
+              disabled={qcFrames.length === 0 || nextQcFrame === undefined}
+              onClick={() => {
+                if (nextQcFrame !== undefined) onFrameChange(nextQcFrame);
+              }}
+            >
+              Next QC frame
+            </button>
             <button
               type="button"
               disabled={buildMutation.isPending}
@@ -402,6 +448,38 @@ export function PoseTemporalReviewPanel({
                 );
               })}
             </div>
+          )}
+
+          {metricsQuery.data && metricsQuery.data.tracklets.length > 0 && (
+            <details>
+              <summary>Tracklet metrics</summary>
+              <div className="annotation-selection-list">
+                {metricsQuery.data.tracklets.map((metric) => (
+                  <div
+                    className="annotation-selection-row"
+                    key={metric.landmark_track_id}
+                  >
+                    <div>
+                      <strong>
+                        {metric.semantic_label} ·{" "}
+                        {shortIdentity(metric.landmark_track_id)}
+                      </strong>
+                      <div className="annotation-helper">
+                        frames {metric.first_frame}–{metric.last_frame} ·{" "}
+                        {metric.associated_observation_count} associated observations
+                      </div>
+                    </div>
+                    <div className="annotation-helper">
+                      path {metric.path_length_pixels.toFixed(1)} px · displacement{" "}
+                      {metric.displacement_pixels.toFixed(1)} px · occluded{" "}
+                      {metric.occluded_observation_count} · out of frame{" "}
+                      {metric.out_of_frame_observation_count} · identity breaks{" "}
+                      {metric.identity_break_count}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </details>
           )}
         </>
       )}
