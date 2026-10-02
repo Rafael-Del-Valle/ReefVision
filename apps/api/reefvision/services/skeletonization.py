@@ -954,3 +954,178 @@ class SkeletonizationService:
         self.session.refresh(record)
         return self._analysis_record_response(record)
 
+    def correct_persisted_analysis(
+        self,
+        analysis_id: str,
+        payload: SkeletonAnalysisCorrectionRequest,
+    ) -> SkeletonAnalysisRevisionResponse:
+        base = self._analysis_record(analysis_id)
+        base_response = self._analysis_record_response(base)
+        if base_response.stale:
+            raise ValidationError(
+                "Stale skeleton analyses must be regenerated before correction"
+            )
+
+        latest = self.session.scalar(
+            select(SkeletonAnalysisRevision)
+            .where(
+                SkeletonAnalysisRevision.analysis_series_id
+                == base.analysis_series_id
+            )
+            .order_by(
+                SkeletonAnalysisRevision.analysis_revision.desc(),
+                SkeletonAnalysisRevision.created_at.desc(),
+                SkeletonAnalysisRevision.id.desc(),
+            )
+            .limit(1)
+        )
+        if latest is None or latest.id != base.id:
+            raise ValidationError(
+                "Skeleton corrections must be based on the latest analysis revision"
+            )
+
+        add_pixels = {(item.x, item.y) for item in payload.add_pixels}
+        remove_pixels = {(item.x, item.y) for item in payload.remove_pixels}
+        if not add_pixels and not remove_pixels:
+            raise ValidationError("Skeleton correction must change at least one pixel")
+        if add_pixels & remove_pixels:
+            raise ValidationError(
+                "A skeleton pixel cannot be both added and removed"
+            )
+
+        image = self._image(base.image_id)
+        for x, y in add_pixels | remove_pixels:
+            if x >= image.width_px or y >= image.height_px:
+                raise ValidationError("Skeleton correction pixel is outside the image")
+
+        current_pixels = {
+            (point.x, point.y)
+            for point in base_response.result.final_skeleton_pixels
+        }
+        missing_removals = remove_pixels - current_pixels
+        if missing_removals:
+            raise ValidationError(
+                "Skeleton correction can only remove existing final pixels"
+            )
+        duplicate_additions = add_pixels & current_pixels
+        if duplicate_additions:
+            raise ValidationError(
+                "Skeleton correction can only add pixels not already present"
+            )
+
+        corrected_pixels = (current_pixels - remove_pixels) | add_pixels
+        if not corrected_pixels:
+            raise ValidationError("Skeleton correction cannot remove every pixel")
+
+        corrected_data = bytearray(image.width_px * image.height_px)
+        for x, y in corrected_pixels:
+            corrected_data[y * image.width_px + x] = 255
+        corrected_mask: BinaryMask = (
+            bytes(corrected_data),
+            image.width_px,
+            image.height_px,
+        )
+        corrected_components = _connected_components_8(corrected_mask)
+        if len(corrected_components) != 1:
+            raise ValidationError(
+                "Corrected skeleton must remain one 8-connected component"
+            )
+
+        features = classify_skeleton_pixels(corrected_mask)
+        clusters = consolidate_junction_clusters(features)
+        nodes, edges = build_initial_branch_graph(features, clusters)
+        calibration = _calibration_payload(image)
+        physical_lengths = _edge_physical_lengths(
+            nodes,
+            edges,
+            calibration,
+        )
+        tle_pixels = total_graph_length_pixels(edges)
+        longest_pixels = graph_diameter_pixels(nodes, edges)
+        tle_physical = (
+            sum(physical_lengths.values()) if calibration is not None else None
+        )
+        longest_physical = (
+            _weighted_graph_diameter(nodes, edges, physical_lengths)
+            if calibration is not None
+            else None
+        )
+        angles = _branch_angle_responses(nodes, edges, calibration)
+
+        corrected_result = base_response.result.model_copy(deep=True)
+        corrected_result.final_skeleton_source = "human_corrected"
+        corrected_result.human_correction_applied = True
+        corrected_result.final_skeleton_pixels = _pixel_coordinates(
+            corrected_mask
+        )
+        corrected_result.final_graph_nodes = [
+            SkeletonGraphNodeResponse(
+                id=node.id,
+                kind=node.kind,
+                x=node.x,
+                y=node.y,
+                source_pixel_count=len(node.source_pixels),
+                external_connection_count=node.external_connection_count,
+            )
+            for node in nodes
+        ]
+        corrected_result.final_graph_edges = self._edge_responses(
+            nodes,
+            edges,
+            physical_lengths,
+        )
+        corrected_result.final_branch_count = len(edges)
+        corrected_result.final_total_linear_extension_pixels = tle_pixels
+        corrected_result.final_total_linear_extension_physical = tle_physical
+        corrected_result.final_longest_path_pixels = longest_pixels
+        corrected_result.final_longest_path_physical = longest_physical
+        corrected_result.final_branch_angles = angles
+
+        result_json = corrected_result.model_dump(mode="json")
+        result_sha256 = canonical_json_sha256(result_json)
+        correction_json = {
+            "schema_version": "skeleton-correction-0001",
+            "base_analysis_id": base.id,
+            "base_result_sha256": base.result_sha256,
+            "reason_code": payload.reason_code,
+            "note": payload.note,
+            "add_pixels": [
+                {"x": x, "y": y}
+                for x, y in sorted(add_pixels, key=lambda point: (point[1], point[0]))
+            ],
+            "remove_pixels": [
+                {"x": x, "y": y}
+                for x, y in sorted(
+                    remove_pixels,
+                    key=lambda point: (point[1], point[0]),
+                )
+            ],
+        }
+
+        record = SkeletonAnalysisRevision(
+            analysis_series_id=base.analysis_series_id,
+            analysis_revision=base.analysis_revision + 1,
+            supersedes_analysis_id=base.id,
+            mask_annotation_id=base.mask_annotation_id,
+            image_id=base.image_id,
+            mask_revision=base.mask_revision,
+            source_kind="human_corrected",
+            algorithm=base.algorithm,
+            algorithm_version=base.algorithm_version,
+            terminal_spur_max_length_pixels=(
+                base.terminal_spur_max_length_pixels
+            ),
+            input_mask_sha256=base.input_mask_sha256,
+            calibration_sha256=base.calibration_sha256,
+            parameters_sha256=base.parameters_sha256,
+            result_sha256=result_sha256,
+            result_json=result_json,
+            correction_json=correction_json,
+            review_status="unreviewed",
+            created_by="local_user",
+        )
+        self.session.add(record)
+        self.session.commit()
+        self.session.refresh(record)
+        return self._analysis_record_response(record)
+
