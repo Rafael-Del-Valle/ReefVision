@@ -16,7 +16,10 @@ from reefvision.config import Settings
 from reefvision.db.models import Job, ModelRegistration
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.jobs import JobResponse
-from reefvision.schemas.pose_interoperability import PoseInteroperabilityFormat
+from reefvision.schemas.pose_interoperability import (
+    PoseInteroperabilityFormat,
+    PoseInteroperabilityImportResponse,
+)
 from reefvision.schemas.pose_tracking import (
     PoseAssociationCorrectionRequest,
     PoseIdentityBreakCreateRequest,
@@ -411,6 +414,37 @@ def export_pose_interoperability(
             "X-ReefVision-Pose-Interoperability-Format": exchange_format,
             "X-ReefVision-Pose-Lossy": "true" if payload.lossy else "false",
         },
+    )
+
+
+@router.post(
+    "/videos/{video_id}/pose-interoperability/import",
+    response_model=PoseInteroperabilityImportResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def import_pose_interoperability(
+    video_id: str,
+    request: Request,
+    session: DbSession,
+    file: Annotated[UploadFile, File()],
+    exchange_format: Annotated[
+        PoseInteroperabilityFormat,
+        Query(alias="format"),
+    ],
+    label_class_id: Annotated[str, Query(min_length=1, max_length=36)],
+    confirm_frame_mapping: Annotated[bool, Query()] = False,
+) -> PoseInteroperabilityImportResponse:
+    raw = file.file.read(200 * 1024 * 1024 + 1)
+    if len(raw) > 200 * 1024 * 1024:
+        raise ValidationError("Pose interoperability upload exceeds 200 MiB")
+    settings: Settings = request.app.state.settings
+    return PoseInteroperabilityService(session, settings).import_bytes(
+        video_id,
+        exchange_format,
+        raw,
+        source_filename=file.filename,
+        label_class_id=label_class_id,
+        confirm_frame_mapping=confirm_frame_mapping,
     )
 
 
