@@ -21,6 +21,11 @@ from reefvision.db.models.mask_annotation import MaskAnnotation
 from reefvision.db.models.mask_annotation_event import MaskAnnotationEvent
 from reefvision.db.models.model_registration import ModelRegistration
 from reefvision.db.models.prediction_proposal import PredictionProposal
+from reefvision.db.models.pose_schema import (
+    PoseLandmarkSchema,
+    PoseLandmarkSchemaRevision,
+    PoseModelSchemaBinding,
+)
 from reefvision.db.models.pose_tracking import (
     PoseLandmarkAssociationCandidate,
     PoseLandmarkAssociationDecision,
@@ -69,6 +74,9 @@ __all__ = [
     "MaskAnnotationEvent",
     "ModelRegistration",
     "PredictionProposal",
+    "PoseLandmarkSchema",
+    "PoseLandmarkSchemaRevision",
+    "PoseModelSchemaBinding",
     "PoseLandmarkAssociationCandidate",
     "PoseLandmarkAssociationDecision",
     "PoseLandmarkCorrection",
