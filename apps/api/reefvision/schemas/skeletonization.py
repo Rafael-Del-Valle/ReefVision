@@ -269,3 +269,15 @@ class SkeletonAnalysisCorrectionRequest(BaseModel):
     remove_pixels: list[SkeletonPixelEdit] = Field(default_factory=list)
     reason_code: str = Field(min_length=1, max_length=100)
     note: str | None = Field(default=None, max_length=2000)
+
+
+
+class SkeletonAnalysisExportResponse(BaseModel):
+    analysis_id: str
+    analysis_revision: int = Field(ge=1)
+    package_name: str
+    archive_name: str
+    archive_size_bytes: int = Field(ge=0)
+    archive_sha256: str = Field(min_length=64, max_length=64)
+    manifest_sha256: str = Field(min_length=64, max_length=64)
+    verification_status: Literal["verified"] = "verified"
