@@ -60,7 +60,10 @@ from reefvision.services.skeleton_algorithms import (
 )
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
-from reefvision.storage.skeleton_exports import build_skeleton_export
+from reefvision.storage.skeleton_exports import (
+    build_skeleton_export,
+    skeleton_export_stem,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1169,4 +1172,33 @@ class SkeletonizationService:
             archive_sha256=exported["archive_sha256"],
             manifest_sha256=exported["manifest_sha256"],
         )
+
+    def persisted_analysis_archive_path(
+        self,
+        analysis_id: str,
+    ) -> Path:
+        record = self._analysis_record_response(
+            self._analysis_record(analysis_id)
+        )
+        if record.stale:
+            raise ValidationError(
+                "Stale skeleton analyses must be regenerated before download"
+            )
+        if record.review_status != "approved":
+            raise ValidationError(
+                "Only approved skeleton analyses can be downloaded"
+            )
+
+        image = self._image(record.image_id)
+        project = self.session.get(Project, image.project_id)
+        if project is None:
+            raise NotFoundError("Project not found")
+        export_root = resolve_managed_project_path(
+            self.settings,
+            f"{project.storage_root}/skeletonization/exports",
+        )
+        archive = export_root / f"{skeleton_export_stem(record.id)}.zip"
+        if not archive.is_file():
+            raise NotFoundError("Skeleton analysis export archive not found")
+        return archive
 
