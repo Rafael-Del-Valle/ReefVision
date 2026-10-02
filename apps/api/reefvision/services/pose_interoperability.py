@@ -974,10 +974,9 @@ class PoseInteroperabilityService:
         video: VideoAsset,
         exchange_format: PoseInteroperabilityFormat,
     ) -> tuple[list[_ImportedTrack], list[str]]:
-        group_key_type = tuple[str, str | int]
-        grouped: dict[group_key_type, list[VideoTrackKeyframe]] = defaultdict(list)
-        names: dict[group_key_type, str | None] = {}
-        seen_frames: dict[group_key_type, set[int]] = defaultdict(set)
+        grouped: dict[tuple[str, str | int], list[VideoTrackKeyframe]] = defaultdict(list)
+        names: dict[tuple[str, str | int], str | None] = {}
+        seen_frames: dict[tuple[str, str | int], set[int]] = defaultdict(set)
         warnings: list[str] = []
         skipped_empty = 0
 
@@ -1083,7 +1082,7 @@ class PoseInteroperabilityService:
 
                 effective_name = manifest_name or native_name
                 if effective_name:
-                    group_key: group_key_type = ("tracked_name", effective_name)
+                    group_key: tuple[str, str | int] = ("tracked_name", effective_name)
                     external_name = effective_name
                 elif track is not None:
                     group_key = ("tracked_object", id(track))
