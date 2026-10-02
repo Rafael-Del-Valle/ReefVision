@@ -6,8 +6,10 @@ from fastapi.testclient import TestClient
 
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.skeletonization import (
+    SkeletonAnalysisCorrectionRequest,
     SkeletonAnalysisCreateRequest,
     SkeletonAnalysisReviewRequest,
+    SkeletonPixelEdit,
 )
 from reefvision.services.skeletonization import SkeletonizationService
 from reefvision.tests.test_annotations import create_project, import_one
@@ -142,3 +144,113 @@ def test_calibration_change_marks_saved_analysis_stale(
         assert regenerated.calibration_sha256 is not None
         assert regenerated.result.calibrated is True
         assert regenerated.stale is False
+
+
+
+def test_human_correction_creates_new_revision_without_overwriting_automatic(
+    client: TestClient,
+) -> None:
+    _image_id, mask_id = _seed_mask(client)
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        service = SkeletonizationService(session, app.state.settings)
+        automatic = service.persist_analysis(
+            mask_id,
+            SkeletonAnalysisCreateRequest(),
+        )
+        endpoint = min(
+            automatic.result.final_skeleton_pixels,
+            key=lambda point: (point.x, point.y),
+        )
+        assert endpoint.x > 0
+
+        corrected = service.correct_persisted_analysis(
+            automatic.id,
+            SkeletonAnalysisCorrectionRequest(
+                add_pixels=[
+                    SkeletonPixelEdit(
+                        x=endpoint.x - 1,
+                        y=endpoint.y,
+                    )
+                ],
+                reason_code="extend_endpoint",
+                note="Human reviewer extended the visible centerline.",
+            ),
+        )
+
+        assert corrected.analysis_series_id == automatic.analysis_series_id
+        assert corrected.analysis_revision == 2
+        assert corrected.supersedes_analysis_id == automatic.id
+        assert corrected.source_kind == "human_corrected"
+        assert corrected.result.final_skeleton_source == "human_corrected"
+        assert corrected.result.human_correction_applied is True
+        assert (
+            corrected.result.raw_total_linear_extension_pixels
+            == automatic.result.raw_total_linear_extension_pixels
+        )
+        assert (
+            corrected.result.pruned_total_linear_extension_pixels
+            == automatic.result.pruned_total_linear_extension_pixels
+        )
+        assert (
+            corrected.result.final_total_linear_extension_pixels
+            > automatic.result.final_total_linear_extension_pixels
+        )
+        assert corrected.correction["reason_code"] == "extend_endpoint"
+        assert corrected.correction["base_analysis_id"] == automatic.id
+
+        original = service.get_persisted_analysis(automatic.id)
+        assert original.analysis_revision == 1
+        assert original.result.final_skeleton_source == "automatic_pruned"
+        assert original.result.human_correction_applied is False
+
+        with pytest.raises(
+            ValidationError,
+            match="latest analysis revision",
+        ):
+            service.correct_persisted_analysis(
+                automatic.id,
+                SkeletonAnalysisCorrectionRequest(
+                    add_pixels=[
+                        SkeletonPixelEdit(
+                            x=endpoint.x - 2,
+                            y=endpoint.y,
+                        )
+                    ],
+                    reason_code="stale_base",
+                ),
+            )
+
+
+def test_human_correction_cannot_disconnect_skeleton(
+    client: TestClient,
+) -> None:
+    _image_id, mask_id = _seed_mask(client)
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        service = SkeletonizationService(session, app.state.settings)
+        automatic = service.persist_analysis(
+            mask_id,
+            SkeletonAnalysisCreateRequest(),
+        )
+        ordered = sorted(
+            automatic.result.final_skeleton_pixels,
+            key=lambda point: (point.x, point.y),
+        )
+        middle = ordered[len(ordered) // 2]
+
+        with pytest.raises(
+            ValidationError,
+            match="one 8-connected component",
+        ):
+            service.correct_persisted_analysis(
+                automatic.id,
+                SkeletonAnalysisCorrectionRequest(
+                    remove_pixels=[
+                        SkeletonPixelEdit(x=middle.x, y=middle.y)
+                    ],
+                    reason_code="invalid_disconnect",
+                ),
+            )
