@@ -533,6 +533,25 @@ class PoseInteroperabilityService:
             )
         return manifests[0].parent
 
+    @classmethod
+    def _validate_coco_paths(cls, content: bytes) -> None:
+        try:
+            document = json.loads(content.decode("utf-8-sig"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValidationError("COCO pose import requires valid UTF-8 JSON") from exc
+        if not isinstance(document, dict):
+            raise ValidationError("COCO pose import requires a JSON object")
+        images = document.get("images")
+        if not isinstance(images, list):
+            raise ValidationError("COCO pose import is missing its images array")
+        for image in images:
+            if not isinstance(image, dict):
+                raise ValidationError("COCO pose import contains a malformed image record")
+            filename = image.get("file_name")
+            if not isinstance(filename, str) or not filename.strip():
+                raise ValidationError("COCO pose image records require file_name")
+            cls._validate_archive_member(filename)
+
     def _load_labels(
         self,
         exchange_format: PoseInteroperabilityFormat,
@@ -540,32 +559,45 @@ class PoseInteroperabilityService:
         source_filename: str | None,
     ) -> Any:
         sio = self._sleap_io()
-        with TemporaryDirectory(prefix="reefvision-pose-import-") as temp:
-            root = Path(temp)
-            if exchange_format == "ultralytics_pose":
-                dataset_root = self._extract_ultralytics_zip(content, root / "dataset")
-                return sio.load_ultralytics(str(dataset_root), split="train")
+        try:
+            with TemporaryDirectory(prefix="reefvision-pose-import-") as temp:
+                root = Path(temp)
+                if exchange_format == "ultralytics_pose":
+                    dataset_root = self._extract_ultralytics_zip(
+                        content,
+                        root / "dataset",
+                    )
+                    return sio.load_ultralytics(str(dataset_root), split="train")
 
-            suffixes: dict[PoseInteroperabilityFormat, str] = {
-                "slp": ".slp",
-                "nwb": ".nwb",
-                "coco": ".json",
-                "dlc_csv": ".csv",
-                "ultralytics_pose": ".zip",
-            }
-            filename = Path(source_filename or f"pose{suffixes[exchange_format]}").name
-            if not filename.casefold().endswith(suffixes[exchange_format]):
-                filename = f"pose{suffixes[exchange_format]}"
-            source = root / filename
-            source.write_bytes(content)
-            if exchange_format == "slp":
-                return sio.load_slp(str(source), open_videos=False)
-            if exchange_format == "nwb":
-                return sio.load_nwb(str(source))
-            if exchange_format == "coco":
-                return sio.load_coco(str(source), dataset_root=str(root))
-            if exchange_format == "dlc_csv":
-                return sio.load_dlc(str(source), config=False)
+                suffixes: dict[PoseInteroperabilityFormat, str] = {
+                    "slp": ".slp",
+                    "nwb": ".nwb",
+                    "coco": ".json",
+                    "dlc_csv": ".csv",
+                    "ultralytics_pose": ".zip",
+                }
+                filename = Path(
+                    source_filename or f"pose{suffixes[exchange_format]}"
+                ).name
+                if not filename.casefold().endswith(suffixes[exchange_format]):
+                    filename = f"pose{suffixes[exchange_format]}"
+                source = root / filename
+                source.write_bytes(content)
+                if exchange_format == "slp":
+                    return sio.load_slp(str(source), open_videos=False)
+                if exchange_format == "nwb":
+                    return sio.load_nwb(str(source))
+                if exchange_format == "coco":
+                    self._validate_coco_paths(content)
+                    return sio.load_coco(str(source), dataset_root=str(root))
+                if exchange_format == "dlc_csv":
+                    return sio.load_dlc(str(source), config=False)
+        except ValidationError:
+            raise
+        except Exception as exc:
+            raise ValidationError(
+                f"Could not parse {exchange_format} pose interoperability file: {exc}"
+            ) from exc
         raise ValidationError(f"Unsupported pose interoperability format: {exchange_format}")
 
     @staticmethod
