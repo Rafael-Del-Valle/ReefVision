@@ -212,7 +212,7 @@ export interface VideoPoseObservation {
   x: number;
   y: number;
   confidence: number | null;
-  status: "visible" | "occluded" | "uncertain" | "absent";
+  status: "visible" | "occluded" | "out_of_frame" | "uncertain" | "absent";
   source: "model" | "manual" | "corrected";
 }
 
