@@ -35,7 +35,9 @@ from reefvision.db.models.pose_tracking import (
     PoseLandmarkTrack,
 )
 from reefvision.db.models.project import Project
-from reefvision.db.models.project_class_visibility_default import ProjectClassVisibilityDefault
+from reefvision.db.models.project_class_visibility_default import (
+    ProjectClassVisibilityDefault,
+)
 from reefvision.db.models.project_exchange_package import ProjectExchangePackage
 from reefvision.db.models.quality_control_issue import QualityControlIssue
 from reefvision.db.models.quality_control_run import QualityControlRun
@@ -74,15 +76,15 @@ __all__ = [
     "MaskAnnotationEvent",
     "ModelRegistration",
     "PredictionProposal",
-    "PoseLandmarkSchema",
-    "PoseLandmarkSchemaRevision",
-    "PoseModelSchemaBinding",
     "PoseLandmarkAssociationCandidate",
     "PoseLandmarkAssociationDecision",
     "PoseLandmarkCorrection",
     "PoseLandmarkIdentityBreak",
     "PoseLandmarkObservation",
+    "PoseLandmarkSchema",
+    "PoseLandmarkSchemaRevision",
     "PoseLandmarkTrack",
+    "PoseModelSchemaBinding",
     "Project",
     "ProjectClassVisibilityDefault",
     "ProjectExchangePackage",
