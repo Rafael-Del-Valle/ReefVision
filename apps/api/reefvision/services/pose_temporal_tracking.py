@@ -999,9 +999,17 @@ class PoseTemporalTrackingService:
             current.selected_landmark_track_id == payload.selected_landmark_track_id
             and current.association_state == payload.association_state
         )
+        correction_action = (
+            "confirm_identity"
+            if unchanged_identity
+            and payload.association_state in {"confirmed", "provisional"}
+            else "confirm_unresolved"
+            if unchanged_identity
+            else "reassign_identity"
+        )
         correction = PoseLandmarkCorrection(
             parent_video_track_id=observation.parent_video_track_id,
-            action="confirm_identity" if unchanged_identity else "reassign_identity",
+            action=correction_action,
             target_type="association",
             target_id=current.id,
             frame_start=observation.frame_index,
