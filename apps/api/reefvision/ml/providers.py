@@ -6,6 +6,7 @@ from __future__ import annotations
 import base64
 from dataclasses import dataclass
 from io import BytesIO
+from math import isfinite
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -124,6 +125,9 @@ class AnnotationAssistProvider(Protocol):
 
 
 def ensure_finite_box(box: PixelBox) -> None:
+    coordinates = (box.x_min, box.y_min, box.x_max, box.y_max)
+    if not all(isfinite(float(value)) for value in coordinates):
+        raise ValidationError("Bounding boxes must contain finite coordinates")
     if not (box.x_max > box.x_min and box.y_max > box.y_min):
         raise ValidationError("Bounding boxes must have positive width and height")
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime
 from hashlib import sha256
+from math import isfinite
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -13,7 +14,7 @@ from PIL import Image, UnidentifiedImageError
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
-from reefvision.db.models import Job, ModelRegistration, PredictionProposal, Project
+from reefvision.db.models import ImageAsset, Job, ModelRegistration, PredictionProposal, Project
 from reefvision.domain.errors import ValidationError
 from reefvision.ml.provider_hub import detection_provider_for_name
 from reefvision.ml.providers import DetectionProvider, DetectionSettings
@@ -27,7 +28,67 @@ from reefvision.ml.semantic_segmentation import (
 )
 from reefvision.repositories.images import ImageRepository
 from reefvision.repositories.models import ModelRepository
+from reefvision.services.annotations import _polygon_area, _polygon_self_intersects
 from reefvision.storage.projects import resolve_managed_project_path
+
+
+def _validate_model_prediction(
+    image: ImageAsset,
+    *,
+    label: str,
+    class_index: int | None,
+    confidence: float,
+    box: Any,
+    polygon: list[list[float]] | None = None,
+) -> None:
+    coordinates = (
+        float(box.x_min),
+        float(box.y_min),
+        float(box.x_max),
+        float(box.y_max),
+    )
+    if not all(isfinite(value) for value in coordinates):
+        raise ValidationError("Model prediction box contains non-finite coordinates")
+    x_min, y_min, x_max, y_max = coordinates
+    if x_max <= x_min or y_max <= y_min:
+        raise ValidationError("Model prediction boxes must have positive area")
+    if x_min < 0 or y_min < 0 or x_max > image.width_px or y_max > image.height_px:
+        raise ValidationError("Model prediction boxes must remain inside the source image")
+
+    normalized_label = str(label).strip()
+    if not normalized_label:
+        raise ValidationError("Model predictions must include a non-empty label")
+    if class_index is not None and int(class_index) < 0:
+        raise ValidationError("Model prediction class indices cannot be negative")
+
+    numeric_confidence = float(confidence)
+    if not isfinite(numeric_confidence) or not 0.0 <= numeric_confidence <= 1.0:
+        raise ValidationError("Model prediction confidence must be finite and between 0 and 1")
+
+    if polygon is None:
+        return
+    if len(polygon) < 3:
+        raise ValidationError("Segmentation predictions require at least three polygon points")
+
+    points: list[tuple[float, float]] = []
+    for raw_point in polygon:
+        if len(raw_point) != 2:
+            raise ValidationError("Every segmentation polygon point must contain x and y")
+        x, y = float(raw_point[0]), float(raw_point[1])
+        if not isfinite(x) or not isfinite(y):
+            raise ValidationError("Segmentation prediction polygons contain non-finite coordinates")
+        if x < 0 or y < 0 or x > image.width_px or y > image.height_px:
+            raise ValidationError(
+                "Segmentation prediction polygons must remain inside the source image"
+            )
+        points.append((x, y))
+
+    if len(set(points)) < 3:
+        raise ValidationError("Segmentation predictions require at least three unique points")
+    if _polygon_self_intersects(points):
+        raise ValidationError("Segmentation prediction polygons may not self-intersect")
+    if _polygon_area(points) <= 0:
+        raise ValidationError("Segmentation prediction polygons must have positive area")
 
 
 def _utc_now() -> datetime:
@@ -286,6 +347,14 @@ def process_inference_job(
                     proposals = []
                     for prediction in predictions:
                         polygon = getattr(prediction, "polygon", None)
+                        _validate_model_prediction(
+                            image,
+                            label=prediction.label,
+                            class_index=prediction.class_index,
+                            confidence=prediction.confidence,
+                            box=prediction.box,
+                            polygon=polygon,
+                        )
                         geometry_kind = "polygon_mask" if polygon is not None else "bounding_box"
                         proposals.append(
                             PredictionProposal(

@@ -563,3 +563,97 @@ def test_interrupted_inference_resumes_without_duplicate_proposals(
     assert completed_job["progress_current"] == 2
     assert completed_job["result_json"]["processed_images"] == 2
     assert completed_job["result_json"]["proposal_count"] == 2
+
+
+@pytest.mark.parametrize(
+    ("prediction", "error_fragment"),
+    [
+        (
+            DetectionPrediction(
+                label="soft coral",
+                class_index=0,
+                confidence=float("nan"),
+                box=PixelBox(x_min=5, y_min=4, x_max=32, y_max=28),
+            ),
+            "confidence must be finite",
+        ),
+        (
+            DetectionPrediction(
+                label="soft coral",
+                class_index=0,
+                confidence=1.01,
+                box=PixelBox(x_min=5, y_min=4, x_max=32, y_max=28),
+            ),
+            "confidence must be finite",
+        ),
+        (
+            DetectionPrediction(
+                label="soft coral",
+                class_index=0,
+                confidence=0.9,
+                box=PixelBox(x_min=-1, y_min=4, x_max=32, y_max=28),
+            ),
+            "inside the source image",
+        ),
+        (
+            DetectionPrediction(
+                label="soft coral",
+                class_index=0,
+                confidence=0.9,
+                box=PixelBox(x_min=5, y_min=4, x_max=float("inf"), y_max=28),
+            ),
+            "non-finite coordinates",
+        ),
+    ],
+)
+def test_invalid_detector_outputs_fail_before_proposal_persistence(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    prediction: DetectionPrediction,
+    error_fragment: str,
+) -> None:
+    class InvalidDetectorWorkerProvider(FakeDetectorWorkerProvider):
+        def predict(self, image_path: Any, settings: Any) -> list[DetectionPrediction]:
+            assert image_path.exists()
+            return [prediction]
+
+    monkeypatch.setattr(
+        ModelService,
+        "_provider_for_purpose",
+        lambda self, purpose: FakeDetectorRegistrationProvider(),
+    )
+    monkeypatch.setattr(
+        inference_module,
+        "detection_provider_for_name",
+        lambda provider_name: InvalidDetectorWorkerProvider(),
+    )
+
+    project = create_project(client, "Invalid detector output")
+    report = import_one(client, project["id"])
+    image_id = report["successful"][0]["image_id"]
+    model = register_model(
+        client,
+        project["id"],
+        purpose="detector",
+        filename="fixture-detector.pt",
+        display_name="Fixture Detector",
+    )
+    job = client.post(
+        f"/api/v1/projects/{project['id']}/inference-jobs",
+        json={"model_id": model["id"], "image_ids": [image_id], "device": "cpu"},
+    ).json()
+
+    app = cast(FastAPI, client.app)
+    assert process_inference_job(
+        app.state.settings,
+        app.state.session_factory,
+        job["id"],
+    ) is False
+
+    failed_job = client.get(f"/api/v1/jobs/{job['id']}").json()
+    assert failed_job["status"] == "failed"
+    assert error_fragment in failed_job["error_message"]
+    proposals = client.get(
+        f"/api/v1/images/{image_id}/prediction-proposals"
+    ).json()["items"]
+    assert proposals == []

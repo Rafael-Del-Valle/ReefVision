@@ -302,3 +302,66 @@ def test_training_dispatch_preserves_detection_and_routes_segmentation(
         "job-2",
     )
     assert calls == ["detect", "segment"]
+
+
+class OutOfBoundsSegmentationProvider(FakeSegmentationProvider):
+    def predict(
+        self,
+        image_path: Path,
+        settings: DetectionSettings,
+    ) -> list[SegmentationPrediction]:
+        assert image_path.is_file()
+        return [
+            SegmentationPrediction(
+                label="soft coral",
+                class_index=0,
+                confidence=0.94,
+                box=PixelBox(x_min=8, y_min=6, x_max=36, y_max=30),
+                polygon=[
+                    [8.0, 6.0],
+                    [81.0, 8.0],
+                    [33.0, 30.0],
+                    [10.0, 28.0],
+                ],
+            )
+        ]
+
+
+def test_invalid_segmentation_output_fails_before_proposal_persistence(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Invalid segmentation output")
+    report = import_one(client, project["id"], size=(80, 60))
+    image_id = report["successful"][0]["image_id"]
+    label_class_id = project["label_classes"][0]["id"]
+    model = _seed_segmenter(client, project["id"], label_class_id)
+
+    monkeypatch.setattr(
+        inference_module,
+        "segmentation_provider_for_name",
+        lambda provider_name: OutOfBoundsSegmentationProvider(),
+    )
+
+    queued = client.post(
+        f"/api/v1/projects/{project['id']}/inference-jobs",
+        json={"model_id": model.id, "image_ids": [image_id], "device": "cpu"},
+    )
+    assert queued.status_code == 200, queued.text
+    job = queued.json()
+
+    app = cast(FastAPI, client.app)
+    assert inference_module.process_inference_job(
+        app.state.settings,
+        app.state.session_factory,
+        job["id"],
+    ) is False
+
+    failed_job = client.get(f"/api/v1/jobs/{job['id']}").json()
+    assert failed_job["status"] == "failed"
+    assert "polygon" in failed_job["error_message"].lower()
+    assert "inside the source image" in failed_job["error_message"]
+    proposals = client.get(
+        f"/api/v1/images/{image_id}/prediction-proposals"
+    ).json()["items"]
+    assert proposals == []
