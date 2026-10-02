@@ -104,7 +104,11 @@ export function correctedVideoKeyframeFromPoseSave(
       semanticLabel,
       indexes[index] ?? 0,
     );
-    if (!observation || observation.status === "absent") {
+    if (
+      !observation ||
+      observation.status === "absent" ||
+      observation.status === "out_of_frame"
+    ) {
       return [0, 0, 0] as [number, number, number];
     }
     return [observation.x, observation.y, observation.confidence ?? 1] as [
