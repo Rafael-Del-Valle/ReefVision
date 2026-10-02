@@ -290,3 +290,42 @@ def test_human_correction_cannot_disconnect_skeleton(
                     reason_code="invalid_disconnect",
                 ),
             )
+
+
+
+def test_human_correction_cannot_create_thick_skeleton_blob(
+    client: TestClient,
+) -> None:
+    _image_id, mask_id = _seed_mask(client)
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        service = SkeletonizationService(session, app.state.settings)
+        automatic = service.persist_analysis(
+            mask_id,
+            SkeletonAnalysisCreateRequest(),
+        )
+        ordered = sorted(
+            automatic.result.final_skeleton_pixels,
+            key=lambda point: (point.x, point.y),
+        )
+        middle_index = len(ordered) // 2
+        first = ordered[middle_index - 1]
+        second = ordered[middle_index]
+        assert first.y == second.y
+        assert abs(first.x - second.x) == 1
+
+        with pytest.raises(
+            ValidationError,
+            match="one-pixel-thin",
+        ):
+            service.correct_persisted_analysis(
+                automatic.id,
+                SkeletonAnalysisCorrectionRequest(
+                    add_pixels=[
+                        SkeletonPixelEdit(x=first.x, y=first.y + 1),
+                        SkeletonPixelEdit(x=second.x, y=second.y + 1),
+                    ],
+                    reason_code="invalid_thickening",
+                ),
+            )
