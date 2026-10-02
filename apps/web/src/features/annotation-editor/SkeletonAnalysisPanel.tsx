@@ -46,13 +46,12 @@ export function SkeletonAnalysisPanel({
   const queryClient = useQueryClient();
   const maskId = selectedMask?.id ?? null;
   const enabled =
-    selectedMask !== null &&
-    selectedMask.persisted &&
-    !documentDirty;
+    selectedMask !== null && selectedMask.persisted && !documentDirty;
   const [spurThreshold, setSpurThreshold] = useState("0");
   const [editMode, setEditMode] = useState<SkeletonEditMode>("view");
-  const [overlaySource, setOverlaySource] =
-    useState<"raw" | "pruned" | "final">("final");
+  const [overlaySource, setOverlaySource] = useState<
+    "raw" | "pruned" | "final"
+  >("final");
   const [addedPixels, setAddedPixels] = useState<SkeletonPixel[]>([]);
   const [removedPixels, setRemovedPixels] = useState<SkeletonPixel[]>([]);
   const [correctionReason, setCorrectionReason] = useState("");
@@ -185,9 +184,7 @@ export function SkeletonAnalysisPanel({
     (point: SkeletonPixel) => {
       if (!latest || editMode === "view") return;
       const key = pixelKey(point);
-      const base = new Set(
-        latest.result.final_skeleton_pixels.map(pixelKey),
-      );
+      const base = new Set(latest.result.final_skeleton_pixels.map(pixelKey));
 
       if (editMode === "add") {
         setRemovedPixels((current) =>
@@ -315,9 +312,9 @@ export function SkeletonAnalysisPanel({
               </p>
               {readiness.resolution_actions.length > 0 && (
                 <p className="annotation-helper">
-                  Resolve explicitly by repairing the gap, deleting an
-                  artifact, or classifying a separate object. ReefVision will
-                  not bridge components automatically.
+                  Resolve explicitly by repairing the gap, deleting an artifact,
+                  or classifying a separate object. ReefVision will not bridge
+                  components automatically.
                 </p>
               )}
             </div>
@@ -346,8 +343,7 @@ export function SkeletonAnalysisPanel({
             type="button"
             className="secondary"
             disabled={
-              !readiness?.ready_for_skeletonization ||
-              createMutation.isPending
+              !readiness?.ready_for_skeletonization || createMutation.isPending
             }
             onClick={() => createMutation.mutate()}
           >
@@ -418,8 +414,8 @@ export function SkeletonAnalysisPanel({
             </span>
           </div>
           <p className="annotation-helper">
-            Final source: {result.final_skeleton_source.replace("_", " ")}.
-            Raw and automatically pruned measurements are retained separately.
+            Final source: {result.final_skeleton_source.replace("_", " ")}. Raw
+            and automatically pruned measurements are retained separately.
           </p>
           <div>
             <p className="annotation-helper">Canvas overlay</p>
@@ -505,9 +501,7 @@ export function SkeletonAnalysisPanel({
                 Correction reason
                 <input
                   value={correctionReason}
-                  onChange={(event) =>
-                    setCorrectionReason(event.target.value)
-                  }
+                  onChange={(event) => setCorrectionReason(event.target.value)}
                   placeholder="e.g. extend_visible_branch"
                 />
               </label>
@@ -524,8 +518,7 @@ export function SkeletonAnalysisPanel({
                   className="secondary"
                   disabled={
                     correctionMutation.isPending ||
-                    (addedPixels.length === 0 &&
-                      removedPixels.length === 0)
+                    (addedPixels.length === 0 && removedPixels.length === 0)
                   }
                   onClick={() => correctionMutation.mutate()}
                 >
@@ -537,8 +530,7 @@ export function SkeletonAnalysisPanel({
                   type="button"
                   className="danger-ghost"
                   disabled={
-                    addedPixels.length === 0 &&
-                    removedPixels.length === 0
+                    addedPixels.length === 0 && removedPixels.length === 0
                   }
                   onClick={() => {
                     setAddedPixels([]);

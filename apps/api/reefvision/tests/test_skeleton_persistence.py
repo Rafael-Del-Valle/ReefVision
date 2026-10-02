@@ -68,7 +68,6 @@ def test_persisted_analysis_is_deduplicated_and_hashed(
         assert first.stale is False
 
 
-
 def test_persisted_analysis_review_is_explicit(client: TestClient) -> None:
     _image_id, mask_id = _seed_mask(client)
     app = cast(FastAPI, client.app)
@@ -92,7 +91,6 @@ def test_persisted_analysis_review_is_explicit(client: TestClient) -> None:
         assert reviewed.reviewed_at is not None
         assert reviewed.review_note == "Reviewed against the source mask."
         assert len(service.list_persisted_analyses(mask_id)) == 1
-
 
 
 def test_calibration_change_marks_saved_analysis_stale(
@@ -144,7 +142,6 @@ def test_calibration_change_marks_saved_analysis_stale(
         assert regenerated.calibration_sha256 is not None
         assert regenerated.result.calibrated is True
         assert regenerated.stale is False
-
 
 
 def test_human_correction_creates_new_revision_without_overwriting_automatic(
@@ -284,13 +281,10 @@ def test_human_correction_cannot_disconnect_skeleton(
             service.correct_persisted_analysis(
                 automatic.id,
                 SkeletonAnalysisCorrectionRequest(
-                    remove_pixels=[
-                        SkeletonPixelEdit(x=middle.x, y=middle.y)
-                    ],
+                    remove_pixels=[SkeletonPixelEdit(x=middle.x, y=middle.y)],
                     reason_code="invalid_disconnect",
                 ),
             )
-
 
 
 def test_human_correction_cannot_create_thick_skeleton_blob(

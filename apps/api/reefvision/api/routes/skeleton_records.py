@@ -38,7 +38,6 @@ def get_skeleton_analysis(
     return service(request, session).get_persisted_analysis(analysis_id)
 
 
-
 @router.post(
     "/mask-annotations/{mask_annotation_id}/skeleton-analyses",
     response_model=SkeletonAnalysisRevisionResponse,
@@ -55,7 +54,6 @@ def create_skeleton_analysis(
     )
 
 
-
 @router.get(
     "/mask-annotations/{mask_annotation_id}/skeleton-analyses",
     response_model=list[SkeletonAnalysisRevisionResponse],
@@ -65,10 +63,7 @@ def list_skeleton_analyses(
     request: Request,
     session: DbSession,
 ) -> list[SkeletonAnalysisRevisionResponse]:
-    return service(request, session).list_persisted_analyses(
-        mask_annotation_id
-    )
-
+    return service(request, session).list_persisted_analyses(mask_annotation_id)
 
 
 @router.post(
@@ -103,7 +98,6 @@ def correct_skeleton_analysis(
     )
 
 
-
 @router.post(
     "/skeleton-analyses/{analysis_id}/export",
     response_model=SkeletonAnalysisExportResponse,
@@ -122,9 +116,7 @@ def download_skeleton_analysis_export(
     request: Request,
     session: DbSession,
 ) -> FileResponse:
-    archive = service(request, session).persisted_analysis_archive_path(
-        analysis_id
-    )
+    archive = service(request, session).persisted_analysis_archive_path(analysis_id)
     return FileResponse(
         archive,
         media_type="application/zip",

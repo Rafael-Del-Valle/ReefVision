@@ -19,12 +19,7 @@ def test_zero_threshold_disables_spur_pruning() -> None:
     mask = _mask(
         11,
         11,
-        {
-            (x, 5) for x in range(1, 10)
-        }
-        | {
-            (5, y) for y in range(3, 10)
-        },
+        {(x, 5) for x in range(1, 10)} | {(5, y) for y in range(3, 10)},
     )
 
     result = prune_terminal_spurs(mask, max_length_pixels=0)
@@ -44,9 +39,7 @@ def test_endpoint_to_endpoint_axis_is_never_pruned() -> None:
 
 
 def test_short_terminal_spurs_are_removed_iteratively_with_audit() -> None:
-    foreground = {
-        (x, 5) for x in range(1, 10)
-    } | {
+    foreground = {(x, 5) for x in range(1, 10)} | {
         (5, 4),
         (5, 3),
         (5, 6),
@@ -58,15 +51,9 @@ def test_short_terminal_spurs_are_removed_iteratively_with_audit() -> None:
 
     assert len(result.removals) == 2
     assert [removal.iteration for removal in result.removals] == [1, 2]
-    assert all(
-        0 < removal.branch_length_pixels <= 2.0
-        for removal in result.removals
-    )
+    assert all(0 < removal.branch_length_pixels <= 2.0 for removal in result.removals)
     assert all(len(removal.removed_pixels) == 2 for removal in result.removals)
-    assert all(
-        removal.removed_junction_boundary_pixel_count == 1
-        for removal in result.removals
-    )
+    assert all(removal.removed_junction_boundary_pixel_count == 1 for removal in result.removals)
     assert {(removal.endpoint_x, removal.endpoint_y) for removal in result.removals} == {
         (5, 3),
         (5, 7),
@@ -80,9 +67,7 @@ def test_short_terminal_spurs_are_removed_iteratively_with_audit() -> None:
 
 
 def test_spurs_over_threshold_are_preserved() -> None:
-    foreground = {
-        (x, 5) for x in range(1, 10)
-    } | {
+    foreground = {(x, 5) for x in range(1, 10)} | {
         (5, 2),
         (5, 3),
         (5, 4),

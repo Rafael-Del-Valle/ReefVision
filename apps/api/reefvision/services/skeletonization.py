@@ -273,8 +273,7 @@ def _reference_plane_branch_angles(
                 if second_norm == 0:
                     continue
                 cosine = (
-                    first_vector[0] * second_vector[0]
-                    + first_vector[1] * second_vector[1]
+                    first_vector[0] * second_vector[0] + first_vector[1] * second_vector[1]
                 ) / (first_norm * second_norm)
                 cosine = max(-1.0, min(1.0, cosine))
                 results.append(
@@ -315,9 +314,7 @@ def _binary_mask_from_image(path: Path, *, width: int, height: int) -> BinaryMas
         with Image.open(path) as image:
             image.load()
             if image.size != (width, height):
-                raise ValidationError(
-                    "Raster mask dimensions do not match the source image"
-                )
+                raise ValidationError("Raster mask dimensions do not match the source image")
             binary = image.convert("L").point(lambda value: 255 if value > 0 else 0)
             return binary.tobytes(), width, height
     except (OSError, UnidentifiedImageError) as exc:
@@ -439,9 +436,7 @@ class SkeletonizationService:
                 source_node_id=edge.source_node_id,
                 target_node_id=edge.target_node_id,
                 path_pixel_count=len(edge.pixels),
-                boundary_to_boundary_length_pixels=(
-                    edge.boundary_to_boundary_length_pixels
-                ),
+                boundary_to_boundary_length_pixels=(edge.boundary_to_boundary_length_pixels),
                 node_to_node_length_pixels=edge.node_to_node_length_pixels,
                 length_physical=physical_lengths.get(edge.id),
                 is_cycle=edge.is_cycle,
@@ -464,9 +459,7 @@ class SkeletonizationService:
                 width=image.width_px,
                 height=image.height_px,
             )
-        raise ValidationError(
-            f"Skeletonization is not supported for {mask.geometry_kind} masks"
-        )
+        raise ValidationError(f"Skeletonization is not supported for {mask.geometry_kind} masks")
 
     @staticmethod
     def _readiness_for(
@@ -583,9 +576,7 @@ class SkeletonizationService:
             pruning.graph_nodes,
             pruning.graph_edges,
         )
-        raw_tle_physical = (
-            sum(raw_physical_lengths.values()) if calibration is not None else None
-        )
+        raw_tle_physical = sum(raw_physical_lengths.values()) if calibration is not None else None
         pruned_tle_physical = (
             sum(pruned_physical_lengths.values()) if calibration is not None else None
         )
@@ -716,8 +707,7 @@ class SkeletonizationService:
             pruned_branch_angles=pruned_angles,
             branch_angle_space=(
                 "reference_plane"
-                if calibration is not None
-                and calibration.perspective_homography is not None
+                if calibration is not None and calibration.perspective_homography is not None
                 else "image_pixels"
             ),
             calibrated=calibration is not None,
@@ -725,30 +715,18 @@ class SkeletonizationService:
             distance_per_pixel=(
                 calibration.distance_per_pixel if calibration is not None else None
             ),
-            calibration_source=(
-                calibration.source if calibration is not None else None
-            ),
-            calibration_confidence=(
-                calibration.confidence if calibration is not None else None
-            ),
+            calibration_source=(calibration.source if calibration is not None else None),
+            calibration_confidence=(calibration.confidence if calibration is not None else None),
             perspective_corrected=(
-                calibration is not None
-                and calibration.perspective_homography is not None
+                calibration is not None and calibration.perspective_homography is not None
             ),
             length_calibration_method=(
                 "reference_plane_homography"
-                if calibration is not None
-                and calibration.perspective_homography is not None
-                else (
-                    "scalar_distance_per_pixel"
-                    if calibration is not None
-                    else "pixel_only"
-                )
+                if calibration is not None and calibration.perspective_homography is not None
+                else ("scalar_distance_per_pixel" if calibration is not None else "pixel_only")
             ),
             reference_plane_only=(
-                calibration.reference_plane_only
-                if calibration is not None
-                else None
+                calibration.reference_plane_only if calibration is not None else None
             ),
             final_skeleton_source="automatic_pruned",
             human_correction_applied=False,
@@ -802,10 +780,7 @@ class SkeletonizationService:
     ) -> SkeletonAnalysisRevision | None:
         return self.session.scalar(
             select(SkeletonAnalysisRevision)
-            .where(
-                SkeletonAnalysisRevision.analysis_series_id
-                == analysis_series_id
-            )
+            .where(SkeletonAnalysisRevision.analysis_series_id == analysis_series_id)
             .order_by(
                 SkeletonAnalysisRevision.analysis_revision.desc(),
                 SkeletonAnalysisRevision.created_at.desc(),
@@ -821,9 +796,7 @@ class SkeletonizationService:
         mask = self._mask(record.mask_annotation_id)
         image = self._image(record.image_id)
         current_calibration_sha256 = _calibration_sha256(image)
-        current_input_mask_sha256 = _binary_mask_sha256(
-            self._binary_mask(mask, image)
-        )
+        current_input_mask_sha256 = _binary_mask_sha256(self._binary_mask(mask, image))
         stale_mask = current_input_mask_sha256 != record.input_mask_sha256
         stale_calibration = current_calibration_sha256 != record.calibration_sha256
         latest = self._latest_analysis_revision(record.analysis_series_id)
@@ -840,16 +813,12 @@ class SkeletonizationService:
             source_kind=record.source_kind,
             algorithm=record.algorithm,
             algorithm_version=record.algorithm_version,
-            terminal_spur_max_length_pixels=(
-                record.terminal_spur_max_length_pixels
-            ),
+            terminal_spur_max_length_pixels=(record.terminal_spur_max_length_pixels),
             input_mask_sha256=record.input_mask_sha256,
             calibration_sha256=record.calibration_sha256,
             parameters_sha256=record.parameters_sha256,
             result_sha256=record.result_sha256,
-            result=SkeletonizationAnalysisResponse.model_validate(
-                record.result_json
-            ),
+            result=SkeletonizationAnalysisResponse.model_validate(record.result_json),
             correction=dict(record.correction_json or {}),
             review_status=record.review_status,
             reviewed_by=record.reviewed_by,
@@ -873,14 +842,10 @@ class SkeletonizationService:
         binary = self._binary_mask(mask, image)
         input_mask_sha256 = _binary_mask_sha256(binary)
         calibration_sha256 = _calibration_sha256(image)
-        parameters_sha256 = _analysis_parameters_sha256(
-            payload.terminal_spur_max_length_pixels
-        )
+        parameters_sha256 = _analysis_parameters_sha256(payload.terminal_spur_max_length_pixels)
         result = self.analysis(
             mask.id,
-            terminal_spur_max_length_pixels=(
-                payload.terminal_spur_max_length_pixels
-            ),
+            terminal_spur_max_length_pixels=(payload.terminal_spur_max_length_pixels),
         )
         result_json = result.model_dump(mode="json")
         result_sha256 = canonical_json_sha256(result_json)
@@ -903,9 +868,7 @@ class SkeletonizationService:
             .limit(1)
         )
         if existing is not None:
-            latest_existing = self._latest_analysis_revision(
-                existing.analysis_series_id
-            )
+            latest_existing = self._latest_analysis_revision(existing.analysis_series_id)
             if latest_existing is not None and latest_existing.id == existing.id:
                 return self._analysis_record_response(existing)
 
@@ -919,9 +882,7 @@ class SkeletonizationService:
             source_kind="automatic",
             algorithm=result.algorithm,
             algorithm_version=result.algorithm_version,
-            terminal_spur_max_length_pixels=(
-                payload.terminal_spur_max_length_pixels
-            ),
+            terminal_spur_max_length_pixels=(payload.terminal_spur_max_length_pixels),
             input_mask_sha256=input_mask_sha256,
             calibration_sha256=calibration_sha256,
             parameters_sha256=parameters_sha256,
@@ -940,9 +901,7 @@ class SkeletonizationService:
         self,
         analysis_id: str,
     ) -> SkeletonAnalysisRevisionResponse:
-        return self._analysis_record_response(
-            self._analysis_record(analysis_id)
-        )
+        return self._analysis_record_response(self._analysis_record(analysis_id))
 
     def list_persisted_analyses(
         self,
@@ -951,10 +910,7 @@ class SkeletonizationService:
         self._mask(mask_annotation_id)
         statement = (
             select(SkeletonAnalysisRevision)
-            .where(
-                SkeletonAnalysisRevision.mask_annotation_id
-                == mask_annotation_id
-            )
+            .where(SkeletonAnalysisRevision.mask_annotation_id == mask_annotation_id)
             .order_by(
                 SkeletonAnalysisRevision.created_at,
                 SkeletonAnalysisRevision.analysis_series_id,
@@ -962,8 +918,7 @@ class SkeletonizationService:
             )
         )
         return [
-            self._analysis_record_response(record)
-            for record in self.session.scalars(statement)
+            self._analysis_record_response(record) for record in self.session.scalars(statement)
         ]
 
     def review_persisted_analysis(
@@ -974,13 +929,9 @@ class SkeletonizationService:
         record = self._analysis_record(analysis_id)
         response = self._analysis_record_response(record)
         if response.stale:
-            raise ValidationError(
-                "Stale skeleton analyses must be regenerated before review"
-            )
+            raise ValidationError("Stale skeleton analyses must be regenerated before review")
         if not response.is_latest_revision:
-            raise ValidationError(
-                "Only the latest skeleton analysis revision can be reviewed"
-            )
+            raise ValidationError("Only the latest skeleton analysis revision can be reviewed")
         record.review_status = payload.review_status
         record.reviewed_by = "local_user"
         record.reviewed_at = utc_now()
@@ -997,9 +948,7 @@ class SkeletonizationService:
         base = self._analysis_record(analysis_id)
         base_response = self._analysis_record_response(base)
         if base_response.stale:
-            raise ValidationError(
-                "Stale skeleton analyses must be regenerated before correction"
-            )
+            raise ValidationError("Stale skeleton analyses must be regenerated before correction")
 
         latest = self._latest_analysis_revision(base.analysis_series_id)
         if latest is None or latest.id != base.id:
@@ -1012,9 +961,7 @@ class SkeletonizationService:
         if not add_pixels and not remove_pixels:
             raise ValidationError("Skeleton correction must change at least one pixel")
         if add_pixels & remove_pixels:
-            raise ValidationError(
-                "A skeleton pixel cannot be both added and removed"
-            )
+            raise ValidationError("A skeleton pixel cannot be both added and removed")
 
         image = self._image(base.image_id)
         for x, y in add_pixels | remove_pixels:
@@ -1022,19 +969,14 @@ class SkeletonizationService:
                 raise ValidationError("Skeleton correction pixel is outside the image")
 
         current_pixels = {
-            (point.x, point.y)
-            for point in base_response.result.final_skeleton_pixels
+            (point.x, point.y) for point in base_response.result.final_skeleton_pixels
         }
         missing_removals = remove_pixels - current_pixels
         if missing_removals:
-            raise ValidationError(
-                "Skeleton correction can only remove existing final pixels"
-            )
+            raise ValidationError("Skeleton correction can only remove existing final pixels")
         duplicate_additions = add_pixels & current_pixels
         if duplicate_additions:
-            raise ValidationError(
-                "Skeleton correction can only add pixels not already present"
-            )
+            raise ValidationError("Skeleton correction can only add pixels not already present")
 
         corrected_pixels = (current_pixels - remove_pixels) | add_pixels
         if not corrected_pixels:
@@ -1050,14 +992,10 @@ class SkeletonizationService:
         )
         corrected_components = _connected_components_8(corrected_mask)
         if len(corrected_components) != 1:
-            raise ValidationError(
-                "Corrected skeleton must remain one 8-connected component"
-            )
+            raise ValidationError("Corrected skeleton must remain one 8-connected component")
         rethinned, _ = zhang_suen_thin(corrected_mask)
         if rethinned[0] != corrected_mask[0]:
-            raise ValidationError(
-                "Corrected skeleton must remain one-pixel-thin"
-            )
+            raise ValidationError("Corrected skeleton must remain one-pixel-thin")
 
         features = classify_skeleton_pixels(corrected_mask)
         clusters = consolidate_junction_clusters(features)
@@ -1070,9 +1008,7 @@ class SkeletonizationService:
         )
         tle_pixels = total_graph_length_pixels(edges)
         longest_pixels = graph_diameter_pixels(nodes, edges)
-        tle_physical = (
-            sum(physical_lengths.values()) if calibration is not None else None
-        )
+        tle_physical = sum(physical_lengths.values()) if calibration is not None else None
         longest_physical = (
             _weighted_graph_diameter(nodes, edges, physical_lengths)
             if calibration is not None
@@ -1083,9 +1019,7 @@ class SkeletonizationService:
         corrected_result = base_response.result.model_copy(deep=True)
         corrected_result.final_skeleton_source = "human_corrected"
         corrected_result.human_correction_applied = True
-        corrected_result.final_skeleton_pixels = _pixel_coordinates(
-            corrected_mask
-        )
+        corrected_result.final_skeleton_pixels = _pixel_coordinates(corrected_mask)
         corrected_result.final_graph_nodes = [
             SkeletonGraphNodeResponse(
                 id=node.id,
@@ -1140,9 +1074,7 @@ class SkeletonizationService:
             source_kind="human_corrected",
             algorithm=base.algorithm,
             algorithm_version=base.algorithm_version,
-            terminal_spur_max_length_pixels=(
-                base.terminal_spur_max_length_pixels
-            ),
+            terminal_spur_max_length_pixels=(base.terminal_spur_max_length_pixels),
             input_mask_sha256=base.input_mask_sha256,
             calibration_sha256=base.calibration_sha256,
             parameters_sha256=base.parameters_sha256,
@@ -1161,21 +1093,13 @@ class SkeletonizationService:
         self,
         analysis_id: str,
     ) -> SkeletonAnalysisExportResponse:
-        record = self._analysis_record_response(
-            self._analysis_record(analysis_id)
-        )
+        record = self._analysis_record_response(self._analysis_record(analysis_id))
         if record.stale:
-            raise ValidationError(
-                "Stale skeleton analyses must be regenerated before export"
-            )
+            raise ValidationError("Stale skeleton analyses must be regenerated before export")
         if not record.is_latest_revision:
-            raise ValidationError(
-                "Only the latest skeleton analysis revision can be exported"
-            )
+            raise ValidationError("Only the latest skeleton analysis revision can be exported")
         if record.review_status != "approved":
-            raise ValidationError(
-                "Only approved skeleton analyses can be exported"
-            )
+            raise ValidationError("Only approved skeleton analyses can be exported")
 
         image = self._image(record.image_id)
         project = self.session.get(Project, image.project_id)
@@ -1203,21 +1127,13 @@ class SkeletonizationService:
         self,
         analysis_id: str,
     ) -> Path:
-        record = self._analysis_record_response(
-            self._analysis_record(analysis_id)
-        )
+        record = self._analysis_record_response(self._analysis_record(analysis_id))
         if record.stale:
-            raise ValidationError(
-                "Stale skeleton analyses must be regenerated before download"
-            )
+            raise ValidationError("Stale skeleton analyses must be regenerated before download")
         if not record.is_latest_revision:
-            raise ValidationError(
-                "Only the latest skeleton analysis revision can be downloaded"
-            )
+            raise ValidationError("Only the latest skeleton analysis revision can be downloaded")
         if record.review_status != "approved":
-            raise ValidationError(
-                "Only approved skeleton analyses can be downloaded"
-            )
+            raise ValidationError("Only approved skeleton analyses can be downloaded")
 
         image = self._image(record.image_id)
         project = self.session.get(Project, image.project_id)
@@ -1231,4 +1147,3 @@ class SkeletonizationService:
         if not archive.is_file():
             raise NotFoundError("Skeleton analysis export archive not found")
         return archive
-

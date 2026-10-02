@@ -101,9 +101,7 @@ def test_disconnected_raster_is_blocked_without_silent_bridging(
     mask_id = "7553d6b7-9424-4526-a30c-93904e4b76f6"
 
     app = cast(FastAPI, client.app)
-    relative_path = (
-        f"projects/{project['id']}/masks/{image_id}/{mask_id}-skeleton-readiness.png"
-    )
+    relative_path = f"projects/{project['id']}/masks/{image_id}/{mask_id}-skeleton-readiness.png"
     mask_path = app.state.settings.resolved_data_dir / Path(relative_path)
     mask_path.parent.mkdir(parents=True, exist_ok=True)
     raster = Image.new("L", (64, 64), 0)
@@ -177,7 +175,6 @@ def test_unverified_mask_is_not_ready_even_when_connected(client: TestClient) ->
     assert payload["automatic_bridge_applied"] is False
 
 
-
 def test_connected_raster_mask_runs_full_structure_analysis(
     client: TestClient,
 ) -> None:
@@ -188,9 +185,7 @@ def test_connected_raster_mask_runs_full_structure_analysis(
     mask_id = "19d879db-01a8-467c-9037-f9d010539ec4"
 
     app = cast(FastAPI, client.app)
-    relative_path = (
-        f"projects/{project['id']}/masks/{image_id}/{mask_id}-connected.png"
-    )
+    relative_path = f"projects/{project['id']}/masks/{image_id}/{mask_id}-connected.png"
     mask_path = app.state.settings.resolved_data_dir / Path(relative_path)
     mask_path.parent.mkdir(parents=True, exist_ok=True)
     raster = Image.new("L", (64, 64), 0)
@@ -217,9 +212,7 @@ def test_connected_raster_mask_runs_full_structure_analysis(
         )
         session.commit()
 
-    response = client.get(
-        f"/api/v1/mask-annotations/{mask_id}/structure-analysis"
-    )
+    response = client.get(f"/api/v1/mask-annotations/{mask_id}/structure-analysis")
 
     assert response.status_code == 200, response.text
     payload = response.json()

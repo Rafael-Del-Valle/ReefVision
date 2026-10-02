@@ -4,10 +4,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import type {
-  SkeletonGraphNode,
-  SkeletonPixel,
-} from "./skeletonAnalysisApi";
+import type { SkeletonGraphNode, SkeletonPixel } from "./skeletonAnalysisApi";
 
 export type SkeletonEditMode = "view" | "add" | "remove";
 
@@ -74,12 +71,7 @@ export function SkeletonOverlayLayer({
         node.kind === "junction"
           ? "rgba(244, 114, 182, 0.98)"
           : "rgba(250, 204, 21, 0.98)";
-      context.fillRect(
-        Math.round(node.x) - 1,
-        Math.round(node.y) - 1,
-        3,
-        3,
-      );
+      context.fillRect(Math.round(node.x) - 1, Math.round(node.y) - 1, 3, 3);
     }
   }, [addedPixels, height, nodes, pixels, removedPixels, width]);
 
@@ -91,7 +83,9 @@ export function SkeletonOverlayLayer({
       0,
       Math.min(
         width - 1,
-        Math.floor(((event.clientX - rectangle.left) / rectangle.width) * width),
+        Math.floor(
+          ((event.clientX - rectangle.left) / rectangle.width) * width,
+        ),
       ),
     );
     const y = Math.max(

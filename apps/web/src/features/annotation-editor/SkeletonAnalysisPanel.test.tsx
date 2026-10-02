@@ -171,9 +171,7 @@ function renderPanel(onOverlayChange = vi.fn()) {
   };
 }
 
-function latestOverlay(
-  calls: unknown[][],
-): SkeletonOverlayModel {
+function latestOverlay(calls: unknown[][]): SkeletonOverlayModel {
   const overlays = calls
     .map((call) => call[0])
     .filter((value): value is SkeletonOverlayModel => value != null);
@@ -221,7 +219,9 @@ it("shows raw, pruned, and final skeleton measurements", async () => {
 
   expect(await screen.findByText("12.00 px")).toBeInTheDocument();
   expect(screen.getAllByText("10.00 px")).toHaveLength(3);
-  expect(screen.getByText("automatic pruned")).toBeInTheDocument();
+  expect(screen.getByText(/Final source:/)).toHaveTextContent(
+    "automatic pruned",
+  );
   expect(screen.getByText("unreviewed")).toBeInTheDocument();
 });
 
@@ -240,7 +240,9 @@ it("queues canvas edits and submits them only as an explicit correction", async 
   act(() => {
     latestOverlay(onOverlayChange.mock.calls).onPixelClick({ x: 4, y: 1 });
   });
-  expect(await screen.findByText(/Pending: \+1 \/ -0 pixels/)).toBeInTheDocument();
+  expect(
+    await screen.findByText(/Pending: \+1 \/ -0 pixels/),
+  ).toBeInTheDocument();
 
   fireEvent.change(screen.getByLabelText("Correction reason"), {
     target: { value: "extend_endpoint" },
@@ -256,8 +258,6 @@ it("queues canvas edits and submits them only as an explicit correction", async 
     }),
   );
 });
-
-
 
 it("switches visual QC baselines and edits only the final skeleton", async () => {
   const onOverlayChange = vi.fn();
@@ -284,7 +284,6 @@ it("switches visual QC baselines and edits only the final skeleton", async () =>
     expect(overlay.pixels).toHaveLength(3);
   });
 });
-
 
 it("requires approval before building and exposing the verified export", async () => {
   vi.mocked(reviewSkeletonAnalysis).mockResolvedValue({

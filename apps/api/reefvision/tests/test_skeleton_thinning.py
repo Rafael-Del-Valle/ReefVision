@@ -40,11 +40,7 @@ def test_one_pixel_path_is_stable_and_classified_by_graph_degree() -> None:
 
 
 def test_thick_bar_thins_without_breaking_eight_connected_topology() -> None:
-    foreground = {
-        (x, y)
-        for x in range(2, 7)
-        for y in range(2, 5)
-    }
+    foreground = {(x, y) for x in range(2, 7) for y in range(2, 5)}
     mask = _binary(10, 8, foreground)
 
     skeleton, iterations = zhang_suen_thin(mask)
@@ -107,9 +103,7 @@ def test_structure_analysis_endpoint_returns_raw_topology_checked_skeleton(
     )
     assert saved.status_code == 200, saved.text
 
-    response = client.get(
-        f"/api/v1/mask-annotations/{mask_id}/structure-analysis"
-    )
+    response = client.get(f"/api/v1/mask-annotations/{mask_id}/structure-analysis")
 
     assert response.status_code == 200, response.text
     payload = response.json()

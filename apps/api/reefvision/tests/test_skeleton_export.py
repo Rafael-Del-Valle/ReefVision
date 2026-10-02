@@ -120,16 +120,10 @@ def test_approved_skeleton_export_contains_verified_raw_pruned_and_final_data(
         "manifest.json",
         "checksums.sha256",
     }
-    actual = {
-        path.relative_to(package).as_posix()
-        for path in package.rglob("*")
-        if path.is_file()
-    }
+    actual = {path.relative_to(package).as_posix() for path in package.rglob("*") if path.is_file()}
     assert expected == actual
 
-    manifest = json.loads(
-        (package / "manifest.json").read_text(encoding="utf-8")
-    )
+    manifest = json.loads((package / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["schema_version"] == "skeleton-export-0001"
     assert manifest["analysis_id"] == approved.id
     assert manifest["result_sha256"] == approved.result_sha256
@@ -139,7 +133,6 @@ def test_approved_skeleton_export_contains_verified_raw_pruned_and_final_data(
         names = set(bundle.namelist())
         assert f"{exported.package_name}/data/final_skeleton_pixels.csv" in names
         assert f"{exported.package_name}/manifest.json" in names
-
 
 
 def test_skeleton_export_verification_detects_tampering(
@@ -173,7 +166,4 @@ def test_skeleton_export_verification_detects_tampering(
     verification = verify_skeleton_export(package)
 
     assert verification["valid"] is False
-    assert any(
-        "mismatch" in error.casefold()
-        for error in verification["errors"]
-    )
+    assert any("mismatch" in error.casefold() for error in verification["errors"])

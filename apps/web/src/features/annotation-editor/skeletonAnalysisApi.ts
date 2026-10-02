@@ -18,14 +18,9 @@ export interface SkeletonReadiness {
   single_component: boolean;
   ready_for_skeletonization: boolean;
   blocking_reason:
-    | "mask_not_verified"
-    | "empty_mask"
-    | "multiple_components"
-    | null;
+    "mask_not_verified" | "empty_mask" | "multiple_components" | null;
   resolution_actions: (
-    | "repair_gap"
-    | "delete_artifact"
-    | "classify_separate_object"
+    "repair_gap" | "delete_artifact" | "classify_separate_object"
   )[];
   automatic_bridge_applied: false;
 }
@@ -101,9 +96,7 @@ export interface SkeletonAnalysisResult {
   calibration_confidence: number | null;
   perspective_corrected: boolean;
   length_calibration_method:
-    | "pixel_only"
-    | "scalar_distance_per_pixel"
-    | "reference_plane_homography";
+    "pixel_only" | "scalar_distance_per_pixel" | "reference_plane_homography";
   reference_plane_only: boolean | null;
   final_skeleton_source: "automatic_pruned" | "human_corrected";
   human_correction_applied: boolean;

@@ -43,9 +43,7 @@ def test_structure_analysis_reports_pixel_and_scalar_calibrated_tle(
 ) -> None:
     image_id, mask_id = _seed_bar_mask(client)
 
-    pixel_response = client.get(
-        f"/api/v1/mask-annotations/{mask_id}/structure-analysis"
-    )
+    pixel_response = client.get(f"/api/v1/mask-annotations/{mask_id}/structure-analysis")
     assert pixel_response.status_code == 200, pixel_response.text
     pixel = pixel_response.json()
     assert pixel["calibrated"] is False
@@ -76,9 +74,7 @@ def test_structure_analysis_reports_pixel_and_scalar_calibrated_tle(
     )
     assert calibrated.status_code == 200, calibrated.text
 
-    scalar_response = client.get(
-        f"/api/v1/mask-annotations/{mask_id}/structure-analysis"
-    )
+    scalar_response = client.get(f"/api/v1/mask-annotations/{mask_id}/structure-analysis")
     assert scalar_response.status_code == 200, scalar_response.text
     scalar = scalar_response.json()
     assert scalar["calibrated"] is True
@@ -121,9 +117,7 @@ def test_reference_plane_homography_controls_skeleton_length_calibration(
     )
     assert calibrated.status_code == 200, calibrated.text
 
-    response = client.get(
-        f"/api/v1/mask-annotations/{mask_id}/structure-analysis"
-    )
+    response = client.get(f"/api/v1/mask-annotations/{mask_id}/structure-analysis")
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["calibrated"] is True

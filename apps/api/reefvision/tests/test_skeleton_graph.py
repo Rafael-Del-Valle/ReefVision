@@ -22,9 +22,7 @@ def _mask(
 
 
 def test_simple_path_becomes_two_nodes_and_one_branch() -> None:
-    features = classify_skeleton_pixels(
-        _mask(7, 5, {(x, 2) for x in range(1, 6)})
-    )
+    features = classify_skeleton_pixels(_mask(7, 5, {(x, 2) for x in range(1, 6)}))
 
     nodes, edges = build_initial_branch_graph(features, [])
 
@@ -62,14 +60,8 @@ def test_cross_uses_one_consolidated_junction_and_four_branches() -> None:
     assert sum(node.kind == "junction" for node in nodes) == 1
     assert sum(node.kind == "endpoint" for node in nodes) == 4
     assert len(edges) == 4
-    assert all(
-        "junction-0001" in {edge.source_node_id, edge.target_node_id}
-        for edge in edges
-    )
-    assert all(
-        edge.boundary_to_boundary_length_pixels == pytest.approx(1.0)
-        for edge in edges
-    )
+    assert all("junction-0001" in {edge.source_node_id, edge.target_node_id} for edge in edges)
+    assert all(edge.boundary_to_boundary_length_pixels == pytest.approx(1.0) for edge in edges)
     assert all(edge.node_to_node_length_pixels == pytest.approx(2.0) for edge in edges)
     assert all(edge.is_cycle is False for edge in edges)
     assert total_graph_length_pixels(edges) == pytest.approx(8.0)

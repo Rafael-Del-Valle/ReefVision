@@ -406,9 +406,7 @@ export function RasterMaskWorkspace({
           <section className="annotation-sidebar-section">
             <SkeletonAnalysisPanel
               selectedMask={selectedSkeletonMask}
-              documentDirty={
-                editMutation.isPending || classMutation.isPending
-              }
+              documentDirty={editMutation.isPending || classMutation.isPending}
               onOverlayChange={setSkeletonOverlay}
             />
           </section>

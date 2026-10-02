@@ -35,9 +35,7 @@ def test_structure_readiness_endpoint_reports_single_component(
     )
     assert saved.status_code == 200, saved.text
 
-    response = client.get(
-        f"/api/v1/mask-annotations/{mask_id}/structure-readiness"
-    )
+    response = client.get(f"/api/v1/mask-annotations/{mask_id}/structure-readiness")
 
     assert response.status_code == 200, response.text
     payload = response.json()

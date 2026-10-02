@@ -64,12 +64,8 @@ def test_junction_ids_are_deterministic_in_image_order() -> None:
     for x, y in foreground:
         data[y * width + x] = 255
 
-    first = consolidate_junction_clusters(
-        classify_skeleton_pixels((bytes(data), width, height))
-    )
-    second = consolidate_junction_clusters(
-        classify_skeleton_pixels((bytes(data), width, height))
-    )
+    first = consolidate_junction_clusters(classify_skeleton_pixels((bytes(data), width, height)))
+    second = consolidate_junction_clusters(classify_skeleton_pixels((bytes(data), width, height)))
 
     assert [cluster.id for cluster in first] == [
         "junction-0001",

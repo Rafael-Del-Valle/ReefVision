@@ -117,10 +117,7 @@ def _ordered_neighbors(
 
 def _zero_to_one_transitions(neighbors: tuple[int, ...]) -> int:
     cycle = neighbors[1:] + neighbors[:1]
-    return sum(
-        first == 0 and second == 1
-        for first, second in zip(neighbors, cycle, strict=True)
-    )
+    return sum(first == 0 and second == 1 for first, second in zip(neighbors, cycle, strict=True))
 
 
 def _deletable(
@@ -195,10 +192,7 @@ def classify_skeleton_pixels(mask: BinaryMask) -> list[SkeletonPixelFeature]:
         for x in range(width):
             if _value(pixels, width, height, x, y) == 0:
                 continue
-            degree = sum(
-                _value(pixels, width, height, x + dx, y + dy)
-                for dx, dy in _NEIGHBORS_8
-            )
+            degree = sum(_value(pixels, width, height, x + dx, y + dy) for dx, dy in _NEIGHBORS_8)
             if degree == 0:
                 kind: SkeletonPixelKind = "isolated"
             elif degree == 1:
@@ -219,18 +213,13 @@ def classify_skeleton_pixels(mask: BinaryMask) -> list[SkeletonPixelFeature]:
     return features
 
 
-
 def consolidate_junction_clusters(
     features: list[SkeletonPixelFeature],
 ) -> list[SkeletonJunctionCluster]:
     """Collapse each 8-connected junction-pixel blob into one deterministic node."""
 
     skeleton_pixels = {(feature.x, feature.y) for feature in features}
-    remaining = {
-        (feature.x, feature.y)
-        for feature in features
-        if feature.kind == "junction"
-    }
+    remaining = {(feature.x, feature.y) for feature in features if feature.kind == "junction"}
     clusters: list[SkeletonJunctionCluster] = []
 
     while remaining:
@@ -248,9 +237,7 @@ def consolidate_junction_clusters(
                     remaining.remove(neighbor)
                     stack.append(neighbor)
 
-        ordered_pixels = tuple(
-            sorted(cluster_pixels, key=lambda point: (point[1], point[0]))
-        )
+        ordered_pixels = tuple(sorted(cluster_pixels, key=lambda point: (point[1], point[0])))
         centroid_x = sum(x for x, _ in ordered_pixels) / len(ordered_pixels)
         centroid_y = sum(y for _, y in ordered_pixels) / len(ordered_pixels)
         representative_x, representative_y = min(
@@ -266,8 +253,7 @@ def consolidate_junction_clusters(
             (x + dx, y + dy)
             for x, y in ordered_pixels
             for dx, dy in _NEIGHBORS_8
-            if (x + dx, y + dy) in skeleton_pixels
-            and (x + dx, y + dy) not in cluster_pixels
+            if (x + dx, y + dy) in skeleton_pixels and (x + dx, y + dy) not in cluster_pixels
         }
         clusters.append(
             SkeletonJunctionCluster(
@@ -308,7 +294,6 @@ def consolidate_junction_clusters(
     ]
 
 
-
 def _edge_key(
     first: tuple[int, int],
     second: tuple[int, int],
@@ -323,11 +308,7 @@ def _pixel_adjacency(
     adjacency: dict[tuple[int, int], list[tuple[int, int]]] = {}
     for x, y in pixels:
         adjacency[(x, y)] = sorted(
-            [
-                (x + dx, y + dy)
-                for dx, dy in _NEIGHBORS_8
-                if (x + dx, y + dy) in pixels
-            ],
+            [(x + dx, y + dy) for dx, dy in _NEIGHBORS_8 if (x + dx, y + dy) in pixels],
             key=lambda point: (point[1], point[0]),
         )
     return adjacency
@@ -361,11 +342,7 @@ def build_initial_branch_graph(
             pixel_to_node[pixel] = node.id
 
     endpoints = sorted(
-        (
-            feature
-            for feature in features
-            if feature.kind == "endpoint"
-        ),
+        (feature for feature in features if feature.kind == "endpoint"),
         key=lambda feature: (feature.y, feature.x),
     )
     for index, feature in enumerate(endpoints, start=1):
@@ -382,11 +359,7 @@ def build_initial_branch_graph(
         pixel_to_node[(feature.x, feature.y)] = node_id
 
     isolated = sorted(
-        (
-            feature
-            for feature in features
-            if feature.kind == "isolated"
-        ),
+        (feature for feature in features if feature.kind == "isolated"),
         key=lambda feature: (feature.y, feature.x),
     )
     for index, feature in enumerate(isolated, start=1):
@@ -443,9 +416,7 @@ def build_initial_branch_graph(
 
                 while current not in pixel_to_node:
                     candidates = [
-                        candidate
-                        for candidate in adjacency[current]
-                        if candidate != previous
+                        candidate for candidate in adjacency[current] if candidate != previous
                     ]
                     if len(candidates) != 1:
                         raise ValueError(
@@ -505,24 +476,16 @@ def build_initial_branch_graph(
                 target_node_id=target,
                 pixels=pixels,
                 boundary_to_boundary_length_pixels=length,
-                node_to_node_length_pixels=(
-                    length + source_offset + target_offset
-                ),
+                node_to_node_length_pixels=(length + source_offset + target_offset),
                 is_cycle=is_cycle,
             )
         )
     return sorted(nodes, key=lambda item: item.id), edges
 
 
-
 def _foreground_component_count(mask: BinaryMask) -> int:
     data, width, height = mask
-    remaining = {
-        (x, y)
-        for y in range(height)
-        for x in range(width)
-        if data[y * width + x] > 0
-    }
+    remaining = {(x, y) for y in range(height) for x in range(width) if data[y * width + x] > 0}
     component_count = 0
 
     while remaining:
@@ -559,13 +522,9 @@ def _safe_spur_removal(
             point[0],
         ),
     )
-    external_pixels = tuple(
-        pixel for pixel in edge.pixels if pixel not in junction_pixels
-    )
+    external_pixels = tuple(pixel for pixel in edge.pixels if pixel not in junction_pixels)
     boundary_pixels = tuple(
-        pixel
-        for pixel in edge.pixels
-        if pixel in junction_pixels and pixel != representative
+        pixel for pixel in edge.pixels if pixel in junction_pixels and pixel != representative
     )
 
     if not external_pixels:
@@ -640,13 +599,16 @@ def prune_terminal_spurs(
         if not eligible:
             break
 
-        selected: tuple[
-            SkeletonGraphEdge,
-            SkeletonGraphNode,
-            SkeletonGraphNode,
-            tuple[tuple[int, int], ...],
-            int,
-        ] | None = None
+        selected: (
+            tuple[
+                SkeletonGraphEdge,
+                SkeletonGraphNode,
+                SkeletonGraphNode,
+                tuple[tuple[int, int], ...],
+                int,
+            ]
+            | None
+        ) = None
         for _, _, edge, endpoint, junction in sorted(
             eligible,
             key=lambda item: (item[0], item[1]),
@@ -703,7 +665,6 @@ def prune_terminal_spurs(
         graph_nodes=tuple(final_nodes),
         graph_edges=tuple(final_edges),
     )
-
 
 
 def total_graph_length_pixels(
@@ -797,8 +758,7 @@ def branch_angles(
                 if second_norm == 0:
                     continue
                 cosine = (
-                    first_vector[0] * second_vector[0]
-                    + first_vector[1] * second_vector[1]
+                    first_vector[0] * second_vector[0] + first_vector[1] * second_vector[1]
                 ) / (first_norm * second_norm)
                 cosine = max(-1.0, min(1.0, cosine))
                 results.append(

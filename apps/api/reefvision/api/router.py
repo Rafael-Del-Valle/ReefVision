@@ -12,10 +12,10 @@ from reefvision.api.routes.annotations import router as annotations_router
 from reefvision.api.routes.assist import router as assist_router
 from reefvision.api.routes.backups import router as backups_router
 from reefvision.api.routes.capabilities import router as capabilities_router
-from reefvision.api.routes.coral_structure import router as coral_structure_router
 from reefvision.api.routes.class_operations import router as class_operations_router
 from reefvision.api.routes.class_visibility import router as class_visibility_router
 from reefvision.api.routes.classification import router as classification_router
+from reefvision.api.routes.coral_structure import router as coral_structure_router
 from reefvision.api.routes.dataset_versions import router as dataset_versions_router
 from reefvision.api.routes.geographic_movement_analytics import (
     router as geographic_movement_analytics_router,

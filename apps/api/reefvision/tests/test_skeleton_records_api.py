@@ -56,13 +56,9 @@ def test_skeleton_record_api_create_correct_review_export_download(
     assert automatic["review_status"] == "unreviewed"
     assert automatic["result"]["final_skeleton_source"] == "automatic_pruned"
 
-    history_response = client.get(
-        f"/api/v1/mask-annotations/{mask_id}/skeleton-analyses"
-    )
+    history_response = client.get(f"/api/v1/mask-annotations/{mask_id}/skeleton-analyses")
     assert history_response.status_code == 200, history_response.text
-    assert [item["id"] for item in history_response.json()] == [
-        automatic["id"]
-    ]
+    assert [item["id"] for item in history_response.json()] == [automatic["id"]]
 
     endpoint = min(
         automatic["result"]["final_skeleton_pixels"],
@@ -103,26 +99,20 @@ def test_skeleton_record_api_create_correct_review_export_download(
     assert approved["review_status"] == "approved"
     assert approved["reviewed_at"] is not None
 
-    final_history = client.get(
-        f"/api/v1/mask-annotations/{mask_id}/skeleton-analyses"
-    )
+    final_history = client.get(f"/api/v1/mask-annotations/{mask_id}/skeleton-analyses")
     assert final_history.status_code == 200, final_history.text
     revisions = final_history.json()
     assert [item["analysis_revision"] for item in revisions] == [1, 2]
     assert revisions[0]["result"]["final_skeleton_source"] == "automatic_pruned"
     assert revisions[1]["result"]["final_skeleton_source"] == "human_corrected"
 
-    export_response = client.post(
-        f"/api/v1/skeleton-analyses/{corrected['id']}/export"
-    )
+    export_response = client.post(f"/api/v1/skeleton-analyses/{corrected['id']}/export")
     assert export_response.status_code == 200, export_response.text
     exported = export_response.json()
     assert exported["verification_status"] == "verified"
     assert exported["analysis_revision"] == 2
 
-    download = client.get(
-        f"/api/v1/skeleton-analyses/{corrected['id']}/export/download"
-    )
+    download = client.get(f"/api/v1/skeleton-analyses/{corrected['id']}/export/download")
     assert download.status_code == 200, download.text
     assert download.headers["content-type"] == "application/zip"
 

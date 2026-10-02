@@ -7,8 +7,9 @@ import hashlib
 import json
 import shutil
 import tempfile
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any
 from uuid import UUID
 
 from reefvision.schemas.skeletonization import SkeletonAnalysisRevisionResponse
@@ -52,13 +53,7 @@ def _write_json(path: Path, value: Any) -> None:
 
 def _write_csv(path: Path, rows: Iterable[Mapping[str, Any]]) -> None:
     materialized = list(rows)
-    headers = list(
-        dict.fromkeys(
-            key
-            for row in materialized
-            for key in row
-        )
-    )
+    headers = list(dict.fromkeys(key for row in materialized for key in row))
     with path.open("w", encoding="utf-8", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=headers)
         writer.writeheader()
@@ -76,9 +71,7 @@ def _edge_rows(edges: list[Any]) -> list[dict[str, Any]]:
             "source_node_id": edge.source_node_id,
             "target_node_id": edge.target_node_id,
             "path_pixel_count": edge.path_pixel_count,
-            "boundary_to_boundary_length_pixels": (
-                edge.boundary_to_boundary_length_pixels
-            ),
+            "boundary_to_boundary_length_pixels": (edge.boundary_to_boundary_length_pixels),
             "node_to_node_length_pixels": edge.node_to_node_length_pixels,
             "length_physical": edge.length_physical,
             "is_cycle": edge.is_cycle,
@@ -131,11 +124,7 @@ def verify_skeleton_export(package: Path) -> dict[str, Any]:
             continue
         relative = str(entry.get("relative_path", ""))
         path = (package / relative).resolve()
-        if (
-            not relative
-            or Path(relative).is_absolute()
-            or not path.is_relative_to(package_root)
-        ):
+        if not relative or Path(relative).is_absolute() or not path.is_relative_to(package_root):
             errors.append(f"Unsafe manifest path: {relative}")
             continue
         expected.add(Path(relative).as_posix())
@@ -151,8 +140,7 @@ def verify_skeleton_export(package: Path) -> dict[str, Any]:
     actual = {
         path.relative_to(package).as_posix()
         for path in package.rglob("*")
-        if path.is_file()
-        and path.name not in {"manifest.json", "checksums.sha256"}
+        if path.is_file() and path.name not in {"manifest.json", "checksums.sha256"}
     }
     for relative in sorted(actual - expected):
         errors.append(f"Unlisted file: {relative}")
@@ -218,15 +206,11 @@ def build_skeleton_export(
                 "result_sha256": record.result_sha256,
                 "algorithm": record.algorithm,
                 "algorithm_version": record.algorithm_version,
-                "terminal_spur_max_length_pixels": (
-                    record.terminal_spur_max_length_pixels
-                ),
+                "terminal_spur_max_length_pixels": (record.terminal_spur_max_length_pixels),
                 "review_status": record.review_status,
                 "reviewed_by": record.reviewed_by,
                 "reviewed_at": (
-                    record.reviewed_at.isoformat()
-                    if record.reviewed_at is not None
-                    else None
+                    record.reviewed_at.isoformat() if record.reviewed_at is not None else None
                 ),
                 "review_note": record.review_note,
                 "correction": record.correction,
@@ -247,31 +231,15 @@ def build_skeleton_export(
                     "pruned_branch_count": result.pruned_branch_count,
                     "final_branch_count": result.final_branch_count,
                     "raw_tle_pixels": result.raw_total_linear_extension_pixels,
-                    "pruned_tle_pixels": (
-                        result.pruned_total_linear_extension_pixels
-                    ),
-                    "final_tle_pixels": (
-                        result.final_total_linear_extension_pixels
-                    ),
-                    "raw_tle_physical": (
-                        result.raw_total_linear_extension_physical
-                    ),
-                    "pruned_tle_physical": (
-                        result.pruned_total_linear_extension_physical
-                    ),
-                    "final_tle_physical": (
-                        result.final_total_linear_extension_physical
-                    ),
+                    "pruned_tle_pixels": (result.pruned_total_linear_extension_pixels),
+                    "final_tle_pixels": (result.final_total_linear_extension_pixels),
+                    "raw_tle_physical": (result.raw_total_linear_extension_physical),
+                    "pruned_tle_physical": (result.pruned_total_linear_extension_physical),
+                    "final_tle_physical": (result.final_total_linear_extension_physical),
                     "raw_longest_path_pixels": result.raw_longest_path_pixels,
-                    "pruned_longest_path_pixels": (
-                        result.pruned_longest_path_pixels
-                    ),
-                    "final_longest_path_pixels": (
-                        result.final_longest_path_pixels
-                    ),
-                    "length_calibration_method": (
-                        result.length_calibration_method
-                    ),
+                    "pruned_longest_path_pixels": (result.pruned_longest_path_pixels),
+                    "final_longest_path_pixels": (result.final_longest_path_pixels),
+                    "length_calibration_method": (result.length_calibration_method),
                     "branch_angle_space": result.branch_angle_space,
                 }
             ],
@@ -307,11 +275,7 @@ def build_skeleton_export(
             _angle_rows(result.final_branch_angles),
         )
 
-        files = sorted(
-            path
-            for path in package.rglob("*")
-            if path.is_file()
-        )
+        files = sorted(path for path in package.rglob("*") if path.is_file())
         entries = [
             {
                 "relative_path": path.relative_to(package).as_posix(),
@@ -335,13 +299,8 @@ def build_skeleton_export(
         manifest_path = package / "manifest.json"
         _write_json(manifest_path, manifest)
 
-        checksum_rows = [
-            f"{entry['sha256']}  {entry['relative_path']}"
-            for entry in entries
-        ]
-        checksum_rows.append(
-            f"{_sha256(manifest_path)}  manifest.json"
-        )
+        checksum_rows = [f"{entry['sha256']}  {entry['relative_path']}" for entry in entries]
+        checksum_rows.append(f"{_sha256(manifest_path)}  manifest.json")
         (package / "checksums.sha256").write_text(
             "\n".join(checksum_rows) + "\n",
             encoding="utf-8",
@@ -349,8 +308,7 @@ def build_skeleton_export(
         verification = verify_skeleton_export(package)
         if not verification["valid"]:
             raise RuntimeError(
-                "Skeleton export verification failed: "
-                + "; ".join(verification["errors"])
+                "Skeleton export verification failed: " + "; ".join(verification["errors"])
             )
         package.rename(final_dir)
 
