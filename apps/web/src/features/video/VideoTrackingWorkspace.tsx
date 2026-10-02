@@ -1686,7 +1686,7 @@ export function VideoTrackingWorkspace({
               <option value="botsort.yaml">BoT-SORT</option>
             </select>
           </label>
-        )
+        )}
         <label>
           Detection confidence
           <input
