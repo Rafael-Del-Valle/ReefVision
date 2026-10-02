@@ -1365,8 +1365,11 @@ export function VideoTrackingWorkspace({
                 <p className="annotation-helper">
                   Exports use the scientist-reviewed canonical pose state.
                   Repeated semantic labels receive stable external node names.
-                  External formats do not contain ReefVision's full immutable
-                  association/correction audit history.
+                  SLP is exported natively; NWB, COCO, DeepLabCut, and
+                  Ultralytics downloads are ZIP bundles containing the standard
+                  native artifact plus a ReefVision manifest for exact frame
+                  and identity restoration. The full immutable
+                  association/correction audit history remains in ReefVision.
                 </p>
                 <div className="workspace-actions">
                   <a
