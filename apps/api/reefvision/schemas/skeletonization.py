@@ -50,6 +50,11 @@ class SkeletonizationReadinessResponse(BaseModel):
 SkeletonPixelKind = Literal["isolated", "endpoint", "path", "junction"]
 
 
+class SkeletonPixelCoordinateResponse(BaseModel):
+    x: int = Field(ge=0)
+    y: int = Field(ge=0)
+
+
 class SkeletonFeaturePixelResponse(BaseModel):
     x: int = Field(ge=0)
     y: int = Field(ge=0)
@@ -124,6 +129,9 @@ class SkeletonizationAnalysisResponse(BaseModel):
     input_foreground_pixels: int = Field(ge=1)
     thinning_iterations: int = Field(ge=0)
     raw_skeleton_pixel_count: int = Field(ge=1)
+    raw_skeleton_pixels: list[SkeletonPixelCoordinateResponse] = Field(
+        default_factory=list
+    )
     raw_skeleton_component_count: int = Field(ge=1)
     topology_preserved: bool
     isolated_pixel_count: int = Field(ge=0)
@@ -142,6 +150,9 @@ class SkeletonizationAnalysisResponse(BaseModel):
     removed_spur_count: int = Field(default=0, ge=0)
     removed_spurs: list[SkeletonSpurRemovalResponse] = Field(default_factory=list)
     pruned_skeleton_pixel_count: int = Field(ge=1)
+    pruned_skeleton_pixels: list[SkeletonPixelCoordinateResponse] = Field(
+        default_factory=list
+    )
     pruned_graph_node_count: int = Field(ge=1)
     pruned_graph_edge_count: int = Field(ge=0)
     pruned_graph_nodes: list[SkeletonGraphNodeResponse] = Field(default_factory=list)
@@ -178,6 +189,24 @@ class SkeletonizationAnalysisResponse(BaseModel):
         "reference_plane_homography",
     ] = "pixel_only"
     reference_plane_only: bool | None = None
+    final_skeleton_source: Literal[
+        "automatic_pruned",
+        "human_corrected",
+    ] = "automatic_pruned"
+    human_correction_applied: bool = False
+    final_skeleton_pixels: list[SkeletonPixelCoordinateResponse] = Field(
+        default_factory=list
+    )
+    final_graph_nodes: list[SkeletonGraphNodeResponse] = Field(default_factory=list)
+    final_graph_edges: list[SkeletonGraphEdgeResponse] = Field(default_factory=list)
+    final_branch_count: int = Field(ge=0)
+    final_total_linear_extension_pixels: float = Field(ge=0)
+    final_total_linear_extension_physical: float | None = Field(default=None, ge=0)
+    final_longest_path_pixels: float = Field(ge=0)
+    final_longest_path_physical: float | None = Field(default=None, ge=0)
+    final_branch_angles: list[SkeletonBranchAngleResponse] = Field(
+        default_factory=list
+    )
     feature_pixels: list[SkeletonFeaturePixelResponse] = Field(default_factory=list)
 
 
@@ -227,3 +256,16 @@ class SkeletonAnalysisRevisionResponse(BaseModel):
     stale_mask: bool = False
     stale_calibration: bool = False
     stale: bool = False
+
+
+
+class SkeletonPixelEdit(BaseModel):
+    x: int = Field(ge=0)
+    y: int = Field(ge=0)
+
+
+class SkeletonAnalysisCorrectionRequest(BaseModel):
+    add_pixels: list[SkeletonPixelEdit] = Field(default_factory=list)
+    remove_pixels: list[SkeletonPixelEdit] = Field(default_factory=list)
+    reason_code: str = Field(min_length=1, max_length=100)
+    note: str | None = Field(default=None, max_length=2000)
