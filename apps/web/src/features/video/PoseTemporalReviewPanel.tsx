@@ -171,6 +171,27 @@ export function PoseTemporalReviewPanel({
     () => latestDecisionMap(summary?.association_decisions ?? []),
     [summary?.association_decisions],
   );
+  const candidatesByDecision = useMemo(() => {
+    const byDecision = new Map<
+      string,
+      NonNullable<typeof summary>["association_candidates"]
+    >();
+    for (const candidate of summary?.association_candidates ?? []) {
+      const current = byDecision.get(candidate.association_decision_id) ?? [];
+      current.push(candidate);
+      byDecision.set(candidate.association_decision_id, current);
+    }
+    for (const candidates of byDecision.values()) {
+      candidates.sort(
+        (first, second) =>
+          first.rank - second.rank ||
+          first.candidate_landmark_track_id.localeCompare(
+            second.candidate_landmark_track_id,
+          ),
+      );
+    }
+    return byDecision;
+  }, [summary?.association_candidates]);
   const availableFrames = useMemo(
     () =>
       [...new Set(observations.map((item) => item.frame_index))].sort(
@@ -338,13 +359,34 @@ export function PoseTemporalReviewPanel({
             <div className="annotation-selection-list">
               {currentObservations.map((observation) => {
                 const decision = decisions.get(observation.id);
-                const compatibleTracks = summary.landmark_tracks.filter(
-                  (track) =>
-                    track.semantic_label === observation.semantic_label &&
-                    track.pose_schema_id === observation.pose_schema_id &&
-                    track.pose_schema_revision ===
-                      observation.pose_schema_revision,
+                const candidateEvidence = decision
+                  ? (candidatesByDecision.get(decision.id) ?? [])
+                  : [];
+                const candidateRank = new Map(
+                  candidateEvidence.map((candidate) => [
+                    candidate.candidate_landmark_track_id,
+                    candidate.rank,
+                  ]),
                 );
+                const compatibleTracks = summary.landmark_tracks
+                  .filter(
+                    (track) =>
+                      track.semantic_label === observation.semantic_label &&
+                      track.pose_schema_id === observation.pose_schema_id &&
+                      track.pose_schema_revision ===
+                        observation.pose_schema_revision,
+                  )
+                  .sort((first, second) => {
+                    const firstRank =
+                      candidateRank.get(first.id) ?? Number.MAX_SAFE_INTEGER;
+                    const secondRank =
+                      candidateRank.get(second.id) ?? Number.MAX_SAFE_INTEGER;
+                    return (
+                      firstRank - secondRank ||
+                      first.first_frame - second.first_frame ||
+                      first.id.localeCompare(second.id)
+                    );
+                  });
                 const selectedIdentity =
                   selectedIdentityByObservation[observation.id] ??
                   decision?.selected_landmark_track_id ??
@@ -375,6 +417,55 @@ export function PoseTemporalReviewPanel({
                         association confidence {confidence} ·{" "}
                         {decision?.verification_state ?? "unreviewed"}
                       </div>
+                      {decision && candidateEvidence.length > 0 && (
+                        <details>
+                          <summary>
+                            Association evidence · {candidateEvidence.length}{" "}
+                            candidate
+                            {candidateEvidence.length === 1 ? "" : "s"}
+                          </summary>
+                          <div className="annotation-selection-list">
+                            {candidateEvidence.map((candidate) => (
+                              <div
+                                className="annotation-selection-row"
+                                key={candidate.id}
+                              >
+                                <strong>
+                                  #{candidate.rank} ·{" "}
+                                  {shortIdentity(
+                                    candidate.candidate_landmark_track_id,
+                                  )}
+                                </strong>
+                                <span className="annotation-helper">
+                                  confidence{" "}
+                                  {candidate.normalized_confidence === null
+                                    ? "n/a"
+                                    : candidate.normalized_confidence.toFixed(
+                                        3,
+                                      )}{" "}
+                                  · total {candidate.total_cost.toFixed(3)} ·
+                                  motion{" "}
+                                  {candidate.motion_cost === null
+                                    ? "n/a"
+                                    : candidate.motion_cost.toFixed(3)}{" "}
+                                  · geometry{" "}
+                                  {candidate.geometry_cost === null
+                                    ? "n/a"
+                                    : candidate.geometry_cost.toFixed(3)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="annotation-helper">
+                            Candidate margin{" "}
+                            {decision.candidate_margin === null
+                              ? "n/a"
+                              : decision.candidate_margin.toFixed(3)}
+                            . Lower total cost is the stronger automatic match;
+                            close alternatives remain unresolved.
+                          </p>
+                        </details>
+                      )}
                     </div>
                     <div>
                       <label>
