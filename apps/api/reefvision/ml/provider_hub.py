@@ -270,6 +270,17 @@ def _sleap_nn_descriptor() -> ModelProviderDescriptor:
     status = sleap_nn_runtime_status()
     ready = bool(status["ready"])
     issues = tuple(str(item) for item in status["issues"])
+    installed_any = (
+        status["sleap_nn_version"] is not None
+        or status["sleap_io_version"] is not None
+    )
+    availability_status = (
+        "ready"
+        if ready
+        else "dependency_incompatible"
+        if installed_any
+        else "dependency_missing"
+    )
     return ModelProviderDescriptor(
         provider_id="sleap_nn",
         display_name="SLEAP-NN",
@@ -347,7 +358,7 @@ def _sleap_nn_descriptor() -> ModelProviderDescriptor:
             if ready
             else "optional_dependency_not_ready"
         ),
-        availability_status="ready" if ready else "dependency_missing",
+        availability_status=availability_status,
         availability_reason=None if ready else "; ".join(issues),
         default_registration_purpose="detector",
         registerable=True,
