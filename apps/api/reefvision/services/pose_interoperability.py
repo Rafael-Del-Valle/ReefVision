@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import zipfile
@@ -12,17 +13,27 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, cast
+from uuid import uuid4
 
 import numpy as np
 from numpy.typing import NDArray
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.db.models import LabelClass, VideoAsset, VideoTrack
+from reefvision.db.models import (
+    LabelClass,
+    PoseLandmarkSchema,
+    PoseLandmarkSchemaRevision,
+    VideoAsset,
+    VideoTrack,
+)
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.ml.sleap_nn_provider import SLEAP_IO_SUPPORTED_VERSION
-from reefvision.schemas.pose_interoperability import PoseInteroperabilityFormat
+from reefvision.schemas.pose_interoperability import (
+    PoseInteroperabilityFormat,
+    PoseInteroperabilityImportResponse,
+)
 from reefvision.schemas.videos import VideoPoseObservation, VideoTrackKeyframe
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -42,6 +53,21 @@ class _PoseSchemaContext:
     external_node_names: tuple[str, ...]
     node_mapping: tuple[dict[str, object], ...]
     schema_metadata: dict[str, object]
+
+
+@dataclass(frozen=True)
+class _ImportedSchema:
+    groups: tuple[dict[str, object], ...]
+    expanded_labels: tuple[str, ...]
+    external_node_names: tuple[str, ...]
+    used_reefvision_provenance: bool
+    provenance: dict[str, object] | None
+
+
+@dataclass(frozen=True)
+class _ImportedTrack:
+    external_track_name: str | None
+    keyframes: tuple[VideoTrackKeyframe, ...]
 
 
 class PoseInteroperabilityService:
@@ -350,6 +376,604 @@ class PoseInteroperabilityService:
             for path in sorted(item for item in directory.rglob("*") if item.is_file()):
                 archive.write(path, path.relative_to(directory).as_posix())
         return buffer.getvalue()
+
+    @staticmethod
+    def _reefvision_provenance(labels: Any) -> dict[str, object] | None:
+        raw_provenance = getattr(labels, "provenance", None)
+        if not isinstance(raw_provenance, dict):
+            return None
+        raw = raw_provenance.get("reefvision_pose_interoperability")
+        if raw is None:
+            return None
+        if not isinstance(raw, dict):
+            raise ValidationError("ReefVision pose provenance is malformed")
+        return cast(dict[str, object], raw)
+
+    @classmethod
+    def _imported_schema(cls, labels: Any) -> _ImportedSchema:
+        skeletons = list(getattr(labels, "skeletons", []) or [])
+        if len(skeletons) != 1:
+            raise ValidationError(
+                "Pose interoperability import requires exactly one external skeleton"
+            )
+        external_node_names = tuple(
+            str(item).strip() for item in getattr(skeletons[0], "node_names", [])
+        )
+        if not external_node_names or any(not item for item in external_node_names):
+            raise ValidationError("External pose skeleton contains blank or missing node names")
+        if len(external_node_names) != len(set(external_node_names)):
+            raise ValidationError("External pose skeleton node names must be unique")
+
+        provenance = cls._reefvision_provenance(labels)
+        if provenance is None:
+            return _ImportedSchema(
+                groups=tuple(
+                    {"name": node_name, "count": 1}
+                    for node_name in external_node_names
+                ),
+                expanded_labels=external_node_names,
+                external_node_names=external_node_names,
+                used_reefvision_provenance=False,
+                provenance=None,
+            )
+
+        raw_mapping = provenance.get("node_mapping")
+        raw_schema = provenance.get("pose_schema")
+        if not isinstance(raw_mapping, list) or not isinstance(raw_schema, dict):
+            raise ValidationError("ReefVision pose provenance is missing schema mapping metadata")
+        if len(raw_mapping) != len(external_node_names):
+            raise ValidationError(
+                "ReefVision pose provenance node mapping does not match the external skeleton"
+            )
+
+        expanded: list[str] = []
+        for index, external_name in enumerate(external_node_names):
+            mapping = raw_mapping[index]
+            if not isinstance(mapping, dict):
+                raise ValidationError("ReefVision pose provenance node mapping is malformed")
+            if str(mapping.get("external_node_name") or "") != external_name:
+                raise ValidationError(
+                    "ReefVision pose provenance node order does not match the external skeleton"
+                )
+            semantic_label = str(mapping.get("semantic_label") or "").strip()
+            if not semantic_label:
+                raise ValidationError(
+                    "ReefVision pose provenance contains a blank semantic landmark label"
+                )
+            expanded.append(semantic_label)
+
+        raw_expanded = raw_schema.get("expanded_labels")
+        if not isinstance(raw_expanded, list) or tuple(str(item) for item in raw_expanded) != tuple(
+            expanded
+        ):
+            raise ValidationError(
+                "ReefVision pose provenance semantic labels do not match its schema metadata"
+            )
+
+        raw_groups = raw_schema.get("groups")
+        if not isinstance(raw_groups, list) or not raw_groups:
+            raise ValidationError("ReefVision pose provenance is missing landmark groups")
+        groups: list[dict[str, object]] = []
+        reconstructed: list[str] = []
+        seen_names: set[str] = set()
+        for raw_group in raw_groups:
+            if not isinstance(raw_group, dict):
+                raise ValidationError("ReefVision pose provenance landmark groups are malformed")
+            name = str(raw_group.get("name") or "").strip()
+            count_raw = raw_group.get("count")
+            if (
+                not name
+                or name.casefold() in seen_names
+                or not isinstance(count_raw, int)
+                or isinstance(count_raw, bool)
+                or count_raw < 1
+            ):
+                raise ValidationError("ReefVision pose provenance landmark groups are invalid")
+            seen_names.add(name.casefold())
+            groups.append({"name": name, "count": count_raw})
+            reconstructed.extend([name] * count_raw)
+        if tuple(reconstructed) != tuple(expanded):
+            raise ValidationError(
+                "ReefVision pose provenance groups do not reproduce the landmark order"
+            )
+        return _ImportedSchema(
+            groups=tuple(groups),
+            expanded_labels=tuple(expanded),
+            external_node_names=external_node_names,
+            used_reefvision_provenance=True,
+            provenance=provenance,
+        )
+
+    @staticmethod
+    def _validate_archive_member(name: str) -> Path:
+        normalized = name.replace("\\", "/")
+        candidate = Path(normalized)
+        if (
+            not normalized
+            or normalized.startswith("/")
+            or candidate.is_absolute()
+            or ".." in candidate.parts
+        ):
+            raise ValidationError("Ultralytics pose ZIP contains an unsafe archive path")
+        return candidate
+
+    @classmethod
+    def _extract_ultralytics_zip(cls, content: bytes, destination: Path) -> Path:
+        try:
+            archive = zipfile.ZipFile(io.BytesIO(content))
+        except zipfile.BadZipFile as exc:
+            raise ValidationError("Ultralytics pose import requires a valid ZIP archive") from exc
+        with archive:
+            members = archive.infolist()
+            if len(members) > 20000:
+                raise ValidationError("Ultralytics pose ZIP contains too many files")
+            expanded_bytes = sum(item.file_size for item in members)
+            if expanded_bytes > 512 * 1024 * 1024:
+                raise ValidationError("Ultralytics pose ZIP expands beyond 512 MiB")
+            root = destination.resolve()
+            for item in members:
+                relative = cls._validate_archive_member(item.filename)
+                target = (destination / relative).resolve()
+                if root not in target.parents and target != root:
+                    raise ValidationError("Ultralytics pose ZIP escapes its extraction directory")
+                if item.is_dir():
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(item) as source, target.open("wb") as output:
+                    while True:
+                        chunk = source.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        output.write(chunk)
+        manifests = sorted(destination.rglob("data.yaml"))
+        if len(manifests) != 1:
+            raise ValidationError(
+                "Ultralytics pose ZIP must contain exactly one data.yaml manifest"
+            )
+        return manifests[0].parent
+
+    def _load_labels(
+        self,
+        exchange_format: PoseInteroperabilityFormat,
+        content: bytes,
+        source_filename: str | None,
+    ) -> Any:
+        sio = self._sleap_io()
+        with TemporaryDirectory(prefix="reefvision-pose-import-") as temp:
+            root = Path(temp)
+            if exchange_format == "ultralytics_pose":
+                dataset_root = self._extract_ultralytics_zip(content, root / "dataset")
+                return sio.load_ultralytics(str(dataset_root), split="train")
+
+            suffixes: dict[PoseInteroperabilityFormat, str] = {
+                "slp": ".slp",
+                "nwb": ".nwb",
+                "coco": ".json",
+                "dlc_csv": ".csv",
+                "ultralytics_pose": ".zip",
+            }
+            filename = Path(source_filename or f"pose{suffixes[exchange_format]}").name
+            if not filename.casefold().endswith(suffixes[exchange_format]):
+                filename = f"pose{suffixes[exchange_format]}"
+            source = root / filename
+            source.write_bytes(content)
+            if exchange_format == "slp":
+                return sio.load_slp(str(source), open_videos=False)
+            if exchange_format == "nwb":
+                return sio.load_nwb(str(source))
+            if exchange_format == "coco":
+                return sio.load_coco(str(source), dataset_root=str(root))
+            if exchange_format == "dlc_csv":
+                return sio.load_dlc(str(source), config=False)
+        raise ValidationError(f"Unsupported pose interoperability format: {exchange_format}")
+
+    @staticmethod
+    def _point_arrays(instance: Any, expected_count: int) -> tuple[
+        NDArray[np.float64],
+        NDArray[np.bool_],
+        NDArray[np.float64],
+    ]:
+        raw_points = getattr(instance, "points", None)
+        if raw_points is None:
+            raise ValidationError("External pose instance is missing landmark points")
+        try:
+            xy = np.asarray(raw_points["xy"], dtype=np.float64)
+            visible = np.asarray(raw_points["visible"], dtype=np.bool_)
+        except (IndexError, KeyError, TypeError, ValueError) as exc:
+            raise ValidationError("External pose point data is malformed") from exc
+        if xy.shape != (expected_count, 2) or visible.shape != (expected_count,):
+            raise ValidationError(
+                "External pose point count does not match the imported landmark schema"
+            )
+        dtype_names = getattr(getattr(raw_points, "dtype", None), "names", None) or ()
+        if "score" in dtype_names:
+            try:
+                scores = np.asarray(raw_points["score"], dtype=np.float64)
+            except (IndexError, KeyError, TypeError, ValueError) as exc:
+                raise ValidationError("External pose confidence data is malformed") from exc
+        else:
+            scores = np.where(visible, 1.0, 0.0).astype(np.float64)
+        if scores.shape != (expected_count,):
+            raise ValidationError(
+                "External pose confidence count does not match the imported landmark schema"
+            )
+        return xy, visible, scores
+
+    @staticmethod
+    def _import_bbox(
+        xy: NDArray[np.float64],
+        video: VideoAsset,
+    ) -> tuple[float, float, float, float] | None:
+        finite = np.isfinite(xy).all(axis=1)
+        if not bool(finite.any()):
+            return None
+        points = xy[finite]
+        if (
+            (points[:, 0] < 0).any()
+            or (points[:, 1] < 0).any()
+            or (points[:, 0] >= video.width_px).any()
+            or (points[:, 1] >= video.height_px).any()
+        ):
+            raise ValidationError("External pose coordinates extend outside the target video")
+        min_x = float(points[:, 0].min())
+        min_y = float(points[:, 1].min())
+        max_x = float(points[:, 0].max())
+        max_y = float(points[:, 1].max())
+        width = min(float(video.width_px) - min_x, max(1.0, max_x - min_x))
+        height = min(float(video.height_px) - min_y, max(1.0, max_y - min_y))
+        return min_x, min_y, width, height
+
+    @classmethod
+    def _import_keyframe(
+        cls,
+        *,
+        instance: Any,
+        frame_index: int,
+        schema: _ImportedSchema,
+        video: VideoAsset,
+    ) -> VideoTrackKeyframe | None:
+        xy, visible, scores = cls._point_arrays(instance, len(schema.expanded_labels))
+        bbox = cls._import_bbox(xy, video)
+        if bbox is None:
+            return None
+        observations: list[dict[str, object]] = []
+        keypoints: list[tuple[float, float, float]] = []
+        source = "model" if "score" in (
+            getattr(getattr(getattr(instance, "points", None), "dtype", None), "names", None) or ()
+        ) else "manual"
+        for index, (semantic_label, occurrence_index) in enumerate(
+            cls._slot_keys(schema.expanded_labels)
+        ):
+            x = float(xy[index, 0])
+            y = float(xy[index, 1])
+            score = float(scores[index]) if np.isfinite(scores[index]) else 0.0
+            if score < 0 or score > 1:
+                raise ValidationError("External pose landmark confidence must be between 0 and 1")
+            finite = np.isfinite(x) and np.isfinite(y)
+            if finite:
+                status = "visible" if bool(visible[index]) else "occluded"
+                keypoint_confidence = score if status == "visible" else 0.0
+                keypoints.append((x, y, keypoint_confidence))
+                observation_x = x
+                observation_y = y
+            else:
+                status = "absent"
+                keypoints.append((0.0, 0.0, 0.0))
+                observation_x = 0.0
+                observation_y = 0.0
+            observations.append(
+                {
+                    "id": f"interop:{uuid4()}",
+                    "semantic_label": semantic_label,
+                    "occurrence_index": occurrence_index,
+                    "x": observation_x,
+                    "y": observation_y,
+                    "confidence": score if score > 0 else None,
+                    "status": status,
+                    "source": source,
+                }
+            )
+
+        raw_instance_score = getattr(instance, "score", None)
+        instance_score: float | None = None
+        if isinstance(raw_instance_score, (int, float)) and not isinstance(
+            raw_instance_score, bool
+        ):
+            candidate_score = float(raw_instance_score)
+            if np.isfinite(candidate_score):
+                if candidate_score < 0 or candidate_score > 1:
+                    raise ValidationError(
+                        "External pose instance confidence must be between 0 and 1"
+                    )
+                instance_score = candidate_score
+
+        return VideoTrackKeyframe.model_validate(
+            {
+                "frame": frame_index,
+                "bbox": bbox,
+                "confidence": instance_score,
+                "keypoints": keypoints,
+                "pose_observations": observations,
+            }
+        )
+
+    @classmethod
+    def _import_tracks_from_labels(
+        cls,
+        labels: Any,
+        schema: _ImportedSchema,
+        video: VideoAsset,
+    ) -> tuple[list[_ImportedTrack], list[str]]:
+        grouped: dict[tuple[str, int], list[VideoTrackKeyframe]] = defaultdict(list)
+        names: dict[tuple[str, int], str | None] = {}
+        seen_frames: dict[tuple[str, int], set[int]] = defaultdict(set)
+        warnings: list[str] = []
+        skipped_empty = 0
+
+        labeled_frames = sorted(
+            list(getattr(labels, "labeled_frames", []) or []),
+            key=lambda item: int(getattr(item, "frame_idx", -1)),
+        )
+        for labeled_frame in labeled_frames:
+            frame_index = int(getattr(labeled_frame, "frame_idx", -1))
+            if frame_index < 0 or frame_index >= video.frame_count:
+                raise ValidationError(
+                    "External pose frame index extends outside the target video"
+                )
+            for instance_index, instance in enumerate(
+                list(getattr(labeled_frame, "instances", []) or [])
+            ):
+                track = getattr(instance, "track", None)
+                if track is None:
+                    group_key = ("untracked", frame_index * 1000000 + instance_index)
+                    external_name = None
+                else:
+                    group_key = ("tracked", id(track))
+                    external_name = str(getattr(track, "name", "") or "").strip() or None
+                if frame_index in seen_frames[group_key]:
+                    raise ValidationError(
+                        "External pose track contains multiple instances on the same frame"
+                    )
+                seen_frames[group_key].add(frame_index)
+                keyframe = cls._import_keyframe(
+                    instance=instance,
+                    frame_index=frame_index,
+                    schema=schema,
+                    video=video,
+                )
+                if keyframe is None:
+                    skipped_empty += 1
+                    continue
+                grouped[group_key].append(keyframe)
+                names[group_key] = external_name
+
+        imported: list[_ImportedTrack] = []
+        for group_key, keyframes in grouped.items():
+            if not keyframes:
+                continue
+            keyframes.sort(key=lambda item: item.frame)
+            imported.append(
+                _ImportedTrack(
+                    external_track_name=names.get(group_key),
+                    keyframes=tuple(keyframes),
+                )
+            )
+        if not imported:
+            raise ValidationError("External pose file contains no importable pose instances")
+        if len(imported) > 10000:
+            raise ValidationError("Pose interoperability import exceeds 10000 tracks")
+        keyframe_count = sum(len(item.keyframes) for item in imported)
+        if keyframe_count > 100000:
+            raise ValidationError("Pose interoperability import exceeds 100000 keyframes")
+        if skipped_empty:
+            warnings.append(
+                f"Skipped {skipped_empty} pose instances containing no finite landmark coordinates."
+            )
+        if any(item.external_track_name is None for item in imported):
+            warnings.append(
+                "Untracked external instances were imported as independent one-frame tracks; "
+                "ReefVision did not infer temporal identity."
+            )
+        return imported, warnings
+
+    @staticmethod
+    def _schema_payload(imported_schema: _ImportedSchema) -> tuple[dict[str, object], str]:
+        groups = [dict(item) for item in imported_schema.groups]
+        expanded = list(imported_schema.expanded_labels)
+        payload: dict[str, object] = {
+            "schema_version": "pose-landmarks-0001",
+            "groups": groups,
+            "expanded_labels": expanded,
+            "keypoint_count": len(expanded),
+            "allows_repeated_labels": any(int(item["count"]) > 1 for item in groups),
+        }
+        content_hash = hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        return payload, content_hash
+
+    def _resolve_import_schema(
+        self,
+        video: VideoAsset,
+        imported_schema: _ImportedSchema,
+        exchange_format: PoseInteroperabilityFormat,
+    ) -> dict[str, object]:
+        payload, content_hash = self._schema_payload(imported_schema)
+        existing = self.session.scalar(
+            select(PoseLandmarkSchemaRevision)
+            .join(
+                PoseLandmarkSchema,
+                PoseLandmarkSchema.id == PoseLandmarkSchemaRevision.schema_id,
+            )
+            .where(
+                PoseLandmarkSchema.project_id == video.project_id,
+                PoseLandmarkSchemaRevision.content_hash == content_hash,
+            )
+            .order_by(PoseLandmarkSchemaRevision.created_at, PoseLandmarkSchemaRevision.id)
+        )
+        if existing is None:
+            schema = PoseLandmarkSchema(
+                project_id=video.project_id,
+                name=f"Imported {exchange_format} pose landmarks",
+            )
+            self.session.add(schema)
+            self.session.flush()
+            existing = PoseLandmarkSchemaRevision(
+                schema_id=schema.id,
+                revision=1,
+                schema_version="pose-landmarks-0001",
+                groups_json=[dict(item) for item in imported_schema.groups],
+                expanded_labels_json=list(imported_schema.expanded_labels),
+                keypoint_count=len(imported_schema.expanded_labels),
+                allows_repeated_labels=bool(payload["allows_repeated_labels"]),
+                content_hash=content_hash,
+            )
+            self.session.add(existing)
+            self.session.flush()
+        return {
+            **payload,
+            "schema_id": existing.schema_id,
+            "schema_revision": existing.revision,
+            "content_hash": content_hash,
+        }
+
+    @staticmethod
+    def _verify_import_video_mapping(
+        *,
+        video: VideoAsset,
+        imported_schema: _ImportedSchema,
+        confirm_frame_mapping: bool,
+    ) -> list[str]:
+        provenance = imported_schema.provenance
+        if provenance is not None:
+            source_sha = str(provenance.get("source_video_sha256") or "").strip().casefold()
+            if not source_sha:
+                raise ValidationError(
+                    "ReefVision pose provenance is missing its source video SHA-256"
+                )
+            if source_sha != video.sha256.casefold():
+                raise ValidationError(
+                    "ReefVision pose provenance source video does not match the target video"
+                )
+            return []
+        if not confirm_frame_mapping:
+            raise ValidationError(
+                "External pose files without ReefVision video provenance require explicit "
+                "confirmation that their frame indices correspond to the target video"
+            )
+        return [
+            "External pose file had no ReefVision source-video provenance; frame mapping "
+            "was accepted from the explicit user confirmation."
+        ]
+
+    def import_bytes(
+        self,
+        video_id: str,
+        exchange_format: PoseInteroperabilityFormat,
+        content: bytes,
+        *,
+        source_filename: str | None,
+        label_class_id: str,
+        confirm_frame_mapping: bool,
+    ) -> PoseInteroperabilityImportResponse:
+        if not content:
+            raise ValidationError("Pose interoperability import file is empty")
+        video = self._video(video_id)
+        label_class = self.session.get(LabelClass, label_class_id)
+        if (
+            label_class is None
+            or label_class.project_id != video.project_id
+            or not label_class.is_active
+        ):
+            raise ValidationError(
+                "Pose interoperability import requires an active label class "
+                "from the target video's project"
+            )
+
+        labels = self._load_labels(exchange_format, content, source_filename)
+        imported_schema = self._imported_schema(labels)
+        warnings = self._verify_import_video_mapping(
+            video=video,
+            imported_schema=imported_schema,
+            confirm_frame_mapping=confirm_frame_mapping,
+        )
+        imported_tracks, track_warnings = self._import_tracks_from_labels(
+            labels,
+            imported_schema,
+            video,
+        )
+        warnings.extend(track_warnings)
+        if not imported_schema.used_reefvision_provenance:
+            warnings.append(
+                "External skeleton node names were imported as distinct semantic landmarks; "
+                "repeated-label equivalence was not inferred."
+            )
+
+        try:
+            schema_metadata = self._resolve_import_schema(
+                video,
+                imported_schema,
+                exchange_format,
+            )
+            next_track_number = int(
+                self.session.scalar(
+                    select(func.max(VideoTrack.track_number)).where(
+                        VideoTrack.video_id == video.id
+                    )
+                )
+                or 0
+            )
+            created: list[VideoTrack] = []
+            for offset, imported_track in enumerate(imported_tracks, start=1):
+                track = VideoTrack(
+                    video_id=video.id,
+                    label_class_id=label_class.id,
+                    track_number=next_track_number + offset,
+                    geometry_kind="bbox",
+                    keyframes_json=[
+                        keyframe.model_dump(mode="json", exclude_none=True)
+                        for keyframe in imported_track.keyframes
+                    ],
+                    interpolation="hold",
+                    status="imported_review_required",
+                    source_model_id=None,
+                    source_job_id=None,
+                    metadata_json={
+                        "source": "pose_interoperability_import",
+                        "pose_tracking": True,
+                        "pose_landmark_schema": schema_metadata,
+                        "pose_interoperability_import": {
+                            "schema_version": "pose-interoperability-import-0001",
+                            "format": exchange_format,
+                            "source_filename": Path(source_filename or "pose").name,
+                            "external_track_name": imported_track.external_track_name,
+                            "used_reefvision_provenance": (
+                                imported_schema.used_reefvision_provenance
+                            ),
+                        },
+                    },
+                )
+                self.session.add(track)
+                created.append(track)
+            self.session.commit()
+            for track in created:
+                self.session.refresh(track)
+        except Exception:
+            self.session.rollback()
+            raise
+
+        return PoseInteroperabilityImportResponse(
+            video_id=video.id,
+            format=exchange_format,
+            created_track_ids=[track.id for track in created],
+            track_count=len(created),
+            keyframe_count=sum(len(track.keyframes_json) for track in created),
+            pose_schema_id=str(schema_metadata["schema_id"]),
+            pose_schema_revision=int(schema_metadata["schema_revision"]),
+            used_reefvision_provenance=imported_schema.used_reefvision_provenance,
+            warnings=warnings,
+        )
 
     def export(
         self,
