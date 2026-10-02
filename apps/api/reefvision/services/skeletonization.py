@@ -903,7 +903,11 @@ class SkeletonizationService:
             .limit(1)
         )
         if existing is not None:
-            return self._analysis_record_response(existing)
+            latest_existing = self._latest_analysis_revision(
+                existing.analysis_series_id
+            )
+            if latest_existing is not None and latest_existing.id == existing.id:
+                return self._analysis_record_response(existing)
 
         record = SkeletonAnalysisRevision(
             analysis_series_id=str(uuid4()),
