@@ -11,7 +11,7 @@ from importlib import import_module
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from tempfile import mkdtemp
-from typing import Any
+from typing import Any, TypedDict
 
 from reefvision.domain.errors import ValidationError
 from reefvision.ml.providers import (
@@ -25,6 +25,13 @@ SLEAP_NN_SUPPORTED_VERSION = "0.3.3"
 SLEAP_IO_SUPPORTED_VERSION = "0.9.2"
 SLEAP_BUNDLE_FORMAT = "reefvision_sleap_nn"
 SLEAP_BUNDLE_MANIFEST = "reefvision-sleap-nn-model.json"
+
+
+class SleapNNRuntimeStatus(TypedDict):
+    ready: bool
+    sleap_nn_version: str | None
+    sleap_io_version: str | None
+    issues: list[str]
 
 
 @dataclass(frozen=True)
@@ -43,7 +50,7 @@ def _installed_version(distribution: str) -> str | None:
         return None
 
 
-def sleap_nn_runtime_status() -> dict[str, object]:
+def sleap_nn_runtime_status() -> SleapNNRuntimeStatus:
     nn_version = _installed_version("sleap-nn")
     io_version = _installed_version("sleap-io")
     ready = (
@@ -130,10 +137,14 @@ def read_sleap_nn_bundle_manifest(bundle_path: Path) -> SleapNNBundleManifest:
         )
 
     with zipfile.ZipFile(bundle_path) as archive:
-        names = [_safe_member_name(item.filename) for item in archive.infolist()]
+        archive_names = [
+            _safe_member_name(item.filename) for item in archive.infolist()
+        ]
         for model_path in model_paths:
             prefix = model_path.rstrip("/") + "/"
-            children = [name for name in names if name.startswith(prefix)]
+            children = [
+                name for name in archive_names if name.startswith(prefix)
+            ]
             if not children:
                 raise ValidationError(
                     f"SLEAP-NN model directory is missing from bundle: {model_path}"
