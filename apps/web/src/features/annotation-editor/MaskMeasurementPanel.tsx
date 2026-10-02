@@ -136,6 +136,7 @@ export function MaskMeasurementPanel({
   async function acceptCalibration(calibration: MeasurementCalibration) {
     queryClient.setQueryData(["measurement-calibration", imageId], calibration);
     await queryClient.invalidateQueries({ queryKey: ["mask-measurements"] });
+    await queryClient.invalidateQueries({ queryKey: ["skeleton-analyses"] });
   }
 
   const calibrationMutation = useMutation({
@@ -160,6 +161,7 @@ export function MaskMeasurementPanel({
     onSuccess: async () => {
       queryClient.setQueryData(["measurement-calibration", imageId], null);
       await queryClient.invalidateQueries({ queryKey: ["mask-measurements"] });
+      await queryClient.invalidateQueries({ queryKey: ["skeleton-analyses"] });
     },
   });
 
