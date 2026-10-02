@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import pairwise
 from math import hypot
 from typing import Literal
 
@@ -430,7 +431,7 @@ def build_initial_branch_graph(
                 target_node_id = pixel_to_node[current]
                 length = sum(
                     hypot(second[0] - first[0], second[1] - first[1])
-                    for first, second in zip(path, path[1:])
+                    for first, second in pairwise(path)
                 )
                 traced.append(
                     (
