@@ -7,7 +7,10 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
-from reefvision.schemas.skeletonization import SkeletonAnalysisRevisionResponse
+from reefvision.schemas.skeletonization import (
+    SkeletonAnalysisCreateRequest,
+    SkeletonAnalysisRevisionResponse,
+)
 from reefvision.services.skeletonization import SkeletonizationService
 
 router = APIRouter(tags=["coral_structure"])
