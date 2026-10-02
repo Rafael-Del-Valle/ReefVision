@@ -4,6 +4,7 @@ import { GeoreferencedMapPanel } from "./GeoreferencedMapPanel";
 import { GeoreferencingSetupPanel } from "./GeoreferencingSetupPanel";
 import { GeographicExportPanel } from "./GeographicExportPanel";
 import { GeographicMovementAnalyticsPanel } from "./GeographicMovementAnalyticsPanel";
+import { PoseTemporalReviewPanel } from "./PoseTemporalReviewPanel";
 import { useGeographicMovementAnalytics } from "./useGeographicMovementAnalytics";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1245,6 +1246,16 @@ export function VideoTrackingWorkspace({
                   />
                 </div>
               )}
+            {selectedTrack && selectedTrackPoseSchema && (
+              <PoseTemporalReviewPanel
+                trackId={selectedTrack.id}
+                frameIndex={previewFrameIndex}
+                onFrameChange={(nextFrame) => {
+                  setFrameIndex(nextFrame);
+                  setPreviewFrameIndex(nextFrame);
+                }}
+              />
+            )}
             {spatialMetricsQuery.data && (
               <div className="annotation-selection-list">
                 <div className="annotation-selection-row">
