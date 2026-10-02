@@ -12,6 +12,7 @@ from reefvision.api.routes.annotations import router as annotations_router
 from reefvision.api.routes.assist import router as assist_router
 from reefvision.api.routes.backups import router as backups_router
 from reefvision.api.routes.capabilities import router as capabilities_router
+from reefvision.api.routes.coral_structure import router as coral_structure_router
 from reefvision.api.routes.class_operations import router as class_operations_router
 from reefvision.api.routes.class_visibility import router as class_visibility_router
 from reefvision.api.routes.classification import router as classification_router
@@ -51,6 +52,7 @@ api_router.include_router(capabilities_router)
 api_router.include_router(system_router)
 api_router.include_router(training_router)
 api_router.include_router(classification_router)
+api_router.include_router(coral_structure_router)
 api_router.include_router(videos_router)
 api_router.include_router(georeferenced_observations_router)
 api_router.include_router(video_science_router)
