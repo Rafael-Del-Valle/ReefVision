@@ -36,9 +36,13 @@ from reefvision.schemas.pose_tracking import (
     PoseLandmarkCorrectionResponse,
     PoseLandmarkIdentityBreakResponse,
     PoseLandmarkObservationResponse,
+    PoseLandmarkTrackMetrics,
     PoseLandmarkTrackResponse,
     PoseTemporalAssociationBuildRequest,
     PoseTemporalBuildResponse,
+    PoseTemporalMetricsResponse,
+    PoseTemporalQcIssue,
+    PoseTemporalQcResponse,
     PoseTemporalTrackSummaryResponse,
 )
 from reefvision.schemas.videos import VideoPoseObservation, VideoTrackKeyframe
@@ -1158,6 +1162,320 @@ class PoseTemporalTrackingService:
         for decision in decisions:
             latest[decision.observation_id] = decision
         return latest
+
+    def qc(
+        self,
+        track_id: str,
+        *,
+        association_confidence_threshold: float = 0.60,
+        landmark_confidence_threshold: float = 0.50,
+        motion_cost_threshold: float = 0.25,
+    ) -> PoseTemporalQcResponse:
+        summary = self.summary(track_id)
+        latest_observations: dict[str, PoseLandmarkObservationResponse] = {}
+        for observation in summary.observations:
+            current = latest_observations.get(observation.observation_series_id)
+            if current is None or observation.revision > current.revision:
+                latest_observations[observation.observation_series_id] = observation
+
+        latest_decisions: dict[str, PoseLandmarkAssociationDecisionResponse] = {}
+        for decision in summary.association_decisions:
+            current = latest_decisions.get(decision.observation_id)
+            if current is None or decision.decision_revision > current.decision_revision:
+                latest_decisions[decision.observation_id] = decision
+
+        issues: list[PoseTemporalQcIssue] = []
+        for observation in latest_observations.values():
+            decision = latest_decisions.get(observation.id)
+            landmark_track_id = (
+                decision.selected_landmark_track_id if decision is not None else None
+            )
+            if decision is not None and decision.association_state == "unresolved":
+                issues.append(
+                    PoseTemporalQcIssue(
+                        code="unresolved_identity",
+                        frame_index=observation.frame_index,
+                        semantic_label=observation.semantic_label,
+                        occurrence_index=observation.occurrence_index,
+                        observation_id=observation.id,
+                        landmark_track_id=None,
+                        message="Temporal landmark identity is unresolved.",
+                    )
+                )
+            if (
+                decision is not None
+                and decision.association_confidence is not None
+                and decision.association_confidence < association_confidence_threshold
+            ):
+                issues.append(
+                    PoseTemporalQcIssue(
+                        code="low_association_confidence",
+                        frame_index=observation.frame_index,
+                        semantic_label=observation.semantic_label,
+                        occurrence_index=observation.occurrence_index,
+                        observation_id=observation.id,
+                        landmark_track_id=landmark_track_id,
+                        value=decision.association_confidence,
+                        threshold=association_confidence_threshold,
+                        message="Temporal association confidence is below the review threshold.",
+                    )
+                )
+            if (
+                observation.landmark_confidence is not None
+                and observation.visibility_state in {"visible", "uncertain"}
+                and observation.landmark_confidence < landmark_confidence_threshold
+            ):
+                issues.append(
+                    PoseTemporalQcIssue(
+                        code="low_landmark_confidence",
+                        frame_index=observation.frame_index,
+                        semantic_label=observation.semantic_label,
+                        occurrence_index=observation.occurrence_index,
+                        observation_id=observation.id,
+                        landmark_track_id=landmark_track_id,
+                        value=observation.landmark_confidence,
+                        threshold=landmark_confidence_threshold,
+                        message="Landmark confidence is below the review threshold.",
+                    )
+                )
+            if (
+                decision is not None
+                and decision.cost_breakdown_json is not None
+                and isinstance(decision.cost_breakdown_json.get("motion"), (int, float))
+                and float(decision.cost_breakdown_json["motion"]) > motion_cost_threshold
+            ):
+                motion_cost = float(decision.cost_breakdown_json["motion"])
+                issues.append(
+                    PoseTemporalQcIssue(
+                        code="high_motion_cost",
+                        frame_index=observation.frame_index,
+                        semantic_label=observation.semantic_label,
+                        occurrence_index=observation.occurrence_index,
+                        observation_id=observation.id,
+                        landmark_track_id=landmark_track_id,
+                        value=motion_cost,
+                        threshold=motion_cost_threshold,
+                        message="Normalized landmark motion exceeds the review threshold.",
+                    )
+                )
+            if observation.visibility_state == "uncertain":
+                issues.append(
+                    PoseTemporalQcIssue(
+                        code="uncertain_visibility",
+                        frame_index=observation.frame_index,
+                        semantic_label=observation.semantic_label,
+                        occurrence_index=observation.occurrence_index,
+                        observation_id=observation.id,
+                        landmark_track_id=landmark_track_id,
+                        message="Landmark visibility/location was marked uncertain.",
+                    )
+                )
+
+        track_labels = {item.id: item.semantic_label for item in summary.landmark_tracks}
+        for identity_break in summary.identity_breaks:
+            issues.append(
+                PoseTemporalQcIssue(
+                    code="identity_break",
+                    frame_index=identity_break.break_after_frame,
+                    semantic_label=track_labels.get(
+                        identity_break.predecessor_landmark_track_id,
+                        "unknown",
+                    ),
+                    occurrence_index=None,
+                    observation_id=None,
+                    landmark_track_id=identity_break.predecessor_landmark_track_id,
+                    value=identity_break.decision_confidence,
+                    message=f"Temporal identity continuity ended: {identity_break.reason}.",
+                )
+            )
+
+        issues.sort(
+            key=lambda item: (
+                item.frame_index,
+                item.semantic_label.casefold(),
+                item.code,
+                item.occurrence_index if item.occurrence_index is not None else -1,
+            )
+        )
+        counts = {
+            code: sum(issue.code == code for issue in issues)
+            for code in (
+                "unresolved_identity",
+                "low_association_confidence",
+                "low_landmark_confidence",
+                "high_motion_cost",
+                "uncertain_visibility",
+                "identity_break",
+            )
+        }
+        return PoseTemporalQcResponse(
+            parent_video_track_id=track_id,
+            issue_count=len(issues),
+            flagged_frame_count=len({item.frame_index for item in issues}),
+            unresolved_identity_count=counts["unresolved_identity"],
+            low_association_confidence_count=counts["low_association_confidence"],
+            low_landmark_confidence_count=counts["low_landmark_confidence"],
+            high_motion_cost_count=counts["high_motion_cost"],
+            uncertain_visibility_count=counts["uncertain_visibility"],
+            identity_break_count=counts["identity_break"],
+            issues=issues,
+        )
+
+    def metrics(self, track_id: str) -> PoseTemporalMetricsResponse:
+        track = self._track(track_id)
+        video = self._video(track.video_id)
+        summary = self.summary(track_id)
+
+        latest_observations: dict[str, PoseLandmarkObservationResponse] = {}
+        for observation in summary.observations:
+            current = latest_observations.get(observation.observation_series_id)
+            if current is None or observation.revision > current.revision:
+                latest_observations[observation.observation_series_id] = observation
+
+        latest_decisions: dict[str, PoseLandmarkAssociationDecisionResponse] = {}
+        for decision in summary.association_decisions:
+            current = latest_decisions.get(decision.observation_id)
+            if current is None or decision.decision_revision > current.decision_revision:
+                latest_decisions[decision.observation_id] = decision
+
+        observations_by_track: dict[
+            str,
+            list[tuple[PoseLandmarkObservationResponse, PoseLandmarkAssociationDecisionResponse]],
+        ] = {}
+        for observation in latest_observations.values():
+            decision = latest_decisions.get(observation.id)
+            if (
+                decision is None
+                or decision.selected_landmark_track_id is None
+                or decision.association_state not in {"confirmed", "provisional"}
+            ):
+                continue
+            observations_by_track.setdefault(
+                decision.selected_landmark_track_id,
+                [],
+            ).append((observation, decision))
+
+        breaks_by_track: dict[str, int] = {}
+        for identity_break in summary.identity_breaks:
+            breaks_by_track[identity_break.predecessor_landmark_track_id] = (
+                breaks_by_track.get(identity_break.predecessor_landmark_track_id, 0) + 1
+            )
+
+        metrics: list[PoseLandmarkTrackMetrics] = []
+        for landmark_track in summary.landmark_tracks:
+            associated = observations_by_track.get(landmark_track.id, [])
+            associated.sort(key=lambda item: item[0].frame_index)
+            status_counts = {
+                state: sum(item[0].visibility_state == state for item in associated)
+                for state in (
+                    "visible",
+                    "occluded",
+                    "out_of_frame",
+                    "uncertain",
+                    "absent",
+                )
+            }
+            observed = [
+                item
+                for item in associated
+                if item[0].observed_x_px is not None
+                and item[0].observed_y_px is not None
+            ]
+            path_length = 0.0
+            speeds: list[float] = []
+            for (first, _), (second, _) in zip(observed, observed[1:]):
+                frame_gap = second.frame_index - first.frame_index
+                if frame_gap != 1:
+                    continue
+                assert first.observed_x_px is not None
+                assert first.observed_y_px is not None
+                assert second.observed_x_px is not None
+                assert second.observed_y_px is not None
+                distance = hypot(
+                    second.observed_x_px - first.observed_x_px,
+                    second.observed_y_px - first.observed_y_px,
+                )
+                path_length += distance
+                speeds.append(distance * video.fps)
+
+            displacement = 0.0
+            if len(observed) >= 2:
+                first = observed[0][0]
+                last = observed[-1][0]
+                assert first.observed_x_px is not None
+                assert first.observed_y_px is not None
+                assert last.observed_x_px is not None
+                assert last.observed_y_px is not None
+                displacement = hypot(
+                    last.observed_x_px - first.observed_x_px,
+                    last.observed_y_px - first.observed_y_px,
+                )
+
+            association_confidences = [
+                decision.association_confidence
+                for _, decision in associated
+                if decision.association_confidence is not None
+            ]
+            first_frame = (
+                min(item[0].frame_index for item in associated)
+                if associated
+                else landmark_track.first_frame
+            )
+            last_frame = (
+                max(item[0].frame_index for item in associated)
+                if associated
+                else landmark_track.last_frame
+                if landmark_track.last_frame is not None
+                else landmark_track.first_frame
+            )
+            metrics.append(
+                PoseLandmarkTrackMetrics(
+                    landmark_track_id=landmark_track.id,
+                    semantic_label=landmark_track.semantic_label,
+                    first_frame=first_frame,
+                    last_frame=last_frame,
+                    duration_seconds=max(0.0, (last_frame - first_frame) / video.fps),
+                    associated_observation_count=len(associated),
+                    visible_observation_count=status_counts["visible"],
+                    occluded_observation_count=status_counts["occluded"],
+                    out_of_frame_observation_count=status_counts["out_of_frame"],
+                    uncertain_observation_count=status_counts["uncertain"],
+                    absent_observation_count=status_counts["absent"],
+                    human_reviewed_observation_count=sum(
+                        decision.verification_state != "unreviewed"
+                        for _, decision in associated
+                    ),
+                    path_length_pixels=path_length,
+                    displacement_pixels=displacement,
+                    mean_speed_pixels_per_second=(
+                        sum(speeds) / len(speeds) if speeds else None
+                    ),
+                    maximum_speed_pixels_per_second=max(speeds) if speeds else None,
+                    mean_association_confidence=(
+                        sum(association_confidences) / len(association_confidences)
+                        if association_confidences
+                        else None
+                    ),
+                    minimum_association_confidence=(
+                        min(association_confidences)
+                        if association_confidences
+                        else None
+                    ),
+                    identity_break_count=breaks_by_track.get(landmark_track.id, 0),
+                )
+            )
+
+        metrics.sort(
+            key=lambda item: (
+                item.semantic_label.casefold(),
+                item.first_frame,
+                item.landmark_track_id,
+            )
+        )
+        return PoseTemporalMetricsResponse(
+            parent_video_track_id=track_id,
+            tracklets=metrics,
+        )
 
     def export(
         self,
