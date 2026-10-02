@@ -9,6 +9,13 @@ from pathlib import Path
 from typing import Any, Protocol, cast
 
 from reefvision.domain.errors import ValidationError
+from reefvision.ml.sleap_nn_provider import (
+    SLEAP_NN_SUPPORTED_VERSION,
+    extract_sleap_nn_bundle,
+    keypoint_bbox,
+    normalize_sleap_keypoints,
+    sleap_predictor_types,
+)
 
 
 @dataclass(frozen=True)
@@ -44,6 +51,13 @@ class VideoTrackingProvider(Protocol):
     @property
     def provider_version(self) -> str: ...
 
+    def resolve_tracker_name(
+        self,
+        requested: str,
+        *,
+        link_detections: bool,
+    ) -> str: ...
+
     def track(
         self,
         checkpoint_path: Path,
@@ -71,6 +85,14 @@ class UltralyticsVideoTrackingProvider:
     @property
     def provider_version(self) -> str:
         return str(vars(self._ultralytics).get("__version__", "unknown"))
+
+    def resolve_tracker_name(
+        self,
+        requested: str,
+        *,
+        link_detections: bool,
+    ) -> str:
+        return requested if link_detections else "instances-only"
 
     @staticmethod
     def _device(device: str) -> str | int:
@@ -238,8 +260,206 @@ class UltralyticsVideoTrackingProvider:
         return observations
 
 
+class SleapNNVideoTrackingProvider:
+    provider_id = "sleap_nn"
+
+    @property
+    def provider_version(self) -> str:
+        return SLEAP_NN_SUPPORTED_VERSION
+
+    def resolve_tracker_name(
+        self,
+        requested: str,
+        *,
+        link_detections: bool,
+    ) -> str:
+        del requested
+        return (
+            "sleap_nn:fixed_window:oks:hungarian"
+            if link_detections
+            else "instances-only"
+        )
+
+    @staticmethod
+    def _device(device: str) -> str:
+        normalized = device.strip().casefold()
+        if normalized in {"", "auto"}:
+            try:
+                torch = cast(Any, import_module("torch"))
+                return "cuda" if bool(torch.cuda.is_available()) else "cpu"
+            except ImportError:
+                return "cpu"
+        if normalized.isdigit():
+            return f"cuda:{normalized}"
+        if normalized in {"gpu", "cuda:0"}:
+            return "cuda"
+        if normalized in {"cpu", "cuda"} or normalized.startswith("cuda:"):
+            return normalized
+        raise ValidationError(
+            "SLEAP-NN supports auto, cpu, cuda, cuda:N, or numeric CUDA devices"
+        )
+
+    def track(
+        self,
+        checkpoint_path: Path,
+        video_path: Path,
+        *,
+        tracker: str,
+        confidence: float,
+        iou: float,
+        device: str,
+        link_detections: bool = True,
+        on_progress: VideoTrackingProgressCallback | None = None,
+        should_cancel: VideoTrackingCancellationCheck | None = None,
+    ) -> list[TrackObservation]:
+        del tracker, iou
+        if not checkpoint_path.is_file():
+            raise ValidationError("SLEAP-NN pose bundle is missing")
+        if not video_path.is_file():
+            raise ValidationError("Tracking source video is missing")
+        if should_cancel is not None and should_cancel():
+            raise VideoTrackingCancelled("Video tracking cancelled before inference")
+
+        if on_progress is not None:
+            on_progress(
+                VideoTrackingProgress(
+                    frames_processed=0,
+                    detections_seen=0,
+                    tracked_observations_seen=0,
+                    unique_tracks_seen=0,
+                    stage="loading_model",
+                )
+            )
+
+        manifest, model_paths = extract_sleap_nn_bundle(checkpoint_path)
+        Predictor, TrackerConfig = sleap_predictor_types()
+        tracker_config = (
+            TrackerConfig(
+                window_size=5,
+                candidates_method="fixed_window",
+                features="keypoints",
+                scoring_method="oks",
+                track_matching_method="hungarian",
+            )
+            if link_detections and manifest.instance_mode == "multi"
+            else None
+        )
+        predictor = Predictor.from_model_paths(
+            [str(path) for path in model_paths],
+            device=self._device(device),
+            peak_threshold=confidence,
+            tracker_config=tracker_config,
+        )
+
+        if on_progress is not None:
+            on_progress(
+                VideoTrackingProgress(
+                    frames_processed=0,
+                    detections_seen=0,
+                    tracked_observations_seen=0,
+                    unique_tracks_seen=0,
+                    stage="starting_stream",
+                )
+            )
+
+        labels = predictor.predict(str(video_path))
+        if should_cancel is not None and should_cancel():
+            raise VideoTrackingCancelled("Video tracking cancelled after SLEAP-NN inference")
+
+        observations: list[TrackObservation] = []
+        track_ids: dict[str, int] = {}
+        next_track_id = 1
+        detections_seen = 0
+        unique_track_ids: set[int] = set()
+        labeled_frames = list(getattr(labels, "labeled_frames", []))
+
+        for fallback_frame, labeled_frame in enumerate(labeled_frames):
+            if should_cancel is not None and should_cancel():
+                raise VideoTrackingCancelled(
+                    f"Video tracking cancelled while reading frame {fallback_frame}"
+                )
+            frame_index = int(
+                getattr(
+                    labeled_frame,
+                    "frame_idx",
+                    getattr(labeled_frame, "frame_index", fallback_frame),
+                )
+            )
+            instances = list(getattr(labeled_frame, "instances", []))
+            detections_seen += len(instances)
+
+            for instance_index, instance in enumerate(instances):
+                raw_points = instance.numpy(scores=True)
+                keypoints = normalize_sleap_keypoints(raw_points)
+                if len(keypoints) != len(manifest.landmark_labels):
+                    raise ValidationError(
+                        "SLEAP-NN prediction landmark count does not match "
+                        "the registered bundle landmark_labels"
+                    )
+                bbox = keypoint_bbox(keypoints)
+                if bbox is None:
+                    continue
+
+                if manifest.instance_mode == "single":
+                    provider_track_id = 1
+                elif link_detections:
+                    provider_track = getattr(instance, "track", None)
+                    if provider_track is None:
+                        track_key = f"untracked:{frame_index}:{instance_index}"
+                    else:
+                        track_key = str(
+                            getattr(provider_track, "name", None)
+                            or getattr(provider_track, "id", None)
+                            or repr(provider_track)
+                        )
+                    if track_key not in track_ids:
+                        track_ids[track_key] = next_track_id
+                        next_track_id += 1
+                    provider_track_id = track_ids[track_key]
+                else:
+                    provider_track_id = next_track_id
+                    next_track_id += 1
+
+                score = float(getattr(instance, "score", 0.0) or 0.0)
+                if not 0.0 <= score <= 1.0:
+                    visible_scores = [
+                        point[2] for point in keypoints if point[2] > 0
+                    ]
+                    score = (
+                        sum(visible_scores) / len(visible_scores)
+                        if visible_scores
+                        else 0.0
+                    )
+
+                unique_track_ids.add(provider_track_id)
+                observations.append(
+                    TrackObservation(
+                        frame=frame_index,
+                        provider_track_id=provider_track_id,
+                        class_name=manifest.class_name,
+                        confidence=score,
+                        bbox=bbox,
+                        keypoints=keypoints,
+                    )
+                )
+
+            if on_progress is not None:
+                on_progress(
+                    VideoTrackingProgress(
+                        frames_processed=fallback_frame + 1,
+                        detections_seen=detections_seen,
+                        tracked_observations_seen=len(observations),
+                        unique_tracks_seen=len(unique_track_ids),
+                    )
+                )
+
+        return observations
+
+
 def video_tracking_provider_for_name(provider_id: str) -> VideoTrackingProvider:
     normalized = provider_id.strip().casefold()
     if normalized == "ultralytics":
         return UltralyticsVideoTrackingProvider()
+    if normalized == "sleap_nn":
+        return SleapNNVideoTrackingProvider()
     raise ValidationError(f"Unsupported video tracking provider: {provider_id}")
