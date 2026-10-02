@@ -457,11 +457,20 @@ def _external_labels(
                 },
             ],
         }
+    external_video = object()
     return _FakeLabels(
         skeletons=[skeleton],
         labeled_frames=[
-            _FakeLabeledFrame(video=object(), frame_idx=2, instances=[first]),
-            _FakeLabeledFrame(video=object(), frame_idx=3, instances=[second]),
+            _FakeLabeledFrame(
+                video=external_video,
+                frame_idx=2,
+                instances=[first],
+            ),
+            _FakeLabeledFrame(
+                video=external_video,
+                frame_idx=3,
+                instances=[second],
+            ),
         ],
         provenance=provenance,
     )
