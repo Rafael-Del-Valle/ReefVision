@@ -335,7 +335,7 @@ class PoseTemporalTrackingService:
     def _point_for_association(item: _SourceObservation) -> tuple[float, float] | None:
         if item.x is None or item.y is None:
             return None
-        if item.visibility_state == "absent":
+        if item.visibility_state in {"absent", "out_of_frame"}:
             return None
         return item.x, item.y
 
