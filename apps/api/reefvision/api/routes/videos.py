@@ -16,6 +16,7 @@ from reefvision.config import Settings
 from reefvision.db.models import Job, ModelRegistration
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.jobs import JobResponse
+from reefvision.schemas.pose_interoperability import PoseInteroperabilityFormat
 from reefvision.schemas.pose_tracking import (
     PoseAssociationCorrectionRequest,
     PoseIdentityBreakCreateRequest,
@@ -55,6 +56,7 @@ from reefvision.schemas.videos import (
     VideoTrackResponse,
     VideoTrackUpdate,
 )
+from reefvision.services.pose_interoperability import PoseInteroperabilityService
 from reefvision.services.pose_temporal_tracking import PoseTemporalTrackingService
 from reefvision.services.scientific_3d_calibration import Scientific3DCalibrationValidationService
 from reefvision.services.video_assets import VideoAssetService
@@ -381,6 +383,33 @@ def export_pose_temporal(
         headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
             "X-ReefVision-Pose-Format": export_format,
+        },
+    )
+
+
+@router.get("/videos/{video_id}/pose-interoperability/export")
+def export_pose_interoperability(
+    video_id: str,
+    request: Request,
+    session: DbSession,
+    exchange_format: Annotated[
+        PoseInteroperabilityFormat,
+        Query(alias="format"),
+    ] = "slp",
+) -> Response:
+    settings: Settings = request.app.state.settings
+    payload = PoseInteroperabilityService(session, settings).export(
+        video_id,
+        exchange_format,
+    )
+    encoded_filename = quote(payload.filename, safe="")
+    return Response(
+        content=payload.content,
+        media_type=payload.media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+            "X-ReefVision-Pose-Interoperability-Format": exchange_format,
+            "X-ReefVision-Pose-Lossy": "true" if payload.lossy else "false",
         },
     )
 
