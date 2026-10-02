@@ -74,7 +74,7 @@ def test_current_database_revision_skips_alembic_upgrade(
     monkeypatch,
 ) -> None:
     settings = _desktop_settings(tmp_path / "current")
-    database = _stamp_database(settings, "0032")
+    database = _stamp_database(settings, "0033")
     before = database.read_bytes()
 
     def unexpected_upgrade(*args, **kwargs) -> None:
