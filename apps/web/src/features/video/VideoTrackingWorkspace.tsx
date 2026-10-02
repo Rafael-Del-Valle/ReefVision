@@ -1352,7 +1352,7 @@ export function VideoTrackingWorkspace({
             <h3>Pose interoperability</h3>
             <div className="workspace-guide compact">
             <div>
-              <strong>Pose interoperability</strong>
+              <strong>Import/export safeguards</strong>
               <p className="annotation-helper">
                 Import or export canonical pose data through SLEAP-IO.
                 ReefVision-exported files must match the target video checksum.
