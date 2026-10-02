@@ -1,4 +1,4 @@
-"""Ultralytics adapter for detection, instance segmentation, classification, and tracking."""
+"""Ultralytics adapter for detection, segmentation, pose, classification, and tracking."""
 # mypy: disable-error-code="attr-defined"
 
 from __future__ import annotations
@@ -11,7 +11,9 @@ from reefvision.ml.provider_contract import ProviderRequest, ProviderResult
 
 class UltralyticsMultitaskProvider:
     provider_id = "ultralytics"
-    supported_tasks = frozenset({"detect", "instance_segment", "classify", "track"})
+    supported_tasks = frozenset(
+        {"detect", "instance_segment", "pose", "classify", "track"}
+    )
 
     def preflight(self, request: ProviderRequest) -> list[str]:
         if request.task not in self.supported_tasks:
@@ -38,6 +40,7 @@ class UltralyticsMultitaskProvider:
         yolo_task = {
             "detect": "detect",
             "instance_segment": "segment",
+            "pose": "pose",
             "classify": "classify",
         }[request.task]
         model = YOLO(model_ref, task=yolo_task)
