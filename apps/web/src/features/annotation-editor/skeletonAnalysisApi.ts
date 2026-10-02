@@ -139,6 +139,7 @@ export interface SkeletonAnalysisRevision {
   review_note: string | null;
   created_by: string;
   created_at: string;
+  is_latest_revision: boolean;
   stale_mask: boolean;
   stale_calibration: boolean;
   stale: boolean;
