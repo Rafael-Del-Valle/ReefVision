@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, ClassVar, cast
@@ -11,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.db.models import VideoTrack
+from reefvision.domain.errors import ValidationError
 from reefvision.schemas.videos import VideoTrackKeyframe
 from reefvision.services import video_assets as video_assets_module
 from reefvision.services.pose_interoperability import PoseInteroperabilityService
@@ -61,6 +63,10 @@ class _FakeSkeleton:
     def __init__(self, *, nodes: list[str], name: str) -> None:
         self.nodes = nodes
         self.name = name
+
+    @property
+    def node_names(self) -> list[str]:
+        return list(self.nodes)
 
 
 class _FakeTrack:
@@ -370,3 +376,238 @@ def test_pose_interoperability_exports_canonical_reviewed_pose(
     assert points[1].tolist() == [17.0, 18.0, 0.0]
     assert np.isnan(points[2, 0])
     assert exported["point_scores"].tolist() == [0.99, 0.60, 0.0]
+
+
+def _external_predicted_instance(
+    *,
+    track: object | None,
+    coordinates: list[tuple[float, float]],
+    visible: list[bool],
+    scores: list[float],
+    instance_score: float = 0.9,
+) -> SimpleNamespace:
+    dtype = np.dtype(
+        [
+            ("xy", "<f8", (2,)),
+            ("score", "<f8"),
+            ("visible", "bool"),
+            ("complete", "bool"),
+            ("name", "O"),
+        ]
+    )
+    points = np.empty(len(coordinates), dtype=dtype)
+    points["xy"] = np.asarray(coordinates, dtype=np.float64)
+    points["score"] = np.asarray(scores, dtype=np.float64)
+    points["visible"] = np.asarray(visible, dtype=np.bool_)
+    points["complete"] = True
+    points["name"] = ["bell_center", "tentacle__1", "tentacle__2"]
+    return SimpleNamespace(points=points, track=track, score=instance_score)
+
+
+def _external_labels(
+    video_sha256: str,
+    *,
+    include_provenance: bool,
+    source_sha256: str | None = None,
+    tracked: bool = True,
+) -> _FakeLabels:
+    skeleton = _FakeSkeleton(
+        nodes=["bell_center", "tentacle__1", "tentacle__2"],
+        name="external",
+    )
+    external_track = _FakeTrack(name="animal-7") if tracked else None
+    first = _external_predicted_instance(
+        track=external_track,
+        coordinates=[(20.0, 25.0), (30.0, 40.0), (50.0, 60.0)],
+        visible=[True, False, True],
+        scores=[0.95, 0.60, 0.80],
+    )
+    second = _external_predicted_instance(
+        track=external_track,
+        coordinates=[(21.0, 26.0), (31.0, 41.0), (np.nan, np.nan)],
+        visible=[True, False, False],
+        scores=[0.96, 0.55, 0.0],
+    )
+    provenance: dict[str, object] = {}
+    if include_provenance:
+        provenance["reefvision_pose_interoperability"] = {
+            "schema_version": "reefvision-pose-interoperability-0001",
+            "source_video_id": "source-video",
+            "source_video_sha256": source_sha256 or video_sha256,
+            "source_filename": "pose.mp4",
+            "frame_index_base": 0,
+            "coordinate_base": 0,
+            "pose_schema": _schema(),
+            "node_mapping": [
+                {
+                    "external_node_name": "bell_center",
+                    "semantic_label": "bell_center",
+                    "occurrence_index": 0,
+                },
+                {
+                    "external_node_name": "tentacle__1",
+                    "semantic_label": "tentacle",
+                    "occurrence_index": 0,
+                },
+                {
+                    "external_node_name": "tentacle__2",
+                    "semantic_label": "tentacle",
+                    "occurrence_index": 1,
+                },
+            ],
+        }
+    return _FakeLabels(
+        skeletons=[skeleton],
+        labeled_frames=[
+            _FakeLabeledFrame(video=object(), frame_idx=2, instances=[first]),
+            _FakeLabeledFrame(video=object(), frame_idx=3, instances=[second]),
+        ],
+        provenance=provenance,
+    )
+
+
+def test_pose_interoperability_import_restores_repeated_labels_and_track_grouping(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Pose interop import")
+    video = _pose_video(client, str(project["id"]), monkeypatch)
+    label_classes = cast(list[dict[str, object]], project["label_classes"])
+    labels = _external_labels(str(video["sha256"]), include_provenance=True)
+    monkeypatch.setattr(
+        PoseInteroperabilityService,
+        "_load_labels",
+        lambda *_args, **_kwargs: labels,
+    )
+
+    response = client.post(
+        f"/api/v1/videos/{video['id']}/pose-interoperability/import",
+        params={
+            "format": "slp",
+            "label_class_id": str(label_classes[0]["id"]),
+        },
+        files={"file": ("pose.slp", io.BytesIO(b"external-pose"), "application/octet-stream")},
+    )
+
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["track_count"] == 1
+    assert payload["keyframe_count"] == 2
+    assert payload["used_reefvision_provenance"] is True
+    assert payload["warnings"] == []
+
+    tracks = client.get(f"/api/v1/videos/{video['id']}/tracks")
+    assert tracks.status_code == 200, tracks.text
+    imported = [
+        item
+        for item in tracks.json()
+        if item["id"] in set(payload["created_track_ids"])
+    ]
+    assert len(imported) == 1
+    track = imported[0]
+    assert track["status"] == "imported_review_required"
+    assert track["metadata_json"]["pose_landmark_schema"]["expanded_labels"] == [
+        "bell_center",
+        "tentacle",
+        "tentacle",
+    ]
+    assert track["metadata_json"]["pose_interoperability_import"]["external_track_name"] == (
+        "animal-7"
+    )
+    assert [item["frame"] for item in track["keyframes_json"]] == [2, 3]
+    first_observations = track["keyframes_json"][0]["pose_observations"]
+    assert first_observations[1]["semantic_label"] == "tentacle"
+    assert first_observations[1]["occurrence_index"] == 0
+    assert first_observations[1]["status"] == "occluded"
+    second_observations = track["keyframes_json"][1]["pose_observations"]
+    assert second_observations[2]["status"] == "absent"
+
+
+def test_external_pose_import_requires_explicit_frame_mapping_confirmation(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Unprovenanced pose import")
+    video = _pose_video(client, str(project["id"]), monkeypatch)
+    label_classes = cast(list[dict[str, object]], project["label_classes"])
+    labels = _external_labels(
+        str(video["sha256"]),
+        include_provenance=False,
+        tracked=False,
+    )
+    monkeypatch.setattr(
+        PoseInteroperabilityService,
+        "_load_labels",
+        lambda *_args, **_kwargs: labels,
+    )
+
+    rejected = client.post(
+        f"/api/v1/videos/{video['id']}/pose-interoperability/import",
+        params={
+            "format": "coco",
+            "label_class_id": str(label_classes[0]["id"]),
+        },
+        files={"file": ("pose.json", io.BytesIO(b"external-pose"), "application/json")},
+    )
+    assert rejected.status_code == 400
+    assert "explicit confirmation" in rejected.json()["detail"]
+
+    accepted = client.post(
+        f"/api/v1/videos/{video['id']}/pose-interoperability/import",
+        params={
+            "format": "coco",
+            "label_class_id": str(label_classes[0]["id"]),
+            "confirm_frame_mapping": "true",
+        },
+        files={"file": ("pose.json", io.BytesIO(b"external-pose"), "application/json")},
+    )
+    assert accepted.status_code == 201, accepted.text
+    payload = accepted.json()
+    assert payload["used_reefvision_provenance"] is False
+    assert payload["track_count"] == 2
+    assert any("did not infer temporal identity" in item for item in payload["warnings"])
+    assert any("distinct semantic landmarks" in item for item in payload["warnings"])
+
+
+def test_reefvision_pose_import_rejects_source_video_hash_mismatch(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Pose hash mismatch")
+    video = _pose_video(client, str(project["id"]), monkeypatch)
+    label_classes = cast(list[dict[str, object]], project["label_classes"])
+    labels = _external_labels(
+        str(video["sha256"]),
+        include_provenance=True,
+        source_sha256="f" * 64,
+    )
+    monkeypatch.setattr(
+        PoseInteroperabilityService,
+        "_load_labels",
+        lambda *_args, **_kwargs: labels,
+    )
+
+    response = client.post(
+        f"/api/v1/videos/{video['id']}/pose-interoperability/import",
+        params={
+            "format": "slp",
+            "label_class_id": str(label_classes[0]["id"]),
+        },
+        files={"file": ("pose.slp", io.BytesIO(b"external-pose"), "application/octet-stream")},
+    )
+
+    assert response.status_code == 400
+    assert "does not match the target video" in response.json()["detail"]
+
+
+def test_ultralytics_pose_import_rejects_zip_traversal(tmp_path: Path) -> None:
+    payload = io.BytesIO()
+    with zipfile.ZipFile(payload, "w") as archive:
+        archive.writestr("../escape.txt", "unsafe")
+        archive.writestr("data.yaml", "path: .\n")
+
+    with pytest.raises(ValidationError, match="unsafe archive path"):
+        PoseInteroperabilityService._extract_ultralytics_zip(
+            payload.getvalue(),
+            tmp_path / "dataset",
+        )
