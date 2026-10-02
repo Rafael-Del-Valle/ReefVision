@@ -1053,6 +1053,11 @@ class SkeletonizationService:
             raise ValidationError(
                 "Corrected skeleton must remain one 8-connected component"
             )
+        rethinned, _ = zhang_suen_thin(corrected_mask)
+        if rethinned[0] != corrected_mask[0]:
+            raise ValidationError(
+                "Corrected skeleton must remain one-pixel-thin"
+            )
 
         features = classify_skeleton_pixels(corrected_mask)
         clusters = consolidate_junction_clusters(features)
