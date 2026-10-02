@@ -19,6 +19,7 @@ from reefvision.config import Settings
 from reefvision.db.models import (
     ImageAsset,
     MaskAnnotation,
+    Project,
     SkeletonAnalysisRevision,
 )
 from reefvision.db.models.project import utc_now
@@ -28,6 +29,7 @@ from reefvision.schemas.measurements import MeasurementCalibrationUpdate
 from reefvision.schemas.skeletonization import (
     SkeletonAnalysisCorrectionRequest,
     SkeletonAnalysisCreateRequest,
+    SkeletonAnalysisExportResponse,
     SkeletonAnalysisReviewRequest,
     SkeletonAnalysisRevisionResponse,
     SkeletonBranchAngleResponse,
@@ -58,6 +60,7 @@ from reefvision.services.skeleton_algorithms import (
 )
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.skeleton_exports import build_skeleton_export
 
 
 @dataclass(frozen=True, slots=True)
@@ -1128,4 +1131,42 @@ class SkeletonizationService:
         self.session.commit()
         self.session.refresh(record)
         return self._analysis_record_response(record)
+
+    def export_persisted_analysis(
+        self,
+        analysis_id: str,
+    ) -> SkeletonAnalysisExportResponse:
+        record = self._analysis_record_response(
+            self._analysis_record(analysis_id)
+        )
+        if record.stale:
+            raise ValidationError(
+                "Stale skeleton analyses must be regenerated before export"
+            )
+        if record.review_status != "approved":
+            raise ValidationError(
+                "Only approved skeleton analyses can be exported"
+            )
+
+        image = self._image(record.image_id)
+        project = self.session.get(Project, image.project_id)
+        if project is None:
+            raise NotFoundError("Project not found")
+        export_root = resolve_managed_project_path(
+            self.settings,
+            f"{project.storage_root}/skeletonization/exports",
+        )
+        exported = build_skeleton_export(
+            export_root=export_root,
+            record=record,
+        )
+        return SkeletonAnalysisExportResponse(
+            analysis_id=record.id,
+            analysis_revision=record.analysis_revision,
+            package_name=exported["package_dir"].name,
+            archive_name=exported["archive_path"].name,
+            archive_size_bytes=exported["archive_size_bytes"],
+            archive_sha256=exported["archive_sha256"],
+            manifest_sha256=exported["manifest_sha256"],
+        )
 
