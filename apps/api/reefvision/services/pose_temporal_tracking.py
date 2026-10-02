@@ -7,8 +7,8 @@ import hashlib
 import io
 import json
 from dataclasses import dataclass
+from itertools import pairwise
 from math import hypot
-from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import delete, select
@@ -45,7 +45,7 @@ from reefvision.schemas.pose_tracking import (
     PoseTemporalQcResponse,
     PoseTemporalTrackSummaryResponse,
 )
-from reefvision.schemas.videos import VideoPoseObservation, VideoTrackKeyframe
+from reefvision.schemas.videos import VideoTrackKeyframe
 
 
 ASSOCIATION_ALGORITHM = "reefvision-temporal-pose"
@@ -247,7 +247,12 @@ class PoseTemporalTrackingService:
     ) -> list[_SourceObservation]:
         source: list[_SourceObservation] = []
         for keyframe in self._keyframes(track):
-            bbox = tuple(float(value) for value in keyframe.bbox)
+            bbox = (
+                float(keyframe.bbox[0]),
+                float(keyframe.bbox[1]),
+                float(keyframe.bbox[2]),
+                float(keyframe.bbox[3]),
+            )
             if keyframe.pose_observations:
                 for observation in keyframe.pose_observations:
                     observed = observation.status in {"visible", "uncertain"}
@@ -528,7 +533,9 @@ class PoseTemporalTrackingService:
                 observations: list[PoseLandmarkObservation] = []
                 for item in frame_items:
                     point = self._point_for_association(item)
-                    observed = item.visibility_state in {"visible", "uncertain"} and point is not None
+                    observed = (
+                        item.visibility_state in {"visible", "uncertain"} and point is not None
+                    )
                     predicted = item.visibility_state == "occluded" and point is not None
                     observation = PoseLandmarkObservation(
                         observation_series_id=str(uuid4()),
@@ -585,12 +592,12 @@ class PoseTemporalTrackingService:
                             candidate.track_id: candidate
                             for candidate in candidate_lists[row_index]
                         }
-                        row = [
-                            by_track.get(active.record.id).total_cost
-                            if active.record.id in by_track
-                            else impossible_cost
-                            for active in eligible_active
-                        ]
+                        row: list[float] = []
+                        for active in eligible_active:
+                            candidate = by_track.get(active.record.id)
+                            row.append(
+                                candidate.total_cost if candidate is not None else impossible_cost
+                            )
                         row.extend(
                             unmatched_cost if dummy == len(matrix) else impossible_cost
                             for dummy in range(len(assignable_rows))
@@ -958,7 +965,9 @@ class PoseTemporalTrackingService:
             if selected_track is None:
                 raise NotFoundError("Pose landmark track not found")
             if selected_track.parent_video_track_id != observation.parent_video_track_id:
-                raise ValidationError("Landmark identity must belong to the same parent video track")
+                raise ValidationError(
+                    "Landmark identity must belong to the same parent video track"
+                )
             if selected_track.semantic_label != observation.semantic_label:
                 raise ValidationError("Landmark identity must use the same semantic label")
             if (
@@ -1115,11 +1124,14 @@ class PoseTemporalTrackingService:
                 and payload.successor_start_frame is not None
                 and observation.frame_index >= payload.successor_start_frame
             )
+            selected_successor_id = (
+                successor.id if use_successor and successor is not None else None
+            )
             replacement = PoseLandmarkAssociationDecision(
                 observation_id=observation.id,
                 decision_revision=current.decision_revision + 1,
                 supersedes_decision_id=current.id,
-                selected_landmark_track_id=successor.id if use_successor else None,
+                selected_landmark_track_id=selected_successor_id,
                 previous_observation_id=(
                     successor_previous_observation_id if use_successor else None
                 ),
@@ -1174,15 +1186,18 @@ class PoseTemporalTrackingService:
         summary = self.summary(track_id)
         latest_observations: dict[str, PoseLandmarkObservationResponse] = {}
         for observation in summary.observations:
-            current = latest_observations.get(observation.observation_series_id)
-            if current is None or observation.revision > current.revision:
+            current_observation = latest_observations.get(observation.observation_series_id)
+            if current_observation is None or observation.revision > current_observation.revision:
                 latest_observations[observation.observation_series_id] = observation
 
         latest_decisions: dict[str, PoseLandmarkAssociationDecisionResponse] = {}
-        for decision in summary.association_decisions:
-            current = latest_decisions.get(decision.observation_id)
-            if current is None or decision.decision_revision > current.decision_revision:
-                latest_decisions[decision.observation_id] = decision
+        for association_decision in summary.association_decisions:
+            current_decision = latest_decisions.get(association_decision.observation_id)
+            if (
+                current_decision is None
+                or association_decision.decision_revision > current_decision.decision_revision
+            ):
+                latest_decisions[association_decision.observation_id] = association_decision
 
         issues: list[PoseTemporalQcIssue] = []
         for observation in latest_observations.values():
@@ -1383,7 +1398,7 @@ class PoseTemporalTrackingService:
             ]
             path_length = 0.0
             speeds: list[float] = []
-            for (first, _), (second, _) in zip(observed, observed[1:]):
+            for (first, _), (second, _) in pairwise(observed):
                 frame_gap = second.frame_index - first.frame_index
                 if frame_gap != 1:
                     continue
