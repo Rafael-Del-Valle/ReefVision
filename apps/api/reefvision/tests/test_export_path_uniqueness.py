@@ -4,7 +4,7 @@ from reefvision.storage.datasets import (
 )
 
 
-def test_export_paths_use_the_complete_export_identifier() -> None:
+def test_export_paths_use_compact_unique_export_identifiers() -> None:
     first_id = "12345678-0000-4000-8000-000000000001"
     second_id = "12345678-0000-4000-8000-000000000002"
 
@@ -20,8 +20,10 @@ def test_export_paths_use_the_complete_export_identifier() -> None:
     )
 
     assert first != second
-    assert first_id in first[0]
-    assert second_id in second[0]
+    assert first[0].startswith("projects/project-1/exports/v0007-")
+    assert second[0].startswith("projects/project-1/exports/v0007-")
+    assert len(first[0].rsplit("-", maxsplit=1)[-1]) == 22
+    assert len(second[0].rsplit("-", maxsplit=1)[-1]) == 22
 
 
 def test_exported_image_names_are_compact_unique_and_extension_preserving() -> None:
