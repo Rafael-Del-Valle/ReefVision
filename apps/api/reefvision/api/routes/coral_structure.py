@@ -9,7 +9,10 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
-from reefvision.schemas.skeletonization import SkeletonizationReadinessResponse
+from reefvision.schemas.skeletonization import (
+    SkeletonizationAnalysisResponse,
+    SkeletonizationReadinessResponse,
+)
 from reefvision.services.skeletonization import SkeletonizationService
 
 router = APIRouter(tags=["coral_structure"])
@@ -31,3 +34,15 @@ def get_structure_readiness(
     session: DbSession,
 ) -> SkeletonizationReadinessResponse:
     return service(request, session).readiness(mask_annotation_id)
+
+
+@router.get(
+    "/mask-annotations/{mask_annotation_id}/structure-analysis",
+    response_model=SkeletonizationAnalysisResponse,
+)
+def get_structure_analysis(
+    mask_annotation_id: str,
+    request: Request,
+    session: DbSession,
+) -> SkeletonizationAnalysisResponse:
+    return service(request, session).analysis(mask_annotation_id)
