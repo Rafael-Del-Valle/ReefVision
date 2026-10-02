@@ -715,6 +715,15 @@ class PoseInteroperabilityService:
             list(getattr(labels, "labeled_frames", []) or []),
             key=lambda item: int(getattr(item, "frame_idx", -1)),
         )
+        external_videos = {
+            id(getattr(labeled_frame, "video", None))
+            for labeled_frame in labeled_frames
+        }
+        if len(external_videos) > 1:
+            raise ValidationError(
+                "Pose interoperability import cannot flatten multiple external videos "
+                "into one ReefVision video"
+            )
         for labeled_frame in labeled_frames:
             frame_index = int(getattr(labeled_frame, "frame_idx", -1))
             if frame_index < 0 or frame_index >= video.frame_count:
@@ -781,12 +790,18 @@ class PoseInteroperabilityService:
     def _schema_payload(imported_schema: _ImportedSchema) -> tuple[dict[str, object], str]:
         groups = [dict(item) for item in imported_schema.groups]
         expanded = list(imported_schema.expanded_labels)
+        repeated = any(
+            isinstance(item.get("count"), int)
+            and not isinstance(item.get("count"), bool)
+            and cast(int, item["count"]) > 1
+            for item in groups
+        )
         payload: dict[str, object] = {
             "schema_version": "pose-landmarks-0001",
             "groups": groups,
             "expanded_labels": expanded,
             "keypoint_count": len(expanded),
-            "allows_repeated_labels": any(int(item["count"]) > 1 for item in groups),
+            "allows_repeated_labels": repeated,
         }
         content_hash = hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -867,6 +882,50 @@ class PoseInteroperabilityService:
             "was accepted from the explicit user confirmation."
         ]
 
+    def _reject_duplicate_reefvision_source_tracks(
+        self,
+        video: VideoAsset,
+        imported_schema: _ImportedSchema,
+    ) -> None:
+        provenance = imported_schema.provenance
+        if provenance is None or str(provenance.get("source_video_id") or "") != video.id:
+            return
+        raw_tracks = provenance.get("tracks")
+        if not isinstance(raw_tracks, dict):
+            return
+        source_track_ids = {
+            str(item.get("video_track_id") or "")
+            for item in raw_tracks.values()
+            if isinstance(item, dict) and str(item.get("video_track_id") or "")
+        }
+        if not source_track_ids:
+            return
+        existing = self.session.scalar(
+            select(VideoTrack.id).where(
+                VideoTrack.video_id == video.id,
+                VideoTrack.id.in_(source_track_ids),
+                VideoTrack.deleted_at.is_(None),
+            )
+        )
+        if existing is not None:
+            raise ValidationError(
+                "This ReefVision pose export references tracks that are already present "
+                "on the target video; import would create duplicate scientific records"
+            )
+
+    @staticmethod
+    def _source_track_metadata(
+        imported_schema: _ImportedSchema,
+        external_track_name: str | None,
+    ) -> dict[str, object] | None:
+        if external_track_name is None or imported_schema.provenance is None:
+            return None
+        raw_tracks = imported_schema.provenance.get("tracks")
+        if not isinstance(raw_tracks, dict):
+            return None
+        raw = raw_tracks.get(external_track_name)
+        return dict(raw) if isinstance(raw, dict) else None
+
     def import_bytes(
         self,
         video_id: str,
@@ -898,6 +957,7 @@ class PoseInteroperabilityService:
             imported_schema=imported_schema,
             confirm_frame_mapping=confirm_frame_mapping,
         )
+        self._reject_duplicate_reefvision_source_tracks(video, imported_schema)
         imported_tracks, track_warnings = self._import_tracks_from_labels(
             labels,
             imported_schema,
@@ -948,6 +1008,10 @@ class PoseInteroperabilityService:
                             "format": exchange_format,
                             "source_filename": Path(source_filename or "pose").name,
                             "external_track_name": imported_track.external_track_name,
+                            "source_reefvision_track": self._source_track_metadata(
+                                imported_schema,
+                                imported_track.external_track_name,
+                            ),
                             "used_reefvision_provenance": (
                                 imported_schema.used_reefvision_provenance
                             ),
@@ -969,8 +1033,8 @@ class PoseInteroperabilityService:
             created_track_ids=[track.id for track in created],
             track_count=len(created),
             keyframe_count=sum(len(track.keyframes_json) for track in created),
-            pose_schema_id=str(schema_metadata["schema_id"]),
-            pose_schema_revision=int(schema_metadata["schema_revision"]),
+            pose_schema_id=cast(str, schema_metadata["schema_id"]),
+            pose_schema_revision=cast(int, schema_metadata["schema_revision"]),
             used_reefvision_provenance=imported_schema.used_reefvision_provenance,
             warnings=warnings,
         )
