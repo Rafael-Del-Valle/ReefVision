@@ -70,6 +70,7 @@ class SkeletonSpurRemoval:
     junction_id: str
     branch_length_pixels: float
     removed_pixels: tuple[tuple[int, int], ...]
+    removed_junction_boundary_pixel_count: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -490,6 +491,77 @@ def build_initial_branch_graph(
 
 
 
+def _foreground_component_count(mask: BinaryMask) -> int:
+    data, width, height = mask
+    remaining = {
+        (x, y)
+        for y in range(height)
+        for x in range(width)
+        if data[y * width + x] > 0
+    }
+    component_count = 0
+
+    while remaining:
+        component_count += 1
+        seed = min(remaining, key=lambda point: (point[1], point[0]))
+        stack = [seed]
+        remaining.remove(seed)
+
+        while stack:
+            x, y = stack.pop()
+            for dx, dy in _NEIGHBORS_8:
+                neighbor = (x + dx, y + dy)
+                if neighbor in remaining:
+                    remaining.remove(neighbor)
+                    stack.append(neighbor)
+
+    return component_count
+
+
+def _safe_spur_removal(
+    working: bytearray,
+    *,
+    width: int,
+    height: int,
+    edge: SkeletonGraphEdge,
+    junction: SkeletonGraphNode,
+) -> tuple[tuple[tuple[int, int], ...], int] | None:
+    junction_pixels = set(junction.source_pixels)
+    representative = min(
+        junction.source_pixels,
+        key=lambda point: (
+            (point[0] - junction.x) ** 2 + (point[1] - junction.y) ** 2,
+            point[1],
+            point[0],
+        ),
+    )
+    external_pixels = tuple(
+        pixel for pixel in edge.pixels if pixel not in junction_pixels
+    )
+    boundary_pixels = tuple(
+        pixel
+        for pixel in edge.pixels
+        if pixel in junction_pixels and pixel != representative
+    )
+
+    if not external_pixels:
+        return None
+
+    candidate_sets = (
+        (external_pixels + boundary_pixels, len(boundary_pixels)),
+        (external_pixels, 0),
+    )
+    for candidate_pixels, boundary_count in candidate_sets:
+        trial = bytearray(working)
+        for x, y in candidate_pixels:
+            trial[y * width + x] = 0
+        trial_mask: BinaryMask = (bytes(trial), width, height)
+        if _foreground_component_count(trial_mask) == 1:
+            return candidate_pixels, boundary_count
+
+    return None
+
+
 def prune_terminal_spurs(
     mask: BinaryMask,
     *,
@@ -544,15 +616,40 @@ def prune_terminal_spurs(
         if not eligible:
             break
 
-        _, _, edge, endpoint, junction = min(
+        selected: tuple[
+            SkeletonGraphEdge,
+            SkeletonGraphNode,
+            SkeletonGraphNode,
+            tuple[tuple[int, int], ...],
+            int,
+        ] | None = None
+        for _, _, edge, endpoint, junction in sorted(
             eligible,
             key=lambda item: (item[0], item[1]),
-        )
-        protected = set(junction.source_pixels)
-        removed = tuple(pixel for pixel in edge.pixels if pixel not in protected)
-        if not removed:
+        ):
+            safe_removal = _safe_spur_removal(
+                working,
+                width=width,
+                height=height,
+                edge=edge,
+                junction=junction,
+            )
+            if safe_removal is None:
+                continue
+            removed, boundary_count = safe_removal
+            selected = (
+                edge,
+                endpoint,
+                junction,
+                removed,
+                boundary_count,
+            )
             break
 
+        if selected is None:
+            break
+
+        edge, endpoint, junction, removed, boundary_count = selected
         for x, y in removed:
             working[y * width + x] = 0
 
@@ -565,6 +662,7 @@ def prune_terminal_spurs(
                 junction_id=junction.id,
                 branch_length_pixels=edge.boundary_to_boundary_length_pixels,
                 removed_pixels=removed,
+                removed_junction_boundary_pixel_count=boundary_count,
             )
         )
 
