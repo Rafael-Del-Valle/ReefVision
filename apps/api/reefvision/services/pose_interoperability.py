@@ -972,42 +972,129 @@ class PoseInteroperabilityService:
         labels: Any,
         schema: _ImportedSchema,
         video: VideoAsset,
+        exchange_format: PoseInteroperabilityFormat,
     ) -> tuple[list[_ImportedTrack], list[str]]:
-        grouped: dict[tuple[str, int], list[VideoTrackKeyframe]] = defaultdict(list)
-        names: dict[tuple[str, int], str | None] = {}
-        seen_frames: dict[tuple[str, int], set[int]] = defaultdict(set)
+        group_key_type = tuple[str, str | int]
+        grouped: dict[group_key_type, list[VideoTrackKeyframe]] = defaultdict(list)
+        names: dict[group_key_type, str | None] = {}
+        seen_frames: dict[group_key_type, set[int]] = defaultdict(set)
         warnings: list[str] = []
         skipped_empty = 0
 
-        labeled_frames = sorted(
-            list(getattr(labels, "labeled_frames", []) or []),
-            key=lambda item: int(getattr(item, "frame_idx", -1)),
-        )
-        external_videos = {
-            id(getattr(labeled_frame, "video", None))
-            for labeled_frame in labeled_frames
-        }
-        if len(external_videos) > 1:
-            raise ValidationError(
-                "Pose interoperability import cannot flatten multiple external videos "
-                "into one ReefVision video"
+        labeled_frames = list(getattr(labels, "labeled_frames", []) or [])
+        if not labeled_frames:
+            raise ValidationError("External pose file contains no labeled frames")
+
+        raw_frame_manifest: object | None = None
+        if schema.provenance is not None:
+            raw_frame_manifest = schema.provenance.get("reefvision_frame_manifest")
+
+        manifest_frames: list[dict[str, object]] | None = None
+        if raw_frame_manifest is not None:
+            if not isinstance(raw_frame_manifest, list) or len(raw_frame_manifest) != len(
+                labeled_frames
+            ):
+                raise ValidationError(
+                    "ReefVision pose bundle frame manifest does not match the native artifact"
+                )
+            manifest_frames = []
+            for raw_entry in raw_frame_manifest:
+                if not isinstance(raw_entry, dict):
+                    raise ValidationError("ReefVision pose bundle frame manifest is malformed")
+                raw_index = raw_entry.get("reefvision_frame_index")
+                raw_instances = raw_entry.get("instances")
+                if (
+                    not isinstance(raw_index, int)
+                    or isinstance(raw_index, bool)
+                    or raw_index < 0
+                    or not isinstance(raw_instances, list)
+                ):
+                    raise ValidationError("ReefVision pose bundle frame entry is invalid")
+                manifest_frames.append(
+                    {str(key): value for key, value in raw_entry.items()}
+                )
+        elif exchange_format in {"coco", "dlc_csv", "ultralytics_pose"}:
+            warnings.append(
+                "External image-dataset frame order was mapped sequentially to target "
+                "video frames starting at 0 because no ReefVision frame manifest was present."
             )
-        for labeled_frame in labeled_frames:
-            frame_index = int(getattr(labeled_frame, "frame_idx", -1))
+        else:
+            labeled_frames.sort(key=lambda item: int(getattr(item, "frame_idx", -1)))
+            external_videos = {
+                id(getattr(labeled_frame, "video", None))
+                for labeled_frame in labeled_frames
+            }
+            if len(external_videos) > 1:
+                raise ValidationError(
+                    "Pose interoperability import cannot flatten multiple external videos "
+                    "into one ReefVision video without a ReefVision frame manifest"
+                )
+
+        for frame_ordinal, labeled_frame in enumerate(labeled_frames):
+            frame_manifest = (
+                manifest_frames[frame_ordinal] if manifest_frames is not None else None
+            )
+            if frame_manifest is not None:
+                frame_index = cast(int, frame_manifest["reefvision_frame_index"])
+                raw_instance_manifest = frame_manifest.get("instances")
+                if not isinstance(raw_instance_manifest, list):
+                    raise ValidationError(
+                        "ReefVision pose bundle instance manifest is malformed"
+                    )
+                instance_manifest = raw_instance_manifest
+            elif exchange_format in {"coco", "dlc_csv", "ultralytics_pose"}:
+                frame_index = frame_ordinal
+                instance_manifest = []
+            else:
+                frame_index = int(getattr(labeled_frame, "frame_idx", -1))
+                instance_manifest = []
+
             if frame_index < 0 or frame_index >= video.frame_count:
                 raise ValidationError(
                     "External pose frame index extends outside the target video"
                 )
-            for instance_index, instance in enumerate(
-                list(getattr(labeled_frame, "instances", []) or [])
-            ):
+
+            instances = list(getattr(labeled_frame, "instances", []) or [])
+            if frame_manifest is not None and len(instance_manifest) != len(instances):
+                raise ValidationError(
+                    "ReefVision pose bundle instance manifest does not match the native artifact"
+                )
+
+            for instance_index, instance in enumerate(instances):
                 track = getattr(instance, "track", None)
-                if track is None:
-                    group_key = ("untracked", frame_index * 1000000 + instance_index)
+                native_name = (
+                    str(getattr(track, "name", "") or "").strip()
+                    if track is not None
+                    else ""
+                )
+                manifest_name = ""
+                if frame_manifest is not None:
+                    raw_instance = instance_manifest[instance_index]
+                    if not isinstance(raw_instance, dict):
+                        raise ValidationError(
+                            "ReefVision pose bundle instance manifest is malformed"
+                        )
+                    raw_name = raw_instance.get("external_track_name")
+                    if raw_name is not None and not isinstance(raw_name, str):
+                        raise ValidationError(
+                            "ReefVision pose bundle track name is malformed"
+                        )
+                    manifest_name = str(raw_name or "").strip()
+
+                effective_name = manifest_name or native_name
+                if effective_name:
+                    group_key: group_key_type = ("tracked_name", effective_name)
+                    external_name = effective_name
+                elif track is not None:
+                    group_key = ("tracked_object", id(track))
                     external_name = None
                 else:
-                    group_key = ("tracked", id(track))
-                    external_name = str(getattr(track, "name", "") or "").strip() or None
+                    group_key = (
+                        "untracked",
+                        frame_index * 1000000 + instance_index,
+                    )
+                    external_name = None
+
                 if frame_index in seen_frames[group_key]:
                     raise ValidationError(
                         "External pose track contains multiple instances on the same frame"
@@ -1232,6 +1319,7 @@ class PoseInteroperabilityService:
             labels,
             imported_schema,
             video,
+            exchange_format,
         )
         warnings.extend(track_warnings)
         if not imported_schema.used_reefvision_provenance:
