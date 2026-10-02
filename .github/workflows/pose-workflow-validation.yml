@@ -68,6 +68,7 @@ jobs:
           npx vitest run
           src/features/pose/PoseAnnotationEditor.test.tsx
           src/features/video/poseKeyframeAdapter.test.ts
+          src/features/video/PoseTemporalReviewPanel.test.tsx
           src/features/video/VideoTrackingWorkspace.test.tsx
           --config vite.config.mjs
           --configLoader runner
