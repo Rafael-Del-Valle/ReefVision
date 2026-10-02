@@ -3,7 +3,10 @@ from typing import cast
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from reefvision.schemas.skeletonization import SkeletonAnalysisCreateRequest
+from reefvision.schemas.skeletonization import (
+    SkeletonAnalysisCreateRequest,
+    SkeletonAnalysisReviewRequest,
+)
 from reefvision.services.skeletonization import SkeletonizationService
 from reefvision.tests.test_annotations import create_project, import_one
 
@@ -59,3 +62,29 @@ def test_persisted_analysis_is_deduplicated_and_hashed(
         assert len(first.result_sha256) == 64
         assert first.result.mask_annotation_id == mask_id
         assert first.stale is False
+
+
+
+def test_persisted_analysis_review_is_explicit(client: TestClient) -> None:
+    _image_id, mask_id = _seed_mask(client)
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        service = SkeletonizationService(session, app.state.settings)
+        record = service.persist_analysis(
+            mask_id,
+            SkeletonAnalysisCreateRequest(),
+        )
+        reviewed = service.review_persisted_analysis(
+            record.id,
+            SkeletonAnalysisReviewRequest(
+                review_status="approved",
+                note="Reviewed against the source mask.",
+            ),
+        )
+
+        assert reviewed.review_status == "approved"
+        assert reviewed.reviewed_by == "local_user"
+        assert reviewed.reviewed_at is not None
+        assert reviewed.review_note == "Reviewed against the source mask."
+        assert len(service.list_persisted_analyses(mask_id)) == 1
