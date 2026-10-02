@@ -70,6 +70,20 @@ export interface TemporalPoseAssociationDecision {
   created_at: string;
 }
 
+export interface TemporalPoseAssociationCandidate {
+  id: string;
+  association_decision_id: string;
+  candidate_landmark_track_id: string;
+  rank: number;
+  total_cost: number;
+  normalized_confidence: number | null;
+  motion_cost: number | null;
+  geometry_cost: number | null;
+  appearance_cost: number | null;
+  ordering_cost: number | null;
+  shape_cost: number | null;
+}
+
 export interface TemporalPoseIdentityBreak {
   id: string;
   parent_video_track_id: string;
@@ -107,6 +121,7 @@ export interface TemporalPoseSummary {
   landmark_tracks: TemporalPoseLandmarkTrack[];
   observations: TemporalPoseObservation[];
   association_decisions: TemporalPoseAssociationDecision[];
+  association_candidates: TemporalPoseAssociationCandidate[];
   identity_breaks: TemporalPoseIdentityBreak[];
   corrections: TemporalPoseCorrection[];
 }
