@@ -166,6 +166,74 @@ def test_temporal_pose_build_persists_repeated_landmark_identity_and_occlusion(
     assert len(occurrence_zero_ids) == 1
 
 
+def test_out_of_frame_landmark_is_missing_and_not_spatially_associated(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Temporal pose out of frame")
+    video = _video(client, str(project["id"]), monkeypatch)
+    response = client.post(
+        f"/api/v1/videos/{video['id']}/tracks",
+        json={
+            "label_class_id": _first_class(project),
+            "keyframes": [
+                {
+                    "frame": 0,
+                    "bbox": [0, 0, 100, 100],
+                    "pose_observations": [
+                        _observation("f0", 0, 20, 50, 0.9),
+                    ],
+                },
+                {
+                    "frame": 1,
+                    "bbox": [0, 0, 100, 100],
+                    "pose_observations": [
+                        _observation(
+                            "f1",
+                            0,
+                            20,
+                            50,
+                            0.9,
+                            status="out_of_frame",
+                        ),
+                    ],
+                },
+            ],
+        },
+    )
+    assert response.status_code == 201, response.text
+    track = response.json()
+
+    built = client.post(
+        f"/api/v1/video-tracks/{track['id']}/pose-temporal-associations",
+        json={},
+    )
+    assert built.status_code == 200, built.text
+    assert built.json()["unresolved_associations"] == 1
+
+    summary = client.get(
+        f"/api/v1/video-tracks/{track['id']}/pose-temporal"
+    ).json()
+    missing = next(
+        item
+        for item in summary["observations"]
+        if item["frame_index"] == 1
+    )
+    assert missing["visibility_state"] == "out_of_frame"
+    assert missing["observed_x_px"] is None
+    assert missing["observed_y_px"] is None
+    assert missing["predicted_x_px"] is None
+    assert missing["predicted_y_px"] is None
+
+    decision = next(
+        item
+        for item in summary["association_decisions"]
+        if item["observation_id"] == missing["id"]
+    )
+    assert decision["association_state"] == "unresolved"
+    assert decision["selected_landmark_track_id"] is None
+
+
 def test_temporal_pose_ambiguous_crossing_is_not_forced(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
