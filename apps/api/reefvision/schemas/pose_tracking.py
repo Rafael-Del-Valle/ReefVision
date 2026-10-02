@@ -106,6 +106,22 @@ class PoseLandmarkAssociationDecisionResponse(BaseModel):
     created_at: datetime
 
 
+class PoseLandmarkAssociationCandidateResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    association_decision_id: str
+    candidate_landmark_track_id: str
+    rank: int
+    total_cost: float
+    normalized_confidence: float | None
+    motion_cost: float | None
+    geometry_cost: float | None
+    appearance_cost: float | None
+    ordering_cost: float | None
+    shape_cost: float | None
+
+
 class PoseLandmarkIdentityBreakResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -147,6 +163,9 @@ class PoseTemporalTrackSummaryResponse(BaseModel):
     landmark_tracks: list[PoseLandmarkTrackResponse]
     observations: list[PoseLandmarkObservationResponse]
     association_decisions: list[PoseLandmarkAssociationDecisionResponse]
+    association_candidates: list[PoseLandmarkAssociationCandidateResponse] = Field(
+        default_factory=list
+    )
     identity_breaks: list[PoseLandmarkIdentityBreakResponse]
     corrections: list[PoseLandmarkCorrectionResponse]
 
