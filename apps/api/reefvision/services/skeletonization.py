@@ -648,6 +648,12 @@ class SkeletonizationService:
             pruned_longest_path_physical=pruned_longest_physical,
             raw_branch_angles=raw_angles,
             pruned_branch_angles=pruned_angles,
+            branch_angle_space=(
+                "reference_plane"
+                if calibration is not None
+                and calibration.perspective_homography is not None
+                else "image_pixels"
+            ),
             calibrated=calibration is not None,
             physical_unit=calibration.unit if calibration is not None else None,
             distance_per_pixel=(
