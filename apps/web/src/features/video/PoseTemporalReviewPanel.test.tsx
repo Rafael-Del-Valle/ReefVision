@@ -303,7 +303,8 @@ it("does not offer future or expired landmark identities for a frame", async () 
     "Temporal identity for tentacle 1",
   );
 
-  expect(selector).toHaveTextContent("landmark-");
+  const options = Array.from(selector.querySelectorAll("option"));
+  expect(options.map((option) => option.value)).toEqual(["", track.id]);
   expect(selector).not.toHaveTextContent("future");
   expect(selector).not.toHaveTextContent("expired");
 });
@@ -345,8 +346,12 @@ it("reviews tracker-created identity breaks without offering duplicate breaks", 
 
   renderPanel(10);
 
-  expect(await screen.findByText("Unreviewed identity breaks")).toBeInTheDocument();
-  expect(screen.getByText("1")).toBeInTheDocument();
+  const unreviewedLabel = await screen.findByText(
+    "Unreviewed identity breaks",
+  );
+  expect(unreviewedLabel.parentElement).toHaveTextContent(
+    "Unreviewed identity breaks1",
+  );
   expect(
     screen.queryByRole("button", { name: "Break identity here" }),
   ).not.toBeInTheDocument();
