@@ -21,6 +21,7 @@ from reefvision.db.models import (
     MaskAnnotation,
     SkeletonAnalysisRevision,
 )
+from reefvision.db.models.project import utc_now
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.repositories.mask_annotations import MaskAnnotationRepository
 from reefvision.schemas.measurements import MeasurementCalibrationUpdate
@@ -740,3 +741,174 @@ class SkeletonizationService:
                 if feature.kind != "path"
             ],
         )
+
+    def _analysis_record(
+        self,
+        analysis_id: str,
+    ) -> SkeletonAnalysisRevision:
+        record = self.session.get(SkeletonAnalysisRevision, analysis_id)
+        if record is None:
+            raise NotFoundError("Skeleton analysis revision not found")
+        return record
+
+    def _analysis_record_response(
+        self,
+        record: SkeletonAnalysisRevision,
+    ) -> SkeletonAnalysisRevisionResponse:
+        mask = self._mask(record.mask_annotation_id)
+        image = self._image(record.image_id)
+        current_calibration_sha256 = _calibration_sha256(image)
+        stale_mask = mask.revision != record.mask_revision
+        stale_calibration = current_calibration_sha256 != record.calibration_sha256
+        return SkeletonAnalysisRevisionResponse(
+            id=record.id,
+            analysis_series_id=record.analysis_series_id,
+            analysis_revision=record.analysis_revision,
+            supersedes_analysis_id=record.supersedes_analysis_id,
+            mask_annotation_id=record.mask_annotation_id,
+            image_id=record.image_id,
+            mask_revision=record.mask_revision,
+            current_mask_revision=mask.revision,
+            source_kind=record.source_kind,
+            algorithm=record.algorithm,
+            algorithm_version=record.algorithm_version,
+            terminal_spur_max_length_pixels=(
+                record.terminal_spur_max_length_pixels
+            ),
+            input_mask_sha256=record.input_mask_sha256,
+            calibration_sha256=record.calibration_sha256,
+            parameters_sha256=record.parameters_sha256,
+            result_sha256=record.result_sha256,
+            result=SkeletonizationAnalysisResponse.model_validate(
+                record.result_json
+            ),
+            correction=dict(record.correction_json or {}),
+            review_status=record.review_status,
+            reviewed_by=record.reviewed_by,
+            reviewed_at=record.reviewed_at,
+            review_note=record.review_note,
+            created_by=record.created_by,
+            created_at=record.created_at,
+            stale_mask=stale_mask,
+            stale_calibration=stale_calibration,
+            stale=stale_mask or stale_calibration,
+        )
+
+    def persist_analysis(
+        self,
+        mask_annotation_id: str,
+        payload: SkeletonAnalysisCreateRequest,
+    ) -> SkeletonAnalysisRevisionResponse:
+        mask = self._mask(mask_annotation_id)
+        image = self._image(mask.image_id)
+        binary = self._binary_mask(mask, image)
+        input_mask_sha256 = _binary_mask_sha256(binary)
+        calibration_sha256 = _calibration_sha256(image)
+        parameters_sha256 = _analysis_parameters_sha256(
+            payload.terminal_spur_max_length_pixels
+        )
+        result = self.analysis(
+            mask.id,
+            terminal_spur_max_length_pixels=(
+                payload.terminal_spur_max_length_pixels
+            ),
+        )
+        result_json = result.model_dump(mode="json")
+        result_sha256 = canonical_json_sha256(result_json)
+
+        existing = self.session.scalar(
+            select(SkeletonAnalysisRevision)
+            .where(
+                SkeletonAnalysisRevision.mask_annotation_id == mask.id,
+                SkeletonAnalysisRevision.mask_revision == mask.revision,
+                SkeletonAnalysisRevision.source_kind == "automatic",
+                SkeletonAnalysisRevision.input_mask_sha256 == input_mask_sha256,
+                SkeletonAnalysisRevision.calibration_sha256 == calibration_sha256,
+                SkeletonAnalysisRevision.parameters_sha256 == parameters_sha256,
+                SkeletonAnalysisRevision.result_sha256 == result_sha256,
+            )
+            .order_by(
+                SkeletonAnalysisRevision.created_at.desc(),
+                SkeletonAnalysisRevision.id.desc(),
+            )
+            .limit(1)
+        )
+        if existing is not None:
+            return self._analysis_record_response(existing)
+
+        record = SkeletonAnalysisRevision(
+            analysis_series_id=str(uuid4()),
+            analysis_revision=1,
+            supersedes_analysis_id=None,
+            mask_annotation_id=mask.id,
+            image_id=mask.image_id,
+            mask_revision=mask.revision,
+            source_kind="automatic",
+            algorithm=result.algorithm,
+            algorithm_version=result.algorithm_version,
+            terminal_spur_max_length_pixels=(
+                payload.terminal_spur_max_length_pixels
+            ),
+            input_mask_sha256=input_mask_sha256,
+            calibration_sha256=calibration_sha256,
+            parameters_sha256=parameters_sha256,
+            result_sha256=result_sha256,
+            result_json=result_json,
+            correction_json={},
+            review_status="unreviewed",
+            created_by="local_user",
+        )
+        self.session.add(record)
+        self.session.commit()
+        self.session.refresh(record)
+        return self._analysis_record_response(record)
+
+    def get_persisted_analysis(
+        self,
+        analysis_id: str,
+    ) -> SkeletonAnalysisRevisionResponse:
+        return self._analysis_record_response(
+            self._analysis_record(analysis_id)
+        )
+
+    def list_persisted_analyses(
+        self,
+        mask_annotation_id: str,
+    ) -> list[SkeletonAnalysisRevisionResponse]:
+        self._mask(mask_annotation_id)
+        statement = (
+            select(SkeletonAnalysisRevision)
+            .where(
+                SkeletonAnalysisRevision.mask_annotation_id
+                == mask_annotation_id
+            )
+            .order_by(
+                SkeletonAnalysisRevision.created_at,
+                SkeletonAnalysisRevision.analysis_series_id,
+                SkeletonAnalysisRevision.analysis_revision,
+            )
+        )
+        return [
+            self._analysis_record_response(record)
+            for record in self.session.scalars(statement)
+        ]
+
+    def review_persisted_analysis(
+        self,
+        analysis_id: str,
+        payload: SkeletonAnalysisReviewRequest,
+    ) -> SkeletonAnalysisRevisionResponse:
+        record = self._analysis_record(analysis_id)
+        response = self._analysis_record_response(record)
+        if response.stale:
+            raise ValidationError(
+                "Stale skeleton analyses must be regenerated before review"
+            )
+        record.review_status = payload.review_status
+        record.reviewed_by = "local_user"
+        record.reviewed_at = utc_now()
+        record.review_note = payload.note
+        self.session.commit()
+        self.session.refresh(record)
+        return self._analysis_record_response(record)
+
