@@ -30,6 +30,11 @@ import {
   updateMaskAnnotation,
 } from "./maskDocumentOperations";
 import { MaskMeasurementPanel } from "./MaskMeasurementPanel";
+import { SkeletonAnalysisPanel } from "./SkeletonAnalysisPanel";
+import {
+  SkeletonOverlayLayer,
+  type SkeletonOverlayModel,
+} from "./SkeletonOverlayLayer";
 import { PolygonMaskLayer, polygonMaskFromPoints } from "./PolygonMaskLayer";
 import {
   generatePolygonFill,
@@ -68,6 +73,8 @@ export function MaskAnnotationWorkspace({
 }: MaskAnnotationWorkspaceProps) {
   const queryClient = useQueryClient();
   const [centerlineEditing, setCenterlineEditing] = useState(false);
+  const [skeletonOverlay, setSkeletonOverlay] =
+    useState<SkeletonOverlayModel | null>(null);
   const [smartCloseStrength, setSmartCloseStrength] = useState(0);
   const [fillPending, setFillPending] = useState(false);
   const [fillError, setFillError] = useState<string | null>(null);
@@ -784,6 +791,11 @@ export function MaskAnnotationWorkspace({
               documentDirty={isDirty(state)}
               onRevisionCommitted={refreshAfterMeasurementChange}
             />
+            <SkeletonAnalysisPanel
+              selectedMask={selectedMeasurementMask}
+              documentDirty={isDirty(state)}
+              onOverlayChange={setSkeletonOverlay}
+            />
           </section>
         </aside>
 
@@ -852,6 +864,13 @@ export function MaskAnnotationWorkspace({
                 onEditingChange={setCenterlineEditing}
                 onRevisionCommitted={refreshAfterMeasurementChange}
               />
+              {skeletonOverlay && (
+                <SkeletonOverlayLayer
+                  width={image.width_px}
+                  height={image.height_px}
+                  {...skeletonOverlay}
+                />
+              )}
             </div>
           </div>
         </section>
