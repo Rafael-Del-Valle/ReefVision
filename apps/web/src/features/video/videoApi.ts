@@ -29,6 +29,9 @@ export interface PoseLandmarkGroup {
 
 export interface PoseLandmarkSchema {
   schema_version: "pose-landmarks-0001";
+  schema_id?: string;
+  schema_revision?: number;
+  content_hash?: string;
   groups: PoseLandmarkGroup[];
   expanded_labels: string[];
   keypoint_count: number;
@@ -73,8 +76,24 @@ export function poseLandmarkSchemaFromMetadata(
       ? schema.keypoint_count
       : expandedLabels.length;
 
+  const schemaId =
+    typeof schema.schema_id === "string" && schema.schema_id.length > 0
+      ? schema.schema_id
+      : undefined;
+  const schemaRevision =
+    typeof schema.schema_revision === "number" &&
+    Number.isInteger(schema.schema_revision) &&
+    schema.schema_revision >= 1
+      ? schema.schema_revision
+      : undefined;
+  const contentHash =
+    typeof schema.content_hash === "string" ? schema.content_hash : undefined;
+
   return {
     schema_version: "pose-landmarks-0001",
+    schema_id: schemaId,
+    schema_revision: schemaRevision,
+    content_hash: contentHash,
     groups,
     expanded_labels: expandedLabels,
     keypoint_count: keypointCount,
