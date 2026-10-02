@@ -303,6 +303,69 @@ def test_temporal_pose_ambiguous_crossing_is_not_forced(
     assert len(unresolved_issues) == 2
     assert {item["frame_index"] for item in unresolved_issues} == {1}
 
+    candidates_by_decision = {
+        decision["id"]: sorted(
+            [
+                candidate
+                for candidate in summary["association_candidates"]
+                if candidate["association_decision_id"] == decision["id"]
+            ],
+            key=lambda candidate: candidate["rank"],
+        )
+        for decision in frame_one_decisions
+    }
+    assert all(
+        [candidate["rank"] for candidate in candidates] == [1, 2]
+        for candidates in candidates_by_decision.values()
+    )
+    assert all(
+        candidates[0]["total_cost"] <= candidates[1]["total_cost"]
+        for candidates in candidates_by_decision.values()
+    )
+
+    reviewed_decision = frame_one_decisions[0]
+    reviewed_candidates = candidates_by_decision[reviewed_decision["id"]]
+    correction = client.post(
+        f"/api/v1/pose-landmark-observations/{reviewed_decision['observation_id']}/association-corrections",
+        json={
+            "selected_landmark_track_id": reviewed_candidates[0][
+                "candidate_landmark_track_id"
+            ],
+            "association_state": "confirmed",
+            "reason_code": "scientist_verified_identity",
+        },
+    )
+    assert correction.status_code == 200, correction.text
+    corrected_decision = correction.json()
+    assert corrected_decision["decision_revision"] == 2
+
+    reviewed_summary = client.get(
+        f"/api/v1/video-tracks/{track['id']}/pose-temporal"
+    ).json()
+    carried_candidates = sorted(
+        [
+            candidate
+            for candidate in reviewed_summary["association_candidates"]
+            if candidate["association_decision_id"] == corrected_decision["id"]
+        ],
+        key=lambda candidate: candidate["rank"],
+    )
+    assert [
+        (
+            candidate["candidate_landmark_track_id"],
+            candidate["rank"],
+            candidate["total_cost"],
+        )
+        for candidate in carried_candidates
+    ] == [
+        (
+            candidate["candidate_landmark_track_id"],
+            candidate["rank"],
+            candidate["total_cost"],
+        )
+        for candidate in reviewed_candidates
+    ]
+
 
 def test_human_association_correction_identity_break_and_exports_are_auditable(
     client: TestClient,
