@@ -95,6 +95,7 @@ class SkeletonSpurRemovalResponse(BaseModel):
     junction_id: str
     branch_length_pixels: float = Field(gt=0)
     removed_pixel_count: int = Field(ge=1)
+    removed_junction_boundary_pixel_count: int = Field(ge=0)
 
 
 class SkeletonizationAnalysisResponse(BaseModel):
