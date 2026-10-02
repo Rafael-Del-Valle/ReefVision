@@ -9,6 +9,11 @@ import {
 } from "../../api/client";
 import { RasterBrushLayer } from "./RasterBrushLayer";
 import { RasterFillLayer } from "./RasterFillLayer";
+import { SkeletonAnalysisPanel } from "./SkeletonAnalysisPanel";
+import {
+  SkeletonOverlayLayer,
+  type SkeletonOverlayModel,
+} from "./SkeletonOverlayLayer";
 import {
   editRasterMask,
   rasterMaskContentUrl,
@@ -16,7 +21,11 @@ import {
   type RasterEditMode,
 } from "./rasterMaskApi";
 import { resolveRasterMaskSelection } from "./rasterMaskSelection";
-import type { MaskAnnotationRecord, Point } from "./types";
+import {
+  toEditorMaskAnnotation,
+  type MaskAnnotationRecord,
+  type Point,
+} from "./types";
 
 interface RasterMaskWorkspaceProps {
   project: Project;
@@ -45,6 +54,8 @@ export function RasterMaskWorkspace({
   const [mode, setMode] = useState<RasterEditMode>("paint");
   const [brushRadius, setBrushRadius] = useState(12);
   const [fillTolerance, setFillTolerance] = useState(24);
+  const [skeletonOverlay, setSkeletonOverlay] =
+    useState<SkeletonOverlayModel | null>(null);
 
   const sessionQuery = useQuery({
     queryKey: ["annotation-session", imageId],
@@ -61,6 +72,10 @@ export function RasterMaskWorkspace({
   );
   const selectedMask =
     rasterMasks.find((mask) => mask.id === selectedMaskId) ?? null;
+  const selectedSkeletonMask = useMemo(
+    () => (selectedMask ? toEditorMaskAnnotation(selectedMask) : null),
+    [selectedMask],
+  );
   const selectedMaskClassId = selectedMask?.label_class_id ?? null;
   const selectedMaskColor =
     session?.label_classes.find((item) => item.id === selectedMaskClassId)
@@ -124,6 +139,12 @@ export function RasterMaskWorkspace({
       setCreateAnotherMaskRequested(false);
       await queryClient.invalidateQueries({
         queryKey: ["project-images", project.id],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["skeleton-analyses", response.mask_annotation.id],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["skeleton-readiness", response.mask_annotation.id],
       });
     },
   });
@@ -381,6 +402,16 @@ export function RasterMaskWorkspace({
               })}
             </div>
           </section>
+
+          <section className="annotation-sidebar-section">
+            <SkeletonAnalysisPanel
+              selectedMask={selectedSkeletonMask}
+              documentDirty={
+                editMutation.isPending || classMutation.isPending
+              }
+              onOverlayChange={setSkeletonOverlay}
+            />
+          </section>
         </aside>
 
         <section className="annotation-canvas-panel">
@@ -460,6 +491,13 @@ export function RasterMaskWorkspace({
                   brushRadius={brushRadius}
                   disabled={editMutation.isPending || activeClassId === null}
                   onStroke={(points) => editMutation.mutate(points)}
+                />
+              )}
+              {skeletonOverlay && (
+                <SkeletonOverlayLayer
+                  width={image.width_px}
+                  height={image.height_px}
+                  {...skeletonOverlay}
                 />
               )}
             </div>
