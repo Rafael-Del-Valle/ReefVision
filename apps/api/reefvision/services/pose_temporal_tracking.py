@@ -21,7 +21,9 @@ from reefvision.db.models import (
     PoseLandmarkCorrection,
     PoseLandmarkIdentityBreak,
     PoseLandmarkObservation,
+    PoseLandmarkSchemaRevision,
     PoseLandmarkTrack,
+    PoseModelSchemaBinding,
     VideoAsset,
     VideoTrack,
 )
@@ -186,6 +188,22 @@ class PoseTemporalTrackingService:
         track: VideoTrack,
     ) -> tuple[str, int, list[str]]:
         if track.source_model_id is not None:
+            binding = self.session.get(PoseModelSchemaBinding, track.source_model_id)
+            if binding is not None:
+                revision = self.session.scalar(
+                    select(PoseLandmarkSchemaRevision).where(
+                        PoseLandmarkSchemaRevision.schema_id == binding.schema_id,
+                        PoseLandmarkSchemaRevision.revision == binding.schema_revision,
+                    )
+                )
+                if revision is None:
+                    raise ValidationError("Pose model schema binding references a missing revision")
+                return (
+                    binding.schema_id,
+                    binding.schema_revision,
+                    [str(item) for item in revision.expanded_labels_json],
+                )
+
             model = self.session.get(ModelRegistration, track.source_model_id)
             if model is not None:
                 schema = (model.metadata_json or {}).get("pose_landmark_schema")
@@ -195,7 +213,15 @@ class PoseTemporalTrackingService:
                     if isinstance(labels, list) and labels and all(
                         isinstance(item, str) and item for item in labels
                     ):
-                        return f"model:{model.id}:{version}", 1, [str(item) for item in labels]
+                        schema_id = schema.get("schema_id")
+                        schema_revision = schema.get("schema_revision")
+                        if isinstance(schema_id, str) and isinstance(schema_revision, int):
+                            return schema_id, schema_revision, [str(item) for item in labels]
+                        return (
+                            f"model:{model.id}:{version}",
+                            1,
+                            [str(item) for item in labels],
+                        )
 
         labels_by_slot: dict[int, str] = {}
         for keyframe in self._keyframes(track):
