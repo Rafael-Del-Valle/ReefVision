@@ -22,12 +22,14 @@ from reefvision.schemas.skeletonization import (
     SkeletonJunctionClusterResponse,
     SkeletonMaskComponentResponse,
     SkeletonResolutionAction,
+    SkeletonSpurRemovalResponse,
 )
 from reefvision.services.skeleton_algorithms import (
     BinaryMask,
     build_initial_branch_graph,
     classify_skeleton_pixels,
     consolidate_junction_clusters,
+    prune_terminal_spurs,
     zhang_suen_thin,
 )
 from reefvision.storage.projects import resolve_managed_project_path
@@ -245,7 +247,12 @@ class SkeletonizationService:
         binary = self._binary_mask(mask, image)
         return self._readiness_for(mask, binary)
 
-    def analysis(self, mask_annotation_id: str) -> SkeletonizationAnalysisResponse:
+    def analysis(
+        self,
+        mask_annotation_id: str,
+        *,
+        terminal_spur_max_length_pixels: float = 0,
+    ) -> SkeletonizationAnalysisResponse:
         mask = self._mask(mask_annotation_id)
         image = self._image(mask.image_id)
         binary = self._binary_mask(mask, image)
@@ -276,6 +283,12 @@ class SkeletonizationService:
             features,
             junction_clusters,
         )
+        pruning = prune_terminal_spurs(
+            raw_skeleton,
+            max_length_pixels=terminal_spur_max_length_pixels,
+        )
+        pruned_data, _, _ = pruning.mask
+        pruned_pixel_count = sum(value > 0 for value in pruned_data)
 
         return SkeletonizationAnalysisResponse(
             mask_annotation_id=mask.id,
@@ -328,6 +341,49 @@ class SkeletonizationService:
                     is_cycle=edge.is_cycle,
                 )
                 for edge in graph_edges
+            ],
+            terminal_spur_max_length_pixels=terminal_spur_max_length_pixels,
+            spur_pruning_applied=bool(pruning.removals),
+            spur_pruning_iteration_count=len(pruning.removals),
+            removed_spur_count=len(pruning.removals),
+            removed_spurs=[
+                SkeletonSpurRemovalResponse(
+                    iteration=removal.iteration,
+                    branch_id=removal.branch_id,
+                    endpoint_x=removal.endpoint_x,
+                    endpoint_y=removal.endpoint_y,
+                    junction_id=removal.junction_id,
+                    branch_length_pixels=removal.branch_length_pixels,
+                    removed_pixel_count=len(removal.removed_pixels),
+                )
+                for removal in pruning.removals
+            ],
+            pruned_skeleton_pixel_count=pruned_pixel_count,
+            pruned_graph_node_count=len(pruning.graph_nodes),
+            pruned_graph_edge_count=len(pruning.graph_edges),
+            pruned_graph_nodes=[
+                SkeletonGraphNodeResponse(
+                    id=node.id,
+                    kind=node.kind,
+                    x=node.x,
+                    y=node.y,
+                    source_pixel_count=len(node.source_pixels),
+                    external_connection_count=node.external_connection_count,
+                )
+                for node in pruning.graph_nodes
+            ],
+            pruned_graph_edges=[
+                SkeletonGraphEdgeResponse(
+                    id=edge.id,
+                    source_node_id=edge.source_node_id,
+                    target_node_id=edge.target_node_id,
+                    path_pixel_count=len(edge.pixels),
+                    boundary_to_boundary_length_pixels=(
+                        edge.boundary_to_boundary_length_pixels
+                    ),
+                    is_cycle=edge.is_cycle,
+                )
+                for edge in pruning.graph_edges
             ],
             feature_pixels=[
                 SkeletonFeaturePixelResponse(
