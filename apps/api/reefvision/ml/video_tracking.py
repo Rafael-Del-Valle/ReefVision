@@ -281,23 +281,42 @@ class SleapNNVideoTrackingProvider:
         )
 
     @staticmethod
+    def _cuda_available() -> bool:
+        try:
+            torch = cast(Any, import_module("torch"))
+        except ImportError:
+            return False
+        return bool(torch.cuda.is_available())
+
+    @staticmethod
     def _device(device: str) -> str:
         normalized = device.strip().casefold()
         if normalized in {"", "auto"}:
-            try:
-                torch = cast(Any, import_module("torch"))
-                return "cuda" if bool(torch.cuda.is_available()) else "cpu"
-            except ImportError:
-                return "cpu"
-        if normalized.isdigit():
-            return f"cuda:{normalized}"
-        if normalized in {"gpu", "cuda:0"}:
-            return "cuda"
-        if normalized in {"cpu", "cuda"} or normalized.startswith("cuda:"):
-            return normalized
-        raise ValidationError(
-            "SLEAP-NN supports auto, cpu, cuda, cuda:N, or numeric CUDA devices"
-        )
+            return "cuda" if SleapNNVideoTrackingProvider._cuda_available() else "cpu"
+        if normalized == "cpu":
+            return "cpu"
+
+        if normalized == "gpu":
+            normalized = "cuda"
+        elif normalized.isdigit():
+            normalized = f"cuda:{int(normalized)}"
+        elif normalized.startswith("cuda:"):
+            device_index = normalized.removeprefix("cuda:")
+            if not device_index.isdigit():
+                raise ValidationError(
+                    "SLEAP-NN CUDA device must use cuda:N with a numeric device index"
+                )
+            normalized = f"cuda:{int(device_index)}"
+        elif normalized != "cuda":
+            raise ValidationError(
+                "SLEAP-NN supports auto, cpu, cuda, cuda:N, or numeric CUDA devices"
+            )
+
+        if not SleapNNVideoTrackingProvider._cuda_available():
+            raise ValidationError(
+                "SLEAP-NN CUDA device was requested but CUDA is not available"
+            )
+        return normalized
 
     def track(
         self,
