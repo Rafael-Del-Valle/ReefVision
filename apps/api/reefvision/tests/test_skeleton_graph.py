@@ -1,9 +1,12 @@
 import pytest
 
 from reefvision.services.skeleton_algorithms import (
+    branch_angles,
     build_initial_branch_graph,
     classify_skeleton_pixels,
     consolidate_junction_clusters,
+    graph_diameter_pixels,
+    total_graph_length_pixels,
 )
 
 
@@ -32,7 +35,10 @@ def test_simple_path_becomes_two_nodes_and_one_branch() -> None:
     assert edge.target_node_id == "endpoint-0002"
     assert len(edge.pixels) == 5
     assert edge.boundary_to_boundary_length_pixels == pytest.approx(4.0)
+    assert edge.node_to_node_length_pixels == pytest.approx(4.0)
     assert edge.is_cycle is False
+    assert total_graph_length_pixels(edges) == pytest.approx(4.0)
+    assert graph_diameter_pixels(nodes, edges) == pytest.approx(4.0)
 
 
 def test_cross_uses_one_consolidated_junction_and_four_branches() -> None:
@@ -60,8 +66,19 @@ def test_cross_uses_one_consolidated_junction_and_four_branches() -> None:
         "junction-0001" in {edge.source_node_id, edge.target_node_id}
         for edge in edges
     )
-    assert all(edge.boundary_to_boundary_length_pixels == pytest.approx(1.0) for edge in edges)
+    assert all(
+        edge.boundary_to_boundary_length_pixels == pytest.approx(1.0)
+        for edge in edges
+    )
+    assert all(edge.node_to_node_length_pixels == pytest.approx(2.0) for edge in edges)
     assert all(edge.is_cycle is False for edge in edges)
+    assert total_graph_length_pixels(edges) == pytest.approx(8.0)
+    assert graph_diameter_pixels(nodes, edges) == pytest.approx(4.0)
+
+    angles = branch_angles(nodes, edges)
+    assert len(angles) == 6
+    values = sorted(round(angle.angle_degrees) for angle in angles)
+    assert values == [90, 90, 90, 90, 180, 180]
 
 
 def test_single_pixel_skeleton_is_preserved_as_isolated_graph_node() -> None:
