@@ -269,7 +269,7 @@ export function correctTemporalPoseAssociation(
   payload: {
     selected_landmark_track_id: string | null;
     association_state: PoseAssociationState;
-    reason_code?: string | null;
+    reason_code: string;
     note?: string | null;
   },
 ): Promise<TemporalPoseAssociationDecision> {
