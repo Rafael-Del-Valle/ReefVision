@@ -121,6 +121,67 @@ export interface TemporalPoseSummary {
   corrections: TemporalPoseCorrection[];
 }
 
+export interface TemporalPoseQcIssue {
+  code:
+    | "unresolved_identity"
+    | "low_association_confidence"
+    | "low_landmark_confidence"
+    | "high_motion_cost"
+    | "uncertain_visibility"
+    | "identity_break";
+  frame_index: number;
+  semantic_label: string;
+  occurrence_index: number | null;
+  observation_id: string | null;
+  landmark_track_id: string | null;
+  value: number | null;
+  threshold: number | null;
+  message: string;
+}
+
+export interface TemporalPoseQcResult {
+  schema_version: "pose-temporal-qc-0001";
+  parent_video_track_id: string;
+  issue_count: number;
+  flagged_frame_count: number;
+  unresolved_identity_count: number;
+  low_association_confidence_count: number;
+  low_landmark_confidence_count: number;
+  high_motion_cost_count: number;
+  uncertain_visibility_count: number;
+  identity_break_count: number;
+  issues: TemporalPoseQcIssue[];
+}
+
+export interface TemporalPoseTrackMetrics {
+  landmark_track_id: string;
+  semantic_label: string;
+  first_frame: number;
+  last_frame: number;
+  duration_seconds: number;
+  associated_observation_count: number;
+  visible_observation_count: number;
+  occluded_observation_count: number;
+  out_of_frame_observation_count: number;
+  uncertain_observation_count: number;
+  absent_observation_count: number;
+  human_reviewed_observation_count: number;
+  path_length_pixels: number;
+  displacement_pixels: number;
+  mean_speed_pixels_per_second: number | null;
+  maximum_speed_pixels_per_second: number | null;
+  mean_association_confidence: number | null;
+  minimum_association_confidence: number | null;
+  identity_break_count: number;
+}
+
+export interface TemporalPoseMetricsResult {
+  schema_version: "pose-temporal-metrics-0001";
+  parent_video_track_id: string;
+  unit: "pixels";
+  tracklets: TemporalPoseTrackMetrics[];
+}
+
 export interface TemporalPoseBuildResult {
   schema_version: "pose-temporal-build-0001";
   parent_video_track_id: string;
@@ -158,6 +219,26 @@ export function getTemporalPoseSummary(
 ): Promise<TemporalPoseSummary> {
   return request<TemporalPoseSummary>(
     `/video-tracks/${encodeURIComponent(trackId)}/pose-temporal`,
+    { signal, cache: "no-store" },
+  );
+}
+
+export function getTemporalPoseQc(
+  trackId: string,
+  signal?: AbortSignal,
+): Promise<TemporalPoseQcResult> {
+  return request<TemporalPoseQcResult>(
+    `/video-tracks/${encodeURIComponent(trackId)}/pose-temporal/qc`,
+    { signal, cache: "no-store" },
+  );
+}
+
+export function getTemporalPoseMetrics(
+  trackId: string,
+  signal?: AbortSignal,
+): Promise<TemporalPoseMetricsResult> {
+  return request<TemporalPoseMetricsResult>(
+    `/video-tracks/${encodeURIComponent(trackId)}/pose-temporal/metrics`,
     { signal, cache: "no-store" },
   );
 }
