@@ -206,6 +206,11 @@ class PoseIdentityBreakCreateRequest(BaseModel):
         return self
 
 
+class PoseIdentityBreakReviewRequest(BaseModel):
+    reason_code: str = Field(min_length=1, max_length=100)
+    note: str | None = Field(default=None, max_length=5000)
+
+
 class PoseTemporalBuildResponse(BaseModel):
     schema_version: Literal["pose-temporal-build-0001"] = "pose-temporal-build-0001"
     parent_video_track_id: str
