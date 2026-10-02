@@ -15,6 +15,7 @@ from reefvision.schemas.skeletonization import (
 )
 from reefvision.services.skeletonization import SkeletonizationService
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.skeleton_exports import verify_skeleton_export
 from reefvision.tests.test_annotations import create_project, import_one
 
 
@@ -138,3 +139,41 @@ def test_approved_skeleton_export_contains_verified_raw_pruned_and_final_data(
         names = set(bundle.namelist())
         assert f"{exported.package_name}/data/final_skeleton_pixels.csv" in names
         assert f"{exported.package_name}/manifest.json" in names
+
+
+
+def test_skeleton_export_verification_detects_tampering(
+    client: TestClient,
+) -> None:
+    project, mask_id = _seed(client)
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        service = SkeletonizationService(session, app.state.settings)
+        record = service.persist_analysis(
+            mask_id,
+            SkeletonAnalysisCreateRequest(),
+        )
+        approved = service.review_persisted_analysis(
+            record.id,
+            SkeletonAnalysisReviewRequest(
+                review_status="approved",
+            ),
+        )
+        exported = service.export_persisted_analysis(approved.id)
+
+    export_root = resolve_managed_project_path(
+        app.state.settings,
+        f"{project['storage_root']}/skeletonization/exports",
+    )
+    package = export_root / exported.package_name
+    target = package / "data" / "summary.csv"
+    target.write_text("tampered\n", encoding="utf-8")
+
+    verification = verify_skeleton_export(package)
+
+    assert verification["valid"] is False
+    assert any(
+        "mismatch" in error.casefold()
+        for error in verification["errors"]
+    )
