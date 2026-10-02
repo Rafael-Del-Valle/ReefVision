@@ -39,7 +39,7 @@ def ensure_supported_model_extension(filename: str) -> None:
     if Path(filename).suffix.lower() not in SUPPORTED_MODEL_EXTENSIONS:
         raise ValidationError(
             "Supported model types are trusted local .pt/.pth checkpoints or "
-            "ReefVision semantic .zip bundles"
+            "ReefVision semantic/SLEAP-NN .zip bundles"
         )
 
 
