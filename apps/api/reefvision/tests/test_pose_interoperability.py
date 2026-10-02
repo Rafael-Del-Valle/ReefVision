@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -611,3 +612,55 @@ def test_ultralytics_pose_import_rejects_zip_traversal(tmp_path: Path) -> None:
             payload.getvalue(),
             tmp_path / "dataset",
         )
+
+
+def test_reefvision_pose_import_rejects_duplicate_live_source_tracks(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Pose duplicate source")
+    video = _pose_video(client, str(project["id"]), monkeypatch)
+    existing_track_id = _persist_pose_track(client, project, video)
+    label_classes = cast(list[dict[str, object]], project["label_classes"])
+    labels = _external_labels(str(video["sha256"]), include_provenance=True)
+    provenance = cast(
+        dict[str, object],
+        labels.provenance["reefvision_pose_interoperability"],
+    )
+    provenance["source_video_id"] = video["id"]
+    provenance["tracks"] = {
+        "animal-7": {
+            "video_track_id": existing_track_id,
+            "track_number": 1,
+        }
+    }
+    monkeypatch.setattr(
+        PoseInteroperabilityService,
+        "_load_labels",
+        lambda *_args, **_kwargs: labels,
+    )
+
+    response = client.post(
+        f"/api/v1/videos/{video['id']}/pose-interoperability/import",
+        params={
+            "format": "slp",
+            "label_class_id": str(label_classes[0]["id"]),
+        },
+        files={"file": ("pose.slp", io.BytesIO(b"external-pose"), "application/octet-stream")},
+    )
+
+    assert response.status_code == 400
+    assert "duplicate scientific records" in response.json()["detail"]
+
+
+def test_coco_pose_import_rejects_unsafe_image_paths() -> None:
+    payload = json.dumps(
+        {
+            "images": [{"id": 1, "file_name": "../outside.png"}],
+            "annotations": [],
+            "categories": [],
+        }
+    ).encode("utf-8")
+
+    with pytest.raises(ValidationError, match="unsafe archive path"):
+        PoseInteroperabilityService._validate_coco_paths(payload)
