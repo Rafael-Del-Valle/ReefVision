@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+from heapq import heappop, heappush
+from itertools import pairwise
+from math import acos, degrees, hypot
 from pathlib import Path
 
 from PIL import Image, ImageDraw, UnidentifiedImageError
@@ -13,7 +16,9 @@ from reefvision.config import Settings
 from reefvision.db.models import ImageAsset, MaskAnnotation
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.repositories.mask_annotations import MaskAnnotationRepository
+from reefvision.schemas.measurements import MeasurementCalibrationUpdate
 from reefvision.schemas.skeletonization import (
+    SkeletonBranchAngleResponse,
     SkeletonFeaturePixelResponse,
     SkeletonGraphEdgeResponse,
     SkeletonGraphNodeResponse,
@@ -24,12 +29,18 @@ from reefvision.schemas.skeletonization import (
     SkeletonResolutionAction,
     SkeletonSpurRemovalResponse,
 )
+from reefvision.services.calibration_geometry import transform_point
 from reefvision.services.skeleton_algorithms import (
     BinaryMask,
+    SkeletonGraphEdge,
+    SkeletonGraphNode,
+    branch_angles,
     build_initial_branch_graph,
     classify_skeleton_pixels,
     consolidate_junction_clusters,
+    graph_diameter_pixels,
     prune_terminal_spurs,
+    total_graph_length_pixels,
     zhang_suen_thin,
 )
 from reefvision.storage.projects import resolve_managed_project_path
@@ -55,6 +66,184 @@ _NEIGHBORS_8 = (
     (0, 1),
     (1, 1),
 )
+
+
+MEASUREMENT_CALIBRATION_KEY = "measurement_calibration"
+
+
+def _calibration_payload(image: ImageAsset) -> MeasurementCalibrationUpdate | None:
+    raw = dict(image.metadata_json or {}).get(MEASUREMENT_CALIBRATION_KEY)
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValidationError("Image measurement calibration metadata is invalid")
+    try:
+        return MeasurementCalibrationUpdate.model_validate(raw)
+    except ValueError as exc:
+        raise ValidationError("Image measurement calibration metadata is invalid") from exc
+
+
+def _edge_polyline(
+    edge: SkeletonGraphEdge,
+    node_by_id: dict[str, SkeletonGraphNode],
+) -> list[tuple[float, float]]:
+    source = node_by_id[edge.source_node_id]
+    target = node_by_id[edge.target_node_id]
+    points: list[tuple[float, float]] = [(source.x, source.y)]
+    points.extend((float(x), float(y)) for x, y in edge.pixels)
+    points.append((target.x, target.y))
+
+    deduplicated: list[tuple[float, float]] = []
+    for point in points:
+        if deduplicated and point == deduplicated[-1]:
+            continue
+        deduplicated.append(point)
+    return deduplicated
+
+
+def _edge_physical_lengths(
+    nodes: list[SkeletonGraphNode] | tuple[SkeletonGraphNode, ...],
+    edges: list[SkeletonGraphEdge] | tuple[SkeletonGraphEdge, ...],
+    calibration: MeasurementCalibrationUpdate | None,
+) -> dict[str, float]:
+    if calibration is None:
+        return {}
+
+    if calibration.perspective_homography is None:
+        return {
+            edge.id: edge.node_to_node_length_pixels * calibration.distance_per_pixel
+            for edge in edges
+        }
+
+    node_by_id = {node.id: node for node in nodes}
+    physical: dict[str, float] = {}
+    for edge in edges:
+        transformed = [
+            transform_point(calibration.perspective_homography, point)
+            for point in _edge_polyline(edge, node_by_id)
+        ]
+        physical[edge.id] = sum(
+            hypot(second[0] - first[0], second[1] - first[1])
+            for first, second in pairwise(transformed)
+        )
+    return physical
+
+
+def _weighted_graph_diameter(
+    nodes: list[SkeletonGraphNode] | tuple[SkeletonGraphNode, ...],
+    edges: list[SkeletonGraphEdge] | tuple[SkeletonGraphEdge, ...],
+    weights: dict[str, float],
+) -> float:
+    if not nodes or not edges:
+        return 0.0
+
+    adjacency: dict[str, list[tuple[str, float]]] = {node.id: [] for node in nodes}
+    cycle_diameter = 0.0
+    for edge in edges:
+        weight = weights[edge.id]
+        if edge.source_node_id == edge.target_node_id:
+            cycle_diameter = max(cycle_diameter, weight / 2.0)
+            continue
+        adjacency[edge.source_node_id].append((edge.target_node_id, weight))
+        adjacency[edge.target_node_id].append((edge.source_node_id, weight))
+
+    maximum = cycle_diameter
+    for source in adjacency:
+        distances = {source: 0.0}
+        queue: list[tuple[float, str]] = [(0.0, source)]
+        while queue:
+            distance, current = heappop(queue)
+            if distance != distances.get(current):
+                continue
+            maximum = max(maximum, distance)
+            for neighbor, weight in adjacency[current]:
+                candidate = distance + weight
+                if candidate < distances.get(neighbor, float("inf")):
+                    distances[neighbor] = candidate
+                    heappush(queue, (candidate, neighbor))
+    return maximum
+
+
+def _reference_plane_branch_angles(
+    nodes: list[SkeletonGraphNode] | tuple[SkeletonGraphNode, ...],
+    edges: list[SkeletonGraphEdge] | tuple[SkeletonGraphEdge, ...],
+    matrix: list[list[float]],
+) -> list[SkeletonBranchAngleResponse]:
+    node_by_id = {node.id: node for node in nodes}
+    incident: dict[str, list[tuple[SkeletonGraphEdge, tuple[float, float]]]] = {}
+
+    for edge in edges:
+        source = node_by_id[edge.source_node_id]
+        target = node_by_id[edge.target_node_id]
+        if source.kind == "junction" and len(edge.pixels) >= 2:
+            incident.setdefault(source.id, []).append(
+                (edge, (float(edge.pixels[1][0]), float(edge.pixels[1][1])))
+            )
+        if target.kind == "junction" and len(edge.pixels) >= 2:
+            incident.setdefault(target.id, []).append(
+                (edge, (float(edge.pixels[-2][0]), float(edge.pixels[-2][1])))
+            )
+
+    results: list[SkeletonBranchAngleResponse] = []
+    for junction_id, branches in sorted(incident.items()):
+        junction = node_by_id[junction_id]
+        origin = transform_point(matrix, (junction.x, junction.y))
+        ordered = sorted(branches, key=lambda item: item[0].id)
+        for first_index in range(len(ordered)):
+            first_edge, first_point = ordered[first_index]
+            first_target = transform_point(matrix, first_point)
+            first_vector = (
+                first_target[0] - origin[0],
+                first_target[1] - origin[1],
+            )
+            first_norm = hypot(*first_vector)
+            if first_norm == 0:
+                continue
+            for second_edge, second_point in ordered[first_index + 1 :]:
+                second_target = transform_point(matrix, second_point)
+                second_vector = (
+                    second_target[0] - origin[0],
+                    second_target[1] - origin[1],
+                )
+                second_norm = hypot(*second_vector)
+                if second_norm == 0:
+                    continue
+                cosine = (
+                    first_vector[0] * second_vector[0]
+                    + first_vector[1] * second_vector[1]
+                ) / (first_norm * second_norm)
+                cosine = max(-1.0, min(1.0, cosine))
+                results.append(
+                    SkeletonBranchAngleResponse(
+                        junction_id=junction_id,
+                        first_branch_id=first_edge.id,
+                        second_branch_id=second_edge.id,
+                        angle_degrees=degrees(acos(cosine)),
+                    )
+                )
+    return results
+
+
+def _branch_angle_responses(
+    nodes: list[SkeletonGraphNode] | tuple[SkeletonGraphNode, ...],
+    edges: list[SkeletonGraphEdge] | tuple[SkeletonGraphEdge, ...],
+    calibration: MeasurementCalibrationUpdate | None,
+) -> list[SkeletonBranchAngleResponse]:
+    if calibration is not None and calibration.perspective_homography is not None:
+        return _reference_plane_branch_angles(
+            nodes,
+            edges,
+            calibration.perspective_homography,
+        )
+    return [
+        SkeletonBranchAngleResponse(
+            junction_id=angle.junction_id,
+            first_branch_id=angle.first_branch_id,
+            second_branch_id=angle.second_branch_id,
+            angle_degrees=angle.angle_degrees,
+        )
+        for angle in branch_angles(nodes, edges)
+    ]
 
 
 def _binary_mask_from_image(path: Path, *, width: int, height: int) -> BinaryMask:
@@ -174,6 +363,28 @@ class SkeletonizationService:
             raise NotFoundError("Image not found")
         return image
 
+    @staticmethod
+    def _edge_responses(
+        nodes: list[SkeletonGraphNode] | tuple[SkeletonGraphNode, ...],
+        edges: list[SkeletonGraphEdge] | tuple[SkeletonGraphEdge, ...],
+        physical_lengths: dict[str, float],
+    ) -> list[SkeletonGraphEdgeResponse]:
+        return [
+            SkeletonGraphEdgeResponse(
+                id=edge.id,
+                source_node_id=edge.source_node_id,
+                target_node_id=edge.target_node_id,
+                path_pixel_count=len(edge.pixels),
+                boundary_to_boundary_length_pixels=(
+                    edge.boundary_to_boundary_length_pixels
+                ),
+                node_to_node_length_pixels=edge.node_to_node_length_pixels,
+                length_physical=physical_lengths.get(edge.id),
+                is_cycle=edge.is_cycle,
+            )
+            for edge in edges
+        ]
+
     def _binary_mask(self, mask: MaskAnnotation, image: ImageAsset) -> BinaryMask:
         if mask.geometry_kind == "polygon":
             return _binary_mask_from_polygon(
@@ -290,6 +501,59 @@ class SkeletonizationService:
         pruned_data, _, _ = pruning.mask
         pruned_pixel_count = sum(value > 0 for value in pruned_data)
 
+        calibration = _calibration_payload(image)
+        raw_physical_lengths = _edge_physical_lengths(
+            graph_nodes,
+            graph_edges,
+            calibration,
+        )
+        pruned_physical_lengths = _edge_physical_lengths(
+            pruning.graph_nodes,
+            pruning.graph_edges,
+            calibration,
+        )
+        raw_tle_pixels = total_graph_length_pixels(graph_edges)
+        pruned_tle_pixels = total_graph_length_pixels(pruning.graph_edges)
+        raw_longest_pixels = graph_diameter_pixels(graph_nodes, graph_edges)
+        pruned_longest_pixels = graph_diameter_pixels(
+            pruning.graph_nodes,
+            pruning.graph_edges,
+        )
+        raw_tle_physical = (
+            sum(raw_physical_lengths.values()) if calibration is not None else None
+        )
+        pruned_tle_physical = (
+            sum(pruned_physical_lengths.values()) if calibration is not None else None
+        )
+        raw_longest_physical = (
+            _weighted_graph_diameter(
+                graph_nodes,
+                graph_edges,
+                raw_physical_lengths,
+            )
+            if calibration is not None
+            else None
+        )
+        pruned_longest_physical = (
+            _weighted_graph_diameter(
+                pruning.graph_nodes,
+                pruning.graph_edges,
+                pruned_physical_lengths,
+            )
+            if calibration is not None
+            else None
+        )
+        raw_angles = _branch_angle_responses(
+            graph_nodes,
+            graph_edges,
+            calibration,
+        )
+        pruned_angles = _branch_angle_responses(
+            pruning.graph_nodes,
+            pruning.graph_edges,
+            calibration,
+        )
+
         return SkeletonizationAnalysisResponse(
             mask_annotation_id=mask.id,
             image_id=mask.image_id,
@@ -329,19 +593,11 @@ class SkeletonizationService:
                 )
                 for node in graph_nodes
             ],
-            graph_edges=[
-                SkeletonGraphEdgeResponse(
-                    id=edge.id,
-                    source_node_id=edge.source_node_id,
-                    target_node_id=edge.target_node_id,
-                    path_pixel_count=len(edge.pixels),
-                    boundary_to_boundary_length_pixels=(
-                        edge.boundary_to_boundary_length_pixels
-                    ),
-                    is_cycle=edge.is_cycle,
-                )
-                for edge in graph_edges
-            ],
+            graph_edges=self._edge_responses(
+                graph_nodes,
+                graph_edges,
+                raw_physical_lengths,
+            ),
             terminal_spur_max_length_pixels=terminal_spur_max_length_pixels,
             spur_pruning_applied=bool(pruning.removals),
             spur_pruning_iteration_count=len(pruning.removals),
@@ -375,19 +631,53 @@ class SkeletonizationService:
                 )
                 for node in pruning.graph_nodes
             ],
-            pruned_graph_edges=[
-                SkeletonGraphEdgeResponse(
-                    id=edge.id,
-                    source_node_id=edge.source_node_id,
-                    target_node_id=edge.target_node_id,
-                    path_pixel_count=len(edge.pixels),
-                    boundary_to_boundary_length_pixels=(
-                        edge.boundary_to_boundary_length_pixels
-                    ),
-                    is_cycle=edge.is_cycle,
+            pruned_graph_edges=self._edge_responses(
+                pruning.graph_nodes,
+                pruning.graph_edges,
+                pruned_physical_lengths,
+            ),
+            raw_branch_count=len(graph_edges),
+            pruned_branch_count=len(pruning.graph_edges),
+            raw_total_linear_extension_pixels=raw_tle_pixels,
+            pruned_total_linear_extension_pixels=pruned_tle_pixels,
+            raw_total_linear_extension_physical=raw_tle_physical,
+            pruned_total_linear_extension_physical=pruned_tle_physical,
+            raw_longest_path_pixels=raw_longest_pixels,
+            pruned_longest_path_pixels=pruned_longest_pixels,
+            raw_longest_path_physical=raw_longest_physical,
+            pruned_longest_path_physical=pruned_longest_physical,
+            raw_branch_angles=raw_angles,
+            pruned_branch_angles=pruned_angles,
+            calibrated=calibration is not None,
+            physical_unit=calibration.unit if calibration is not None else None,
+            distance_per_pixel=(
+                calibration.distance_per_pixel if calibration is not None else None
+            ),
+            calibration_source=(
+                calibration.source if calibration is not None else None
+            ),
+            calibration_confidence=(
+                calibration.confidence if calibration is not None else None
+            ),
+            perspective_corrected=(
+                calibration is not None
+                and calibration.perspective_homography is not None
+            ),
+            length_calibration_method=(
+                "reference_plane_homography"
+                if calibration is not None
+                and calibration.perspective_homography is not None
+                else (
+                    "scalar_distance_per_pixel"
+                    if calibration is not None
+                    else "pixel_only"
                 )
-                for edge in pruning.graph_edges
-            ],
+            ),
+            reference_plane_only=(
+                calibration.reference_plane_only
+                if calibration is not None
+                else True
+            ),
             feature_pixels=[
                 SkeletonFeaturePixelResponse(
                     x=feature.x,
