@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from datetime import datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -178,3 +179,51 @@ class SkeletonizationAnalysisResponse(BaseModel):
     ] = "pixel_only"
     reference_plane_only: bool | None = None
     feature_pixels: list[SkeletonFeaturePixelResponse] = Field(default_factory=list)
+
+
+
+SkeletonAnalysisReviewStatus = Literal[
+    "unreviewed",
+    "approved",
+    "needs_correction",
+    "rejected",
+]
+
+
+class SkeletonAnalysisCreateRequest(BaseModel):
+    terminal_spur_max_length_pixels: float = Field(default=0, ge=0, le=10000)
+
+
+class SkeletonAnalysisReviewRequest(BaseModel):
+    review_status: Literal["approved", "needs_correction", "rejected"]
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class SkeletonAnalysisRevisionResponse(BaseModel):
+    id: str
+    analysis_series_id: str
+    analysis_revision: int = Field(ge=1)
+    supersedes_analysis_id: str | None = None
+    mask_annotation_id: str
+    image_id: str
+    mask_revision: int = Field(ge=1)
+    current_mask_revision: int = Field(ge=1)
+    source_kind: Literal["automatic", "human_corrected"]
+    algorithm: str
+    algorithm_version: str
+    terminal_spur_max_length_pixels: float = Field(ge=0)
+    input_mask_sha256: str
+    calibration_sha256: str | None = None
+    parameters_sha256: str
+    result_sha256: str
+    result: SkeletonizationAnalysisResponse
+    correction: dict[str, Any] = Field(default_factory=dict)
+    review_status: SkeletonAnalysisReviewStatus
+    reviewed_by: str | None = None
+    reviewed_at: datetime | None = None
+    review_note: str | None = None
+    created_by: str
+    created_at: datetime
+    stale_mask: bool = False
+    stale_calibration: bool = False
+    stale: bool = False
