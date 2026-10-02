@@ -7,7 +7,10 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
-from reefvision.schemas.skeletonization import SkeletonAnalysisRevisionResponse
+from reefvision.schemas.skeletonization import (
+    SkeletonAnalysisCreateRequest,
+    SkeletonAnalysisRevisionResponse,
+)
 from reefvision.services.skeletonization import SkeletonizationService
 
 router = APIRouter(tags=["skeletonization"])
@@ -29,3 +32,20 @@ def get_skeleton_analysis(
     session: DbSession,
 ) -> SkeletonAnalysisRevisionResponse:
     return service(request, session).get_persisted_analysis(analysis_id)
+
+
+
+@router.post(
+    "/mask-annotations/{mask_annotation_id}/skeleton-analyses",
+    response_model=SkeletonAnalysisRevisionResponse,
+)
+def create_skeleton_analysis(
+    mask_annotation_id: str,
+    payload: SkeletonAnalysisCreateRequest,
+    request: Request,
+    session: DbSession,
+) -> SkeletonAnalysisRevisionResponse:
+    return service(request, session).persist_analysis(
+        mask_annotation_id,
+        payload,
+    )
