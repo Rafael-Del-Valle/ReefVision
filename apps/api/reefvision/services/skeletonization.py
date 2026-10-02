@@ -619,6 +619,7 @@ class SkeletonizationService:
             input_foreground_pixels=readiness.total_foreground_pixels,
             thinning_iterations=iterations,
             raw_skeleton_pixel_count=len(features),
+            raw_skeleton_pixels=_pixel_coordinates(raw_skeleton),
             raw_skeleton_component_count=len(skeleton_components),
             topology_preserved=True,
             isolated_pixel_count=isolated,
@@ -676,6 +677,7 @@ class SkeletonizationService:
                 for removal in pruning.removals
             ],
             pruned_skeleton_pixel_count=pruned_pixel_count,
+            pruned_skeleton_pixels=_pixel_coordinates(pruning.mask),
             pruned_graph_node_count=len(pruning.graph_nodes),
             pruned_graph_edge_count=len(pruning.graph_edges),
             pruned_graph_nodes=[
@@ -742,6 +744,31 @@ class SkeletonizationService:
                 if calibration is not None
                 else None
             ),
+            final_skeleton_source="automatic_pruned",
+            human_correction_applied=False,
+            final_skeleton_pixels=_pixel_coordinates(pruning.mask),
+            final_graph_nodes=[
+                SkeletonGraphNodeResponse(
+                    id=node.id,
+                    kind=node.kind,
+                    x=node.x,
+                    y=node.y,
+                    source_pixel_count=len(node.source_pixels),
+                    external_connection_count=node.external_connection_count,
+                )
+                for node in pruning.graph_nodes
+            ],
+            final_graph_edges=self._edge_responses(
+                pruning.graph_nodes,
+                pruning.graph_edges,
+                pruned_physical_lengths,
+            ),
+            final_branch_count=len(pruning.graph_edges),
+            final_total_linear_extension_pixels=pruned_tle_pixels,
+            final_total_linear_extension_physical=pruned_tle_physical,
+            final_longest_path_pixels=pruned_longest_pixels,
+            final_longest_path_physical=pruned_longest_physical,
+            final_branch_angles=pruned_angles,
             feature_pixels=[
                 SkeletonFeaturePixelResponse(
                     x=feature.x,
