@@ -1433,6 +1433,22 @@ export function VideoTrackingWorkspace({
               </select>
             </label>
             <label>
+              Target identity class
+              <select
+                aria-label="Pose interoperability target identity class"
+                value={labelClassId}
+                onChange={(event) => setLabelClassId(event.target.value)}
+              >
+                {project.label_classes
+                  .filter((labelClass) => labelClass.is_active)
+                  .map((labelClass) => (
+                    <option key={labelClass.id} value={labelClass.id}>
+                      {labelClass.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label>
               Pose file
               <input
                 aria-label="Pose interoperability import file"
@@ -1563,6 +1579,9 @@ export function VideoTrackingWorkspace({
             <option value="verified">Verified</option>
             <option value="draft">Draft</option>
             <option value="machine_generated">Machine generated</option>
+            <option value="imported_review_required">
+              Imported — review required
+            </option>
           </select>
         </label>
         <button
