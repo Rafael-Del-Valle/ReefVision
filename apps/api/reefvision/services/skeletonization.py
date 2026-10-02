@@ -1,4 +1,4 @@
-"""Conservative mask-connectivity gate for coral skeletonization."""
+"""Conservative coral skeletonization readiness and raw analysis."""
 
 from __future__ import annotations
 
@@ -14,13 +14,18 @@ from reefvision.db.models import ImageAsset, MaskAnnotation
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.repositories.mask_annotations import MaskAnnotationRepository
 from reefvision.schemas.skeletonization import (
+    SkeletonFeaturePixelResponse,
+    SkeletonizationAnalysisResponse,
+    SkeletonizationReadinessResponse,
     SkeletonMaskComponentResponse,
     SkeletonResolutionAction,
-    SkeletonizationReadinessResponse,
+)
+from reefvision.services.skeleton_algorithms import (
+    BinaryMask,
+    classify_skeleton_pixels,
+    zhang_suen_thin,
 )
 from reefvision.storage.projects import resolve_managed_project_path
-
-BinaryMask = tuple[bytes, int, int]
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,7 +148,7 @@ def _connected_components_8(mask: BinaryMask) -> list[_Component]:
 
 
 class SkeletonizationService:
-    """Validate whether an approved mask is topologically safe to skeletonize."""
+    """Validate masks and derive topology-preserving raw skeletons."""
 
     def __init__(self, session: Session, settings: Settings) -> None:
         self.session = session
@@ -181,10 +186,11 @@ class SkeletonizationService:
             f"Skeletonization is not supported for {mask.geometry_kind} masks"
         )
 
-    def readiness(self, mask_annotation_id: str) -> SkeletonizationReadinessResponse:
-        mask = self._mask(mask_annotation_id)
-        image = self._image(mask.image_id)
-        binary = self._binary_mask(mask, image)
+    @staticmethod
+    def _readiness_for(
+        mask: MaskAnnotation,
+        binary: BinaryMask,
+    ) -> SkeletonizationReadinessResponse:
         components = _connected_components_8(binary)
         total_pixels = sum(component.pixel_count for component in components)
 
@@ -225,5 +231,63 @@ class SkeletonizationService:
                     touches_image_border=component.touches_image_border,
                 )
                 for index, component in enumerate(components, start=1)
+            ],
+        )
+
+    def readiness(self, mask_annotation_id: str) -> SkeletonizationReadinessResponse:
+        mask = self._mask(mask_annotation_id)
+        image = self._image(mask.image_id)
+        binary = self._binary_mask(mask, image)
+        return self._readiness_for(mask, binary)
+
+    def analysis(self, mask_annotation_id: str) -> SkeletonizationAnalysisResponse:
+        mask = self._mask(mask_annotation_id)
+        image = self._image(mask.image_id)
+        binary = self._binary_mask(mask, image)
+        readiness = self._readiness_for(mask, binary)
+        if not readiness.ready_for_skeletonization:
+            reason = readiness.blocking_reason or "unknown"
+            raise ValidationError(
+                f"Skeletonization is blocked until mask readiness is resolved: {reason}"
+            )
+
+        raw_skeleton, iterations = zhang_suen_thin(binary)
+        skeleton_components = _connected_components_8(raw_skeleton)
+        if len(skeleton_components) != 1:
+            raise ValidationError(
+                "Skeletonization changed mask connectivity; raw analysis was blocked"
+            )
+
+        features = classify_skeleton_pixels(raw_skeleton)
+        if not features:
+            raise ValidationError("Skeletonization produced an empty raw skeleton")
+
+        isolated = sum(feature.kind == "isolated" for feature in features)
+        endpoints = sum(feature.kind == "endpoint" for feature in features)
+        paths = sum(feature.kind == "path" for feature in features)
+        junctions = sum(feature.kind == "junction" for feature in features)
+
+        return SkeletonizationAnalysisResponse(
+            mask_annotation_id=mask.id,
+            image_id=mask.image_id,
+            mask_revision=mask.revision,
+            input_foreground_pixels=readiness.total_foreground_pixels,
+            thinning_iterations=iterations,
+            raw_skeleton_pixel_count=len(features),
+            raw_skeleton_component_count=len(skeleton_components),
+            topology_preserved=True,
+            isolated_pixel_count=isolated,
+            endpoint_count=endpoints,
+            path_pixel_count=paths,
+            junction_pixel_count=junctions,
+            feature_pixels=[
+                SkeletonFeaturePixelResponse(
+                    x=feature.x,
+                    y=feature.y,
+                    degree=feature.degree,
+                    kind=feature.kind,
+                )
+                for feature in features
+                if feature.kind != "path"
             ],
         )
