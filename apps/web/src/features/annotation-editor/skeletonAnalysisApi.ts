@@ -69,6 +69,8 @@ export interface SkeletonAnalysisResult {
   raw_skeleton_pixel_count: number;
   raw_skeleton_pixels: SkeletonPixel[];
   raw_skeleton_component_count: number;
+  graph_nodes: SkeletonGraphNode[];
+  graph_edges: SkeletonGraphEdge[];
   topology_preserved: boolean;
   endpoint_count: number;
   junction_pixel_count: number;
@@ -78,6 +80,8 @@ export interface SkeletonAnalysisResult {
   removed_spur_count: number;
   pruned_skeleton_pixel_count: number;
   pruned_skeleton_pixels: SkeletonPixel[];
+  pruned_graph_nodes: SkeletonGraphNode[];
+  pruned_graph_edges: SkeletonGraphEdge[];
   raw_branch_count: number;
   pruned_branch_count: number;
   raw_total_linear_extension_pixels: number;
