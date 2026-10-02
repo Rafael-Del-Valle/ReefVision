@@ -114,7 +114,7 @@ def _cleanup_pending_job_proposals(
                     resolve_managed_project_path(settings, proposal.mask_path).unlink(
                         missing_ok=True
                     )
-                except OSError:
+                except (OSError, ValidationError):
                     pass
             session.delete(proposal)
         session.commit()
@@ -443,11 +443,17 @@ def process_inference_job(
                 session.commit()
         return True
     except Exception as exc:
-        removed_pending_proposals = _cleanup_pending_job_proposals(
-            settings,
-            factory,
-            job_id,
-        )
+        cleanup_error: str | None = None
+        try:
+            removed_pending_proposals = _cleanup_pending_job_proposals(
+                settings,
+                factory,
+                job_id,
+            )
+        except Exception as cleanup_exc:
+            removed_pending_proposals = 0
+            cleanup_error = str(cleanup_exc)
+
         with factory() as session:
             job = session.get(Job, job_id)
             if job is not None:
@@ -458,6 +464,7 @@ def process_inference_job(
                     "error": str(exc),
                     "model_task": model_task,
                     "removed_pending_proposals": removed_pending_proposals,
+                    "cleanup_error": cleanup_error,
                 }
                 job.completed_at = _utc_now()
                 session.commit()
