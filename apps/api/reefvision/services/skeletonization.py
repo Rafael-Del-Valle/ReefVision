@@ -4,20 +4,30 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+from hashlib import sha256
 from heapq import heappop, heappush
 from itertools import pairwise
 from math import acos, degrees, hypot
 from pathlib import Path
+from uuid import uuid4
 
 from PIL import Image, ImageDraw, UnidentifiedImageError
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.db.models import ImageAsset, MaskAnnotation
+from reefvision.db.models import (
+    ImageAsset,
+    MaskAnnotation,
+    SkeletonAnalysisRevision,
+)
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.repositories.mask_annotations import MaskAnnotationRepository
 from reefvision.schemas.measurements import MeasurementCalibrationUpdate
 from reefvision.schemas.skeletonization import (
+    SkeletonAnalysisCreateRequest,
+    SkeletonAnalysisReviewRequest,
+    SkeletonAnalysisRevisionResponse,
     SkeletonBranchAngleResponse,
     SkeletonFeaturePixelResponse,
     SkeletonGraphEdgeResponse,
@@ -43,6 +53,7 @@ from reefvision.services.skeleton_algorithms import (
     total_graph_length_pixels,
     zhang_suen_thin,
 )
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
 
@@ -69,6 +80,40 @@ _NEIGHBORS_8 = (
 
 
 MEASUREMENT_CALIBRATION_KEY = "measurement_calibration"
+
+
+def _binary_mask_sha256(mask: BinaryMask) -> str:
+    data, width, height = mask
+    digest = sha256()
+    digest.update(width.to_bytes(8, "little", signed=False))
+    digest.update(height.to_bytes(8, "little", signed=False))
+    digest.update(data)
+    return digest.hexdigest()
+
+
+def _calibration_sha256(image: ImageAsset) -> str | None:
+    raw = dict(image.metadata_json or {}).get(MEASUREMENT_CALIBRATION_KEY)
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValidationError("Image measurement calibration metadata is invalid")
+    return canonical_json_sha256(raw)
+
+
+def _analysis_parameters_sha256(
+    terminal_spur_max_length_pixels: float,
+) -> str:
+    return canonical_json_sha256(
+        {
+            "schema_version": "skeleton-analysis-parameters-0001",
+            "algorithm": "zhang_suen",
+            "algorithm_version": "0001",
+            "connectivity": 8,
+            "pre_thinning_cleanup": "binary_normalization_only",
+            "automatic_bridge_applied": False,
+            "terminal_spur_max_length_pixels": terminal_spur_max_length_pixels,
+        }
+    )
 
 
 def _calibration_payload(image: ImageAsset) -> MeasurementCalibrationUpdate | None:
