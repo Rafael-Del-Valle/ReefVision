@@ -226,9 +226,16 @@ export function SkeletonAnalysisPanel({
         : overlaySource === "pruned"
           ? latest.result.pruned_skeleton_pixels
           : latest.result.final_skeleton_pixels;
+    const nodes =
+      overlaySource === "raw"
+        ? latest.result.graph_nodes
+        : overlaySource === "pruned"
+          ? latest.result.pruned_graph_nodes
+          : latest.result.final_graph_nodes;
     const finalOverlay = overlaySource === "final";
     onOverlayChange({
       pixels,
+      nodes,
       addedPixels: finalOverlay ? addedPixels : [],
       removedPixels: finalOverlay ? removedPixels : [],
       editMode: finalOverlay ? editMode : "view",
