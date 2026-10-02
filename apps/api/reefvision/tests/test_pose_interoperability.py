@@ -361,6 +361,20 @@ def test_pose_interoperability_exports_canonical_reviewed_pose(
     assert response.headers["x-reefvision-pose-interoperability-format"] == exchange_format
     assert response.headers["x-reefvision-pose-lossy"] == "true"
     assert response.content
+    if exchange_format != "slp":
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            assert "reefvision-pose-manifest.json" in archive.namelist()
+            manifest = json.loads(
+                archive.read("reefvision-pose-manifest.json").decode("utf-8")
+            )
+        assert manifest["schema_version"] == "reefvision-pose-bundle-0001"
+        assert manifest["format"] == exchange_format
+        assert [
+            item["reefvision_frame_index"] for item in manifest["frames"]
+        ] == [4]
+        assert manifest["frames"][0]["instances"][0]["external_track_name"].startswith(
+            "reefvision-track-1-"
+        )
     assert _FakeSio.last_labels is not None
     assert _FakeSio.last_labels.skeletons[0].nodes == [
         "bell_center",
