@@ -159,6 +159,13 @@ def test_human_correction_creates_new_revision_without_overwriting_automatic(
             mask_id,
             SkeletonAnalysisCreateRequest(),
         )
+        automatic = service.review_persisted_analysis(
+            automatic.id,
+            SkeletonAnalysisReviewRequest(
+                review_status="approved",
+                note="Automatic result approved before later correction.",
+            ),
+        )
         endpoint = min(
             automatic.result.final_skeleton_pixels,
             key=lambda point: (point.x, point.y),
@@ -202,8 +209,28 @@ def test_human_correction_creates_new_revision_without_overwriting_automatic(
 
         original = service.get_persisted_analysis(automatic.id)
         assert original.analysis_revision == 1
+        assert original.review_status == "approved"
+        assert original.is_latest_revision is False
+        assert corrected.is_latest_revision is True
         assert original.result.final_skeleton_source == "automatic_pruned"
         assert original.result.human_correction_applied is False
+
+        with pytest.raises(
+            ValidationError,
+            match="latest skeleton analysis revision",
+        ):
+            service.review_persisted_analysis(
+                automatic.id,
+                SkeletonAnalysisReviewRequest(
+                    review_status="approved",
+                ),
+            )
+
+        with pytest.raises(
+            ValidationError,
+            match="latest skeleton analysis revision",
+        ):
+            service.export_persisted_analysis(automatic.id)
 
         with pytest.raises(
             ValidationError,
@@ -221,6 +248,15 @@ def test_human_correction_creates_new_revision_without_overwriting_automatic(
                     reason_code="stale_base",
                 ),
             )
+
+        regenerated = service.persist_analysis(
+            mask_id,
+            SkeletonAnalysisCreateRequest(),
+        )
+        assert regenerated.id != automatic.id
+        assert regenerated.analysis_series_id != automatic.analysis_series_id
+        assert regenerated.analysis_revision == 1
+        assert regenerated.source_kind == "automatic"
 
 
 def test_human_correction_cannot_disconnect_skeleton(
