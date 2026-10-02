@@ -66,7 +66,7 @@ class VideoPoseObservation(BaseModel):
     x: FiniteFloat = Field(ge=0)
     y: FiniteFloat = Field(ge=0)
     confidence: FiniteFloat | None = Field(default=None, ge=0, le=1)
-    status: Literal["visible", "occluded", "uncertain", "absent"] = "visible"
+    status: Literal["visible", "occluded", "out_of_frame", "uncertain", "absent"] = "visible"
     source: Literal["model", "manual", "corrected"] = "model"
 
 
