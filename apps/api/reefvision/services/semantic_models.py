@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import zipfile
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
-from reefvision.db.models import ExperimentRecord, Job, ModelRegistration, TrainingRun
+from reefvision.db.models import (
+    ExperimentRecord,
+    Job,
+    ModelRegistration,
+    PoseLandmarkSchema,
+    PoseLandmarkSchemaRevision,
+    PoseModelSchemaBinding,
+    TrainingRun,
+)
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.ml.semantic_segmentation import (
     NNUNET_PROVIDER_ID,
@@ -183,12 +192,87 @@ class SemanticModelService(SegmentationModelService):
             )
 
         groups = [{"name": group.name, "count": group.count} for group in payload.groups]
-        metadata["pose_landmark_schema"] = {
+        schema_payload = {
             "schema_version": "pose-landmarks-0001",
             "groups": groups,
             "expanded_labels": expanded_labels,
             "keypoint_count": len(expanded_labels),
             "allows_repeated_labels": any(group.count > 1 for group in payload.groups),
+        }
+        content_hash = hashlib.sha256(
+            json.dumps(
+                schema_payload,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+
+        binding = self.session.get(PoseModelSchemaBinding, model.id)
+        if binding is None:
+            schema = PoseLandmarkSchema(
+                project_id=model.project_id,
+                name=f"{model.display_name} pose landmarks",
+            )
+            self.session.add(schema)
+            self.session.flush()
+            schema_revision = PoseLandmarkSchemaRevision(
+                schema_id=schema.id,
+                revision=1,
+                schema_version="pose-landmarks-0001",
+                groups_json=groups,
+                expanded_labels_json=expanded_labels,
+                keypoint_count=len(expanded_labels),
+                allows_repeated_labels=any(group.count > 1 for group in payload.groups),
+                content_hash=content_hash,
+            )
+            self.session.add(schema_revision)
+            self.session.flush()
+            binding = PoseModelSchemaBinding(
+                model_id=model.id,
+                schema_id=schema.id,
+                schema_revision=1,
+            )
+            self.session.add(binding)
+        else:
+            existing_revision = self.session.scalar(
+                select(PoseLandmarkSchemaRevision).where(
+                    PoseLandmarkSchemaRevision.schema_id == binding.schema_id,
+                    PoseLandmarkSchemaRevision.content_hash == content_hash,
+                )
+            )
+            if existing_revision is None:
+                next_revision = (
+                    int(
+                        self.session.scalar(
+                            select(func.max(PoseLandmarkSchemaRevision.revision)).where(
+                                PoseLandmarkSchemaRevision.schema_id == binding.schema_id
+                            )
+                        )
+                        or 0
+                    )
+                    + 1
+                )
+                existing_revision = PoseLandmarkSchemaRevision(
+                    schema_id=binding.schema_id,
+                    revision=next_revision,
+                    schema_version="pose-landmarks-0001",
+                    groups_json=groups,
+                    expanded_labels_json=expanded_labels,
+                    keypoint_count=len(expanded_labels),
+                    allows_repeated_labels=any(
+                        group.count > 1 for group in payload.groups
+                    ),
+                    content_hash=content_hash,
+                )
+                self.session.add(existing_revision)
+                self.session.flush()
+            binding.schema_revision = existing_revision.revision
+
+        metadata["pose_landmark_schema"] = {
+            **schema_payload,
+            "schema_id": binding.schema_id,
+            "schema_revision": binding.schema_revision,
+            "content_hash": content_hash,
         }
         model.metadata_json = metadata
         self.session.commit()
