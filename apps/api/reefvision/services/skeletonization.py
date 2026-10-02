@@ -682,7 +682,7 @@ class SkeletonizationService:
             reference_plane_only=(
                 calibration.reference_plane_only
                 if calibration is not None
-                else True
+                else None
             ),
             feature_pixels=[
                 SkeletonFeaturePixelResponse(
