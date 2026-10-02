@@ -796,6 +796,24 @@ class SkeletonizationService:
             raise NotFoundError("Skeleton analysis revision not found")
         return record
 
+    def _latest_analysis_revision(
+        self,
+        analysis_series_id: str,
+    ) -> SkeletonAnalysisRevision | None:
+        return self.session.scalar(
+            select(SkeletonAnalysisRevision)
+            .where(
+                SkeletonAnalysisRevision.analysis_series_id
+                == analysis_series_id
+            )
+            .order_by(
+                SkeletonAnalysisRevision.analysis_revision.desc(),
+                SkeletonAnalysisRevision.created_at.desc(),
+                SkeletonAnalysisRevision.id.desc(),
+            )
+            .limit(1)
+        )
+
     def _analysis_record_response(
         self,
         record: SkeletonAnalysisRevision,
@@ -808,6 +826,8 @@ class SkeletonizationService:
         )
         stale_mask = current_input_mask_sha256 != record.input_mask_sha256
         stale_calibration = current_calibration_sha256 != record.calibration_sha256
+        latest = self._latest_analysis_revision(record.analysis_series_id)
+        is_latest_revision = latest is not None and latest.id == record.id
         return SkeletonAnalysisRevisionResponse(
             id=record.id,
             analysis_series_id=record.analysis_series_id,
@@ -837,6 +857,7 @@ class SkeletonizationService:
             review_note=record.review_note,
             created_by=record.created_by,
             created_at=record.created_at,
+            is_latest_revision=is_latest_revision,
             stale_mask=stale_mask,
             stale_calibration=stale_calibration,
             stale=stale_mask or stale_calibration,
@@ -952,6 +973,10 @@ class SkeletonizationService:
             raise ValidationError(
                 "Stale skeleton analyses must be regenerated before review"
             )
+        if not response.is_latest_revision:
+            raise ValidationError(
+                "Only the latest skeleton analysis revision can be reviewed"
+            )
         record.review_status = payload.review_status
         record.reviewed_by = "local_user"
         record.reviewed_at = utc_now()
@@ -972,19 +997,7 @@ class SkeletonizationService:
                 "Stale skeleton analyses must be regenerated before correction"
             )
 
-        latest = self.session.scalar(
-            select(SkeletonAnalysisRevision)
-            .where(
-                SkeletonAnalysisRevision.analysis_series_id
-                == base.analysis_series_id
-            )
-            .order_by(
-                SkeletonAnalysisRevision.analysis_revision.desc(),
-                SkeletonAnalysisRevision.created_at.desc(),
-                SkeletonAnalysisRevision.id.desc(),
-            )
-            .limit(1)
-        )
+        latest = self._latest_analysis_revision(base.analysis_series_id)
         if latest is None or latest.id != base.id:
             raise ValidationError(
                 "Skeleton corrections must be based on the latest analysis revision"
@@ -1146,6 +1159,10 @@ class SkeletonizationService:
             raise ValidationError(
                 "Stale skeleton analyses must be regenerated before export"
             )
+        if not record.is_latest_revision:
+            raise ValidationError(
+                "Only the latest skeleton analysis revision can be exported"
+            )
         if record.review_status != "approved":
             raise ValidationError(
                 "Only approved skeleton analyses can be exported"
@@ -1183,6 +1200,10 @@ class SkeletonizationService:
         if record.stale:
             raise ValidationError(
                 "Stale skeleton analyses must be regenerated before download"
+            )
+        if not record.is_latest_revision:
+            raise ValidationError(
+                "Only the latest skeleton analysis revision can be downloaded"
             )
         if record.review_status != "approved":
             raise ValidationError(
