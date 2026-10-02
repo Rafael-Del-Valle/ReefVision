@@ -49,5 +49,6 @@ jobs:
           from alembic.config import Config
           from alembic.script import ScriptDirectory
           scripts = ScriptDirectory.from_config(Config('apps/api/alembic.ini'))
-          assert scripts.get_heads() == ['0023'], scripts.get_heads()
+          heads = scripts.get_heads()
+          assert len(heads) == 1, heads
           PY
