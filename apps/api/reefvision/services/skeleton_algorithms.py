@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import hypot
 from typing import Literal
 
 BinaryMask = tuple[bytes, int, int]
@@ -37,6 +38,26 @@ class SkeletonJunctionCluster:
     representative_x: int
     representative_y: int
     external_connections: tuple[tuple[int, int], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SkeletonGraphNode:
+    id: str
+    kind: Literal["endpoint", "junction", "isolated", "cycle_anchor"]
+    x: float
+    y: float
+    source_pixels: tuple[tuple[int, int], ...]
+    external_connection_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class SkeletonGraphEdge:
+    id: str
+    source_node_id: str
+    target_node_id: str
+    pixels: tuple[tuple[int, int], ...]
+    boundary_to_boundary_length_pixels: float
+    is_cycle: bool
 
 
 def _value(pixels: bytearray, width: int, height: int, x: int, y: int) -> int:
@@ -255,3 +276,194 @@ def consolidate_junction_clusters(
         )
         for index, cluster in enumerate(clusters, start=1)
     ]
+
+
+
+def _edge_key(
+    first: tuple[int, int],
+    second: tuple[int, int],
+) -> tuple[tuple[int, int], tuple[int, int]]:
+    return tuple(sorted((first, second)))  # type: ignore[return-value]
+
+
+def _pixel_adjacency(
+    features: list[SkeletonPixelFeature],
+) -> dict[tuple[int, int], list[tuple[int, int]]]:
+    pixels = {(feature.x, feature.y) for feature in features}
+    adjacency: dict[tuple[int, int], list[tuple[int, int]]] = {}
+    for x, y in pixels:
+        adjacency[(x, y)] = sorted(
+            [
+                (x + dx, y + dy)
+                for dx, dy in _NEIGHBORS_8
+                if (x + dx, y + dy) in pixels
+            ],
+            key=lambda point: (point[1], point[0]),
+        )
+    return adjacency
+
+
+def build_initial_branch_graph(
+    features: list[SkeletonPixelFeature],
+    junction_clusters: list[SkeletonJunctionCluster],
+) -> tuple[list[SkeletonGraphNode], list[SkeletonGraphEdge]]:
+    """Trace degree-2 paths between endpoints and consolidated junction nodes."""
+
+    if not features:
+        return [], []
+
+    feature_by_pixel = {(feature.x, feature.y): feature for feature in features}
+    adjacency = _pixel_adjacency(features)
+    nodes: list[SkeletonGraphNode] = []
+    pixel_to_node: dict[tuple[int, int], str] = {}
+
+    for cluster in junction_clusters:
+        node = SkeletonGraphNode(
+            id=cluster.id,
+            kind="junction",
+            x=cluster.centroid_x,
+            y=cluster.centroid_y,
+            source_pixels=cluster.pixels,
+            external_connection_count=len(cluster.external_connections),
+        )
+        nodes.append(node)
+        for pixel in cluster.pixels:
+            pixel_to_node[pixel] = node.id
+
+    endpoints = sorted(
+        (
+            feature
+            for feature in features
+            if feature.kind == "endpoint"
+        ),
+        key=lambda feature: (feature.y, feature.x),
+    )
+    for index, feature in enumerate(endpoints, start=1):
+        node_id = f"endpoint-{index:04d}"
+        node = SkeletonGraphNode(
+            id=node_id,
+            kind="endpoint",
+            x=float(feature.x),
+            y=float(feature.y),
+            source_pixels=((feature.x, feature.y),),
+            external_connection_count=feature.degree,
+        )
+        nodes.append(node)
+        pixel_to_node[(feature.x, feature.y)] = node_id
+
+    isolated = sorted(
+        (
+            feature
+            for feature in features
+            if feature.kind == "isolated"
+        ),
+        key=lambda feature: (feature.y, feature.x),
+    )
+    for index, feature in enumerate(isolated, start=1):
+        node_id = f"isolated-{index:04d}"
+        node = SkeletonGraphNode(
+            id=node_id,
+            kind="isolated",
+            x=float(feature.x),
+            y=float(feature.y),
+            source_pixels=((feature.x, feature.y),),
+            external_connection_count=0,
+        )
+        nodes.append(node)
+        pixel_to_node[(feature.x, feature.y)] = node_id
+
+    if not pixel_to_node:
+        anchor = min(feature_by_pixel, key=lambda point: (point[1], point[0]))
+        node_id = "cycle-0001"
+        node = SkeletonGraphNode(
+            id=node_id,
+            kind="cycle_anchor",
+            x=float(anchor[0]),
+            y=float(anchor[1]),
+            source_pixels=(anchor,),
+            external_connection_count=len(adjacency[anchor]),
+        )
+        nodes.append(node)
+        pixel_to_node[anchor] = node_id
+
+    visited_edges: set[tuple[tuple[int, int], tuple[int, int]]] = set()
+    traced: list[
+        tuple[
+            str,
+            str,
+            tuple[tuple[int, int], ...],
+            float,
+            bool,
+        ]
+    ] = []
+
+    for node in sorted(nodes, key=lambda item: item.id):
+        for start_pixel in node.source_pixels:
+            for neighbor in adjacency[start_pixel]:
+                if pixel_to_node.get(neighbor) == node.id:
+                    continue
+                first_edge = _edge_key(start_pixel, neighbor)
+                if first_edge in visited_edges:
+                    continue
+
+                path = [start_pixel, neighbor]
+                visited_edges.add(first_edge)
+                previous = start_pixel
+                current = neighbor
+
+                while current not in pixel_to_node:
+                    candidates = [
+                        candidate
+                        for candidate in adjacency[current]
+                        if candidate != previous
+                    ]
+                    if len(candidates) != 1:
+                        raise ValueError(
+                            "Skeleton path encountered a non-node pixel "
+                            "with an unexpected graph degree"
+                        )
+                    following = candidates[0]
+                    visited_edges.add(_edge_key(current, following))
+                    path.append(following)
+                    previous, current = current, following
+
+                target_node_id = pixel_to_node[current]
+                length = sum(
+                    hypot(second[0] - first[0], second[1] - first[1])
+                    for first, second in zip(path, path[1:], strict=True)
+                )
+                traced.append(
+                    (
+                        node.id,
+                        target_node_id,
+                        tuple(path),
+                        length,
+                        node.id == target_node_id,
+                    )
+                )
+
+    traced.sort(
+        key=lambda item: (
+            min(item[0], item[1]),
+            max(item[0], item[1]),
+            item[2][0][1],
+            item[2][0][0],
+            item[2][-1][1],
+            item[2][-1][0],
+        )
+    )
+    edges = [
+        SkeletonGraphEdge(
+            id=f"branch-{index:04d}",
+            source_node_id=source,
+            target_node_id=target,
+            pixels=pixels,
+            boundary_to_boundary_length_pixels=length,
+            is_cycle=is_cycle,
+        )
+        for index, (source, target, pixels, length, is_cycle) in enumerate(
+            traced,
+            start=1,
+        )
+    ]
+    return sorted(nodes, key=lambda item: item.id), edges
