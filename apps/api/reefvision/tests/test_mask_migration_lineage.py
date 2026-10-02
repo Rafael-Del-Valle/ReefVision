@@ -6,7 +6,7 @@ def test_mask_migrations_form_one_linear_head() -> None:
     config = Config("apps/api/alembic.ini")
     scripts = ScriptDirectory.from_config(config)
 
-    assert scripts.get_heads() == ["0030"]
+    assert scripts.get_heads() == ["0032"]
     editable_masks = scripts.get_revision("0015")
     mask_datasets = scripts.get_revision("0016")
     segmentation_proposals = scripts.get_revision("0017")
@@ -18,6 +18,8 @@ def test_mask_migrations_form_one_linear_head() -> None:
     project_exchange_packages = scripts.get_revision("0023")
     srt_primary_georeferencing = scripts.get_revision("0029")
     projection_stability_georeferencing = scripts.get_revision("0030")
+    temporal_pose_tracking = scripts.get_revision("0031")
+    pose_landmark_schemas = scripts.get_revision("0032")
     assert editable_masks is not None
     assert editable_masks.down_revision == "53ba400993db"
     assert mask_datasets is not None
@@ -40,3 +42,7 @@ def test_mask_migrations_form_one_linear_head() -> None:
     assert srt_primary_georeferencing.down_revision == "0028"
     assert projection_stability_georeferencing is not None
     assert projection_stability_georeferencing.down_revision == "0029"
+    assert temporal_pose_tracking is not None
+    assert temporal_pose_tracking.down_revision == "0030"
+    assert pose_landmark_schemas is not None
+    assert pose_landmark_schemas.down_revision == "0031"
