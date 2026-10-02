@@ -9,6 +9,7 @@ from uuid import uuid4
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -54,6 +55,14 @@ class PoseLandmarkSchemaRevision(Base):
 
     __tablename__ = "pose_landmark_schema_revisions"
     __table_args__ = (
+        CheckConstraint(
+            "revision >= 1",
+            name="ck_pose_landmark_schema_revisions_revision",
+        ),
+        CheckConstraint(
+            "keypoint_count >= 1",
+            name="ck_pose_landmark_schema_revisions_keypoint_count",
+        ),
         UniqueConstraint(
             "schema_id",
             "revision",
