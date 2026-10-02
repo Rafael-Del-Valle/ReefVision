@@ -95,6 +95,71 @@ def _angle_rows(angles: list[Any]) -> list[dict[str, Any]]:
     ]
 
 
+def verify_skeleton_export(package: Path) -> dict[str, Any]:
+    manifest_path = package / "manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {
+            "valid": False,
+            "checked_files": 0,
+            "errors": [f"Manifest unavailable: {exc}"],
+        }
+
+    errors: list[str] = []
+    if manifest.get("schema_version") != EXPORT_SCHEMA_VERSION:
+        errors.append("Unsupported skeleton export schema version")
+
+    entries = manifest.get("files")
+    if not isinstance(entries, list):
+        return {
+            "valid": False,
+            "checked_files": 0,
+            "errors": ["Manifest files must be a list"],
+        }
+
+    package_root = package.resolve()
+    expected: set[str] = set()
+    checked = 0
+    for entry in entries:
+        if not isinstance(entry, dict):
+            errors.append("Manifest file entry must be an object")
+            continue
+        relative = str(entry.get("relative_path", ""))
+        path = (package / relative).resolve()
+        if (
+            not relative
+            or Path(relative).is_absolute()
+            or not path.is_relative_to(package_root)
+        ):
+            errors.append(f"Unsafe manifest path: {relative}")
+            continue
+        expected.add(Path(relative).as_posix())
+        if not path.is_file():
+            errors.append(f"Missing file: {relative}")
+            continue
+        checked += 1
+        if path.stat().st_size != entry.get("size_bytes"):
+            errors.append(f"Size mismatch: {relative}")
+        if _sha256(path) != entry.get("sha256"):
+            errors.append(f"Checksum mismatch: {relative}")
+
+    actual = {
+        path.relative_to(package).as_posix()
+        for path in package.rglob("*")
+        if path.is_file()
+        and path.name not in {"manifest.json", "checksums.sha256"}
+    }
+    for relative in sorted(actual - expected):
+        errors.append(f"Unlisted file: {relative}")
+
+    return {
+        "valid": not errors,
+        "checked_files": checked,
+        "errors": errors,
+    }
+
+
 def build_skeleton_export(
     *,
     export_root: Path,
@@ -277,6 +342,12 @@ def build_skeleton_export(
             "\n".join(checksum_rows) + "\n",
             encoding="utf-8",
         )
+        verification = verify_skeleton_export(package)
+        if not verification["valid"]:
+            raise RuntimeError(
+                "Skeleton export verification failed: "
+                + "; ".join(verification["errors"])
+            )
         package.rename(final_dir)
 
     archive_path = Path(
