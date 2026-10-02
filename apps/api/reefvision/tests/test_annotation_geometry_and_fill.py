@@ -53,7 +53,7 @@ def test_flood_fill_tolerance_accepts_small_variation() -> None:
     filled = _flood_fill_from_source(mask, source, seed_x=0, seed_y=0, tolerance=10)
 
     assert filled == 2
-    assert list(mask.getdata()) == [255, 255, 0]
+    assert list(mask.tobytes()) == [255, 255, 0]
 
 
 def test_flood_fill_keeps_diagonally_connected_space_reachable_around_obstacles() -> None:
