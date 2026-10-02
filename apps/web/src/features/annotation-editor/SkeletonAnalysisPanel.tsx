@@ -51,6 +51,8 @@ export function SkeletonAnalysisPanel({
     !documentDirty;
   const [spurThreshold, setSpurThreshold] = useState("0");
   const [editMode, setEditMode] = useState<SkeletonEditMode>("view");
+  const [overlaySource, setOverlaySource] =
+    useState<"raw" | "pruned" | "final">("final");
   const [addedPixels, setAddedPixels] = useState<SkeletonPixel[]>([]);
   const [removedPixels, setRemovedPixels] = useState<SkeletonPixel[]>([]);
   const [correctionReason, setCorrectionReason] = useState("");
@@ -88,6 +90,7 @@ export function SkeletonAnalysisPanel({
     setAddedPixels([]);
     setRemovedPixels([]);
     setEditMode("view");
+    setOverlaySource("final");
     setCorrectionReason("");
     setCorrectionNote("");
     setReviewNote("");
@@ -125,6 +128,7 @@ export function SkeletonAnalysisPanel({
       setAddedPixels([]);
       setRemovedPixels([]);
       setEditMode("view");
+      setOverlaySource("final");
       await refreshHistory();
     },
   });
@@ -163,6 +167,7 @@ export function SkeletonAnalysisPanel({
       setAddedPixels([]);
       setRemovedPixels([]);
       setEditMode("view");
+      setOverlaySource("final");
       setCorrectionReason("");
       setCorrectionNote("");
       await refreshHistory();
@@ -215,11 +220,18 @@ export function SkeletonAnalysisPanel({
       onOverlayChange(null);
       return;
     }
+    const pixels =
+      overlaySource === "raw"
+        ? latest.result.raw_skeleton_pixels
+        : overlaySource === "pruned"
+          ? latest.result.pruned_skeleton_pixels
+          : latest.result.final_skeleton_pixels;
+    const finalOverlay = overlaySource === "final";
     onOverlayChange({
-      pixels: latest.result.final_skeleton_pixels,
-      addedPixels,
-      removedPixels,
-      editMode,
+      pixels,
+      addedPixels: finalOverlay ? addedPixels : [],
+      removedPixels: finalOverlay ? removedPixels : [],
+      editMode: finalOverlay ? editMode : "view",
       onPixelClick: handlePixelClick,
     });
   }, [
@@ -229,6 +241,7 @@ export function SkeletonAnalysisPanel({
     handlePixelClick,
     latest,
     onOverlayChange,
+    overlaySource,
     removedPixels,
   ]);
 
@@ -401,6 +414,38 @@ export function SkeletonAnalysisPanel({
             Final source: {result.final_skeleton_source.replace("_", " ")}.
             Raw and automatically pruned measurements are retained separately.
           </p>
+          <div>
+            <p className="annotation-helper">Canvas overlay</p>
+            <div className="annotation-editor-inline-actions">
+              <button
+                type="button"
+                className={overlaySource === "raw" ? "secondary" : ""}
+                onClick={() => {
+                  setEditMode("view");
+                  setOverlaySource("raw");
+                }}
+              >
+                Raw
+              </button>
+              <button
+                type="button"
+                className={overlaySource === "pruned" ? "secondary" : ""}
+                onClick={() => {
+                  setEditMode("view");
+                  setOverlaySource("pruned");
+                }}
+              >
+                Auto-pruned
+              </button>
+              <button
+                type="button"
+                className={overlaySource === "final" ? "secondary" : ""}
+                onClick={() => setOverlaySource("final")}
+              >
+                Final
+              </button>
+            </div>
+          </div>
           {result.perspective_corrected && (
             <p className="annotation-helper">
               Physical lengths and branch angles use the accepted reference
@@ -427,14 +472,20 @@ export function SkeletonAnalysisPanel({
                 <button
                   type="button"
                   className={editMode === "add" ? "secondary" : ""}
-                  onClick={() => setEditMode("add")}
+                  onClick={() => {
+                    setOverlaySource("final");
+                    setEditMode("add");
+                  }}
                 >
                   Add pixels
                 </button>
                 <button
                   type="button"
                   className={editMode === "remove" ? "secondary" : ""}
-                  onClick={() => setEditMode("remove")}
+                  onClick={() => {
+                    setOverlaySource("final");
+                    setEditMode("remove");
+                  }}
                 >
                   Remove pixels
                 </button>
