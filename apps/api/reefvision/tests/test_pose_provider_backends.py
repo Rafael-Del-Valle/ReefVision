@@ -6,7 +6,7 @@ import math
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 import pytest
 from fastapi import FastAPI
@@ -146,7 +146,7 @@ class _FakeInstance:
 
 
 class _FakePredictor:
-    calls: list[dict[str, Any]] = []
+    calls: ClassVar[list[dict[str, Any]]] = []
 
     @classmethod
     def from_model_paths(
