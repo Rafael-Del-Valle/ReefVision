@@ -1,8 +1,10 @@
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from reefvision.domain.errors import ValidationError
 from reefvision.schemas.skeletonization import (
     SkeletonAnalysisCreateRequest,
     SkeletonAnalysisReviewRequest,
@@ -88,3 +90,55 @@ def test_persisted_analysis_review_is_explicit(client: TestClient) -> None:
         assert reviewed.reviewed_at is not None
         assert reviewed.review_note == "Reviewed against the source mask."
         assert len(service.list_persisted_analyses(mask_id)) == 1
+
+
+
+def test_calibration_change_marks_saved_analysis_stale(
+    client: TestClient,
+) -> None:
+    image_id, mask_id = _seed_mask(client)
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        service = SkeletonizationService(session, app.state.settings)
+        original = service.persist_analysis(
+            mask_id,
+            SkeletonAnalysisCreateRequest(),
+        )
+
+    calibrated = client.put(
+        f"/api/v1/images/{image_id}/measurement-calibration",
+        json={
+            "distance_per_pixel": 0.1,
+            "unit": "mm",
+            "source": "manual",
+        },
+    )
+    assert calibrated.status_code == 200, calibrated.text
+
+    with app.state.session_factory() as session:
+        service = SkeletonizationService(session, app.state.settings)
+        stale = service.get_persisted_analysis(original.id)
+
+        assert stale.stale_calibration is True
+        assert stale.stale is True
+
+        with pytest.raises(
+            ValidationError,
+            match="must be regenerated before review",
+        ):
+            service.review_persisted_analysis(
+                original.id,
+                SkeletonAnalysisReviewRequest(
+                    review_status="approved",
+                ),
+            )
+
+        regenerated = service.persist_analysis(
+            mask_id,
+            SkeletonAnalysisCreateRequest(),
+        )
+        assert regenerated.id != original.id
+        assert regenerated.calibration_sha256 is not None
+        assert regenerated.result.calibrated is True
+        assert regenerated.stale is False
