@@ -195,3 +195,65 @@ class PoseTemporalBuildResponse(BaseModel):
     created_association_decisions: int
     unresolved_associations: int
     identity_breaks: int
+
+
+class PoseTemporalQcIssue(BaseModel):
+    code: Literal[
+        "unresolved_identity",
+        "low_association_confidence",
+        "low_landmark_confidence",
+        "high_motion_cost",
+        "uncertain_visibility",
+        "identity_break",
+    ]
+    frame_index: int = Field(ge=0)
+    semantic_label: str
+    occurrence_index: int | None = Field(default=None, ge=0)
+    observation_id: str | None = None
+    landmark_track_id: str | None = None
+    value: float | None = None
+    threshold: float | None = None
+    message: str
+
+
+class PoseTemporalQcResponse(BaseModel):
+    schema_version: Literal["pose-temporal-qc-0001"] = "pose-temporal-qc-0001"
+    parent_video_track_id: str
+    issue_count: int
+    flagged_frame_count: int
+    unresolved_identity_count: int
+    low_association_confidence_count: int
+    low_landmark_confidence_count: int
+    high_motion_cost_count: int
+    uncertain_visibility_count: int
+    identity_break_count: int
+    issues: list[PoseTemporalQcIssue]
+
+
+class PoseLandmarkTrackMetrics(BaseModel):
+    landmark_track_id: str
+    semantic_label: str
+    first_frame: int
+    last_frame: int
+    duration_seconds: float
+    associated_observation_count: int
+    visible_observation_count: int
+    occluded_observation_count: int
+    out_of_frame_observation_count: int
+    uncertain_observation_count: int
+    absent_observation_count: int
+    human_reviewed_observation_count: int
+    path_length_pixels: float
+    displacement_pixels: float
+    mean_speed_pixels_per_second: float | None
+    maximum_speed_pixels_per_second: float | None
+    mean_association_confidence: float | None
+    minimum_association_confidence: float | None
+    identity_break_count: int
+
+
+class PoseTemporalMetricsResponse(BaseModel):
+    schema_version: Literal["pose-temporal-metrics-0001"] = "pose-temporal-metrics-0001"
+    parent_video_track_id: str
+    unit: Literal["pixels"] = "pixels"
+    tracklets: list[PoseLandmarkTrackMetrics]
