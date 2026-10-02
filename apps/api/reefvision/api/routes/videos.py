@@ -24,6 +24,8 @@ from reefvision.schemas.pose_tracking import (
     PoseTemporalAssociationBuildRequest,
     PoseTemporalBuildResponse,
     PoseTemporalExportFormat,
+    PoseTemporalMetricsResponse,
+    PoseTemporalQcResponse,
     PoseTemporalTrackSummaryResponse,
 )
 from reefvision.schemas.video_georeferencing_readiness import (
@@ -329,6 +331,36 @@ def get_pose_temporal_summary(
     session: DbSession,
 ) -> PoseTemporalTrackSummaryResponse:
     return PoseTemporalTrackingService(session).summary(track_id)
+
+
+@router.get(
+    "/video-tracks/{track_id}/pose-temporal/qc",
+    response_model=PoseTemporalQcResponse,
+)
+def get_pose_temporal_qc(
+    track_id: str,
+    session: DbSession,
+    association_confidence_threshold: Annotated[float, Query(ge=0, le=1)] = 0.60,
+    landmark_confidence_threshold: Annotated[float, Query(ge=0, le=1)] = 0.50,
+    motion_cost_threshold: Annotated[float, Query(ge=0)] = 0.25,
+) -> PoseTemporalQcResponse:
+    return PoseTemporalTrackingService(session).qc(
+        track_id,
+        association_confidence_threshold=association_confidence_threshold,
+        landmark_confidence_threshold=landmark_confidence_threshold,
+        motion_cost_threshold=motion_cost_threshold,
+    )
+
+
+@router.get(
+    "/video-tracks/{track_id}/pose-temporal/metrics",
+    response_model=PoseTemporalMetricsResponse,
+)
+def get_pose_temporal_metrics(
+    track_id: str,
+    session: DbSession,
+) -> PoseTemporalMetricsResponse:
+    return PoseTemporalTrackingService(session).metrics(track_id)
 
 
 @router.get("/video-tracks/{track_id}/pose-temporal/export")
