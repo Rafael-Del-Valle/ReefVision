@@ -61,6 +61,25 @@ class SkeletonGraphEdge:
     is_cycle: bool
 
 
+@dataclass(frozen=True, slots=True)
+class SkeletonSpurRemoval:
+    iteration: int
+    branch_id: str
+    endpoint_x: int
+    endpoint_y: int
+    junction_id: str
+    branch_length_pixels: float
+    removed_pixels: tuple[tuple[int, int], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SkeletonPruningResult:
+    mask: BinaryMask
+    removals: tuple[SkeletonSpurRemoval, ...]
+    graph_nodes: tuple[SkeletonGraphNode, ...]
+    graph_edges: tuple[SkeletonGraphEdge, ...]
+
+
 def _value(pixels: bytearray, width: int, height: int, x: int, y: int) -> int:
     if x < 0 or y < 0 or x >= width or y >= height:
         return 0
@@ -468,3 +487,97 @@ def build_initial_branch_graph(
         )
     ]
     return sorted(nodes, key=lambda item: item.id), edges
+
+
+
+def prune_terminal_spurs(
+    mask: BinaryMask,
+    *,
+    max_length_pixels: float,
+) -> SkeletonPruningResult:
+    """Iteratively remove only short endpoint-to-junction terminal branches."""
+
+    if max_length_pixels < 0:
+        raise ValueError("Terminal spur threshold cannot be negative")
+
+    data, width, height = mask
+    working = bytearray(data)
+    removals: list[SkeletonSpurRemoval] = []
+
+    while max_length_pixels > 0:
+        current_mask: BinaryMask = (bytes(working), width, height)
+        features = classify_skeleton_pixels(current_mask)
+        junction_clusters = consolidate_junction_clusters(features)
+        nodes, edges = build_initial_branch_graph(features, junction_clusters)
+        node_by_id = {node.id: node for node in nodes}
+
+        eligible: list[
+            tuple[
+                float,
+                str,
+                SkeletonGraphEdge,
+                SkeletonGraphNode,
+                SkeletonGraphNode,
+            ]
+        ] = []
+        for edge in edges:
+            if edge.is_cycle or edge.boundary_to_boundary_length_pixels > max_length_pixels:
+                continue
+            source = node_by_id[edge.source_node_id]
+            target = node_by_id[edge.target_node_id]
+            if source.kind == "endpoint" and target.kind == "junction":
+                endpoint, junction = source, target
+            elif source.kind == "junction" and target.kind == "endpoint":
+                endpoint, junction = target, source
+            else:
+                continue
+            eligible.append(
+                (
+                    edge.boundary_to_boundary_length_pixels,
+                    edge.id,
+                    edge,
+                    endpoint,
+                    junction,
+                )
+            )
+
+        if not eligible:
+            break
+
+        _, _, edge, endpoint, junction = min(
+            eligible,
+            key=lambda item: (item[0], item[1]),
+        )
+        protected = set(junction.source_pixels)
+        removed = tuple(pixel for pixel in edge.pixels if pixel not in protected)
+        if not removed:
+            break
+
+        for x, y in removed:
+            working[y * width + x] = 0
+
+        removals.append(
+            SkeletonSpurRemoval(
+                iteration=len(removals) + 1,
+                branch_id=edge.id,
+                endpoint_x=int(endpoint.x),
+                endpoint_y=int(endpoint.y),
+                junction_id=junction.id,
+                branch_length_pixels=edge.boundary_to_boundary_length_pixels,
+                removed_pixels=removed,
+            )
+        )
+
+    final_mask: BinaryMask = (bytes(working), width, height)
+    final_features = classify_skeleton_pixels(final_mask)
+    final_clusters = consolidate_junction_clusters(final_features)
+    final_nodes, final_edges = build_initial_branch_graph(
+        final_features,
+        final_clusters,
+    )
+    return SkeletonPruningResult(
+        mask=final_mask,
+        removals=tuple(removals),
+        graph_nodes=tuple(final_nodes),
+        graph_edges=tuple(final_edges),
+    )
