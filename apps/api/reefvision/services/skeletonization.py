@@ -15,6 +15,8 @@ from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.repositories.mask_annotations import MaskAnnotationRepository
 from reefvision.schemas.skeletonization import (
     SkeletonFeaturePixelResponse,
+    SkeletonGraphEdgeResponse,
+    SkeletonGraphNodeResponse,
     SkeletonizationAnalysisResponse,
     SkeletonizationReadinessResponse,
     SkeletonJunctionClusterResponse,
@@ -23,6 +25,7 @@ from reefvision.schemas.skeletonization import (
 )
 from reefvision.services.skeleton_algorithms import (
     BinaryMask,
+    build_initial_branch_graph,
     classify_skeleton_pixels,
     consolidate_junction_clusters,
     zhang_suen_thin,
@@ -269,6 +272,10 @@ class SkeletonizationService:
         paths = sum(feature.kind == "path" for feature in features)
         junctions = sum(feature.kind == "junction" for feature in features)
         junction_clusters = consolidate_junction_clusters(features)
+        graph_nodes, graph_edges = build_initial_branch_graph(
+            features,
+            junction_clusters,
+        )
 
         return SkeletonizationAnalysisResponse(
             mask_annotation_id=mask.id,
@@ -295,6 +302,32 @@ class SkeletonizationService:
                     external_connection_count=len(cluster.external_connections),
                 )
                 for cluster in junction_clusters
+            ],
+            graph_node_count=len(graph_nodes),
+            graph_edge_count=len(graph_edges),
+            graph_nodes=[
+                SkeletonGraphNodeResponse(
+                    id=node.id,
+                    kind=node.kind,
+                    x=node.x,
+                    y=node.y,
+                    source_pixel_count=len(node.source_pixels),
+                    external_connection_count=node.external_connection_count,
+                )
+                for node in graph_nodes
+            ],
+            graph_edges=[
+                SkeletonGraphEdgeResponse(
+                    id=edge.id,
+                    source_node_id=edge.source_node_id,
+                    target_node_id=edge.target_node_id,
+                    path_pixel_count=len(edge.pixels),
+                    boundary_to_boundary_length_pixels=(
+                        edge.boundary_to_boundary_length_pixels
+                    ),
+                    is_cycle=edge.is_cycle,
+                )
+                for edge in graph_edges
             ],
             feature_pixels=[
                 SkeletonFeaturePixelResponse(
