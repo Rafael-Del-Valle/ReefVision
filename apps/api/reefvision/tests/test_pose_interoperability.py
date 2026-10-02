@@ -327,9 +327,9 @@ def test_corrected_pose_observations_take_precedence_and_preserve_visibility() -
     ("exchange_format", "expected_content_type"),
     [
         ("slp", "application/octet-stream"),
-        ("nwb", "application/x-hdf5"),
-        ("coco", "application/json"),
-        ("dlc_csv", "text/csv; charset=utf-8"),
+        ("nwb", "application/zip"),
+        ("coco", "application/zip"),
+        ("dlc_csv", "application/zip"),
         ("ultralytics_pose", "application/zip"),
     ],
 )
