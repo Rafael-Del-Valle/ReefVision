@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_serializer, model_validator
 
 from reefvision.schemas.videos import VideoTrackKeyframe
 
@@ -23,6 +23,12 @@ class ReefVisionTrackExchangeItem(BaseModel):
     original_source_model_id: str | None = Field(default=None, max_length=100)
     original_source_job_id: str | None = Field(default=None, max_length=100)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_serializer("keyframes")
+    def serialize_keyframes(
+        self, keyframes: list[VideoTrackKeyframe]
+    ) -> list[dict[str, object]]:
+        return [item.model_dump(mode="json", exclude_none=True) for item in keyframes]
 
     @model_validator(mode="after")
     def ordered_unique_frames(self) -> ReefVisionTrackExchangeItem:
