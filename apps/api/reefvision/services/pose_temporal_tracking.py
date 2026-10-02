@@ -984,6 +984,18 @@ class PoseTemporalTrackingService:
                 or selected_track.pose_schema_revision != observation.pose_schema_revision
             ):
                 raise ValidationError("Landmark identity must use the same pose schema revision")
+            if observation.frame_index < selected_track.first_frame:
+                raise ValidationError(
+                    "Landmark identity cannot be assigned before its first frame"
+                )
+            if (
+                selected_track.lifecycle_state == "terminated"
+                and selected_track.last_frame is not None
+                and observation.frame_index > selected_track.last_frame
+            ):
+                raise ValidationError(
+                    "Landmark identity cannot be assigned after a terminated track"
+                )
 
         before = {
             "selected_landmark_track_id": current.selected_landmark_track_id,
@@ -1079,6 +1091,17 @@ class PoseTemporalTrackingService:
         predecessor = self.session.get(PoseLandmarkTrack, landmark_track_id)
         if predecessor is None:
             raise NotFoundError("Pose landmark track not found")
+        if payload.break_after_frame < predecessor.first_frame:
+            raise ValidationError(
+                "Identity break cannot occur before the track begins"
+            )
+        if (
+            predecessor.last_frame is not None
+            and payload.break_after_frame > predecessor.last_frame
+        ):
+            raise ValidationError(
+                "Identity break cannot occur after the track ends"
+            )
         successor: PoseLandmarkTrack | None = None
         if payload.successor_landmark_track_id is not None:
             successor = self.session.get(
@@ -1087,6 +1110,10 @@ class PoseTemporalTrackingService:
             )
             if successor is None:
                 raise NotFoundError("Successor pose landmark track not found")
+            if successor.id == predecessor.id:
+                raise ValidationError(
+                    "Successor identity must be different from the predecessor"
+                )
             if successor.parent_video_track_id != predecessor.parent_video_track_id:
                 raise ValidationError("Successor identity must belong to the same parent track")
             if successor.semantic_label != predecessor.semantic_label:
@@ -1096,6 +1123,19 @@ class PoseTemporalTrackingService:
                 or successor.pose_schema_revision != predecessor.pose_schema_revision
             ):
                 raise ValidationError("Successor identity must use the same pose schema revision")
+            effective_successor_start = (
+                payload.successor_start_frame
+                if payload.successor_start_frame is not None
+                else successor.first_frame
+            )
+            if effective_successor_start < successor.first_frame:
+                raise ValidationError(
+                    "Successor identity cannot start before its first frame"
+                )
+            if effective_successor_start <= payload.break_after_frame:
+                raise ValidationError(
+                    "Successor identity must start after the identity break"
+                )
 
         correction = PoseLandmarkCorrection(
             parent_video_track_id=predecessor.parent_video_track_id,
