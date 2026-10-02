@@ -36,6 +36,7 @@ jobs:
           apps/api/reefvision/tests/test_video_pose_tracking.py
           apps/api/reefvision/tests/test_video_tracking_phase6.py
           apps/api/reefvision/tests/test_pose_temporal_tracking.py
+          apps/api/reefvision/tests/test_pose_schema_revisions.py
           -q
       - name: Verify temporal pose migration roundtrip
         run: |
