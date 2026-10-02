@@ -74,15 +74,9 @@ def _keyframes(
     pose_landmark_schema: dict[str, object] | None = None,
 ) -> list[dict[str, object]]:
     labels_raw = (
-        pose_landmark_schema.get("expanded_labels")
-        if pose_landmark_schema is not None
-        else None
+        pose_landmark_schema.get("expanded_labels") if pose_landmark_schema is not None else None
     )
-    expanded_labels = (
-        [str(item) for item in labels_raw]
-        if isinstance(labels_raw, list)
-        else None
-    )
+    expanded_labels = [str(item) for item in labels_raw] if isinstance(labels_raw, list) else None
 
     keyframes: list[dict[str, object]] = []
     for item in observations:
@@ -129,9 +123,7 @@ def _keyframes(
                             "x": x if visible else 0.0,
                             "y": y if visible else 0.0,
                             "confidence": (
-                                min(max(confidence, 0.0), 1.0)
-                                if math.isfinite(confidence)
-                                else 0.0
+                                min(max(confidence, 0.0), 1.0) if math.isfinite(confidence) else 0.0
                             ),
                             "status": "visible" if visible else "absent",
                             "source": "model",
@@ -301,8 +293,7 @@ def process_video_tracking_job(
         if model_task == "pose" and pose_landmark_schema is None:
             job.status = "failed"
             job.error_message = (
-                "Pose video inference requires a bound ReefVision landmark schema "
-                "before tracking"
+                "Pose video inference requires a bound ReefVision landmark schema before tracking"
             )
             job.completed_at = datetime.now(UTC)
             video.status = "tracking_failed"

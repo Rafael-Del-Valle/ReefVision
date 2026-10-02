@@ -714,92 +714,91 @@ describe("VideoTrackingWorkspace", () => {
   });
 });
 
+it("blocks pose inference until the ReefVision landmark schema is saved", async () => {
+  vi.mocked(api.getTrackingModels).mockResolvedValue([
+    {
+      id: "pose-model-unbound",
+      project_id: project.id,
+      purpose: "detector",
+      display_name: "Unbound pose model",
+      source_filename: "pose.pt",
+      managed_path: "projects/project-1/models/pose.pt",
+      sha256: "b".repeat(64),
+      file_size_bytes: 100,
+      framework: "ultralytics",
+      task: "pose",
+      provider_name: "ultralytics",
+      provider_version: "test",
+      class_map_json: {},
+      input_size_json: { width: 640, height: 640 },
+      metadata_json: { pose_keypoint_shape: [3, 3] },
+      notes: null,
+      created_at: "2026-10-02T00:00:00Z",
+      updated_at: "2026-10-02T00:00:00Z",
+    },
+  ]);
 
-  it("blocks pose inference until the ReefVision landmark schema is saved", async () => {
-    vi.mocked(api.getTrackingModels).mockResolvedValue([
-      {
-        id: "pose-model-unbound",
-        project_id: project.id,
-        purpose: "detector",
-        display_name: "Unbound pose model",
-        source_filename: "pose.pt",
-        managed_path: "projects/project-1/models/pose.pt",
-        sha256: "b".repeat(64),
-        file_size_bytes: 100,
-        framework: "ultralytics",
-        task: "pose",
-        provider_name: "ultralytics",
-        provider_version: "test",
-        class_map_json: {},
-        input_size_json: { width: 640, height: 640 },
-        metadata_json: { pose_keypoint_shape: [3, 3] },
-        notes: null,
-        created_at: "2026-10-02T00:00:00Z",
-        updated_at: "2026-10-02T00:00:00Z",
-      },
-    ]);
+  renderWorkspace();
 
-    renderWorkspace();
-
-    const run = await screen.findByRole("button", {
-      name: /Run pose/,
-    });
-    expect(run).toBeDisabled();
-    expect(screen.getByText("Pose landmark schema")).toBeInTheDocument();
+  const run = await screen.findByRole("button", {
+    name: /Run pose/,
   });
+  expect(run).toBeDisabled();
+  expect(screen.getByText("Pose landmark schema")).toBeInTheDocument();
+});
 
-  it("shows SLEAP-NN instance tracking controls without Ultralytics tracker knobs", async () => {
-    vi.mocked(api.getTrackingModels).mockResolvedValue([
-      {
-        id: "sleap-pose-model",
-        project_id: project.id,
-        purpose: "detector",
-        display_name: "Jellyfish SLEAP pose",
-        source_filename: "jellyfish-pose.zip",
-        managed_path: "projects/project-1/models/sleap.zip",
-        sha256: "c".repeat(64),
-        file_size_bytes: 100,
-        framework: "sleap_nn",
-        task: "pose",
-        provider_name: "sleap_nn",
-        provider_version: "0.3.3",
-        class_map_json: {},
-        input_size_json: null,
-        metadata_json: {
-          pose_keypoint_shape: [3, 3],
-          pose_landmark_schema: {
-            schema_version: "pose-landmarks-0001",
-            schema_id: "schema-1",
-            schema_revision: 1,
-            content_hash: "d".repeat(64),
-            groups: [
-              { name: "bell_center", count: 1 },
-              { name: "tentacle", count: 2 },
-            ],
-            expanded_labels: ["bell_center", "tentacle", "tentacle"],
-            keypoint_count: 3,
-            allows_repeated_labels: true,
-          },
+it("shows SLEAP-NN instance tracking controls without Ultralytics tracker knobs", async () => {
+  vi.mocked(api.getTrackingModels).mockResolvedValue([
+    {
+      id: "sleap-pose-model",
+      project_id: project.id,
+      purpose: "detector",
+      display_name: "Jellyfish SLEAP pose",
+      source_filename: "jellyfish-pose.zip",
+      managed_path: "projects/project-1/models/sleap.zip",
+      sha256: "c".repeat(64),
+      file_size_bytes: 100,
+      framework: "sleap_nn",
+      task: "pose",
+      provider_name: "sleap_nn",
+      provider_version: "0.3.3",
+      class_map_json: {},
+      input_size_json: null,
+      metadata_json: {
+        pose_keypoint_shape: [3, 3],
+        pose_landmark_schema: {
+          schema_version: "pose-landmarks-0001",
+          schema_id: "schema-1",
+          schema_revision: 1,
+          content_hash: "d".repeat(64),
+          groups: [
+            { name: "bell_center", count: 1 },
+            { name: "tentacle", count: 2 },
+          ],
+          expanded_labels: ["bell_center", "tentacle", "tentacle"],
+          keypoint_count: 3,
+          allows_repeated_labels: true,
         },
-        notes: null,
-        created_at: "2026-10-02T00:00:00Z",
-        updated_at: "2026-10-02T00:00:00Z",
       },
-    ]);
+      notes: null,
+      created_at: "2026-10-02T00:00:00Z",
+      updated_at: "2026-10-02T00:00:00Z",
+    },
+  ]);
 
-    renderWorkspace();
+  renderWorkspace();
 
-    expect(
-      await screen.findByText("SLEAP-NN animal-instance tracking"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/fixed-window OKS\/Hungarian tracking/),
-    ).toBeInTheDocument();
-    expect(screen.queryByLabelText("Tracker")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Detector IoU")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", {
-        name: "Run SLEAP-NN pose + instance tracking",
-      }),
-    ).toBeEnabled();
-  });
+  expect(
+    await screen.findByText("SLEAP-NN animal-instance tracking"),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(/fixed-window OKS\/Hungarian tracking/),
+  ).toBeInTheDocument();
+  expect(screen.queryByLabelText("Tracker")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Detector IoU")).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", {
+      name: "Run SLEAP-NN pose + instance tracking",
+    }),
+  ).toBeEnabled();
+});

@@ -228,10 +228,13 @@ def test_sleap_video_pose_normalizes_to_track_observations(
         link_detections=True,
     )
 
-    assert provider.resolve_tracker_name(
-        "bytetrack.yaml",
-        link_detections=True,
-    ) == "sleap_nn:fixed_window:oks:hungarian"
+    assert (
+        provider.resolve_tracker_name(
+            "bytetrack.yaml",
+            link_detections=True,
+        )
+        == "sleap_nn:fixed_window:oks:hungarian"
+    )
     assert len(observations) == 2
     assert {item.provider_track_id for item in observations} == {1}
     assert observations[0].class_name == "jellyfish"
@@ -316,7 +319,6 @@ def test_ultralytics_multitask_adapter_declares_pose_support() -> None:
     assert "pose" in provider.supported_tasks
 
 
-
 def test_provider_catalog_exposes_optional_sleap_pose_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -362,9 +364,7 @@ def test_provider_catalog_marks_incompatible_sleap_runtime(
     descriptor = provider_hub_module._sleap_nn_descriptor()
 
     assert descriptor.availability_status == "dependency_incompatible"
-    assert descriptor.availability_reason == (
-        "sleap-nn 0.3.3 is required (found 0.3.2)"
-    )
+    assert descriptor.availability_reason == ("sleap-nn 0.3.3 is required (found 0.3.2)")
     assert descriptor.required_packages[0].status == "incompatible"
     assert descriptor.required_packages[1].status == "ok"
 
@@ -457,9 +457,7 @@ def test_sleap_bundle_registers_without_optional_runtime(
     assert model["provider_name"] == "sleap_nn"
     assert model["task"] == "pose"
     assert model["framework"] == "sleap_nn"
-    assert model["class_map_json"]["mapping"][class_name] == str(
-        project["label_classes"][0]["id"]
-    )
+    assert model["class_map_json"]["mapping"][class_name] == str(project["label_classes"][0]["id"])
     assert model["metadata_json"]["pose_keypoint_shape"] == [3, 3]
     assert model["metadata_json"]["pose_landmark_labels"] == [
         "bell_center",
@@ -731,11 +729,7 @@ def test_pose_video_job_persists_provider_neutral_canonical_landmarks(
         queued.json()["id"],
     )
     tracks = client.get(f"/api/v1/videos/{video['id']}/tracks").json()
-    machine = next(
-        item
-        for item in tracks
-        if item["source_job_id"] == queued.json()["id"]
-    )
+    machine = next(item for item in tracks if item["source_job_id"] == queued.json()["id"])
     first_frame = machine["keyframes_json"][0]
     assert [item["semantic_label"] for item in first_frame["pose_observations"]] == [
         "bell_center",
@@ -746,18 +740,15 @@ def test_pose_video_job_persists_provider_neutral_canonical_landmarks(
     assert first_frame["pose_observations"][2]["confidence"] == 0.0
     assert machine["metadata_json"]["pose_tracking"] is True
 
-    temporal = client.get(
-        f"/api/v1/video-tracks/{machine['id']}/pose-temporal"
-    )
+    temporal = client.get(f"/api/v1/video-tracks/{machine['id']}/pose-temporal")
     assert temporal.status_code == 200, temporal.text
     summary = temporal.json()
-    assert {
-        observation["semantic_label"]
-        for observation in summary["observations"]
-    } == {"bell_center", "tentacle"}
+    assert {observation["semantic_label"] for observation in summary["observations"]} == {
+        "bell_center",
+        "tentacle",
+    }
     assert any(
-        observation["visibility_state"] == "absent"
-        for observation in summary["observations"]
+        observation["visibility_state"] == "absent" for observation in summary["observations"]
     )
 
 

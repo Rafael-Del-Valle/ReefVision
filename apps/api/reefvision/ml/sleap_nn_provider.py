@@ -53,20 +53,15 @@ def _installed_version(distribution: str) -> str | None:
 def sleap_nn_runtime_status() -> SleapNNRuntimeStatus:
     nn_version = _installed_version("sleap-nn")
     io_version = _installed_version("sleap-io")
-    ready = (
-        nn_version == SLEAP_NN_SUPPORTED_VERSION
-        and io_version == SLEAP_IO_SUPPORTED_VERSION
-    )
+    ready = nn_version == SLEAP_NN_SUPPORTED_VERSION and io_version == SLEAP_IO_SUPPORTED_VERSION
     issues: list[str] = []
     if nn_version != SLEAP_NN_SUPPORTED_VERSION:
         issues.append(
-            f"sleap-nn {SLEAP_NN_SUPPORTED_VERSION} is required "
-            f"(found {nn_version or 'missing'})"
+            f"sleap-nn {SLEAP_NN_SUPPORTED_VERSION} is required (found {nn_version or 'missing'})"
         )
     if io_version != SLEAP_IO_SUPPORTED_VERSION:
         issues.append(
-            f"sleap-io {SLEAP_IO_SUPPORTED_VERSION} is required "
-            f"(found {io_version or 'missing'})"
+            f"sleap-io {SLEAP_IO_SUPPORTED_VERSION} is required (found {io_version or 'missing'})"
         )
     return {
         "ready": ready,
@@ -91,9 +86,7 @@ def read_sleap_nn_bundle_manifest(bundle_path: Path) -> SleapNNBundleManifest:
         with zipfile.ZipFile(bundle_path) as archive:
             names = {_safe_member_name(item.filename) for item in archive.infolist()}
             if SLEAP_BUNDLE_MANIFEST not in names:
-                raise ValidationError(
-                    f"SLEAP-NN bundle is missing {SLEAP_BUNDLE_MANIFEST}"
-                )
+                raise ValidationError(f"SLEAP-NN bundle is missing {SLEAP_BUNDLE_MANIFEST}")
             raw = json.loads(archive.read(SLEAP_BUNDLE_MANIFEST).decode("utf-8"))
     except ValidationError:
         raise
@@ -127,9 +120,7 @@ def read_sleap_nn_bundle_manifest(bundle_path: Path) -> SleapNNBundleManifest:
     if instance_mode not in {"single", "multi"}:
         raise ValidationError("SLEAP-NN instance_mode must be single or multi")
 
-    provider_version = str(
-        raw.get("provider_version") or SLEAP_NN_SUPPORTED_VERSION
-    ).strip()
+    provider_version = str(raw.get("provider_version") or SLEAP_NN_SUPPORTED_VERSION).strip()
     if provider_version != SLEAP_NN_SUPPORTED_VERSION:
         raise ValidationError(
             "SLEAP-NN bundle provider_version must match the validated "
@@ -137,27 +128,20 @@ def read_sleap_nn_bundle_manifest(bundle_path: Path) -> SleapNNBundleManifest:
         )
 
     with zipfile.ZipFile(bundle_path) as archive:
-        archive_names = [
-            _safe_member_name(item.filename) for item in archive.infolist()
-        ]
+        archive_names = [_safe_member_name(item.filename) for item in archive.infolist()]
         for model_path in model_paths:
             prefix = model_path.rstrip("/") + "/"
-            children = [
-                name for name in archive_names if name.startswith(prefix)
-            ]
+            children = [name for name in archive_names if name.startswith(prefix)]
             if not children:
                 raise ValidationError(
                     f"SLEAP-NN model directory is missing from bundle: {model_path}"
                 )
             basenames = {Path(name).name for name in children}
             if "best.ckpt" not in basenames:
-                raise ValidationError(
-                    f"SLEAP-NN model directory lacks best.ckpt: {model_path}"
-                )
+                raise ValidationError(f"SLEAP-NN model directory lacks best.ckpt: {model_path}")
             if not {"training_config.yaml", "training_config.json"} & basenames:
                 raise ValidationError(
-                    "SLEAP-NN model directory lacks training_config.yaml/json: "
-                    f"{model_path}"
+                    f"SLEAP-NN model directory lacks training_config.yaml/json: {model_path}"
                 )
 
     return SleapNNBundleManifest(

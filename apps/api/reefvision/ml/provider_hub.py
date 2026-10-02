@@ -270,25 +270,16 @@ def _sleap_nn_descriptor() -> ModelProviderDescriptor:
     status = sleap_nn_runtime_status()
     ready = bool(status["ready"])
     issues = tuple(str(item) for item in status["issues"])
-    installed_any = (
-        status["sleap_nn_version"] is not None
-        or status["sleap_io_version"] is not None
-    )
+    installed_any = status["sleap_nn_version"] is not None or status["sleap_io_version"] is not None
     availability_status = (
-        "ready"
-        if ready
-        else "dependency_incompatible"
-        if installed_any
-        else "dependency_missing"
+        "ready" if ready else "dependency_incompatible" if installed_any else "dependency_missing"
     )
     return ModelProviderDescriptor(
         provider_id="sleap_nn",
         display_name="SLEAP-NN",
         provider_version=SLEAP_NN_SUPPORTED_VERSION,
         package_version=(
-            str(status["sleap_nn_version"])
-            if status["sleap_nn_version"] is not None
-            else None
+            str(status["sleap_nn_version"]) if status["sleap_nn_version"] is not None else None
         ),
         supported_model_families=(
             "SLEAP-NN single-instance pose bundles",
@@ -354,9 +345,7 @@ def _sleap_nn_descriptor() -> ModelProviderDescriptor:
         ),
         desktop_packaging_state="optional_provider_pack",
         clean_machine_verification_state=(
-            "runtime_ready"
-            if ready
-            else "optional_dependency_not_ready"
+            "runtime_ready" if ready else "optional_dependency_not_ready"
         ),
         availability_status=availability_status,
         availability_reason=None if ready else "; ".join(issues),

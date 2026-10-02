@@ -274,11 +274,7 @@ class SleapNNVideoTrackingProvider:
         link_detections: bool,
     ) -> str:
         del requested
-        return (
-            "sleap_nn:fixed_window:oks:hungarian"
-            if link_detections
-            else "instances-only"
-        )
+        return "sleap_nn:fixed_window:oks:hungarian" if link_detections else "instances-only"
 
     @staticmethod
     def _cuda_available() -> bool:
@@ -313,9 +309,7 @@ class SleapNNVideoTrackingProvider:
             )
 
         if not SleapNNVideoTrackingProvider._cuda_available():
-            raise ValidationError(
-                "SLEAP-NN CUDA device was requested but CUDA is not available"
-            )
+            raise ValidationError("SLEAP-NN CUDA device was requested but CUDA is not available")
         return normalized
 
     def track(
@@ -441,14 +435,8 @@ class SleapNNVideoTrackingProvider:
 
                 score = float(getattr(instance, "score", 0.0) or 0.0)
                 if not 0.0 <= score <= 1.0:
-                    visible_scores = [
-                        point[2] for point in keypoints if point[2] > 0
-                    ]
-                    score = (
-                        sum(visible_scores) / len(visible_scores)
-                        if visible_scores
-                        else 0.0
-                    )
+                    visible_scores = [point[2] for point in keypoints if point[2] > 0]
+                    score = sum(visible_scores) / len(visible_scores) if visible_scores else 0.0
 
                 unique_track_ids.add(provider_track_id)
                 observations.append(

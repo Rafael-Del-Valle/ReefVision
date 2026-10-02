@@ -11,9 +11,7 @@ from reefvision.ml.provider_contract import ProviderRequest, ProviderResult
 
 class UltralyticsMultitaskProvider:
     provider_id = "ultralytics"
-    supported_tasks = frozenset(
-        {"detect", "instance_segment", "pose", "classify", "track"}
-    )
+    supported_tasks = frozenset({"detect", "instance_segment", "pose", "classify", "track"})
 
     def preflight(self, request: ProviderRequest) -> list[str]:
         if request.task not in self.supported_tasks:
