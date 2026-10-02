@@ -256,3 +256,31 @@ it("queues canvas edits and submits them only as an explicit correction", async 
     }),
   );
 });
+
+
+
+it("switches visual QC baselines and edits only the final skeleton", async () => {
+  const onOverlayChange = vi.fn();
+  renderPanel(onOverlayChange);
+
+  await screen.findByText("12.00 px");
+  fireEvent.click(screen.getByRole("button", { name: "Raw" }));
+
+  await waitFor(() => {
+    const overlay = latestOverlay(onOverlayChange.mock.calls);
+    expect(overlay.editMode).toBe("view");
+    expect(overlay.pixels).toHaveLength(4);
+  });
+
+  fireEvent.click(screen.getByRole("button", { name: "Auto-pruned" }));
+  await waitFor(() =>
+    expect(latestOverlay(onOverlayChange.mock.calls).pixels).toHaveLength(3),
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Add pixels" }));
+  await waitFor(() => {
+    const overlay = latestOverlay(onOverlayChange.mock.calls);
+    expect(overlay.editMode).toBe("add");
+    expect(overlay.pixels).toHaveLength(3);
+  });
+});
