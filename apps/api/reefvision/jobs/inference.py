@@ -11,6 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 from PIL import Image, UnidentifiedImageError
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
@@ -89,6 +90,35 @@ def _validate_model_prediction(
         raise ValidationError("Segmentation prediction polygons may not self-intersect")
     if _polygon_area(points) <= 0:
         raise ValidationError("Segmentation prediction polygons must have positive area")
+
+
+def _cleanup_pending_job_proposals(
+    settings: Settings,
+    factory: sessionmaker[Session],
+    job_id: str,
+) -> int:
+    """Remove only unreviewed outputs from a terminally failed inference job."""
+
+    with factory() as session:
+        pending = list(
+            session.scalars(
+                select(PredictionProposal).where(
+                    PredictionProposal.inference_job_id == job_id,
+                    PredictionProposal.review_status == "pending",
+                )
+            )
+        )
+        for proposal in pending:
+            if proposal.mask_path:
+                try:
+                    resolve_managed_project_path(settings, proposal.mask_path).unlink(
+                        missing_ok=True
+                    )
+                except OSError:
+                    pass
+            session.delete(proposal)
+        session.commit()
+        return len(pending)
 
 
 def _utc_now() -> datetime:
@@ -413,6 +443,11 @@ def process_inference_job(
                 session.commit()
         return True
     except Exception as exc:
+        removed_pending_proposals = _cleanup_pending_job_proposals(
+            settings,
+            factory,
+            job_id,
+        )
         with factory() as session:
             job = session.get(Job, job_id)
             if job is not None:
@@ -422,6 +457,7 @@ def process_inference_job(
                     "error_type": type(exc).__name__,
                     "error": str(exc),
                     "model_task": model_task,
+                    "removed_pending_proposals": removed_pending_proposals,
                 }
                 job.completed_at = _utc_now()
                 session.commit()
