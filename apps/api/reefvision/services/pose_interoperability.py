@@ -14,6 +14,7 @@ from tempfile import TemporaryDirectory
 from typing import Any, cast
 
 import numpy as np
+from numpy.typing import NDArray
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,7 +23,7 @@ from reefvision.db.models import LabelClass, VideoAsset, VideoTrack
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.ml.sleap_nn_provider import SLEAP_IO_SUPPORTED_VERSION
 from reefvision.schemas.pose_interoperability import PoseInteroperabilityFormat
-from reefvision.schemas.videos import VideoTrackKeyframe
+from reefvision.schemas.videos import VideoPoseObservation, VideoTrackKeyframe
 from reefvision.storage.projects import resolve_managed_project_path
 
 
@@ -186,14 +187,14 @@ class PoseInteroperabilityService:
         cls,
         keyframe: VideoTrackKeyframe,
         schema: _PoseSchemaContext,
-    ) -> tuple[np.ndarray, np.ndarray] | None:
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]] | None:
         point_count = len(schema.expanded_labels)
         points = np.full((point_count, 3), np.nan, dtype=np.float64)
         points[:, 2] = 0.0
         scores = np.zeros(point_count, dtype=np.float64)
 
         if keyframe.pose_observations is not None:
-            observations: dict[tuple[str, int], Any] = {}
+            observations: dict[tuple[str, int], VideoPoseObservation] = {}
             valid_keys = set(cls._slot_keys(schema.expanded_labels))
             for observation in keyframe.pose_observations:
                 key = (observation.semantic_label, observation.occurrence_index)
@@ -236,7 +237,10 @@ class PoseInteroperabilityService:
         return points, scores
 
     @staticmethod
-    def _instance_score(keyframe: VideoTrackKeyframe, scores: np.ndarray) -> float:
+    def _instance_score(
+        keyframe: VideoTrackKeyframe,
+        scores: NDArray[np.float64],
+    ) -> float:
         if keyframe.confidence is not None:
             return float(keyframe.confidence)
         positive = scores[scores > 0]
