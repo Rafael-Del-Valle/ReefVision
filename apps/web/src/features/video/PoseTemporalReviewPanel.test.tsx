@@ -237,9 +237,7 @@ describe("PoseTemporalReviewPanel", () => {
     expect(
       screen.getByText("unresolved · association confidence n/a · unreviewed"),
     ).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByText("Association evidence · 1 candidate"),
-    );
+    fireEvent.click(screen.getByText("Association evidence · 1 candidate"));
     expect(screen.getByText(/confidence 0\.800/)).toHaveTextContent(
       "total 0.100",
     );
@@ -270,7 +268,6 @@ describe("PoseTemporalReviewPanel", () => {
     ).toHaveAttribute("href", "/pose-export/track-1.json");
   });
 });
-
 
 it("does not offer future or expired landmark identities for a frame", async () => {
   const futureTrack = {
@@ -309,7 +306,6 @@ it("does not offer future or expired landmark identities for a frame", async () 
   expect(selector).not.toHaveTextContent("expired");
 });
 
-
 it("reviews tracker-created identity breaks without offering duplicate breaks", async () => {
   vi.mocked(poseApi.getTemporalPoseSummary).mockResolvedValue({
     schema_version: "pose-temporal-summary-0001",
@@ -346,9 +342,7 @@ it("reviews tracker-created identity breaks without offering duplicate breaks", 
 
   renderPanel(10);
 
-  const unreviewedLabel = await screen.findByText(
-    "Unreviewed identity breaks",
-  );
+  const unreviewedLabel = await screen.findByText("Unreviewed identity breaks");
   expect(unreviewedLabel.parentElement).toHaveTextContent(
     "Unreviewed identity breaks1",
   );

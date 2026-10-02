@@ -902,9 +902,7 @@ class PoseTemporalTrackingService:
                 self.session.scalars(
                     select(PoseLandmarkAssociationCandidate)
                     .where(
-                        PoseLandmarkAssociationCandidate.association_decision_id.in_(
-                            decision_ids
-                        )
+                        PoseLandmarkAssociationCandidate.association_decision_id.in_(decision_ids)
                     )
                     .order_by(
                         PoseLandmarkAssociationCandidate.association_decision_id,
@@ -939,8 +937,7 @@ class PoseTemporalTrackingService:
                 PoseLandmarkAssociationDecisionResponse.model_validate(item) for item in decisions
             ],
             association_candidates=[
-                PoseLandmarkAssociationCandidateResponse.model_validate(item)
-                for item in candidates
+                PoseLandmarkAssociationCandidateResponse.model_validate(item) for item in candidates
             ],
             identity_breaks=[
                 PoseLandmarkIdentityBreakResponse.model_validate(item) for item in breaks
@@ -986,9 +983,7 @@ class PoseTemporalTrackingService:
             ):
                 raise ValidationError("Landmark identity must use the same pose schema revision")
             if observation.frame_index < selected_track.first_frame:
-                raise ValidationError(
-                    "Landmark identity cannot be assigned before its first frame"
-                )
+                raise ValidationError("Landmark identity cannot be assigned before its first frame")
             if (
                 selected_track.lifecycle_state == "terminated"
                 and selected_track.last_frame is not None
@@ -1014,8 +1009,7 @@ class PoseTemporalTrackingService:
         )
         correction_action = (
             "confirm_identity"
-            if unchanged_identity
-            and payload.association_state in {"confirmed", "provisional"}
+            if unchanged_identity and payload.association_state in {"confirmed", "provisional"}
             else "confirm_unresolved"
             if unchanged_identity
             else "reassign_identity"
@@ -1058,10 +1052,7 @@ class PoseTemporalTrackingService:
         source_candidates = list(
             self.session.scalars(
                 select(PoseLandmarkAssociationCandidate)
-                .where(
-                    PoseLandmarkAssociationCandidate.association_decision_id
-                    == current.id
-                )
+                .where(PoseLandmarkAssociationCandidate.association_decision_id == current.id)
                 .order_by(PoseLandmarkAssociationCandidate.rank)
             )
         )
@@ -1094,10 +1085,7 @@ class PoseTemporalTrackingService:
             raise NotFoundError("Pose landmark track not found")
         existing_break = self.session.scalar(
             select(PoseLandmarkIdentityBreak)
-            .where(
-                PoseLandmarkIdentityBreak.predecessor_landmark_track_id
-                == predecessor.id
-            )
+            .where(PoseLandmarkIdentityBreak.predecessor_landmark_track_id == predecessor.id)
             .order_by(
                 PoseLandmarkIdentityBreak.break_after_frame,
                 PoseLandmarkIdentityBreak.id,
@@ -1109,16 +1097,12 @@ class PoseTemporalTrackingService:
                 "Landmark identity already has a break; review the existing break instead"
             )
         if payload.break_after_frame < predecessor.first_frame:
-            raise ValidationError(
-                "Identity break cannot occur before the track begins"
-            )
+            raise ValidationError("Identity break cannot occur before the track begins")
         if (
             predecessor.last_frame is not None
             and payload.break_after_frame > predecessor.last_frame
         ):
-            raise ValidationError(
-                "Identity break cannot occur after the track ends"
-            )
+            raise ValidationError("Identity break cannot occur after the track ends")
         successor: PoseLandmarkTrack | None = None
         effective_successor_start = payload.successor_start_frame
         if payload.successor_landmark_track_id is not None:
@@ -1129,9 +1113,7 @@ class PoseTemporalTrackingService:
             if successor is None:
                 raise NotFoundError("Successor pose landmark track not found")
             if successor.id == predecessor.id:
-                raise ValidationError(
-                    "Successor identity must be different from the predecessor"
-                )
+                raise ValidationError("Successor identity must be different from the predecessor")
             if successor.parent_video_track_id != predecessor.parent_video_track_id:
                 raise ValidationError("Successor identity must belong to the same parent track")
             if successor.semantic_label != predecessor.semantic_label:
@@ -1147,13 +1129,9 @@ class PoseTemporalTrackingService:
                 else successor.first_frame
             )
             if effective_successor_start < successor.first_frame:
-                raise ValidationError(
-                    "Successor identity cannot start before its first frame"
-                )
+                raise ValidationError("Successor identity cannot start before its first frame")
             if effective_successor_start <= payload.break_after_frame:
-                raise ValidationError(
-                    "Successor identity must start after the identity break"
-                )
+                raise ValidationError("Successor identity must start after the identity break")
 
         correction = PoseLandmarkCorrection(
             parent_video_track_id=predecessor.parent_video_track_id,
@@ -1249,10 +1227,7 @@ class PoseTemporalTrackingService:
             current_candidates = list(
                 self.session.scalars(
                     select(PoseLandmarkAssociationCandidate)
-                    .where(
-                        PoseLandmarkAssociationCandidate.association_decision_id
-                        == current.id
-                    )
+                    .where(PoseLandmarkAssociationCandidate.association_decision_id == current.id)
                     .order_by(PoseLandmarkAssociationCandidate.rank)
                 )
             )
@@ -1260,9 +1235,7 @@ class PoseTemporalTrackingService:
                 self.session.add(
                     PoseLandmarkAssociationCandidate(
                         association_decision_id=replacement.id,
-                        candidate_landmark_track_id=(
-                            candidate.candidate_landmark_track_id
-                        ),
+                        candidate_landmark_track_id=(candidate.candidate_landmark_track_id),
                         rank=candidate.rank,
                         total_cost=candidate.total_cost,
                         normalized_confidence=candidate.normalized_confidence,
@@ -1292,9 +1265,7 @@ class PoseTemporalTrackingService:
         if identity_break is None:
             raise NotFoundError("Pose landmark identity break not found")
         if identity_break.human_verified:
-            return PoseLandmarkIdentityBreakResponse.model_validate(
-                identity_break
-            )
+            return PoseLandmarkIdentityBreakResponse.model_validate(identity_break)
 
         correction = PoseLandmarkCorrection(
             parent_video_track_id=identity_break.parent_video_track_id,
@@ -1322,9 +1293,7 @@ class PoseTemporalTrackingService:
         identity_break.correction_id = correction.id
         self.session.commit()
         self.session.refresh(identity_break)
-        return PoseLandmarkIdentityBreakResponse.model_validate(
-            identity_break
-        )
+        return PoseLandmarkIdentityBreakResponse.model_validate(identity_break)
 
     def _latest_decisions(
         self,

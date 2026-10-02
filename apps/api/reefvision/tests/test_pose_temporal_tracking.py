@@ -330,9 +330,7 @@ def test_temporal_pose_ambiguous_crossing_is_not_forced(
     correction = client.post(
         f"/api/v1/pose-landmark-observations/{reviewed_decision['observation_id']}/association-corrections",
         json={
-            "selected_landmark_track_id": reviewed_candidates[0][
-                "candidate_landmark_track_id"
-            ],
+            "selected_landmark_track_id": reviewed_candidates[0]["candidate_landmark_track_id"],
             "association_state": "confirmed",
             "reason_code": "scientist_verified_identity",
         },
@@ -341,9 +339,7 @@ def test_temporal_pose_ambiguous_crossing_is_not_forced(
     corrected_decision = correction.json()
     assert corrected_decision["decision_revision"] == 2
 
-    reviewed_summary = client.get(
-        f"/api/v1/video-tracks/{track['id']}/pose-temporal"
-    ).json()
+    reviewed_summary = client.get(f"/api/v1/video-tracks/{track['id']}/pose-temporal").json()
     carried_candidates = sorted(
         [
             candidate
@@ -533,7 +529,6 @@ def test_temporal_pose_rebuild_requires_explicit_replace(
     assert replaced.json()["created_observations"] == 6
 
 
-
 def test_human_reassignment_respects_landmark_track_lifetime(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -547,9 +542,7 @@ def test_human_reassignment_respects_landmark_track_lifetime(
     )
     assert built.status_code == 200, built.text
 
-    summary = client.get(
-        f"/api/v1/video-tracks/{source['id']}/pose-temporal"
-    ).json()
+    summary = client.get(f"/api/v1/video-tracks/{source['id']}/pose-temporal").json()
     observation = next(
         item
         for item in summary["observations"]
@@ -613,9 +606,7 @@ def test_identity_break_respects_track_lifetime_and_rejects_self_successor(
     )
     assert built.status_code == 200, built.text
 
-    summary = client.get(
-        f"/api/v1/video-tracks/{source['id']}/pose-temporal"
-    ).json()
+    summary = client.get(f"/api/v1/video-tracks/{source['id']}/pose-temporal").json()
     track = summary["landmark_tracks"][0]
 
     too_late = client.post(
@@ -639,7 +630,6 @@ def test_identity_break_respects_track_lifetime_and_rejects_self_successor(
     )
     assert self_successor.status_code == 400, self_successor.text
     assert "different from the predecessor" in self_successor.json()["detail"]
-
 
 
 def test_tracker_identity_break_can_be_human_verified_without_duplication(
@@ -680,9 +670,7 @@ def test_tracker_identity_break_can_be_human_verified_without_duplication(
     assert built.status_code == 200, built.text
     assert built.json()["identity_breaks"] == 1
 
-    summary = client.get(
-        f"/api/v1/video-tracks/{source['id']}/pose-temporal"
-    ).json()
+    summary = client.get(f"/api/v1/video-tracks/{source['id']}/pose-temporal").json()
     assert len(summary["identity_breaks"]) == 1
     identity_break = summary["identity_breaks"][0]
     assert identity_break["source"] == "tracker"
@@ -702,13 +690,9 @@ def test_tracker_identity_break_can_be_human_verified_without_duplication(
     assert reviewed_payload["human_verified"] is True
     assert reviewed_payload["correction_id"] is not None
 
-    audited = client.get(
-        f"/api/v1/video-tracks/{source['id']}/pose-temporal"
-    ).json()
+    audited = client.get(f"/api/v1/video-tracks/{source['id']}/pose-temporal").json()
     break_corrections = [
-        item
-        for item in audited["corrections"]
-        if item["action"] == "confirm_identity_break"
+        item for item in audited["corrections"] if item["action"] == "confirm_identity_break"
     ]
     assert len(break_corrections) == 1
     assert break_corrections[0]["target_id"] == identity_break["id"]
@@ -728,9 +712,7 @@ def test_tracker_identity_break_can_be_human_verified_without_duplication(
         json={"reason_code": "scientist_verified_identity_break"},
     )
     assert reviewed_again.status_code == 200, reviewed_again.text
-    audited_again = client.get(
-        f"/api/v1/video-tracks/{source['id']}/pose-temporal"
-    ).json()
+    audited_again = client.get(f"/api/v1/video-tracks/{source['id']}/pose-temporal").json()
     assert (
         len(
             [
