@@ -347,7 +347,8 @@ class BehaviorFeatureService:
                     pose_frame_count / evaluated_frame_count,
                     "ratio",
                     "pose_geometry",
-                    "Fraction of evaluated source frames containing at least one included pose coordinate.",
+                    "Fraction of evaluated source frames containing at least one "
+                    "included pose coordinate.",
                 ),
                 self._feature(
                     "pose.mean_landmarks_per_sampled_frame",
@@ -373,7 +374,8 @@ class BehaviorFeatureService:
                     sum(confidence_values) / len(confidence_values),
                     "probability",
                     "pose_geometry",
-                    "Mean persisted confidence across included landmarks that have confidence values.",
+                    "Mean persisted confidence across included landmarks that have "
+                    "confidence values.",
                 )
             )
         else:
@@ -382,7 +384,8 @@ class BehaviorFeatureService:
                     "pose.mean_landmark_confidence",
                     "probability",
                     "pose_geometry",
-                    "Mean persisted confidence across included landmarks that have confidence values.",
+                    "Mean persisted confidence across included landmarks that have "
+                    "confidence values.",
                     "No included pose landmarks have persisted confidence values.",
                 )
             )
@@ -434,7 +437,8 @@ class BehaviorFeatureService:
                     sum(normalized_spreads) / len(normalized_spreads),
                     "ratio",
                     "pose_geometry",
-                    "Mean pose spread divided by the parent bounding-box diagonal at the same frame.",
+                    "Mean pose spread divided by the parent bounding-box diagonal "
+                    "at the same frame.",
                 )
             )
         else:
@@ -443,8 +447,10 @@ class BehaviorFeatureService:
                     "pose.mean_spread_per_bbox_diagonal",
                     "ratio",
                     "pose_geometry",
-                    "Mean pose spread divided by the parent bounding-box diagonal at the same frame.",
-                    "No pose frame has both included coordinates and a positive bounding-box diagonal.",
+                    "Mean pose spread divided by the parent bounding-box diagonal "
+                    "at the same frame.",
+                    "No pose frame has both included coordinates and a positive "
+                    "bounding-box diagonal.",
                 )
             )
 
@@ -496,7 +502,8 @@ class BehaviorFeatureService:
                     / len(normalized_pairwise_distances),
                     "ratio",
                     "pose_geometry",
-                    "Mean within-frame landmark-pair distance normalized by parent bounding-box diagonal.",
+                    "Mean within-frame landmark-pair distance normalized by parent "
+                    "bounding-box diagonal.",
                 )
             )
         else:
@@ -505,8 +512,10 @@ class BehaviorFeatureService:
                     "pose.mean_pairwise_distance_per_bbox_diagonal",
                     "ratio",
                     "pose_geometry",
-                    "Mean within-frame landmark-pair distance normalized by parent bounding-box diagonal.",
-                    "At least two included landmarks and a positive bounding-box diagonal are required.",
+                    "Mean within-frame landmark-pair distance normalized by parent "
+                    "bounding-box diagonal.",
+                    "At least two included landmarks and a positive bounding-box "
+                    "diagonal are required.",
                 )
             )
 
@@ -547,7 +556,8 @@ class BehaviorFeatureService:
                         resolved_fraction,
                         "ratio",
                         "pose_identity",
-                        "Fraction of included pose samples assigned to a current persistent landmark identity.",
+                        "Fraction of included pose samples assigned to a current "
+                        "persistent landmark identity.",
                     ),
                     self._feature(
                         "pose.identity_path_length_pixels",
@@ -563,7 +573,8 @@ class BehaviorFeatureService:
                         else 0.0,
                         "pixels_per_second",
                         "pose_identity",
-                        "Total continuity-safe persistent-landmark path divided by evaluated identity-motion time.",
+                        "Total continuity-safe persistent-landmark path divided by "
+                        "evaluated identity-motion time.",
                     ),
                     self._feature(
                         "pose.identity_maximum_speed_pixels_per_second",
@@ -577,7 +588,8 @@ class BehaviorFeatureService:
                         sum(len(trajectory.segments) for trajectory in pose.trajectories),
                         "count",
                         "pose_identity",
-                        "Number of persistent-landmark continuity segments after gaps and breaks are applied.",
+                        "Number of persistent-landmark continuity segments after "
+                        "gaps and breaks are applied.",
                     ),
                 ]
             )
@@ -586,7 +598,8 @@ class BehaviorFeatureService:
                 (
                     "pose.resolved_identity_fraction",
                     "ratio",
-                    "Fraction of included pose samples assigned to a current persistent landmark identity.",
+                    "Fraction of included pose samples assigned to a current "
+                    "persistent landmark identity.",
                 ),
                 (
                     "pose.identity_path_length_pixels",
@@ -596,7 +609,8 @@ class BehaviorFeatureService:
                 (
                     "pose.identity_mean_speed_pixels_per_second",
                     "pixels_per_second",
-                    "Total continuity-safe persistent-landmark path divided by evaluated identity-motion time.",
+                    "Total continuity-safe persistent-landmark path divided by "
+                    "evaluated identity-motion time.",
                 ),
                 (
                     "pose.identity_maximum_speed_pixels_per_second",
@@ -606,7 +620,8 @@ class BehaviorFeatureService:
                 (
                     "pose.identity_continuity_segment_count",
                     "count",
-                    "Number of persistent-landmark continuity segments after gaps and breaks are applied.",
+                    "Number of persistent-landmark continuity segments after gaps "
+                    "and breaks are applied.",
                 ),
             ):
                 features.append(

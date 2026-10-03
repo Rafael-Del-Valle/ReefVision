@@ -268,7 +268,7 @@ def test_behavior_features_mark_identity_motion_unavailable_when_temporal_state_
     assert features["track.path_length_pixels"]["value"] == pytest.approx(4.0)
     assert features["pose.mean_spread_pixels"]["available"] is True
     assert features["pose.identity_path_length_pixels"]["available"] is False
-    assert "older" in features["pose.identity_path_length_pixels"]["missing_reason"].lower()
+    assert "rebuild" in features["pose.identity_path_length_pixels"]["missing_reason"].lower()
 
 
 def test_behavior_features_predicted_coordinates_are_explicit_opt_in(
