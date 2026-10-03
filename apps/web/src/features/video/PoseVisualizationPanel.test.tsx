@@ -105,6 +105,46 @@ const response: poseVisualizationApi.PoseVisualizationResponse = {
       path_length_pixels: 25,
       evaluated_seconds: 0.3,
       movement_segment_count: 3,
+      segments: [
+        {
+          segment_index: 0,
+          path_length_pixels: 25,
+          evaluated_seconds: 0.3,
+          movement_segment_count: 3,
+          points: [
+            {
+              frame_index: 0,
+              time_s: 0,
+              semantic_label: "tentacle",
+              occurrence_index: 0,
+              x_px: 20,
+              y_px: 50,
+              landmark_confidence: 0.95,
+              visibility_state: "visible",
+              observation_source: "model",
+              coordinate_kind: "observed",
+              landmark_track_id: "landmark-track-123456",
+              association_state: "confirmed",
+              verification_state: "unreviewed",
+            },
+            {
+              frame_index: 1,
+              time_s: 0.1,
+              semantic_label: "tentacle",
+              occurrence_index: 0,
+              x_px: 30,
+              y_px: 50,
+              landmark_confidence: 0.93,
+              visibility_state: "visible",
+              observation_source: "model",
+              coordinate_kind: "observed",
+              landmark_track_id: "landmark-track-123456",
+              association_state: "confirmed",
+              verification_state: "unreviewed",
+            },
+          ],
+        },
+      ],
       points: [
         {
           frame_index: 0,
@@ -274,6 +314,64 @@ describe("PoseVisualizationPanel", () => {
     expect(screen.getAllByTestId("pose-trajectory")).toHaveLength(1);
     expect(screen.getAllByTestId("pose-current-frame-point")).toHaveLength(1);
     expect(screen.queryByTestId("pose-heatmap-cell")).not.toBeInTheDocument();
+  });
+
+  it("does not draw across trajectory continuity breaks", async () => {
+    vi.mocked(poseVisualizationApi.getPoseVisualization).mockResolvedValue({
+      ...response,
+      trajectories: [
+        {
+          ...response.trajectories[0],
+          points: [
+            ...response.trajectories[0].points,
+            {
+              ...response.trajectories[0].points[1],
+              frame_index: 3,
+              time_s: 0.3,
+              x_px: 80,
+            },
+          ],
+          segments: [
+            {
+              segment_index: 0,
+              path_length_pixels: 10,
+              evaluated_seconds: 0.1,
+              movement_segment_count: 1,
+              points: response.trajectories[0].points,
+            },
+            {
+              segment_index: 1,
+              path_length_pixels: 0,
+              evaluated_seconds: 0,
+              movement_segment_count: 0,
+              points: [
+                {
+                  ...response.trajectories[0].points[1],
+                  frame_index: 3,
+                  time_s: 0.3,
+                  x_px: 80,
+                },
+              ],
+            },
+          ],
+          path_length_pixels: 10,
+          evaluated_seconds: 0.1,
+          movement_segment_count: 1,
+        },
+      ],
+    });
+
+    renderPanel();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Generate pose visualization" }),
+    );
+    await screen.findByText("Mean landmark confidence (0–1)");
+    fireEvent.change(screen.getByLabelText("Pose visualization mode"), {
+      target: { value: "trajectory" },
+    });
+
+    expect(screen.getAllByTestId("pose-trajectory")).toHaveLength(1);
+    expect(screen.getByText(/2 continuity segments/)).toBeInTheDocument();
   });
 
   it("surfaces stale temporal identity state instead of drawing trajectories", async () => {

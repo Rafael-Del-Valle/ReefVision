@@ -407,27 +407,32 @@ export function PoseVisualizationPanel({
                 })}
 
               {mode === "trajectory" &&
-                data.trajectories.map((trajectory) => (
-                  <polyline
-                    key={trajectory.landmark_track_id}
-                    data-testid="pose-trajectory"
-                    points={trajectory.points
-                      .map((point) => `${point.x_px},${point.y_px}`)
-                      .join(" ")}
-                    fill="none"
-                    stroke="var(--accent-color, #2563eb)"
-                    strokeWidth={2}
-                    strokeOpacity={0.85}
-                    vectorEffect="non-scaling-stroke"
-                  >
-                    <title>
-                      {trajectory.semantic_label} ·{" "}
-                      {shortIdentity(trajectory.landmark_track_id)} · path{" "}
-                      {trajectory.path_length_pixels.toFixed(1)} px ·{" "}
-                      {trajectory.movement_segment_count} segments
-                    </title>
-                  </polyline>
-                ))}
+                data.trajectories.flatMap((trajectory) =>
+                  trajectory.segments
+                    .filter((segment) => segment.points.length > 1)
+                    .map((segment) => (
+                      <polyline
+                        key={`${trajectory.landmark_track_id}-${segment.segment_index}`}
+                        data-testid="pose-trajectory"
+                        points={segment.points
+                          .map((point) => `${point.x_px},${point.y_px}`)
+                          .join(" ")}
+                        fill="none"
+                        stroke="var(--accent-color, #2563eb)"
+                        strokeWidth={2}
+                        strokeOpacity={0.85}
+                        vectorEffect="non-scaling-stroke"
+                      >
+                        <title>
+                          {trajectory.semantic_label} ·{" "}
+                          {shortIdentity(trajectory.landmark_track_id)} ·
+                          segment {segment.segment_index + 1} · path{" "}
+                          {segment.path_length_pixels.toFixed(1)} px ·{" "}
+                          {segment.movement_segment_count} movement segments
+                        </title>
+                      </polyline>
+                    )),
+                )}
 
               {mode === "trajectory" &&
                 currentFramePoints.map((point) => (
@@ -464,6 +469,7 @@ export function PoseVisualizationPanel({
                   </strong>
                   <span className="annotation-helper">
                     {trajectory.points.length} points ·{" "}
+                    {trajectory.segments.length} continuity segments ·{" "}
                     {trajectory.path_length_pixels.toFixed(1)} px path ·{" "}
                     {trajectory.movement_segment_count} movement segments
                   </span>

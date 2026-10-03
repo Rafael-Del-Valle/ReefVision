@@ -28,6 +28,7 @@ from reefvision.schemas.pose_visualization import (
     PoseVisualizationRequest,
     PoseVisualizationResponse,
     PoseVisualizationTrajectory,
+    PoseVisualizationTrajectorySegment,
 )
 from reefvision.schemas.videos import VideoTrackKeyframe
 from reefvision.services.pose_temporal_tracking import PoseTemporalTrackingService
@@ -255,6 +256,7 @@ class PoseVisualizationService:
         str | None,
         dict[str, tuple[str, str]],
         set[tuple[str, int]],
+        dict[str, set[int]],
     ]:
         summary = self.temporal.summary(track.id)
         if not summary.observations:
@@ -264,6 +266,7 @@ class PoseVisualizationService:
                 "Build temporal identities before interpreting trajectory or activity continuity.",
                 {},
                 set(),
+                {},
             )
 
         latest_observations: dict[str, PoseLandmarkObservationResponse] = {}
@@ -281,6 +284,7 @@ class PoseVisualizationService:
                 "rebuild them before interpreting trajectories or activity.",
                 {},
                 set(),
+                {},
             )
 
         latest_decisions: dict[str, PoseLandmarkAssociationDecisionResponse] = {}
@@ -293,6 +297,7 @@ class PoseVisualizationService:
                 latest_decisions[decision.observation_id] = decision
 
         identities: dict[tuple[int, str, int], tuple[str | None, str | None, str | None]] = {}
+        unresolved_frames_by_label: dict[str, set[int]] = defaultdict(set)
         for observation in latest_observations.values():
             latest_decision = latest_decisions.get(observation.id)
             landmark_track_id = None
@@ -306,6 +311,10 @@ class PoseVisualizationService:
                     and latest_decision.selected_landmark_track_id is not None
                 ):
                     landmark_track_id = latest_decision.selected_landmark_track_id
+            if landmark_track_id is None:
+                unresolved_frames_by_label[observation.semantic_label].add(
+                    observation.frame_index
+                )
             identities[
                 (
                     observation.frame_index,
@@ -342,7 +351,14 @@ class PoseVisualizationService:
             (item.predecessor_landmark_track_id, item.break_after_frame)
             for item in summary.identity_breaks
         }
-        return attached, "current", None, track_context, identity_breaks
+        return (
+            attached,
+            "current",
+            None,
+            track_context,
+            identity_breaks,
+            dict(unresolved_frames_by_label),
+        )
 
     def _provider_capabilities(
         self,
@@ -436,6 +452,7 @@ class PoseVisualizationService:
             identity_warning,
             track_context,
             identity_breaks,
+            unresolved_frames_by_label,
         ) = self._identity_context(track, samples)
 
         accumulators = [
@@ -489,74 +506,109 @@ class PoseVisualizationService:
                 by_identity[landmark_track_id],
                 key=lambda item: (item.frame_index, item.time_s),
             )
-            path_length = 0.0
-            evaluated_seconds = 0.0
-            segment_count = 0
-            for first, second in pairwise(points):
-                if second.frame_index <= first.frame_index:
-                    continue
-                if any(
-                    break_track_id == landmark_track_id
-                    and first.frame_index <= break_after_frame < second.frame_index
-                    for break_track_id, break_after_frame in identity_breaks
-                ):
-                    continue
-                duration = second.time_s - first.time_s
-                if duration <= 0:
-                    continue
-                distance = hypot(second.x_px - first.x_px, second.y_px - first.y_px)
-                speed = distance / duration
-                midpoint_x = (first.x_px + second.x_px) / 2.0
-                midpoint_y = (first.y_px + second.y_px) / 2.0
-                row, column = self._cell_index(
-                    midpoint_x,
-                    midpoint_y,
-                    video.width_px,
-                    video.height_px,
-                    payload.grid_rows,
-                    payload.grid_columns,
-                )
-                cell = accumulators[row][column]
-                cell.movement_segment_count += 1
-                cell.movement_distance_pixels += distance
-                cell.movement_duration_seconds += duration
-                cell.maximum_speed_pixels_per_second = (
-                    speed
-                    if cell.maximum_speed_pixels_per_second is None
-                    else max(cell.maximum_speed_pixels_per_second, speed)
-                )
-                path_length += distance
-                evaluated_seconds += duration
-                segment_count += 1
-                total_activity_segments += 1
-
             semantic_label, lifecycle_state = track_context.get(
                 landmark_track_id,
                 (points[0].semantic_label, "unknown"),
             )
+            unresolved_frames = unresolved_frames_by_label.get(semantic_label, set())
+
+            sample_segments: list[list[_Sample]] = [[points[0]]]
+            for first, second in pairwise(points):
+                explicit_break = any(
+                    break_track_id == landmark_track_id
+                    and first.frame_index <= break_after_frame < second.frame_index
+                    for break_track_id, break_after_frame in identity_breaks
+                )
+                unresolved_gap = any(
+                    first.frame_index < frame_index < second.frame_index
+                    for frame_index in unresolved_frames
+                )
+                if explicit_break or unresolved_gap:
+                    sample_segments.append([second])
+                else:
+                    sample_segments[-1].append(second)
+
+            path_length = 0.0
+            evaluated_seconds = 0.0
+            segment_count = 0
+            rendered_segments: list[PoseVisualizationTrajectorySegment] = []
+            for segment_index, segment_points in enumerate(sample_segments):
+                segment_distance = 0.0
+                segment_seconds = 0.0
+                segment_movement_count = 0
+                for first, second in pairwise(segment_points):
+                    if second.frame_index <= first.frame_index:
+                        continue
+                    duration = second.time_s - first.time_s
+                    if duration <= 0:
+                        continue
+                    distance = hypot(second.x_px - first.x_px, second.y_px - first.y_px)
+                    speed = distance / duration
+                    midpoint_x = (first.x_px + second.x_px) / 2.0
+                    midpoint_y = (first.y_px + second.y_px) / 2.0
+                    row, column = self._cell_index(
+                        midpoint_x,
+                        midpoint_y,
+                        video.width_px,
+                        video.height_px,
+                        payload.grid_rows,
+                        payload.grid_columns,
+                    )
+                    cell = accumulators[row][column]
+                    cell.movement_segment_count += 1
+                    cell.movement_distance_pixels += distance
+                    cell.movement_duration_seconds += duration
+                    cell.maximum_speed_pixels_per_second = (
+                        speed
+                        if cell.maximum_speed_pixels_per_second is None
+                        else max(cell.maximum_speed_pixels_per_second, speed)
+                    )
+                    segment_distance += distance
+                    segment_seconds += duration
+                    segment_movement_count += 1
+                    total_activity_segments += 1
+
+                path_length += segment_distance
+                evaluated_seconds += segment_seconds
+                segment_count += segment_movement_count
+                rendered_segments.append(
+                    PoseVisualizationTrajectorySegment(
+                        segment_index=segment_index,
+                        points=[
+                            PoseVisualizationPoint(
+                                frame_index=item.frame_index,
+                                time_s=item.time_s,
+                                semantic_label=item.semantic_label,
+                                occurrence_index=item.occurrence_index,
+                                x_px=item.x_px,
+                                y_px=item.y_px,
+                                landmark_confidence=item.confidence,
+                                visibility_state=item.visibility_state,
+                                observation_source=item.observation_source,
+                                coordinate_kind=cast(Any, item.coordinate_kind),
+                                landmark_track_id=item.landmark_track_id,
+                                association_state=item.association_state,
+                                verification_state=item.verification_state,
+                            )
+                            for item in segment_points
+                        ],
+                        path_length_pixels=segment_distance,
+                        evaluated_seconds=segment_seconds,
+                        movement_segment_count=segment_movement_count,
+                    )
+                )
+
             trajectories.append(
                 PoseVisualizationTrajectory(
                     landmark_track_id=landmark_track_id,
                     semantic_label=semantic_label,
                     lifecycle_state=lifecycle_state,
                     points=[
-                        PoseVisualizationPoint(
-                            frame_index=item.frame_index,
-                            time_s=item.time_s,
-                            semantic_label=item.semantic_label,
-                            occurrence_index=item.occurrence_index,
-                            x_px=item.x_px,
-                            y_px=item.y_px,
-                            landmark_confidence=item.confidence,
-                            visibility_state=item.visibility_state,
-                            observation_source=item.observation_source,
-                            coordinate_kind=cast(Any, item.coordinate_kind),
-                            landmark_track_id=item.landmark_track_id,
-                            association_state=item.association_state,
-                            verification_state=item.verification_state,
-                        )
-                        for item in points
+                        point
+                        for segment in rendered_segments
+                        for point in segment.points
                     ],
+                    segments=rendered_segments,
                     path_length_pixels=path_length,
                     evaluated_seconds=evaluated_seconds,
                     movement_segment_count=segment_count,
@@ -763,11 +815,15 @@ class PoseVisualizationService:
             "include_uncertain",
             "minimum_landmark_confidence",
             "landmark_track_id",
+            "segment_index",
             "semantic_label",
             "lifecycle_state",
             "trajectory_path_length_pixels",
             "trajectory_evaluated_seconds",
             "trajectory_movement_segment_count",
+            "segment_path_length_pixels",
+            "segment_evaluated_seconds",
+            "segment_movement_segment_count",
             "frame_index",
             "time_s",
             "occurrence_index",
@@ -783,46 +839,53 @@ class PoseVisualizationService:
         writer = csv.DictWriter(output, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         for trajectory in result.trajectories:
-            for point in trajectory.points:
-                writer.writerow(
-                    {
-                        "video_id": result.video_id,
-                        "parent_video_track_id": result.parent_video_track_id,
-                        "source_track_revision": result.source_track_revision,
-                        "start_frame": result.start_frame,
-                        "end_frame": result.end_frame,
-                        "include_predicted": payload.include_predicted,
-                        "include_uncertain": payload.include_uncertain,
-                        "minimum_landmark_confidence": (
-                            payload.minimum_landmark_confidence
-                            if payload.minimum_landmark_confidence is not None
-                            else ""
-                        ),
-                        "landmark_track_id": trajectory.landmark_track_id,
-                        "semantic_label": trajectory.semantic_label,
-                        "lifecycle_state": trajectory.lifecycle_state,
-                        "trajectory_path_length_pixels": trajectory.path_length_pixels,
-                        "trajectory_evaluated_seconds": trajectory.evaluated_seconds,
-                        "trajectory_movement_segment_count": (
-                            trajectory.movement_segment_count
-                        ),
-                        "frame_index": point.frame_index,
-                        "time_s": point.time_s,
-                        "occurrence_index": point.occurrence_index,
-                        "x_px": point.x_px,
-                        "y_px": point.y_px,
-                        "landmark_confidence": (
-                            point.landmark_confidence
-                            if point.landmark_confidence is not None
-                            else ""
-                        ),
-                        "visibility_state": point.visibility_state,
-                        "observation_source": point.observation_source,
-                        "coordinate_kind": point.coordinate_kind,
-                        "association_state": point.association_state or "",
-                        "verification_state": point.verification_state or "",
-                    }
-                )
+            for segment in trajectory.segments:
+                for point in segment.points:
+                    writer.writerow(
+                        {
+                            "video_id": result.video_id,
+                            "parent_video_track_id": result.parent_video_track_id,
+                            "source_track_revision": result.source_track_revision,
+                            "start_frame": result.start_frame,
+                            "end_frame": result.end_frame,
+                            "include_predicted": payload.include_predicted,
+                            "include_uncertain": payload.include_uncertain,
+                            "minimum_landmark_confidence": (
+                                payload.minimum_landmark_confidence
+                                if payload.minimum_landmark_confidence is not None
+                                else ""
+                            ),
+                            "landmark_track_id": trajectory.landmark_track_id,
+                            "segment_index": segment.segment_index,
+                            "semantic_label": trajectory.semantic_label,
+                            "lifecycle_state": trajectory.lifecycle_state,
+                            "trajectory_path_length_pixels": trajectory.path_length_pixels,
+                            "trajectory_evaluated_seconds": trajectory.evaluated_seconds,
+                            "trajectory_movement_segment_count": (
+                                trajectory.movement_segment_count
+                            ),
+                            "segment_path_length_pixels": segment.path_length_pixels,
+                            "segment_evaluated_seconds": segment.evaluated_seconds,
+                            "segment_movement_segment_count": (
+                                segment.movement_segment_count
+                            ),
+                            "frame_index": point.frame_index,
+                            "time_s": point.time_s,
+                            "occurrence_index": point.occurrence_index,
+                            "x_px": point.x_px,
+                            "y_px": point.y_px,
+                            "landmark_confidence": (
+                                point.landmark_confidence
+                                if point.landmark_confidence is not None
+                                else ""
+                            ),
+                            "visibility_state": point.visibility_state,
+                            "observation_source": point.observation_source,
+                            "coordinate_kind": point.coordinate_kind,
+                            "association_state": point.association_state or "",
+                            "verification_state": point.verification_state or "",
+                        }
+                    )
         return PoseVisualizationExportPayload(
             filename=f"{stem}-pose-visualization-trajectories.csv",
             media_type="text/csv",

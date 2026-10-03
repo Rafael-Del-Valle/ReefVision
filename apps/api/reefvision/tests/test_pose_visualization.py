@@ -160,6 +160,7 @@ def test_pose_visualization_uses_canonical_points_and_never_invents_paf(
     assert payload["resolved_identity_sample_count"] == 6
     assert payload["unresolved_identity_sample_count"] == 0
     assert len(payload["trajectories"]) == 2
+    assert all(len(item["segments"]) == 1 for item in payload["trajectories"])
     assert sum(item["sample_count"] for item in payload["cells"]) == 6
     assert sum(item["movement_segment_count"] for item in payload["cells"]) == 4
     assert sum(item["movement_distance_pixels"] for item in payload["cells"]) == pytest.approx(8.0)
@@ -213,6 +214,7 @@ def test_pose_visualization_uses_canonical_points_and_never_invents_paf(
     )
     assert trajectory_export.status_code == 200, trajectory_export.text
     assert "landmark_track_id" in trajectory_export.text
+    assert "segment_index" in trajectory_export.text
     assert "coordinate_kind" in trajectory_export.text
 
 
@@ -285,3 +287,77 @@ def test_pose_visualization_filters_uncertain_and_low_confidence_without_zeroing
     assert payload["observed_sample_count"] == 1
     assert payload["excluded_filter_count"] == 2
     assert payload["cells"][0]["sample_fraction"] in {0.0, 1.0}
+
+
+
+def test_pose_visualization_breaks_trajectory_at_unresolved_identity_gap(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Pose visualization unresolved gap")
+    video = _video(client, str(project["id"]), monkeypatch)
+    track = _track(client, str(video["id"]), _first_class(project))
+
+    built = client.post(
+        f"/api/v1/video-tracks/{track['id']}/pose-temporal-associations",
+        json={
+            "max_gap_frames": 2,
+            "max_normalized_displacement": 0.35,
+            "ambiguity_margin": 0.02,
+            "confirm_after_observations": 3,
+        },
+    )
+    assert built.status_code == 200, built.text
+
+    summary = client.get(
+        f"/api/v1/video-tracks/{track['id']}/pose-temporal"
+    ).json()
+    middle = next(
+        item
+        for item in summary["observations"]
+        if item["frame_index"] == 1 and item["occurrence_index"] == 0
+    )
+    correction = client.post(
+        f"/api/v1/pose-landmark-observations/{middle['id']}/association-corrections",
+        json={
+            "selected_landmark_track_id": None,
+            "association_state": "unresolved",
+            "reason_code": "visualization_gap_regression",
+        },
+    )
+    assert correction.status_code == 200, correction.text
+
+    response = client.post(
+        f"/api/v1/video-tracks/{track['id']}/pose-visualization",
+        json={
+            "grid_rows": 2,
+            "grid_columns": 2,
+            "include_predicted": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    target = next(
+        item
+        for item in payload["trajectories"]
+        if any(
+            point["frame_index"] == 0 and point["occurrence_index"] == 0
+            for point in item["points"]
+        )
+    )
+    assert [len(segment["points"]) for segment in target["segments"]] == [1, 1]
+    assert target["movement_segment_count"] == 0
+    assert target["path_length_pixels"] == pytest.approx(0.0)
+    assert payload["unresolved_identity_sample_count"] >= 1
+
+    trajectory_export = client.get(
+        f"/api/v1/video-tracks/{track['id']}/pose-visualization/export",
+        params={
+            "format": "trajectories_csv",
+            "grid_rows": 2,
+            "grid_columns": 2,
+            "include_predicted": "true",
+        },
+    )
+    assert trajectory_export.status_code == 200, trajectory_export.text
+    assert "segment_index" in trajectory_export.text

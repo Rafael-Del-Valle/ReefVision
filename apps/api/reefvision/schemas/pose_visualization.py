@@ -47,11 +47,20 @@ class PoseVisualizationPoint(BaseModel):
     verification_state: str | None = None
 
 
+class PoseVisualizationTrajectorySegment(BaseModel):
+    segment_index: int = Field(ge=0)
+    points: list[PoseVisualizationPoint]
+    path_length_pixels: float = Field(ge=0)
+    evaluated_seconds: float = Field(ge=0)
+    movement_segment_count: int = Field(ge=0)
+
+
 class PoseVisualizationTrajectory(BaseModel):
     landmark_track_id: str
     semantic_label: str
     lifecycle_state: str
     points: list[PoseVisualizationPoint]
+    segments: list[PoseVisualizationTrajectorySegment]
     path_length_pixels: float = Field(ge=0)
     evaluated_seconds: float = Field(ge=0)
     movement_segment_count: int = Field(ge=0)

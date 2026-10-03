@@ -12,7 +12,8 @@ reinterpret model tensors as biological measurements.
 - **Activity / speed heatmap**: mean source-pixel speed of resolved persistent-landmark
   movement segments, assigned by segment midpoint.
 - **Trajectory overlay**: consecutive points sharing a resolved `landmark_track_id`. Explicit
-  identity breaks are never bridged.
+  identity breaks and unresolved same-label temporal-association gaps split the displayed
+  trajectory into separate continuity segments; ReefVision never draws a line across them.
 
 Occlusion-predicted coordinates are excluded by default. When enabled, they remain labeled as
 predicted and are counted separately from observed coordinates.
@@ -33,7 +34,8 @@ The visualization endpoint supports numeric exports using the same filters as th
 
 - JSON: complete visualization response plus the exact request and provenance.
 - Cell CSV: heatmap cell statistics plus source revision and visualization parameters.
-- Trajectory CSV: resolved persistent-landmark points and trajectory summaries.
+- Trajectory CSV: resolved persistent-landmark points, explicit continuity-segment indices,
+  and trajectory/segment summaries.
 
 Trajectory CSV is blocked when temporal identity state is missing or stale. JSON remains the
 recommended audit export because it preserves capability state and all visualization metadata.

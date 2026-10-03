@@ -3,6 +3,11 @@ import { getApiBaseUrl } from "../../runtime";
 export type PoseVisualizationMode =
   "confidence" | "occupancy" | "activity" | "trajectory";
 
+export type PoseVisualizationExportFormat =
+  | "json"
+  | "cells_csv"
+  | "trajectories_csv";
+
 export interface PoseVisualizationRequest {
   grid_rows: number;
   grid_columns: number;
@@ -29,11 +34,20 @@ export interface PoseVisualizationPoint {
   verification_state: string | null;
 }
 
+export interface PoseVisualizationTrajectorySegment {
+  segment_index: number;
+  points: PoseVisualizationPoint[];
+  path_length_pixels: number;
+  evaluated_seconds: number;
+  movement_segment_count: number;
+}
+
 export interface PoseVisualizationTrajectory {
   landmark_track_id: string;
   semantic_label: string;
   lifecycle_state: string;
   points: PoseVisualizationPoint[];
+  segments: PoseVisualizationTrajectorySegment[];
   path_length_pixels: number;
   evaluated_seconds: number;
   movement_segment_count: number;
