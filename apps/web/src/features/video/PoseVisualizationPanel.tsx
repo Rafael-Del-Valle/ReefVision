@@ -125,46 +125,46 @@ export function PoseVisualizationPanel({
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const buildRequest = (): PoseVisualizationRequest => {
-      const parsedStart = parseOptionalNumber(startFrame);
-      const parsedEnd = parseOptionalNumber(endFrame);
-      const parsedConfidence = parseOptionalNumber(minimumConfidence);
-      if (
-        gridRows < 1 ||
-        gridRows > 100 ||
-        gridColumns < 1 ||
-        gridColumns > 100
-      ) {
-        throw new Error(
-          "Pose visualization grid dimensions must be between 1 and 100",
-        );
-      }
-      if (
-        parsedStart !== undefined &&
-        parsedEnd !== undefined &&
-        parsedEnd < parsedStart
-      ) {
-        throw new Error(
-          "Pose visualization end frame must be at or after the start frame",
-        );
-      }
-      if (
-        parsedConfidence !== undefined &&
-        (parsedConfidence < 0 || parsedConfidence > 1)
-      ) {
-        throw new Error("Minimum landmark confidence must be between 0 and 1");
-      }
-      const payload: PoseVisualizationRequest = {
-        grid_rows: gridRows,
-        grid_columns: gridColumns,
-        include_predicted: includePredicted,
-        include_uncertain: includeUncertain,
-      };
-      if (parsedStart !== undefined) payload.start_frame = parsedStart;
-      if (parsedEnd !== undefined) payload.end_frame = parsedEnd;
-      if (parsedConfidence !== undefined) {
-        payload.minimum_landmark_confidence = parsedConfidence;
-      }
-      return payload;
+    const parsedStart = parseOptionalNumber(startFrame);
+    const parsedEnd = parseOptionalNumber(endFrame);
+    const parsedConfidence = parseOptionalNumber(minimumConfidence);
+    if (
+      gridRows < 1 ||
+      gridRows > 100 ||
+      gridColumns < 1 ||
+      gridColumns > 100
+    ) {
+      throw new Error(
+        "Pose visualization grid dimensions must be between 1 and 100",
+      );
+    }
+    if (
+      parsedStart !== undefined &&
+      parsedEnd !== undefined &&
+      parsedEnd < parsedStart
+    ) {
+      throw new Error(
+        "Pose visualization end frame must be at or after the start frame",
+      );
+    }
+    if (
+      parsedConfidence !== undefined &&
+      (parsedConfidence < 0 || parsedConfidence > 1)
+    ) {
+      throw new Error("Minimum landmark confidence must be between 0 and 1");
+    }
+    const payload: PoseVisualizationRequest = {
+      grid_rows: gridRows,
+      grid_columns: gridColumns,
+      include_predicted: includePredicted,
+      include_uncertain: includeUncertain,
+    };
+    if (parsedStart !== undefined) payload.start_frame = parsedStart;
+    if (parsedEnd !== undefined) payload.end_frame = parsedEnd;
+    if (parsedConfidence !== undefined) {
+      payload.minimum_landmark_confidence = parsedConfidence;
+    }
+    return payload;
   };
 
   const visualizationMutation = useMutation({
@@ -529,7 +529,8 @@ export function PoseVisualizationPanel({
                 {" · "}raw tensor export:{" "}
                 {data.provider_capabilities.raw_tensor_export_available
                   ? "available"
-                  : "unavailable"}.
+                  : "unavailable"}
+                .
               </p>
               <p className="annotation-helper">
                 {data.provider_capabilities.reason}

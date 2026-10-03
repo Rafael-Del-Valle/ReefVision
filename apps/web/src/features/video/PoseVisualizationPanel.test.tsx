@@ -257,25 +257,19 @@ describe("PoseVisualizationPanel", () => {
     expect(
       screen.getByText("ReefVision does not synthesize PAFs from keypoints."),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/canonical keypoint scores:/),
-    ).toHaveTextContent("persisted");
-    expect(
-      screen.getByText(/native confidence maps:/),
-    ).toHaveTextContent("not persisted");
+    expect(screen.getByText(/canonical keypoint scores:/)).toHaveTextContent(
+      "persisted",
+    );
+    expect(screen.getByText(/native confidence maps:/)).toHaveTextContent(
+      "not persisted",
+    );
 
     expect(
       screen.getByRole("link", { name: "Export visualization JSON" }),
-    ).toHaveAttribute(
-      "href",
-      expect.stringContaining("format=json"),
-    );
+    ).toHaveAttribute("href", expect.stringContaining("format=json"));
     expect(
       screen.getByRole("link", { name: "Export heatmap cells CSV" }),
-    ).toHaveAttribute(
-      "href",
-      expect.stringContaining("grid_rows=12"),
-    );
+    ).toHaveAttribute("href", expect.stringContaining("grid_rows=12"));
     expect(
       screen.getByRole("link", { name: "Export trajectories CSV" }),
     ).toHaveAttribute(

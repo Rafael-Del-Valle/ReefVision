@@ -312,9 +312,7 @@ class PoseVisualizationService:
                 ):
                     landmark_track_id = latest_decision.selected_landmark_track_id
             if landmark_track_id is None:
-                unresolved_frames_by_label[observation.semantic_label].add(
-                    observation.frame_index
-                )
+                unresolved_frames_by_label[observation.semantic_label].add(observation.frame_index)
             identities[
                 (
                     observation.frame_index,
@@ -605,11 +603,7 @@ class PoseVisualizationService:
                     landmark_track_id=landmark_track_id,
                     semantic_label=semantic_label,
                     lifecycle_state=lifecycle_state,
-                    points=[
-                        point
-                        for segment in rendered_segments
-                        for point in segment.points
-                    ],
+                    points=[point for segment in rendered_segments for point in segment.points],
                     segments=rendered_segments,
                     path_length_pixels=path_length,
                     evaluated_seconds=evaluated_seconds,
@@ -868,9 +862,7 @@ class PoseVisualizationService:
                             ),
                             "segment_path_length_pixels": segment.path_length_pixels,
                             "segment_evaluated_seconds": segment.evaluated_seconds,
-                            "segment_movement_segment_count": (
-                                segment.movement_segment_count
-                            ),
+                            "segment_movement_segment_count": (segment.movement_segment_count),
                             "frame_index": point.frame_index,
                             "time_s": point.time_s,
                             "occurrence_index": point.occurrence_index,

@@ -4,9 +4,7 @@ export type PoseVisualizationMode =
   "confidence" | "occupancy" | "activity" | "trajectory";
 
 export type PoseVisualizationExportFormat =
-  | "json"
-  | "cells_csv"
-  | "trajectories_csv";
+  "json" | "cells_csv" | "trajectories_csv";
 
 export interface PoseVisualizationRequest {
   grid_rows: number;
@@ -155,7 +153,6 @@ export async function getPoseVisualization(
   if (!response.ok) throw new Error(await responseError(response));
   return (await response.json()) as PoseVisualizationResponse;
 }
-
 
 export function poseVisualizationExportUrl(
   trackId: string,

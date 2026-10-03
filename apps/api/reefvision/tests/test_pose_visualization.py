@@ -182,9 +182,7 @@ def test_pose_visualization_uses_canonical_points_and_never_invents_paf(
     )
     assert json_export.status_code == 200, json_export.text
     exported = json_export.json()
-    assert exported["export_schema_version"] == (
-        "reefvision-pose-visualization-export-0001"
-    )
+    assert exported["export_schema_version"] == ("reefvision-pose-visualization-export-0001")
     assert exported["source_track_revision"] == track["revision"]
     assert exported["request"]["grid_rows"] == 2
     assert exported["request"]["include_predicted"] is True
@@ -289,7 +287,6 @@ def test_pose_visualization_filters_uncertain_and_low_confidence_without_zeroing
     assert payload["cells"][0]["sample_fraction"] in {0.0, 1.0}
 
 
-
 def test_pose_visualization_breaks_trajectory_at_unresolved_identity_gap(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -309,9 +306,7 @@ def test_pose_visualization_breaks_trajectory_at_unresolved_identity_gap(
     )
     assert built.status_code == 200, built.text
 
-    summary = client.get(
-        f"/api/v1/video-tracks/{track['id']}/pose-temporal"
-    ).json()
+    summary = client.get(f"/api/v1/video-tracks/{track['id']}/pose-temporal").json()
     middle = next(
         item
         for item in summary["observations"]
@@ -341,8 +336,7 @@ def test_pose_visualization_breaks_trajectory_at_unresolved_identity_gap(
         item
         for item in payload["trajectories"]
         if any(
-            point["frame_index"] == 0 and point["occurrence_index"] == 0
-            for point in item["points"]
+            point["frame_index"] == 0 and point["occurrence_index"] == 0 for point in item["points"]
         )
     )
     assert [len(segment["points"]) for segment in target["segments"]] == [1, 1]

@@ -374,14 +374,8 @@ def export_pose_visualization(
     include_uncertain: bool = True,
     minimum_landmark_confidence: Annotated[float | None, Query(ge=0, le=1)] = None,
 ) -> Response:
-    if (
-        start_frame is not None
-        and end_frame is not None
-        and end_frame < start_frame
-    ):
-        raise ValidationError(
-            "Pose visualization end frame must be at or after the start frame"
-        )
+    if start_frame is not None and end_frame is not None and end_frame < start_frame:
+        raise ValidationError("Pose visualization end frame must be at or after the start frame")
     request_payload = PoseVisualizationRequest(
         grid_rows=grid_rows,
         grid_columns=grid_columns,
