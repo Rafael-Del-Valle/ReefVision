@@ -125,15 +125,24 @@ export function PoseVisualizationPanel({
       const parsedStart = parseOptionalNumber(startFrame);
       const parsedEnd = parseOptionalNumber(endFrame);
       const parsedConfidence = parseOptionalNumber(minimumConfidence);
-      if (gridRows < 1 || gridRows > 100 || gridColumns < 1 || gridColumns > 100) {
-        throw new Error("Pose visualization grid dimensions must be between 1 and 100");
+      if (
+        gridRows < 1 ||
+        gridRows > 100 ||
+        gridColumns < 1 ||
+        gridColumns > 100
+      ) {
+        throw new Error(
+          "Pose visualization grid dimensions must be between 1 and 100",
+        );
       }
       if (
         parsedStart !== undefined &&
         parsedEnd !== undefined &&
         parsedEnd < parsedStart
       ) {
-        throw new Error("Pose visualization end frame must be at or after the start frame");
+        throw new Error(
+          "Pose visualization end frame must be at or after the start frame",
+        );
       }
       if (
         parsedConfidence !== undefined &&

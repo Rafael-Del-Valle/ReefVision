@@ -6,10 +6,9 @@ import { PoseVisualizationPanel } from "./PoseVisualizationPanel";
 import * as poseVisualizationApi from "./poseVisualizationApi";
 
 vi.mock("./poseVisualizationApi", async () => {
-  const actual =
-    await vi.importActual<typeof import("./poseVisualizationApi")>(
-      "./poseVisualizationApi",
-    );
+  const actual = await vi.importActual<typeof import("./poseVisualizationApi")>(
+    "./poseVisualizationApi",
+  );
   return {
     ...actual,
     getPoseVisualization: vi.fn(),
@@ -167,14 +166,12 @@ describe("PoseVisualizationPanel", () => {
       screen.queryByTestId("pose-visualization-canvas"),
     ).not.toBeInTheDocument();
 
-    fireEvent.change(
-      screen.getByLabelText("Pose visualization grid rows"),
-      { target: { value: "12" } },
-    );
-    fireEvent.change(
-      screen.getByLabelText("Pose visualization grid columns"),
-      { target: { value: "16" } },
-    );
+    fireEvent.change(screen.getByLabelText("Pose visualization grid rows"), {
+      target: { value: "12" },
+    });
+    fireEvent.change(screen.getByLabelText("Pose visualization grid columns"), {
+      target: { value: "16" },
+    });
     fireEvent.change(
       screen.getByLabelText("Pose visualization minimum confidence"),
       { target: { value: "0.4" } },
@@ -189,15 +186,16 @@ describe("PoseVisualizationPanel", () => {
     );
 
     await waitFor(() =>
-      expect(
-        poseVisualizationApi.getPoseVisualization,
-      ).toHaveBeenCalledWith("track-1", {
-        grid_rows: 12,
-        grid_columns: 16,
-        include_predicted: true,
-        include_uncertain: true,
-        minimum_landmark_confidence: 0.4,
-      }),
+      expect(poseVisualizationApi.getPoseVisualization).toHaveBeenCalledWith(
+        "track-1",
+        {
+          grid_rows: 12,
+          grid_columns: 16,
+          include_predicted: true,
+          include_uncertain: true,
+          minimum_landmark_confidence: 0.4,
+        },
+      ),
     );
 
     expect(
@@ -261,8 +259,8 @@ describe("PoseVisualizationPanel", () => {
       screen.getByRole("button", { name: "Generate pose visualization" }),
     );
 
-    expect(
-      await screen.findByRole("alert"),
-    ).toHaveTextContent("rebuild them before interpreting trajectories");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "rebuild them before interpreting trajectories",
+    );
   });
 });

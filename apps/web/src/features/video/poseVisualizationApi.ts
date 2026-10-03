@@ -1,10 +1,7 @@
 import { getApiBaseUrl } from "../../runtime";
 
 export type PoseVisualizationMode =
-  | "confidence"
-  | "occupancy"
-  | "activity"
-  | "trajectory";
+  "confidence" | "occupancy" | "activity" | "trajectory";
 
 export interface PoseVisualizationRequest {
   grid_rows: number;
@@ -88,8 +85,7 @@ export interface PoseVisualizationResponse {
   grid_columns: number;
   sampling_policy: "persisted_canonical_pose_keyframes";
   predicted_coordinate_policy:
-    | "exclude_occluded_predictions"
-    | "include_occluded_predictions";
+    "exclude_occluded_predictions" | "include_occluded_predictions";
   identity_policy: "latest_resolved_temporal_association";
   identity_status: "not_built" | "current" | "stale";
   identity_warning: string | null;
