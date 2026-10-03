@@ -16,6 +16,7 @@ from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.behavior_features import (
     BehaviorFeatureQuality,
     BehaviorFeatureRequest,
+    BehaviorFeatureSource,
     BehaviorFeatureValue,
     BehaviorFeatureVectorResponse,
 )
@@ -76,7 +77,7 @@ class BehaviorFeatureService:
         name: str,
         value: float,
         unit: str,
-        source: str,
+        source: BehaviorFeatureSource,
         definition: str,
     ) -> BehaviorFeatureValue:
         return BehaviorFeatureValue(
