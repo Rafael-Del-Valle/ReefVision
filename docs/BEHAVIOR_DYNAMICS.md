@@ -5,8 +5,9 @@ classifier backend.
 
 ## Ethograms
 
-Ethograms are project-scoped, immutable revisions. Each revision stores a SHA-256 hash of its
-complete state definition. States have a stable code, a human-readable label, and a channel.
+Ethograms are project-scoped, immutable revisions. A new revision is created rather than editing
+an existing definition in place, and no-op revisions are rejected. Each revision stores a SHA-256
+hash of its complete state definition. States have a stable code, a human-readable label, and a channel.
 
 Channels allow simultaneous behavioral dimensions. For example, a locomotion channel can contain
 `rest` and `swim` while a feeding channel independently contains `feed` and `not_feed`.
@@ -15,7 +16,8 @@ Bouts may overlap across channels, but they cannot overlap within one channel.
 ## Behavior bouts
 
 Behavior bouts use inclusive source-video frame intervals and are attached to one persisted video
-track. Each revision stores the video-track revision that was current when the bout was created.
+track. Time boundaries use the start of the first frame and the end boundary immediately after the
+last included frame, so a two-frame bout at 10 fps has a duration of 0.2 seconds. Each revision stores the video-track revision that was current when the bout was created.
 If the track later changes, ReefVision reports the bout and any derived dynamics as stale instead
 of silently assuming identity continuity.
 

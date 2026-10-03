@@ -93,7 +93,14 @@ def test_behavior_ethogram_bouts_and_transition_summary(
             },
         )
         assert response.status_code == 201, response.text
-        assert response.json()["stale_against_track"] is False
+        created_bout = response.json()
+        assert created_bout["stale_against_track"] is False
+        assert created_bout["duration_seconds"] == pytest.approx(
+            (end - start + 1) / 10.0
+        )
+        assert created_bout["end_time_seconds"] == pytest.approx(
+            (end + 1) / 10.0
+        )
 
     listed = client.get(
         f"/api/v1/video-tracks/{track['id']}/behavior-bouts",
@@ -264,3 +271,60 @@ def test_behavior_ethogram_is_project_scoped(
     )
     assert listed.status_code == 200
     assert listed.json() == []
+
+
+
+def test_behavior_ethogram_revisions_are_immutable_and_latest_listing_wins(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project, _video, _track = _setup(
+        client,
+        monkeypatch,
+        "Behavior ethogram revisions",
+    )
+    original = _ethogram(client, str(project["id"]))
+
+    no_op = client.post(
+        f"/api/v1/behavior-ethograms/{original['ethogram_series_id']}/revisions",
+        json={
+            "name": "Jellyfish ethogram",
+            "description": "Independent locomotion and feeding channels.",
+            "states": [
+                {"code": "rest", "label": "Rest", "channel": "locomotion"},
+                {"code": "swim", "label": "Swimming", "channel": "locomotion"},
+                {"code": "feed", "label": "Feeding", "channel": "feeding"},
+                {"code": "not_feed", "label": "Not feeding", "channel": "feeding"},
+            ],
+        },
+    )
+    assert no_op.status_code == 400, no_op.text
+
+    revised = client.post(
+        f"/api/v1/behavior-ethograms/{original['ethogram_series_id']}/revisions",
+        json={
+            "name": "Jellyfish ethogram",
+            "description": "Revised locomotion and feeding vocabulary.",
+            "states": [
+                {"code": "rest", "label": "Rest", "channel": "locomotion"},
+                {"code": "swim", "label": "Swimming", "channel": "locomotion"},
+                {"code": "burst", "label": "Burst swimming", "channel": "locomotion"},
+                {"code": "feed", "label": "Feeding", "channel": "feeding"},
+                {"code": "not_feed", "label": "Not feeding", "channel": "feeding"},
+            ],
+        },
+    )
+    assert revised.status_code == 201, revised.text
+    revised_payload = revised.json()
+    assert revised_payload["revision"] == 2
+    assert revised_payload["supersedes_revision_id"] == original["id"]
+    assert revised_payload["ethogram_series_id"] == original["ethogram_series_id"]
+    assert revised_payload["definition_sha256"] != original["definition_sha256"]
+
+    listed = client.get(
+        f"/api/v1/projects/{project['id']}/behavior-ethograms"
+    )
+    assert listed.status_code == 200, listed.text
+    assert len(listed.json()) == 1
+    assert listed.json()[0]["id"] == revised_payload["id"]
+    assert listed.json()[0]["revision"] == 2

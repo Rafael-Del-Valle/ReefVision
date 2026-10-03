@@ -35,6 +35,22 @@ def create_behavior_ethogram(
     return BehaviorDynamicsService(session).create_ethogram(project_id, payload)
 
 
+@router.post(
+    "/behavior-ethograms/{ethogram_series_id}/revisions",
+    response_model=BehaviorEthogramResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def revise_behavior_ethogram(
+    ethogram_series_id: str,
+    payload: BehaviorEthogramCreateRequest,
+    session: DbSession,
+) -> BehaviorEthogramResponse:
+    return BehaviorDynamicsService(session).revise_ethogram(
+        ethogram_series_id,
+        payload,
+    )
+
+
 @router.get(
     "/projects/{project_id}/behavior-ethograms",
     response_model=list[BehaviorEthogramResponse],

@@ -95,17 +95,20 @@ class BehaviorDynamicsService:
         ).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 
-    def create_ethogram(
+    def _persist_ethogram_revision(
         self,
+        *,
         project_id: str,
+        ethogram_series_id: str,
+        revision: int,
+        supersedes_revision_id: str | None,
         payload: BehaviorEthogramCreateRequest,
     ) -> BehaviorEthogramResponse:
-        self._project(project_id)
         ethogram = BehaviorEthogramRevision(
-            ethogram_series_id=str(uuid4()),
+            ethogram_series_id=ethogram_series_id,
             project_id=project_id,
-            revision=1,
-            supersedes_revision_id=None,
+            revision=revision,
+            supersedes_revision_id=supersedes_revision_id,
             name=payload.name.strip(),
             description=payload.description,
             definition_sha256=self._definition_hash(payload),
@@ -128,6 +131,51 @@ class BehaviorDynamicsService:
         self.session.commit()
         self.session.refresh(ethogram)
         return self._ethogram_response(ethogram, states)
+
+    def create_ethogram(
+        self,
+        project_id: str,
+        payload: BehaviorEthogramCreateRequest,
+    ) -> BehaviorEthogramResponse:
+        self._project(project_id)
+        return self._persist_ethogram_revision(
+            project_id=project_id,
+            ethogram_series_id=str(uuid4()),
+            revision=1,
+            supersedes_revision_id=None,
+            payload=payload,
+        )
+
+    def revise_ethogram(
+        self,
+        ethogram_series_id: str,
+        payload: BehaviorEthogramCreateRequest,
+    ) -> BehaviorEthogramResponse:
+        revisions = list(
+            self.session.scalars(
+                select(BehaviorEthogramRevision)
+                .where(
+                    BehaviorEthogramRevision.ethogram_series_id
+                    == ethogram_series_id
+                )
+                .order_by(BehaviorEthogramRevision.revision.desc())
+            )
+        )
+        if not revisions:
+            raise NotFoundError("Behavior ethogram series not found")
+        latest = revisions[0]
+        definition_sha256 = self._definition_hash(payload)
+        if definition_sha256 == latest.definition_sha256:
+            raise ValidationError(
+                "New behavior ethogram revision must change the ethogram definition"
+            )
+        return self._persist_ethogram_revision(
+            project_id=latest.project_id,
+            ethogram_series_id=latest.ethogram_series_id,
+            revision=latest.revision + 1,
+            supersedes_revision_id=latest.id,
+            payload=payload,
+        )
 
     def list_ethograms(self, project_id: str) -> list[BehaviorEthogramResponse]:
         self._project(project_id)
@@ -347,7 +395,7 @@ class BehaviorDynamicsService:
             start_frame=bout.start_frame,
             end_frame=bout.end_frame,
             start_time_seconds=bout.start_frame / video.fps,
-            end_time_seconds=bout.end_frame / video.fps,
+            end_time_seconds=(bout.end_frame + 1) / video.fps,
             duration_seconds=frame_count / video.fps,
             source=bout.source,
             confidence=bout.confidence,
