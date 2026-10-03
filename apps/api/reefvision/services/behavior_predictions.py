@@ -273,11 +273,6 @@ class BehaviorPredictionService:
         track = self._track(prediction.video_track_id)
         if prediction.review_status != "pending":
             return self._response(prediction, track)
-        if prediction.source_track_revision != track.revision:
-            raise ValidationError(
-                "Behavior prediction is stale against the current video-track revision; "
-                "rerun inference before review"
-            )
 
         if payload.action == "reject":
             prediction.review_status = "rejected"
@@ -286,6 +281,12 @@ class BehaviorPredictionService:
             self.session.commit()
             self.session.refresh(prediction)
             return self._response(prediction, track)
+
+        if prediction.source_track_revision != track.revision:
+            raise ValidationError(
+                "Behavior prediction is stale against the current video-track revision; "
+                "rerun inference before acceptance"
+            )
 
         target_state_id = payload.behavior_state_id or prediction.behavior_state_id
         state = self._state(target_state_id)

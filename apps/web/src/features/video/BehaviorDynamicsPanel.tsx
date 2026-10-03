@@ -161,6 +161,7 @@ export function BehaviorDynamicsPanel({
         queryKey: ["behavior-ethograms", projectId],
       });
       setSelectedEthogramId(ethogram.id);
+      setSelectedModelId("");
     },
   });
 
