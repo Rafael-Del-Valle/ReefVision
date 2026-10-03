@@ -158,16 +158,10 @@ def test_pose_visualization_uses_canonical_points_and_never_invents_paf(
     assert len(payload["trajectories"]) == 2
     assert sum(item["sample_count"] for item in payload["cells"]) == 6
     assert sum(item["movement_segment_count"] for item in payload["cells"]) == 4
-    assert sum(item["movement_distance_pixels"] for item in payload["cells"]) == pytest.approx(
-        8.0
-    )
+    assert sum(item["movement_distance_pixels"] for item in payload["cells"]) == pytest.approx(8.0)
     assert payload["activity_segment_count"] == 4
 
-    all_points = [
-        point
-        for trajectory in payload["trajectories"]
-        for point in trajectory["points"]
-    ]
+    all_points = [point for trajectory in payload["trajectories"] for point in trajectory["points"]]
     predicted = [point for point in all_points if point["coordinate_kind"] == "predicted"]
     assert len(predicted) == 1
     assert predicted[0]["visibility_state"] == "occluded"

@@ -12,6 +12,10 @@ from sqlalchemy.orm import Session
 
 from reefvision.db.models import ModelRegistration, VideoAsset, VideoTrack
 from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.schemas.pose_tracking import (
+    PoseLandmarkAssociationDecisionResponse,
+    PoseLandmarkObservationResponse,
+)
 from reefvision.schemas.pose_visualization import (
     PosePafAvailability,
     PoseVisualizationCell,
@@ -78,15 +82,16 @@ class PoseVisualizationService:
         if video is None:
             raise NotFoundError("Video not found")
         if video.width_px <= 0 or video.height_px <= 0 or video.fps <= 0:
-            raise ValidationError("Pose visualization requires valid source video dimensions and fps")
+            raise ValidationError(
+                "Pose visualization requires valid source video dimensions and fps"
+            )
         return video
 
     @staticmethod
     def _keyframes(track: VideoTrack) -> list[VideoTrackKeyframe]:
         try:
             return [
-                VideoTrackKeyframe.model_validate(item)
-                for item in list(track.keyframes_json or [])
+                VideoTrackKeyframe.model_validate(item) for item in list(track.keyframes_json or [])
             ]
         except ValueError as exc:
             raise ValidationError("Stored video track keyframes are invalid") from exc
@@ -188,9 +193,8 @@ class PoseVisualizationService:
                 if confidence <= 0:
                     excluded_missing += 1
                     continue
-                if (
-                    payload.minimum_landmark_confidence is not None
-                    and confidence < float(payload.minimum_landmark_confidence)
+                if payload.minimum_landmark_confidence is not None and confidence < float(
+                    payload.minimum_landmark_confidence
                 ):
                     excluded_filter += 1
                     continue
@@ -250,10 +254,10 @@ class PoseVisualizationService:
                 set(),
             )
 
-        latest_observations: dict[str, Any] = {}
+        latest_observations: dict[str, PoseLandmarkObservationResponse] = {}
         for observation in summary.observations:
-            current = latest_observations.get(observation.observation_series_id)
-            if current is None or observation.revision > current.revision:
+            current_observation = latest_observations.get(observation.observation_series_id)
+            if current_observation is None or observation.revision > current_observation.revision:
                 latest_observations[observation.observation_series_id] = observation
 
         latest_created_at = max(item.created_at for item in latest_observations.values())
@@ -261,31 +265,35 @@ class PoseVisualizationService:
             return (
                 samples,
                 "stale",
-                "Temporal identities predate the current video-track revision; rebuild them before interpreting trajectories or activity.",
+                "Temporal identities predate the current video-track revision; "
+                "rebuild them before interpreting trajectories or activity.",
                 {},
                 set(),
             )
 
-        latest_decisions: dict[str, Any] = {}
+        latest_decisions: dict[str, PoseLandmarkAssociationDecisionResponse] = {}
         for decision in summary.association_decisions:
-            current = latest_decisions.get(decision.observation_id)
-            if current is None or decision.decision_revision > current.decision_revision:
+            current_decision = latest_decisions.get(decision.observation_id)
+            if (
+                current_decision is None
+                or decision.decision_revision > current_decision.decision_revision
+            ):
                 latest_decisions[decision.observation_id] = decision
 
         identities: dict[tuple[int, str, int], tuple[str | None, str | None, str | None]] = {}
         for observation in latest_observations.values():
-            decision = latest_decisions.get(observation.id)
+            latest_decision = latest_decisions.get(observation.id)
             landmark_track_id = None
             association_state = None
             verification_state = None
-            if decision is not None:
-                association_state = decision.association_state
-                verification_state = decision.verification_state
+            if latest_decision is not None:
+                association_state = latest_decision.association_state
+                verification_state = latest_decision.verification_state
                 if (
-                    decision.association_state in {"confirmed", "provisional"}
-                    and decision.selected_landmark_track_id is not None
+                    latest_decision.association_state in {"confirmed", "provisional"}
+                    and latest_decision.selected_landmark_track_id is not None
                 ):
-                    landmark_track_id = decision.selected_landmark_track_id
+                    landmark_track_id = latest_decision.selected_landmark_track_id
             identities[
                 (
                     observation.frame_index,
@@ -316,8 +324,7 @@ class PoseVisualizationService:
             )
 
         track_context = {
-            item.id: (item.semantic_label, item.lifecycle_state)
-            for item in summary.landmark_tracks
+            item.id: (item.semantic_label, item.lifecycle_state) for item in summary.landmark_tracks
         }
         identity_breaks = {
             (item.predecessor_landmark_track_id, item.break_after_frame)
@@ -358,9 +365,7 @@ class PoseVisualizationService:
         video = self._video(track.video_id)
         start_frame = payload.start_frame if payload.start_frame is not None else 0
         end_frame = (
-            payload.end_frame
-            if payload.end_frame is not None
-            else max(0, video.frame_count - 1)
+            payload.end_frame if payload.end_frame is not None else max(0, video.frame_count - 1)
         )
         if start_frame >= video.frame_count or end_frame >= video.frame_count:
             raise ValidationError("Pose visualization frame range cannot exceed the source video")
@@ -537,24 +542,18 @@ class PoseVisualizationService:
                         sample_fraction=(
                             item.sample_count / total_samples if total_samples else 0.0
                         ),
-                        occupied_sampled_frame_count=len(
-                            cast(set[int], item.sampled_frames)
-                        ),
+                        occupied_sampled_frame_count=len(cast(set[int], item.sampled_frames)),
                         occupied_sampled_frame_fraction=(
                             len(cast(set[int], item.sampled_frames)) / sampled_frame_count
                             if sampled_frame_count
                             else 0.0
                         ),
-                        unique_landmark_track_count=len(
-                            cast(set[str], item.landmark_track_ids)
-                        ),
+                        unique_landmark_track_count=len(cast(set[str], item.landmark_track_ids)),
                         movement_segment_count=item.movement_segment_count,
                         movement_distance_pixels=item.movement_distance_pixels,
                         movement_duration_seconds=item.movement_duration_seconds,
                         mean_speed_pixels_per_second=movement_speed,
-                        maximum_speed_pixels_per_second=(
-                            item.maximum_speed_pixels_per_second
-                        ),
+                        maximum_speed_pixels_per_second=(item.maximum_speed_pixels_per_second),
                     )
                 )
 

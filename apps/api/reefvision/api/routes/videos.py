@@ -21,10 +21,6 @@ from reefvision.schemas.pose_interoperability import (
     PoseInteroperabilityImportResponse,
     PoseInteroperabilityRuntimeResponse,
 )
-from reefvision.schemas.pose_visualization import (
-    PoseVisualizationRequest,
-    PoseVisualizationResponse,
-)
 from reefvision.schemas.pose_tracking import (
     PoseAssociationCorrectionRequest,
     PoseIdentityBreakCreateRequest,
@@ -37,6 +33,10 @@ from reefvision.schemas.pose_tracking import (
     PoseTemporalMetricsResponse,
     PoseTemporalQcResponse,
     PoseTemporalTrackSummaryResponse,
+)
+from reefvision.schemas.pose_visualization import (
+    PoseVisualizationRequest,
+    PoseVisualizationResponse,
 )
 from reefvision.schemas.video_georeferencing_readiness import (
     VideoGeoreferencingReadinessResponse,
