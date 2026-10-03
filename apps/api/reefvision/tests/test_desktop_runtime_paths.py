@@ -3,6 +3,9 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+
 from reefvision import desktop
 from reefvision.config import Settings
 from reefvision.ml.dependencies import provider_runtime_dir
@@ -74,7 +77,21 @@ def test_current_database_revision_skips_alembic_upgrade(
     monkeypatch,
 ) -> None:
     settings = _desktop_settings(tmp_path / "current")
-    database = _stamp_database(settings, "0035")
+
+    alembic_ini, migrations_dir = desktop.resolve_alembic_paths()
+    config = Config(str(alembic_ini))
+    config.set_main_option(
+        "script_location",
+        str(migrations_dir),
+    )
+    current_head = ScriptDirectory.from_config(config).get_current_head()
+
+    assert current_head is not None
+
+    database = _stamp_database(
+        settings,
+        current_head,
+    )
     before = database.read_bytes()
 
     def unexpected_upgrade(*args, **kwargs) -> None:

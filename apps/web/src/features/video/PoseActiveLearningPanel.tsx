@@ -8,6 +8,7 @@ import {
   poseActiveLearningRetrainingManifestUrl,
   reviewPoseActiveLearningCandidate,
   type PoseActiveLearningCandidate,
+  type PoseActiveLearningSelectionMode,
   type PoseActiveLearningSelectionUnit,
 } from "./poseActiveLearningApi";
 
@@ -35,6 +36,9 @@ export function PoseActiveLearningPanel({
   const [requestedSize, setRequestedSize] = useState(50);
   const [clipRadiusFrames, setClipRadiusFrames] = useState(5);
   const [minimumFrameSpacing, setMinimumFrameSpacing] = useState(5);
+  const [selectionMode, setSelectionMode] =
+    useState<PoseActiveLearningSelectionMode>("uncertainty");
+  const [diversityWeight, setDiversityWeight] = useState(0.25);
   const [selectedRoundId, setSelectedRoundId] = useState("");
 
   const roundsQuery = useQuery({
@@ -66,6 +70,8 @@ export function PoseActiveLearningPanel({
         requested_size: requestedSize,
         clip_radius_frames: clipRadiusFrames,
         minimum_frame_spacing: minimumFrameSpacing,
+        selection_mode: selectionMode,
+        diversity_weight: diversityWeight,
       }),
     onSuccess: async (round) => {
       setSelectedRoundId(round.id);
@@ -190,6 +196,48 @@ export function PoseActiveLearningPanel({
             }
           />
         </label>
+
+        <label className="annotation-selection-row">
+          Acquisition balance
+          <select
+            aria-label="Pose Active Learning acquisition balance"
+            value={selectionMode}
+            onChange={(event) =>
+              setSelectionMode(
+                event.target.value as PoseActiveLearningSelectionMode,
+              )
+            }
+          >
+            <option value="uncertainty">Highest uncertainty</option>
+            <option value="uncertainty_diverse">
+              Uncertainty + pose diversity
+            </option>
+          </select>
+        </label>
+
+        {selectionMode === "uncertainty_diverse" && (
+          <>
+            <label className="annotation-selection-row">
+              Pose diversity weight
+              <input
+                aria-label="Pose Active Learning diversity weight"
+                type="number"
+                min={0}
+                max={0.75}
+                step={0.05}
+                value={diversityWeight}
+                onChange={(event) =>
+                  setDiversityWeight(Number(event.target.value))
+                }
+              />
+            </label>
+            <p className="annotation-helper">
+              Diversity uses a deterministic max-min comparison of canonical
+              pose configurations. Repeated landmarks are compared without
+              assuming occurrence-index identity.
+            </p>
+          </>
+        )}
       </div>
 
       <button

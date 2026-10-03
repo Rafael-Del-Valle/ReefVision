@@ -34,7 +34,7 @@ from reefvision.schemas.pose_active_learning import (
 from reefvision.storage.datasets import canonical_json_sha256
 
 SELECTION_ALGORITHM = "reefvision-pose-active-learning"
-SELECTION_ALGORITHM_VERSION = "0002"
+SELECTION_ALGORITHM_VERSION = "0003"
 
 _VISIBILITY_RISK = {
     "visible": 0.0,
@@ -852,6 +852,7 @@ class PoseActiveLearningService:
                         "source_job_ids": source_job_ids,
                         "provenance": provenance,
                         "provenance_sha256": canonical_json_sha256(provenance),
+                        "_selection_keyframe": (_keyframe_for(track, frame_index) or {}),
                     }
                 )
 
@@ -870,10 +871,14 @@ class PoseActiveLearningService:
             )
         )
 
-        selected: list[dict[str, Any]] = []
-        for candidate in raw_candidates:
+        def is_redundant(
+            candidate: dict[str, Any],
+            selected_items: list[dict[str, Any]],
+        ) -> bool:
             same_track = [
-                item for item in selected if item["video_track_id"] == candidate["video_track_id"]
+                item
+                for item in selected_items
+                if item["video_track_id"] == candidate["video_track_id"]
             ]
 
             too_close = any(
@@ -888,17 +893,102 @@ class PoseActiveLearningService:
                 for previous in same_track
             )
 
-            if too_close or overlapping_clip:
-                continue
+            return too_close or overlapping_clip
 
-            selected.append(candidate)
-            if len(selected) >= request.requested_size:
+        def pose_novelty(
+            candidate: dict[str, Any],
+            selected_items: list[dict[str, Any]],
+        ) -> float:
+            if not selected_items:
+                return 1.0
+
+            novelty_values: list[float] = []
+
+            for previous in selected_items:
+                if (
+                    candidate["pose_schema_id"] != previous["pose_schema_id"]
+                    or candidate["pose_schema_revision"] != previous["pose_schema_revision"]
+                ):
+                    novelty_values.append(1.0)
+                    continue
+
+                disagreement = _pose_configuration_disagreement(
+                    candidate["_selection_keyframe"],
+                    previous["_selection_keyframe"],
+                )
+
+                novelty_values.append(0.0 if disagreement is None else _bounded(disagreement))
+
+            # Max-min selection: reward a candidate only when it remains
+            # distinct from its most similar already-selected pose.
+            return min(novelty_values)
+
+        selected: list[dict[str, Any]] = []
+        remaining = list(raw_candidates)
+
+        while remaining and len(selected) < request.requested_size:
+            eligible = [
+                candidate for candidate in remaining if not is_redundant(candidate, selected)
+            ]
+
+            if not eligible:
                 break
+
+            if request.selection_mode == "uncertainty":
+                chosen = eligible[0]
+                chosen["diversity_score"] = None
+                chosen["selection_score"] = float(chosen["acquisition_score"])
+            else:
+                diversity_weight = float(request.diversity_weight)
+
+                for candidate in eligible:
+                    diversity_score = pose_novelty(
+                        candidate,
+                        selected,
+                    )
+                    acquisition_score = float(candidate["acquisition_score"])
+
+                    candidate["diversity_score"] = diversity_score
+                    candidate["selection_score"] = (
+                        1.0 - diversity_weight
+                    ) * acquisition_score + diversity_weight * diversity_score
+
+                eligible.sort(
+                    key=lambda item: (
+                        -float(item["selection_score"]),
+                        -float(item["acquisition_score"]),
+                        str(item["video_track_id"]),
+                        int(item["focus_frame"]),
+                    )
+                )
+                chosen = eligible[0]
+
+            selected.append(chosen)
+            remaining.remove(chosen)
 
         if not selected:
             raise ValidationError(
                 "Pose Active Learning selection constraints removed every candidate"
             )
+
+        for item in selected:
+            selection_metadata = {
+                "selection_mode": request.selection_mode,
+                "diversity_weight": (
+                    float(request.diversity_weight)
+                    if request.selection_mode == "uncertainty_diverse"
+                    else 0.0
+                ),
+                "diversity_score": item.get("diversity_score"),
+                "selection_score": float(item["selection_score"]),
+            }
+
+            item["selection_metadata"] = selection_metadata
+            item["provenance"] = {
+                **dict(item["provenance"]),
+                "selection_metadata": selection_metadata,
+            }
+            item["provenance_sha256"] = canonical_json_sha256(item["provenance"])
 
         identity_manifest = {
             "schema_version": "pose-active-learning-selection-identity-0001",
@@ -911,6 +1001,12 @@ class PoseActiveLearningService:
             "requested_size": request.requested_size,
             "clip_radius_frames": request.clip_radius_frames,
             "minimum_frame_spacing": request.minimum_frame_spacing,
+            "selection_mode": request.selection_mode,
+            "diversity_weight": (
+                float(request.diversity_weight)
+                if request.selection_mode == "uncertainty_diverse"
+                else 0.0
+            ),
             "model_ids": model_ids,
             "weights": weights,
             "items": [
@@ -920,6 +1016,8 @@ class PoseActiveLearningService:
                     "frame_start": item["frame_start"],
                     "frame_end": item["frame_end"],
                     "acquisition_score": item["acquisition_score"],
+                    "selection_score": item["selection_score"],
+                    "diversity_score": item["diversity_score"],
                     "score_components": item["score_components"],
                     "reason_codes": item["reason_codes"],
                     "pose_schema_id": item["pose_schema_id"],
@@ -961,6 +1059,12 @@ class PoseActiveLearningService:
             scoring_config_json={
                 "algorithm": SELECTION_ALGORITHM,
                 "algorithm_version": SELECTION_ALGORITHM_VERSION,
+                "selection_mode": request.selection_mode,
+                "diversity_weight": (
+                    float(request.diversity_weight)
+                    if request.selection_mode == "uncertainty_diverse"
+                    else 0.0
+                ),
                 "weights": weights,
             },
             selection_manifest_json=manifest,

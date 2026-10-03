@@ -1,6 +1,8 @@
 import { getApiBaseUrl } from "../../runtime";
 
 export type PoseActiveLearningSelectionUnit = "frame" | "clip";
+export type PoseActiveLearningSelectionMode =
+  "uncertainty" | "uncertainty_diverse";
 
 export interface PoseActiveLearningRound {
   id: string;
@@ -70,6 +72,8 @@ interface PoseActiveLearningCreatePayload {
   requested_size: number;
   clip_radius_frames: number;
   minimum_frame_spacing: number;
+  selection_mode?: PoseActiveLearningSelectionMode;
+  diversity_weight?: number;
 }
 
 interface PoseActiveLearningReviewPayload {

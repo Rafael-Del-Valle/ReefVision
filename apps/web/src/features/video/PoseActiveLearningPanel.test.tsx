@@ -110,6 +110,7 @@ function renderPanel(onOpenCandidate = vi.fn()) {
 describe("PoseActiveLearningPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(api.createPoseActiveLearningRound).mockResolvedValue(round);
     vi.mocked(api.getPoseActiveLearningRounds).mockResolvedValue([round]);
     vi.mocked(api.getPoseActiveLearningCandidates).mockResolvedValue([
       candidate,
@@ -163,6 +164,49 @@ describe("PoseActiveLearningPanel", () => {
         expect.objectContaining({
           id: "candidate-1",
           review_status: "in_review",
+        }),
+      ),
+    );
+  });
+
+  it("creates a diversity-balanced acquisition round", async () => {
+    renderPanel();
+
+    await screen.findByTestId("pose-al-candidate-candidate-1");
+
+    fireEvent.change(
+      screen.getByLabelText("Pose Active Learning acquisition balance"),
+      {
+        target: {
+          value: "uncertainty_diverse",
+        },
+      },
+    );
+
+    const diversityInput = screen.getByLabelText(
+      "Pose Active Learning diversity weight",
+    );
+
+    expect(diversityInput).toBeInTheDocument();
+
+    fireEvent.change(diversityInput, {
+      target: {
+        value: "0.35",
+      },
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Create pose acquisition round",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(api.createPoseActiveLearningRound).toHaveBeenCalledWith(
+        "project-1",
+        expect.objectContaining({
+          selection_mode: "uncertainty_diverse",
+          diversity_weight: 0.35,
         }),
       ),
     );

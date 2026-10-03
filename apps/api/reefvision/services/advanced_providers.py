@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from sqlalchemy.orm import Session
 
@@ -15,7 +16,16 @@ from reefvision.schemas.advanced_providers import (
     AdvancedProviderPreflightRequest,
     AdvancedProviderPreflightResponse,
 )
-from reefvision.services.advanced_provider_execution import optional_provider_runtime_status
+from reefvision.services.advanced_provider_execution import (
+    PROVIDER_LAB_EXECUTION_IDS,
+    optional_provider_runtime_status,
+)
+
+AdvancedProviderExecutionSurface = Literal[
+    "provider_lab",
+    "existing_workflow",
+    "blocked",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -272,6 +282,16 @@ class AdvancedProviderService:
         return project
 
     @staticmethod
+    def _execution_surface(
+        provider_id: str,
+    ) -> AdvancedProviderExecutionSurface:
+        if provider_id in PROVIDER_LAB_EXECUTION_IDS:
+            return "provider_lab"
+        if provider_id == "segment_anything":
+            return "existing_workflow"
+        return "blocked"
+
+    @staticmethod
     def _profile(provider_id: str) -> _AdvancedProviderProfile:
         profile = next((item for item in _PROFILES if item.provider_id == provider_id), None)
         if profile is None:
@@ -294,6 +314,7 @@ class AdvancedProviderService:
                     display_name=profile.display_name,
                     maturity=maturity,
                     execution_supported=profile.execution_supported,
+                    execution_surface=self._execution_surface(profile.provider_id),
                     supported_tasks=list(profile.supported_tasks),
                     prompt_fields_by_task={
                         key: list(value) for key, value in profile.prompt_fields_by_task.items()
@@ -318,6 +339,8 @@ class AdvancedProviderService:
     ) -> AdvancedProviderPreflightResponse:
         self._project(project_id)
         profile = self._profile(provider_id)
+        execution_surface = self._execution_surface(provider_id)
+
         if request.task not in profile.supported_tasks:
             raise ValidationError("The selected provider does not declare the requested task")
 
@@ -396,6 +419,7 @@ class AdvancedProviderService:
             task=request.task,
             ready=not blockers,
             execution_supported=profile.execution_supported,
+            execution_surface=execution_surface,
             availability_status=availability_status,
             blockers=blockers,
             warnings=warnings,

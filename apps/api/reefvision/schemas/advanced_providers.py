@@ -24,6 +24,11 @@ class AdvancedProviderManifestResponse(BaseModel):
     display_name: str
     maturity: str
     execution_supported: bool
+    execution_surface: Literal[
+        "provider_lab",
+        "existing_workflow",
+        "blocked",
+    ]
     supported_tasks: list[str]
     prompt_fields_by_task: dict[str, list[str]]
     output_contracts_by_task: dict[str, list[str]]
@@ -47,6 +52,11 @@ class AdvancedProviderPreflightResponse(BaseModel):
     task: str
     ready: bool
     execution_supported: bool
+    execution_surface: Literal[
+        "provider_lab",
+        "existing_workflow",
+        "blocked",
+    ]
     availability_status: str
     blockers: list[str]
     warnings: list[str]

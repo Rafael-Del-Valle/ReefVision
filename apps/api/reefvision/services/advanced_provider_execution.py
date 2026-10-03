@@ -33,6 +33,15 @@ from reefvision.services.advanced_provider_proposals import (
 )
 from reefvision.storage.projects import resolve_managed_project_path
 
+PROVIDER_LAB_EXECUTION_IDS: frozenset[str] = frozenset(
+    {
+        "grounding_dino",
+        "sam2",
+        "smolvlm",
+        "nnunet",
+    }
+)
+
 
 def optional_provider_runtime_status(settings: Settings, provider_id: str) -> dict[str, Any]:
     if provider_id in OPTIONAL_MODEL_SPECS:
@@ -127,6 +136,9 @@ class AdvancedProviderExecutionService:
         provider_id: str,
         request: AdvancedProviderExecutionRequest,
     ) -> AdvancedProviderExecutionResponse:
+        if provider_id not in PROVIDER_LAB_EXECUTION_IDS:
+            raise ValidationError("This provider does not execute through Advanced Provider Lab")
+
         if provider_id == "grounding_dino":
             return self._grounding_dino(project_id, request)
         if provider_id == "sam2":

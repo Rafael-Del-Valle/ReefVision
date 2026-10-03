@@ -682,3 +682,70 @@ def test_pose_active_learning_scores_cross_model_repeated_landmark_disagreement(
     assert evidence["comparisons"][0]["video_track_id"] == second_track["id"]
     assert evidence["comparisons"][0]["bbox_iou"] > 0.10
     assert evidence["method"] == "repeated-label-order-invariant-symmetric-nearest-distance"
+
+
+def test_pose_active_learning_diversity_selection_is_deterministic(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(
+        client,
+        "Pose diversity selection",
+    )
+    video = _video(
+        client,
+        str(project["id"]),
+        monkeypatch,
+    )
+    track = _track(
+        client,
+        str(video["id"]),
+        _first_class(project),
+    )
+    _build_temporal(client, str(track["id"]))
+
+    payload = {
+        "name": "Uncertainty plus diversity",
+        "video_id": video["id"],
+        "track_ids": [track["id"]],
+        "selection_unit": "frame",
+        "selection_mode": "uncertainty_diverse",
+        "diversity_weight": 0.35,
+        "requested_size": 2,
+        "minimum_frame_spacing": 0,
+    }
+
+    first = client.post(
+        f"/api/v1/projects/{project['id']}/pose-active-learning-rounds",
+        json=payload,
+    )
+    assert first.status_code == 201, first.text
+
+    first_payload = first.json()
+    manifest = first_payload["selection_manifest_json"]
+
+    assert manifest["selection_mode"] == ("uncertainty_diverse")
+    assert manifest["diversity_weight"] == pytest.approx(0.35)
+
+    assert len(manifest["items"]) == 2
+
+    for item in manifest["items"]:
+        assert 0 <= item["selection_score"] <= 1
+        assert 0 <= item["diversity_score"] <= 1
+
+    config = first_payload["scoring_config_json"]
+
+    assert config["algorithm_version"] == "0003"
+    assert config["selection_mode"] == ("uncertainty_diverse")
+    assert config["diversity_weight"] == pytest.approx(0.35)
+
+    second = client.post(
+        f"/api/v1/projects/{project['id']}/pose-active-learning-rounds",
+        json=payload,
+    )
+    assert second.status_code == 201, second.text
+
+    second_payload = second.json()
+
+    assert second_payload["id"] == first_payload["id"]
+    assert second_payload["selection_sha256"] == first_payload["selection_sha256"]

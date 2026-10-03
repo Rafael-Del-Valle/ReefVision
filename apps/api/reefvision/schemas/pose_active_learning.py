@@ -8,6 +8,10 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat
 
 PoseActiveLearningSelectionUnit = Literal["frame", "clip"]
+PoseActiveLearningSelectionMode = Literal[
+    "uncertainty",
+    "uncertainty_diverse",
+]
 PoseActiveLearningReviewAction = Literal["start_review", "verify", "skip"]
 
 
@@ -32,6 +36,12 @@ class PoseActiveLearningRoundCreateRequest(BaseModel):
     requested_size: int = Field(default=50, ge=1, le=1000)
     clip_radius_frames: int = Field(default=5, ge=0, le=10000)
     minimum_frame_spacing: int = Field(default=5, ge=0, le=10000)
+    selection_mode: PoseActiveLearningSelectionMode = "uncertainty"
+    diversity_weight: FiniteFloat = Field(
+        default=0.25,
+        ge=0,
+        le=0.75,
+    )
     weights: PoseActiveLearningScoreWeights = Field(default_factory=PoseActiveLearningScoreWeights)
     created_by: str | None = Field(default=None, max_length=100)
 

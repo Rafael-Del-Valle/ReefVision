@@ -212,9 +212,11 @@ export function AdvancedProviderWorkspace({
           </label>
           {selectedManifest && (
             <p className="annotation-helper">
-              {selectedManifest.execution_supported
-                ? "This provider has a ReefVision execution adapter."
-                : "This provider remains documented/preflight-only."}
+              {selectedManifest.execution_surface === "provider_lab"
+                ? "This provider runs here in Advanced Provider Lab."
+                : selectedManifest.execution_surface === "existing_workflow"
+                  ? "This provider is available through an existing ReefVision workflow; Provider Lab launch is disabled."
+                  : "This provider remains documented/preflight-only."}
             </p>
           )}
           {managedCatalogId && (
@@ -414,7 +416,8 @@ export function AdvancedProviderWorkspace({
               type="button"
               onClick={() => executeMutation.mutate()}
               disabled={
-                !selectedManifest?.execution_supported ||
+                selectedManifest?.execution_surface !== "provider_lab" ||
+                !managedModelReady ||
                 !providerId ||
                 !task ||
                 executeMutation.isPending

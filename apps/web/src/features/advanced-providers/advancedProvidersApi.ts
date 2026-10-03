@@ -5,6 +5,7 @@ export interface AdvancedProviderManifest {
   display_name: string;
   maturity: string;
   execution_supported: boolean;
+  execution_surface: "provider_lab" | "existing_workflow" | "blocked";
   supported_tasks: string[];
   prompt_fields_by_task: Record<string, string[]>;
   output_contracts_by_task: Record<string, string[]>;
@@ -20,6 +21,7 @@ export interface AdvancedProviderPreflight {
   task: string;
   ready: boolean;
   execution_supported: boolean;
+  execution_surface: "provider_lab" | "existing_workflow" | "blocked";
   availability_status: string;
   blockers: string[];
   warnings: string[];

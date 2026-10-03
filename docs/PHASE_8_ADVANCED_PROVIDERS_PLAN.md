@@ -45,15 +45,29 @@ A provider is executable only after all of the following are true:
 
 Depth Anything V2 is represented as a relative-depth provider. Its contract produces a float array, preview, and value range. It does not claim calibrated physical distance, 3D reconstruction, or coral surface area. Those require a separate calibration and geometry model.
 
+## Current execution surfaces
+
+- Segment Anything / Smart Mask: existing Annotation Editor workflow.
+- Grounding DINO: Advanced Provider Lab.
+- SAM 2 image assist: Advanced Provider Lab.
+- SmolVLM: Advanced Provider Lab.
+- nnU-Net v2: Advanced Provider Lab when its external runtime is configured.
+- OWLv2: blocked / manifest and preflight only.
+- Florence-2: blocked / manifest and preflight only.
+- MobileSAM: blocked / manifest and preflight only.
+- FastSAM: blocked / manifest and preflight only.
+- Depth Anything V2: blocked / manifest and preflight only.
+- SAM 2 long-video propagation: not yet enabled.
+
 ## Deferred implementation
 
-- Optional provider-pack installer and version lock files.
-- Grounding DINO and OWLv2 proposal adapters.
-- SAM 2 image and video propagation adapters.
+- Optional provider-pack installer/version-lock refinements where still needed.
+- OWLv2 reviewed execution adapter.
+- Florence-2 reviewed execution adapter.
+- SAM 2 long-video propagation.
 - Depth Anything V2 array persistence and viewer overlay.
-- Florence-2 advisory caption and phrase-grounding review UI.
 - MobileSAM and FastSAM benchmark-based adapter selection.
-- Clean-machine desktop packaging validation.
+- Clean-machine desktop packaging validation in final release validation.
 
 ## Scientist-Ready 1.0 - pose-specific Active Learning
 
@@ -168,3 +182,36 @@ per-comparison disagreement remain in candidate provenance.
   occurrence ordering.
 - Candidate cards distinguish unavailable provider evidence from a real
   zero-valued uncertainty score.
+
+## Phase 8C - diversity and final hardening
+
+Pose Active Learning provides two deterministic selection policies:
+
+- `uncertainty`: select the highest-ranked uncertainty candidates after
+  spacing and clip-redundancy constraints.
+- `uncertainty_diverse`: preserve uncertainty ranking while adding a
+  scientist-configurable pose-diversity term.
+
+The diversity policy uses greedy max-min novelty. Candidate pose
+configurations are compared using the same repeated-landmark-order-independent
+distance used by cross-model disagreement. A candidate receives high novelty
+only when it remains distinct from its most similar already-selected pose.
+
+The default diversity weight is 0.25 and is capped at 0.75 so uncertainty
+remains represented. Selection mode, diversity weight, per-candidate diversity
+score, combined selection score, algorithm version, and final selection
+SHA-256 remain in acquisition provenance.
+
+Phase 8 provider execution surfaces are explicit:
+
+- `provider_lab`
+- `existing_workflow`
+- `blocked`
+
+A provider available elsewhere in ReefVision is not presented as launchable
+through Provider Lab merely because it has an existing execution workflow.
+
+Phase 8 feature implementation is complete when the full backend suite,
+frontend suite, formatting, linting, typing, production build, and automated
+Phase 8 acceptance pass. Clean-machine packaged provider-runtime checks remain
+final release-validation evidence.
