@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, FiniteFloat, model_validator
 
 PoseVisualizationIdentityStatus = Literal["not_built", "current", "stale"]
 PoseVisualizationCoordinateKind = Literal["observed", "predicted"]
+PoseVisualizationExportFormat = Literal["json", "cells_csv", "trajectories_csv"]
 
 
 class PoseVisualizationRequest(BaseModel):
@@ -79,6 +80,15 @@ class PoseVisualizationCell(BaseModel):
     maximum_speed_pixels_per_second: float | None = Field(default=None, ge=0)
 
 
+class PoseProviderVisualizationCapabilities(BaseModel):
+    provider_name: str | None
+    keypoint_scores_persisted: bool
+    native_confidence_maps_persisted: bool
+    part_affinity_fields_persisted: bool
+    raw_tensor_export_available: bool
+    reason: str
+
+
 class PosePafAvailability(BaseModel):
     available: bool
     provider_name: str | None
@@ -123,4 +133,5 @@ class PoseVisualizationResponse(BaseModel):
     activity_segment_count: int = Field(ge=0)
     cells: list[PoseVisualizationCell]
     trajectories: list[PoseVisualizationTrajectory]
+    provider_capabilities: PoseProviderVisualizationCapabilities
     paf: PosePafAvailability

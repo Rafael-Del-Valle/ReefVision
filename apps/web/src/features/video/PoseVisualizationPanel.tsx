@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 
 import {
   getPoseVisualization,
+  poseVisualizationExportUrl,
   type PoseVisualizationCell,
   type PoseVisualizationMode,
   type PoseVisualizationRequest,
@@ -119,9 +120,11 @@ export function PoseVisualizationPanel({
   const [minimumConfidence, setMinimumConfidence] = useState("");
   const [includePredicted, setIncludePredicted] = useState(false);
   const [includeUncertain, setIncludeUncertain] = useState(true);
+  const [generatedRequest, setGeneratedRequest] =
+    useState<PoseVisualizationRequest | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
-  const visualizationMutation = useMutation({
-    mutationFn: () => {
+  const buildRequest = (): PoseVisualizationRequest => {
       const parsedStart = parseOptionalNumber(startFrame);
       const parsedEnd = parseOptionalNumber(endFrame);
       const parsedConfidence = parseOptionalNumber(minimumConfidence);
@@ -161,8 +164,13 @@ export function PoseVisualizationPanel({
       if (parsedConfidence !== undefined) {
         payload.minimum_landmark_confidence = parsedConfidence;
       }
-      return getPoseVisualization(trackId, payload);
-    },
+      return payload;
+  };
+
+  const visualizationMutation = useMutation({
+    mutationFn: (payload: PoseVisualizationRequest) =>
+      getPoseVisualization(trackId, payload),
+    onSuccess: (_data, payload) => setGeneratedRequest(payload),
   });
 
   const data = visualizationMutation.data;
@@ -299,13 +307,25 @@ export function PoseVisualizationPanel({
       <button
         type="button"
         disabled={visualizationMutation.isPending}
-        onClick={() => visualizationMutation.mutate()}
+        onClick={() => {
+          try {
+            setValidationError(null);
+            visualizationMutation.mutate(buildRequest());
+          } catch (error) {
+            setValidationError(
+              error instanceof Error
+                ? error.message
+                : "Pose visualization settings are invalid",
+            );
+          }
+        }}
       >
         {visualizationMutation.isPending
           ? "Generating visualization..."
           : "Generate pose visualization"}
       </button>
 
+      {validationError && <p className="form-error">{validationError}</p>}
       {visualizationMutation.error instanceof Error && (
         <p className="form-error">{visualizationMutation.error.message}</p>
       )}
@@ -451,6 +471,65 @@ export function PoseVisualizationPanel({
               ))}
             </div>
           )}
+
+          {generatedRequest && (
+            <div className="workspace-actions">
+              <a
+                href={poseVisualizationExportUrl(
+                  trackId,
+                  generatedRequest,
+                  "json",
+                )}
+              >
+                Export visualization JSON
+              </a>
+              <a
+                href={poseVisualizationExportUrl(
+                  trackId,
+                  generatedRequest,
+                  "cells_csv",
+                )}
+              >
+                Export heatmap cells CSV
+              </a>
+              {data.identity_status === "current" &&
+                data.trajectories.length > 0 && (
+                  <a
+                    href={poseVisualizationExportUrl(
+                      trackId,
+                      generatedRequest,
+                      "trajectories_csv",
+                    )}
+                  >
+                    Export trajectories CSV
+                  </a>
+                )}
+            </div>
+          )}
+
+          <div className="workspace-guide compact">
+            <div>
+              <strong>Provider visualization capability</strong>
+              <p className="annotation-helper">
+                Provider: {data.provider_capabilities.provider_name ?? "none"} ·
+                canonical keypoint scores:{" "}
+                {data.provider_capabilities.keypoint_scores_persisted
+                  ? "persisted"
+                  : "not persisted"}
+                {" · "}native confidence maps:{" "}
+                {data.provider_capabilities.native_confidence_maps_persisted
+                  ? "persisted"
+                  : "not persisted"}
+                {" · "}raw tensor export:{" "}
+                {data.provider_capabilities.raw_tensor_export_available
+                  ? "available"
+                  : "unavailable"}.
+              </p>
+              <p className="annotation-helper">
+                {data.provider_capabilities.reason}
+              </p>
+            </div>
+          </div>
 
           <div className="workspace-guide compact">
             <div>

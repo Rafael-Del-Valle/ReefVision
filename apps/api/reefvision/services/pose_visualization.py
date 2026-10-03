@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import csv
+import io
+import json
 from collections import defaultdict
 from dataclasses import dataclass, replace
 from itertools import pairwise
@@ -18,7 +21,9 @@ from reefvision.schemas.pose_tracking import (
 )
 from reefvision.schemas.pose_visualization import (
     PosePafAvailability,
+    PoseProviderVisualizationCapabilities,
     PoseVisualizationCell,
+    PoseVisualizationExportFormat,
     PoseVisualizationPoint,
     PoseVisualizationRequest,
     PoseVisualizationResponse,
@@ -26,6 +31,13 @@ from reefvision.schemas.pose_visualization import (
 )
 from reefvision.schemas.videos import VideoTrackKeyframe
 from reefvision.services.pose_temporal_tracking import PoseTemporalTrackingService
+
+
+@dataclass(frozen=True)
+class PoseVisualizationExportPayload:
+    filename: str
+    media_type: str
+    content: str
 
 
 @dataclass(frozen=True)
@@ -332,28 +344,69 @@ class PoseVisualizationService:
         }
         return attached, "current", None, track_context, identity_breaks
 
-    def _paf_availability(self, track: VideoTrack) -> PosePafAvailability:
+    def _provider_capabilities(
+        self,
+        track: VideoTrack,
+    ) -> PoseProviderVisualizationCapabilities:
         provider_name: str | None = None
         if track.source_model_id is not None:
             model = self.session.get(ModelRegistration, track.source_model_id)
             if model is not None:
                 provider_name = model.provider_name
+
+        keypoint_scores_persisted = any(
+            (
+                any(point[2] > 0 for point in keyframe.keypoints or [])
+                or any(
+                    observation.confidence is not None
+                    for observation in keyframe.pose_observations or []
+                )
+            )
+            for keyframe in self._keyframes(track)
+        )
         if provider_name == "sleap_nn":
             reason = (
-                "The current SLEAP-NN adapter persists canonical keypoints but does not "
-                "persist raw part-affinity-field tensors."
+                "The current SLEAP-NN adapter persists canonical keypoint scores, "
+                "but ReefVision does not retain native confidence-map or "
+                "part-affinity-field tensors from inference."
+            )
+        elif provider_name == "ultralytics":
+            reason = (
+                "The Ultralytics adapter persists canonical keypoint scores when "
+                "provided, but ReefVision does not retain native model heatmap or "
+                "part-affinity-field tensors."
             )
         elif provider_name is not None:
             reason = (
-                f"The {provider_name} pose adapter does not persist a raw "
-                "part-affinity-field artifact."
+                f"The {provider_name} adapter does not expose persisted raw pose "
+                "visualization tensors through ReefVision."
             )
         else:
-            reason = "This pose track has no persisted model-backed PAF artifact."
-        return PosePafAvailability(
-            available=False,
+            reason = (
+                "This track has no registered model provider; visualizations use "
+                "only persisted canonical pose observations."
+            )
+        return PoseProviderVisualizationCapabilities(
             provider_name=provider_name,
+            keypoint_scores_persisted=keypoint_scores_persisted,
+            native_confidence_maps_persisted=False,
+            part_affinity_fields_persisted=False,
+            raw_tensor_export_available=False,
             reason=reason,
+        )
+
+    @staticmethod
+    def _paf_availability(
+        capabilities: PoseProviderVisualizationCapabilities,
+    ) -> PosePafAvailability:
+        return PosePafAvailability(
+            available=capabilities.part_affinity_fields_persisted,
+            provider_name=capabilities.provider_name,
+            reason=(
+                "A persisted raw part-affinity-field artifact is available."
+                if capabilities.part_affinity_fields_persisted
+                else capabilities.reason
+            ),
         )
 
     def analyze(
@@ -557,6 +610,7 @@ class PoseVisualizationService:
                     )
                 )
 
+        capabilities = self._provider_capabilities(track)
         return PoseVisualizationResponse(
             parent_video_track_id=track.id,
             source_track_revision=track.revision,
@@ -586,5 +640,191 @@ class PoseVisualizationService:
             activity_segment_count=total_activity_segments,
             cells=cells,
             trajectories=trajectories,
-            paf=self._paf_availability(track),
+            provider_capabilities=capabilities,
+            paf=self._paf_availability(capabilities),
+        )
+
+    def export(
+        self,
+        track_id: str,
+        payload: PoseVisualizationRequest,
+        export_format: PoseVisualizationExportFormat,
+    ) -> PoseVisualizationExportPayload:
+        result = self.analyze(track_id, payload)
+        video = self._video(result.video_id)
+        stem = video.original_filename.rsplit(".", 1)[0]
+        request_payload = payload.model_dump(mode="json")
+        provenance = {
+            "export_schema_version": "reefvision-pose-visualization-export-0001",
+            "visualization_schema_version": result.schema_version,
+            "video_id": result.video_id,
+            "parent_video_track_id": result.parent_video_track_id,
+            "source_track_revision": result.source_track_revision,
+            "coordinate_space": result.coordinate_space,
+            "sampling_policy": result.sampling_policy,
+            "identity_policy": result.identity_policy,
+            "identity_status": result.identity_status,
+            "request": request_payload,
+            "provider_capabilities": result.provider_capabilities.model_dump(mode="json"),
+            "paf": result.paf.model_dump(mode="json"),
+        }
+
+        if export_format == "json":
+            document = {
+                **provenance,
+                "visualization": result.model_dump(mode="json"),
+            }
+            return PoseVisualizationExportPayload(
+                filename=f"{stem}-pose-visualization.json",
+                media_type="application/json",
+                content=json.dumps(document, indent=2, sort_keys=True) + "\n",
+            )
+
+        if export_format == "cells_csv":
+            output = io.StringIO(newline="")
+            fieldnames = [
+                "video_id",
+                "parent_video_track_id",
+                "source_track_revision",
+                "start_frame",
+                "end_frame",
+                "grid_rows",
+                "grid_columns",
+                "include_predicted",
+                "include_uncertain",
+                "minimum_landmark_confidence",
+                "identity_status",
+                "row",
+                "column",
+                "x_min_pixels",
+                "y_min_pixels",
+                "x_max_pixels",
+                "y_max_pixels",
+                "sample_count",
+                "observed_sample_count",
+                "predicted_sample_count",
+                "confidence_sample_count",
+                "mean_landmark_confidence",
+                "sample_fraction",
+                "occupied_sampled_frame_count",
+                "occupied_sampled_frame_fraction",
+                "unique_landmark_track_count",
+                "movement_segment_count",
+                "movement_distance_pixels",
+                "movement_duration_seconds",
+                "mean_speed_pixels_per_second",
+                "maximum_speed_pixels_per_second",
+            ]
+            writer = csv.DictWriter(output, fieldnames=fieldnames, lineterminator="\n")
+            writer.writeheader()
+            for cell in result.cells:
+                writer.writerow(
+                    {
+                        "video_id": result.video_id,
+                        "parent_video_track_id": result.parent_video_track_id,
+                        "source_track_revision": result.source_track_revision,
+                        "start_frame": result.start_frame,
+                        "end_frame": result.end_frame,
+                        "grid_rows": result.grid_rows,
+                        "grid_columns": result.grid_columns,
+                        "include_predicted": payload.include_predicted,
+                        "include_uncertain": payload.include_uncertain,
+                        "minimum_landmark_confidence": (
+                            payload.minimum_landmark_confidence
+                            if payload.minimum_landmark_confidence is not None
+                            else ""
+                        ),
+                        "identity_status": result.identity_status,
+                        **cell.model_dump(mode="json"),
+                    }
+                )
+            return PoseVisualizationExportPayload(
+                filename=f"{stem}-pose-visualization-cells.csv",
+                media_type="text/csv",
+                content=output.getvalue(),
+            )
+
+        if export_format != "trajectories_csv":
+            raise ValidationError("Unsupported pose visualization export format")
+        if result.identity_status != "current" or not result.trajectories:
+            raise ValidationError(
+                "Trajectory CSV export requires current temporal identities and "
+                "at least one resolved landmark trajectory"
+            )
+
+        output = io.StringIO(newline="")
+        fieldnames = [
+            "video_id",
+            "parent_video_track_id",
+            "source_track_revision",
+            "start_frame",
+            "end_frame",
+            "include_predicted",
+            "include_uncertain",
+            "minimum_landmark_confidence",
+            "landmark_track_id",
+            "semantic_label",
+            "lifecycle_state",
+            "trajectory_path_length_pixels",
+            "trajectory_evaluated_seconds",
+            "trajectory_movement_segment_count",
+            "frame_index",
+            "time_s",
+            "occurrence_index",
+            "x_px",
+            "y_px",
+            "landmark_confidence",
+            "visibility_state",
+            "observation_source",
+            "coordinate_kind",
+            "association_state",
+            "verification_state",
+        ]
+        writer = csv.DictWriter(output, fieldnames=fieldnames, lineterminator="\n")
+        writer.writeheader()
+        for trajectory in result.trajectories:
+            for point in trajectory.points:
+                writer.writerow(
+                    {
+                        "video_id": result.video_id,
+                        "parent_video_track_id": result.parent_video_track_id,
+                        "source_track_revision": result.source_track_revision,
+                        "start_frame": result.start_frame,
+                        "end_frame": result.end_frame,
+                        "include_predicted": payload.include_predicted,
+                        "include_uncertain": payload.include_uncertain,
+                        "minimum_landmark_confidence": (
+                            payload.minimum_landmark_confidence
+                            if payload.minimum_landmark_confidence is not None
+                            else ""
+                        ),
+                        "landmark_track_id": trajectory.landmark_track_id,
+                        "semantic_label": trajectory.semantic_label,
+                        "lifecycle_state": trajectory.lifecycle_state,
+                        "trajectory_path_length_pixels": trajectory.path_length_pixels,
+                        "trajectory_evaluated_seconds": trajectory.evaluated_seconds,
+                        "trajectory_movement_segment_count": (
+                            trajectory.movement_segment_count
+                        ),
+                        "frame_index": point.frame_index,
+                        "time_s": point.time_s,
+                        "occurrence_index": point.occurrence_index,
+                        "x_px": point.x_px,
+                        "y_px": point.y_px,
+                        "landmark_confidence": (
+                            point.landmark_confidence
+                            if point.landmark_confidence is not None
+                            else ""
+                        ),
+                        "visibility_state": point.visibility_state,
+                        "observation_source": point.observation_source,
+                        "coordinate_kind": point.coordinate_kind,
+                        "association_state": point.association_state or "",
+                        "verification_state": point.verification_state or "",
+                    }
+                )
+        return PoseVisualizationExportPayload(
+            filename=f"{stem}-pose-visualization-trajectories.csv",
+            media_type="text/csv",
+            content=output.getvalue(),
         )

@@ -88,6 +88,15 @@ const response: poseVisualizationApi.PoseVisualizationResponse = {
       maximum_speed_pixels_per_second: 50,
     },
   ],
+  provider_capabilities: {
+    provider_name: "sleap_nn",
+    keypoint_scores_persisted: true,
+    native_confidence_maps_persisted: false,
+    part_affinity_fields_persisted: false,
+    raw_tensor_export_available: false,
+    reason:
+      "The current SLEAP-NN adapter persists canonical keypoint scores, but ReefVision does not retain native confidence-map or part-affinity-field tensors from inference.",
+  },
   trajectories: [
     {
       landmark_track_id: "landmark-track-123456",
@@ -208,6 +217,31 @@ describe("PoseVisualizationPanel", () => {
     expect(
       screen.getByText("ReefVision does not synthesize PAFs from keypoints."),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/canonical keypoint scores:/),
+    ).toHaveTextContent("persisted");
+    expect(
+      screen.getByText(/native confidence maps:/),
+    ).toHaveTextContent("not persisted");
+
+    expect(
+      screen.getByRole("link", { name: "Export visualization JSON" }),
+    ).toHaveAttribute(
+      "href",
+      expect.stringContaining("format=json"),
+    );
+    expect(
+      screen.getByRole("link", { name: "Export heatmap cells CSV" }),
+    ).toHaveAttribute(
+      "href",
+      expect.stringContaining("grid_rows=12"),
+    );
+    expect(
+      screen.getByRole("link", { name: "Export trajectories CSV" }),
+    ).toHaveAttribute(
+      "href",
+      expect.stringContaining("format=trajectories_csv"),
+    );
   });
 
   it("keeps occupancy, activity, and trajectory semantics distinct", async () => {

@@ -35,6 +35,7 @@ from reefvision.schemas.pose_tracking import (
     PoseTemporalTrackSummaryResponse,
 )
 from reefvision.schemas.pose_visualization import (
+    PoseVisualizationExportFormat,
     PoseVisualizationRequest,
     PoseVisualizationResponse,
 )
@@ -355,6 +356,47 @@ def get_pose_visualization(
     session: DbSession,
 ) -> PoseVisualizationResponse:
     return PoseVisualizationService(session).analyze(track_id, payload)
+
+
+@router.get("/video-tracks/{track_id}/pose-visualization/export")
+def export_pose_visualization(
+    track_id: str,
+    session: DbSession,
+    export_format: Annotated[
+        PoseVisualizationExportFormat,
+        Query(alias="format"),
+    ] = "json",
+    grid_rows: Annotated[int, Query(ge=1, le=100)] = 24,
+    grid_columns: Annotated[int, Query(ge=1, le=100)] = 24,
+    start_frame: Annotated[int | None, Query(ge=0)] = None,
+    end_frame: Annotated[int | None, Query(ge=0)] = None,
+    include_predicted: bool = False,
+    include_uncertain: bool = True,
+    minimum_landmark_confidence: Annotated[float | None, Query(ge=0, le=1)] = None,
+) -> Response:
+    request_payload = PoseVisualizationRequest(
+        grid_rows=grid_rows,
+        grid_columns=grid_columns,
+        start_frame=start_frame,
+        end_frame=end_frame,
+        include_predicted=include_predicted,
+        include_uncertain=include_uncertain,
+        minimum_landmark_confidence=minimum_landmark_confidence,
+    )
+    payload = PoseVisualizationService(session).export(
+        track_id,
+        request_payload,
+        export_format,
+    )
+    encoded_filename = quote(payload.filename, safe="")
+    return Response(
+        content=payload.content,
+        media_type=payload.media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+            "X-ReefVision-Pose-Visualization-Format": export_format,
+        },
+    )
 
 
 @router.get(

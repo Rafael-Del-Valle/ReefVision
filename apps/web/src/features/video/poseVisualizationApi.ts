@@ -62,6 +62,15 @@ export interface PoseVisualizationCell {
   maximum_speed_pixels_per_second: number | null;
 }
 
+export interface PoseProviderVisualizationCapabilities {
+  provider_name: string | null;
+  keypoint_scores_persisted: boolean;
+  native_confidence_maps_persisted: boolean;
+  part_affinity_fields_persisted: boolean;
+  raw_tensor_export_available: boolean;
+  reason: string;
+}
+
 export interface PosePafAvailability {
   available: boolean;
   provider_name: string | null;
@@ -100,6 +109,7 @@ export interface PoseVisualizationResponse {
   activity_segment_count: number;
   cells: PoseVisualizationCell[];
   trajectories: PoseVisualizationTrajectory[];
+  provider_capabilities: PoseProviderVisualizationCapabilities;
   paf: PosePafAvailability;
 }
 
@@ -130,4 +140,32 @@ export async function getPoseVisualization(
   );
   if (!response.ok) throw new Error(await responseError(response));
   return (await response.json()) as PoseVisualizationResponse;
+}
+
+
+export function poseVisualizationExportUrl(
+  trackId: string,
+  payload: PoseVisualizationRequest,
+  format: PoseVisualizationExportFormat,
+): string {
+  const params = new URLSearchParams({
+    format,
+    grid_rows: String(payload.grid_rows),
+    grid_columns: String(payload.grid_columns),
+    include_predicted: String(payload.include_predicted),
+    include_uncertain: String(payload.include_uncertain),
+  });
+  if (payload.start_frame !== undefined) {
+    params.set("start_frame", String(payload.start_frame));
+  }
+  if (payload.end_frame !== undefined) {
+    params.set("end_frame", String(payload.end_frame));
+  }
+  if (payload.minimum_landmark_confidence !== undefined) {
+    params.set(
+      "minimum_landmark_confidence",
+      String(payload.minimum_landmark_confidence),
+    );
+  }
+  return `${getApiBaseUrl()}/video-tracks/${encodeURIComponent(trackId)}/pose-visualization/export?${params.toString()}`;
 }

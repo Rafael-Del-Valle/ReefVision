@@ -125,6 +125,10 @@ def test_pose_visualization_uses_canonical_points_and_never_invents_paf(
     assert raw["observed_sample_count"] == 5
     assert raw["predicted_sample_count"] == 0
     assert raw["trajectories"] == []
+    assert raw["provider_capabilities"]["keypoint_scores_persisted"] is True
+    assert raw["provider_capabilities"]["native_confidence_maps_persisted"] is False
+    assert raw["provider_capabilities"]["part_affinity_fields_persisted"] is False
+    assert raw["provider_capabilities"]["raw_tensor_export_available"] is False
     assert raw["paf"]["available"] is False
     assert raw["paf"]["persistence_state"] == "not_persisted"
 
@@ -165,6 +169,51 @@ def test_pose_visualization_uses_canonical_points_and_never_invents_paf(
     predicted = [point for point in all_points if point["coordinate_kind"] == "predicted"]
     assert len(predicted) == 1
     assert predicted[0]["visibility_state"] == "occluded"
+
+    json_export = client.get(
+        f"/api/v1/video-tracks/{track['id']}/pose-visualization/export",
+        params={
+            "format": "json",
+            "grid_rows": 2,
+            "grid_columns": 2,
+            "include_predicted": "true",
+        },
+    )
+    assert json_export.status_code == 200, json_export.text
+    exported = json_export.json()
+    assert exported["export_schema_version"] == (
+        "reefvision-pose-visualization-export-0001"
+    )
+    assert exported["source_track_revision"] == track["revision"]
+    assert exported["request"]["grid_rows"] == 2
+    assert exported["request"]["include_predicted"] is True
+    assert exported["visualization"]["spatial_sample_count"] == 6
+
+    cells_export = client.get(
+        f"/api/v1/video-tracks/{track['id']}/pose-visualization/export",
+        params={
+            "format": "cells_csv",
+            "grid_rows": 2,
+            "grid_columns": 2,
+            "include_predicted": "true",
+        },
+    )
+    assert cells_export.status_code == 200, cells_export.text
+    assert "mean_landmark_confidence" in cells_export.text
+    assert "source_track_revision" in cells_export.text
+
+    trajectory_export = client.get(
+        f"/api/v1/video-tracks/{track['id']}/pose-visualization/export",
+        params={
+            "format": "trajectories_csv",
+            "grid_rows": 2,
+            "grid_columns": 2,
+            "include_predicted": "true",
+        },
+    )
+    assert trajectory_export.status_code == 200, trajectory_export.text
+    assert "landmark_track_id" in trajectory_export.text
+    assert "coordinate_kind" in trajectory_export.text
 
 
 def test_pose_visualization_filters_uncertain_and_low_confidence_without_zeroing_unknowns(
