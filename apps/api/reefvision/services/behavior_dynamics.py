@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 from collections import Counter, defaultdict
 from uuid import uuid4
@@ -154,10 +155,7 @@ class BehaviorDynamicsService:
         revisions = list(
             self.session.scalars(
                 select(BehaviorEthogramRevision)
-                .where(
-                    BehaviorEthogramRevision.ethogram_series_id
-                    == ethogram_series_id
-                )
+                .where(BehaviorEthogramRevision.ethogram_series_id == ethogram_series_id)
                 .order_by(BehaviorEthogramRevision.revision.desc())
             )
         )
@@ -229,10 +227,7 @@ class BehaviorDynamicsService:
             definition_sha256=record.definition_sha256,
             created_by=record.created_by,
             created_at=record.created_at,
-            states=[
-                BehaviorStateDefinitionResponse.model_validate(state)
-                for state in states
-            ],
+            states=[BehaviorStateDefinitionResponse.model_validate(state) for state in states],
         )
 
     @staticmethod
@@ -256,15 +251,15 @@ class BehaviorDynamicsService:
         ethogram = self._ethogram(payload.ethogram_revision_id)
         state = self._state(payload.behavior_state_id)
         if state.ethogram_revision_id != ethogram.id:
-            raise ValidationError("Behavior state does not belong to the selected ethogram revision")
+            raise ValidationError(
+                "Behavior state does not belong to the selected ethogram revision"
+            )
         if ethogram.project_id != video.project_id:
             raise ValidationError("Behavior ethogram belongs to a different project")
 
         first_frame, last_frame = self._track_frame_bounds(track)
         if payload.start_frame < first_frame or payload.end_frame > last_frame:
-            raise ValidationError(
-                "Behavior bout must stay within the selected track frame range"
-            )
+            raise ValidationError("Behavior bout must stay within the selected track frame range")
 
         existing = self._effective_bouts(track.id, ethogram.id)
         same_channel = [
@@ -274,19 +269,15 @@ class BehaviorDynamicsService:
         ]
         for bout, bout_state in same_channel:
             overlaps = not (
-                payload.end_frame < bout.start_frame
-                or payload.start_frame > bout.end_frame
+                payload.end_frame < bout.start_frame or payload.start_frame > bout.end_frame
             )
             if overlaps:
                 raise ValidationError(
                     "Behavior bouts cannot overlap within the same ethogram channel"
                 )
-            adjacent_same_state = (
-                bout_state.id == state.id
-                and (
-                    payload.start_frame == bout.end_frame + 1
-                    or bout.start_frame == payload.end_frame + 1
-                )
+            adjacent_same_state = bout_state.id == state.id and (
+                payload.start_frame == bout.end_frame + 1
+                or bout.start_frame == payload.end_frame + 1
             )
             if adjacent_same_state:
                 raise ValidationError(
@@ -303,11 +294,7 @@ class BehaviorDynamicsService:
             start_frame=payload.start_frame,
             end_frame=payload.end_frame,
             source=payload.source,
-            confidence=(
-                float(payload.confidence)
-                if payload.confidence is not None
-                else None
-            ),
+            confidence=(float(payload.confidence) if payload.confidence is not None else None),
             review_status="verified" if payload.source == "manual" else "unreviewed",
             source_track_revision=track.revision,
             source_model_id=None,
@@ -347,9 +334,7 @@ class BehaviorDynamicsService:
             current = latest.get(bout.bout_series_id)
             if current is None or bout.revision > current[0].revision:
                 latest[bout.bout_series_id] = (bout, state)
-        effective = [
-            item for item in latest.values() if not item[0].is_deleted
-        ]
+        effective = [item for item in latest.values() if not item[0].is_deleted]
         effective.sort(
             key=lambda item: (
                 item[1].channel.casefold(),
@@ -420,9 +405,7 @@ class BehaviorDynamicsService:
             raise ValidationError("Behavior ethogram belongs to a different project")
 
         first_frame, last_frame = self._track_frame_bounds(track)
-        start_frame = (
-            payload.start_frame if payload.start_frame is not None else first_frame
-        )
+        start_frame = payload.start_frame if payload.start_frame is not None else first_frame
         end_frame = payload.end_frame if payload.end_frame is not None else last_frame
         if start_frame < first_frame or end_frame > last_frame:
             raise ValidationError(
@@ -435,15 +418,9 @@ class BehaviorDynamicsService:
             for bout, state in rows
             if bout.end_frame >= start_frame and bout.start_frame <= end_frame
         ]
-        excluded_unreviewed = sum(
-            1 for bout, _state in rows if bout.review_status != "verified"
-        )
+        excluded_unreviewed = sum(1 for bout, _state in rows if bout.review_status != "verified")
         if not payload.include_unreviewed:
-            rows = [
-                (bout, state)
-                for bout, state in rows
-                if bout.review_status == "verified"
-            ]
+            rows = [(bout, state) for bout, state in rows if bout.review_status == "verified"]
         states = list(
             self.session.scalars(
                 select(BehaviorStateDefinition)
@@ -467,11 +444,7 @@ class BehaviorDynamicsService:
         channels: list[BehaviorChannelDynamics] = []
 
         for channel in sorted(states_by_channel, key=str.casefold):
-            channel_rows = [
-                (bout, state)
-                for bout, state in rows
-                if state.channel == channel
-            ]
+            channel_rows = [(bout, state) for bout, state in rows if state.channel == channel]
             clipped: list[tuple[BehaviorBoutRevision, BehaviorStateDefinition, int, int]] = []
             for bout, state in channel_rows:
                 clipped_start = max(start_frame, bout.start_frame)
@@ -490,7 +463,7 @@ class BehaviorDynamicsService:
             labeled_frames = sum(dwell_frames.values())
             transition_counts: Counter[tuple[str, str]] = Counter()
             outgoing_counts: Counter[str] = Counter()
-            for first, second in zip(clipped, clipped[1:], strict=False):
+            for first, second in itertools.pairwise(clipped):
                 _first_bout, first_state, _first_start, first_end = first
                 _second_bout, second_state, second_start, _second_end = second
                 if second_start != first_end + 1:
@@ -516,9 +489,7 @@ class BehaviorDynamicsService:
                         fraction_of_labeled_time=(
                             frames / labeled_frames if labeled_frames else 0.0
                         ),
-                        mean_bout_seconds=(
-                            sum(durations) / len(durations) if durations else None
-                        ),
+                        mean_bout_seconds=(sum(durations) / len(durations) if durations else None),
                         maximum_bout_seconds=max(durations) if durations else None,
                     )
                 )
@@ -566,9 +537,7 @@ class BehaviorDynamicsService:
             end_frame=end_frame,
             fps=video.fps,
             annotation_policy=(
-                "include_unreviewed"
-                if payload.include_unreviewed
-                else "verified_only"
+                "include_unreviewed" if payload.include_unreviewed else "verified_only"
             ),
             excluded_unreviewed_bout_count=(
                 0 if payload.include_unreviewed else excluded_unreviewed

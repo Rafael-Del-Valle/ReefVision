@@ -95,12 +95,8 @@ def test_behavior_ethogram_bouts_and_transition_summary(
         assert response.status_code == 201, response.text
         created_bout = response.json()
         assert created_bout["stale_against_track"] is False
-        assert created_bout["duration_seconds"] == pytest.approx(
-            (end - start + 1) / 10.0
-        )
-        assert created_bout["end_time_seconds"] == pytest.approx(
-            (end + 1) / 10.0
-        )
+        assert created_bout["duration_seconds"] == pytest.approx((end - start + 1) / 10.0)
+        assert created_bout["end_time_seconds"] == pytest.approx((end + 1) / 10.0)
 
     listed = client.get(
         f"/api/v1/video-tracks/{track['id']}/behavior-bouts",
@@ -123,14 +119,10 @@ def test_behavior_ethogram_bouts_and_transition_summary(
     channels = {item["channel"]: item for item in payload["channels"]}
     locomotion = channels["locomotion"]
     assert locomotion["coverage_fraction"] == pytest.approx(1.0)
-    locomotion_states = {
-        item["behavior_code"]: item for item in locomotion["states"]
-    }
+    locomotion_states = {item["behavior_code"]: item for item in locomotion["states"]}
     assert locomotion_states["rest"]["bout_count"] == 2
     assert locomotion_states["rest"]["dwell_seconds"] == pytest.approx(0.4)
-    assert locomotion_states["rest"]["fraction_of_evaluated_time"] == pytest.approx(
-        4 / 6
-    )
+    assert locomotion_states["rest"]["fraction_of_evaluated_time"] == pytest.approx(4 / 6)
     assert locomotion_states["swim"]["dwell_seconds"] == pytest.approx(0.2)
     transitions = {
         (item["from_behavior_code"], item["to_behavior_code"]): item
@@ -266,12 +258,9 @@ def test_behavior_ethogram_is_project_scoped(
     assert cross_project.status_code == 400, cross_project.text
     assert "different project" in cross_project.json()["detail"]
 
-    listed = client.get(
-        f"/api/v1/projects/{project_two['id']}/behavior-ethograms"
-    )
+    listed = client.get(f"/api/v1/projects/{project_two['id']}/behavior-ethograms")
     assert listed.status_code == 200
     assert listed.json() == []
-
 
 
 def test_behavior_ethogram_revisions_are_immutable_and_latest_listing_wins(
@@ -321,14 +310,11 @@ def test_behavior_ethogram_revisions_are_immutable_and_latest_listing_wins(
     assert revised_payload["ethogram_series_id"] == original["ethogram_series_id"]
     assert revised_payload["definition_sha256"] != original["definition_sha256"]
 
-    listed = client.get(
-        f"/api/v1/projects/{project['id']}/behavior-ethograms"
-    )
+    listed = client.get(f"/api/v1/projects/{project['id']}/behavior-ethograms")
     assert listed.status_code == 200, listed.text
     assert len(listed.json()) == 1
     assert listed.json()[0]["id"] == revised_payload["id"]
     assert listed.json()[0]["revision"] == 2
-
 
 
 def test_behavior_dynamics_excludes_unreviewed_imports_by_default(
@@ -366,8 +352,7 @@ def test_behavior_dynamics_excludes_unreviewed_imports_by_default(
     assert default_payload["annotation_policy"] == "verified_only"
     assert default_payload["excluded_unreviewed_bout_count"] == 1
     locomotion = next(
-        item for item in default_payload["channels"]
-        if item["channel"] == "locomotion"
+        item for item in default_payload["channels"] if item["channel"] == "locomotion"
     )
     assert locomotion["labeled_frames"] == 0
 
@@ -383,7 +368,6 @@ def test_behavior_dynamics_excludes_unreviewed_imports_by_default(
     assert inclusive_payload["annotation_policy"] == "include_unreviewed"
     assert inclusive_payload["excluded_unreviewed_bout_count"] == 0
     locomotion = next(
-        item for item in inclusive_payload["channels"]
-        if item["channel"] == "locomotion"
+        item for item in inclusive_payload["channels"] if item["channel"] == "locomotion"
     )
     assert locomotion["labeled_frames"] == 3
