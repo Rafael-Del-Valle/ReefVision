@@ -5,6 +5,7 @@ import { GeoreferencingSetupPanel } from "./GeoreferencingSetupPanel";
 import { GeographicExportPanel } from "./GeographicExportPanel";
 import { GeographicMovementAnalyticsPanel } from "./GeographicMovementAnalyticsPanel";
 import { PoseTemporalReviewPanel } from "./PoseTemporalReviewPanel";
+import { PoseVisualizationPanel } from "./PoseVisualizationPanel";
 import {
   importPoseInteroperability,
   poseInteroperabilityExportUrl,
@@ -1302,6 +1303,12 @@ export function VideoTrackingWorkspace({
                   setFrameIndex(nextFrame);
                   setPreviewFrameIndex(nextFrame);
                 }}
+              />
+            )}
+            {selectedTrack && selectedTrackPoseSchema && (
+              <PoseVisualizationPanel
+                trackId={selectedTrack.id}
+                frameIndex={previewFrameIndex}
               />
             )}
             {spatialMetricsQuery.data && (

@@ -480,6 +480,9 @@ describe("VideoTrackingWorkspace", () => {
     expect(
       screen.getByRole("heading", { name: "Pose interoperability" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Scientific pose visualization" }),
+    ).toBeInTheDocument();
     const slpExport = screen.getByRole("link", { name: "SLEAP SLP" });
     const nwbExport = screen.getByRole("link", { name: "NWB" });
     const cocoExport = screen.getByRole("link", { name: "COCO pose" });
