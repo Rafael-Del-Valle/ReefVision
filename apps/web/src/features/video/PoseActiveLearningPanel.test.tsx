@@ -53,6 +53,7 @@ const candidate: api.PoseActiveLearningCandidate = {
     repeated_landmark_ambiguity: 0.8,
     identity_break_signal: 1,
     motion_anomaly: 0.2,
+    model_disagreement: 0.55,
   },
   reason_codes_json: [
     "low_landmark_confidence",
@@ -133,6 +134,13 @@ describe("PoseActiveLearningPanel", () => {
     expect(candidateCard).toHaveTextContent(/repeated[- ]landmark ambiguity/i);
 
     expect(candidateCard).toHaveTextContent(/identity-break signal\s+100\.0%/i);
+    expect(candidateCard).toHaveTextContent(/Model disagreement:\s+55\.0%/i);
+    expect(candidateCard).toHaveTextContent(
+      /Heatmap entropy:\s+not exposed by this provider/i,
+    );
+    expect(candidateCard).toHaveTextContent(
+      /PAF ambiguity:\s+not exposed by this provider/i,
+    );
 
     fireEvent.click(
       screen.getByRole("button", {

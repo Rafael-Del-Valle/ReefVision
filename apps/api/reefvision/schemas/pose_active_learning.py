@@ -18,6 +18,9 @@ class PoseActiveLearningScoreWeights(BaseModel):
     repeated_landmark_ambiguity: FiniteFloat = Field(default=0.15, ge=0, le=1)
     identity_break_signal: FiniteFloat = Field(default=0.15, ge=0, le=1)
     motion_anomaly: FiniteFloat = Field(default=0.05, ge=0, le=1)
+    model_disagreement: FiniteFloat = Field(default=0.10, ge=0, le=1)
+    heatmap_entropy: FiniteFloat = Field(default=0.05, ge=0, le=1)
+    paf_ambiguity: FiniteFloat = Field(default=0.05, ge=0, le=1)
 
 
 class PoseActiveLearningRoundCreateRequest(BaseModel):

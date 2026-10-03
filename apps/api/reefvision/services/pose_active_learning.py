@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from math import hypot
 from typing import Any
 from uuid import uuid4
 
@@ -33,7 +34,7 @@ from reefvision.schemas.pose_active_learning import (
 from reefvision.storage.datasets import canonical_json_sha256
 
 SELECTION_ALGORITHM = "reefvision-pose-active-learning"
-SELECTION_ALGORITHM_VERSION = "0001"
+SELECTION_ALGORITHM_VERSION = "0002"
 
 _VISIBILITY_RISK = {
     "visible": 0.0,
@@ -52,6 +53,173 @@ def _mean(values: list[float]) -> float:
 
 def _bounded(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
+
+
+def _keyframe_for(
+    track: VideoTrack,
+    frame_index: int,
+) -> dict[str, Any] | None:
+    for item in track.keyframes_json:
+        if int(item.get("frame", -1)) == frame_index:
+            return dict(item)
+    return None
+
+
+def _bbox_iou(
+    first: object,
+    second: object,
+) -> float:
+    if (
+        not isinstance(first, list)
+        or not isinstance(second, list)
+        or len(first) != 4
+        or len(second) != 4
+    ):
+        return 0.0
+
+    try:
+        ax, ay, aw, ah = (float(value) for value in first)
+        bx, by, bw, bh = (float(value) for value in second)
+    except (TypeError, ValueError):
+        return 0.0
+
+    if aw <= 0 or ah <= 0 or bw <= 0 or bh <= 0:
+        return 0.0
+
+    ax2 = ax + aw
+    ay2 = ay + ah
+    bx2 = bx + bw
+    by2 = by + bh
+
+    ix1 = max(ax, bx)
+    iy1 = max(ay, by)
+    ix2 = min(ax2, bx2)
+    iy2 = min(ay2, by2)
+
+    intersection = max(0.0, ix2 - ix1) * max(
+        0.0,
+        iy2 - iy1,
+    )
+    if intersection <= 0:
+        return 0.0
+
+    union = aw * ah + bw * bh - intersection
+    return intersection / union if union > 0 else 0.0
+
+
+def _pose_points_by_label(
+    keyframe: dict[str, Any],
+) -> dict[str, list[tuple[float, float]]]:
+    grouped: dict[str, list[tuple[float, float]]] = defaultdict(list)
+
+    raw_observations = keyframe.get("pose_observations")
+    if not isinstance(raw_observations, list):
+        return grouped
+
+    for raw in raw_observations:
+        if not isinstance(raw, dict):
+            continue
+
+        status = str(raw.get("status") or "visible")
+        if status in {"absent", "out_of_frame"}:
+            continue
+
+        label = str(raw.get("semantic_label") or "").strip()
+        if not label:
+            continue
+
+        try:
+            x = float(raw["x"])
+            y = float(raw["y"])
+        except (KeyError, TypeError, ValueError):
+            continue
+
+        grouped[label].append((x, y))
+
+    return grouped
+
+
+def _symmetric_nearest_distance(
+    first: list[tuple[float, float]],
+    second: list[tuple[float, float]],
+    *,
+    diagonal: float,
+) -> float:
+    if not first or not second or diagonal <= 0:
+        return 1.0
+
+    def nearest(
+        point: tuple[float, float],
+        candidates: list[tuple[float, float]],
+    ) -> float:
+        return min(
+            hypot(
+                point[0] - candidate[0],
+                point[1] - candidate[1],
+            )
+            for candidate in candidates
+        )
+
+    forward = _mean([nearest(point, second) for point in first])
+    reverse = _mean([nearest(point, first) for point in second])
+
+    return ((forward + reverse) / 2.0) / diagonal
+
+
+def _pose_configuration_disagreement(
+    first: dict[str, Any],
+    second: dict[str, Any],
+) -> float | None:
+    first_points = _pose_points_by_label(first)
+    second_points = _pose_points_by_label(second)
+
+    labels = sorted(set(first_points) | set(second_points))
+    if not labels:
+        return None
+
+    bbox = first.get("bbox")
+    if not isinstance(bbox, list) or len(bbox) != 4:
+        return None
+
+    try:
+        width = float(bbox[2])
+        height = float(bbox[3])
+    except (TypeError, ValueError):
+        return None
+
+    diagonal = hypot(width, height)
+    if diagonal <= 0:
+        return None
+
+    weighted_score = 0.0
+    total_weight = 0.0
+
+    for label in labels:
+        left = first_points.get(label, [])
+        right = second_points.get(label, [])
+        weight = float(max(len(left), len(right), 1))
+
+        if not left or not right:
+            label_score = 1.0
+        else:
+            normalized_distance = _symmetric_nearest_distance(
+                left,
+                right,
+                diagonal=diagonal,
+            )
+            distance_score = _bounded(normalized_distance / 0.25)
+            count_mismatch = abs(len(left) - len(right)) / max(len(left), len(right), 1)
+
+            # Spatial disagreement dominates while a difference
+            # in repeated-landmark count remains explicit.
+            label_score = _bounded(0.80 * distance_score + 0.20 * count_mismatch)
+
+        weighted_score += label_score * weight
+        total_weight += weight
+
+    if total_weight <= 0:
+        return None
+    return _bounded(weighted_score / total_weight)
 
 
 class PoseActiveLearningService:
@@ -189,6 +357,190 @@ class PoseActiveLearningService:
             )
         )
 
+    def _provider_uncertainty(
+        self,
+        track: VideoTrack,
+        frame_index: int,
+    ) -> tuple[dict[str, float], dict[str, Any]]:
+        keyframe = _keyframe_for(track, frame_index)
+        if keyframe is None:
+            return {}, {"available": False, "reason": "missing_keyframe"}
+
+        raw = keyframe.get("pose_uncertainty")
+        if not isinstance(raw, dict):
+            return {}, {
+                "available": False,
+                "reason": "provider_did_not_supply_uncertainty_evidence",
+            }
+
+        if raw.get("schema_version") != "pose-provider-uncertainty-0001":
+            return {}, {
+                "available": False,
+                "reason": "unsupported_uncertainty_evidence_version",
+            }
+
+        metadata = dict(track.metadata_json or {})
+        expected_provider = metadata.get("provider_name")
+        actual_provider = raw.get("provider_id")
+
+        if (
+            isinstance(expected_provider, str)
+            and expected_provider
+            and actual_provider != expected_provider
+        ):
+            return {}, {
+                "available": False,
+                "reason": "provider_identity_mismatch",
+                "expected_provider": expected_provider,
+                "actual_provider": actual_provider,
+            }
+
+        capabilities = raw.get("capabilities")
+        if not isinstance(capabilities, dict):
+            capabilities = {}
+
+        components: dict[str, float] = {}
+        for signal in ("heatmap_entropy", "paf_ambiguity"):
+            value = raw.get(signal)
+            if capabilities.get(signal) is not True:
+                continue
+            if not isinstance(value, int | float):
+                continue
+            number = float(value)
+            if 0.0 <= number <= 1.0:
+                components[signal] = number
+
+        raw_available_signals = raw.get("available_signals")
+        available_signals = (
+            [str(item) for item in raw_available_signals]
+            if isinstance(raw_available_signals, list)
+            else []
+        )
+
+        evidence = {
+            "available": True,
+            "schema_version": raw.get("schema_version"),
+            "provider_id": actual_provider,
+            "provider_version": raw.get("provider_version"),
+            "capabilities": capabilities,
+            "available_signals": available_signals,
+            "mean_keypoint_confidence": raw.get("mean_keypoint_confidence"),
+            "minimum_keypoint_confidence": raw.get("minimum_keypoint_confidence"),
+            "heatmap_entropy": raw.get("heatmap_entropy"),
+            "paf_ambiguity": raw.get("paf_ambiguity"),
+        }
+        return components, evidence
+
+    def _model_disagreement(
+        self,
+        *,
+        source_track: VideoTrack,
+        frame_index: int,
+        comparison_tracks: list[VideoTrack],
+        model_ids: list[str],
+    ) -> tuple[float | None, dict[str, Any]]:
+        if source_track.source_model_id is None:
+            return None, {
+                "available": False,
+                "reason": "source_track_has_no_model_identity",
+            }
+
+        source_keyframe = _keyframe_for(
+            source_track,
+            frame_index,
+        )
+        if source_keyframe is None:
+            return None, {
+                "available": False,
+                "reason": "source_keyframe_missing",
+            }
+
+        best_by_model: dict[
+            str,
+            tuple[VideoTrack, dict[str, Any], float],
+        ] = {}
+
+        for comparator in comparison_tracks:
+            if comparator.id == source_track.id:
+                continue
+            if comparator.deleted_at is not None:
+                continue
+            if comparator.video_id != source_track.video_id:
+                continue
+            if comparator.label_class_id != source_track.label_class_id:
+                continue
+            if comparator.source_model_id is None:
+                continue
+            if comparator.source_model_id == source_track.source_model_id:
+                continue
+            if model_ids and comparator.source_model_id not in model_ids:
+                continue
+
+            comparator_keyframe = _keyframe_for(
+                comparator,
+                frame_index,
+            )
+            if comparator_keyframe is None:
+                continue
+
+            overlap = _bbox_iou(
+                source_keyframe.get("bbox"),
+                comparator_keyframe.get("bbox"),
+            )
+            if overlap < 0.10:
+                continue
+
+            previous = best_by_model.get(comparator.source_model_id)
+            if previous is None or overlap > previous[2]:
+                best_by_model[comparator.source_model_id] = (
+                    comparator,
+                    comparator_keyframe,
+                    overlap,
+                )
+
+        comparisons: list[dict[str, Any]] = []
+        scores: list[float] = []
+
+        for model_id, (
+            comparator,
+            comparator_keyframe,
+            overlap,
+        ) in sorted(best_by_model.items()):
+            disagreement = _pose_configuration_disagreement(
+                source_keyframe,
+                comparator_keyframe,
+            )
+            if disagreement is None:
+                continue
+
+            scores.append(disagreement)
+            comparisons.append(
+                {
+                    "model_id": model_id,
+                    "video_track_id": comparator.id,
+                    "frame_index": frame_index,
+                    "bbox_iou": overlap,
+                    "configuration_disagreement": disagreement,
+                }
+            )
+
+        if not scores:
+            return None, {
+                "available": False,
+                "reason": "no_overlapping_alternative_pose_model",
+                "source_model_id": source_track.source_model_id,
+            }
+
+        return _bounded(_mean(scores)), {
+            "available": True,
+            "method": ("repeated-label-order-invariant-symmetric-nearest-distance"),
+            "normalization": "source_bbox_diagonal",
+            "saturation_distance_fraction": 0.25,
+            "source_model_id": source_track.source_model_id,
+            "comparison_count": len(comparisons),
+            "comparisons": comparisons,
+        }
+
     def _score_frame(
         self,
         *,
@@ -198,6 +550,8 @@ class PoseActiveLearningService:
         frame_index: int,
         clip_radius_frames: int,
         weights: dict[str, float],
+        provider_components: dict[str, float] | None = None,
+        model_disagreement: float | None = None,
     ) -> tuple[float, dict[str, float], list[str]]:
         confidence_risk = [
             1.0 - item.landmark_confidence if item.landmark_confidence is not None else 1.0
@@ -290,13 +644,25 @@ class PoseActiveLearningService:
             "motion_anomaly": motion_anomaly,
         }
 
-        total_weight = sum(weights.values())
+        if provider_components:
+            for key, value in provider_components.items():
+                if key in {"heatmap_entropy", "paf_ambiguity"}:
+                    components[key] = _bounded(value)
+
+        if model_disagreement is not None:
+            components["model_disagreement"] = _bounded(model_disagreement)
+
+        active_weights = {key: float(weights.get(key, 0.0)) for key in components}
+        total_weight = sum(active_weights.values())
         if total_weight <= 0:
             raise ValidationError(
-                "Pose Active Learning requires at least one positive score weight"
+                "Pose Active Learning requires at least one positive "
+                "weight for an available uncertainty signal"
             )
 
-        score = _bounded(sum(components[key] * weights[key] for key in components) / total_weight)
+        score = _bounded(
+            sum(components[key] * active_weights[key] for key in components) / total_weight
+        )
 
         reasons: list[str] = []
         if low_landmark_confidence >= 0.35:
@@ -311,6 +677,12 @@ class PoseActiveLearningService:
             reasons.append("identity_break_or_nearby_break")
         if motion_anomaly >= 0.25:
             reasons.append("temporal_motion_anomaly")
+        if components.get("model_disagreement", 0.0) >= 0.25:
+            reasons.append("cross_model_pose_disagreement")
+        if components.get("heatmap_entropy", 0.0) >= 0.25:
+            reasons.append("provider_heatmap_entropy")
+        if components.get("paf_ambiguity", 0.0) >= 0.25:
+            reasons.append("provider_paf_ambiguity")
         if not reasons and score > 0:
             reasons.append("composite_pose_uncertainty")
 
@@ -323,6 +695,7 @@ class PoseActiveLearningService:
     ) -> PoseActiveLearningRoundResponse:
         video = self._video(project_id, request.video_id)
         tracks = self._tracks(video, request.track_ids)
+        comparison_tracks = self._tracks(video, [])
         model_ids = self._models(project_id, request.model_ids)
 
         weights = request.weights.model_dump(mode="json")
@@ -361,6 +734,20 @@ class PoseActiveLearningService:
 
                 pose_schema_id, pose_schema_revision = next(iter(schema_pairs))
 
+                provider_components, provider_evidence = self._provider_uncertainty(
+                    track,
+                    frame_index,
+                )
+                (
+                    model_disagreement,
+                    disagreement_evidence,
+                ) = self._model_disagreement(
+                    source_track=track,
+                    frame_index=frame_index,
+                    comparison_tracks=comparison_tracks,
+                    model_ids=model_ids,
+                )
+
                 score, components, reasons = self._score_frame(
                     observations=frame_observations,
                     decisions=decisions,
@@ -368,6 +755,8 @@ class PoseActiveLearningService:
                     frame_index=frame_index,
                     clip_radius_frames=request.clip_radius_frames,
                     weights=weights,
+                    provider_components=provider_components,
+                    model_disagreement=model_disagreement,
                 )
 
                 if request.selection_unit == "frame":
@@ -385,9 +774,12 @@ class PoseActiveLearningService:
 
                 source_model_ids = sorted(
                     {
-                        item.source_model_id
-                        for item in frame_observations
-                        if item.source_model_id is not None
+                        *([track.source_model_id] if track.source_model_id is not None else []),
+                        *[
+                            item.source_model_id
+                            for item in frame_observations
+                            if item.source_model_id is not None
+                        ],
                     }
                 )
                 source_job_ids = sorted(
@@ -437,6 +829,8 @@ class PoseActiveLearningService:
                     "identity_break_ids": relevant_break_ids,
                     "source_model_ids": source_model_ids,
                     "source_job_ids": source_job_ids,
+                    "provider_uncertainty_evidence": provider_evidence,
+                    "model_disagreement_evidence": disagreement_evidence,
                     "score_components": components,
                     "weights": weights,
                     "reason_codes": reasons,
@@ -854,13 +1248,19 @@ class PoseActiveLearningService:
         pending = [item for item in candidates if item.review_status in {"pending", "in_review"}]
         skipped = [item for item in candidates if item.review_status == "skipped"]
 
+        scoring_config = dict(round_record.scoring_config_json or {})
+        stored_algorithm = str(scoring_config.get("algorithm") or SELECTION_ALGORITHM)
+        stored_algorithm_version = str(
+            scoring_config.get("algorithm_version") or SELECTION_ALGORITHM_VERSION
+        )
+
         return PoseActiveLearningExportManifestResponse(
             round_id=round_record.id,
             project_id=round_record.project_id,
             video_id=round_record.video_id,
             selection_sha256=round_record.selection_sha256,
-            selection_algorithm=SELECTION_ALGORITHM,
-            selection_algorithm_version=(SELECTION_ALGORITHM_VERSION),
+            selection_algorithm=stored_algorithm,
+            selection_algorithm_version=stored_algorithm_version,
             status=round_record.status,
             retraining_ready=(
                 bool(verified)

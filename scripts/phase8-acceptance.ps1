@@ -7,13 +7,13 @@ $repo = Split-Path -Parent $PSScriptRoot
 Set-Location $repo
 
 Write-Host "Phase 8 Advanced Providers acceptance" -ForegroundColor Cyan
-Write-Host "Expected branch: feat/advanced-providers-phase8"
+Write-Host "Expected branch: feat/scientist-ready-phase8-pose-active-learning-20261003"
 
 if ($RunAutomatedValidation) {
     & ".\.venv\Scripts\python.exe" -m ruff format --check apps\api
     & ".\.venv\Scripts\python.exe" -m ruff check apps\api
     & ".\.venv\Scripts\python.exe" -m mypy apps\api\reefvision
-    & ".\.venv\Scripts\python.exe" -m pytest apps\api\reefvision\tests\test_advanced_providers_phase8.py apps\api\reefvision\tests\test_pose_active_learning_phase8.py -v
+    & ".\.venv\Scripts\python.exe" -m pytest apps\api\reefvision\tests\test_advanced_providers_phase8.py apps\api\reefvision\tests\test_advanced_provider_execution_schema.py apps\api\reefvision\tests\test_advanced_provider_proposals.py apps\api\reefvision\tests\test_pose_provider_backends.py apps\api\reefvision\tests\test_pose_uncertainty_contract_phase8.py apps\api\reefvision\tests\test_pose_active_learning_phase8.py -v
     Push-Location apps\web
     npm run test -- --run
     npm run build
@@ -41,3 +41,12 @@ Write-Host "[ ] Confirm the candidate becomes verified only after scientist save
 Write-Host "[ ] Confirm an append-only pose correction audit event records Active Learning verification."
 Write-Host "[ ] Confirm stale candidates are blocked before review."
 Write-Host "[ ] Confirm the retraining provenance manifest contains verified pose SHA and track revision."
+
+Write-Host "[ ] Confirm Ultralytics pose keyframes declare keypoint confidence but do not claim heatmap/PAF support."
+Write-Host "[ ] Confirm SLEAP-NN pose keyframes declare keypoint confidence but do not claim raw heatmap/PAF support through the current wrapper."
+Write-Host "[ ] Confirm optional heatmap entropy enters acquisition only when provider evidence explicitly supplies it."
+Write-Host "[ ] Confirm optional PAF ambiguity enters acquisition only when provider evidence explicitly supplies it."
+Write-Host "[ ] Confirm missing optional signals do not dilute the acquisition score."
+Write-Host "[ ] Confirm overlapping predictions from two distinct pose models produce model-disagreement evidence."
+Write-Host "[ ] Confirm repeated landmarks are compared without assuming occurrence-index identity between models."
+Write-Host "[ ] Confirm candidate provenance records every comparison model/track and provider uncertainty capability."

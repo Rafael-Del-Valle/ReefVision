@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import import_module
+from math import isfinite
 from pathlib import Path
 from typing import Any, Protocol, cast
 
@@ -17,6 +18,74 @@ from reefvision.ml.sleap_nn_provider import (
     sleap_predictor_types,
 )
 
+POSE_UNCERTAINTY_EVIDENCE_SCHEMA_VERSION = "pose-provider-uncertainty-0001"
+
+
+def _optional_uncertainty_score(
+    value: float | None,
+    *,
+    name: str,
+) -> float | None:
+    if value is None:
+        return None
+    number = float(value)
+    if not isfinite(number) or not 0.0 <= number <= 1.0:
+        raise ValidationError(f"{name} must be a finite value between 0 and 1")
+    return number
+
+
+def build_pose_uncertainty_evidence(
+    *,
+    provider_id: str,
+    provider_version: str,
+    keypoints: tuple[tuple[float, float, float], ...],
+    heatmap_entropy: float | None = None,
+    paf_ambiguity: float | None = None,
+) -> dict[str, Any]:
+    """Build explicit provider evidence without inventing unsupported signals."""
+
+    normalized_confidences = [
+        min(max(float(point[2]), 0.0), 1.0)
+        for point in keypoints
+        if len(point) >= 3 and isfinite(float(point[2]))
+    ]
+
+    mean_confidence = (
+        sum(normalized_confidences) / len(normalized_confidences)
+        if normalized_confidences
+        else None
+    )
+    minimum_confidence = min(normalized_confidences) if normalized_confidences else None
+
+    validated_heatmap = _optional_uncertainty_score(
+        heatmap_entropy,
+        name="heatmap_entropy",
+    )
+    validated_paf = _optional_uncertainty_score(
+        paf_ambiguity,
+        name="paf_ambiguity",
+    )
+
+    capabilities = {
+        "keypoint_confidence": bool(normalized_confidences),
+        "heatmap_entropy": validated_heatmap is not None,
+        "paf_ambiguity": validated_paf is not None,
+    }
+
+    available_signals = [key for key, available in capabilities.items() if available]
+
+    return {
+        "schema_version": POSE_UNCERTAINTY_EVIDENCE_SCHEMA_VERSION,
+        "provider_id": provider_id,
+        "provider_version": provider_version,
+        "capabilities": capabilities,
+        "available_signals": available_signals,
+        "mean_keypoint_confidence": mean_confidence,
+        "minimum_keypoint_confidence": minimum_confidence,
+        "heatmap_entropy": validated_heatmap,
+        "paf_ambiguity": validated_paf,
+    }
+
 
 @dataclass(frozen=True)
 class TrackObservation:
@@ -26,6 +95,7 @@ class TrackObservation:
     confidence: float
     bbox: tuple[float, float, float, float]
     keypoints: tuple[tuple[float, float, float], ...] | None = None
+    pose_uncertainty: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -244,6 +314,15 @@ class UltralyticsVideoTrackingProvider:
                                 height,
                             ),
                             keypoints=normalized_keypoints,
+                            pose_uncertainty=(
+                                build_pose_uncertainty_evidence(
+                                    provider_id=self.provider_id,
+                                    provider_version=self.provider_version,
+                                    keypoints=normalized_keypoints,
+                                )
+                                if normalized_keypoints is not None
+                                else None
+                            ),
                         )
                     )
 
@@ -447,6 +526,11 @@ class SleapNNVideoTrackingProvider:
                         confidence=score,
                         bbox=bbox,
                         keypoints=keypoints,
+                        pose_uncertainty=build_pose_uncertainty_evidence(
+                            provider_id=self.provider_id,
+                            provider_version=self.provider_version,
+                            keypoints=keypoints,
+                        ),
                     )
                 )
 

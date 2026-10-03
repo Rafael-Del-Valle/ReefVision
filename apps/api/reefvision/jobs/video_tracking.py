@@ -85,6 +85,8 @@ def _keyframes(
             "bbox": list(item.bbox),
             "confidence": item.confidence,
         }
+        if item.pose_uncertainty is not None:
+            payload["pose_uncertainty"] = dict(item.pose_uncertainty)
         if item.keypoints is not None:
             payload["keypoints"] = [list(point) for point in item.keypoints]
             if expanded_labels is not None:

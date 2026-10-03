@@ -235,12 +235,29 @@ export interface VideoPoseObservation {
   source: "model" | "manual" | "corrected";
 }
 
+export interface PoseProviderUncertaintyEvidence {
+  schema_version: "pose-provider-uncertainty-0001";
+  provider_id: string;
+  provider_version: string;
+  capabilities: {
+    keypoint_confidence: boolean;
+    heatmap_entropy: boolean;
+    paf_ambiguity: boolean;
+  };
+  available_signals: string[];
+  mean_keypoint_confidence: number | null;
+  minimum_keypoint_confidence: number | null;
+  heatmap_entropy: number | null;
+  paf_ambiguity: number | null;
+}
+
 export interface VideoTrackKeyframe {
   frame: number;
   bbox: [number, number, number, number];
   confidence?: number | null;
   keypoints?: VideoPoseKeypoint[] | null;
   pose_observations?: VideoPoseObservation[] | null;
+  pose_uncertainty?: PoseProviderUncertaintyEvidence | null;
 }
 
 export interface VideoTrackRecord {

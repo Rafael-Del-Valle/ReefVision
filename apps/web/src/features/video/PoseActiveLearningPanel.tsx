@@ -120,8 +120,9 @@ export function PoseActiveLearningPanel({
       <p className="annotation-helper">
         ReefVision ranks frames or clips using landmark confidence, visibility,
         temporal association uncertainty, repeated-landmark ambiguity, identity
-        breaks, and motion anomalies. Selection never promotes a model
-        prediction to verified ground truth.
+        breaks, motion anomalies, cross-model disagreement, and provider-native
+        uncertainty evidence when it is actually available. Selection never
+        promotes a model prediction to verified ground truth.
       </p>
 
       <div className="annotation-selection-list">
@@ -211,7 +212,7 @@ export function PoseActiveLearningPanel({
           >
             {(roundsQuery.data ?? []).map((round) => (
               <option key={round.id} value={round.id}>
-                {round.name} ? {round.selected_count} selected ? {round.status}
+                {round.name} | {round.selected_count} selected | {round.status}
               </option>
             ))}
           </select>
@@ -222,11 +223,12 @@ export function PoseActiveLearningPanel({
         <div className="workspace-guide compact">
           <div>
             <strong>
-              {selectedRound.selection_unit} acquisition ?{" "}
+              {selectedRound.selection_unit} acquisition |{" "}
               {selectedRound.selected_count} candidates
             </strong>
             <p className="annotation-helper">
-              Selection manifest {selectedRound.selection_sha256.slice(0, 12)}?
+              Selection manifest {selectedRound.selection_sha256.slice(0, 12)}
+              ...
             </p>
             <a href={poseActiveLearningRetrainingManifestUrl(selectedRound.id)}>
               Inspect retraining provenance manifest
@@ -243,20 +245,20 @@ export function PoseActiveLearningPanel({
         >
           <div>
             <strong>
-              Frame {candidate.focus_frame} ? uncertainty{" "}
+              Frame {candidate.focus_frame} | uncertainty{" "}
               {(candidate.acquisition_score * 100).toFixed(1)}%
             </strong>
 
             {candidate.frame_start !== candidate.frame_end && (
               <p className="annotation-helper">
-                Review clip {candidate.frame_start}?{candidate.frame_end}
+                Review clip {candidate.frame_start}-{candidate.frame_end}
               </p>
             )}
 
             <p className="annotation-helper">
               Reasons:{" "}
               {candidate.reason_codes_json.length > 0
-                ? candidate.reason_codes_json.map(reasonLabel).join(" ? ")
+                ? candidate.reason_codes_json.map(reasonLabel).join(" | ")
                 : "composite score"}
             </p>
 
@@ -266,12 +268,12 @@ export function PoseActiveLearningPanel({
                 (candidate.score_components_json.low_landmark_confidence ?? 0) *
                 100
               ).toFixed(1)}
-              % ? repeated-landmark ambiguity{" "}
+              % | repeated-landmark ambiguity{" "}
               {(
                 (candidate.score_components_json.repeated_landmark_ambiguity ??
                   0) * 100
               ).toFixed(1)}
-              % ? identity-break signal{" "}
+              % | identity-break signal{" "}
               {(
                 (candidate.score_components_json.identity_break_signal ?? 0) *
                 100
@@ -280,8 +282,29 @@ export function PoseActiveLearningPanel({
             </p>
 
             <p className="annotation-helper">
-              Provenance {candidate.provenance_sha256.slice(0, 12)}? ? source
-              track revision {candidate.source_track_revision} ?{" "}
+              Model disagreement:{" "}
+              {candidate.score_components_json.model_disagreement === undefined
+                ? "not available"
+                : `${(
+                    candidate.score_components_json.model_disagreement * 100
+                  ).toFixed(1)}%`}
+              {" | "}Heatmap entropy:{" "}
+              {candidate.score_components_json.heatmap_entropy === undefined
+                ? "not exposed by this provider"
+                : `${(
+                    candidate.score_components_json.heatmap_entropy * 100
+                  ).toFixed(1)}%`}
+              {" | "}PAF ambiguity:{" "}
+              {candidate.score_components_json.paf_ambiguity === undefined
+                ? "not exposed by this provider"
+                : `${(
+                    candidate.score_components_json.paf_ambiguity * 100
+                  ).toFixed(1)}%`}
+            </p>
+
+            <p className="annotation-helper">
+              Provenance {candidate.provenance_sha256.slice(0, 12)}... | source
+              track revision {candidate.source_track_revision} |{" "}
               {candidate.review_status}
             </p>
 

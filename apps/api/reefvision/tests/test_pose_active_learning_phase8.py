@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import copy
 import io
 from typing import cast
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from reefvision.db.models import ModelRegistration, VideoTrack
 from reefvision.services import video_assets as video_assets_module
 from reefvision.tests.test_annotations import create_project
 
@@ -137,6 +140,102 @@ def _build_temporal(
         },
     )
     assert response.status_code == 200, response.text
+
+
+def _register_pose_model(
+    client: TestClient,
+    project_id: str,
+    *,
+    name: str,
+    provider_name: str,
+    sha_character: str,
+) -> str:
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        model = ModelRegistration(
+            project_id=project_id,
+            purpose="detector",
+            display_name=name,
+            source_filename=f"{name}.bin",
+            managed_path=f"models/{name}.bin",
+            sha256=sha_character * 64,
+            file_size_bytes=1,
+            framework=provider_name,
+            task="pose",
+            provider_name=provider_name,
+            provider_version="test",
+            class_map_json={},
+            metadata_json={},
+        )
+        session.add(model)
+        session.commit()
+        session.refresh(model)
+        return model.id
+
+
+def _attach_pose_model(
+    client: TestClient,
+    track_id: str,
+    *,
+    model_id: str,
+    provider_name: str,
+    x_offset: float = 0.0,
+    heatmap_entropy: float | None = None,
+    paf_ambiguity: float | None = None,
+) -> int:
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        track = session.get(VideoTrack, track_id)
+        assert track is not None
+
+        keyframes = copy.deepcopy(track.keyframes_json)
+
+        for frame in keyframes:
+            bbox = frame.get("bbox")
+            if isinstance(bbox, list) and len(bbox) == 4:
+                bbox[0] = float(bbox[0]) + x_offset
+
+            observations = frame.get("pose_observations")
+            if isinstance(observations, list):
+                for observation in observations:
+                    if isinstance(observation, dict):
+                        observation["x"] = float(observation["x"]) + x_offset
+
+            frame["pose_uncertainty"] = {
+                "schema_version": "pose-provider-uncertainty-0001",
+                "provider_id": provider_name,
+                "provider_version": "test",
+                "capabilities": {
+                    "keypoint_confidence": True,
+                    "heatmap_entropy": heatmap_entropy is not None,
+                    "paf_ambiguity": paf_ambiguity is not None,
+                },
+                "available_signals": [
+                    "keypoint_confidence",
+                    *(["heatmap_entropy"] if heatmap_entropy is not None else []),
+                    *(["paf_ambiguity"] if paf_ambiguity is not None else []),
+                ],
+                "mean_keypoint_confidence": 0.75,
+                "minimum_keypoint_confidence": 0.25,
+                "heatmap_entropy": heatmap_entropy,
+                "paf_ambiguity": paf_ambiguity,
+            }
+
+        track.source_model_id = model_id
+        track.metadata_json = {
+            **dict(track.metadata_json or {}),
+            "provider_name": provider_name,
+            "provider_version": "test",
+            "pose_tracking": True,
+        }
+        track.keyframes_json = keyframes
+        track.revision += 1
+
+        revision = track.revision
+        session.commit()
+        return revision
 
 
 def test_pose_active_learning_selects_explainable_clip_and_editor_handoff(
@@ -365,3 +464,221 @@ def test_pose_active_learning_blocks_stale_candidate_before_review(
     )
     assert stale.status_code == 409
     assert "stale" in stale.json()["detail"].lower()
+
+
+def test_pose_active_learning_uses_provider_native_uncertainty_only_when_available(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(
+        client,
+        "Pose provider uncertainty",
+    )
+    video = _video(
+        client,
+        str(project["id"]),
+        monkeypatch,
+    )
+    track = _track(
+        client,
+        str(video["id"]),
+        _first_class(project),
+    )
+    model_id = _register_pose_model(
+        client,
+        str(project["id"]),
+        name="provider-native-pose",
+        provider_name="future_pose_provider",
+        sha_character="a",
+    )
+
+    _attach_pose_model(
+        client,
+        str(track["id"]),
+        model_id=model_id,
+        provider_name="future_pose_provider",
+        heatmap_entropy=0.74,
+        paf_ambiguity=0.46,
+    )
+    _build_temporal(client, str(track["id"]))
+
+    created = client.post(
+        f"/api/v1/projects/{project['id']}/pose-active-learning-rounds",
+        json={
+            "name": "Provider uncertainty round",
+            "video_id": video["id"],
+            "track_ids": [track["id"]],
+            "model_ids": [model_id],
+            "requested_size": 1,
+            "minimum_frame_spacing": 0,
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    candidate = client.get(
+        f"/api/v1/pose-active-learning-rounds/{created.json()['id']}/candidates"
+    ).json()[0]
+
+    assert candidate["score_components_json"]["heatmap_entropy"] == pytest.approx(0.74)
+    assert candidate["score_components_json"]["paf_ambiguity"] == pytest.approx(0.46)
+
+    evidence = candidate["provenance_json"]["provider_uncertainty_evidence"]
+    assert evidence["available"] is True
+    assert evidence["provider_id"] == "future_pose_provider"
+    assert evidence["capabilities"]["heatmap_entropy"] is True
+    assert evidence["capabilities"]["paf_ambiguity"] is True
+
+
+def test_pose_active_learning_does_not_fabricate_heatmap_or_paf_scores(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(
+        client,
+        "Pose unsupported uncertainty",
+    )
+    video = _video(
+        client,
+        str(project["id"]),
+        monkeypatch,
+    )
+    track = _track(
+        client,
+        str(video["id"]),
+        _first_class(project),
+    )
+    model_id = _register_pose_model(
+        client,
+        str(project["id"]),
+        name="ultralytics-pose-no-heatmap",
+        provider_name="ultralytics",
+        sha_character="b",
+    )
+
+    _attach_pose_model(
+        client,
+        str(track["id"]),
+        model_id=model_id,
+        provider_name="ultralytics",
+    )
+    _build_temporal(client, str(track["id"]))
+
+    created = client.post(
+        f"/api/v1/projects/{project['id']}/pose-active-learning-rounds",
+        json={
+            "name": "No fabricated provider uncertainty",
+            "video_id": video["id"],
+            "track_ids": [track["id"]],
+            "model_ids": [model_id],
+            "requested_size": 1,
+            "minimum_frame_spacing": 0,
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    candidate = client.get(
+        f"/api/v1/pose-active-learning-rounds/{created.json()['id']}/candidates"
+    ).json()[0]
+
+    components = candidate["score_components_json"]
+
+    assert "heatmap_entropy" not in components
+    assert "paf_ambiguity" not in components
+
+    evidence = candidate["provenance_json"]["provider_uncertainty_evidence"]
+    assert evidence["available"] is True
+    assert evidence["capabilities"]["heatmap_entropy"] is False
+    assert evidence["capabilities"]["paf_ambiguity"] is False
+
+
+def test_pose_active_learning_scores_cross_model_repeated_landmark_disagreement(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(
+        client,
+        "Cross-model pose disagreement",
+    )
+    video = _video(
+        client,
+        str(project["id"]),
+        monkeypatch,
+    )
+    label_class_id = _first_class(project)
+
+    first_track = _track(
+        client,
+        str(video["id"]),
+        label_class_id,
+    )
+    second_track = _track(
+        client,
+        str(video["id"]),
+        label_class_id,
+    )
+
+    first_model = _register_pose_model(
+        client,
+        str(project["id"]),
+        name="pose-model-a",
+        provider_name="ultralytics",
+        sha_character="c",
+    )
+    second_model = _register_pose_model(
+        client,
+        str(project["id"]),
+        name="pose-model-b",
+        provider_name="sleap_nn",
+        sha_character="d",
+    )
+
+    _attach_pose_model(
+        client,
+        str(first_track["id"]),
+        model_id=first_model,
+        provider_name="ultralytics",
+        x_offset=0.0,
+    )
+    _attach_pose_model(
+        client,
+        str(second_track["id"]),
+        model_id=second_model,
+        provider_name="sleap_nn",
+        x_offset=16.0,
+    )
+
+    _build_temporal(client, str(first_track["id"]))
+    _build_temporal(client, str(second_track["id"]))
+
+    created = client.post(
+        f"/api/v1/projects/{project['id']}/pose-active-learning-rounds",
+        json={
+            "name": "Cross-model disagreement review",
+            "video_id": video["id"],
+            "track_ids": [first_track["id"]],
+            "model_ids": [
+                first_model,
+                second_model,
+            ],
+            "requested_size": 1,
+            "minimum_frame_spacing": 0,
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    candidate = client.get(
+        f"/api/v1/pose-active-learning-rounds/{created.json()['id']}/candidates"
+    ).json()[0]
+
+    disagreement = candidate["score_components_json"].get("model_disagreement")
+
+    assert disagreement is not None
+    assert disagreement > 0
+
+    evidence = candidate["provenance_json"]["model_disagreement_evidence"]
+    assert evidence["available"] is True
+    assert evidence["comparison_count"] == 1
+    assert evidence["comparisons"][0]["model_id"] == second_model
+    assert evidence["comparisons"][0]["video_track_id"] == second_track["id"]
+    assert evidence["comparisons"][0]["bbox_iou"] > 0.10
+    assert evidence["method"] == "repeated-label-order-invariant-symmetric-nearest-distance"
