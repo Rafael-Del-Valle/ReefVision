@@ -1,5 +1,6 @@
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { AnnotatedVideoExportPanel } from "./AnnotatedVideoExportPanel";
+import { BehaviorDynamicsPanel } from "./BehaviorDynamicsPanel";
 import { GeoreferencedMapPanel } from "./GeoreferencedMapPanel";
 import { GeoreferencingSetupPanel } from "./GeoreferencingSetupPanel";
 import { GeographicExportPanel } from "./GeographicExportPanel";
@@ -1309,6 +1310,17 @@ export function VideoTrackingWorkspace({
               <PoseVisualizationPanel
                 trackId={selectedTrack.id}
                 frameIndex={previewFrameIndex}
+              />
+            )}
+            {selectedTrack && (
+              <BehaviorDynamicsPanel
+                projectId={project.id}
+                trackId={selectedTrack.id}
+                frameIndex={previewFrameIndex}
+                onFrameChange={(nextFrame) => {
+                  setFrameIndex(nextFrame);
+                  setPreviewFrameIndex(nextFrame);
+                }}
               />
             )}
             {spatialMetricsQuery.data && (

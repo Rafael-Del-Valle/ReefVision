@@ -9,6 +9,20 @@ import * as geographicApi from "./videoGeographicMovementAnalyticsApi";
 import type { GeographicTrackAnalytics } from "./videoGeographicMovementAnalyticsApi";
 import * as poseInteropApi from "./poseInteroperabilityApi";
 
+vi.mock("./BehaviorDynamicsPanel", () => ({
+  BehaviorDynamicsPanel: ({
+    trackId,
+    frameIndex,
+  }: {
+    trackId: string;
+    frameIndex: number;
+  }) => (
+    <section data-testid="mock-behavior-dynamics-panel">
+      {trackId} · frame {frameIndex}
+    </section>
+  ),
+}));
+
 vi.mock("./GeoreferencedMapPanel", () => ({
   GeoreferencedMapPanel: ({
     videoId,
