@@ -4,6 +4,11 @@ from reefvision.db.models.active_learning_round import ActiveLearningRound
 from reefvision.db.models.annotation import Annotation
 from reefvision.db.models.annotation_event import AnnotationEvent
 from reefvision.db.models.backup_record import BackupRecord
+from reefvision.db.models.behavior import (
+    BehaviorBoutRevision,
+    BehaviorEthogramRevision,
+    BehaviorStateDefinition,
+)
 from reefvision.db.models.class_operation import ClassOperation
 from reefvision.db.models.class_visibility_preference import ClassVisibilityPreference
 from reefvision.db.models.classification_dataset import ClassificationDataset
@@ -60,6 +65,9 @@ __all__ = [
     "Annotation",
     "AnnotationEvent",
     "BackupRecord",
+    "BehaviorBoutRevision",
+    "BehaviorEthogramRevision",
+    "BehaviorStateDefinition",
     "ClassOperation",
     "ClassVisibilityPreference",
     "ClassificationDataset",
