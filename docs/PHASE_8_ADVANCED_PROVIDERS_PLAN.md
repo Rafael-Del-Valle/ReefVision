@@ -54,3 +54,55 @@ Depth Anything V2 is represented as a relative-depth provider. Its contract prod
 - Florence-2 advisory caption and phrase-grounding review UI.
 - MobileSAM and FastSAM benchmark-based adapter selection.
 - Clean-machine desktop packaging validation.
+
+## Scientist-Ready 1.0 ? pose-specific Active Learning
+
+Pose annotations are first-class Active Learning inputs. Phase 8 is not
+accepted if Active Learning is limited to image detection/classification.
+
+### Phase 8A acquisition and review acceptance
+
+The implementation must:
+
+1. Select either individual frames or short clips from canonical temporal
+   pose observations.
+2. Rank candidates with explicit, persisted components for:
+   - low landmark confidence
+   - uncertain/occluded/missing landmarks
+   - temporal association uncertainty
+   - repeated-landmark ambiguity
+   - explicit or nearby identity breaks
+   - temporal motion anomalies
+3. Preserve the scoring algorithm/version, component weights, source video
+   checksum, source track revision, immutable pose schema/revision, source
+   observation IDs, association-decision IDs, identity-break IDs, model IDs,
+   job IDs, score components, reason codes, and a SHA-256 provenance digest.
+4. Avoid redundant neighboring frames or overlapping clips according to a
+   scientist-configurable spacing rule.
+5. Route each selected candidate directly into the existing
+   Pose Annotation Editor at the selected video track and focus frame.
+6. Keep model output non-canonical until explicit scientist review.
+7. Mark corrected model landmarks as corrected provenance through the
+   existing Pose Annotation Editor.
+8. Record scientist verification as an append-only
+   PoseLandmarkCorrection audit event.
+9. Block candidates that become stale before scientist review starts.
+10. Preserve a SHA-256 digest of the verified canonical pose keyframe and
+    canonical track revision.
+11. Expose a versioned retraining provenance manifest. Phase 8 establishes
+    the manifest contract; Phase 9 materializes verified pose datasets and
+    loss-aware SLEAP/COCO/DLC/YOLO/NWB exports.
+
+### Required end-to-end Phase 8A journey
+
+pose inference / imported pose
+? temporal landmark association
+? pose uncertainty scoring
+? frame/clip acquisition
+? scientist opens candidate in Pose Annotation Editor
+? correction or explicit save
+? verified canonical pose track revision
+? append-only review provenance
+? Phase 9 retraining manifest input
+
+Predictions must never silently become verified training truth.

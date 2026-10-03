@@ -5,6 +5,11 @@ import { GeoreferencedMapPanel } from "./GeoreferencedMapPanel";
 import { GeoreferencingSetupPanel } from "./GeoreferencingSetupPanel";
 import { GeographicExportPanel } from "./GeographicExportPanel";
 import { GeographicMovementAnalyticsPanel } from "./GeographicMovementAnalyticsPanel";
+import { PoseActiveLearningPanel } from "./PoseActiveLearningPanel";
+import {
+  reviewPoseActiveLearningCandidate,
+  type PoseActiveLearningCandidate,
+} from "./poseActiveLearningApi";
 import { PoseTemporalReviewPanel } from "./PoseTemporalReviewPanel";
 import { PoseVisualizationPanel } from "./PoseVisualizationPanel";
 import {
@@ -118,6 +123,10 @@ export function VideoTrackingWorkspace({
   const [everyNFrames, setEveryNFrames] = useState(1);
   const [frameIndex, setFrameIndex] = useState(0);
   const [selectedTrackId, setSelectedTrackId] = useState("");
+  const [
+    activePoseActiveLearningCandidate,
+    setActivePoseActiveLearningCandidate,
+  ] = useState<PoseActiveLearningCandidate | null>(null);
 
   // Task 16E: load only for the explicitly selected track.
   // Playback-active map tracks do not drive this request.
@@ -707,6 +716,16 @@ export function VideoTrackingWorkspace({
       throw new Error("Select a persisted pose track keyframe first");
     }
 
+    if (
+      activePoseActiveLearningCandidate &&
+      (activePoseActiveLearningCandidate.video_track_id !== selectedTrack.id ||
+        activePoseActiveLearningCandidate.focus_frame !== poseFrame.frame)
+    ) {
+      throw new Error(
+        "The active pose Active Learning candidate no longer matches the selected track/frame",
+      );
+    }
+
     const correctedFrame = correctedVideoKeyframeFromPoseSave(
       poseFrame,
       selectedTrackPoseSchema,
@@ -732,6 +751,36 @@ export function VideoTrackingWorkspace({
     }
 
     setKeyframes(sortedKeyframes(updatedTrack.keyframes_json));
+
+    if (activePoseActiveLearningCandidate) {
+      try {
+        await reviewPoseActiveLearningCandidate(
+          activePoseActiveLearningCandidate.id,
+          {
+            action: "verify",
+            reviewed_by: "local_user",
+            verified_track_revision: updatedTrack.revision,
+            note: "Verified through the ReefVision Pose Annotation Editor.",
+          },
+        );
+        await queryClient.invalidateQueries({
+          queryKey: [
+            "pose-active-learning-candidates",
+            activePoseActiveLearningCandidate.round_id,
+          ],
+        });
+        setActivePoseActiveLearningCandidate(null);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unknown pose Active Learning verification error";
+        throw new Error(
+          `Pose saved as track revision ${updatedTrack.revision}, but Active Learning verification failed: ${message}`,
+        );
+      }
+    }
+
     await Promise.all([
       queryClient.invalidateQueries({
         queryKey: ["video-tracks", selectedVideoId],
@@ -1263,6 +1312,18 @@ export function VideoTrackingWorkspace({
                 )}
               </>
             )}
+            <PoseActiveLearningPanel
+              projectId={project.id}
+              videoId={selectedVideo.id}
+              activeCandidateId={activePoseActiveLearningCandidate?.id ?? null}
+              onOpenCandidate={(candidate) => {
+                setActivePoseActiveLearningCandidate(candidate);
+                setSelectedTrackId(candidate.video_track_id);
+                setFrameIndex(candidate.focus_frame);
+                setPreviewFrameIndex(candidate.focus_frame);
+              }}
+            />
+
             {selectedVideo.frame_directory_path &&
               selectedTrack &&
               selectedTrackPoseSchema &&

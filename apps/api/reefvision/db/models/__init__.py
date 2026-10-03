@@ -29,6 +29,10 @@ from reefvision.db.models.label_class import LabelClass
 from reefvision.db.models.mask_annotation import MaskAnnotation
 from reefvision.db.models.mask_annotation_event import MaskAnnotationEvent
 from reefvision.db.models.model_registration import ModelRegistration
+from reefvision.db.models.pose_active_learning import (
+    PoseActiveLearningCandidate,
+    PoseActiveLearningRound,
+)
 from reefvision.db.models.pose_schema import (
     PoseLandmarkSchema,
     PoseLandmarkSchemaRevision,
@@ -90,6 +94,8 @@ __all__ = [
     "MaskAnnotation",
     "MaskAnnotationEvent",
     "ModelRegistration",
+    "PoseActiveLearningCandidate",
+    "PoseActiveLearningRound",
     "PoseLandmarkAssociationCandidate",
     "PoseLandmarkAssociationDecision",
     "PoseLandmarkCorrection",
