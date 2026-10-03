@@ -6,6 +6,7 @@ import csv
 import io
 import json
 from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -53,7 +54,7 @@ class BehaviorExportService:
         )
 
         track = self.dynamics._track(track_id)
-        provenance = {
+        provenance: dict[str, Any] = {
             "export_schema_version": "reefvision-behavior-export-0001",
             "track_id": track_id,
             "source_track_revision": track.revision,
