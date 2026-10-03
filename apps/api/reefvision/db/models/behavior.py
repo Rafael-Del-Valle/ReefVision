@@ -143,6 +143,16 @@ class BehaviorBoutRevision(Base):
         ForeignKey("jobs.id", ondelete="SET NULL"),
         nullable=True,
     )
+    source_behavior_classifier_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("behavior_classifier_models.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    source_behavior_prediction_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("behavior_predictions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     revision_reason: Mapped[str] = mapped_column(
         String(100),

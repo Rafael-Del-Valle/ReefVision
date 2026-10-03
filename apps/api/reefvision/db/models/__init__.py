@@ -9,6 +9,10 @@ from reefvision.db.models.behavior import (
     BehaviorEthogramRevision,
     BehaviorStateDefinition,
 )
+from reefvision.db.models.behavior_classifier import (
+    BehaviorClassifierModel,
+    BehaviorPrediction,
+)
 from reefvision.db.models.class_operation import ClassOperation
 from reefvision.db.models.class_visibility_preference import ClassVisibilityPreference
 from reefvision.db.models.classification_dataset import ClassificationDataset
@@ -66,7 +70,9 @@ __all__ = [
     "AnnotationEvent",
     "BackupRecord",
     "BehaviorBoutRevision",
+    "BehaviorClassifierModel",
     "BehaviorEthogramRevision",
+    "BehaviorPrediction",
     "BehaviorStateDefinition",
     "ClassOperation",
     "ClassVisibilityPreference",

@@ -387,6 +387,8 @@ class BehaviorDynamicsService:
             review_status=bout.review_status,
             source_track_revision=bout.source_track_revision,
             stale_against_track=bout.source_track_revision != track.revision,
+            source_behavior_classifier_id=bout.source_behavior_classifier_id,
+            source_behavior_prediction_id=bout.source_behavior_prediction_id,
             revision_reason=bout.revision_reason,
             note=bout.note,
             created_by=bout.created_by,

@@ -69,3 +69,26 @@ is reported. If temporal pose identity is missing or stale, identity-dependent f
 returned as unavailable with `value=null` and a reason rather than as numeric zero. Geometry
 features that do not require persistent identity remain available when the current pose keyframes
 support them.
+
+
+## P7C model-assisted behavior review
+
+Behavior models use the transparent `standardized_nearest_centroid` algorithm over versioned
+P7B scalar features. The default training corpus includes only verified **manual** bouts attached
+to the current video-track revision. Accepted model predictions are deliberately excluded from
+future training truth unless a scientist later recreates them as manual ground truth.
+
+Three feature presets are available: track-only, track plus pose geometry, and track plus current
+persistent-pose identity. Model records store the feature names, scaler, state centroids, class
+counts, training tracks/bouts, ethogram revision, and a SHA-256 training-manifest hash.
+
+Inference creates reviewable behavior predictions only. The displayed score is a normalized
+inverse-distance score used to rank the nearest state centroid; it is **not** a calibrated
+probability. Predictions retain the complete per-state distance/score map and raw feature vector.
+
+A scientist may accept, edit-and-accept, or reject a pending prediction. Acceptance is blocked if
+the prediction is stale against the current track revision or would overlap an existing canonical
+bout in the same ethogram channel. Accepted predictions create new verified canonical bouts with
+back-references to the behavior model and prediction.
+
+JSON, canonical-bout CSV, and prediction CSV exports preserve track/ethogram/model provenance.

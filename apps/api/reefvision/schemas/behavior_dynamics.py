@@ -101,6 +101,8 @@ class BehaviorBoutResponse(BaseModel):
     review_status: str
     source_track_revision: int
     stale_against_track: bool
+    source_behavior_classifier_id: str | None
+    source_behavior_prediction_id: str | None
     revision_reason: str
     note: str | None
     created_by: str
