@@ -39,3 +39,11 @@ The visualization endpoint supports numeric exports using the same filters as th
 
 Trajectory CSV is blocked when temporal identity state is missing or stale. JSON remains the
 recommended audit export because it preserves capability state and all visualization metadata.
+
+
+## Capability contract invariants
+
+PAF persistence state can represent both `persisted` and `not_persisted`. Current
+SLEAP-NN and Ultralytics integrations report `not_persisted`; the `persisted` state is
+reserved for a future provider path that actually stores the raw PAF artifact. The UI must not
+enable native PAF rendering merely because a provider family can produce PAF-like tensors.

@@ -415,12 +415,14 @@ class PoseVisualizationService:
     def _paf_availability(
         capabilities: PoseProviderVisualizationCapabilities,
     ) -> PosePafAvailability:
+        persisted = capabilities.part_affinity_fields_persisted
         return PosePafAvailability(
-            available=capabilities.part_affinity_fields_persisted,
+            available=persisted,
             provider_name=capabilities.provider_name,
+            persistence_state="persisted" if persisted else "not_persisted",
             reason=(
                 "A persisted raw part-affinity-field artifact is available."
-                if capabilities.part_affinity_fields_persisted
+                if persisted
                 else capabilities.reason
             ),
         )

@@ -102,7 +102,7 @@ class PosePafAvailability(BaseModel):
     available: bool
     provider_name: str | None
     representation: Literal["part_affinity_fields"] = "part_affinity_fields"
-    persistence_state: Literal["not_persisted"] = "not_persisted"
+    persistence_state: Literal["persisted", "not_persisted"] = "not_persisted"
     reason: str
 
 

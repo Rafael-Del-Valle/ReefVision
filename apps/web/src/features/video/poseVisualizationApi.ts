@@ -89,7 +89,7 @@ export interface PosePafAvailability {
   available: boolean;
   provider_name: string | null;
   representation: "part_affinity_fields";
-  persistence_state: "not_persisted";
+  persistence_state: "persisted" | "not_persisted";
   reason: string;
 }
 
