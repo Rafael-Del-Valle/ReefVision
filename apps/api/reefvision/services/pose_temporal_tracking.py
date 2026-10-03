@@ -499,6 +499,10 @@ class PoseTemporalTrackingService:
             "occurrence_index_is_temporal_identity": False,
         }
         parameters_hash = _parameters_hash(parameters)
+        association_parameters = {
+            **parameters,
+            "source_track_revision": track.revision,
+        }
         active_by_label: dict[str, dict[str, _ActiveTrack]] = {}
         created_tracks = 0
         created_observations = 0
@@ -723,7 +727,7 @@ class PoseTemporalTrackingService:
                             source_job_id=track.source_job_id,
                             association_algorithm=ASSOCIATION_ALGORITHM,
                             association_algorithm_version=ASSOCIATION_ALGORITHM_VERSION,
-                            association_parameters_json=parameters,
+                            association_parameters_json=association_parameters,
                             association_parameters_hash=parameters_hash,
                         )
                         self.session.add(landmark_track)

@@ -70,9 +70,7 @@ class BehaviorFeatureQuality(BaseModel):
 
 
 class BehaviorFeatureVectorResponse(BaseModel):
-    schema_version: Literal["behavior-feature-vector-0001"] = (
-        "behavior-feature-vector-0001"
-    )
+    schema_version: Literal["behavior-feature-vector-0001"] = "behavior-feature-vector-0001"
     feature_set_version: Literal["reefvision-behavior-features-0001"] = (
         "reefvision-behavior-features-0001"
     )

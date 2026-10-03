@@ -139,6 +139,10 @@ def test_temporal_pose_build_persists_repeated_landmark_identity_and_occlusion(
     assert len(summary["landmark_tracks"]) == 2
     assert all(item["semantic_label"] == "tentacle" for item in summary["landmark_tracks"])
     assert all(item["lifecycle_state"] == "confirmed" for item in summary["landmark_tracks"])
+    assert {
+        item["association_parameters_json"]["source_track_revision"]
+        for item in summary["landmark_tracks"]
+    } == {source["revision"]}
 
     occluded = next(
         item

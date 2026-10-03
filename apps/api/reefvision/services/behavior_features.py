@@ -51,8 +51,7 @@ class BehaviorFeatureService:
     @staticmethod
     def _keyframes(track: VideoTrack) -> list[VideoTrackKeyframe]:
         frames = [
-            VideoTrackKeyframe.model_validate(item)
-            for item in list(track.keyframes_json or [])
+            VideoTrackKeyframe.model_validate(item) for item in list(track.keyframes_json or [])
         ]
         frames.sort(key=lambda item: item.frame)
         if not frames:
@@ -93,7 +92,7 @@ class BehaviorFeatureService:
     def _missing_feature(
         name: str,
         unit: str,
-        source: str,
+        source: BehaviorFeatureSource,
         definition: str,
         reason: str,
     ) -> BehaviorFeatureValue:
@@ -134,12 +133,8 @@ class BehaviorFeatureService:
                         if observation.confidence is not None
                         else None
                     )
-                    if (
-                        payload.minimum_landmark_confidence is not None
-                        and (
-                            confidence is None
-                            or confidence < payload.minimum_landmark_confidence
-                        )
+                    if payload.minimum_landmark_confidence is not None and (
+                        confidence is None or confidence < payload.minimum_landmark_confidence
                     ):
                         continue
                     points[keyframe.frame].append(
@@ -184,17 +179,14 @@ class BehaviorFeatureService:
             )
 
         frames = [
-            frame
-            for frame in interpolation.frames
-            if start_frame <= frame.frame <= end_frame
+            frame for frame in interpolation.frames if start_frame <= frame.frame <= end_frame
         ]
         if not frames:
             raise ValidationError("Behavior feature frame range contains no track samples")
 
         centers = [(frame.center_x, frame.center_y) for frame in frames]
         track_distances = [
-            hypot(second[0] - first[0], second[1] - first[1])
-            for first, second in pairwise(centers)
+            hypot(second[0] - first[0], second[1] - first[1]) for first, second in pairwise(centers)
         ]
         track_path = sum(track_distances)
         track_displacement = hypot(
@@ -202,16 +194,11 @@ class BehaviorFeatureService:
             centers[-1][1] - centers[0][1],
         )
         track_motion_seconds = (
-            (frames[-1].frame - frames[0].frame) / video.fps
-            if len(frames) > 1
-            else 0.0
+            (frames[-1].frame - frames[0].frame) / video.fps if len(frames) > 1 else 0.0
         )
         track_speeds = [distance * video.fps for distance in track_distances]
         bbox_areas = [float(frame.bbox[2] * frame.bbox[3]) for frame in frames]
-        bbox_diagonals = [
-            hypot(float(frame.bbox[2]), float(frame.bbox[3]))
-            for frame in frames
-        ]
+        bbox_diagonals = [hypot(float(frame.bbox[2]), float(frame.bbox[3])) for frame in frames]
         mean_bbox_area = sum(bbox_areas) / len(bbox_areas)
         mean_bbox_diagonal = sum(bbox_diagonals) / len(bbox_diagonals)
         bbox_area_cv = (
@@ -319,19 +306,12 @@ class BehaviorFeatureService:
             center_x = sum(item[0] for item in items) / len(items)
             center_y = sum(item[1] for item in items) / len(items)
             spread = sqrt(
-                sum(
-                    (item[0] - center_x) ** 2 + (item[1] - center_y) ** 2
-                    for item in items
-                )
+                sum((item[0] - center_x) ** 2 + (item[1] - center_y) ** 2 for item in items)
                 / len(items)
             )
             spreads.append(spread)
             bbox = bbox_by_frame.get(frame_index)
-            diagonal = (
-                hypot(float(bbox[2]), float(bbox[3]))
-                if bbox is not None
-                else 0.0
-            )
+            diagonal = hypot(float(bbox[2]), float(bbox[3])) if bbox is not None else 0.0
             if diagonal > 0:
                 normalized_spreads.append(spread / diagonal)
             for first, second in combinations(items, 2):
@@ -498,8 +478,7 @@ class BehaviorFeatureService:
             features.append(
                 self._feature(
                     "pose.mean_pairwise_distance_per_bbox_diagonal",
-                    sum(normalized_pairwise_distances)
-                    / len(normalized_pairwise_distances),
+                    sum(normalized_pairwise_distances) / len(normalized_pairwise_distances),
                     "ratio",
                     "pose_geometry",
                     "Mean within-frame landmark-pair distance normalized by parent "
@@ -538,14 +517,14 @@ class BehaviorFeatureService:
             identity_speeds: list[float] = []
             for trajectory in pose.trajectories:
                 for segment in trajectory.segments:
-                    for first, second in pairwise(segment.points):
-                        duration = second.time_s - first.time_s
+                    for first_point, second_point in pairwise(segment.points):
+                        duration = second_point.time_s - first_point.time_s
                         if duration <= 0:
                             continue
                         identity_speeds.append(
                             hypot(
-                                second.x_px - first.x_px,
-                                second.y_px - first.y_px,
+                                second_point.x_px - first_point.x_px,
+                                second_point.y_px - first_point.y_px,
                             )
                             / duration
                         )

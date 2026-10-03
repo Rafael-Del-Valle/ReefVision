@@ -275,17 +275,48 @@ class PoseVisualizationService:
             if current_observation is None or observation.revision > current_observation.revision:
                 latest_observations[observation.observation_series_id] = observation
 
-        latest_created_at = max(item.created_at for item in latest_observations.values())
-        if latest_created_at < track.updated_at:
-            return (
-                samples,
-                "stale",
-                "Temporal identities predate the current video-track revision; "
-                "rebuild them before interpreting trajectories or activity.",
-                {},
-                set(),
-                {},
+        source_track_revisions: set[int] = set()
+        revision_provenance_count = 0
+        for landmark_track in summary.landmark_tracks:
+            source_revision = landmark_track.association_parameters_json.get(
+                "source_track_revision"
             )
+            if isinstance(source_revision, int) and not isinstance(
+                source_revision,
+                bool,
+            ):
+                source_track_revisions.add(source_revision)
+                revision_provenance_count += 1
+
+        if revision_provenance_count:
+            revision_is_stale = revision_provenance_count != len(
+                summary.landmark_tracks
+            ) or source_track_revisions != {track.revision}
+            if revision_is_stale:
+                return (
+                    samples,
+                    "stale",
+                    "Temporal identities were built from an older or inconsistent "
+                    "video-track revision; rebuild them before interpreting "
+                    "trajectories or activity.",
+                    {},
+                    set(),
+                    {},
+                )
+        else:
+            # Legacy temporal records created before source-track revision
+            # provenance was persisted retain the timestamp fallback.
+            latest_created_at = max(item.created_at for item in latest_observations.values())
+            if latest_created_at < track.updated_at:
+                return (
+                    samples,
+                    "stale",
+                    "Temporal identities predate the current video-track revision; "
+                    "rebuild them before interpreting trajectories or activity.",
+                    {},
+                    set(),
+                    {},
+                )
 
         latest_decisions: dict[str, PoseLandmarkAssociationDecisionResponse] = {}
         for decision in summary.association_decisions:
