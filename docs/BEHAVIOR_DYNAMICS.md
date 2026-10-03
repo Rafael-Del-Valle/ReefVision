@@ -22,7 +22,9 @@ If the track later changes, ReefVision reports the bout and any derived dynamics
 of silently assuming identity continuity.
 
 Manual bouts are human-verified ground truth and do not carry model confidence. Imported bouts may
-carry confidence and remain unreviewed until a later review workflow.
+carry confidence and remain unreviewed until a later review workflow. Behavior dynamics use
+verified bouts only by default. Including unreviewed bouts requires an explicit request and the
+response records that annotation policy.
 
 ## Dynamics
 

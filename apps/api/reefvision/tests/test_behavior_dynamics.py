@@ -328,3 +328,62 @@ def test_behavior_ethogram_revisions_are_immutable_and_latest_listing_wins(
     assert len(listed.json()) == 1
     assert listed.json()[0]["id"] == revised_payload["id"]
     assert listed.json()[0]["revision"] == 2
+
+
+
+def test_behavior_dynamics_excludes_unreviewed_imports_by_default(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project, _video, track = _setup(
+        client,
+        monkeypatch,
+        "Behavior review policy",
+    )
+    ethogram = _ethogram(client, str(project["id"]))
+    state = next(item for item in ethogram["states"] if item["code"] == "swim")
+
+    imported = client.post(
+        f"/api/v1/video-tracks/{track['id']}/behavior-bouts",
+        json={
+            "ethogram_revision_id": ethogram["id"],
+            "behavior_state_id": state["id"],
+            "start_frame": 0,
+            "end_frame": 2,
+            "source": "imported",
+            "confidence": 0.82,
+        },
+    )
+    assert imported.status_code == 201, imported.text
+    assert imported.json()["review_status"] == "unreviewed"
+
+    verified_only = client.post(
+        f"/api/v1/video-tracks/{track['id']}/behavior-dynamics",
+        json={"ethogram_revision_id": ethogram["id"]},
+    )
+    assert verified_only.status_code == 200, verified_only.text
+    default_payload = verified_only.json()
+    assert default_payload["annotation_policy"] == "verified_only"
+    assert default_payload["excluded_unreviewed_bout_count"] == 1
+    locomotion = next(
+        item for item in default_payload["channels"]
+        if item["channel"] == "locomotion"
+    )
+    assert locomotion["labeled_frames"] == 0
+
+    inclusive = client.post(
+        f"/api/v1/video-tracks/{track['id']}/behavior-dynamics",
+        json={
+            "ethogram_revision_id": ethogram["id"],
+            "include_unreviewed": True,
+        },
+    )
+    assert inclusive.status_code == 200, inclusive.text
+    inclusive_payload = inclusive.json()
+    assert inclusive_payload["annotation_policy"] == "include_unreviewed"
+    assert inclusive_payload["excluded_unreviewed_bout_count"] == 0
+    locomotion = next(
+        item for item in inclusive_payload["channels"]
+        if item["channel"] == "locomotion"
+    )
+    assert locomotion["labeled_frames"] == 3

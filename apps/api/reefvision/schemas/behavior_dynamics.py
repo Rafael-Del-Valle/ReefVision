@@ -111,6 +111,7 @@ class BehaviorDynamicsRequest(BaseModel):
     ethogram_revision_id: str = Field(min_length=1, max_length=36)
     start_frame: int | None = Field(default=None, ge=0)
     end_frame: int | None = Field(default=None, ge=0)
+    include_unreviewed: bool = False
 
     @model_validator(mode="after")
     def validate_range(self) -> BehaviorDynamicsRequest:
@@ -172,6 +173,8 @@ class BehaviorDynamicsResponse(BaseModel):
     fps: float = Field(gt=0)
     transition_policy: Literal["adjacent-labeled-bouts-only"] = "adjacent-labeled-bouts-only"
     interval_policy: Literal["inclusive-frame-intervals"] = "inclusive-frame-intervals"
+    annotation_policy: Literal["verified_only", "include_unreviewed"]
+    excluded_unreviewed_bout_count: int = Field(ge=0)
     provenance_status: BehaviorProvenanceStatus
     provenance_warning: str | None
     stale_bout_count: int = Field(ge=0)

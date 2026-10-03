@@ -435,6 +435,15 @@ class BehaviorDynamicsService:
             for bout, state in rows
             if bout.end_frame >= start_frame and bout.start_frame <= end_frame
         ]
+        excluded_unreviewed = sum(
+            1 for bout, _state in rows if bout.review_status != "verified"
+        )
+        if not payload.include_unreviewed:
+            rows = [
+                (bout, state)
+                for bout, state in rows
+                if bout.review_status == "verified"
+            ]
         states = list(
             self.session.scalars(
                 select(BehaviorStateDefinition)
@@ -556,6 +565,14 @@ class BehaviorDynamicsService:
             start_frame=start_frame,
             end_frame=end_frame,
             fps=video.fps,
+            annotation_policy=(
+                "include_unreviewed"
+                if payload.include_unreviewed
+                else "verified_only"
+            ),
+            excluded_unreviewed_bout_count=(
+                0 if payload.include_unreviewed else excluded_unreviewed
+            ),
             provenance_status="stale" if stale_count else "current",
             provenance_warning=(
                 "One or more behavior bouts were attached to an older video-track revision; "
