@@ -8,6 +8,10 @@
 - JPEG, PNG, TIFF, and WebP imports are covered.
 - Batch import, corrupt files, unsupported files, exact duplicates, missing source files, retries, and interrupted-job recovery are covered.
 - Deprecation and resource warnings are treated as errors.
+- Phase 5 real pose interoperability tests use the existing `integration` marker
+  and opt in with `--pose-interop-integration`. Install `.[interoperability]` first.
+  They generate synthetic temporary media and execute SLEAP-IO 0.9.2 without
+  network access. See [the format contracts and test command](POSE_INTEROPERABILITY.md).
 
 ## Frontend
 

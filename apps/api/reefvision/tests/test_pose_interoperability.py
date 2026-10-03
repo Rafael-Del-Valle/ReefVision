@@ -85,9 +85,31 @@ class _FakePredictedInstance:
 
     @classmethod
     def from_numpy(cls, points: np.ndarray, **kwargs: Any) -> SimpleNamespace:
-        record = {"points": points.copy(), **kwargs}
-        cls.calls.append(record)
-        return SimpleNamespace(**record)
+        raw_points = np.asarray(points, dtype=np.float64).copy()
+        point_scores = np.asarray(
+            kwargs.get("point_scores", np.full(raw_points.shape[0], np.nan)),
+            dtype=np.float64,
+        )
+        dtype = np.dtype(
+            [
+                ("xy", "<f8", (2,)),
+                ("score", "<f8"),
+                ("visible", "bool"),
+            ]
+        )
+        structured = np.empty(raw_points.shape[0], dtype=dtype)
+        structured["xy"] = raw_points[:, :2]
+        structured["score"] = point_scores
+        structured["visible"] = np.isfinite(raw_points[:, :2]).all(axis=1)
+        instance = SimpleNamespace(points=structured, **kwargs)
+        cls.calls.append(
+            {
+                "points": raw_points,
+                "instance": instance,
+                **kwargs,
+            }
+        )
+        return instance
 
 
 class _FakeLabeledFrame:
@@ -99,8 +121,18 @@ class _FakeLabeledFrame:
 
 class _FakeVideo:
     @classmethod
-    def from_filename(cls, filename: str, keep_open: bool = False) -> SimpleNamespace:
-        return SimpleNamespace(filename=filename, keep_open=keep_open)
+    def from_filename(
+        cls,
+        filename: str,
+        keep_open: bool = False,
+        grayscale: bool = False,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(
+            filename=filename,
+            keep_open=keep_open,
+            grayscale=grayscale,
+            shape=(20, 120, 200, 3),
+        )
 
 
 class _FakeLabels:
@@ -364,14 +396,10 @@ def test_pose_interoperability_exports_canonical_reviewed_pose(
     if exchange_format != "slp":
         with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
             assert "reefvision-pose-manifest.json" in archive.namelist()
-            manifest = json.loads(
-                archive.read("reefvision-pose-manifest.json").decode("utf-8")
-            )
+            manifest = json.loads(archive.read("reefvision-pose-manifest.json").decode("utf-8"))
         assert manifest["schema_version"] == "reefvision-pose-bundle-0001"
         assert manifest["format"] == exchange_format
-        assert [
-            item["reefvision_frame_index"] for item in manifest["frames"]
-        ] == [4]
+        assert [item["reefvision_frame_index"] for item in manifest["frames"]] == [4]
         assert manifest["frames"][0]["instances"][0]["external_track_name"].startswith(
             "reefvision-track-1-"
         )
@@ -387,10 +415,11 @@ def test_pose_interoperability_exports_canonical_reviewed_pose(
 
     exported = _FakePredictedInstance.calls[-1]
     points = exported["points"]
-    assert points[0].tolist() == [15.0, 16.0, 1.0]
-    assert points[1].tolist() == [17.0, 18.0, 0.0]
+    assert points[0].tolist() == [15.0, 16.0]
+    assert points[1].tolist() == [17.0, 18.0]
     assert np.isnan(points[2, 0])
     assert exported["point_scores"].tolist() == [0.99, 0.60, 0.0]
+    assert exported["instance"].points["visible"].tolist() == [True, False, False]
 
 
 def _external_predicted_instance(
@@ -522,11 +551,7 @@ def test_pose_interoperability_import_restores_repeated_labels_and_track_groupin
 
     tracks = client.get(f"/api/v1/videos/{video['id']}/tracks")
     assert tracks.status_code == 200, tracks.text
-    imported = [
-        item
-        for item in tracks.json()
-        if item["id"] in set(payload["created_track_ids"])
-    ]
+    imported = [item for item in tracks.json() if item["id"] in set(payload["created_track_ids"])]
     assert len(imported) == 1
     track = imported[0]
     assert track["status"] == "imported_review_required"

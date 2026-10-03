@@ -19,6 +19,7 @@ from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.pose_interoperability import (
     PoseInteroperabilityFormat,
     PoseInteroperabilityImportResponse,
+    PoseInteroperabilityRuntimeResponse,
 )
 from reefvision.schemas.pose_tracking import (
     PoseAssociationCorrectionRequest,
@@ -388,6 +389,11 @@ def export_pose_temporal(
             "X-ReefVision-Pose-Format": export_format,
         },
     )
+
+
+@router.get("/pose-interoperability/runtime", response_model=PoseInteroperabilityRuntimeResponse)
+def pose_interoperability_runtime() -> PoseInteroperabilityRuntimeResponse:
+    return PoseInteroperabilityService.runtime_status()
 
 
 @router.get("/videos/{video_id}/pose-interoperability/export")

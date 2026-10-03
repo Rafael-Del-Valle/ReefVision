@@ -67,6 +67,12 @@ create_app = _load_test_create_app()
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
+        "--pose-interop-integration",
+        action="store_true",
+        default=False,
+        help="Execute synthetic pose interoperability tests with sleap-io==0.9.2",
+    )
+    parser.addoption(
         "--whaledrone-integration",
         action="store_true",
         default=False,

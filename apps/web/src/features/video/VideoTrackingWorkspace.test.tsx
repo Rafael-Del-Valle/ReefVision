@@ -49,10 +49,9 @@ vi.mock("./videoGeographicMovementAnalyticsApi", async () => {
 });
 
 vi.mock("./poseInteroperabilityApi", async () => {
-  const actual =
-    await vi.importActual<typeof import("./poseInteroperabilityApi")>(
-      "./poseInteroperabilityApi",
-    );
+  const actual = await vi.importActual<
+    typeof import("./poseInteroperabilityApi")
+  >("./poseInteroperabilityApi");
   return {
     ...actual,
     importPoseInteroperability: vi.fn(),
@@ -482,11 +481,11 @@ describe("VideoTrackingWorkspace", () => {
       screen.getByRole("heading", { name: "Pose interoperability" }),
     ).toBeInTheDocument();
     const slpExport = screen.getByRole("link", { name: "SLEAP SLP" });
-    const nwbExport = screen.getByRole("link", { name: "NWB bundle" });
-    const cocoExport = screen.getByRole("link", { name: "COCO pose bundle" });
-    const dlcExport = screen.getByRole("link", { name: "DeepLabCut bundle" });
+    const nwbExport = screen.getByRole("link", { name: "NWB" });
+    const cocoExport = screen.getByRole("link", { name: "COCO pose" });
+    const dlcExport = screen.getByRole("link", { name: "DeepLabCut CSV" });
     const yoloExport = screen.getByRole("link", {
-      name: "Ultralytics pose bundle",
+      name: "Ultralytics pose ZIP",
     });
     expect(slpExport).toHaveAttribute(
       "href",

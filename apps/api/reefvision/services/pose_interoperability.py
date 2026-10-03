@@ -35,9 +35,13 @@ from reefvision.ml.sleap_nn_provider import SLEAP_IO_SUPPORTED_VERSION
 from reefvision.schemas.pose_interoperability import (
     PoseInteroperabilityFormat,
     PoseInteroperabilityImportResponse,
+    PoseInteroperabilityRuntimeResponse,
 )
 from reefvision.schemas.videos import VideoPoseObservation, VideoTrackKeyframe
+from reefvision.services.pose_temporal_tracking import PoseTemporalTrackingService
+from reefvision.storage.pose_exchange import save_exchange
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.results_packages import sha256_file
 
 
 @dataclass(frozen=True)
@@ -82,6 +86,27 @@ class PoseInteroperabilityService:
         self.session = session
         self.settings = settings
 
+    @classmethod
+    def runtime_status(cls) -> PoseInteroperabilityRuntimeResponse:
+        installed = None
+        try:
+            installed = version("sleap-io")
+            cls._sleap_io()
+        except (PackageNotFoundError, ValidationError) as exc:
+            return PoseInteroperabilityRuntimeResponse(
+                available=False,
+                required_version=SLEAP_IO_SUPPORTED_VERSION,
+                installed_version=installed,
+                installation='python -m pip install "reefvision[interoperability]"',
+                reason=str(exc),
+            )
+        return PoseInteroperabilityRuntimeResponse(
+            available=True,
+            required_version=SLEAP_IO_SUPPORTED_VERSION,
+            installed_version=installed,
+            installation='python -m pip install "reefvision[interoperability]"',
+        )
+
     @staticmethod
     def _sleap_io() -> Any:
         try:
@@ -89,18 +114,22 @@ class PoseInteroperabilityService:
         except PackageNotFoundError as exc:
             raise ValidationError(
                 "Pose interoperability requires optional sleap-io "
-                f"{SLEAP_IO_SUPPORTED_VERSION}"
+                f"{SLEAP_IO_SUPPORTED_VERSION}. "
+                'Run python -m pip install "reefvision[interoperability]".'
             ) from exc
         if installed != SLEAP_IO_SUPPORTED_VERSION:
             raise ValidationError(
                 "Pose interoperability requires sleap-io "
-                f"{SLEAP_IO_SUPPORTED_VERSION}; found {installed}"
+                f"{SLEAP_IO_SUPPORTED_VERSION}; found {installed}. "
+                'Run python -m pip install "reefvision[interoperability]".'
             )
         try:
             return import_module("sleap_io")
         except Exception as exc:
             raise ValidationError(
-                f"sleap-io {SLEAP_IO_SUPPORTED_VERSION} could not be imported: {exc}"
+                f"sleap-io {SLEAP_IO_SUPPORTED_VERSION} could not be imported: {exc}. "
+                "Repair the optional runtime with "
+                'python -m pip install "reefvision[interoperability]".'
             ) from exc
 
     def _video(self, video_id: str) -> VideoAsset:
@@ -137,7 +166,9 @@ class PoseInteroperabilityService:
         return pose_tracks
 
     @staticmethod
-    def _external_node_names(labels: tuple[str, ...]) -> tuple[tuple[str, ...], tuple[dict[str, object], ...]]:
+    def _external_node_names(
+        labels: tuple[str, ...],
+    ) -> tuple[tuple[str, ...], tuple[dict[str, object], ...]]:
         counts = Counter(labels)
         seen: dict[str, int] = defaultdict(int)
         used: set[str] = set()
@@ -222,7 +253,7 @@ class PoseInteroperabilityService:
         point_count = len(schema.expanded_labels)
         points = np.full((point_count, 3), np.nan, dtype=np.float64)
         points[:, 2] = 0.0
-        scores = np.zeros(point_count, dtype=np.float64)
+        scores = np.full(point_count, np.nan, dtype=np.float64)
 
         if keyframe.pose_observations is not None:
             observations: dict[tuple[str, int], VideoPoseObservation] = {}
@@ -243,15 +274,17 @@ class PoseInteroperabilityService:
                 current_observation = observations.get(key)
                 if current_observation is None:
                     continue
-                scores[index] = float(current_observation.confidence or 0.0)
+                scores[index] = (
+                    float(current_observation.confidence)
+                    if current_observation.confidence is not None
+                    else np.nan
+                )
                 if current_observation.status in {"absent", "out_of_frame"}:
                     continue
                 points[index, 0] = float(current_observation.x)
                 points[index, 1] = float(current_observation.y)
                 points[index, 2] = (
-                    1.0
-                    if current_observation.status in {"visible", "uncertain"}
-                    else 0.0
+                    1.0 if current_observation.status in {"visible", "uncertain"} else 0.0
                 )
             return points, scores
 
@@ -272,24 +305,32 @@ class PoseInteroperabilityService:
     @staticmethod
     def _instance_score(
         keyframe: VideoTrackKeyframe,
-        scores: NDArray[np.float64],
     ) -> float:
         if keyframe.confidence is not None:
             return float(keyframe.confidence)
-        positive = scores[scores > 0]
-        return float(positive.mean()) if positive.size else 0.0
+        return float("nan")
 
-    def _labels(self, video: VideoAsset, tracks: list[VideoTrack], schema: _PoseSchemaContext) -> Any:
+    def _labels(
+        self, video: VideoAsset, tracks: list[VideoTrack], schema: _PoseSchemaContext
+    ) -> Any:
         sio = self._sleap_io()
         managed_path = resolve_managed_project_path(self.settings, video.managed_path)
         if not managed_path.is_file():
             raise NotFoundError("Managed video file is missing")
+        if sha256_file(managed_path) != video.sha256:
+            raise ValidationError(
+                f"Source video {video.original_filename}: checksum differs from the imported media"
+            )
 
         skeleton = sio.Skeleton(
             nodes=list(schema.external_node_names),
             name="ReefVision canonical pose",
         )
-        sio_video = sio.Video.from_filename(str(managed_path), keep_open=False)
+        sio_video = sio.Video.from_filename(str(managed_path), keep_open=False, grayscale=False)
+        if not video.width_px or not video.height_px or video.width_px <= 0 or video.height_px <= 0:
+            raise ValidationError("Source video dimensional metadata is required for pose export")
+        if tuple(sio_video.shape[1:3]) != (video.height_px, video.width_px):
+            raise ValidationError("Decoded media dimensions do not match the source video metadata")
 
         external_tracks: dict[str, Any] = {}
         categories: dict[str, Any] = {}
@@ -315,28 +356,45 @@ class PoseInteroperabilityService:
                 "source_model_id": track.source_model_id,
                 "source_job_id": track.source_job_id,
                 "revision": track.revision,
+                "canonical_keyframes": track.keyframes_json,
+                "canonical_metadata": track.metadata_json,
             }
+            temporal = PoseTemporalTrackingService(self.session)
+            if temporal.summary(track.id).observations:
+                track_provenance[external_name]["temporal_audit"] = json.loads(
+                    temporal.export(track.id, "json").content
+                )
 
             for raw_keyframe in track.keyframes_json:
                 keyframe = VideoTrackKeyframe.model_validate(raw_keyframe)
+                if keyframe.frame < 0 or keyframe.frame >= video.frame_count:
+                    raise ValidationError(
+                        f"Track {track.id}: frame {keyframe.frame} is outside the video"
+                    )
                 converted = self._keyframe_points(keyframe, schema)
                 if converted is None:
                     continue
                 points, point_scores = converted
+                self._import_bbox(points[:, :2], video)
                 instance = sio.PredictedInstance.from_numpy(
-                    points,
+                    points[:, :2],
                     skeleton=skeleton,
                     point_scores=point_scores,
-                    score=self._instance_score(keyframe, point_scores),
+                    score=self._instance_score(keyframe),
                     track=external_track,
                     tracking_score=None,
                     category=category,
                     category_score=keyframe.confidence,
                 )
+                # SLEAP-IO infers visibility from finite coordinates; column 3 is score,
+                # not visibility. Occluded coordinates remain finite scientific observations.
+                instance.points["visible"] = points[:, 2].astype(np.bool_)
                 instances_by_frame[keyframe.frame].append(instance)
 
         if not instances_by_frame:
-            raise ValidationError("Canonical pose tracks do not contain exportable pose observations")
+            raise ValidationError(
+                "Canonical pose tracks do not contain exportable pose observations"
+            )
 
         labeled_frames = [
             sio.LabeledFrame(
@@ -355,13 +413,18 @@ class PoseInteroperabilityService:
                 "source_filename": video.original_filename,
                 "frame_index_base": 0,
                 "coordinate_base": 0,
+                "width_px": video.width_px,
+                "height_px": video.height_px,
+                "fps": video.fps,
                 "pose_schema": schema.schema_metadata,
                 "node_mapping": list(schema.node_mapping),
                 "tracks": track_provenance,
                 "loss_policy": (
-                    "External formats do not preserve the complete ReefVision immutable "
-                    "association/correction audit trail; use the ReefVision pose audit JSON "
-                    "for full provenance."
+                    "External pose fields cannot encode ReefVision observation identity, uncertain/"
+                    "out_of_frame states, temporal association confidence, identity breaks, or "
+                    "human correction history. Canonical keyframes, metadata and temporal "
+                    "audit records are retained as evidence in ReefVision metadata; imports create "
+                    "new review-required records and do not replay the immutable audit history."
                 ),
             }
         }
@@ -403,13 +466,9 @@ class PoseInteroperabilityService:
             for instance in list(getattr(labeled_frame, "instances", []) or []):
                 track = getattr(instance, "track", None)
                 track_name = (
-                    str(getattr(track, "name", "") or "").strip()
-                    if track is not None
-                    else ""
+                    str(getattr(track, "name", "") or "").strip() if track is not None else ""
                 )
-                instances.append(
-                    {"external_track_name": track_name or None}
-                )
+                instances.append({"external_track_name": track_name or None})
             frames.append(
                 {
                     "reefvision_frame_index": frame_index,
@@ -422,6 +481,43 @@ class PoseInteroperabilityService:
             "reefvision_pose_interoperability": provenance,
             "frames": frames,
         }
+
+    @staticmethod
+    def _save_nwb_predictions(
+        sio: Any,
+        labels: Any,
+        output: Path,
+        *,
+        frame_count: int,
+        fps: float | None,
+    ) -> None:
+        if getattr(sio, "__name__", None) != "sleap_io":
+            sio.save_nwb(labels, output, nwb_format="predictions")
+            return
+
+        if frame_count <= 0:
+            raise ValidationError("NWB pose export requires a positive source frame count")
+        if fps is None:
+            raise ValidationError("NWB pose export requires source video FPS metadata")
+        sample_rate = float(fps)
+        if not np.isfinite(sample_rate) or sample_rate <= 0:
+            raise ValidationError("NWB pose export requires positive source video FPS metadata")
+
+        timestamps = np.arange(frame_count, dtype=np.float64) / sample_rate
+        try:
+            nwb_predictions = import_module("sleap_io.io.nwb_predictions")
+            write_nwb = nwb_predictions.write_nwb
+            write_nwb(
+                labels,
+                str(output),
+                pose_estimation_metadata={"video_timestamps": timestamps},
+            )
+        except ValidationError:
+            raise
+        except Exception as exc:
+            raise ValidationError(
+                f"Could not write NWB pose predictions with source-frame timestamps: {exc}"
+            ) from exc
 
     @staticmethod
     def _write_bundle_manifest(
@@ -511,10 +607,7 @@ class PoseInteroperabilityService:
         provenance = cls._reefvision_provenance(labels)
         if provenance is None:
             return _ImportedSchema(
-                groups=tuple(
-                    {"name": node_name, "count": 1}
-                    for node_name in external_node_names
-                ),
+                groups=tuple({"name": node_name, "count": 1} for node_name in external_node_names),
                 expanded_labels=external_node_names,
                 external_node_names=external_node_names,
                 used_reefvision_provenance=False,
@@ -545,6 +638,9 @@ class PoseInteroperabilityService:
                     "ReefVision pose provenance contains a blank semantic landmark label"
                 )
             expanded.append(semantic_label)
+            occurrence = sum(label == semantic_label for label in expanded[:-1])
+            if mapping.get("occurrence_index") != occurrence:
+                raise ValidationError("Ambiguous repeated landmark occurrence in node mapping")
 
         raw_expanded = raw_schema.get("expanded_labels")
         if not isinstance(raw_expanded, list) or tuple(str(item) for item in raw_expanded) != tuple(
@@ -717,9 +813,7 @@ class PoseInteroperabilityService:
             cls._placeholder_image(source.parent / relative)
             image_rows += 1
         if image_rows == 0:
-            raise ValidationError(
-                "DeepLabCut pose CSV does not contain any image-index rows"
-            )
+            raise ValidationError("DeepLabCut pose CSV does not contain any image-index rows")
 
     @staticmethod
     def _native_bundle_file(
@@ -754,6 +848,22 @@ class PoseInteroperabilityService:
         content: bytes,
         source_filename: str | None,
     ) -> Any:
+        extensions: dict[str, tuple[str, ...]] = {
+            "slp": (".slp",),
+            "nwb": (".nwb", ".zip"),
+            "coco": (".json", ".zip"),
+            "dlc_csv": (".csv", ".zip"),
+            "ultralytics_pose": (".zip",),
+        }
+        if exchange_format not in extensions:
+            raise ValidationError(f"Unsupported pose interoperability format: {exchange_format}")
+        if source_filename:
+            lowered_name = Path(source_filename).name.casefold()
+            if not any(
+                lowered_name.endswith(extension) for extension in extensions[exchange_format]
+            ):
+                raise ValidationError(f"Invalid extension for {exchange_format}: {source_filename}")
+
         sio = self._sleap_io()
         try:
             with TemporaryDirectory(prefix="reefvision-pose-import-") as temp:
@@ -766,7 +876,7 @@ class PoseInteroperabilityService:
                         content,
                         dataset_root,
                     )
-                    manifest = self._read_bundle_manifest(
+                    ultralytics_manifest = self._read_bundle_manifest(
                         dataset_root,
                         exchange_format,
                     )
@@ -774,7 +884,7 @@ class PoseInteroperabilityService:
                         str(actual_dataset_root),
                         split="train",
                     )
-                    return self._inject_bundle_manifest(labels, manifest)
+                    return self._inject_bundle_manifest(labels, ultralytics_manifest)
 
                 suffixes: dict[PoseInteroperabilityFormat, str] = {
                     "slp": ".slp",
@@ -802,9 +912,7 @@ class PoseInteroperabilityService:
                         exchange_format,
                     )
                 else:
-                    filename = Path(
-                        source_filename or f"pose{suffixes[exchange_format]}"
-                    ).name
+                    filename = Path(source_filename or f"pose{suffixes[exchange_format]}").name
                     if not filename.casefold().endswith(suffixes[exchange_format]):
                         filename = f"pose{suffixes[exchange_format]}"
                     source = root / filename
@@ -837,7 +945,9 @@ class PoseInteroperabilityService:
             ) from exc
 
     @staticmethod
-    def _point_arrays(instance: Any, expected_count: int) -> tuple[
+    def _point_arrays(
+        instance: Any, expected_count: int
+    ) -> tuple[
         NDArray[np.float64],
         NDArray[np.bool_],
         NDArray[np.float64],
@@ -861,11 +971,13 @@ class PoseInteroperabilityService:
             except (IndexError, KeyError, TypeError, ValueError) as exc:
                 raise ValidationError("External pose confidence data is malformed") from exc
         else:
-            scores = np.where(visible, 1.0, 0.0).astype(np.float64)
+            scores = np.full(expected_count, np.nan, dtype=np.float64)
         if scores.shape != (expected_count,):
             raise ValidationError(
                 "External pose confidence count does not match the imported landmark schema"
             )
+        if np.isinf(xy).any() or (np.isnan(xy).any(axis=1) != np.isnan(xy).all(axis=1)).any():
+            raise ValidationError("External pose coordinates must be finite pairs or absent pairs")
         return xy, visible, scores
 
     @staticmethod
@@ -907,9 +1019,15 @@ class PoseInteroperabilityService:
             return None
         observations: list[dict[str, object]] = []
         keypoints: list[tuple[float, float, float]] = []
-        source = "model" if "score" in (
-            getattr(getattr(getattr(instance, "points", None), "dtype", None), "names", None) or ()
-        ) else "manual"
+        source = (
+            "model"
+            if "score"
+            in (
+                getattr(getattr(getattr(instance, "points", None), "dtype", None), "names", None)
+                or ()
+            )
+            else "manual"
+        )
         for index, (semantic_label, occurrence_index) in enumerate(
             cls._slot_keys(schema.expanded_labels)
         ):
@@ -937,7 +1055,7 @@ class PoseInteroperabilityService:
                     "occurrence_index": occurrence_index,
                     "x": observation_x,
                     "y": observation_y,
-                    "confidence": score if score > 0 else None,
+                    "confidence": score if np.isfinite(scores[index]) else None,
                     "status": status,
                     "source": source,
                 }
@@ -945,7 +1063,7 @@ class PoseInteroperabilityService:
 
         raw_instance_score = getattr(instance, "score", None)
         instance_score: float | None = None
-        if isinstance(raw_instance_score, (int, float)) and not isinstance(
+        if isinstance(raw_instance_score, (int, float, np.integer, np.floating)) and not isinstance(
             raw_instance_score, bool
         ):
             candidate_score = float(raw_instance_score)
@@ -965,6 +1083,91 @@ class PoseInteroperabilityService:
                 "pose_observations": observations,
             }
         )
+
+    @classmethod
+    def _restore_bundle_keyframe_metadata(
+        cls,
+        keyframe: VideoTrackKeyframe,
+        schema: _ImportedSchema,
+        external_track_name: str | None,
+        frame_index: int,
+        exchange_format: PoseInteroperabilityFormat,
+    ) -> VideoTrackKeyframe:
+        if external_track_name is None or schema.provenance is None:
+            return keyframe
+        raw_tracks = schema.provenance.get("tracks")
+        if not isinstance(raw_tracks, dict):
+            return keyframe
+        raw_track = raw_tracks.get(external_track_name)
+        if not isinstance(raw_track, dict):
+            return keyframe
+        raw_keyframes = raw_track.get("canonical_keyframes")
+        if raw_keyframes is None:
+            return keyframe
+        if not isinstance(raw_keyframes, list):
+            raise ValidationError("ReefVision pose bundle canonical keyframes are malformed")
+        matches = []
+        for raw_keyframe in raw_keyframes:
+            if not isinstance(raw_keyframe, dict):
+                raise ValidationError("ReefVision pose bundle canonical keyframe is malformed")
+            if raw_keyframe.get("frame") == frame_index:
+                matches.append({str(k): v for k, v in raw_keyframe.items()})
+        if len(matches) > 1:
+            raise ValidationError("ReefVision pose bundle contains duplicate canonical keyframes")
+        if not matches:
+            return keyframe
+
+        canonical = VideoTrackKeyframe.model_validate(matches[0])
+        payload = keyframe.model_dump(mode="python")
+        if keyframe.confidence is None and canonical.confidence is not None:
+            payload["confidence"] = canonical.confidence
+
+        if keyframe.pose_observations is not None and canonical.pose_observations is not None:
+            canonical_obs = {
+                (o.semantic_label, o.occurrence_index): o for o in canonical.pose_observations
+            }
+            restored = []
+            for observation in keyframe.pose_observations:
+                item = observation.model_dump(mode="python")
+                source = canonical_obs.get(
+                    (observation.semantic_label, observation.occurrence_index)
+                )
+                if source is not None:
+                    item["status"] = source.status
+                    if observation.confidence is None and source.confidence is not None:
+                        item["confidence"] = source.confidence
+                    if exchange_format in {
+                        "coco",
+                        "dlc_csv",
+                        "ultralytics_pose",
+                    } and source.status in {"occluded", "uncertain"}:
+                        item["x"] = source.x
+                        item["y"] = source.y
+                restored.append(item)
+            payload["pose_observations"] = restored
+
+            models = [VideoPoseObservation.model_validate(item) for item in restored]
+            payload["keypoints"] = [
+                (
+                    float(o.x),
+                    float(o.y),
+                    float(o.confidence)
+                    if o.confidence is not None and o.status in {"visible", "uncertain"}
+                    else 0.0,
+                )
+                for o in models
+            ]
+            bounded = [o for o in models if o.status not in {"absent", "out_of_frame"}]
+            if bounded:
+                xs = [float(o.x) for o in bounded]
+                ys = [float(o.y) for o in bounded]
+                payload["bbox"] = (
+                    min(xs),
+                    min(ys),
+                    max(1.0, max(xs) - min(xs)),
+                    max(1.0, max(ys) - min(ys)),
+                )
+        return VideoTrackKeyframe.model_validate(payload)
 
     @classmethod
     def _import_tracks_from_labels(
@@ -1009,19 +1212,26 @@ class PoseInteroperabilityService:
                     or not isinstance(raw_instances, list)
                 ):
                     raise ValidationError("ReefVision pose bundle frame entry is invalid")
-                manifest_frames.append(
-                    {str(key): value for key, value in raw_entry.items()}
-                )
+                manifest_frames.append({str(key): value for key, value in raw_entry.items()})
         elif exchange_format in {"coco", "dlc_csv", "ultralytics_pose"}:
             warnings.append(
                 "External image-dataset frame order was mapped sequentially to target "
                 "video frames starting at 0 because no ReefVision frame manifest was present."
             )
         else:
-            labeled_frames.sort(key=lambda item: int(getattr(item, "frame_idx", -1)))
+
+            def native_frame(item: Any) -> int:
+                raw_frame = getattr(item, "frame_idx", -1)
+                frame_index = int(raw_frame)
+                if isinstance(raw_frame, bool) or frame_index != raw_frame:
+                    raise ValidationError(
+                        f"External pose frame index must be an integer: {raw_frame}"
+                    )
+                return frame_index
+
+            labeled_frames.sort(key=native_frame)
             external_videos = {
-                id(getattr(labeled_frame, "video", None))
-                for labeled_frame in labeled_frames
+                id(getattr(labeled_frame, "video", None)) for labeled_frame in labeled_frames
             }
             if len(external_videos) > 1:
                 raise ValidationError(
@@ -1030,28 +1240,27 @@ class PoseInteroperabilityService:
                 )
 
         for frame_ordinal, labeled_frame in enumerate(labeled_frames):
-            frame_manifest = (
-                manifest_frames[frame_ordinal] if manifest_frames is not None else None
-            )
+            frame_manifest = manifest_frames[frame_ordinal] if manifest_frames is not None else None
             if frame_manifest is not None:
                 frame_index = cast(int, frame_manifest["reefvision_frame_index"])
                 raw_instance_manifest = frame_manifest.get("instances")
                 if not isinstance(raw_instance_manifest, list):
-                    raise ValidationError(
-                        "ReefVision pose bundle instance manifest is malformed"
-                    )
+                    raise ValidationError("ReefVision pose bundle instance manifest is malformed")
                 instance_manifest = raw_instance_manifest
             elif exchange_format in {"coco", "dlc_csv", "ultralytics_pose"}:
                 frame_index = frame_ordinal
                 instance_manifest = []
             else:
-                frame_index = int(getattr(labeled_frame, "frame_idx", -1))
+                raw_frame = getattr(labeled_frame, "frame_idx", -1)
+                frame_index = int(raw_frame)
+                if isinstance(raw_frame, bool) or frame_index != raw_frame:
+                    raise ValidationError(
+                        f"External pose frame index must be an integer: {raw_frame}"
+                    )
                 instance_manifest = []
 
             if frame_index < 0 or frame_index >= video.frame_count:
-                raise ValidationError(
-                    "External pose frame index extends outside the target video"
-                )
+                raise ValidationError("External pose frame index extends outside the target video")
 
             instances = list(getattr(labeled_frame, "instances", []) or [])
             if frame_manifest is not None and len(instance_manifest) != len(instances):
@@ -1060,11 +1269,18 @@ class PoseInteroperabilityService:
                 )
 
             for instance_index, instance in enumerate(instances):
+                instance_skeleton = getattr(instance, "skeleton", None)
+                if (
+                    instance_skeleton is not None
+                    and tuple(instance_skeleton.node_names) != schema.external_node_names
+                ):
+                    raise ValidationError(
+                        f"Frame {frame_index}: instance uses an incompatible skeleton"
+                    )
+
                 track = getattr(instance, "track", None)
                 native_name = (
-                    str(getattr(track, "name", "") or "").strip()
-                    if track is not None
-                    else ""
+                    str(getattr(track, "name", "") or "").strip() if track is not None else ""
                 )
                 manifest_name = ""
                 if frame_manifest is not None:
@@ -1075,9 +1291,7 @@ class PoseInteroperabilityService:
                         )
                     raw_name = raw_instance.get("external_track_name")
                     if raw_name is not None and not isinstance(raw_name, str):
-                        raise ValidationError(
-                            "ReefVision pose bundle track name is malformed"
-                        )
+                        raise ValidationError("ReefVision pose bundle track name is malformed")
                     manifest_name = str(raw_name or "").strip()
 
                 effective_name = manifest_name or native_name
@@ -1108,6 +1322,14 @@ class PoseInteroperabilityService:
                 if keyframe is None:
                     skipped_empty += 1
                     continue
+                if frame_manifest is not None:
+                    keyframe = cls._restore_bundle_keyframe_metadata(
+                        keyframe,
+                        schema,
+                        external_name,
+                        frame_index,
+                        exchange_format,
+                    )
                 grouped[group_key].append(keyframe)
                 names[group_key] = external_name
 
@@ -1267,6 +1489,23 @@ class PoseInteroperabilityService:
                 "on the target video; import would create duplicate scientific records"
             )
 
+    @classmethod
+    def _json_safe_provenance(cls, value: object) -> object:
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, Path):
+            return str(value)
+        if isinstance(value, np.generic):
+            return cls._json_safe_provenance(value.item())
+        if isinstance(value, dict):
+            return {str(k): cls._json_safe_provenance(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [cls._json_safe_provenance(v) for v in value]
+        raise ValidationError(
+            "External pose provenance contains an unsupported non-JSON value: "
+            f"{type(value).__name__}"
+        )
+
     @staticmethod
     def _source_track_metadata(
         imported_schema: _ImportedSchema,
@@ -1282,7 +1521,7 @@ class PoseInteroperabilityService:
             return None
         return {str(key): value for key, value in raw.items()}
 
-    def import_bytes(
+    def _import_bytes(
         self,
         video_id: str,
         exchange_format: PoseInteroperabilityFormat,
@@ -1321,6 +1560,9 @@ class PoseInteroperabilityService:
             exchange_format,
         )
         warnings.extend(track_warnings)
+        external_warnings = getattr(labels, "provenance", {}).get("reefvision_warnings", [])
+        if isinstance(external_warnings, list):
+            warnings.extend(str(item) for item in external_warnings)
         if not imported_schema.used_reefvision_provenance:
             warnings.append(
                 "External skeleton node names were imported as distinct semantic landmarks; "
@@ -1335,9 +1577,7 @@ class PoseInteroperabilityService:
             )
             next_track_number = int(
                 self.session.scalar(
-                    select(func.max(VideoTrack.track_number)).where(
-                        VideoTrack.video_id == video.id
-                    )
+                    select(func.max(VideoTrack.track_number)).where(VideoTrack.video_id == video.id)
                 )
                 or 0
             )
@@ -1363,6 +1603,9 @@ class PoseInteroperabilityService:
                         "pose_interoperability_import": {
                             "schema_version": "pose-interoperability-import-0001",
                             "format": exchange_format,
+                            "external_provenance": self._json_safe_provenance(
+                                getattr(labels, "provenance", {})
+                            ),
                             "source_filename": Path(source_filename or "pose").name,
                             "external_track_name": imported_track.external_track_name,
                             "source_reefvision_track": self._source_track_metadata(
@@ -1377,7 +1620,7 @@ class PoseInteroperabilityService:
                 )
                 self.session.add(track)
                 created.append(track)
-            self.session.commit()
+            self.session.flush()
             for track in created:
                 self.session.refresh(track)
         except Exception:
@@ -1396,90 +1639,152 @@ class PoseInteroperabilityService:
             warnings=warnings,
         )
 
+    def import_bytes(
+        self,
+        video_id: str,
+        exchange_format: PoseInteroperabilityFormat,
+        content: bytes,
+        *,
+        source_filename: str | None,
+        label_class_id: str,
+        confirm_frame_mapping: bool,
+    ) -> PoseInteroperabilityImportResponse:
+        try:
+            result = self._import_bytes(
+                video_id,
+                exchange_format,
+                content,
+                source_filename=source_filename,
+                label_class_id=label_class_id,
+                confirm_frame_mapping=confirm_frame_mapping,
+            )
+            self.session.commit()
+            return result
+        except Exception as exc:
+            self.session.rollback()
+            raise ValidationError(
+                f"Import failed for {Path(source_filename or 'pose').name} "
+                f"({exchange_format}): {exc}. "
+                "Nothing was imported; the operation was atomic. "
+                "Correct the file, source mapping, or optional runtime and retry."
+            ) from exc
+
     def export(
         self,
         video_id: str,
         exchange_format: PoseInteroperabilityFormat,
     ) -> PoseInteroperabilityArtifact:
-        video = self._video(video_id)
-        tracks = self._pose_tracks(video_id)
-        schema = self._schema_context(tracks)
-        labels = self._labels(video, tracks, schema)
-        sio = self._sleap_io()
-        stem = Path(video.original_filename).stem or "video"
+        try:
+            if exchange_format not in {
+                "slp",
+                "nwb",
+                "coco",
+                "dlc_csv",
+                "ultralytics_pose",
+            }:
+                raise ValidationError(
+                    f"Unsupported pose interoperability format: {exchange_format}"
+                )
 
-        with TemporaryDirectory(prefix="reefvision-pose-export-") as temp:
-            root = Path(temp)
+            video = self._video(video_id)
+            tracks = self._pose_tracks(video_id)
+            schema = self._schema_context(tracks)
+            labels = self._labels(video, tracks, schema)
+            sio = self._sleap_io()
+            stem = Path(video.original_filename).stem or "video"
+
             if exchange_format == "slp":
-                output = root / f"{stem}.pose.slp"
-                sio.save_slp(labels, str(output), embed=False, verbose=False)
+                filename, media_type, content = save_exchange(
+                    sio,
+                    labels,
+                    stem,
+                    exchange_format,
+                )
                 return PoseInteroperabilityArtifact(
-                    filename=output.name,
-                    media_type="application/octet-stream",
-                    content=output.read_bytes(),
+                    filename=filename,
+                    media_type=media_type,
+                    content=content,
                     exchange_format=exchange_format,
                 )
 
             manifest = self._bundle_manifest(labels, exchange_format)
-            bundle_dir = root / f"{stem}-{exchange_format}-bundle"
-            bundle_dir.mkdir(parents=True, exist_ok=True)
+            with TemporaryDirectory(prefix="reefvision-pose-export-") as temp:
+                root = Path(temp)
+                bundle_dir = root / f"{stem}-{exchange_format}-bundle"
+                bundle_dir.mkdir(parents=True, exist_ok=True)
 
-            if exchange_format == "nwb":
-                output = bundle_dir / f"{stem}.pose.nwb"
-                sio.save_nwb(labels, output, nwb_format="predictions")
-                self._write_bundle_manifest(bundle_dir, manifest)
-                return PoseInteroperabilityArtifact(
-                    filename=f"{stem}.pose.nwb.zip",
-                    media_type="application/zip",
-                    content=self._zip_directory(bundle_dir),
-                    exchange_format=exchange_format,
-                )
+                if exchange_format == "nwb":
+                    output = bundle_dir / f"{stem}.pose.nwb"
+                    self._save_nwb_predictions(
+                        sio,
+                        labels,
+                        output,
+                        frame_count=video.frame_count,
+                        fps=video.fps,
+                    )
+                    self._write_bundle_manifest(bundle_dir, manifest)
+                    return PoseInteroperabilityArtifact(
+                        filename=f"{stem}.pose.nwb.zip",
+                        media_type="application/zip",
+                        content=self._zip_directory(bundle_dir),
+                        exchange_format=exchange_format,
+                    )
 
-            if exchange_format == "coco":
-                output = bundle_dir / f"{stem}.pose.coco.json"
-                sio.save_coco(labels, str(output), visibility_encoding="ternary")
-                self._write_bundle_manifest(bundle_dir, manifest)
-                return PoseInteroperabilityArtifact(
-                    filename=f"{stem}.pose.coco.zip",
-                    media_type="application/zip",
-                    content=self._zip_directory(bundle_dir),
-                    exchange_format=exchange_format,
-                )
+                if exchange_format == "coco":
+                    output = bundle_dir / f"{stem}.pose.coco.json"
+                    sio.save_coco(
+                        labels,
+                        str(output),
+                        visibility_encoding="ternary",
+                    )
+                    self._write_bundle_manifest(bundle_dir, manifest)
+                    return PoseInteroperabilityArtifact(
+                        filename=f"{stem}.pose.coco.zip",
+                        media_type="application/zip",
+                        content=self._zip_directory(bundle_dir),
+                        exchange_format=exchange_format,
+                    )
 
-            if exchange_format == "dlc_csv":
-                output = bundle_dir / f"{stem}.pose.dlc.csv"
-                sio.save_csv(
-                    labels,
-                    str(output),
-                    format="dlc",
-                    include_score=True,
-                    scorer="ReefVision",
-                    save_metadata=False,
-                )
-                self._write_bundle_manifest(bundle_dir, manifest)
-                return PoseInteroperabilityArtifact(
-                    filename=f"{stem}.pose.dlc.zip",
-                    media_type="application/zip",
-                    content=self._zip_directory(bundle_dir),
-                    exchange_format=exchange_format,
-                )
+                if exchange_format == "dlc_csv":
+                    output = bundle_dir / f"{stem}.pose.dlc.csv"
+                    sio.save_csv(
+                        labels,
+                        str(output),
+                        format="dlc",
+                        include_score=True,
+                        scorer="ReefVision",
+                        save_metadata=False,
+                    )
+                    self._write_bundle_manifest(bundle_dir, manifest)
+                    return PoseInteroperabilityArtifact(
+                        filename=f"{stem}.pose.dlc.zip",
+                        media_type="application/zip",
+                        content=self._zip_directory(bundle_dir),
+                        exchange_format=exchange_format,
+                    )
 
-            if exchange_format == "ultralytics_pose":
-                output_dir = bundle_dir / "dataset"
-                sio.save_ultralytics(
-                    labels,
-                    str(output_dir),
-                    split_ratios={"train": 1.0},
-                    class_id=0,
-                    verbose=False,
-                    use_multiprocessing=False,
-                )
-                self._write_bundle_manifest(output_dir, manifest)
-                return PoseInteroperabilityArtifact(
-                    filename=f"{stem}.pose.ultralytics.zip",
-                    media_type="application/zip",
-                    content=self._zip_directory(output_dir),
-                    exchange_format=exchange_format,
-                )
+                if exchange_format == "ultralytics_pose":
+                    output_dir = bundle_dir / "dataset"
+                    sio.save_ultralytics(
+                        labels,
+                        str(output_dir),
+                        split_ratios={"train": 1.0},
+                        class_id=0,
+                        verbose=False,
+                        use_multiprocessing=False,
+                    )
+                    self._write_bundle_manifest(output_dir, manifest)
+                    return PoseInteroperabilityArtifact(
+                        filename=f"{stem}.pose.ultralytics.zip",
+                        media_type="application/zip",
+                        content=self._zip_directory(output_dir),
+                        exchange_format=exchange_format,
+                    )
 
-        raise ValidationError(f"Unsupported pose interoperability format: {exchange_format}")
+            raise ValidationError(f"Unsupported pose interoperability format: {exchange_format}")
+        except Exception as exc:
+            raise ValidationError(
+                f"Export failed for video {video_id} ({exchange_format}): {exc}. "
+                "Source observations were not changed. Check source media, pose schema, "
+                "and optional runtime before retrying."
+            ) from exc

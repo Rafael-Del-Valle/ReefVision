@@ -15,6 +15,14 @@ PoseInteroperabilityFormat = Literal[
 ]
 
 
+class PoseInteroperabilityRuntimeResponse(BaseModel):
+    available: bool
+    required_version: str
+    installed_version: str | None
+    installation: str
+    reason: str | None = None
+
+
 class PoseInteroperabilityImportResponse(BaseModel):
     schema_version: Literal["pose-interoperability-import-0001"] = (
         "pose-interoperability-import-0001"

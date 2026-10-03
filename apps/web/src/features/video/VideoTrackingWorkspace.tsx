@@ -1347,10 +1347,10 @@ export function VideoTrackingWorkspace({
       </section>
 
       {selectedVideo && (
-          <section className="management-card">
-            <p className="eyebrow">Pose exchange</p>
-            <h3>Pose interoperability</h3>
-            <div className="workspace-guide compact">
+        <section className="management-card">
+          <p className="eyebrow">Pose exchange</p>
+          <h3>Pose interoperability</h3>
+          <div className="workspace-guide compact">
             <div>
               <strong>Import/export safeguards</strong>
               <p className="annotation-helper">
@@ -1367,8 +1367,8 @@ export function VideoTrackingWorkspace({
                   Repeated semantic labels receive stable external node names.
                   SLP is exported natively; NWB, COCO, DeepLabCut, and
                   Ultralytics downloads are ZIP bundles containing the standard
-                  native artifact plus a ReefVision manifest for exact frame
-                  and identity restoration. The full immutable
+                  native artifact plus a ReefVision manifest for exact frame and
+                  identity restoration. The full immutable
                   association/correction audit history remains in ReefVision.
                 </p>
                 <div className="workspace-actions">
@@ -1430,9 +1430,7 @@ export function VideoTrackingWorkspace({
                 <option value="nwb">NWB</option>
                 <option value="coco">COCO pose JSON</option>
                 <option value="dlc_csv">DeepLabCut CSV</option>
-                <option value="ultralytics_pose">
-                  Ultralytics pose ZIP
-                </option>
+                <option value="ultralytics_pose">Ultralytics pose ZIP</option>
               </select>
             </label>
             <label>
@@ -1470,8 +1468,8 @@ export function VideoTrackingWorkspace({
                   setConfirmPoseInteropFrameMapping(event.target.checked)
                 }
               />
-              I confirm external frame indices correspond to this video when
-              the file has no ReefVision provenance
+              I confirm external frame indices correspond to this video when the
+              file has no ReefVision provenance
             </label>
             <p className="annotation-helper">
               Imported instances use the current Identity class selected in the
@@ -1499,7 +1497,9 @@ export function VideoTrackingWorkspace({
             {poseInteropImportMutation.data && (
               <p className="annotation-helper">
                 Imported {poseInteropImportMutation.data.track_count} track
-                {poseInteropImportMutation.data.track_count === 1 ? "" : "s"}{" "}
+                {poseInteropImportMutation.data.track_count === 1
+                  ? ""
+                  : "s"}{" "}
                 with {poseInteropImportMutation.data.keyframe_count} pose
                 keyframes. Review is required before treating imported
                 identities as verified.
@@ -1510,8 +1510,8 @@ export function VideoTrackingWorkspace({
                 {warning}
               </p>
             ))}
-            </div>
-          </section>
+          </div>
+        </section>
       )}
 
       {selectedVideo && (
