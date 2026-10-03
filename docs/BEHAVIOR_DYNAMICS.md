@@ -41,3 +41,31 @@ source frames. ReefVision does not infer a transition across an unlabeled gap.
 
 The initial P7A schema is designed so model-assisted behavior predictions can be added later without
 changing the scientific meaning of manual ground-truth bouts.
+
+
+## P7B behavior feature vectors
+
+ReefVision derives model-ready scalar behavior features from the current canonical track and pose
+state without persisting another derived database copy. Each response records the source track
+revision, frame window, feature-set version, extraction-parameter SHA-256 hash, sampling policies,
+and pose-identity status.
+
+The feature set has three provenance groups:
+
+- **Track kinematics** use configured track interpolation and include center path/displacement,
+  speed, bounding-box area variability, and an explicit bounding-box-diagonal normalization.
+- **Pose geometry** uses persisted canonical pose keyframes and includes pose-frame coverage,
+  landmark count/confidence, RMS pose spread, pairwise landmark distances, and bbox-diagonal
+  normalized geometry.
+- **Pose identity** uses the continuity-safe persistent landmark segments from pose visualization
+  and includes resolved-identity coverage, aggregate landmark path/speed, and continuity segment
+  count.
+
+Raw pixels remain the primary coordinate unit. Bbox-diagonal normalization is labeled as a
+dimensionless image-space normalization; it must not be interpreted as anatomical body length.
+
+Occlusion-predicted coordinates are excluded by default. When explicitly included, their fraction
+is reported. If temporal pose identity is missing or stale, identity-dependent features are
+returned as unavailable with `value=null` and a reason rather than as numeric zero. Geometry
+features that do not require persistent identity remain available when the current pose keyframes
+support them.

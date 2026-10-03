@@ -8,6 +8,10 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
+from reefvision.schemas.behavior_features import (
+    BehaviorFeatureRequest,
+    BehaviorFeatureVectorResponse,
+)
 from reefvision.schemas.behavior_dynamics import (
     BehaviorBoutCreateRequest,
     BehaviorBoutResponse,
@@ -17,6 +21,7 @@ from reefvision.schemas.behavior_dynamics import (
     BehaviorEthogramResponse,
 )
 from reefvision.services.behavior_dynamics import BehaviorDynamicsService
+from reefvision.services.behavior_features import BehaviorFeatureService
 
 router = APIRouter(tags=["behavior-dynamics"])
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -100,3 +105,16 @@ def behavior_dynamics(
     session: DbSession,
 ) -> BehaviorDynamicsResponse:
     return BehaviorDynamicsService(session).analyze(track_id, payload)
+
+
+
+@router.post(
+    "/video-tracks/{track_id}/behavior-features",
+    response_model=BehaviorFeatureVectorResponse,
+)
+def behavior_features(
+    track_id: str,
+    payload: BehaviorFeatureRequest,
+    session: DbSession,
+) -> BehaviorFeatureVectorResponse:
+    return BehaviorFeatureService(session).extract(track_id, payload)
