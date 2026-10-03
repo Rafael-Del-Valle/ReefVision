@@ -1299,7 +1299,7 @@ export function VideoTrackingWorkspace({
             {selectedTrack && selectedTrackPoseSchema && (
               <PoseTemporalReviewPanel
                 trackId={selectedTrack.id}
-                frameIndex={previewFrameIndex}
+                frameIndex={frameIndex}
                 onFrameChange={(nextFrame) => {
                   setFrameIndex(nextFrame);
                   setPreviewFrameIndex(nextFrame);

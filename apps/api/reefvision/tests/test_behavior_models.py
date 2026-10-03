@@ -338,3 +338,62 @@ def test_behavior_prediction_review_is_blocked_after_track_revision_changes(
     )
     assert bouts.status_code == 200, bouts.text
     assert bouts.json() == []
+
+
+
+def test_behavior_prediction_edit_and_accept_persists_human_correction(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project, _video, labeled, inference = _setup(client, monkeypatch)
+    ethogram = _ethogram(client, str(project["id"]))
+    _label_training_bouts(client, str(labeled["id"]), ethogram)
+    model = _train(
+        client,
+        str(project["id"]),
+        str(labeled["id"]),
+        ethogram,
+    )
+    states = {
+        item["code"]: item
+        for item in cast(list[dict[str, object]], ethogram["states"])
+    }
+
+    run = client.post(
+        f"/api/v1/video-tracks/{inference['id']}/behavior-predictions",
+        json={
+            "model_id": model["id"],
+            "window_frames": 8,
+            "stride_frames": 8,
+        },
+    )
+    assert run.status_code == 200, run.text
+    prediction = run.json()["predictions"][0]
+
+    reviewed = client.put(
+        f"/api/v1/behavior-predictions/{prediction['id']}/review",
+        json={
+            "action": "edit_and_accept",
+            "behavior_state_id": states["rest"]["id"],
+            "start_frame": 1,
+            "end_frame": 6,
+            "note": "Scientist corrected state and interval.",
+        },
+    )
+    assert reviewed.status_code == 200, reviewed.text
+    assert reviewed.json()["review_status"] == "edited_and_accepted"
+
+    bouts = client.get(
+        f"/api/v1/video-tracks/{inference['id']}/behavior-bouts",
+        params={"ethogram_revision_id": ethogram["id"]},
+    )
+    assert bouts.status_code == 200, bouts.text
+    payload = bouts.json()
+    assert len(payload) == 1
+    assert payload[0]["behavior_state_id"] == states["rest"]["id"]
+    assert payload[0]["start_frame"] == 1
+    assert payload[0]["end_frame"] == 6
+    assert payload[0]["revision_reason"] == "prediction_edit_and_accept"
+    assert payload[0]["confidence"] is None
+    assert payload[0]["source_behavior_classifier_id"] == model["id"]
+    assert payload[0]["source_behavior_prediction_id"] == prediction["id"]
