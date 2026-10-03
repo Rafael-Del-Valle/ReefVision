@@ -91,10 +91,7 @@ def _label_training_bouts(
     track_id: str,
     ethogram: dict[str, object],
 ) -> None:
-    states = {
-        item["code"]: item
-        for item in cast(list[dict[str, object]], ethogram["states"])
-    }
+    states = {item["code"]: item for item in cast(list[dict[str, object]], ethogram["states"])}
     for code, start, end in (
         ("rest", 0, 1),
         ("swim", 2, 3),
@@ -176,8 +173,7 @@ def test_behavior_model_prediction_review_and_export_workflow(
     predictions = run_payload["predictions"]
     assert all(item["review_status"] == "pending" for item in predictions)
     assert all(
-        item["score_semantics"]
-        == "normalized_inverse_distance_not_calibrated"
+        item["score_semantics"] == "normalized_inverse_distance_not_calibrated"
         for item in predictions
     )
     assert all(0 <= item["prediction_score"] <= 1 for item in predictions)
@@ -312,9 +308,7 @@ def test_behavior_prediction_review_is_blocked_after_track_revision_changes(
     )
     assert updated.status_code == 200, updated.text
 
-    stale = client.get(
-        f"/api/v1/video-tracks/{inference['id']}/behavior-predictions"
-    )
+    stale = client.get(f"/api/v1/video-tracks/{inference['id']}/behavior-predictions")
     assert stale.status_code == 200, stale.text
     assert stale.json()[0]["stale_against_track"] is True
 
@@ -340,7 +334,6 @@ def test_behavior_prediction_review_is_blocked_after_track_revision_changes(
     assert bouts.json() == []
 
 
-
 def test_behavior_prediction_edit_and_accept_persists_human_correction(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -354,10 +347,7 @@ def test_behavior_prediction_edit_and_accept_persists_human_correction(
         str(labeled["id"]),
         ethogram,
     )
-    states = {
-        item["code"]: item
-        for item in cast(list[dict[str, object]], ethogram["states"])
-    }
+    states = {item["code"]: item for item in cast(list[dict[str, object]], ethogram["states"])}
 
     run = client.post(
         f"/api/v1/video-tracks/{inference['id']}/behavior-predictions",

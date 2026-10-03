@@ -121,25 +121,18 @@ class BehaviorPredictionService:
         review_status: str | None = None,
     ) -> list[BehaviorPredictionResponse]:
         track = self._track(track_id)
-        statement = select(BehaviorPrediction).where(
-            BehaviorPrediction.video_track_id == track.id
-        )
+        statement = select(BehaviorPrediction).where(BehaviorPrediction.video_track_id == track.id)
         if model_id is not None:
             statement = statement.where(BehaviorPrediction.classifier_id == model_id)
         if review_status is not None:
-            statement = statement.where(
-                BehaviorPrediction.review_status == review_status
-            )
+            statement = statement.where(BehaviorPrediction.review_status == review_status)
         statement = statement.order_by(
             BehaviorPrediction.start_frame,
             BehaviorPrediction.end_frame,
             BehaviorPrediction.created_at,
             BehaviorPrediction.id,
         )
-        return [
-            self._response(record, track)
-            for record in self.session.scalars(statement)
-        ]
+        return [self._response(record, track) for record in self.session.scalars(statement)]
 
     def run(
         self,
@@ -156,9 +149,7 @@ class BehaviorPredictionService:
         start_frame = payload.start_frame if payload.start_frame is not None else first_frame
         end_frame = payload.end_frame if payload.end_frame is not None else last_frame
         if start_frame < first_frame or end_frame > last_frame:
-            raise ValidationError(
-                "Behavior prediction range must stay within the selected track"
-            )
+            raise ValidationError("Behavior prediction range must stay within the selected track")
 
         feature_names = list(model.feature_names_json)
         scaler = dict(model.scaler_json)
@@ -167,16 +158,13 @@ class BehaviorPredictionService:
             item.id: item
             for item in self.session.scalars(
                 select(BehaviorStateDefinition).where(
-                    BehaviorStateDefinition.ethogram_revision_id
-                    == model.ethogram_revision_id,
+                    BehaviorStateDefinition.ethogram_revision_id == model.ethogram_revision_id,
                     BehaviorStateDefinition.channel == model.channel,
                 )
             )
         }
         if set(centroids) - set(states):
-            raise ValidationError(
-                "Behavior model centroids reference missing ethogram states"
-            )
+            raise ValidationError("Behavior model centroids reference missing ethogram states")
 
         existing = {
             (item.start_frame, item.end_frame): item
@@ -211,15 +199,13 @@ class BehaviorPredictionService:
             standardized_vector = standardize(raw_vector, feature_names, scaler)
             distances = centroid_distances(standardized_vector, centroids)
             inverse = {
-                state_id: 1.0 / (distance + 1e-9)
-                for state_id, distance in distances.items()
+                state_id: 1.0 / (distance + 1e-9) for state_id, distance in distances.items()
             }
             denominator = sum(inverse.values())
             if not isfinite(denominator) or denominator <= 0:
                 raise ValidationError("Behavior-model distance scores are invalid")
             normalized_scores = {
-                state_id: value / denominator
-                for state_id, value in inverse.items()
+                state_id: value / denominator for state_id, value in inverse.items()
             }
             predicted_state_id = min(
                 distances,
@@ -240,8 +226,7 @@ class BehaviorPredictionService:
                     "standardized_centroid_distance": distances,
                 },
                 feature_vector_json={
-                    name: raw_vector[index]
-                    for index, name in enumerate(feature_names)
+                    name: raw_vector[index] for index, name in enumerate(feature_names)
                 },
                 feature_parameters_sha256=feature_response.parameters_sha256,
                 source_track_revision=track.revision,
@@ -295,29 +280,15 @@ class BehaviorPredictionService:
                 "Accepted behavior state must belong to the prediction ethogram revision"
             )
         if state.channel != prediction.channel:
-            raise ValidationError(
-                "Accepted behavior state must remain in the prediction channel"
-            )
+            raise ValidationError("Accepted behavior state must remain in the prediction channel")
 
         start_frame = (
-            payload.start_frame
-            if payload.start_frame is not None
-            else prediction.start_frame
+            payload.start_frame if payload.start_frame is not None else prediction.start_frame
         )
-        end_frame = (
-            payload.end_frame
-            if payload.end_frame is not None
-            else prediction.end_frame
-        )
+        end_frame = payload.end_frame if payload.end_frame is not None else prediction.end_frame
         first_frame, last_frame = self.dynamics._track_frame_bounds(track)
-        if (
-            start_frame < first_frame
-            or end_frame > last_frame
-            or end_frame < start_frame
-        ):
-            raise ValidationError(
-                "Accepted prediction interval must stay within the current track"
-            )
+        if start_frame < first_frame or end_frame > last_frame or end_frame < start_frame:
+            raise ValidationError("Accepted prediction interval must stay within the current track")
 
         for bout, bout_state in self.dynamics._effective_bouts(
             track.id,
@@ -353,18 +324,14 @@ class BehaviorPredictionService:
             source_behavior_prediction_id=prediction.id,
             is_deleted=False,
             revision_reason=(
-                "prediction_accept"
-                if payload.action == "accept"
-                else "prediction_edit_and_accept"
+                "prediction_accept" if payload.action == "accept" else "prediction_edit_and_accept"
             ),
             note=payload.note,
             created_by="local_user",
         )
         self.session.add(bout)
         prediction.review_status = (
-            "accepted"
-            if payload.action == "accept"
-            else "edited_and_accepted"
+            "accepted" if payload.action == "accept" else "edited_and_accepted"
         )
         prediction.accepted_bout_series_id = bout_series_id
         prediction.reviewed_at = utc_now()

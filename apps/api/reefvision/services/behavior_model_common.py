@@ -83,9 +83,7 @@ def standardize(
         mean = float(entry.get("mean", 0.0))
         std = float(entry.get("std", 0.0))
         if std <= 0:
-            raise ValidationError(
-                "Behavior model scaler contains an invalid standard deviation"
-            )
+            raise ValidationError("Behavior model scaler contains an invalid standard deviation")
         standardized.append((vector[index] - mean) / std)
     return standardized
 
@@ -100,10 +98,7 @@ def centroid_distances(
             raise ValidationError("Behavior model centroid metadata is incomplete")
         centroid = [float(value) for value in raw_centroid]
         distances[state_id] = sqrt(
-            sum(
-                (value - centroid[index]) ** 2
-                for index, value in enumerate(vector)
-            )
+            sum((value - centroid[index]) ** 2 for index, value in enumerate(vector))
         )
     if len(distances) < 2:
         raise ValidationError("Behavior model must contain at least two state centroids")

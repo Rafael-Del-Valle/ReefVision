@@ -68,19 +68,14 @@ class BehaviorExportService:
             model = self.session.get(BehaviorClassifierModel, model_id)
             if model is None:
                 raise ValidationError("Behavior model not found for export")
-            provenance["model"] = behavior_model_response(model).model_dump(
-                mode="json"
-            )
+            provenance["model"] = behavior_model_response(model).model_dump(mode="json")
 
         if export_format == "json":
             document = {
                 "provenance": provenance,
                 "dynamics": dynamics.model_dump(mode="json"),
                 "bouts": [item.model_dump(mode="json") for item in bouts],
-                "predictions": [
-                    item.model_dump(mode="json")
-                    for item in predictions
-                ],
+                "predictions": [item.model_dump(mode="json") for item in predictions],
             }
             return BehaviorExportPayload(
                 filename=f"reefvision-behavior-{track_id}.json",
@@ -114,13 +109,8 @@ class BehaviorExportService:
             ]
             writer = csv.DictWriter(buffer, fieldnames=fields)
             writer.writeheader()
-            for item in bouts:
-                writer.writerow(
-                    {
-                        field: getattr(item, field)
-                        for field in fields
-                    }
-                )
+            for bout in bouts:
+                writer.writerow({field: getattr(bout, field) for field in fields})
             return BehaviorExportPayload(
                 filename=f"reefvision-behavior-bouts-{track_id}.csv",
                 media_type="text/csv",
@@ -153,15 +143,15 @@ class BehaviorExportService:
             ]
             writer = csv.DictWriter(buffer, fieldnames=fields)
             writer.writeheader()
-            for item in predictions:
-                row = item.model_dump(mode="json")
+            for prediction in predictions:
+                row = prediction.model_dump(mode="json")
                 row["scores_json"] = json.dumps(
-                    item.scores,
+                    prediction.scores,
                     sort_keys=True,
                     separators=(",", ":"),
                 )
                 row["feature_vector_json"] = json.dumps(
-                    item.feature_vector,
+                    prediction.feature_vector,
                     sort_keys=True,
                     separators=(",", ":"),
                 )

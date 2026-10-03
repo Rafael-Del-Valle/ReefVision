@@ -6,10 +6,9 @@ import { BehaviorDynamicsPanel } from "./BehaviorDynamicsPanel";
 import * as api from "./behaviorDynamicsApi";
 
 vi.mock("./behaviorDynamicsApi", async () => {
-  const actual =
-    await vi.importActual<typeof import("./behaviorDynamicsApi")>(
-      "./behaviorDynamicsApi",
-    );
+  const actual = await vi.importActual<typeof import("./behaviorDynamicsApi")>(
+    "./behaviorDynamicsApi",
+  );
   return {
     ...actual,
     getBehaviorEthograms: vi.fn(),
@@ -199,13 +198,13 @@ describe("BehaviorDynamicsPanel", () => {
     renderPanel();
 
     await screen.findByText(/Definition a{12}/);
-    expect(screen.getByText(/60.0% labeled/)).toBeInTheDocument();
+    expect(await screen.findByText(/60.0% labeled/)).toBeInTheDocument();
     expect(screen.getByText(/rest → swim: 1 · 50.0%/)).toBeInTheDocument();
     expect(
-      screen.getByText(/normalized inverse distance, not calibrated/),
+      await screen.findByText(/normalized inverse distance, not calibrated/),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/standardized_nearest_centroid 0001/),
+      await screen.findByText(/standardized_nearest_centroid 0001/),
     ).toBeInTheDocument();
 
     expect(

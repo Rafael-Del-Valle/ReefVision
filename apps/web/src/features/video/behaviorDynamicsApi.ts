@@ -1,9 +1,7 @@
 import { getApiBaseUrl } from "../../runtime";
 
 export type BehaviorFeaturePreset =
-  | "track_only"
-  | "track_pose_geometry"
-  | "track_pose_identity";
+  "track_only" | "track_pose_geometry" | "track_pose_identity";
 export type BehaviorExportFormat = "json" | "bouts_csv" | "predictions_csv";
 
 export interface BehaviorStateDefinition {

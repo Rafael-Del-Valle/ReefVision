@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.schemas.behavior_classifier import (
-    BehaviorModelResponse,
     BehaviorExportFormat,
+    BehaviorModelResponse,
     BehaviorModelTrainRequest,
     BehaviorPredictionResponse,
     BehaviorPredictionReviewRequest,
@@ -129,7 +129,6 @@ def behavior_features(
     session: DbSession,
 ) -> BehaviorFeatureVectorResponse:
     return BehaviorFeatureService(session).extract(track_id, payload)
-
 
 
 @router.post(

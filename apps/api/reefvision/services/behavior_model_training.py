@@ -63,12 +63,8 @@ class BehaviorModelTrainingService:
         if requested_track_ids:
             statement = statement.where(VideoTrack.id.in_(requested_track_ids))
         tracks = list(self.session.scalars(statement))
-        if requested_track_ids and {item.id for item in tracks} != set(
-            requested_track_ids
-        ):
-            raise ValidationError(
-                "All behavior-model training tracks must belong to the project"
-            )
+        if requested_track_ids and {item.id for item in tracks} != set(requested_track_ids):
+            raise ValidationError("All behavior-model training tracks must belong to the project")
         return tracks
 
     def train(
@@ -150,9 +146,7 @@ class BehaviorModelTrainingService:
 
         columns = list(zip(*(item["values"] for item in samples), strict=True))
         means = [fmean(column) for column in columns]
-        raw_stds = [
-            pstdev(column) if len(column) > 1 else 0.0 for column in columns
-        ]
+        raw_stds = [pstdev(column) if len(column) > 1 else 0.0 for column in columns]
         safe_stds = [value if value > 1e-12 else 1.0 for value in raw_stds]
         scaler = {
             name: {
@@ -173,8 +167,7 @@ class BehaviorModelTrainingService:
 
         centroids = {
             state_id: [
-                fmean(vector[index] for vector in vectors)
-                for index in range(len(feature_names))
+                fmean(vector[index] for vector in vectors) for index in range(len(feature_names))
             ]
             for state_id, vectors in standardized.items()
         }
@@ -212,9 +205,7 @@ class BehaviorModelTrainingService:
             scaler_json=scaler,
             centroids_json=centroids,
             class_counts_json=dict(class_counts),
-            training_track_ids_json=sorted(
-                {str(item["track_id"]) for item in samples}
-            ),
+            training_track_ids_json=sorted({str(item["track_id"]) for item in samples}),
             training_bout_ids_json=[str(item["bout_id"]) for item in samples],
             training_sample_count=len(samples),
             training_manifest_sha256=manifest_sha256,
@@ -235,17 +226,13 @@ class BehaviorModelTrainingService:
         )
         if ethogram_revision_id is not None:
             statement = statement.where(
-                BehaviorClassifierModel.ethogram_revision_id
-                == ethogram_revision_id
+                BehaviorClassifierModel.ethogram_revision_id == ethogram_revision_id
             )
         statement = statement.order_by(
             BehaviorClassifierModel.created_at.desc(),
             BehaviorClassifierModel.id,
         )
-        return [
-            behavior_model_response(record)
-            for record in self.session.scalars(statement)
-        ]
+        return [behavior_model_response(record) for record in self.session.scalars(statement)]
 
 
 def behavior_model_response(

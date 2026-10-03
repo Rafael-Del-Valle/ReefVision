@@ -274,7 +274,9 @@ export function BehaviorDynamicsPanel({
       action();
     } catch (error) {
       setValidationError(
-        error instanceof Error ? error.message : "Behavior settings are invalid",
+        error instanceof Error
+          ? error.message
+          : "Behavior settings are invalid",
       );
     }
   };
@@ -442,9 +444,12 @@ export function BehaviorDynamicsPanel({
                       {channel.unlabeled_seconds.toFixed(2)} s unlabeled
                     </p>
                     {channel.states.map((state) => (
-                      <p className="annotation-helper" key={state.behavior_state_id}>
-                        {state.behavior_label}: {state.dwell_seconds.toFixed(2)} s ·{" "}
-                        {state.bout_count} bout
+                      <p
+                        className="annotation-helper"
+                        key={state.behavior_state_id}
+                      >
+                        {state.behavior_label}: {state.dwell_seconds.toFixed(2)}{" "}
+                        s · {state.bout_count} bout
                         {state.bout_count === 1 ? "" : "s"}
                       </p>
                     ))}
@@ -487,9 +492,7 @@ export function BehaviorDynamicsPanel({
               }
             >
               <option value="track_only">Track kinematics</option>
-              <option value="track_pose_geometry">
-                Track + pose geometry
-              </option>
+              <option value="track_pose_geometry">Track + pose geometry</option>
               <option value="track_pose_identity">
                 Track + persistent pose identity
               </option>
@@ -514,7 +517,8 @@ export function BehaviorDynamicsPanel({
                 >
                   {(modelsQuery.data ?? []).map((model) => (
                     <option key={model.id} value={model.id}>
-                      {model.display_name} · {model.training_sample_count} samples
+                      {model.display_name} · {model.training_sample_count}{" "}
+                      samples
                     </option>
                   ))}
                 </select>
