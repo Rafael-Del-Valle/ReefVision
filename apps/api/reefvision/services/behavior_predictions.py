@@ -341,7 +341,9 @@ class BehaviorPredictionService:
             start_frame=start_frame,
             end_frame=end_frame,
             source="accepted_prediction",
-            confidence=prediction.prediction_score,
+            # The centroid score is not calibrated probability/confidence.
+            # Preserve it on the linked prediction rather than relabeling it.
+            confidence=None,
             review_status="verified",
             source_track_revision=track.revision,
             source_model_id=None,

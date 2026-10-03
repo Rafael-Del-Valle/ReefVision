@@ -19,7 +19,7 @@ from reefvision.db.models import (
 )
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.behavior_classifier import (
-    BehaviorClassifierResponse,
+    BehaviorModelResponse,
     BehaviorModelTrainRequest,
 )
 from reefvision.schemas.behavior_features import BehaviorFeatureRequest
@@ -75,7 +75,7 @@ class BehaviorModelTrainingService:
         self,
         project_id: str,
         payload: BehaviorModelTrainRequest,
-    ) -> BehaviorClassifierResponse:
+    ) -> BehaviorModelResponse:
         ethogram = self._ethogram(payload.ethogram_revision_id)
         if ethogram.project_id != project_id:
             raise ValidationError("Behavior ethogram belongs to a different project")
@@ -115,7 +115,9 @@ class BehaviorModelTrainingService:
                     BehaviorFeatureRequest(
                         start_frame=bout.start_frame,
                         end_frame=bout.end_frame,
-                        **request_options,
+                        include_predicted=False,
+                        include_uncertain=True,
+                        minimum_landmark_confidence=None,
                     ),
                 )
                 vector = feature_vector(
@@ -227,7 +229,7 @@ class BehaviorModelTrainingService:
         self,
         project_id: str,
         ethogram_revision_id: str | None = None,
-    ) -> list[BehaviorClassifierResponse]:
+    ) -> list[BehaviorModelResponse]:
         statement = select(BehaviorClassifierModel).where(
             BehaviorClassifierModel.project_id == project_id
         )
@@ -248,8 +250,8 @@ class BehaviorModelTrainingService:
 
 def behavior_model_response(
     record: BehaviorClassifierModel,
-) -> BehaviorClassifierResponse:
-    return BehaviorClassifierResponse(
+) -> BehaviorModelResponse:
+    return BehaviorModelResponse(
         id=record.id,
         project_id=record.project_id,
         ethogram_revision_id=record.ethogram_revision_id,

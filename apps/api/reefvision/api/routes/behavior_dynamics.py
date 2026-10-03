@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.schemas.behavior_classifier import (
-    BehaviorClassifierResponse,
+    BehaviorModelResponse,
     BehaviorExportFormat,
     BehaviorModelTrainRequest,
     BehaviorPredictionResponse,
@@ -134,26 +134,26 @@ def behavior_features(
 
 @router.post(
     "/projects/{project_id}/behavior-models",
-    response_model=BehaviorClassifierResponse,
+    response_model=BehaviorModelResponse,
     status_code=status.HTTP_201_CREATED,
 )
 def train_behavior_model(
     project_id: str,
     payload: BehaviorModelTrainRequest,
     session: DbSession,
-) -> BehaviorClassifierResponse:
+) -> BehaviorModelResponse:
     return BehaviorModelTrainingService(session).train(project_id, payload)
 
 
 @router.get(
     "/projects/{project_id}/behavior-models",
-    response_model=list[BehaviorClassifierResponse],
+    response_model=list[BehaviorModelResponse],
 )
 def list_behavior_models(
     project_id: str,
     session: DbSession,
     ethogram_revision_id: Annotated[str | None, Query(max_length=36)] = None,
-) -> list[BehaviorClassifierResponse]:
+) -> list[BehaviorModelResponse]:
     return BehaviorModelTrainingService(session).list_models(
         project_id,
         ethogram_revision_id,
