@@ -198,7 +198,7 @@ describe("BehaviorDynamicsPanel", () => {
   it("shows scientific dynamics, provenance, model semantics, and exports", async () => {
     renderPanel();
 
-    await screen.findByText(/Locomotion · revision 1/);
+    await screen.findByText(/Definition a{12}/);
     expect(screen.getByText(/60.0% labeled/)).toBeInTheDocument();
     expect(screen.getByText(/rest → swim: 1 · 50.0%/)).toBeInTheDocument();
     expect(
@@ -278,7 +278,7 @@ describe("BehaviorDynamicsPanel", () => {
     });
     renderPanel();
 
-    await screen.findByText(/Locomotion · revision 1/);
+    await screen.findByText(/Definition a{12}/);
     fireEvent.click(
       screen.getByRole("button", { name: "Add verified manual bout" }),
     );

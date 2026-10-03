@@ -271,6 +271,8 @@ def test_behavior_model_prediction_review_and_export_workflow(
     )
     assert predictions_csv.status_code == 200, predictions_csv.text
     assert "score_semantics" in predictions_csv.text
+    assert "scores_json" in predictions_csv.text
+    assert "feature_vector_json" in predictions_csv.text
 
 
 def test_behavior_prediction_review_is_blocked_after_track_revision_changes(
@@ -322,6 +324,13 @@ def test_behavior_prediction_review_is_blocked_after_track_revision_changes(
     )
     assert review.status_code == 400, review.text
     assert "stale" in review.json()["detail"].lower()
+
+    rejected = client.put(
+        f"/api/v1/behavior-predictions/{prediction['id']}/review",
+        json={"action": "reject"},
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["review_status"] == "rejected"
 
     bouts = client.get(
         f"/api/v1/video-tracks/{inference['id']}/behavior-bouts",

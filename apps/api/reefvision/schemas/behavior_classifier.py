@@ -109,6 +109,19 @@ class BehaviorPredictionReviewRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_edit(self) -> BehaviorPredictionReviewRequest:
+        edited_fields = (
+            self.behavior_state_id,
+            self.start_frame,
+            self.end_frame,
+        )
+        if self.action == "edit_and_accept" and all(
+            value is None for value in edited_fields
+        ):
+            raise ValueError("edit_and_accept requires at least one explicit correction")
+        if self.action != "edit_and_accept" and any(
+            value is not None for value in edited_fields
+        ):
+            raise ValueError("Only edit_and_accept may include corrected state or frames")
         if (
             self.start_frame is not None
             and self.end_frame is not None

@@ -52,21 +52,11 @@ class BehaviorExportService:
             ),
         )
 
+        track = self.dynamics._track(track_id)
         provenance = {
             "export_schema_version": "reefvision-behavior-export-0001",
             "track_id": track_id,
-            "source_track_revision": (
-                predictions[0].source_track_revision
-                if predictions
-                else next(
-                    (
-                        bout.source_track_revision
-                        for bout in bouts
-                        if not bout.stale_against_track
-                    ),
-                    None,
-                )
-            ),
+            "source_track_revision": track.revision,
             "ethogram_revision_id": ethogram_revision_id,
             "ethogram_definition_sha256": dynamics.ethogram_definition_sha256,
             "annotation_policy": dynamics.annotation_policy,
@@ -150,6 +140,8 @@ class BehaviorExportService:
                 "end_frame",
                 "prediction_score",
                 "score_semantics",
+                "scores_json",
+                "feature_vector_json",
                 "feature_parameters_sha256",
                 "source_track_revision",
                 "stale_against_track",
@@ -162,6 +154,16 @@ class BehaviorExportService:
             writer.writeheader()
             for item in predictions:
                 row = item.model_dump(mode="json")
+                row["scores_json"] = json.dumps(
+                    item.scores,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                row["feature_vector_json"] = json.dumps(
+                    item.feature_vector,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
                 writer.writerow({field: row.get(field) for field in fields})
             return BehaviorExportPayload(
                 filename=f"reefvision-behavior-predictions-{track_id}.csv",
