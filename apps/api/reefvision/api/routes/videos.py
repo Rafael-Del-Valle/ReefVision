@@ -21,6 +21,10 @@ from reefvision.schemas.pose_interoperability import (
     PoseInteroperabilityImportResponse,
     PoseInteroperabilityRuntimeResponse,
 )
+from reefvision.schemas.pose_visualization import (
+    PoseVisualizationRequest,
+    PoseVisualizationResponse,
+)
 from reefvision.schemas.pose_tracking import (
     PoseAssociationCorrectionRequest,
     PoseIdentityBreakCreateRequest,
@@ -62,6 +66,7 @@ from reefvision.schemas.videos import (
 )
 from reefvision.services.pose_interoperability import PoseInteroperabilityService
 from reefvision.services.pose_temporal_tracking import PoseTemporalTrackingService
+from reefvision.services.pose_visualization import PoseVisualizationService
 from reefvision.services.scientific_3d_calibration import Scientific3DCalibrationValidationService
 from reefvision.services.video_assets import VideoAssetService
 from reefvision.services.video_georeferencing_readiness import (
@@ -338,6 +343,18 @@ def get_pose_temporal_summary(
     session: DbSession,
 ) -> PoseTemporalTrackSummaryResponse:
     return PoseTemporalTrackingService(session).summary(track_id)
+
+
+@router.post(
+    "/video-tracks/{track_id}/pose-visualization",
+    response_model=PoseVisualizationResponse,
+)
+def get_pose_visualization(
+    track_id: str,
+    payload: PoseVisualizationRequest,
+    session: DbSession,
+) -> PoseVisualizationResponse:
+    return PoseVisualizationService(session).analyze(track_id, payload)
 
 
 @router.get(
