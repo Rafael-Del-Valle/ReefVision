@@ -285,4 +285,59 @@ describe("PoseActiveLearningPanel", () => {
       }),
     ).toBeInTheDocument();
   });
+
+  it("exposes retraining-ready frozen dataset formats", async () => {
+    const completedRound: api.PoseActiveLearningRound = {
+      ...round,
+      status: "complete",
+      completed_at: "2026-10-03T01:00:00Z",
+    };
+
+    vi.mocked(api.getPoseActiveLearningRounds).mockResolvedValue([
+      completedRound,
+    ]);
+
+    vi.mocked(api.getPoseActiveLearningCandidates).mockResolvedValue([
+      {
+        ...candidate,
+        review_status: "verified",
+        verified_track_revision: 8,
+        verified_pose_sha256: "f".repeat(64),
+        correction_id: "correction-1",
+        reviewed_by: "scientist",
+        reviewed_at: "2026-10-03T01:00:00Z",
+      },
+    ]);
+
+    renderPanel();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Freeze verified training dataset",
+      }),
+    );
+
+    await screen.findByTestId("pose-training-dataset");
+
+    const format = screen.getByLabelText("Pose training export format");
+
+    expect(format).toHaveValue("coco");
+
+    fireEvent.change(format, {
+      target: {
+        value: "ultralytics_pose",
+      },
+    });
+
+    expect(format).toHaveValue("ultralytics_pose");
+
+    const link = screen.getByRole("link", {
+      name: "Download retraining-ready pose export",
+    });
+
+    expect(link).toHaveAttribute(
+      "href",
+      expect.stringContaining("format=ultralytics_pose"),
+    );
+  });
 });

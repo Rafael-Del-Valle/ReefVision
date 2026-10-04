@@ -7,6 +7,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+PoseTrainingExportFormat = Literal[
+    "slp",
+    "nwb",
+    "coco",
+    "dlc_csv",
+    "ultralytics_pose",
+]
+
 
 class PoseTrainingDatasetCreateRequest(BaseModel):
     name: str | None = Field(

@@ -7,12 +7,14 @@ import {
   getPoseActiveLearningCandidates,
   getPoseActiveLearningRounds,
   poseActiveLearningRetrainingManifestUrl,
+  poseTrainingDatasetExportUrl,
   poseTrainingDatasetNativePackageUrl,
   reviewPoseActiveLearningCandidate,
   type PoseActiveLearningCandidate,
   type PoseActiveLearningSelectionMode,
   type PoseActiveLearningSelectionUnit,
   type PoseTrainingDataset,
+  type PoseTrainingExportFormat,
 } from "./poseActiveLearningApi";
 
 interface PoseActiveLearningPanelProps {
@@ -45,6 +47,8 @@ export function PoseActiveLearningPanel({
   const [selectedRoundId, setSelectedRoundId] = useState("");
   const [frozenDataset, setFrozenDataset] =
     useState<PoseTrainingDataset | null>(null);
+  const [trainingExportFormat, setTrainingExportFormat] =
+    useState<PoseTrainingExportFormat>("coco");
 
   const roundsQuery = useQuery({
     queryKey: ["pose-active-learning-rounds", projectId, videoId],
@@ -350,6 +354,41 @@ export function PoseActiveLearningPanel({
             <a href={poseTrainingDatasetNativePackageUrl(frozenDataset.id)}>
               Download immutable ReefVision pose dataset
             </a>
+
+            <label className="annotation-selection-row">
+              Retraining / interoperability format
+              <select
+                aria-label="Pose training export format"
+                value={trainingExportFormat}
+                onChange={(event) =>
+                  setTrainingExportFormat(
+                    event.target.value as PoseTrainingExportFormat,
+                  )
+                }
+              >
+                <option value="coco">COCO Keypoints</option>
+                <option value="ultralytics_pose">Ultralytics Pose</option>
+                <option value="dlc_csv">DeepLabCut CSV</option>
+                <option value="slp">SLEAP .slp</option>
+                <option value="nwb">NWB</option>
+              </select>
+            </label>
+
+            <a
+              href={poseTrainingDatasetExportUrl(
+                frozenDataset.id,
+                trainingExportFormat,
+              )}
+            >
+              Download retraining-ready pose export
+            </a>
+
+            <p className="annotation-helper">
+              External formats cannot represent every ReefVision scientific
+              audit field. The export ZIP includes a conversion/loss manifest,
+              exact source-frame PNGs, repeated-landmark mapping, and the full
+              frozen review/acquisition provenance.
+            </p>
           </div>
         </div>
       )}

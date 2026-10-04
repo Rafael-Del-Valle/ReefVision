@@ -1,6 +1,8 @@
 import { getApiBaseUrl } from "../../runtime";
 
 export type PoseActiveLearningSelectionUnit = "frame" | "clip";
+export type PoseTrainingExportFormat =
+  "slp" | "nwb" | "coco" | "dlc_csv" | "ultralytics_pose";
 export type PoseActiveLearningSelectionMode =
   "uncertainty" | "uncertainty_diverse";
 
@@ -203,4 +205,15 @@ export function createPoseTrainingDataset(
 
 export function poseTrainingDatasetNativePackageUrl(datasetId: string): string {
   return `${getApiBaseUrl()}/pose-training-datasets/${encodeURIComponent(datasetId)}/native-package`;
+}
+
+export function poseTrainingDatasetExportUrl(
+  datasetId: string,
+  format: PoseTrainingExportFormat,
+): string {
+  const query = new URLSearchParams({
+    format,
+  });
+
+  return `${getApiBaseUrl()}/pose-training-datasets/${encodeURIComponent(datasetId)}/export?${query.toString()}`;
 }

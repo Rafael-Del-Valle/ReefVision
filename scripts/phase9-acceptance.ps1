@@ -30,6 +30,7 @@ if ($RunAutomatedValidation) {
 
     & $python -m pytest `
         apps\api\reefvision\tests\test_pose_training_datasets_phase9.py `
+        apps\api\reefvision\tests\test_pose_training_exports_phase9.py `
         apps\api\reefvision\tests\test_pose_active_learning_phase8.py `
         apps\api\reefvision\tests\test_pose_interoperability.py `
         apps\api\reefvision\tests\test_project_exchange_phase9.py `
@@ -37,12 +38,12 @@ if ($RunAutomatedValidation) {
         apps\api\reefvision\tests\test_desktop_runtime_paths.py `
         -v
 
-    Require-Success "Phase 9A backend acceptance failed."
+    Require-Success "Phase 9A/9B backend acceptance failed."
 
     Push-Location apps\web
     try {
         npm run test -- --run src/features/video/PoseActiveLearningPanel.test.tsx
-        Require-Success "Phase 9A frontend test failed."
+        Require-Success "Phase 9A/9B frontend test failed."
 
         npm run typecheck
         Require-Success "Phase 9A frontend typecheck failed."
@@ -65,3 +66,15 @@ Write-Host "[ ] Verify schema revision/content hash are visible in dataset prove
 Write-Host "[ ] Verify model provider/version/checkpoint SHA are retained where a source model exists."
 Write-Host "[ ] Verify the native ZIP is deterministic for an unchanged frozen dataset."
 Write-Host "[ ] Verify Pose Active Learning UI can freeze a completed round."
+
+Write-Host ""
+Write-Host "Phase 9B manual checks:" -ForegroundColor Yellow
+Write-Host "[ ] Confirm source-video SHA mismatch blocks every external export."
+Write-Host "[ ] Confirm selected frames match their exact original zero-based frame indices."
+Write-Host "[ ] Confirm exported PNG SHA-256 values match the files inside each bundle."
+Write-Host "[ ] Confirm repeated landmark names remain recoverable through node_mapping."
+Write-Host "[ ] Confirm COCO export opens with its bundled frame paths."
+Write-Host "[ ] Confirm Ultralytics Pose export has images/train, labels/train, and data.yaml."
+Write-Host "[ ] Confirm DeepLabCut export does not silently flatten multi-instance frames."
+Write-Host "[ ] Confirm SLEAP and NWB exports fail clearly when the optional runtime is missing."
+Write-Host "[ ] Confirm native-format losses are explicitly documented in the bundle manifest."

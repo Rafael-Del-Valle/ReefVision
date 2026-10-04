@@ -126,3 +126,58 @@ Phase 9B will render the frozen dataset into SLEAP, COCO keypoints,
 DeepLabCut, Ultralytics pose, and NWB while preserving a loss/provenance
 manifest and extracting the exact source video frames required by each
 training format.
+
+### Phase 9B - exact source frames and external pose training formats
+
+A frozen Phase 9A dataset can be rendered into:
+
+- SLEAP `.slp`
+- NWB
+- COCO Keypoints
+- DeepLabCut CSV
+- Ultralytics Pose
+
+The renderer never reads pose truth from the current live `VideoTrack`. Pose
+annotations come exclusively from immutable `PoseTrainingDatasetItem`
+snapshots.
+
+Before any frame is exported ReefVision verifies that the managed source video
+still matches the SHA-256 frozen into every dataset item.
+
+Selected source frames are decoded sequentially from frame zero through the
+highest requested frame. This avoids relying on codec-dependent random seek
+behavior. Every selected frame is written as a lossless PNG with:
+
+- original zero-based source frame index
+- output path
+- SHA-256
+- byte size
+- width and height
+- decoder name/version
+- frozen source-video SHA-256.
+
+Repeated semantic landmarks are never silently renamed and forgotten.
+External formats receive stable unique slot names such as `tentacle__1` and
+`tentacle__2`, while the export manifest retains the original semantic label
+and occurrence-index mapping.
+
+Every external export is a ZIP containing:
+
+- exact selected source-frame PNGs
+- the native external-format artifact
+- `reefvision-pose-training-export-manifest.json`
+- `README.txt`.
+
+The native artifact is explicitly marked lossy because external ecosystems do
+not encode every ReefVision audit field. The ReefVision manifest retains the
+full canonical frozen pose, verified-pose SHA, item SHA, scientist review and
+correction provenance, Active Learning acquisition provenance, source
+model/provider/checkpoint provenance, repeated-landmark mapping, and
+conversion-loss policy.
+
+COCO, DeepLabCut, and Ultralytics exports do not require the optional SLEAP-IO
+runtime. SLEAP and NWB exports use the existing pinned pose-interoperability
+runtime.
+
+DeepLabCut CSV export fails closed when multiple frozen individuals occupy the
+same image rather than silently collapsing them into a single-animal table.
