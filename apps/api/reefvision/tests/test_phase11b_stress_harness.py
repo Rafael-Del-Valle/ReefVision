@@ -31,8 +31,16 @@ def test_offline_guard_blocks_non_loopback_dns_without_real_network(harness) -> 
         with pytest.raises(OSError, match="Blocked non-loopback network access"):
             socket.getaddrinfo("example.com", 443)
 
-    assert guard.attempts
+        probe = socket.socket()
+        try:
+            with pytest.raises(OSError, match="Blocked non-loopback network access"):
+                probe.connect(("203.0.113.1", 443))
+        finally:
+            probe.close()
+
+    assert len(guard.attempts) == 2
     assert "example.com" in guard.attempts[0]
+    assert "203.0.113.1" in guard.attempts[1]
 
 
 def test_results_package_fixture_records_non_biological_cpu_run(harness) -> None:
