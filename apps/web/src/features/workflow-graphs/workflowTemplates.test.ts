@@ -34,22 +34,20 @@ describe("workflowTemplates", () => {
     );
 
     const nodeTypes = new Set(graph.nodes.map((node) => node.node_type));
-    expect(nodeTypes).toEqual(
-      expect.objectContaining(
-        new Set([
-          "pose_inference",
-          "pose_temporal_association",
-          "pose_review_gate",
-          "pose_active_learning",
-          "pose_active_learning_review_gate",
-          "pose_training_dataset_freeze",
-          "pose_training_export",
-          "pose_model_training",
-          "register_trained_model",
-          "training_results_package",
-        ]),
-      ),
-    );
+    for (const nodeType of [
+      "pose_inference",
+      "pose_temporal_association",
+      "pose_review_gate",
+      "pose_active_learning",
+      "pose_active_learning_review_gate",
+      "pose_training_dataset_freeze",
+      "pose_training_export",
+      "pose_model_training",
+      "register_trained_model",
+      "training_results_package",
+    ]) {
+      expect(nodeTypes.has(nodeType)).toBe(true);
+    }
 
     expect(
       graph.edges.some(
