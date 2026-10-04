@@ -49,6 +49,7 @@ _MODEL_PURPOSES_BY_NODE: dict[str, set[str]] = {
     "relative_depth_estimation": {"depth"},
     "video_tracking": {"detector", "segmenter"},
     "pose_inference": {"detector"},
+    "pose_model_training": {"detector"},
 }
 
 _ACTIONS: dict[str, str] = {
@@ -120,6 +121,9 @@ _ACTIONS: dict[str, str] = {
     ),
     "pose_training_export": (
         "Export the immutable pose dataset through the validated Phase 9 exporters."
+    ),
+    "pose_model_training": (
+        "Retrain an Ultralytics pose checkpoint from immutable scientist-verified pose truth."
     ),
     "project_exchange_export": "Build a Phase 9 checksummed project exchange export inline.",
 }

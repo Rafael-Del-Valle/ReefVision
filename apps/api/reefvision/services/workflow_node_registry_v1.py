@@ -14,6 +14,9 @@ from reefvision.services.workflow_node_registry import (
     workflow_node_registry as base_workflow_node_registry,
 )
 from reefvision.services.workflow_pose import register_pose_workflow_adapters
+from reefvision.services.workflow_pose_training import (
+    register_pose_training_workflow_adapter,
+)
 from reefvision.services.workflow_results_packages import (
     register_results_package_workflow_adapter,
 )
@@ -21,6 +24,7 @@ from reefvision.services.workflow_results_packages import (
 register_video_depth_3d_adapter()
 register_video_metric_depth_3d_adapter()
 register_pose_workflow_adapters()
+register_pose_training_workflow_adapter()
 register_results_package_workflow_adapter()
 
 
@@ -471,6 +475,85 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 ],
             ),
         }
+    )
+
+    registry["pose_model_training"] = WorkflowNodeDefinitionResponse(
+        node_type="pose_model_training",
+        display_name="Retrain Pose Model",
+        category="Training",
+        description=(
+            "Retrain a registered Ultralytics pose model from an immutable, "
+            "scientist-verified ReefVision pose dataset."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="dataset",
+                display_name="Frozen pose training dataset",
+                accepted_types=["pose_training_dataset"],
+            ),
+            WorkflowPortDefinition(
+                port_id="validation_dataset",
+                display_name="Frozen pose validation dataset",
+                accepted_types=["pose_training_dataset"],
+                required=False,
+            ),
+            WorkflowPortDefinition(
+                port_id="initial_model",
+                display_name="Seed pose model",
+                accepted_types=["model_reference"],
+            ),
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="training",
+                display_name="Pose training result",
+                accepted_types=["training_result"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=[],
+        optional_parameters={
+            "run_name": "workflow-pose-retrain",
+            "notes": None,
+            "device": "auto",
+            "precision": "fp32",
+            "random_seed": None,
+            "require_validation_dataset": False,
+            "training_config": {
+                "epochs": 50,
+                "patience": 20,
+                "batch": 8,
+                "imgsz": 640,
+                "optimizer": "auto",
+                "workers": 2,
+                "cache": False,
+                "plots": True,
+            },
+            "resource_limits": {},
+        },
+        execution_state="executable_pose_training",
+        executable=True,
+        implementation_notes=[
+            (
+                "Training truth must come from an immutable "
+                "scientist-verified pose_training_dataset."
+            ),
+            (
+                "The seed checkpoint must be a registered Ultralytics "
+                "task=pose model whose bound landmark schema matches the "
+                "frozen dataset."
+            ),
+            (
+                "A separate frozen validation dataset may be connected. "
+                "If none is supplied, validation is disabled; training "
+                "frames are never silently reused as validation evidence."
+            ),
+            (
+                "Execution produces the normal ReefVision training_result "
+                "artifact so Results Package integration remains shared."
+            ),
+        ],
     )
 
     registry["training_results_package"] = WorkflowNodeDefinitionResponse(

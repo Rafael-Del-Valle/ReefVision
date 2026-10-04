@@ -18,7 +18,7 @@ from reefvision.snapshot_cache import CachedSnapshot, get_cached_snapshot
 ULTRALYTICS_PROVIDER_VERSION = provider_spec("ultralytics").provider_version
 ULTRALYTICS_VERSION_LABEL = f"Ultralytics {ULTRALYTICS_PROVIDER_VERSION}"
 
-SUPPORTED_REEFVISION_TASKS: tuple[str, ...] = ("detect", "segment")
+SUPPORTED_REEFVISION_TASKS: tuple[str, ...] = ("detect", "segment", "pose")
 SUPPORTED_REEFVISION_MODES: tuple[str, ...] = (
     "train",
     "val",
@@ -547,7 +547,8 @@ def validate_ultralytics_training_configuration(
     snapshot = ultralytics_training_registry(settings)
     if task not in SUPPORTED_REEFVISION_TASKS:
         raise ValidationError(
-            "ReefVision currently supports Ultralytics training only for detect and segment tasks"
+            "ReefVision currently supports Ultralytics training only for "
+            "detect, segment, and pose tasks"
         )
     if mode not in SUPPORTED_REEFVISION_MODES:
         raise ValidationError(
@@ -657,10 +658,12 @@ def _build_parameter_record(
 
 
 def _supported_tasks(name: str) -> tuple[str, ...]:
-    if name in CLASSIFY_ONLY_KEYS or name in POSE_ONLY_KEYS or name in TRACK_ONLY_KEYS:
+    if name in CLASSIFY_ONLY_KEYS or name in TRACK_ONLY_KEYS:
         return ()
     if name in SEGMENT_ONLY_KEYS:
         return ("segment",)
+    if name in POSE_ONLY_KEYS:
+        return ("pose",)
     return SUPPORTED_REEFVISION_TASKS
 
 
@@ -737,7 +740,7 @@ def _dependency_rules(name: str) -> tuple[str, ...]:
             "implement classify training."
         )
     if name in POSE_ONLY_KEYS:
-        rules.append("Pose-only parameter. ReefVision does not currently implement pose training.")
+        rules.append("Available only for ReefVision pose-training workflows.")
     if name in TRACK_ONLY_KEYS:
         rules.append(
             "Tracking-only parameter. ReefVision does not currently implement tracking workflows."

@@ -50,6 +50,7 @@ if ($LASTEXITCODE -ne 0) {
     apps/api/reefvision/tests/test_workflow_pose_runtime_phase10.py `
     apps/api/reefvision/tests/test_workflow_pose_review_resume_phase10.py `
     apps/api/reefvision/tests/test_workflow_results_package_phase10.py `
+    apps/api/reefvision/tests/test_workflow_pose_training_phase10.py `
     apps/api/reefvision/tests/test_workflow_review_phase10.py `
     apps/api/reefvision/tests/test_workflow_graphs_phase10.py `
     -q
@@ -68,3 +69,5 @@ Write-Host "[ ] Active Learning Review requires a retraining-ready canonical rou
 Write-Host "[ ] Only verified Active Learning truth reaches dataset freeze/export."
 Write-Host ""
 Write-Host "Phase 10B-1 Results Package workflow integration validated."
+
+Write-Host "Phase 10B-2A Ultralytics pose retraining validated."

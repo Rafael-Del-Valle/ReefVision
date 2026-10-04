@@ -108,3 +108,20 @@ def test_ultralytics_training_validation_endpoint_accepts_native_tune_bounds(
     assert payload["normalized_mode"] == "train"
     assert payload["validated_parameters"]["epochs"] == 100
     assert payload["validated_search_space"][0]["name"] == "lr0"
+
+
+def test_ultralytics_registry_exposes_pose_training_parameters(
+    test_settings: Settings,
+) -> None:
+    snapshot = ultralytics_training_registry(test_settings)
+
+    assert "pose" in snapshot.supported_tasks
+
+    records = {item.name: item for item in snapshot.parameters}
+
+    assert records["epochs"].reefvision_supported is True
+    assert "pose" in records["epochs"].supported_tasks
+    assert records["pose"].reefvision_supported is True
+    assert records["pose"].supported_tasks == ("pose",)
+    assert records["kobj"].reefvision_supported is True
+    assert records["kobj"].supported_tasks == ("pose",)

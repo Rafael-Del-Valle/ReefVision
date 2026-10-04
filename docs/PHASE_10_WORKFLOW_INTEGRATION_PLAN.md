@@ -248,3 +248,48 @@ The shared builder now:
 This is a storage-safety correction used by both normal Training workspace
 Results Packages and workflow-generated Results Packages; it does not alter
 training metrics, dataset hashes, checkpoint hashes, or package verification.
+
+
+### 10B-2A — Actual Ultralytics pose retraining
+
+ReefVision now has a production `pose_model_training` workflow node.
+
+This is actual model training, not an export alias.
+
+The node requires:
+
+- an immutable scientist-verified `pose_training_dataset`
+- a registered Ultralytics `task=pose` seed checkpoint
+- an exact matching ReefVision landmark-schema content hash
+
+A second frozen pose dataset may optionally be connected as validation truth.
+
+Validation policy is fail-explicit:
+
+- with a separate frozen validation dataset, Ultralytics receives
+  `images/train` and `images/val`
+- without a separate validation dataset, the runner forces `val=false`
+- the training frames are never silently reused and reported as independent
+  validation evidence
+- runs without validation carry an explicit scientific warning
+
+Pose runs use ReefVision's normal persisted `TrainingRun`, `Job`,
+`ExperimentRecord`, checkpoint hashing, metrics collection, cancellation,
+workflow provenance, and `training_result` artifact type.
+
+The pose training split identity is represented by a canonical SHA-256 over
+the exact training dataset, optional validation dataset, schema identity, and
+validation mode.
+
+### 10B-2B remaining
+
+The next slice binds the newly trained Ultralytics pose checkpoint back to the
+exact frozen ReefVision landmark-schema revision during model registration and
+validates the complete:
+
+pose_training_dataset
+→ pose_model_training
+→ register_trained_model
+→ training_results_package
+
+chain.
