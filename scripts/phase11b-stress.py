@@ -75,7 +75,7 @@ class OfflineSocketGuard(AbstractContextManager["OfflineSocketGuard"]):
 
     def __init__(self) -> None:
         self.attempts: list[str] = []
-        self._connect = socket.socket.connect
+        self._socket_class = socket.socket
         self._create_connection = socket.create_connection
         self._getaddrinfo = socket.getaddrinfo
 
@@ -86,7 +86,6 @@ class OfflineSocketGuard(AbstractContextManager["OfflineSocketGuard"]):
 
     def __enter__(self) -> "OfflineSocketGuard":
         guard = self
-
         original_socket_class = self._socket_class
 
         class GuardedSocket(original_socket_class):
@@ -124,7 +123,7 @@ class OfflineSocketGuard(AbstractContextManager["OfflineSocketGuard"]):
                 guard._reject(host)
             return guard._getaddrinfo(host, port, family, type, proto, flags)
 
-        socket.socket.connect = guarded_connect  # type: ignore[method-assign]
+        socket.socket = GuardedSocket  # type: ignore[assignment]
         socket.create_connection = guarded_create_connection
         socket.getaddrinfo = guarded_getaddrinfo
         return self
@@ -135,7 +134,7 @@ class OfflineSocketGuard(AbstractContextManager["OfflineSocketGuard"]):
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> bool | None:
-        socket.socket.connect = self._connect  # type: ignore[method-assign]
+        socket.socket = self._socket_class  # type: ignore[assignment]
         socket.create_connection = self._create_connection
         socket.getaddrinfo = self._getaddrinfo
         return None
