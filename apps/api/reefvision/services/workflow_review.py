@@ -12,6 +12,8 @@ from reefvision.db.models import (
     ClassificationPrediction,
     Job,
     PredictionProposal,
+    VideoAsset,
+    VideoTrack,
     WorkflowArtifact,
     WorkflowNodeRun,
     WorkflowRun,
@@ -20,6 +22,12 @@ from reefvision.domain.errors import ConflictError, NotFoundError, ValidationErr
 from reefvision.schemas.workflow_execution import (
     WorkflowReviewResumeRequest,
     WorkflowRunResponse,
+)
+from reefvision.services.pose_active_learning import (
+    PoseActiveLearningService,
+)
+from reefvision.services.pose_temporal_tracking import (
+    PoseTemporalTrackingService,
 )
 from reefvision.services.workflow_auto_label import (
     ensure_disagreement_active_learning_round,
@@ -30,6 +38,8 @@ REVIEW_GATE_NODE_TYPES = {
     "detection_review_gate",
     "mask_review_gate",
     "classification_review_gate",
+    "pose_review_gate",
+    "pose_active_learning_review_gate",
 }
 
 
@@ -156,6 +166,202 @@ def _auto_label_post_review(
     }
 
 
+def pose_temporal_review_status(
+    session: Session,
+    artifact: WorkflowArtifact,
+    *,
+    project_id: str,
+) -> dict[str, Any]:
+    """Return fail-closed readiness for scientist approval of temporal pose state."""
+
+    if artifact.data_type != "pose_temporal_tracks":
+        raise ValidationError("Pose Review requires a pose_temporal_tracks artifact")
+
+    payload = dict(artifact.payload_json or {})
+
+    if payload.get("project_id") not in {None, project_id}:
+        raise ValidationError("Pose Review received temporal tracks from another project")
+
+    raw_track_ids = payload.get("track_ids", [])
+
+    if not isinstance(raw_track_ids, list):
+        raise ValidationError("Pose Review artifact track_ids are invalid")
+
+    track_ids = list(
+        dict.fromkeys(str(value) for value in raw_track_ids if isinstance(value, str) and value)
+    )
+
+    if not track_ids:
+        raise ValidationError("Pose Review requires at least one temporal pose track")
+
+    expected_revisions: dict[str, int] = {}
+
+    raw_builds = payload.get("builds", [])
+    if isinstance(raw_builds, list):
+        for raw in raw_builds:
+            if not isinstance(raw, dict):
+                continue
+
+            track_id = str(raw.get("parent_video_track_id") or "")
+            revision = raw.get("source_track_revision")
+
+            if track_id and isinstance(revision, int) and revision >= 1:
+                expected_revisions[track_id] = revision
+
+    service = PoseTemporalTrackingService(session)
+
+    stale_track_ids: list[str] = []
+    missing_decision_observation_ids: list[str] = []
+    unreviewed_unresolved_observation_ids: list[str] = []
+    unreviewed_identity_break_decision_ids: list[str] = []
+    unverified_identity_break_ids: list[str] = []
+    current_track_revisions: dict[str, int] = {}
+    qc_by_track: list[dict[str, Any]] = []
+
+    for track_id in track_ids:
+        track = session.get(VideoTrack, track_id)
+
+        if track is None or track.deleted_at is not None:
+            raise ValidationError("A Pose Review source track no longer exists")
+
+        video = session.get(VideoAsset, track.video_id)
+
+        if video is None or video.project_id != project_id:
+            raise ValidationError("A Pose Review source track belongs to another project")
+
+        current_track_revisions[track.id] = track.revision
+
+        expected_revision = expected_revisions.get(track.id)
+
+        if expected_revision is not None and track.revision != expected_revision:
+            stale_track_ids.append(track.id)
+
+        summary = service.summary(track.id)
+
+        latest_decisions: dict[str, Any] = {}
+
+        for decision in summary.association_decisions:
+            current = latest_decisions.get(decision.observation_id)
+
+            if current is None or decision.decision_revision > current.decision_revision:
+                latest_decisions[decision.observation_id] = decision
+
+        for observation in summary.observations:
+            latest_decision = latest_decisions.get(observation.id)
+
+            if latest_decision is None:
+                missing_decision_observation_ids.append(observation.id)
+                continue
+
+            if (
+                latest_decision.association_state == "unresolved"
+                and latest_decision.verification_state == "unreviewed"
+            ):
+                unreviewed_unresolved_observation_ids.append(observation.id)
+
+            if (
+                latest_decision.association_state == "identity_break"
+                and latest_decision.verification_state == "unreviewed"
+            ):
+                unreviewed_identity_break_decision_ids.append(latest_decision.id)
+
+        for identity_break in summary.identity_breaks:
+            if not identity_break.human_verified:
+                unverified_identity_break_ids.append(identity_break.id)
+
+        qc = service.qc(track.id)
+
+        qc_by_track.append(
+            {
+                "track_id": track.id,
+                "issue_count": qc.issue_count,
+                "flagged_frame_count": (qc.flagged_frame_count),
+                "unresolved_identity_count": (qc.unresolved_identity_count),
+                "low_association_confidence_count": (qc.low_association_confidence_count),
+                "low_landmark_confidence_count": (qc.low_landmark_confidence_count),
+                "high_motion_cost_count": (qc.high_motion_cost_count),
+                "uncertain_visibility_count": (qc.uncertain_visibility_count),
+                "identity_break_count": (qc.identity_break_count),
+            }
+        )
+
+    ready = not any(
+        (
+            stale_track_ids,
+            missing_decision_observation_ids,
+            unreviewed_unresolved_observation_ids,
+            unreviewed_identity_break_decision_ids,
+            unverified_identity_break_ids,
+        )
+    )
+
+    return {
+        "schema_version": "pose-workflow-review-readiness-0001",
+        "ready": ready,
+        "project_id": project_id,
+        "source_artifact_id": artifact.id,
+        "track_ids": track_ids,
+        "track_count": len(track_ids),
+        "current_track_revisions": (current_track_revisions),
+        "stale_track_ids": sorted(stale_track_ids),
+        "missing_decision_observation_ids": sorted(set(missing_decision_observation_ids)),
+        "unreviewed_unresolved_observation_ids": sorted(set(unreviewed_unresolved_observation_ids)),
+        "unreviewed_identity_break_decision_ids": sorted(
+            set(unreviewed_identity_break_decision_ids)
+        ),
+        "unverified_identity_break_ids": sorted(set(unverified_identity_break_ids)),
+        "qc_by_track": qc_by_track,
+    }
+
+
+def pose_active_learning_review_status(
+    session: Session,
+    artifact: WorkflowArtifact,
+    *,
+    project_id: str,
+) -> dict[str, Any]:
+    """Return retraining readiness for one workflow Active Learning round."""
+
+    if artifact.data_type != "pose_active_learning_round":
+        raise ValidationError(
+            "Pose Active Learning Review requires a pose_active_learning_round artifact"
+        )
+
+    payload = dict(artifact.payload_json or {})
+
+    if payload.get("project_id") not in {None, project_id}:
+        raise ValidationError("Pose Active Learning Review received a round from another project")
+
+    round_id = str(payload.get("round_id") or "")
+
+    if not round_id:
+        raise ValidationError("Pose Active Learning Review artifact is missing round_id")
+
+    manifest = PoseActiveLearningService(session).export_manifest(round_id)
+
+    if manifest.project_id != project_id:
+        raise ValidationError("Pose Active Learning round belongs to another project")
+
+    ready = manifest.status == "complete" and manifest.retraining_ready
+
+    return {
+        "schema_version": ("pose-active-learning-workflow-review-readiness-0001"),
+        "ready": ready,
+        "project_id": project_id,
+        "source_artifact_id": artifact.id,
+        "round_id": manifest.round_id,
+        "video_id": manifest.video_id,
+        "selection_sha256": manifest.selection_sha256,
+        "selection_algorithm": (manifest.selection_algorithm),
+        "selection_algorithm_version": (manifest.selection_algorithm_version),
+        "round_status": manifest.status,
+        "retraining_ready": (manifest.retraining_ready),
+        "verified_candidate_count": (manifest.verified_candidate_count),
+        "pending_candidate_count": (manifest.pending_candidate_count),
+        "skipped_candidate_count": (manifest.skipped_candidate_count),
+    }
+
+
 def resume_review_gate(
     session: Session,
     node_run_id: str,
@@ -179,9 +385,54 @@ def resume_review_gate(
         raise ConflictError("Workflow run is not paused at this review node")
 
     artifacts = _input_artifacts(session, node_run)
-    pending_count = _pending_review_count(session, artifacts)
-    if pending_count:
-        raise ValidationError(f"{pending_count} model prediction(s) are still pending review")
+
+    review_context: dict[str, Any] = {}
+
+    if node_run.node_type == "pose_review_gate":
+        if len(artifacts) != 1:
+            raise ValidationError("Pose Review requires exactly one temporal-pose artifact")
+
+        pose_status = pose_temporal_review_status(
+            session,
+            artifacts[0],
+            project_id=run.project_id,
+        )
+
+        if not pose_status["ready"]:
+            raise ValidationError(
+                "Pose review cannot be approved while stale tracks, "
+                "unreviewed unresolved identities, unverified identity "
+                "breaks, or missing association decisions remain"
+            )
+
+        review_context["pose_review_status"] = pose_status
+
+    elif node_run.node_type == "pose_active_learning_review_gate":
+        if len(artifacts) != 1:
+            raise ValidationError("Pose Active Learning Review requires exactly one round artifact")
+
+        active_learning_status = pose_active_learning_review_status(
+            session,
+            artifacts[0],
+            project_id=run.project_id,
+        )
+
+        if not active_learning_status["ready"]:
+            raise ValidationError(
+                "Pose Active Learning round is not retraining-ready. "
+                "Finish or skip every candidate and verify at least one pose."
+            )
+
+        review_context["pose_active_learning_review_status"] = active_learning_status
+
+    else:
+        pending_count = _pending_review_count(
+            session,
+            artifacts,
+        )
+
+        if pending_count:
+            raise ValidationError(f"{pending_count} model prediction(s) are still pending review")
 
     auto_label_result = (
         _auto_label_post_review(
@@ -201,6 +452,7 @@ def resume_review_gate(
         "note": request.note,
         "approved_at": now.isoformat(),
         "input_artifact_ids": [artifact.id for artifact in artifacts],
+        **review_context,
         **auto_label_result,
     }
     node_run.result_json = result

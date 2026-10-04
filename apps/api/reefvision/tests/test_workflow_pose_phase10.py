@@ -7,11 +7,13 @@ from reefvision.services.workflow_runtime_adapters import (
 )
 from reefvision.tests.test_annotations import create_project
 
-_EXECUTABLE_PHASE10_NODES = {
+_PHASE10_POSE_NODES = {
     "pose_inference",
     "pose_temporal_association",
+    "pose_review_gate",
     "behavior_dynamics",
     "pose_active_learning",
+    "pose_active_learning_review_gate",
     "pose_training_dataset_freeze",
     "pose_training_export",
 }
@@ -20,8 +22,6 @@ _PHASE10_REVIEW_GATES = {
     "pose_review_gate",
     "pose_active_learning_review_gate",
 }
-
-_PHASE10_POSE_NODES = _EXECUTABLE_PHASE10_NODES | _PHASE10_REVIEW_GATES
 
 
 def test_phase10_pose_workflow_contracts_are_registered(
@@ -34,39 +34,48 @@ def test_phase10_pose_workflow_contracts_are_registered(
 
     assert _PHASE10_POSE_NODES.issubset(registry)
 
-    for node_type in _EXECUTABLE_PHASE10_NODES:
+    assert _PHASE10_POSE_NODES.issubset(RUNTIME_ADAPTER_NODE_TYPES)
+
+    for node_type in _PHASE10_POSE_NODES:
         assert registry[node_type]["executable"] is True
-        assert registry[node_type]["execution_state"] == "executable_pose_workflow"
 
     for node_type in _PHASE10_REVIEW_GATES:
-        assert registry[node_type]["executable"] is False
-        assert registry[node_type]["execution_state"] == "contract_only_phase10a"
-
-    assert _EXECUTABLE_PHASE10_NODES.issubset(RUNTIME_ADAPTER_NODE_TYPES)
+        assert registry[node_type]["execution_state"] == "pausable_review_gate"
 
     pose = registry["pose_inference"]
+
     assert {item["port_id"] for item in pose["input_ports"]} == {
         "video",
         "model",
     }
+
     assert pose["output_ports"][0]["accepted_types"] == ["pose_tracks"]
 
     temporal = registry["pose_temporal_association"]
+
     assert temporal["input_ports"][0]["accepted_types"] == ["pose_tracks"]
+
     assert temporal["output_ports"][0]["accepted_types"] == ["pose_temporal_tracks"]
 
     review = registry["pose_review_gate"]
+
     assert review["input_ports"][0]["accepted_types"] == ["pose_temporal_tracks"]
+
     assert review["output_ports"][0]["accepted_types"] == ["reviewed_pose_tracks"]
 
     behavior = registry["behavior_dynamics"]
+
     assert behavior["required_parameters"] == ["ethogram_revision_id"]
 
-    freeze = registry["pose_training_dataset_freeze"]
-    assert freeze["output_ports"][0]["accepted_types"] == ["pose_training_dataset"]
+    al_review = registry["pose_active_learning_review_gate"]
 
-    export = registry["pose_training_export"]
-    assert export["optional_parameters"]["format"] == "native"
+    assert al_review["input_ports"][0]["accepted_types"] == ["pose_active_learning_round"]
+
+    assert al_review["output_ports"][0]["accepted_types"] == ["verified_pose_active_learning_round"]
+
+    freeze = registry["pose_training_dataset_freeze"]
+
+    assert freeze["output_ports"][0]["accepted_types"] == ["pose_training_dataset"]
 
 
 def test_phase10_behavior_requires_reviewed_pose_truth(
@@ -113,11 +122,9 @@ def test_phase10_behavior_requires_reviewed_pose_truth(
     payload = response.json()
     assert payload["valid"] is False
 
-    issues = payload["issues"]
-
     assert any(
-        item["code"] == "incompatible_port_types" and item["edge_id"] == ("unreviewed-to-behavior")
-        for item in issues
+        item["code"] == "incompatible_port_types" and item["edge_id"] == "unreviewed-to-behavior"
+        for item in payload["issues"]
     )
 
 

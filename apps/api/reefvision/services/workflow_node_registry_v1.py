@@ -256,8 +256,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 ],
                 required_parameters=[],
                 optional_parameters={},
-                execution_state="contract_only_phase10a",
-                executable=False,
+                execution_state="pausable_review_gate",
+                executable=True,
                 implementation_notes=[
                     "Machine-generated pose state is not equivalent to scientist-verified truth.",
                     (
@@ -373,8 +373,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 ],
                 required_parameters=[],
                 optional_parameters={},
-                execution_state="contract_only_phase10a",
-                executable=False,
+                execution_state="pausable_review_gate",
+                executable=True,
                 implementation_notes=[
                     (
                         "Pending or skipped candidates must never be represented as "

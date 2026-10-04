@@ -110,3 +110,79 @@ The following scientist boundaries remain intentionally non-executable:
 
 Phase 10A-3 will implement persisted pause/resume semantics and will verify
 that completed upstream nodes are not rerun after scientist review.
+
+
+## Phase 10A-3 — Scientist review and persisted resume
+
+Both pose review boundaries now use ReefVision's existing persisted workflow
+pause/resume system.
+
+### Pose review gate
+
+`pose_review_gate` pauses after temporal association and records the exact
+source artifact. Resume is refused while any of the following remain:
+
+- temporal source track changed after association, making it stale
+- an observation has no association decision
+- an unresolved identity remains machine-only/unreviewed
+- an identity-break association remains machine-only/unreviewed
+- a tracker-created identity break has not been explicitly human verified
+
+Low-confidence and other QC flags remain visible in the readiness snapshot,
+but a scientist may approve them globally after inspection. An explicitly
+unresolved identity is acceptable only after the scientist records that
+decision through the normal correction path.
+
+The resulting `reviewed_pose_tracks` artifact stores the exact source
+artifact checksum, reviewed track revisions, review approval, and readiness
+snapshot.
+
+### Pose Active Learning review gate
+
+`pose_active_learning_review_gate` pauses until the canonical Active Learning
+manifest is retraining-ready:
+
+- every candidate is verified or skipped
+- at least one candidate is scientist verified
+- every verified candidate has a verified pose checksum
+- the round has reached complete status
+
+The gate emits `verified_pose_active_learning_round`; only that type can feed
+the immutable pose-training freeze node.
+
+### Resume invariant
+
+On resume, workflow nodes already marked `succeeded` are skipped. Pose
+inference, temporal association, and Active Learning are therefore not rerun
+after scientist review. Their existing artifact IDs and checksums remain the
+inputs to downstream scientific outputs.
+
+## Phase 10A status
+
+Phase 10A is complete when 10A-3 validation passes:
+
+- all eight pose/behavior workflow nodes executable
+- both human-review nodes persist pause/resume state
+- upstream pose computation is not repeated on resume
+- only scientist-verified Active Learning truth can be frozen/exported
+
+
+### Windows-safe workflow export storage
+
+Pose-training workflow exports retain their full original export filename in
+artifact provenance, but the physical managed-project filename is compact and
+run-scoped.
+
+This prevents deeply nested Windows data roots from exceeding the classic
+MAX_PATH limit while preserving:
+
+- original export filename
+- media type
+- immutable bundle SHA-256
+- dataset identity
+- workflow run identity
+- workflow node-run identity
+- managed relative path
+
+The physical filename is an implementation/storage detail and does not change
+the contents or scientific identity of the immutable training package.

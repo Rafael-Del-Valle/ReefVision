@@ -48,6 +48,8 @@ if ($LASTEXITCODE -ne 0) {
 & $Python -m pytest `
     apps/api/reefvision/tests/test_workflow_pose_phase10.py `
     apps/api/reefvision/tests/test_workflow_pose_runtime_phase10.py `
+    apps/api/reefvision/tests/test_workflow_pose_review_resume_phase10.py `
+    apps/api/reefvision/tests/test_workflow_review_phase10.py `
     apps/api/reefvision/tests/test_workflow_graphs_phase10.py `
     -q
 
@@ -56,12 +58,12 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ""
-Write-Host "Phase 10A-1 manual contract checks:"
-Write-Host "[ ] Pose nodes appear in the workflow registry."
-Write-Host "[ ] Pose/behavior nodes remain visibly non-executable until adapters exist."
-Write-Host "[ ] Behavior cannot consume unreviewed temporal pose output directly."
-Write-Host "[ ] Pose review converts temporal pose state into reviewed pose state."
-Write-Host "[ ] Frozen training truth requires a verified Active Learning round."
-Write-Host "[ ] No duplicate pose/behavior scientific implementation was introduced."
+Write-Host "Phase 10A-3 scientist review checks:"
+Write-Host "[ ] Pose Review pauses instead of silently promoting machine pose state."
+Write-Host "[ ] Unreviewed unresolved identities block Pose Review approval."
+Write-Host "[ ] Tracker identity breaks require explicit scientist verification."
+Write-Host "[ ] Resume preserves succeeded upstream node artifacts without rerunning pose inference."
+Write-Host "[ ] Active Learning Review requires a retraining-ready canonical round."
+Write-Host "[ ] Only verified Active Learning truth reaches dataset freeze/export."
 Write-Host ""
-Write-Host "Phase 10A-2 automated scope complete. Scientist review/resume gates remain Phase 10A-3."
+Write-Host "Phase 10A automated scope complete."

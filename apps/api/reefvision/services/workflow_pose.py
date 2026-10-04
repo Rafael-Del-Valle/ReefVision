@@ -41,6 +41,11 @@ from reefvision.services.pose_training_datasets import (
 from reefvision.services.pose_training_exports import (
     PoseTrainingExportService,
 )
+from reefvision.services.workflow_review import (
+    WorkflowReviewRequired,
+    pose_active_learning_review_status,
+    pose_temporal_review_status,
+)
 from reefvision.storage.projects import resolve_managed_project_path
 
 POSE_WORKFLOW_RUNTIME_NODE_TYPES = {
@@ -48,6 +53,8 @@ POSE_WORKFLOW_RUNTIME_NODE_TYPES = {
     "pose_temporal_association",
     "behavior_dynamics",
     "pose_active_learning",
+    "pose_review_gate",
+    "pose_active_learning_review_gate",
     "pose_training_dataset_freeze",
     "pose_training_export",
 }
@@ -734,11 +741,19 @@ def execute_pose_training_export_adapter(
 
     workflow_node_run_id = str(parameters.get("__workflow_node_run_id") or "unscoped")
 
-    relative_path = (
-        f"{project.storage_root}/derived/workflows/"
-        f"{workflow_run_id}/{workflow_node_run_id}/"
-        f"pose-training/{filename}"
-    )
+    # Keep the user-facing/original export filename in provenance,
+    # but use a compact physical storage name. Workflow run/node UUIDs
+    # plus the long native export filename can exceed the classic
+    # Windows MAX_PATH limit in deeply nested data roots (especially
+    # pytest temp roots).
+    storage_extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
+
+    if not storage_extension.isalnum() or len(storage_extension) > 10:
+        storage_extension = "bin"
+
+    storage_filename = f"pose-{workflow_node_run_id[:8]}.{storage_extension}"
+
+    relative_path = f"{project.storage_root}/derived/workflows/{workflow_run_id}/{storage_filename}"
 
     destination = resolve_managed_project_path(
         settings,
@@ -762,6 +777,7 @@ def execute_pose_training_export_adapter(
                 "dataset_id": dataset_id,
                 "export_format": export_format,
                 "filename": filename,
+                "storage_filename": storage_filename,
                 "media_type": media_type,
                 "lossy": lossy,
                 "bundle_sha256": (bundle_sha256),
@@ -774,11 +790,174 @@ def execute_pose_training_export_adapter(
     ]
 
 
+def execute_pose_review_gate_adapter(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    del settings, parameters
+
+    source = runtime_adapters._single_artifact(
+        inputs,
+        "tracks",
+    )
+
+    payload = dict(source.payload_json or {})
+
+    if payload.get("project_id") not in {
+        None,
+        project_id,
+    }:
+        raise ValidationError("Pose Review received tracks from another project")
+
+    node_run = runtime_adapters._current_review_node(
+        session,
+        source,
+        "pose_review_gate",
+    )
+
+    readiness = pose_temporal_review_status(
+        session,
+        source,
+        project_id=project_id,
+    )
+
+    approval = dict((node_run.result_json or {}).get("review_approval") or {})
+
+    if not approval:
+        raise WorkflowReviewRequired(
+            f"{node_run.node_id} is waiting for scientist pose review",
+            details={
+                "node_run_id": node_run.id,
+                "node_id": node_run.node_id,
+                "node_type": node_run.node_type,
+                "source_artifact_id": source.id,
+                "source_data_type": source.data_type,
+                "review_workspace": "pose_annotation_editor",
+                "track_ids": readiness["track_ids"],
+                "review_readiness": readiness,
+            },
+        )
+
+    if not readiness["ready"]:
+        raise ValidationError(
+            "Pose Review approval is no longer valid because "
+            "the canonical temporal pose state has unresolved blockers"
+        )
+
+    return [
+        {
+            "port_id": "poses",
+            "data_type": "reviewed_pose_tracks",
+            "payload": {
+                "schema_version": ("reviewed-pose-tracks-workflow-0001"),
+                "project_id": project_id,
+                "video_id": payload.get("video_id"),
+                "video_sha256": payload.get("video_sha256"),
+                "track_ids": readiness["track_ids"],
+                "count": readiness["track_count"],
+                "track_revisions": (readiness["current_track_revisions"]),
+                "source_temporal_artifact_id": (source.id),
+                "source_temporal_artifact_sha256": (source.payload_sha256),
+                "review_approval": approval,
+                "review_readiness": readiness,
+                "truth_status": "scientist_reviewed",
+            },
+        }
+    ]
+
+
+def execute_pose_active_learning_review_gate_adapter(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    del settings, parameters
+
+    source = runtime_adapters._single_artifact(
+        inputs,
+        "round",
+    )
+
+    payload = dict(source.payload_json or {})
+
+    if payload.get("project_id") not in {
+        None,
+        project_id,
+    }:
+        raise ValidationError("Pose Active Learning Review received a round from another project")
+
+    node_run = runtime_adapters._current_review_node(
+        session,
+        source,
+        "pose_active_learning_review_gate",
+    )
+
+    readiness = pose_active_learning_review_status(
+        session,
+        source,
+        project_id=project_id,
+    )
+
+    approval = dict((node_run.result_json or {}).get("review_approval") or {})
+
+    if not approval:
+        raise WorkflowReviewRequired(
+            f"{node_run.node_id} is waiting for scientist Active Learning review",
+            details={
+                "node_run_id": node_run.id,
+                "node_id": node_run.node_id,
+                "node_type": node_run.node_type,
+                "source_artifact_id": source.id,
+                "source_data_type": source.data_type,
+                "review_workspace": "pose_annotation_editor",
+                "round_id": readiness["round_id"],
+                "review_readiness": readiness,
+            },
+        )
+
+    if not readiness["ready"]:
+        raise ValidationError(
+            "Pose Active Learning approval is no longer valid because "
+            "the round is not retraining-ready"
+        )
+
+    return [
+        {
+            "port_id": "verified_round",
+            "data_type": ("verified_pose_active_learning_round"),
+            "payload": {
+                "schema_version": ("verified-pose-active-learning-workflow-0001"),
+                "project_id": project_id,
+                "video_id": readiness["video_id"],
+                "round_id": readiness["round_id"],
+                "selection_sha256": (readiness["selection_sha256"]),
+                "selection_algorithm": (readiness["selection_algorithm"]),
+                "selection_algorithm_version": (readiness["selection_algorithm_version"]),
+                "verified_candidate_count": (readiness["verified_candidate_count"]),
+                "skipped_candidate_count": (readiness["skipped_candidate_count"]),
+                "retraining_ready": True,
+                "source_round_artifact_id": (source.id),
+                "source_round_artifact_sha256": (source.payload_sha256),
+                "review_approval": approval,
+                "review_readiness": readiness,
+                "truth_policy": ("scientist_verified_only"),
+            },
+        }
+    ]
+
+
 _POSE_ADAPTERS = {
     "pose_inference": (execute_pose_inference_adapter),
     "pose_temporal_association": (execute_pose_temporal_association_adapter),
     "behavior_dynamics": (execute_behavior_dynamics_adapter),
     "pose_active_learning": (execute_pose_active_learning_adapter),
+    "pose_review_gate": (execute_pose_review_gate_adapter),
+    "pose_active_learning_review_gate": (execute_pose_active_learning_review_gate_adapter),
     "pose_training_dataset_freeze": (execute_pose_training_dataset_freeze_adapter),
     "pose_training_export": (execute_pose_training_export_adapter),
 }
