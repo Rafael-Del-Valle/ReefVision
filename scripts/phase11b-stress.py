@@ -87,11 +87,14 @@ class OfflineSocketGuard(AbstractContextManager["OfflineSocketGuard"]):
     def __enter__(self) -> "OfflineSocketGuard":
         guard = self
 
-        def guarded_connect(sock: socket.socket, address: object) -> Any:
-            if isinstance(address, tuple) and address:
-                if not is_loopback_host(address[0]):
-                    guard._reject(address)
-            return guard._connect(sock, address)  # type: ignore[arg-type]
+        original_socket_class = self._socket_class
+
+        class GuardedSocket(original_socket_class):
+            def connect(self, address: object) -> Any:
+                if isinstance(address, tuple) and address:
+                    if not is_loopback_host(address[0]):
+                        guard._reject(address)
+                return super().connect(address)  # type: ignore[arg-type]
 
         def guarded_create_connection(
             address: tuple[str, int],
