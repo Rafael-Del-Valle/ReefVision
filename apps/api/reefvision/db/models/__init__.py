@@ -46,6 +46,10 @@ from reefvision.db.models.pose_tracking import (
     PoseLandmarkObservation,
     PoseLandmarkTrack,
 )
+from reefvision.db.models.pose_training_dataset import (
+    PoseTrainingDataset,
+    PoseTrainingDatasetItem,
+)
 from reefvision.db.models.prediction_proposal import PredictionProposal
 from reefvision.db.models.project import Project
 from reefvision.db.models.project_class_visibility_default import (
@@ -105,6 +109,8 @@ __all__ = [
     "PoseLandmarkSchemaRevision",
     "PoseLandmarkTrack",
     "PoseModelSchemaBinding",
+    "PoseTrainingDataset",
+    "PoseTrainingDatasetItem",
     "PredictionProposal",
     "Project",
     "ProjectClassVisibilityDefault",

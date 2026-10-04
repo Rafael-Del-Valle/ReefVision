@@ -24,6 +24,25 @@ export interface PoseActiveLearningRound {
   completed_at: string | null;
 }
 
+export interface PoseTrainingDataset {
+  id: string;
+  project_id: string;
+  source_round_id: string;
+  name: string;
+  status: string;
+  schema_version: string;
+  pose_schema_id: string;
+  pose_schema_revision: number;
+  pose_schema_content_hash: string;
+  source_selection_sha256: string;
+  source_retraining_manifest_sha256: string;
+  manifest_json: Record<string, unknown>;
+  manifest_sha256: string;
+  item_count: number;
+  created_by: string;
+  created_at: string;
+}
+
 export interface PoseActiveLearningReviewTarget {
   workspace: "pose_annotation_editor";
   video_id: string;
@@ -164,4 +183,24 @@ export function poseActiveLearningRetrainingManifestUrl(
   roundId: string,
 ): string {
   return `${getApiBaseUrl()}/pose-active-learning-rounds/${encodeURIComponent(roundId)}/retraining-manifest`;
+}
+
+export function createPoseTrainingDataset(
+  roundId: string,
+  payload: {
+    name?: string;
+    created_by?: string;
+  } = {},
+): Promise<PoseTrainingDataset> {
+  return request(
+    `/pose-active-learning-rounds/${encodeURIComponent(roundId)}/training-dataset`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function poseTrainingDatasetNativePackageUrl(datasetId: string): string {
+  return `${getApiBaseUrl()}/pose-training-datasets/${encodeURIComponent(datasetId)}/native-package`;
 }

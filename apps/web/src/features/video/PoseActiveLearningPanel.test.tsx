@@ -12,6 +12,7 @@ vi.mock("./poseActiveLearningApi", async () => {
   return {
     ...actual,
     createPoseActiveLearningRound: vi.fn(),
+    createPoseTrainingDataset: vi.fn(),
     getPoseActiveLearningRounds: vi.fn(),
     getPoseActiveLearningCandidates: vi.fn(),
     reviewPoseActiveLearningCandidate: vi.fn(),
@@ -36,6 +37,25 @@ const round: api.PoseActiveLearningRound = {
   created_by: "local_user",
   created_at: "2026-10-03T00:00:00Z",
   completed_at: null,
+};
+
+const trainingDataset: api.PoseTrainingDataset = {
+  id: "pose-dataset-1",
+  project_id: "project-1",
+  source_round_id: "pose-round-1",
+  name: "Verified pose dataset",
+  status: "complete",
+  schema_version: "pose-training-dataset-0001",
+  pose_schema_id: "jellyfish",
+  pose_schema_revision: 3,
+  pose_schema_content_hash: "c".repeat(64),
+  source_selection_sha256: "a".repeat(64),
+  source_retraining_manifest_sha256: "d".repeat(64),
+  manifest_json: {},
+  manifest_sha256: "e".repeat(64),
+  item_count: 1,
+  created_by: "local_user",
+  created_at: "2026-10-03T00:00:00Z",
 };
 
 const candidate: api.PoseActiveLearningCandidate = {
@@ -111,6 +131,7 @@ describe("PoseActiveLearningPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.createPoseActiveLearningRound).mockResolvedValue(round);
+    vi.mocked(api.createPoseTrainingDataset).mockResolvedValue(trainingDataset);
     vi.mocked(api.getPoseActiveLearningRounds).mockResolvedValue([round]);
     vi.mocked(api.getPoseActiveLearningCandidates).mockResolvedValue([
       candidate,
@@ -210,5 +231,58 @@ describe("PoseActiveLearningPanel", () => {
         }),
       ),
     );
+  });
+
+  it("freezes a completed reviewed round into immutable training truth", async () => {
+    const completedRound: api.PoseActiveLearningRound = {
+      ...round,
+      status: "complete",
+      completed_at: "2026-10-03T01:00:00Z",
+    };
+
+    vi.mocked(api.getPoseActiveLearningRounds).mockResolvedValue([
+      completedRound,
+    ]);
+
+    vi.mocked(api.getPoseActiveLearningCandidates).mockResolvedValue([
+      {
+        ...candidate,
+        review_status: "verified",
+        verified_track_revision: 8,
+        verified_pose_sha256: "f".repeat(64),
+        correction_id: "correction-1",
+        reviewed_by: "scientist",
+        reviewed_at: "2026-10-03T01:00:00Z",
+      },
+    ]);
+
+    renderPanel();
+
+    const freezeButton = await screen.findByRole("button", {
+      name: "Freeze verified training dataset",
+    });
+
+    expect(freezeButton).toBeEnabled();
+
+    fireEvent.click(freezeButton);
+
+    await waitFor(() =>
+      expect(api.createPoseTrainingDataset).toHaveBeenCalledWith(
+        "pose-round-1",
+        {
+          created_by: "local_user",
+        },
+      ),
+    );
+
+    const frozen = await screen.findByTestId("pose-training-dataset");
+
+    expect(frozen).toHaveTextContent(/Immutable pose dataset/i);
+    expect(frozen).toHaveTextContent(/1 verified pose/i);
+    expect(
+      screen.getByRole("link", {
+        name: /Download immutable ReefVision pose dataset/i,
+      }),
+    ).toBeInTheDocument();
   });
 });

@@ -3,13 +3,16 @@ import { useEffect, useState } from "react";
 
 import {
   createPoseActiveLearningRound,
+  createPoseTrainingDataset,
   getPoseActiveLearningCandidates,
   getPoseActiveLearningRounds,
   poseActiveLearningRetrainingManifestUrl,
+  poseTrainingDatasetNativePackageUrl,
   reviewPoseActiveLearningCandidate,
   type PoseActiveLearningCandidate,
   type PoseActiveLearningSelectionMode,
   type PoseActiveLearningSelectionUnit,
+  type PoseTrainingDataset,
 } from "./poseActiveLearningApi";
 
 interface PoseActiveLearningPanelProps {
@@ -40,6 +43,8 @@ export function PoseActiveLearningPanel({
     useState<PoseActiveLearningSelectionMode>("uncertainty");
   const [diversityWeight, setDiversityWeight] = useState(0.25);
   const [selectedRoundId, setSelectedRoundId] = useState("");
+  const [frozenDataset, setFrozenDataset] =
+    useState<PoseTrainingDataset | null>(null);
 
   const roundsQuery = useQuery({
     queryKey: ["pose-active-learning-rounds", projectId, videoId],
@@ -81,6 +86,16 @@ export function PoseActiveLearningPanel({
     },
   });
 
+  const freezeDatasetMutation = useMutation({
+    mutationFn: (roundId: string) =>
+      createPoseTrainingDataset(roundId, {
+        created_by: "local_user",
+      }),
+    onSuccess: (dataset) => {
+      setFrozenDataset(dataset);
+    },
+  });
+
   const startReviewMutation = useMutation({
     mutationFn: (candidate: PoseActiveLearningCandidate) =>
       reviewPoseActiveLearningCandidate(candidate.id, {
@@ -102,9 +117,14 @@ export function PoseActiveLearningPanel({
         reviewed_by: "local_user",
       }),
     onSuccess: async (candidate) => {
-      await queryClient.invalidateQueries({
-        queryKey: ["pose-active-learning-candidates", candidate.round_id],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["pose-active-learning-candidates", candidate.round_id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["pose-active-learning-rounds", projectId, videoId],
+        }),
+      ]);
     },
   });
 
@@ -116,6 +136,7 @@ export function PoseActiveLearningPanel({
     roundsQuery.error ??
     candidatesQuery.error ??
     createMutation.error ??
+    freezeDatasetMutation.error ??
     startReviewMutation.error ??
     skipMutation.error;
 
@@ -280,6 +301,54 @@ export function PoseActiveLearningPanel({
             </p>
             <a href={poseActiveLearningRetrainingManifestUrl(selectedRound.id)}>
               Inspect retraining provenance manifest
+            </a>
+
+            <div className="workspace-actions">
+              <button
+                type="button"
+                disabled={
+                  selectedRound.status !== "complete" ||
+                  freezeDatasetMutation.isPending
+                }
+                onClick={() => freezeDatasetMutation.mutate(selectedRound.id)}
+              >
+                {freezeDatasetMutation.isPending
+                  ? "Freezing verified poses..."
+                  : "Freeze verified training dataset"}
+              </button>
+            </div>
+
+            {selectedRound.status !== "complete" && (
+              <p className="annotation-helper">
+                Finish or skip every acquisition candidate before freezing
+                training truth.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {frozenDataset && (
+        <div
+          className="workspace-guide compact"
+          data-testid="pose-training-dataset"
+        >
+          <div>
+            <strong>
+              Immutable pose dataset | {frozenDataset.item_count} verified
+              {frozenDataset.item_count === 1 ? " pose" : " poses"}
+            </strong>
+            <p className="annotation-helper">
+              Dataset manifest {frozenDataset.manifest_sha256.slice(0, 12)}... |
+              schema {frozenDataset.pose_schema_id} revision{" "}
+              {frozenDataset.pose_schema_revision}
+            </p>
+            <p className="annotation-helper">
+              This snapshot contains scientist-verified pose truth only. Later
+              edits to the live track do not mutate the frozen dataset.
+            </p>
+            <a href={poseTrainingDatasetNativePackageUrl(frozenDataset.id)}>
+              Download immutable ReefVision pose dataset
             </a>
           </div>
         </div>

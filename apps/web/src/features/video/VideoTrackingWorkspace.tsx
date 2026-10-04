@@ -763,12 +763,21 @@ export function VideoTrackingWorkspace({
             note: "Verified through the ReefVision Pose Annotation Editor.",
           },
         );
-        await queryClient.invalidateQueries({
-          queryKey: [
-            "pose-active-learning-candidates",
-            activePoseActiveLearningCandidate.round_id,
-          ],
-        });
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: [
+              "pose-active-learning-candidates",
+              activePoseActiveLearningCandidate.round_id,
+            ],
+          }),
+          queryClient.invalidateQueries({
+            queryKey: [
+              "pose-active-learning-rounds",
+              project.id,
+              selectedVideoId,
+            ],
+          }),
+        ]);
         setActivePoseActiveLearningCandidate(null);
       } catch (error) {
         const message =

@@ -3,32 +3,65 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
 $repo = Split-Path -Parent $PSScriptRoot
+$python = Join-Path $repo ".venv\Scripts\python.exe"
+
 Set-Location $repo
 
-Write-Host "Phase 9 Project Interoperability acceptance" -ForegroundColor Cyan
-Write-Host "Expected branch: feat/project-interoperability-phase9"
+function Require-Success([string]$Message) {
+    if ($LASTEXITCODE -ne 0) {
+        throw $Message
+    }
+}
+
+Write-Host "Phase 9 pose training + project interoperability acceptance" -ForegroundColor Cyan
+Write-Host "Expected branch: feat/scientist-ready-phase9-pose-training-datasets-20261003"
 
 if ($RunAutomatedValidation) {
-    & ".\.venv\Scripts\python.exe" -m ruff format --check apps\api
-    & ".\.venv\Scripts\python.exe" -m ruff check apps\api
-    & ".\.venv\Scripts\python.exe" -m mypy apps\api\reefvision
-    & ".\.venv\Scripts\python.exe" -m pytest apps\api\reefvision\tests\test_project_exchange_phase9.py -v
+    & $python -m ruff format --check apps\api
+    Require-Success "Phase 9 Ruff formatting failed."
+
+    & $python -m ruff check apps\api
+    Require-Success "Phase 9 Ruff lint failed."
+
+    & $python -m mypy apps\api\reefvision
+    Require-Success "Phase 9 mypy failed."
+
+    & $python -m pytest `
+        apps\api\reefvision\tests\test_pose_training_datasets_phase9.py `
+        apps\api\reefvision\tests\test_pose_active_learning_phase8.py `
+        apps\api\reefvision\tests\test_pose_interoperability.py `
+        apps\api\reefvision\tests\test_project_exchange_phase9.py `
+        apps\api\reefvision\tests\test_mask_migration_lineage.py `
+        apps\api\reefvision\tests\test_desktop_runtime_paths.py `
+        -v
+
+    Require-Success "Phase 9A backend acceptance failed."
+
     Push-Location apps\web
-    npm run test -- --run
-    npm run build
-    Pop-Location
+    try {
+        npm run test -- --run src/features/video/PoseActiveLearningPanel.test.tsx
+        Require-Success "Phase 9A frontend test failed."
+
+        npm run typecheck
+        Require-Success "Phase 9A frontend typecheck failed."
+
+        npm run build
+        Require-Success "Phase 9A frontend build failed."
+    }
+    finally {
+        Pop-Location
+    }
 }
 
 Write-Host ""
-Write-Host "Manual acceptance:" -ForegroundColor Yellow
-Write-Host "[ ] Create a metadata-only exchange and inspect it."
-Write-Host "[ ] Confirm inspection warns that original media must be relinked."
-Write-Host "[ ] Create an exchange with images and videos included."
-Write-Host "[ ] Confirm section counts and checksums are present in the manifest."
-Write-Host "[ ] Download the completed .reefvision.zip archive."
-Write-Host "[ ] Inspect the downloaded archive and confirm it is compatible."
-Write-Host "[ ] Confirm model weights are excluded unless explicitly selected."
-Write-Host "[ ] Confirm unsafe ZIP paths and checksum changes are rejected."
-Write-Host "[ ] Confirm the UI has no enabled Import action."
-Write-Host "[ ] Restart ReefVision and confirm exchange history persists."
+Write-Host "Phase 9A manual checks:" -ForegroundColor Yellow
+Write-Host "[ ] Verify only scientist-verified candidates enter a frozen dataset."
+Write-Host "[ ] Verify skipped/pending candidates never enter training truth."
+Write-Host "[ ] Verify a pose changed after verification is blocked before materialization."
+Write-Host "[ ] Verify live-track edits after freezing do not mutate the dataset."
+Write-Host "[ ] Verify schema revision/content hash are visible in dataset provenance."
+Write-Host "[ ] Verify model provider/version/checkpoint SHA are retained where a source model exists."
+Write-Host "[ ] Verify the native ZIP is deterministic for an unchanged frozen dataset."
+Write-Host "[ ] Verify Pose Active Learning UI can freeze a completed round."
