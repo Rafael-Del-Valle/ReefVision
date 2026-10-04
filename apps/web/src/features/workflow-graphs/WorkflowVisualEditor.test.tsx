@@ -185,7 +185,9 @@ describe("WorkflowVisualEditor", () => {
     );
 
     expect(screen.getAllByText("Scientist review").length).toBeGreaterThan(0);
-    expect(screen.getByText("Waiting for scientist review")).toBeInTheDocument();
+    expect(
+      screen.getByText("Waiting for scientist review"),
+    ).toBeInTheDocument();
     expect(
       screen.getByText("Next iteration: trained model → inference"),
     ).toBeInTheDocument();

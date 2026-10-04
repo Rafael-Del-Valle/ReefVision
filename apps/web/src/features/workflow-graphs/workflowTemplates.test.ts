@@ -52,8 +52,7 @@ describe("workflowTemplates", () => {
     expect(
       graph.edges.some(
         (edge) =>
-          edge.source_node_id === "register" &&
-          edge.target_node_id === "pose",
+          edge.source_node_id === "register" && edge.target_node_id === "pose",
       ),
     ).toBe(false);
   });

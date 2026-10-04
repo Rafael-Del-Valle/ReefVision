@@ -61,7 +61,9 @@ function asGraph(value: Record<string, unknown>): GraphShape | null {
   return value as unknown as GraphShape;
 }
 
-function asFeedbackLoop(metadata: Record<string, unknown> | undefined): FeedbackLoop | null {
+function asFeedbackLoop(
+  metadata: Record<string, unknown> | undefined,
+): FeedbackLoop | null {
   const raw = metadata?.feedback_loop;
   if (!raw || Array.isArray(raw) || typeof raw !== "object") return null;
   const value = raw as Record<string, unknown>;
@@ -101,7 +103,8 @@ function portCompatible(sourceTypes: string[], targetTypes: string[]): boolean {
 function nodeKind(definition: WorkflowNodeDefinition | undefined): string {
   if (!definition) return "Automated";
   if (definition.category === "Human review") return "Scientist review";
-  if (definition.category === "Scientific analysis") return "Scientific analysis";
+  if (definition.category === "Scientific analysis")
+    return "Scientific analysis";
   if (definition.category === "Active learning") return "Active learning";
   return "Automated";
 }
@@ -330,7 +333,9 @@ export function WorkflowVisualEditor({
     setMessage(`Connected ${pending.nodeId} → ${targetNodeId}.`);
   }
 
-  function replaceSelectedParameters(nextParameters: Record<string, unknown>): void {
+  function replaceSelectedParameters(
+    nextParameters: Record<string, unknown>,
+  ): void {
     if (!selectedNode) return;
     emit({
       ...currentGraph,
@@ -448,7 +453,10 @@ export function WorkflowVisualEditor({
       </div>
 
       {feedbackLoop && (
-        <div className="workflow-feedback-note" data-testid="workflow-feedback-note">
+        <div
+          className="workflow-feedback-note"
+          data-testid="workflow-feedback-note"
+        >
           <strong>{feedbackLoop.label ?? "Next iteration"}</strong>
           <span>
             {feedbackLoop.description ??
@@ -483,7 +491,10 @@ export function WorkflowVisualEditor({
                 markerHeight="6"
                 orient="auto-start-reverse"
               >
-                <path d="M 0 0 L 10 5 L 0 10 z" className="workflow-feedback-arrow" />
+                <path
+                  d="M 0 0 L 10 5 L 0 10 z"
+                  className="workflow-feedback-arrow"
+                />
               </marker>
             </defs>
             {currentGraph.edges.map((edge) => {
@@ -572,7 +583,9 @@ export function WorkflowVisualEditor({
                   }}
                 >
                   <div>
-                    <strong>{definition?.display_name ?? node.node_type}</strong>
+                    <strong>
+                      {definition?.display_name ?? node.node_type}
+                    </strong>
                     <small>{node.node_id}</small>
                   </div>
                   <span className="workflow-kind-chip">{kind}</span>
@@ -582,7 +595,9 @@ export function WorkflowVisualEditor({
                   {(status || planStep) && (
                     <div className="workflow-node-state">
                       {status && (
-                        <span className={`workflow-status-chip status-${runNode?.status}`}>
+                        <span
+                          className={`workflow-status-chip status-${runNode?.status}`}
+                        >
                           {status}
                         </span>
                       )}
@@ -595,7 +610,9 @@ export function WorkflowVisualEditor({
                   )}
 
                   {runNode?.error_message && (
-                    <p className="workflow-node-error">{runNode.error_message}</p>
+                    <p className="workflow-node-error">
+                      {runNode.error_message}
+                    </p>
                   )}
 
                   <div className="workflow-port-group inputs">
@@ -668,7 +685,8 @@ export function WorkflowVisualEditor({
           {selectedNode ? (
             <>
               <p>
-                <strong>{selectedNode.node_id}</strong> · {selectedNode.node_type}
+                <strong>{selectedNode.node_id}</strong> ·{" "}
+                {selectedNode.node_type}
               </p>
               {selectedDefinition && (
                 <p className="muted-copy">{selectedDefinition.description}</p>
@@ -677,7 +695,8 @@ export function WorkflowVisualEditor({
               {parameterKeys.length > 0 && (
                 <div className="workflow-parameter-grid">
                   {parameterKeys.map((key) => {
-                    const fallback = selectedDefinition?.optional_parameters[key];
+                    const fallback =
+                      selectedDefinition?.optional_parameters[key];
                     const value =
                       selectedNode.parameters &&
                       Object.prototype.hasOwnProperty.call(
@@ -724,7 +743,11 @@ export function WorkflowVisualEditor({
                         </span>
                         <input
                           type={typeof value === "number" ? "number" : "text"}
-                          value={value === null || value === undefined ? "" : String(value)}
+                          value={
+                            value === null || value === undefined
+                              ? ""
+                              : String(value)
+                          }
                           onChange={(event) => {
                             const next =
                               typeof value === "number"
