@@ -293,3 +293,53 @@ pose_training_dataset
 → training_results_package
 
 chain.
+
+
+### 10B-2B — Trained pose registration and exact schema binding
+
+Completed Ultralytics pose-training runs now enter ReefVision's normal model
+registry without losing pose truth identity.
+
+Registration verifies:
+
+- the run is a completed Ultralytics `task=pose` run
+- the persisted pose split-manifest SHA-256 is unchanged
+- the frozen training dataset still matches the run dataset hash
+- the recorded pose schema ID, revision, and content hash still match the
+  immutable frozen dataset
+- any frozen validation dataset remains compatible with the same schema
+- the produced checkpoint identifies itself as `task=pose`
+- the checkpoint keypoint count exactly matches the frozen landmark-schema
+  revision
+
+After validation, ReefVision registers the checkpoint through the normal model
+registry and creates a `PoseModelSchemaBinding` pointing to the exact existing
+schema ID and revision used for training.
+
+No replacement schema is created.
+
+The registered model metadata retains:
+
+- training-run and experiment identity
+- frozen training dataset ID and SHA-256
+- optional frozen validation dataset ID and SHA-256
+- split-manifest SHA-256
+- initial pose-model identity/checksum
+- pose schema ID/revision/content hash
+- repeated semantic landmark labels
+- validation mode
+- checkpoint and metric provenance
+
+The standard workflow model reference surfaces this pose lineage, and the
+standard Results Package workflow artifact carries the pose dataset/schema
+identity alongside the training/checkpoint hashes.
+
+Phase 10B now supports the defensible chain:
+
+`scientist-reviewed pose truth`
+→ `immutable pose training dataset`
+→ `actual Ultralytics pose retraining`
+→ `trained checkpoint`
+→ `registered pose model`
+→ `exact frozen schema binding`
+→ `verified Results Package`

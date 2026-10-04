@@ -297,6 +297,16 @@ def register_workflow_trained_model(
         ),
     )
     metadata = dict(registered.metadata_json or {})
+    pose_schema = metadata.get("pose_landmark_schema")
+    pose_schema = (
+        dict(pose_schema)
+        if isinstance(
+            pose_schema,
+            dict,
+        )
+        else {}
+    )
+
     return {
         "schema_version": "workflow-model-reference-0001",
         "project_id": project_id,
@@ -312,5 +322,17 @@ def register_workflow_trained_model(
         "source_dataset_version_id": metadata.get("source_dataset_version_id"),
         "source_dataset_manifest_sha256": metadata.get("source_dataset_manifest_sha256"),
         "source_split_manifest_sha256": metadata.get("source_split_manifest_sha256"),
+        "source_pose_training_dataset_id": metadata.get("source_pose_training_dataset_id"),
+        "source_pose_training_dataset_manifest_sha256": metadata.get(
+            "source_pose_training_dataset_manifest_sha256"
+        ),
+        "source_pose_validation_dataset_id": metadata.get("source_pose_validation_dataset_id"),
+        "source_pose_validation_dataset_manifest_sha256": metadata.get(
+            "source_pose_validation_dataset_manifest_sha256"
+        ),
+        "pose_schema_id": pose_schema.get("schema_id"),
+        "pose_schema_revision": pose_schema.get("schema_revision"),
+        "pose_schema_content_hash": pose_schema.get("content_hash"),
+        "pose_landmark_labels": pose_schema.get("expanded_labels"),
         "registered_from_workflow": True,
     }

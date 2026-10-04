@@ -411,6 +411,11 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 "lineage.",
                 "The resulting model_reference can feed normal inference or later retraining "
                 "nodes.",
+                (
+                    "Trained pose checkpoints are bound to the exact existing frozen "
+                    "landmark-schema revision used for training; registration does not "
+                    "invent a replacement pose schema."
+                ),
             ],
         ),
         WorkflowNodeDefinitionResponse(

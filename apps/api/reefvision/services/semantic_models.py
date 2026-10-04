@@ -18,6 +18,7 @@ from reefvision.db.models import (
     PoseLandmarkSchema,
     PoseLandmarkSchemaRevision,
     PoseModelSchemaBinding,
+    PoseTrainingDataset,
     TrainingRun,
 )
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
@@ -33,6 +34,7 @@ from reefvision.schemas.models import (
     RegisterModelFromRunRequest,
 )
 from reefvision.services.segmentation_models import SegmentationModelService
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import copy_model_file, hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -68,6 +70,309 @@ class SemanticModelService(SegmentationModelService):
             raise ValidationError("Semantic model bundle class metadata is invalid")
         return payload
 
+    def _register_pose_model_from_run(
+        self,
+        project_id: str,
+        payload: RegisterModelFromRunRequest,
+        run: TrainingRun,
+    ) -> ModelRegistrationResponse:
+        """Register a trained pose checkpoint against its exact frozen schema."""
+
+        if run.project_id != project_id:
+            raise ValidationError("Training runs must belong to the selected project")
+
+        if run.status != "completed" or not run.result_checkpoint_path:
+            raise ValidationError(
+                "Only completed pose-training runs with a finalized checkpoint can be registered"
+            )
+
+        if run.provider_id != "ultralytics":
+            raise ValidationError(
+                "Phase 10B trained-pose registration currently supports "
+                "Ultralytics pose checkpoints only"
+            )
+
+        artifact_manifest = dict(run.artifact_manifest_json or {})
+
+        split_manifest_raw = artifact_manifest.get("pose_split_manifest")
+
+        if not isinstance(
+            split_manifest_raw,
+            dict,
+        ):
+            raise ValidationError("Pose training run is missing its immutable split manifest")
+
+        split_manifest = dict(split_manifest_raw)
+
+        if canonical_json_sha256(split_manifest) != run.split_manifest_sha256:
+            raise ValidationError(
+                "Pose training split manifest checksum no longer matches the persisted training run"
+            )
+
+        training_dataset_id = str(
+            artifact_manifest.get("pose_training_dataset_id")
+            or split_manifest.get("training_dataset_id")
+            or ""
+        )
+
+        if not training_dataset_id:
+            raise ValidationError(
+                "Pose training run is missing its frozen training dataset identity"
+            )
+
+        training_dataset = self.session.get(
+            PoseTrainingDataset,
+            training_dataset_id,
+        )
+
+        if training_dataset is None or training_dataset.project_id != project_id:
+            raise ValidationError("Frozen pose training dataset no longer belongs to this project")
+
+        if training_dataset.status != "complete":
+            raise ValidationError(
+                "Only complete immutable pose datasets may produce registered models"
+            )
+
+        if training_dataset.manifest_sha256 != run.dataset_manifest_sha256:
+            raise ValidationError(
+                "Pose training dataset manifest no longer matches the training run"
+            )
+
+        advertised_training_manifest = str(
+            split_manifest.get("training_dataset_manifest_sha256") or ""
+        )
+
+        if (
+            advertised_training_manifest
+            and advertised_training_manifest != training_dataset.manifest_sha256
+        ):
+            raise ValidationError(
+                "Pose training split manifest references a different training dataset checksum"
+            )
+
+        schema_id = str(
+            artifact_manifest.get("pose_schema_id") or split_manifest.get("pose_schema_id") or ""
+        )
+
+        schema_revision_value = artifact_manifest.get("pose_schema_revision") or split_manifest.get(
+            "pose_schema_revision"
+        )
+
+        schema_hash = str(
+            artifact_manifest.get("pose_schema_content_hash")
+            or split_manifest.get("pose_schema_content_hash")
+            or ""
+        )
+
+        if not schema_id or schema_revision_value is None or not schema_hash:
+            raise ValidationError("Pose training run is missing exact landmark-schema provenance")
+
+        schema_revision = int(schema_revision_value)
+
+        if (
+            schema_id != training_dataset.pose_schema_id
+            or schema_revision != training_dataset.pose_schema_revision
+            or schema_hash != training_dataset.pose_schema_content_hash
+        ):
+            raise ValidationError(
+                "Pose training run landmark-schema provenance does not "
+                "match the frozen training dataset"
+            )
+
+        revision = self.session.scalar(
+            select(PoseLandmarkSchemaRevision).where(
+                PoseLandmarkSchemaRevision.schema_id == schema_id,
+                PoseLandmarkSchemaRevision.revision == schema_revision,
+            )
+        )
+
+        if revision is None:
+            raise ValidationError("Frozen pose landmark-schema revision no longer exists")
+
+        if revision.content_hash != schema_hash:
+            raise ValidationError("Frozen pose landmark-schema content hash changed")
+
+        validation_dataset_id = (
+            str(
+                artifact_manifest.get("pose_validation_dataset_id")
+                or split_manifest.get("validation_dataset_id")
+                or ""
+            )
+            or None
+        )
+
+        validation_manifest_sha256 = (
+            str(
+                artifact_manifest.get("pose_validation_dataset_manifest_sha256")
+                or split_manifest.get("validation_dataset_manifest_sha256")
+                or ""
+            )
+            or None
+        )
+
+        if validation_dataset_id is not None:
+            validation_dataset = self.session.get(
+                PoseTrainingDataset,
+                validation_dataset_id,
+            )
+
+            if validation_dataset is None or validation_dataset.project_id != project_id:
+                raise ValidationError(
+                    "Frozen pose validation dataset no longer belongs to this project"
+                )
+
+            if (
+                validation_manifest_sha256
+                and validation_dataset.manifest_sha256 != validation_manifest_sha256
+            ):
+                raise ValidationError(
+                    "Pose validation dataset checksum no longer matches training provenance"
+                )
+
+            if validation_dataset.pose_schema_content_hash != schema_hash:
+                raise ValidationError(
+                    "Pose validation dataset landmark schema no longer "
+                    "matches the trained model schema"
+                )
+
+        source_path = resolve_managed_project_path(
+            self.settings,
+            run.result_checkpoint_path,
+        )
+
+        if not source_path.is_file():
+            raise ValidationError("Trained pose checkpoint is missing")
+
+        # Inspect before registration so a malformed or incompatible
+        # checkpoint cannot leave behind a partially registered model.
+        provider = self._provider_for_registration(
+            "detector",
+            run.provider_id,
+        )
+
+        inspected = provider.inspect_model(source_path)
+
+        if inspected.task != "pose":
+            raise ValidationError(
+                "Completed pose training checkpoint does not identify itself as task=pose"
+            )
+
+        raw_shape = inspected.metadata.get("pose_keypoint_shape")
+
+        if (
+            not isinstance(
+                raw_shape,
+                list,
+            )
+            or not raw_shape
+            or not isinstance(
+                raw_shape[0],
+                int,
+            )
+        ):
+            raise ValidationError("Trained pose checkpoint did not expose a keypoint shape")
+
+        checkpoint_keypoint_count = int(raw_shape[0])
+
+        if checkpoint_keypoint_count != revision.keypoint_count:
+            raise ValidationError(
+                "Trained pose checkpoint expects "
+                f"{checkpoint_keypoint_count} landmarks but the frozen "
+                f"schema defines {revision.keypoint_count}"
+            )
+
+        experiment = self.session.scalar(
+            select(ExperimentRecord).where(ExperimentRecord.training_run_id == run.id)
+        )
+
+        schema_snapshot = {
+            "schema_version": revision.schema_version,
+            "schema_id": revision.schema_id,
+            "schema_revision": revision.revision,
+            "groups": list(revision.groups_json),
+            "expanded_labels": list(revision.expanded_labels_json),
+            "keypoint_count": (revision.keypoint_count),
+            "allows_repeated_labels": (revision.allows_repeated_labels),
+            "content_hash": (revision.content_hash),
+        }
+
+        metadata_overrides: dict[
+            str,
+            object,
+        ] = {
+            "registered_from": ("training_run"),
+            "source_training_run_id": (run.id),
+            "source_dataset_version_id": (run.dataset_version_id),
+            "source_dataset_manifest_sha256": (run.dataset_manifest_sha256),
+            "source_split_manifest_sha256": (run.split_manifest_sha256),
+            "source_result_checkpoint_path": (run.result_checkpoint_path),
+            "source_metrics": dict(run.metrics_json or {}),
+            "source_experiment_id": (experiment.id if experiment is not None else None),
+            "source_pose_training_dataset_id": (training_dataset.id),
+            "source_pose_training_dataset_manifest_sha256": (training_dataset.manifest_sha256),
+            "source_pose_validation_dataset_id": (validation_dataset_id),
+            "source_pose_validation_dataset_manifest_sha256": (validation_manifest_sha256),
+            "source_pose_schema_id": (revision.schema_id),
+            "source_pose_schema_revision": (revision.revision),
+            "source_pose_schema_content_hash": (revision.content_hash),
+            "source_pose_validation_mode": (split_manifest.get("validation_mode")),
+            "source_initial_pose_model_id": (run.initial_checkpoint_model_id),
+            "source_initial_pose_model_sha256": (run.resolved_model_checksum),
+            "source_architecture": (run.architecture),
+            "pose_landmark_schema": (schema_snapshot),
+        }
+
+        display_name = payload.display_name or f"{run.run_name} pose"
+
+        registered = self._register_model_path(
+            project_id,
+            purpose="detector",
+            provider_name=(run.provider_id),
+            source_path=source_path,
+            source_filename=(Path(run.result_checkpoint_path).name),
+            display_name=display_name,
+            notes=(payload.notes or run.notes),
+            metadata_overrides=(metadata_overrides),
+        )
+
+        model = self._model(registered.id)
+
+        if model.task != "pose" or model.provider_name != "ultralytics":
+            raise ValidationError("Registered trained model is not an Ultralytics pose model")
+
+        binding = self.session.get(
+            PoseModelSchemaBinding,
+            model.id,
+        )
+
+        if binding is None:
+            binding = PoseModelSchemaBinding(
+                model_id=model.id,
+                schema_id=(revision.schema_id),
+                schema_revision=(revision.revision),
+            )
+
+            self.session.add(binding)
+
+        elif (
+            binding.schema_id != revision.schema_id or binding.schema_revision != revision.revision
+        ):
+            raise ConflictError(
+                "The trained pose checkpoint is already bound to a "
+                "different landmark-schema revision"
+            )
+
+        model_metadata = dict(model.metadata_json or {})
+
+        model_metadata.update(metadata_overrides)
+
+        model.metadata_json = model_metadata
+
+        self.session.commit()
+        self.session.refresh(model)
+
+        return ModelRegistrationResponse.model_validate(model)
+
     def register_model_from_run(
         self,
         project_id: str,
@@ -76,6 +381,12 @@ class SemanticModelService(SegmentationModelService):
         run = self.session.get(TrainingRun, payload.training_run_id)
         if run is None:
             raise NotFoundError("Training run not found")
+        if run.task == "pose":
+            return self._register_pose_model_from_run(
+                project_id,
+                payload,
+                run,
+            )
         if run.task != SEMANTIC_SEGMENTATION_TASK:
             return super().register_model_from_run(project_id, payload)
         if run.project_id != project_id:

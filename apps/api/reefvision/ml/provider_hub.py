@@ -243,8 +243,15 @@ def _implemented_ultralytics_descriptor(
         known_limitations=(
             "Image review still reduces detection, segmentation, and pose checkpoints to box proposals.",
             "Pose landmarks are currently exposed through the video tracking workflow, not the still-image annotation editor.",
-            "The Training workspace currently launches only Ultralytics object-detection runs against immutable dataset versions.",
-            "Segmentation or pose training and tuning execution are not yet exposed by ReefVision.",
+            (
+                "Pose retraining is available through the workflow builder from immutable "
+                "scientist-verified pose-training datasets; the generic DatasetVersion "
+                "Training workspace does not yet create pose runs."
+            ),
+            (
+                "Ultralytics pose hyperparameter tuning is not yet exposed; "
+                "the current pose path executes standard training."
+            ),
             "Automatic checkpoint downloads remain disabled; local checkpoints must be selected explicitly.",
         ),
         desktop_packaging_state="base_sidecar_provider",
