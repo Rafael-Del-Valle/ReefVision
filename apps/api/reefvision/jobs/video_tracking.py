@@ -589,7 +589,11 @@ def process_video_tracking_job(
                 # constructing GeoReferencedObservation.track_id.
                 session.flush()
 
-                if model_task == "pose" and any(item.keypoints for item in ordered):
+                if (
+                    model_task == "pose"
+                    and any(item.keypoints for item in ordered)
+                    and bool(request.get("build_pose_temporal_associations", True))
+                ):
                     temporal_result = PoseTemporalTrackingService(session).build(
                         track.id,
                         PoseTemporalAssociationBuildRequest(),

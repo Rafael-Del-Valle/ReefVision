@@ -214,7 +214,10 @@ class WorkflowExecutionService:
         if not plan.valid:
             raise ValidationError("Workflow graph is no longer valid")
         unsupported = [
-            step.node_type for step in plan.steps if step.node_type not in EXECUTABLE_NODE_TYPES
+            step.node_type
+            for step in plan.steps
+            if step.node_type not in EXECUTABLE_NODE_TYPES
+            and step.node_type not in RUNTIME_ADAPTER_NODE_TYPES
         ]
         if unsupported:
             raise ValidationError(
@@ -273,7 +276,10 @@ class WorkflowExecutionService:
     ) -> list[WorkflowArtifactSpec]:
         if self.settings is None:
             raise ValidationError("Workflow execution requires application settings")
-        if step.node_type not in EXECUTABLE_NODE_TYPES:
+        if (
+            step.node_type not in EXECUTABLE_NODE_TYPES
+            and step.node_type not in RUNTIME_ADAPTER_NODE_TYPES
+        ):
             raise ValidationError(f"Workflow node is not executable: {step.node_type}")
         handler = getattr(self, f"_execute_{step.node_type}", None)
         if handler is not None:

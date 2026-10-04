@@ -47,6 +47,7 @@ if ($LASTEXITCODE -ne 0) {
 
 & $Python -m pytest `
     apps/api/reefvision/tests/test_workflow_pose_phase10.py `
+    apps/api/reefvision/tests/test_workflow_pose_runtime_phase10.py `
     apps/api/reefvision/tests/test_workflow_graphs_phase10.py `
     -q
 
@@ -63,4 +64,4 @@ Write-Host "[ ] Pose review converts temporal pose state into reviewed pose stat
 Write-Host "[ ] Frozen training truth requires a verified Active Learning round."
 Write-Host "[ ] No duplicate pose/behavior scientific implementation was introduced."
 Write-Host ""
-Write-Host "Phase 10A-1 automated scope complete."
+Write-Host "Phase 10A-2 automated scope complete. Scientist review/resume gates remain Phase 10A-3."

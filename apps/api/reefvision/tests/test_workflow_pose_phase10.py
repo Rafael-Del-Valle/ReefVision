@@ -2,18 +2,26 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from reefvision.services.workflow_runtime_adapters import (
+    RUNTIME_ADAPTER_NODE_TYPES,
+)
 from reefvision.tests.test_annotations import create_project
 
-_PHASE10_POSE_NODES = {
+_EXECUTABLE_PHASE10_NODES = {
     "pose_inference",
     "pose_temporal_association",
-    "pose_review_gate",
     "behavior_dynamics",
     "pose_active_learning",
-    "pose_active_learning_review_gate",
     "pose_training_dataset_freeze",
     "pose_training_export",
 }
+
+_PHASE10_REVIEW_GATES = {
+    "pose_review_gate",
+    "pose_active_learning_review_gate",
+}
+
+_PHASE10_POSE_NODES = _EXECUTABLE_PHASE10_NODES | _PHASE10_REVIEW_GATES
 
 
 def test_phase10_pose_workflow_contracts_are_registered(
@@ -26,12 +34,21 @@ def test_phase10_pose_workflow_contracts_are_registered(
 
     assert _PHASE10_POSE_NODES.issubset(registry)
 
-    for node_type in _PHASE10_POSE_NODES:
+    for node_type in _EXECUTABLE_PHASE10_NODES:
+        assert registry[node_type]["executable"] is True
+        assert registry[node_type]["execution_state"] == "executable_pose_workflow"
+
+    for node_type in _PHASE10_REVIEW_GATES:
         assert registry[node_type]["executable"] is False
         assert registry[node_type]["execution_state"] == "contract_only_phase10a"
 
+    assert _EXECUTABLE_PHASE10_NODES.issubset(RUNTIME_ADAPTER_NODE_TYPES)
+
     pose = registry["pose_inference"]
-    assert {item["port_id"] for item in pose["input_ports"]} == {"video", "model"}
+    assert {item["port_id"] for item in pose["input_ports"]} == {
+        "video",
+        "model",
+    }
     assert pose["output_ports"][0]["accepted_types"] == ["pose_tracks"]
 
     temporal = registry["pose_temporal_association"]
@@ -66,13 +83,13 @@ def test_phase10_behavior_requires_reviewed_pose_truth(
         "nodes": [
             {
                 "node_id": "temporal",
-                "node_type": "pose_temporal_association",
+                "node_type": ("pose_temporal_association"),
             },
             {
                 "node_id": "behavior",
                 "node_type": "behavior_dynamics",
                 "parameters": {
-                    "ethogram_revision_id": "ethogram-test",
+                    "ethogram_revision_id": ("ethogram-test"),
                 },
             },
         ],
@@ -88,7 +105,7 @@ def test_phase10_behavior_requires_reviewed_pose_truth(
     }
 
     response = client.post(
-        f"/api/v1/projects/{project['id']}/workflow-graphs/validate",
+        (f"/api/v1/projects/{project['id']}/workflow-graphs/validate"),
         json=graph,
     )
 
@@ -97,8 +114,9 @@ def test_phase10_behavior_requires_reviewed_pose_truth(
     assert payload["valid"] is False
 
     issues = payload["issues"]
+
     assert any(
-        item["code"] == "incompatible_port_types" and item["edge_id"] == "unreviewed-to-behavior"
+        item["code"] == "incompatible_port_types" and item["edge_id"] == ("unreviewed-to-behavior")
         for item in issues
     )
 
@@ -117,7 +135,7 @@ def test_phase10_pose_review_gate_has_type_safe_scientist_boundary(
         "nodes": [
             {
                 "node_id": "temporal",
-                "node_type": "pose_temporal_association",
+                "node_type": ("pose_temporal_association"),
             },
             {
                 "node_id": "review",
@@ -127,7 +145,7 @@ def test_phase10_pose_review_gate_has_type_safe_scientist_boundary(
                 "node_id": "behavior",
                 "node_type": "behavior_dynamics",
                 "parameters": {
-                    "ethogram_revision_id": "ethogram-test",
+                    "ethogram_revision_id": ("ethogram-test"),
                 },
             },
         ],
@@ -150,7 +168,7 @@ def test_phase10_pose_review_gate_has_type_safe_scientist_boundary(
     }
 
     response = client.post(
-        f"/api/v1/projects/{project['id']}/workflow-graphs/validate",
+        (f"/api/v1/projects/{project['id']}/workflow-graphs/validate"),
         json=graph,
     )
 
@@ -160,9 +178,6 @@ def test_phase10_pose_review_gate_has_type_safe_scientist_boundary(
 
     assert not any(item["code"] == "incompatible_port_types" for item in issues)
 
-    # The isolated contract graph intentionally has no upstream pose
-    # artifact yet, so the temporal node must still report its missing
-    # required input.
     assert any(
         item["code"] == "required_input_missing" and item["node_id"] == "temporal"
         for item in issues

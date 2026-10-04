@@ -13,9 +13,11 @@ from reefvision.services.workflow_metric_depth_3d import (
 from reefvision.services.workflow_node_registry import (
     workflow_node_registry as base_workflow_node_registry,
 )
+from reefvision.services.workflow_pose import register_pose_workflow_adapters
 
 register_video_depth_3d_adapter()
 register_video_metric_depth_3d_adapter()
+register_pose_workflow_adapters()
 
 
 def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
@@ -172,8 +174,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                     "device": "auto",
                     "confidence": 0.25,
                 },
-                execution_state="contract_only_phase10a",
-                executable=False,
+                execution_state="executable_pose_workflow",
+                executable=True,
                 implementation_notes=[
                     (
                         "Runtime execution must reuse ReefVision's production pose/video "
@@ -215,8 +217,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 ],
                 required_parameters=[],
                 optional_parameters={},
-                execution_state="contract_only_phase10a",
-                executable=False,
+                execution_state="executable_pose_workflow",
+                executable=True,
                 implementation_notes=[
                     (
                         "Runtime execution must use PoseTemporalTrackingService rather "
@@ -293,8 +295,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                     "start_frame": None,
                     "end_frame": None,
                 },
-                execution_state="contract_only_phase10a",
-                executable=False,
+                execution_state="executable_pose_workflow",
+                executable=True,
                 implementation_notes=[
                     (
                         "Runtime execution must delegate to BehaviorDynamicsService "
@@ -332,8 +334,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                     "requested_size": 20,
                     "diversity_balance": True,
                 },
-                execution_state="contract_only_phase10a",
-                executable=False,
+                execution_state="executable_pose_workflow",
+                executable=True,
                 implementation_notes=[
                     (
                         "Runtime execution must delegate to PoseActiveLearningService "
@@ -410,8 +412,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                     "name": None,
                     "notes": None,
                 },
-                execution_state="contract_only_phase10a",
-                executable=False,
+                execution_state="executable_pose_workflow",
+                executable=True,
                 implementation_notes=[
                     (
                         "Runtime execution must call PoseTrainingDatasetService and "
@@ -451,8 +453,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 optional_parameters={
                     "format": "native",
                 },
-                execution_state="contract_only_phase10a",
-                executable=False,
+                execution_state="executable_pose_workflow",
+                executable=True,
                 implementation_notes=[
                     (
                         "Runtime execution must reuse the Phase 9 immutable native package "

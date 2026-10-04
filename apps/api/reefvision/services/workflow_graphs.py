@@ -48,6 +48,7 @@ _MODEL_PURPOSES_BY_NODE: dict[str, set[str]] = {
     "prompt_assist_masks": {"assist"},
     "relative_depth_estimation": {"depth"},
     "video_tracking": {"detector", "segmenter"},
+    "pose_inference": {"detector"},
 }
 
 _ACTIONS: dict[str, str] = {
