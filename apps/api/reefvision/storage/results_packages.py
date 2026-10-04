@@ -23,6 +23,12 @@ from openpyxl.utils import get_column_letter
 
 PACKAGE_SCHEMA_VERSION = "1.0"
 CHUNK_SIZE = 1024 * 1024
+
+# Keep generated package paths comfortably below the classic Windows
+# MAX_PATH boundary. The budget is intentionally conservative because
+# packages contain nested data/, plots/, artifacts/, and workbook paths.
+RESULTS_PACKAGE_PATH_BUDGET = 230
+RESULTS_PACKAGE_MIN_COMPONENT = 8
 SECRET_KEYS = re.compile(r"(?:api[_-]?key|token|password|secret|credential)", re.IGNORECASE)
 
 
@@ -30,6 +36,22 @@ def safe_package_name(value: str, *, limit: int = 90) -> str:
     cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", value).strip(" .")
     cleaned = re.sub(r"\s+", "_", cleaned)
     return cleaned[:limit].rstrip(" ._") or "run"
+
+
+def safe_component_limit(
+    parent: Path,
+    *,
+    requested: int,
+    reserve: int = 0,
+) -> int:
+    """Limit one generated path component while reserving nested-path space."""
+
+    available = RESULTS_PACKAGE_PATH_BUDGET - len(str(parent)) - 1 - max(0, reserve)
+
+    return max(
+        RESULTS_PACKAGE_MIN_COMPONENT,
+        min(requested, available),
+    )
 
 
 def sha256_file(path: Path) -> str:
@@ -53,17 +75,39 @@ def build_results_package(
     tuning = isinstance(run.get("tuning_results"), Mapping)
     package_type = "tuning" if tuning else "training"
     timestamp = datetime.now(UTC)
-    stem = safe_package_name(
-        f"ReefVision_{package_type.title()}_Run_{run['run_name']}_{timestamp:%Y%m%dT%H%M%SZ}"
-    )
     export_root.mkdir(parents=True, exist_ok=True)
+
+    stem_limit = safe_component_limit(
+        export_root,
+        requested=90,
+        reserve=72,
+    )
+
+    stem = safe_package_name(
+        (f"ReefVision_{package_type.title()}_Run_{run['run_name']}_{timestamp:%Y%m%dT%H%M%SZ}"),
+        limit=stem_limit,
+    )
+
     final_dir = export_root / stem
+
     if final_dir.exists() or final_dir.with_suffix(".zip").exists():
-        stem = f"{stem}_{str(run['id'])[:8]}_{timestamp.microsecond:06d}"
+        stem = safe_package_name(
+            (f"rv_{str(run['id'])[:8]}_{timestamp.microsecond:06d}"),
+            limit=stem_limit,
+        )
         final_dir = export_root / stem
+
     warnings = list(run.get("warnings", []))
-    with tempfile.TemporaryDirectory(prefix="rv-results-", dir=export_root) as temporary:
-        package = Path(temporary) / stem
+
+    # The staging directory deliberately does not repeat the final,
+    # descriptive package stem. On Windows, export_root + temporary
+    # directory + final stem + nested package content can exceed
+    # MAX_PATH even when the final package location itself is valid.
+    with tempfile.TemporaryDirectory(
+        prefix="rv-",
+        dir=export_root,
+    ) as temporary:
+        package = Path(temporary) / "p"
         package.mkdir()
         data_dir = package / "data"
         data_dir.mkdir()
@@ -94,8 +138,17 @@ def build_results_package(
             )
             copied.append((inventory, "data", "reefvision_generated"))
         if options.get("include_excel", True):
+            workbook_stem_limit = safe_component_limit(
+                package,
+                requested=90,
+                reserve=len(".xlsx"),
+            )
+
             workbook_name = (
-                safe_package_name(f"ReefVision_{package_type.title()}_Results_{run['run_name']}")
+                safe_package_name(
+                    (f"ReefVision_{package_type.title()}_Results_{run['run_name']}"),
+                    limit=workbook_stem_limit,
+                )
                 + ".xlsx"
             )
             workbook = package / workbook_name
@@ -397,7 +450,15 @@ def _copy_artifacts(
             continue
         seen.add(identity)
         destination_dir.mkdir(parents=True, exist_ok=True)
-        destination = destination_dir / safe_package_name(name, limit=140)
+        destination_name_limit = safe_component_limit(
+            destination_dir,
+            requested=140,
+        )
+
+        destination = destination_dir / safe_package_name(
+            name,
+            limit=destination_name_limit,
+        )
         if destination.exists():
             destination = destination.with_name(
                 f"{destination.stem}_{index:04d}{destination.suffix}"

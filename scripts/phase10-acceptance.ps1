@@ -49,6 +49,7 @@ if ($LASTEXITCODE -ne 0) {
     apps/api/reefvision/tests/test_workflow_pose_phase10.py `
     apps/api/reefvision/tests/test_workflow_pose_runtime_phase10.py `
     apps/api/reefvision/tests/test_workflow_pose_review_resume_phase10.py `
+    apps/api/reefvision/tests/test_workflow_results_package_phase10.py `
     apps/api/reefvision/tests/test_workflow_review_phase10.py `
     apps/api/reefvision/tests/test_workflow_graphs_phase10.py `
     -q
@@ -66,4 +67,4 @@ Write-Host "[ ] Resume preserves succeeded upstream node artifacts without rerun
 Write-Host "[ ] Active Learning Review requires a retraining-ready canonical round."
 Write-Host "[ ] Only verified Active Learning truth reaches dataset freeze/export."
 Write-Host ""
-Write-Host "Phase 10A automated scope complete."
+Write-Host "Phase 10B-1 Results Package workflow integration validated."

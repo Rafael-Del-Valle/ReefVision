@@ -7,6 +7,7 @@ from openpyxl import load_workbook
 
 from reefvision.storage.results_packages import (
     build_results_package,
+    safe_component_limit,
     safe_package_name,
     verify_results_package,
 )
@@ -163,3 +164,20 @@ def test_verification_detects_tampering_and_names_are_windows_safe(tmp_path: Pat
     assert result["valid"] is False
     assert any("mismatch" in error.casefold() for error in result["errors"])
     assert safe_package_name('bad<>:"/\\|?* name.').endswith("name")
+
+
+def test_path_component_limit_reserves_nested_package_headroom() -> None:
+    parent = Path("C:/") / ("nested-" * 15)
+
+    limit = safe_component_limit(
+        parent,
+        requested=90,
+        reserve=72,
+    )
+
+    assert limit >= 8
+    assert limit < 90
+
+    candidate_length = len(str(parent)) + 1 + limit + 72
+
+    assert candidate_length <= 230

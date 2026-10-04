@@ -36,6 +36,7 @@ WorkflowDataType = Literal[
     "verified_pose_active_learning_round",
     "pose_training_dataset",
     "pose_training_package",
+    "results_package",
     "project_exchange_package",
 ]
 

@@ -14,10 +14,14 @@ from reefvision.services.workflow_node_registry import (
     workflow_node_registry as base_workflow_node_registry,
 )
 from reefvision.services.workflow_pose import register_pose_workflow_adapters
+from reefvision.services.workflow_results_packages import (
+    register_results_package_workflow_adapter,
+)
 
 register_video_depth_3d_adapter()
 register_video_metric_depth_3d_adapter()
 register_pose_workflow_adapters()
+register_results_package_workflow_adapter()
 
 
 def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
@@ -467,6 +471,53 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 ],
             ),
         }
+    )
+
+    registry["training_results_package"] = WorkflowNodeDefinitionResponse(
+        node_type="training_results_package",
+        display_name="Training Results Package",
+        category="Exports",
+        description=(
+            "Build and verify ReefVision's scientific Results Package "
+            "from one completed workflow training result."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="training",
+                display_name="Training Result",
+                accepted_types=["training_result"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="package",
+                display_name="Results Package",
+                accepted_types=["results_package"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=[],
+        optional_parameters={
+            "include_excel": True,
+            "include_machine_data": True,
+            "include_native_artifacts": True,
+            "include_logs": True,
+            "checkpoint_mode": "best",
+        },
+        execution_state="executable_results_package",
+        executable=True,
+        implementation_notes=[
+            ("Delegates to ResultsPackageService rather than reimplementing package generation."),
+            (
+                "Dataset, split, checkpoint, workflow-artifact, and "
+                "training-run lineage are checked before packaging."
+            ),
+            (
+                "The generated package is immediately verified before "
+                "a workflow artifact is emitted."
+            ),
+        ],
     )
 
     return registry

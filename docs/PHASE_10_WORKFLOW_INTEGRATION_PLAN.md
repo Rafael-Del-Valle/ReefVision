@@ -186,3 +186,65 @@ MAX_PATH limit while preserving:
 
 The physical filename is an implementation/storage detail and does not change
 the contents or scientific identity of the immutable training package.
+
+
+## Phase 10B — Retraining and Results Package integration
+
+### 10B-1 — Workflow Results Package
+
+Completed training results can now terminate in a normal ReefVision scientific
+Results Package workflow artifact.
+
+The node:
+
+`training_result -> training_results_package -> results_package`
+
+delegates to the existing `ResultsPackageService` and does not reproduce
+package-building logic.
+
+Before a package is emitted, ReefVision checks:
+
+- project identity
+- persisted training-run identity
+- immutable dataset manifest identity
+- immutable split manifest identity
+- trained checkpoint SHA-256, when present
+- Results Package self-verification
+
+The workflow artifact records the exact upstream training artifact checksum,
+training-run identity, archive SHA-256, package verification result, dataset
+and split hashes, checkpoint hash, package options, and managed paths.
+
+### Pose retraining boundary
+
+Phase 10A already produces immutable, scientist-verified pose-training
+datasets and exports.
+
+ReefVision does not yet have a production local pose-training runner.
+SLEAP-NN is currently a validated registration/inference backend, not a
+training backend.
+
+Phase 10B-2 therefore adds a real pose-training execution path rather than
+misrepresenting dataset export as retraining. Ultralytics pose is the first
+local target because the existing validated pose export already produces its
+dataset layout.
+
+
+### Results Package Windows path safety
+
+Phase 10B-1 exposed a Windows path-length failure in the existing shared
+Results Package builder when the ReefVision data root is deeply nested.
+
+The shared builder now:
+
+- avoids repeating the descriptive final package stem inside its temporary
+  staging directory
+- reserves path headroom for nested package files
+- constrains generated workbook names using the same path budget
+- constrains copied native artifact filenames using the same path budget
+- keeps the package's run identity and scientific provenance inside the
+  package metadata even when a filesystem component must be shortened
+
+This is a storage-safety correction used by both normal Training workspace
+Results Packages and workflow-generated Results Packages; it does not alter
+training metrics, dataset hashes, checkpoint hashes, or package verification.

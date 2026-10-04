@@ -80,6 +80,9 @@ _ACTIONS: dict[str, str] = {
     "register_trained_model": (
         "Register a completed training checkpoint with dataset, split, and experiment lineage."
     ),
+    "training_results_package": (
+        "Build and verify a scientific Results Package from the completed training run."
+    ),
     "detection_review_gate": "Pause until detection proposals are reviewed by a human.",
     "prompt_assist_masks": "Generate reviewable raster masks from reviewed detection boxes.",
     "relative_depth_estimation": (
