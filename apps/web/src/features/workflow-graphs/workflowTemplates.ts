@@ -899,6 +899,13 @@ const poseActiveLearningRetrain = {
 
 export const workflowTemplates: WorkflowTemplate[] = [
   {
+    id: "pose-active-learning-retrain",
+    name: "Pose Active Learning → retrain",
+    description:
+      "Pose inference → temporal identity → scientist review → Active Learning → verified dataset → retrain → register → Results Package, with a visual next-iteration cue.",
+    graph: poseActiveLearningRetrain,
+  },
+  {
     id: "project-images",
     name: "Project images",
     description: "Minimal executable source workflow.",
