@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 
-import type { WorkflowNodeDefinition } from "./workflowGraphApi";
+import type {
+  WorkflowGraphPlan,
+  WorkflowNodeDefinition,
+  WorkflowRunDetail,
+} from "./workflowGraphApi";
 
 interface GraphNode {
   node_id: string;
@@ -17,6 +21,13 @@ interface GraphEdge {
   target_port_id: string;
 }
 
+interface FeedbackLoop {
+  from_node_id: string;
+  to_node_id: string;
+  label?: string;
+  description?: string;
+}
+
 interface GraphShape {
   graph_id: string;
   name: string;
@@ -30,6 +41,8 @@ interface WorkflowVisualEditorProps {
   graph: Record<string, unknown>;
   registry: WorkflowNodeDefinition[];
   onChange: (graph: Record<string, unknown>) => void;
+  plan?: WorkflowGraphPlan | null;
+  runDetail?: WorkflowRunDetail | null;
 }
 
 interface PendingConnection {
@@ -38,14 +51,33 @@ interface PendingConnection {
   dataTypes: string[];
 }
 
-const NODE_WIDTH = 240;
-const NODE_HEADER_HEIGHT = 52;
-const CANVAS_WIDTH = 1800;
-const CANVAS_HEIGHT = 900;
+const NODE_WIDTH = 260;
+const NODE_HEADER_HEIGHT = 74;
+const MIN_CANVAS_WIDTH = 1800;
+const MIN_CANVAS_HEIGHT = 820;
 
 function asGraph(value: Record<string, unknown>): GraphShape | null {
   if (!Array.isArray(value.nodes) || !Array.isArray(value.edges)) return null;
   return value as unknown as GraphShape;
+}
+
+function asFeedbackLoop(metadata: Record<string, unknown> | undefined): FeedbackLoop | null {
+  const raw = metadata?.feedback_loop;
+  if (!raw || Array.isArray(raw) || typeof raw !== "object") return null;
+  const value = raw as Record<string, unknown>;
+  if (
+    typeof value.from_node_id !== "string" ||
+    typeof value.to_node_id !== "string"
+  ) {
+    return null;
+  }
+  return {
+    from_node_id: value.from_node_id,
+    to_node_id: value.to_node_id,
+    label: typeof value.label === "string" ? value.label : undefined,
+    description:
+      typeof value.description === "string" ? value.description : undefined,
+  };
 }
 
 function slug(value: string): string {
@@ -57,8 +89,8 @@ function slug(value: string): string {
 
 function defaultPosition(index: number): { x: number; y: number } {
   return {
-    x: 40 + (index % 5) * 300,
-    y: 40 + Math.floor(index / 5) * 220,
+    x: 40 + (index % 5) * 310,
+    y: 40 + Math.floor(index / 5) * 230,
   };
 }
 
@@ -66,10 +98,45 @@ function portCompatible(sourceTypes: string[], targetTypes: string[]): boolean {
   return sourceTypes.some((item) => targetTypes.includes(item));
 }
 
+function nodeKind(definition: WorkflowNodeDefinition | undefined): string {
+  if (!definition) return "Automated";
+  if (definition.category === "Human review") return "Scientist review";
+  if (definition.category === "Scientific analysis") return "Scientific analysis";
+  if (definition.category === "Active learning") return "Active learning";
+  return "Automated";
+}
+
+function statusLabel(status: string | undefined): string | null {
+  if (!status) return null;
+  const labels: Record<string, string> = {
+    pending: "Pending",
+    queued: "Queued",
+    running: "Running",
+    waiting_for_review: "Waiting for scientist review",
+    review_approved: "Review approved",
+    succeeded: "Succeeded",
+    failed: "Failed",
+    cancelled: "Cancelled",
+    cancel_requested: "Cancelling",
+  };
+  return labels[status] ?? status.replaceAll("_", " ");
+}
+
+function isPrimitive(value: unknown): boolean {
+  return (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  );
+}
+
 export function WorkflowVisualEditor({
   graph: rawGraph,
   registry,
   onChange,
+  plan = null,
+  runDetail = null,
 }: WorkflowVisualEditorProps) {
   const graph = asGraph(rawGraph);
   const [pending, setPending] = useState<PendingConnection | null>(null);
@@ -81,9 +148,21 @@ export function WorkflowVisualEditor({
     () => new Map(registry.map((item) => [item.node_type, item])),
     [registry],
   );
+  const runNodes = useMemo(
+    () => new Map((runDetail?.nodes ?? []).map((item) => [item.node_id, item])),
+    [runDetail],
+  );
+  const planSteps = useMemo(
+    () => new Map((plan?.steps ?? []).map((item) => [item.node_id, item])),
+    [plan],
+  );
+
   const selectedNode = graph?.nodes.find(
     (item) => item.node_id === selectedNodeId,
   );
+  const selectedDefinition = selectedNode
+    ? definitions.get(selectedNode.node_type)
+    : undefined;
 
   useEffect(() => {
     setParameterText(JSON.stringify(selectedNode?.parameters ?? {}, null, 2));
@@ -97,7 +176,9 @@ export function WorkflowVisualEditor({
       </p>
     );
   }
+
   const currentGraph = graph;
+  const feedbackLoop = asFeedbackLoop(currentGraph.metadata);
 
   function emit(next: GraphShape): void {
     onChange(next as unknown as Record<string, unknown>);
@@ -153,13 +234,29 @@ export function WorkflowVisualEditor({
           ? {
               ...resolved,
               position: {
-                x: Math.max(0, Math.min(CANVAS_WIDTH - NODE_WIDTH, x)),
-                y: Math.max(0, Math.min(CANVAS_HEIGHT - 160, y)),
+                x: Math.max(0, x),
+                y: Math.max(0, y),
               },
             }
           : resolved;
       }),
     });
+  }
+
+  function arrangeNodes(): void {
+    const orderedIds =
+      plan?.steps.map((step) => step.node_id) ??
+      currentGraph.nodes.map((node) => node.node_id);
+    const order = new Map(orderedIds.map((nodeId, index) => [nodeId, index]));
+    const nodes = currentGraph.nodes.map((node, index) => {
+      const resolvedIndex = order.get(node.node_id) ?? index;
+      return {
+        ...node,
+        position: defaultPosition(resolvedIndex),
+      };
+    });
+    emit({ ...currentGraph, nodes });
+    setMessage("Arranged nodes in execution order.");
   }
 
   function beginConnection(
@@ -233,6 +330,25 @@ export function WorkflowVisualEditor({
     setMessage(`Connected ${pending.nodeId} → ${targetNodeId}.`);
   }
 
+  function replaceSelectedParameters(nextParameters: Record<string, unknown>): void {
+    if (!selectedNode) return;
+    emit({
+      ...currentGraph,
+      nodes: currentGraph.nodes.map((node) =>
+        node.node_id === selectedNode.node_id
+          ? { ...node, parameters: nextParameters }
+          : node,
+      ),
+    });
+  }
+
+  function setSelectedParameter(key: string, value: unknown): void {
+    replaceSelectedParameters({
+      ...(selectedNode?.parameters ?? {}),
+      [key]: value,
+    });
+  }
+
   function applyParameters(): void {
     if (!selectedNode) return;
     try {
@@ -240,14 +356,7 @@ export function WorkflowVisualEditor({
       if (!value || Array.isArray(value) || typeof value !== "object") {
         throw new Error("Parameters must be a JSON object.");
       }
-      emit({
-        ...currentGraph,
-        nodes: currentGraph.nodes.map((node) =>
-          node.node_id === selectedNode.node_id
-            ? { ...node, parameters: value as Record<string, unknown> }
-            : node,
-        ),
-      });
+      replaceSelectedParameters(value as Record<string, unknown>);
       setMessage(`Updated parameters for ${selectedNode.node_id}.`);
     } catch (error) {
       setMessage(
@@ -266,11 +375,39 @@ export function WorkflowVisualEditor({
     }),
   );
 
+  const maxX = Math.max(
+    ...Array.from(positions.values()).map((position) => position.x),
+    0,
+  );
+  const maxY = Math.max(
+    ...Array.from(positions.values()).map((position) => position.y),
+    0,
+  );
+  const canvasWidth = Math.max(MIN_CANVAS_WIDTH, maxX + NODE_WIDTH + 180);
+  const canvasHeight = Math.max(MIN_CANVAS_HEIGHT, maxY + 300);
+
+  const feedbackSource = feedbackLoop
+    ? positions.get(feedbackLoop.from_node_id)
+    : undefined;
+  const feedbackTarget = feedbackLoop
+    ? positions.get(feedbackLoop.to_node_id)
+    : undefined;
+
+  const parameterKeys = selectedNode
+    ? Array.from(
+        new Set([
+          ...(selectedDefinition?.required_parameters ?? []),
+          ...Object.keys(selectedDefinition?.optional_parameters ?? {}),
+          ...Object.keys(selectedNode.parameters ?? {}),
+        ]),
+      )
+    : [];
+
   return (
-    <div>
-      <div className="button-row" style={{ alignItems: "center" }}>
+    <div className="workflow-editor-shell">
+      <div className="workflow-editor-toolbar">
         <label>
-          Add node{" "}
+          Add node
           <select
             defaultValue=""
             onChange={(event) => {
@@ -286,6 +423,9 @@ export function WorkflowVisualEditor({
             ))}
           </select>
         </label>
+        <button type="button" className="secondary" onClick={arrangeNodes}>
+          Arrange by execution
+        </button>
         {pending && (
           <button
             type="button"
@@ -295,34 +435,57 @@ export function WorkflowVisualEditor({
             Cancel connection
           </button>
         )}
+        <div className="workflow-legend" aria-label="Workflow node legend">
+          <span className="workflow-legend-item automated">Automated</span>
+          <span className="workflow-legend-item review">Scientist review</span>
+          <span className="workflow-legend-item active-learning">
+            Active learning
+          </span>
+          <span className="workflow-legend-item feedback">
+            Next iteration cue
+          </span>
+        </div>
       </div>
+
+      {feedbackLoop && (
+        <div className="workflow-feedback-note" data-testid="workflow-feedback-note">
+          <strong>{feedbackLoop.label ?? "Next iteration"}</strong>
+          <span>
+            {feedbackLoop.description ??
+              "The trained model can seed the next workflow iteration. This dashed cue is provenance guidance, not a cyclic execution edge."}
+          </span>
+        </div>
+      )}
+
       {message && <p className="muted-copy">{message}</p>}
 
-      <div
-        style={{
-          border: "1px solid var(--border-color, #777)",
-          borderRadius: 8,
-          overflow: "auto",
-          minHeight: 560,
-          maxHeight: 720,
-          position: "relative",
-        }}
-      >
+      <div className="workflow-editor-canvas-frame">
         <div
+          className="workflow-editor-canvas"
           style={{
-            width: CANVAS_WIDTH,
-            height: CANVAS_HEIGHT,
-            position: "relative",
-            backgroundImage:
-              "linear-gradient(to right, rgba(127,127,127,.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(127,127,127,.12) 1px, transparent 1px)",
-            backgroundSize: "24px 24px",
+            width: canvasWidth,
+            height: canvasHeight,
           }}
         >
           <svg
-            width={CANVAS_WIDTH}
-            height={CANVAS_HEIGHT}
-            style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+            width={canvasWidth}
+            height={canvasHeight}
+            className="workflow-edge-layer"
+            aria-hidden="true"
           >
+            <defs>
+              <marker
+                id="workflow-feedback-arrow"
+                viewBox="0 0 10 10"
+                refX="8"
+                refY="5"
+                markerWidth="6"
+                markerHeight="6"
+                orient="auto-start-reverse"
+              >
+                <path d="M 0 0 L 10 5 L 0 10 z" className="workflow-feedback-arrow" />
+              </marker>
+            </defs>
             {currentGraph.edges.map((edge) => {
               const source = positions.get(edge.source_node_id);
               const target = positions.get(edge.target_node_id);
@@ -336,44 +499,57 @@ export function WorkflowVisualEditor({
                 <path
                   key={edge.edge_id}
                   d={`M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}`}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  opacity={0.55}
+                  className="workflow-edge"
                 />
               );
             })}
+            {feedbackLoop && feedbackSource && feedbackTarget && (
+              <path
+                d={`M ${feedbackSource.x + NODE_WIDTH / 2} ${feedbackSource.y + 170}
+                    C ${feedbackSource.x + NODE_WIDTH / 2} ${canvasHeight - 55},
+                      ${feedbackTarget.x + NODE_WIDTH / 2} ${canvasHeight - 55},
+                      ${feedbackTarget.x + NODE_WIDTH / 2} ${feedbackTarget.y + 170}`}
+                className="workflow-feedback-edge"
+                markerEnd="url(#workflow-feedback-arrow)"
+                data-testid="workflow-feedback-edge"
+              />
+            )}
           </svg>
 
           {currentGraph.nodes.map((rawNode, index) => {
             const node = positionedNode(rawNode, index);
             const position = node.position ?? defaultPosition(index);
             const definition = definitions.get(node.node_type);
+            const runNode = runNodes.get(node.node_id);
+            const planStep = planSteps.get(node.node_id);
+            const status = statusLabel(runNode?.status);
+            const kind = nodeKind(definition);
+            const reviewNode = definition?.category === "Human review";
+
             return (
               <div
                 key={node.node_id}
+                className={[
+                  "workflow-node-card",
+                  selectedNodeId === node.node_id ? "selected" : "",
+                  reviewNode ? "is-review-node" : "",
+                  definition?.category === "Active learning"
+                    ? "is-active-learning-node"
+                    : "",
+                  runNode?.status ? `status-${runNode.status}` : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
                 style={{
-                  position: "absolute",
                   left: position.x,
                   top: position.y,
                   width: NODE_WIDTH,
-                  border:
-                    selectedNodeId === node.node_id
-                      ? "2px solid currentColor"
-                      : "1px solid #777",
-                  borderRadius: 8,
-                  background: "var(--panel-background, Canvas)",
-                  boxShadow: "0 4px 16px rgba(0,0,0,.12)",
-                  overflow: "hidden",
                 }}
+                data-node-id={node.node_id}
+                data-node-status={runNode?.status ?? "not-run"}
               >
                 <div
-                  style={{
-                    minHeight: NODE_HEADER_HEIGHT,
-                    padding: "8px 10px",
-                    cursor: "grab",
-                    background: "rgba(127,127,127,.12)",
-                  }}
+                  className="workflow-node-header"
                   onPointerDown={(event) => {
                     const element = event.currentTarget;
                     element.setPointerCapture(event.pointerId);
@@ -395,18 +571,39 @@ export function WorkflowVisualEditor({
                     element.addEventListener("pointerup", handleUp);
                   }}
                 >
-                  <strong>{definition?.display_name ?? node.node_type}</strong>
-                  <br />
-                  <small>{node.node_id}</small>
-                </div>
-                <div style={{ padding: 8 }}>
                   <div>
+                    <strong>{definition?.display_name ?? node.node_type}</strong>
+                    <small>{node.node_id}</small>
+                  </div>
+                  <span className="workflow-kind-chip">{kind}</span>
+                </div>
+
+                <div className="workflow-node-body">
+                  {(status || planStep) && (
+                    <div className="workflow-node-state">
+                      {status && (
+                        <span className={`workflow-status-chip status-${runNode?.status}`}>
+                          {status}
+                        </span>
+                      )}
+                      {!status && planStep && (
+                        <span className="workflow-status-chip plan">
+                          {planStep.executable ? "Plan ready" : "Plan blocked"}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {runNode?.error_message && (
+                    <p className="workflow-node-error">{runNode.error_message}</p>
+                  )}
+
+                  <div className="workflow-port-group inputs">
                     {definition?.input_ports.map((port) => (
                       <button
                         key={`in-${port.port_id}`}
                         type="button"
-                        className="secondary"
-                        style={{ margin: 2, fontSize: 11 }}
+                        className="workflow-port workflow-port-input"
                         title={`Input: ${port.accepted_types.join(", ")}`}
                         onClick={() =>
                           finishConnection(
@@ -417,17 +614,17 @@ export function WorkflowVisualEditor({
                           )
                         }
                       >
-                        ◀ {port.port_id}
+                        ◀ {port.display_name}
                       </button>
                     ))}
                   </div>
-                  <div>
+
+                  <div className="workflow-port-group outputs">
                     {definition?.output_ports.map((port) => (
                       <button
                         key={`out-${port.port_id}`}
                         type="button"
-                        className="secondary"
-                        style={{ margin: 2, fontSize: 11 }}
+                        className="workflow-port workflow-port-output"
                         title={`Output: ${port.accepted_types.join(", ")}`}
                         onClick={() =>
                           beginConnection(
@@ -437,11 +634,12 @@ export function WorkflowVisualEditor({
                           )
                         }
                       >
-                        {port.port_id} ▶
+                        {port.display_name} ▶
                       </button>
                     ))}
                   </div>
-                  <div className="button-row" style={{ marginTop: 6 }}>
+
+                  <div className="button-row workflow-node-actions">
                     <button
                       type="button"
                       className="secondary"
@@ -464,41 +662,113 @@ export function WorkflowVisualEditor({
         </div>
       </div>
 
-      <div className="feature-grid" style={{ marginTop: 12 }}>
+      <div className="workflow-editor-detail-grid">
         <div className="panel-card">
           <h5>Selected node parameters</h5>
           {selectedNode ? (
             <>
               <p>
-                <strong>{selectedNode.node_id}</strong> ·{" "}
-                {selectedNode.node_type}
+                <strong>{selectedNode.node_id}</strong> · {selectedNode.node_type}
               </p>
-              <textarea
-                rows={12}
-                value={parameterText}
-                onChange={(event) => setParameterText(event.target.value)}
-                spellCheck={false}
-              />
-              <div className="button-row">
-                <button type="button" onClick={applyParameters}>
-                  Apply parameters
-                </button>
-              </div>
+              {selectedDefinition && (
+                <p className="muted-copy">{selectedDefinition.description}</p>
+              )}
+
+              {parameterKeys.length > 0 && (
+                <div className="workflow-parameter-grid">
+                  {parameterKeys.map((key) => {
+                    const fallback = selectedDefinition?.optional_parameters[key];
+                    const value =
+                      selectedNode.parameters &&
+                      Object.prototype.hasOwnProperty.call(
+                        selectedNode.parameters,
+                        key,
+                      )
+                        ? selectedNode.parameters[key]
+                        : fallback;
+                    const required =
+                      selectedDefinition?.required_parameters.includes(key) ??
+                      false;
+                    if (!isPrimitive(value)) {
+                      return (
+                        <div className="workflow-parameter-field" key={key}>
+                          <strong>{key}</strong>
+                          <small>
+                            Nested setting · edit in Advanced parameter JSON.
+                          </small>
+                        </div>
+                      );
+                    }
+                    if (typeof value === "boolean") {
+                      return (
+                        <label className="workflow-parameter-toggle" key={key}>
+                          <input
+                            type="checkbox"
+                            checked={value}
+                            onChange={(event) =>
+                              setSelectedParameter(key, event.target.checked)
+                            }
+                          />
+                          <span>
+                            {key}
+                            {required ? " *" : ""}
+                          </span>
+                        </label>
+                      );
+                    }
+                    return (
+                      <label className="workflow-parameter-field" key={key}>
+                        <span>
+                          {key}
+                          {required ? " *" : ""}
+                        </span>
+                        <input
+                          type={typeof value === "number" ? "number" : "text"}
+                          value={value === null || value === undefined ? "" : String(value)}
+                          onChange={(event) => {
+                            const next =
+                              typeof value === "number"
+                                ? Number(event.target.value)
+                                : event.target.value;
+                            setSelectedParameter(key, next);
+                          }}
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+
+              <details className="advanced-disclosure">
+                <summary>Advanced parameter JSON</summary>
+                <textarea
+                  rows={12}
+                  value={parameterText}
+                  onChange={(event) => setParameterText(event.target.value)}
+                  spellCheck={false}
+                />
+                <div className="button-row">
+                  <button type="button" onClick={applyParameters}>
+                    Apply JSON
+                  </button>
+                </div>
+              </details>
             </>
           ) : (
-            <p>Select Configure on a node to edit its parameter JSON.</p>
+            <p>Select Configure on a node to edit its parameters.</p>
           )}
         </div>
+
         <div className="panel-card">
           <h5>Connections</h5>
           {currentGraph.edges.length ? (
-            <ul>
+            <ul className="workflow-connection-list">
               {currentGraph.edges.map((edge) => (
                 <li key={edge.edge_id}>
                   <code>
                     {edge.source_node_id}.{edge.source_port_id} →{" "}
                     {edge.target_node_id}.{edge.target_port_id}
-                  </code>{" "}
+                  </code>
                   <button
                     type="button"
                     className="secondary"
@@ -521,6 +791,17 @@ export function WorkflowVisualEditor({
               No connections yet. Select an output port, then a compatible input
               port.
             </p>
+          )}
+          {feedbackLoop && (
+            <div className="workflow-feedback-legend">
+              <strong>Iteration cue</strong>
+              <p>
+                {feedbackLoop.from_node_id} ⇢ {feedbackLoop.to_node_id}
+              </p>
+              <small>
+                Dashed feedback cues never create a cyclic execution edge.
+              </small>
+            </div>
           )}
         </div>
       </div>
