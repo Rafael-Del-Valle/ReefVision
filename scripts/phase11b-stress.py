@@ -748,7 +748,7 @@ def main() -> int:
                 report["checks"]["results_package"] = {
                     "status": "PASS",
                     "package_directory": str(package_dir),
-                    "archive_path": package_result.get("archive_path"),
+                    "archive_path": str(package_result.get("archive_path")),
                     "verification_checked_files": restarted_package.get(
                         "checked_files"
                     ),
