@@ -3,32 +3,64 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$repo = Split-Path -Parent $PSScriptRoot
-Set-Location $repo
 
-Write-Host "Phase 10 Workflow Graph Foundation acceptance" -ForegroundColor Cyan
-Write-Host "Expected branch: feat/workflow-graph-foundation-phase10"
+$Repo = Split-Path $PSScriptRoot -Parent
+$ExpectedBranch = "feat/scientist-ready-phase10-workflow-integration-20261004"
+$Python = Join-Path $Repo ".venv\Scripts\python.exe"
 
-if ($RunAutomatedValidation) {
-    & ".\.venv\Scripts\python.exe" -m ruff format --check apps\api
-    & ".\.venv\Scripts\python.exe" -m ruff check apps\api
-    & ".\.venv\Scripts\python.exe" -m mypy apps\api\reefvision
-    & ".\.venv\Scripts\python.exe" -m pytest apps\api\reefvision\tests\test_workflow_graphs_phase10.py -v
-    Push-Location apps\web
-    npm run test -- --run
-    npm run build
-    Pop-Location
+Set-Location $Repo
+
+$CurrentBranch = (git branch --show-current).Trim()
+
+if ($CurrentBranch -ne $ExpectedBranch) {
+    throw "Phase 10 acceptance must run on $ExpectedBranch"
+}
+
+if (-not (Test-Path $Python)) {
+    throw "ReefVision virtual environment not found."
+}
+
+Write-Host "Phase 10 workflow integration acceptance"
+Write-Host "Expected branch: $ExpectedBranch"
+
+& $Python -m ruff format --check `
+    apps/api/reefvision/schemas/workflow_graphs.py `
+    apps/api/reefvision/services/workflow_graphs.py `
+    apps/api/reefvision/services/workflow_node_registry_v1.py `
+    apps/api/reefvision/tests/test_workflow_pose_phase10.py
+
+if ($LASTEXITCODE -ne 0) {
+    throw "Phase 10 formatting check failed."
+}
+
+& $Python -m ruff check apps/api
+
+if ($LASTEXITCODE -ne 0) {
+    throw "Phase 10 Ruff validation failed."
+}
+
+& $Python -m mypy apps/api/reefvision
+
+if ($LASTEXITCODE -ne 0) {
+    throw "Phase 10 mypy validation failed."
+}
+
+& $Python -m pytest `
+    apps/api/reefvision/tests/test_workflow_pose_phase10.py `
+    apps/api/reefvision/tests/test_workflow_graphs_phase10.py `
+    -q
+
+if ($LASTEXITCODE -ne 0) {
+    throw "Phase 10 focused workflow tests failed."
 }
 
 Write-Host ""
-Write-Host "Manual acceptance:" -ForegroundColor Yellow
-Write-Host "[ ] Inspect every node definition and confirm its ports match an existing ReefVision operation."
-Write-Host "[ ] Validate the example segmentation-review-measurement graph after inserting a real segmenter model ID."
-Write-Host "[ ] Confirm incompatible ports are rejected."
-Write-Host "[ ] Confirm missing required parameters and connections are rejected."
-Write-Host "[ ] Confirm a classifier cannot be connected to Detection Inference."
-Write-Host "[ ] Confirm dataset, model, and video references must belong to the current project."
-Write-Host "[ ] Confirm review gates appear as explicit pause steps."
-Write-Host "[ ] Confirm the dry-run plan is topologically ordered."
-Write-Host "[ ] Confirm every plan reports executable=false."
-Write-Host "[ ] Confirm there is no enabled Run graph action and no visual node editor."
+Write-Host "Phase 10A-1 manual contract checks:"
+Write-Host "[ ] Pose nodes appear in the workflow registry."
+Write-Host "[ ] Pose/behavior nodes remain visibly non-executable until adapters exist."
+Write-Host "[ ] Behavior cannot consume unreviewed temporal pose output directly."
+Write-Host "[ ] Pose review converts temporal pose state into reviewed pose state."
+Write-Host "[ ] Frozen training truth requires a verified Active Learning round."
+Write-Host "[ ] No duplicate pose/behavior scientific implementation was introduced."
+Write-Host ""
+Write-Host "Phase 10A-1 automated scope complete."

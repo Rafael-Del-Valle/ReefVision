@@ -28,6 +28,14 @@ WorkflowDataType = Literal[
     "training_result",
     "video_tracks",
     "video_3d_trajectories",
+    "pose_tracks",
+    "pose_temporal_tracks",
+    "reviewed_pose_tracks",
+    "behavior_analysis",
+    "pose_active_learning_round",
+    "verified_pose_active_learning_round",
+    "pose_training_dataset",
+    "pose_training_package",
     "project_exchange_package",
 ]
 

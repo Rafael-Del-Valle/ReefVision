@@ -126,4 +126,345 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             ),
         ],
     )
+
+    # ------------------------------------------------------------------
+    # Phase 10A: pose, behavior, active-learning, and frozen-training
+    # workflow contracts.
+    #
+    # These definitions intentionally begin as contract-only nodes.
+    # Phase 10A-2 binds them to the already validated production services
+    # rather than creating duplicate scientific implementations here.
+    # ------------------------------------------------------------------
+
+    registry.update(
+        {
+            "pose_inference": WorkflowNodeDefinitionResponse(
+                node_type="pose_inference",
+                display_name="Pose Inference",
+                category="Pose",
+                description=(
+                    "Run a registered pose model over one managed video and persist "
+                    "canonical ReefVision video tracks containing pose observations."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="video",
+                        display_name="Video",
+                        accepted_types=["video_reference"],
+                    ),
+                    WorkflowPortDefinition(
+                        port_id="model",
+                        display_name="Pose model",
+                        accepted_types=["model_reference"],
+                    ),
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="poses",
+                        display_name="Pose tracks",
+                        accepted_types=["pose_tracks"],
+                        required=False,
+                        multiple=True,
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={
+                    "device": "auto",
+                    "confidence": 0.25,
+                },
+                execution_state="contract_only_phase10a",
+                executable=False,
+                implementation_notes=[
+                    (
+                        "Runtime execution must reuse ReefVision's production pose/video "
+                        "tracking provider path."
+                    ),
+                    (
+                        "Repeated semantic landmark labels must remain canonical and "
+                        "must not be flattened into unique biological labels."
+                    ),
+                    (
+                        "Model/provider/checkpoint and source-video identity must be "
+                        "retained in the workflow artifact."
+                    ),
+                ],
+            ),
+            "pose_temporal_association": WorkflowNodeDefinitionResponse(
+                node_type="pose_temporal_association",
+                display_name="Temporal Pose Association",
+                category="Pose",
+                description=(
+                    "Build persistent landmark identities and temporal association "
+                    "provenance from canonical pose tracks."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="poses",
+                        display_name="Pose tracks",
+                        accepted_types=["pose_tracks"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="tracks",
+                        display_name="Temporal pose tracks",
+                        accepted_types=["pose_temporal_tracks"],
+                        required=False,
+                        multiple=True,
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={},
+                execution_state="contract_only_phase10a",
+                executable=False,
+                implementation_notes=[
+                    (
+                        "Runtime execution must use PoseTemporalTrackingService rather "
+                        "than reimplementing temporal association."
+                    ),
+                    (
+                        "Identity breaks, occlusions, association confidence, and human "
+                        "corrections remain canonical persisted state."
+                    ),
+                ],
+            ),
+            "pose_review_gate": WorkflowNodeDefinitionResponse(
+                node_type="pose_review_gate",
+                display_name="Pose Review Gate",
+                category="Human review",
+                description=(
+                    "Pause a workflow until pose/landmark association output has been "
+                    "reviewed through ReefVision's scientist-facing pose editor."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="tracks",
+                        display_name="Temporal pose tracks",
+                        accepted_types=["pose_temporal_tracks"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="poses",
+                        display_name="Reviewed pose tracks",
+                        accepted_types=["reviewed_pose_tracks"],
+                        required=False,
+                        multiple=True,
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={},
+                execution_state="contract_only_phase10a",
+                executable=False,
+                implementation_notes=[
+                    "Machine-generated pose state is not equivalent to scientist-verified truth.",
+                    (
+                        "Resume must continue from persisted review state without "
+                        "rerunning completed upstream nodes."
+                    ),
+                ],
+            ),
+            "behavior_dynamics": WorkflowNodeDefinitionResponse(
+                node_type="behavior_dynamics",
+                display_name="Behavior Dynamics",
+                category="Scientific analysis",
+                description=(
+                    "Calculate deterministic behavior bouts, occupancy/dwell summaries, "
+                    "and state transitions from scientist-reviewed tracks."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="poses",
+                        display_name="Reviewed pose tracks",
+                        accepted_types=["reviewed_pose_tracks"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="analysis",
+                        display_name="Behavior analysis",
+                        accepted_types=["behavior_analysis"],
+                        required=False,
+                        multiple=True,
+                    )
+                ],
+                required_parameters=["ethogram_revision_id"],
+                optional_parameters={
+                    "start_frame": None,
+                    "end_frame": None,
+                },
+                execution_state="contract_only_phase10a",
+                executable=False,
+                implementation_notes=[
+                    (
+                        "Runtime execution must delegate to BehaviorDynamicsService "
+                        "using an immutable ethogram revision."
+                    ),
+                    ("Output provenance must retain source track revisions and ethogram identity."),
+                ],
+            ),
+            "pose_active_learning": WorkflowNodeDefinitionResponse(
+                node_type="pose_active_learning",
+                display_name="Pose Active Learning",
+                category="Active learning",
+                description=(
+                    "Create an explainable pose-specific acquisition round from canonical "
+                    "temporally associated pose state."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="tracks",
+                        display_name="Temporal pose tracks",
+                        accepted_types=["pose_temporal_tracks"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="round",
+                        display_name="Pose Active Learning round",
+                        accepted_types=["pose_active_learning_round"],
+                        required=False,
+                        multiple=True,
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={
+                    "requested_size": 20,
+                    "diversity_balance": True,
+                },
+                execution_state="contract_only_phase10a",
+                executable=False,
+                implementation_notes=[
+                    (
+                        "Runtime execution must delegate to PoseActiveLearningService "
+                        "and preserve explainable acquisition components."
+                    ),
+                    (
+                        "Provider-native uncertainty may only be used where the provider "
+                        "actually exposes it."
+                    ),
+                ],
+            ),
+            "pose_active_learning_review_gate": WorkflowNodeDefinitionResponse(
+                node_type="pose_active_learning_review_gate",
+                display_name="Pose Active Learning Review",
+                category="Human review",
+                description=(
+                    "Pause until Active Learning candidates have explicit scientist "
+                    "review outcomes."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="round",
+                        display_name="Pose Active Learning round",
+                        accepted_types=["pose_active_learning_round"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="verified_round",
+                        display_name="Verified pose round",
+                        accepted_types=["verified_pose_active_learning_round"],
+                        required=False,
+                        multiple=True,
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={},
+                execution_state="contract_only_phase10a",
+                executable=False,
+                implementation_notes=[
+                    (
+                        "Pending or skipped candidates must never be represented as "
+                        "verified training truth."
+                    ),
+                    ("The workflow must resume from persisted scientist review state."),
+                ],
+            ),
+            "pose_training_dataset_freeze": WorkflowNodeDefinitionResponse(
+                node_type="pose_training_dataset_freeze",
+                display_name="Freeze Pose Training Dataset",
+                category="Training",
+                description=(
+                    "Freeze scientist-verified Active Learning candidates into the "
+                    "immutable Phase 9 pose-training dataset format."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="verified_round",
+                        display_name="Verified pose round",
+                        accepted_types=["verified_pose_active_learning_round"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="dataset",
+                        display_name="Frozen pose dataset",
+                        accepted_types=["pose_training_dataset"],
+                        required=False,
+                        multiple=True,
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={
+                    "name": None,
+                    "notes": None,
+                },
+                execution_state="contract_only_phase10a",
+                executable=False,
+                implementation_notes=[
+                    (
+                        "Runtime execution must call PoseTrainingDatasetService and "
+                        "must not reproduce its hashing/materialization logic."
+                    ),
+                    (
+                        "Phase 9 immutable manifest/item hashes and schema identity "
+                        "remain authoritative."
+                    ),
+                ],
+            ),
+            "pose_training_export": WorkflowNodeDefinitionResponse(
+                node_type="pose_training_export",
+                display_name="Pose Training Export",
+                category="Exports",
+                description=(
+                    "Export an immutable frozen pose dataset in ReefVision native or "
+                    "supported external retraining formats."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="dataset",
+                        display_name="Frozen pose dataset",
+                        accepted_types=["pose_training_dataset"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="package",
+                        display_name="Pose training package",
+                        accepted_types=["pose_training_package"],
+                        required=False,
+                        multiple=True,
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={
+                    "format": "native",
+                },
+                execution_state="contract_only_phase10a",
+                executable=False,
+                implementation_notes=[
+                    (
+                        "Runtime execution must reuse the Phase 9 immutable native package "
+                        "or PoseTrainingExportService."
+                    ),
+                    (
+                        "Lossy external formats must continue to report conversion losses "
+                        "explicitly."
+                    ),
+                ],
+            ),
+        }
+    )
+
     return registry

@@ -94,6 +94,29 @@ _ACTIONS: dict[str, str] = {
     "video_metric_depth_3d": (
         "Estimate model-metric video depth and reconstruct Scientific 3D fish trajectories."
     ),
+    "pose_inference": (
+        "Run the registered pose backend and persist canonical pose-bearing video tracks."
+    ),
+    "pose_temporal_association": (
+        "Build persistent landmark identities, association confidence, occlusion state, "
+        "and identity-break provenance."
+    ),
+    "pose_review_gate": ("Pause until temporal pose state has explicit scientist review."),
+    "behavior_dynamics": (
+        "Calculate deterministic behavior dynamics from scientist-reviewed tracks."
+    ),
+    "pose_active_learning": (
+        "Create an explainable pose-specific Active Learning acquisition round."
+    ),
+    "pose_active_learning_review_gate": (
+        "Pause until Active Learning candidates have explicit scientist review outcomes."
+    ),
+    "pose_training_dataset_freeze": (
+        "Freeze only verified pose candidates into immutable Phase 9 training truth."
+    ),
+    "pose_training_export": (
+        "Export the immutable pose dataset through the validated Phase 9 exporters."
+    ),
     "project_exchange_export": "Build a Phase 9 checksummed project exchange export inline.",
 }
 
