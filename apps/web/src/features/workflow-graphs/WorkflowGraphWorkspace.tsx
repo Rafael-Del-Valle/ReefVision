@@ -147,6 +147,16 @@ export function WorkflowGraphWorkspace({
     cancelMutation.error;
   const selectedRun = runDetailQuery.data?.run;
   const visualGraph = safeParseGraph(graphJson);
+  const selectedProvenanceSha =
+    typeof selectedRun?.result_json.provenance_sha256 === "string"
+      ? selectedRun.result_json.provenance_sha256
+      : null;
+  const selectedProvenanceManifest =
+    selectedRun?.result_json.provenance_manifest &&
+    !Array.isArray(selectedRun.result_json.provenance_manifest) &&
+    typeof selectedRun.result_json.provenance_manifest === "object"
+      ? (selectedRun.result_json.provenance_manifest as Record<string, unknown>)
+      : null;
 
   return (
     <section className="feature-workspace">
@@ -231,6 +241,8 @@ export function WorkflowGraphWorkspace({
           <WorkflowVisualEditor
             graph={visualGraph}
             registry={registryQuery.data ?? []}
+            plan={planMutation.data ?? null}
+            runDetail={runDetailQuery.data ?? null}
             onChange={(graph) => setGraphJson(JSON.stringify(graph, null, 2))}
           />
         ) : (
@@ -238,6 +250,15 @@ export function WorkflowGraphWorkspace({
             Fix the JSON syntax below before continuing visual editing.
           </p>
         )}
+      </div>
+
+      <div className="workflow-scientist-boundary-note">
+        <strong>Scientific truth stays scientist-gated.</strong>
+        <span>
+          Purple review nodes pause execution before machine output becomes
+          verified training truth. Dashed feedback cues describe the next saved
+          iteration and never create a cyclic execution dependency.
+        </span>
       </div>
 
       <div className="feature-grid" style={{ marginTop: 12 }}>
@@ -455,6 +476,30 @@ export function WorkflowGraphWorkspace({
               )}
               {selectedRun.error_message && (
                 <p className="form-error">{selectedRun.error_message}</p>
+              )}
+              {(selectedProvenanceSha || selectedProvenanceManifest) && (
+                <div className="workflow-provenance-summary">
+                  <h5>Workflow provenance</h5>
+                  {selectedProvenanceSha && (
+                    <p>
+                      Canonical SHA-256:{" "}
+                      <code>{shortHash(selectedProvenanceSha)}</code>
+                    </p>
+                  )}
+                  <p className="muted-copy">
+                    The terminal manifest records node parameters, input/output
+                    artifact hashes, scientist approvals, recovery history, and
+                    terminal outputs for this saved run.
+                  </p>
+                  {selectedProvenanceManifest && (
+                    <details>
+                      <summary>Inspect provenance manifest</summary>
+                      <pre>
+                        {JSON.stringify(selectedProvenanceManifest, null, 2)}
+                      </pre>
+                    </details>
+                  )}
+                </div>
               )}
               <h5>Nodes</h5>
               <ol>
