@@ -187,7 +187,16 @@ if ($RunFullSoftwareGate) {
 
 if ($BuildMsi) {
     Invoke-Phase11Gate -Name "msi_build_and_verification" -Action {
-        & (Join-Path $Repo "scripts\build-desktop.ps1") -TargetTriple $TargetTriple
+        $BuildDesktopScript = Join-Path $Repo "scripts\build-desktop.ps1"
+        & powershell.exe `
+            -NoLogo `
+            -NoProfile `
+            -ExecutionPolicy Bypass `
+            -File $BuildDesktopScript `
+            -TargetTriple $TargetTriple
+        if ($LASTEXITCODE -ne 0) {
+            throw "build-desktop.ps1 failed with exit code $LASTEXITCODE."
+        }
     }
 
     $InstallerDirectory = Join-Path $Repo "apps\web\src-tauri\target\$TargetTriple\release\bundle\msi"
