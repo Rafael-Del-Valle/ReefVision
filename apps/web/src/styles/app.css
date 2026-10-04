@@ -1847,3 +1847,358 @@ summary:focus-visible {
     flex: 1 1 calc(50% - 0.45rem);
   }
 }
+
+
+/* Phase 10D workflow node builder ------------------------------------------ */
+.workflow-editor-shell {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.workflow-editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.7rem;
+}
+
+.workflow-editor-toolbar > label {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 260px;
+}
+
+.workflow-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-left: auto;
+}
+
+.workflow-legend-item,
+.workflow-kind-chip,
+.workflow-status-chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 1.65rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid rgba(182, 238, 228, 0.16);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.workflow-legend-item.automated,
+.workflow-kind-chip {
+  color: #b9ddd7;
+  background: rgba(111, 177, 190, 0.09);
+}
+
+.workflow-legend-item.review,
+.workflow-node-card.is-review-node .workflow-kind-chip {
+  color: #ead9ff;
+  border-color: rgba(185, 141, 255, 0.32);
+  background: rgba(153, 95, 225, 0.14);
+}
+
+.workflow-legend-item.active-learning,
+.workflow-node-card.is-active-learning-node .workflow-kind-chip {
+  color: #fff0be;
+  border-color: rgba(235, 190, 90, 0.32);
+  background: rgba(235, 190, 90, 0.1);
+}
+
+.workflow-legend-item.feedback {
+  border-style: dashed;
+  color: #93e4d4;
+  background: rgba(114, 219, 201, 0.08);
+}
+
+.workflow-feedback-note,
+.workflow-scientist-boundary-note,
+.workflow-provenance-summary,
+.workflow-feedback-legend {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid rgba(114, 219, 201, 0.2);
+  border-radius: 0.85rem;
+  background: rgba(55, 163, 145, 0.07);
+}
+
+.workflow-feedback-note span,
+.workflow-scientist-boundary-note span,
+.workflow-feedback-legend small {
+  color: #a9cbc5;
+  line-height: 1.45;
+}
+
+.workflow-editor-canvas-frame {
+  min-height: 560px;
+  max-height: 760px;
+  overflow: auto;
+  border: 1px solid rgba(182, 238, 228, 0.16);
+  border-radius: 0.95rem;
+  background: #031418;
+  scrollbar-gutter: stable;
+}
+
+.workflow-editor-canvas {
+  position: relative;
+  background-image:
+    linear-gradient(to right, rgba(127, 224, 200, 0.075) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(127, 224, 200, 0.075) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.workflow-edge-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.workflow-edge {
+  fill: none;
+  stroke: rgba(159, 215, 205, 0.52);
+  stroke-width: 2;
+}
+
+.workflow-feedback-edge {
+  fill: none;
+  stroke: rgba(114, 219, 201, 0.85);
+  stroke-width: 2.5;
+  stroke-dasharray: 9 7;
+}
+
+.workflow-feedback-arrow {
+  fill: rgba(114, 219, 201, 0.9);
+}
+
+.workflow-node-card {
+  position: absolute;
+  overflow: hidden;
+  border: 1px solid rgba(182, 238, 228, 0.22);
+  border-radius: 0.85rem;
+  background: rgba(4, 27, 33, 0.97);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.workflow-node-card.selected {
+  border-color: #72dbc9;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.24),
+    0 0 0 1px rgba(114, 219, 201, 0.32);
+}
+
+.workflow-node-card.is-review-node {
+  border-color: rgba(185, 141, 255, 0.42);
+}
+
+.workflow-node-card.is-active-learning-node {
+  border-color: rgba(235, 190, 90, 0.35);
+}
+
+.workflow-node-card.status-running {
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.24),
+    0 0 0 2px rgba(114, 219, 201, 0.28);
+}
+
+.workflow-node-card.status-waiting_for_review {
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.24),
+    0 0 0 2px rgba(185, 141, 255, 0.3);
+}
+
+.workflow-node-card.status-failed {
+  border-color: rgba(255, 143, 135, 0.58);
+}
+
+.workflow-node-card.status-succeeded {
+  border-color: rgba(114, 219, 201, 0.36);
+}
+
+.workflow-node-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.55rem;
+  min-height: 4.6rem;
+  padding: 0.65rem 0.7rem;
+  align-items: start;
+  cursor: grab;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.workflow-node-header:active {
+  cursor: grabbing;
+}
+
+.workflow-node-header > div {
+  min-width: 0;
+}
+
+.workflow-node-header strong,
+.workflow-node-header small {
+  display: block;
+}
+
+.workflow-node-header small {
+  margin-top: 0.15rem;
+  overflow: hidden;
+  color: #91b4ae;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-node-body {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.65rem;
+}
+
+.workflow-node-state {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.workflow-status-chip.status-running,
+.workflow-status-chip.status-queued {
+  color: #c8f3eb;
+  background: rgba(114, 219, 201, 0.12);
+}
+
+.workflow-status-chip.status-waiting_for_review,
+.workflow-status-chip.status-review_approved {
+  color: #ead9ff;
+  background: rgba(153, 95, 225, 0.14);
+}
+
+.workflow-status-chip.status-succeeded {
+  color: #bff0d8;
+  background: rgba(85, 190, 126, 0.12);
+}
+
+.workflow-status-chip.status-failed,
+.workflow-status-chip.status-cancelled {
+  color: #ffd5d1;
+  background: rgba(232, 91, 84, 0.13);
+}
+
+.workflow-status-chip.plan {
+  color: #d4e6e2;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.workflow-node-error {
+  margin: 0;
+  padding: 0.45rem 0.5rem;
+  border-radius: 0.6rem;
+  color: #ffd5d1;
+  background: rgba(232, 91, 84, 0.08);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.workflow-port-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.workflow-port {
+  min-height: 1.9rem;
+  padding: 0.25rem 0.45rem;
+  font-size: 0.7rem;
+}
+
+.workflow-port-input {
+  border-color: rgba(137, 177, 240, 0.26);
+}
+
+.workflow-port-output {
+  margin-left: auto;
+  border-color: rgba(114, 219, 201, 0.28);
+}
+
+.workflow-node-actions {
+  margin-top: 0.15rem;
+}
+
+.workflow-editor-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 1rem;
+}
+
+.workflow-parameter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.7rem;
+  margin: 0.8rem 0;
+}
+
+.workflow-parameter-field,
+.workflow-parameter-toggle {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.65rem;
+  border: 1px solid rgba(182, 238, 228, 0.11);
+  border-radius: 0.7rem;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.workflow-parameter-toggle {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.workflow-parameter-toggle input {
+  width: auto;
+}
+
+.workflow-parameter-field small {
+  color: #91b4ae;
+}
+
+.workflow-connection-list {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0;
+  list-style: none;
+}
+
+.workflow-connection-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.55rem;
+  align-items: center;
+  padding: 0.55rem;
+  border: 1px solid rgba(182, 238, 228, 0.1);
+  border-radius: 0.65rem;
+}
+
+.workflow-connection-list code {
+  overflow-wrap: anywhere;
+}
+
+.workflow-provenance-summary {
+  margin: 0.7rem 0 1rem;
+}
+
+.workflow-provenance-summary h5,
+.workflow-provenance-summary p {
+  margin-top: 0;
+}
+
+@media (max-width: 900px) {
+  .workflow-legend {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .workflow-editor-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
