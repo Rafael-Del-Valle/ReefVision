@@ -181,3 +181,52 @@ runtime.
 
 DeepLabCut CSV export fails closed when multiple frozen individuals occupy the
 same image rather than silently collapsing them into a single-animal table.
+
+### Phase 9C - project exchange of immutable pose training truth
+
+Project exchange now treats frozen pose retraining truth as first-class
+scientific project state.
+
+The `.reefvision.zip` record inventory includes the lineage required to
+interpret an immutable pose-training dataset:
+
+- pose landmark schema identities
+- immutable pose schema revisions
+- Pose Active Learning rounds
+- scientist review corrections referenced by those rounds
+- Pose Active Learning candidates
+- frozen pose training datasets
+- frozen pose training dataset items.
+
+Project import remains import-as-new-project. Source primary keys are not
+reused. All project/video/track/schema/round/candidate/dataset/item/correction
+identities are remapped to the imported project.
+
+Because hashes containing IDs cannot remain valid after intentional ID
+remapping, ReefVision deterministically rebuilds:
+
+- candidate provenance SHA-256
+- verified pose SHA-256
+- Pose Active Learning selection SHA-256
+- retraining-manifest SHA-256
+- frozen training item SHA-256
+- frozen dataset manifest SHA-256.
+
+The original source archive remains stored as import provenance, preserving the
+source package and original source hashes. The imported project receives a new
+internally self-consistent chain of hashes over its remapped identities.
+
+Inspection verifies each pose section using the normal project-exchange section
+count and SHA-256 contract before import. A modified frozen-item JSONL section
+therefore makes the archive incompatible before any project state is created.
+
+### Phase 9 closeout
+
+Phase 9 is complete when Phase 9A, 9B, and 9C automated acceptance all pass:
+
+1. scientist-verified poses can be frozen into immutable training truth;
+2. exact source frames and retraining-ready SLEAP, COCO, DeepLabCut,
+   Ultralytics Pose, and NWB bundles can be generated from that frozen truth;
+3. frozen pose-training state and its scientific lineage survive
+   `.reefvision.zip` export, inspection, ID-remapped import, and native-package
+   regeneration.

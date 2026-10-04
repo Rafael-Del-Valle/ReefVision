@@ -35,6 +35,19 @@ from reefvision.db.models import (
     WorkflowNodeRun,
     WorkflowRun,
 )
+from reefvision.db.models.pose_active_learning import (
+    PoseActiveLearningCandidate,
+    PoseActiveLearningRound,
+)
+from reefvision.db.models.pose_schema import (
+    PoseLandmarkSchema,
+    PoseLandmarkSchemaRevision,
+)
+from reefvision.db.models.pose_tracking import PoseLandmarkCorrection
+from reefvision.db.models.pose_training_dataset import (
+    PoseTrainingDataset,
+    PoseTrainingDatasetItem,
+)
 from reefvision.schemas.project_exchange import ProjectExchangePackageResponse
 from reefvision.services.project_exchange import MANIFEST_NAME, ProjectExchangeService
 from reefvision.storage.datasets import canonical_json_sha256
@@ -191,6 +204,97 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                 ),
             }
         )
+
+        pose_schemas = list(
+            self.session.scalars(
+                select(PoseLandmarkSchema).where(PoseLandmarkSchema.project_id == project.id)
+            )
+        )
+        pose_schema_ids = [item.id for item in pose_schemas]
+
+        pose_schema_revisions = (
+            list(
+                self.session.scalars(
+                    select(PoseLandmarkSchemaRevision).where(
+                        PoseLandmarkSchemaRevision.schema_id.in_(pose_schema_ids)
+                    )
+                )
+            )
+            if pose_schema_ids
+            else []
+        )
+
+        pose_active_learning_rounds = list(
+            self.session.scalars(
+                select(PoseActiveLearningRound).where(
+                    PoseActiveLearningRound.project_id == project.id
+                )
+            )
+        )
+        pose_round_ids = [item.id for item in pose_active_learning_rounds]
+
+        pose_active_learning_candidates = (
+            list(
+                self.session.scalars(
+                    select(PoseActiveLearningCandidate).where(
+                        PoseActiveLearningCandidate.round_id.in_(pose_round_ids)
+                    )
+                )
+            )
+            if pose_round_ids
+            else []
+        )
+
+        correction_ids = [
+            item.correction_id
+            for item in pose_active_learning_candidates
+            if item.correction_id is not None
+        ]
+
+        pose_landmark_corrections = (
+            list(
+                self.session.scalars(
+                    select(PoseLandmarkCorrection).where(
+                        PoseLandmarkCorrection.id.in_(correction_ids)
+                    )
+                )
+            )
+            if correction_ids
+            else []
+        )
+
+        pose_training_datasets = list(
+            self.session.scalars(
+                select(PoseTrainingDataset).where(PoseTrainingDataset.project_id == project.id)
+            )
+        )
+
+        pose_training_dataset_ids = [item.id for item in pose_training_datasets]
+
+        pose_training_dataset_items = (
+            list(
+                self.session.scalars(
+                    select(PoseTrainingDatasetItem).where(
+                        PoseTrainingDatasetItem.dataset_id.in_(pose_training_dataset_ids)
+                    )
+                )
+            )
+            if pose_training_dataset_ids
+            else []
+        )
+
+        sections.update(
+            {
+                "pose_landmark_schemas": pose_schemas,
+                "pose_landmark_schema_revisions": pose_schema_revisions,
+                "pose_active_learning_rounds": pose_active_learning_rounds,
+                "pose_landmark_corrections": pose_landmark_corrections,
+                "pose_active_learning_candidates": (pose_active_learning_candidates),
+                "pose_training_datasets": pose_training_datasets,
+                "pose_training_dataset_items": (pose_training_dataset_items),
+            }
+        )
+
         return sections
 
     def _telemetry_sidecars(

@@ -28,9 +28,30 @@ from reefvision.db.models import (
     ReviewQueueItem,
     TrainingDraft,
     VideoAsset,
+    VideoTrack,
+)
+from reefvision.db.models.pose_active_learning import (
+    PoseActiveLearningCandidate,
+    PoseActiveLearningRound,
+)
+from reefvision.db.models.pose_schema import (
+    PoseLandmarkSchema,
+    PoseLandmarkSchemaRevision,
+)
+from reefvision.db.models.pose_tracking import PoseLandmarkCorrection
+from reefvision.db.models.pose_training_dataset import (
+    PoseTrainingDataset,
+    PoseTrainingDatasetItem,
 )
 from reefvision.schemas.project_exchange import ProjectExchangeImportResponse
 from reefvision.services import project_exchange_import as base_import
+from reefvision.services.pose_active_learning import (
+    PoseActiveLearningService,
+)
+from reefvision.services.pose_training_datasets import (
+    ITEM_SCHEMA_VERSION,
+    MANIFEST_SCHEMA_VERSION,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -53,6 +74,13 @@ def _register_v1_sections() -> None:
             "class_operations": ClassOperation,
             "exports": ExportRecord,
             "georeferenced_observations": GeoReferencedObservation,
+            "pose_landmark_schemas": PoseLandmarkSchema,
+            "pose_landmark_schema_revisions": PoseLandmarkSchemaRevision,
+            "pose_active_learning_rounds": PoseActiveLearningRound,
+            "pose_landmark_corrections": PoseLandmarkCorrection,
+            "pose_active_learning_candidates": PoseActiveLearningCandidate,
+            "pose_training_datasets": PoseTrainingDataset,
+            "pose_training_dataset_items": PoseTrainingDatasetItem,
         }
     )
     _insert_after("project_class_visibility_defaults", "label_classes")
@@ -63,6 +91,31 @@ def _register_v1_sections() -> None:
     _insert_after("annotation_events", "annotations")
     _insert_after("mask_annotation_events", "mask_annotations")
     _insert_after("georeferenced_observations", "video_tracks")
+    _insert_after("pose_landmark_schemas", "models")
+    _insert_after(
+        "pose_landmark_schema_revisions",
+        "pose_landmark_schemas",
+    )
+    _insert_after(
+        "pose_active_learning_rounds",
+        "video_tracks",
+    )
+    _insert_after(
+        "pose_landmark_corrections",
+        "pose_active_learning_rounds",
+    )
+    _insert_after(
+        "pose_active_learning_candidates",
+        "pose_landmark_corrections",
+    )
+    _insert_after(
+        "pose_training_datasets",
+        "pose_active_learning_candidates",
+    )
+    _insert_after(
+        "pose_training_dataset_items",
+        "pose_training_datasets",
+    )
 
 
 def _safe_relative_path(value: str) -> bool:
@@ -481,6 +534,404 @@ def _mark_imported_georeferencing_stale(
     session.flush()
 
 
+def _refresh_pose_training_exchange_integrity(
+    session: Session,
+    project_id: str,
+) -> None:
+    """Rebuild pose AL/training hashes after deterministic exchange ID remapping."""
+
+    rounds = list(
+        session.scalars(
+            select(PoseActiveLearningRound).where(PoseActiveLearningRound.project_id == project_id)
+        )
+    )
+
+    if not rounds:
+        return
+
+    round_ids = [item.id for item in rounds]
+
+    candidates = list(
+        session.scalars(
+            select(PoseActiveLearningCandidate).where(
+                PoseActiveLearningCandidate.round_id.in_(round_ids)
+            )
+        )
+    )
+
+    candidates_by_round: dict[
+        str,
+        list[PoseActiveLearningCandidate],
+    ] = {}
+
+    for candidate in candidates:
+        candidates_by_round.setdefault(
+            candidate.round_id,
+            [],
+        ).append(candidate)
+
+        candidate.provenance_sha256 = canonical_json_sha256(dict(candidate.provenance_json or {}))
+
+        if candidate.review_status != "verified":
+            continue
+
+        track = session.get(
+            VideoTrack,
+            candidate.video_track_id,
+        )
+
+        if track is None:
+            raise RuntimeError("Imported verified pose candidate lost its video track")
+
+        keyframe = next(
+            (
+                dict(item)
+                for item in track.keyframes_json
+                if int(
+                    item.get(
+                        "frame",
+                        -1,
+                    )
+                )
+                == candidate.focus_frame
+            ),
+            None,
+        )
+
+        if keyframe is None:
+            raise RuntimeError("Imported verified pose candidate lost its canonical frame")
+
+        verified_payload = {
+            "schema_version": ("pose-active-learning-verified-pose-0001"),
+            "video_track_id": track.id,
+            "track_revision": track.revision,
+            "focus_frame": candidate.focus_frame,
+            "pose_schema_id": candidate.pose_schema_id,
+            "pose_schema_revision": (candidate.pose_schema_revision),
+            "pose_observations": list(keyframe.get("pose_observations") or []),
+            "keypoints": list(keyframe.get("keypoints") or []),
+        }
+
+        candidate.verified_pose_sha256 = canonical_json_sha256(verified_payload)
+
+        if candidate.correction_id is not None:
+            correction = session.get(
+                PoseLandmarkCorrection,
+                candidate.correction_id,
+            )
+
+            if correction is None:
+                raise RuntimeError("Imported verified pose candidate lost its scientist correction")
+
+            correction.parent_video_track_id = track.id
+            correction.target_id = candidate.id
+
+            before = dict(correction.before_json or {})
+
+            before.update(
+                {
+                    "candidate_id": candidate.id,
+                    "source_track_revision": (candidate.source_track_revision),
+                    "candidate_provenance_sha256": (candidate.provenance_sha256),
+                    "acquisition_score": (candidate.acquisition_score),
+                    "score_components": dict(candidate.score_components_json or {}),
+                    "reason_codes": list(candidate.reason_codes_json or []),
+                }
+            )
+
+            after = dict(correction.after_json or {})
+
+            after.update(
+                {
+                    "verified_track_revision": (candidate.verified_track_revision),
+                    "verified_pose_sha256": (candidate.verified_pose_sha256),
+                    "pose_schema_id": (candidate.pose_schema_id),
+                    "pose_schema_revision": (candidate.pose_schema_revision),
+                }
+            )
+
+            correction.before_json = before
+            correction.after_json = after
+
+    session.flush()
+
+    for round_record in rounds:
+        round_candidates = candidates_by_round.get(
+            round_record.id,
+            [],
+        )
+
+        candidate_by_key = {
+            (
+                item.video_track_id,
+                item.focus_frame,
+            ): item
+            for item in round_candidates
+        }
+
+        manifest = dict(round_record.selection_manifest_json or {})
+
+        raw_items = manifest.get(
+            "items",
+            [],
+        )
+
+        refreshed_items: list[dict[str, Any]] = []
+
+        if isinstance(
+            raw_items,
+            list,
+        ):
+            for raw_item in raw_items:
+                if not isinstance(
+                    raw_item,
+                    dict,
+                ):
+                    continue
+
+                manifest_item = dict(raw_item)
+
+                video_track_id = manifest_item.get("video_track_id")
+                focus_frame = manifest_item.get("focus_frame")
+
+                manifest_candidate = (
+                    candidate_by_key.get(
+                        (
+                            video_track_id,
+                            focus_frame,
+                        )
+                    )
+                    if (
+                        isinstance(
+                            video_track_id,
+                            str,
+                        )
+                        and isinstance(
+                            focus_frame,
+                            int,
+                        )
+                        and not isinstance(
+                            focus_frame,
+                            bool,
+                        )
+                    )
+                    else None
+                )
+
+                if manifest_candidate is not None:
+                    manifest_item["provenance_sha256"] = manifest_candidate.provenance_sha256
+
+                refreshed_items.append(manifest_item)
+
+        manifest["items"] = refreshed_items
+        manifest["project_id"] = round_record.project_id
+        manifest["video_id"] = round_record.video_id
+        manifest["model_ids"] = list(round_record.model_ids_json or [])
+
+        round_record.selection_manifest_json = manifest
+
+        identity_manifest = dict(manifest)
+
+        identity_manifest["schema_version"] = "pose-active-learning-selection-identity-0001"
+
+        round_record.selection_sha256 = canonical_json_sha256(identity_manifest)
+
+    session.flush()
+
+    datasets = list(
+        session.scalars(
+            select(PoseTrainingDataset).where(PoseTrainingDataset.project_id == project_id)
+        )
+    )
+
+    for dataset in datasets:
+        source_round_record = session.get(
+            PoseActiveLearningRound,
+            dataset.source_round_id,
+        )
+
+        if source_round_record is None:
+            raise RuntimeError("Imported pose training dataset lost its Active Learning round")
+
+        retraining_manifest = (
+            PoseActiveLearningService(session)
+            .export_manifest(source_round_record.id)
+            .model_dump(mode="json")
+        )
+
+        dataset.source_selection_sha256 = source_round_record.selection_sha256
+
+        dataset.source_retraining_manifest_sha256 = canonical_json_sha256(retraining_manifest)
+
+        items = list(
+            session.scalars(
+                select(PoseTrainingDatasetItem)
+                .where(PoseTrainingDatasetItem.dataset_id == dataset.id)
+                .order_by(
+                    PoseTrainingDatasetItem.video_id,
+                    PoseTrainingDatasetItem.video_track_id,
+                    PoseTrainingDatasetItem.frame_index,
+                    PoseTrainingDatasetItem.id,
+                )
+            )
+        )
+
+        if len(items) != dataset.item_count:
+            raise RuntimeError(
+                "Imported pose training dataset item count does not match its frozen record"
+            )
+
+        summaries: list[dict[str, Any]] = []
+
+        for dataset_item in items:
+            dataset_candidate = session.get(
+                PoseActiveLearningCandidate,
+                dataset_item.candidate_id,
+            )
+
+            if dataset_candidate is None:
+                raise RuntimeError("Imported frozen pose item lost its Active Learning candidate")
+
+            track = session.get(
+                VideoTrack,
+                dataset_item.video_track_id,
+            )
+
+            if track is None:
+                raise RuntimeError("Imported frozen pose item lost its video track")
+
+            video = session.get(
+                VideoAsset,
+                dataset_item.video_id,
+            )
+
+            if video is None:
+                raise RuntimeError("Imported frozen pose item lost its video")
+
+            if dataset_candidate.verified_pose_sha256 is None:
+                raise RuntimeError(
+                    "Imported frozen pose item candidate is missing its verified pose checksum"
+                )
+
+            dataset_item.verified_pose_sha256 = dataset_candidate.verified_pose_sha256
+
+            dataset_item.acquisition_provenance_json = dict(dataset_candidate.provenance_json or {})
+
+            review = dict(dataset_item.review_provenance_json or {})
+
+            review["correction_id"] = dataset_candidate.correction_id
+
+            review["target_id"] = dataset_candidate.id
+
+            review["reviewed_by"] = dataset_candidate.reviewed_by
+
+            if dataset_candidate.reviewed_at is not None:
+                review["reviewed_at"] = dataset_candidate.reviewed_at.isoformat()
+
+            review_before = review.get("before")
+
+            if isinstance(
+                review_before,
+                dict,
+            ):
+                review_before = dict(review_before)
+                review_before["candidate_id"] = dataset_candidate.id
+                review_before["candidate_provenance_sha256"] = dataset_candidate.provenance_sha256
+                review["before"] = review_before
+
+            review_after = review.get("after")
+
+            if isinstance(
+                review_after,
+                dict,
+            ):
+                review_after = dict(review_after)
+                review_after["verified_pose_sha256"] = dataset_candidate.verified_pose_sha256
+                review_after["pose_schema_id"] = dataset_candidate.pose_schema_id
+                review_after["pose_schema_revision"] = dataset_candidate.pose_schema_revision
+                review["after"] = review_after
+
+            dataset_item.review_provenance_json = review
+
+            item_payload = {
+                "schema_version": (ITEM_SCHEMA_VERSION),
+                "dataset_id": dataset.id,
+                "candidate_id": dataset_candidate.id,
+                "project_id": dataset.project_id,
+                "source_round_id": (dataset.source_round_id),
+                "video": {
+                    "video_id": video.id,
+                    "sha256": video.sha256,
+                    "revision": (dataset_item.video_revision),
+                    "original_filename": (video.original_filename),
+                    "width_px": (video.width_px),
+                    "height_px": (video.height_px),
+                    "frame_count": (video.frame_count),
+                    "fps": video.fps,
+                },
+                "video_track_id": track.id,
+                "label_class_id": (dataset_item.label_class_id),
+                "verified_track_revision": (dataset_item.verified_track_revision),
+                "pose_schema": {
+                    "schema_version": ("pose-landmarks-0001"),
+                    "schema_id": (dataset_item.pose_schema_id),
+                    "schema_revision": (dataset_item.pose_schema_revision),
+                    "content_hash": (dataset_item.pose_schema_content_hash),
+                },
+                "verified_pose_sha256": (dataset_item.verified_pose_sha256),
+                "canonical_pose": dict(dataset_item.canonical_pose_json or {}),
+                "source_models": list(dataset_item.source_models_json or []),
+                "source_job_ids": list(dataset_item.source_job_ids_json or []),
+                "acquisition_provenance": dict(dataset_item.acquisition_provenance_json or {}),
+                "candidate_provenance_sha256": (dataset_candidate.provenance_sha256),
+                "review_provenance": dict(dataset_item.review_provenance_json or {}),
+            }
+
+            dataset_item.item_sha256 = canonical_json_sha256(item_payload)
+
+            summaries.append(
+                {
+                    "item_id": dataset_item.id,
+                    "item_sha256": (dataset_item.item_sha256),
+                    "candidate_id": (dataset_candidate.id),
+                    "video_id": (video.id),
+                    "video_sha256": (video.sha256),
+                    "video_track_id": (track.id),
+                    "frame_index": (dataset_item.frame_index),
+                    "verified_track_revision": (dataset_item.verified_track_revision),
+                    "verified_pose_sha256": (dataset_item.verified_pose_sha256),
+                    "pose_schema_id": (dataset_item.pose_schema_id),
+                    "pose_schema_revision": (dataset_item.pose_schema_revision),
+                    "pose_schema_content_hash": (dataset_item.pose_schema_content_hash),
+                    "candidate_provenance_sha256": (dataset_candidate.provenance_sha256),
+                    "correction_id": (dataset_candidate.correction_id),
+                }
+            )
+
+        dataset.manifest_json = {
+            "schema_version": (MANIFEST_SCHEMA_VERSION),
+            "dataset_id": dataset.id,
+            "project_id": (dataset.project_id),
+            "source_round_id": (source_round_record.id),
+            "source_selection_sha256": (dataset.source_selection_sha256),
+            "source_retraining_manifest_sha256": (dataset.source_retraining_manifest_sha256),
+            "pose_schema": {
+                "schema_id": (dataset.pose_schema_id),
+                "schema_revision": (dataset.pose_schema_revision),
+                "content_hash": (dataset.pose_schema_content_hash),
+            },
+            "truth_policy": ("scientist_verified_only"),
+            "skipped_candidates_included": False,
+            "pending_candidates_included": False,
+            "item_count": len(items),
+            "items": summaries,
+        }
+
+        dataset.manifest_sha256 = canonical_json_sha256(dataset.manifest_json)
+
+    session.flush()
+
+
 def import_project_exchange_v1(
     source: BinaryIO,
     session: Session,
@@ -506,6 +957,10 @@ def import_project_exchange_v1(
         _refresh_class_operation_checksums(session, project.id)
         _refresh_review_queue_checksums(session, project.id)
         _refresh_active_learning_checksums(session, project.id)
+        _refresh_pose_training_exchange_integrity(
+            session,
+            project.id,
+        )
         copied_telemetry_sidecars = _restore_telemetry_sidecars(
             source,
             project=project,

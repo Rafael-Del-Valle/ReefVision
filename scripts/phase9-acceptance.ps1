@@ -34,6 +34,7 @@ if ($RunAutomatedValidation) {
         apps\api\reefvision\tests\test_pose_active_learning_phase8.py `
         apps\api\reefvision\tests\test_pose_interoperability.py `
         apps\api\reefvision\tests\test_project_exchange_phase9.py `
+        apps\api\reefvision\tests\test_pose_training_project_exchange_phase9.py `
         apps\api\reefvision\tests\test_mask_migration_lineage.py `
         apps\api\reefvision\tests\test_desktop_runtime_paths.py `
         -v
@@ -78,3 +79,15 @@ Write-Host "[ ] Confirm Ultralytics Pose export has images/train, labels/train, 
 Write-Host "[ ] Confirm DeepLabCut export does not silently flatten multi-instance frames."
 Write-Host "[ ] Confirm SLEAP and NWB exports fail clearly when the optional runtime is missing."
 Write-Host "[ ] Confirm native-format losses are explicitly documented in the bundle manifest."
+
+
+Write-Host ""
+Write-Host "Phase 9C manual checks:" -ForegroundColor Yellow
+Write-Host "[ ] Confirm .reefvision.zip inspection reports frozen pose dataset/item counts."
+Write-Host "[ ] Confirm imported pose schema, AL round, candidate, correction, dataset, and item IDs differ from source IDs."
+Write-Host "[ ] Confirm imported frozen dataset manifest SHA validates after ID remapping."
+Write-Host "[ ] Confirm imported item hashes and verified-pose hashes reference imported identities."
+Write-Host "[ ] Confirm a tampered pose-training item section is rejected during inspection."
+Write-Host "[ ] Confirm an imported frozen dataset can still produce its native immutable pose package."
+Write-Host ""
+Write-Host "Phase 9 automated scope complete when all automated gates above pass." -ForegroundColor Green
