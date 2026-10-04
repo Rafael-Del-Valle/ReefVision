@@ -132,6 +132,58 @@ def _scoped_tracks(
     return tracks, video
 
 
+def _reusable_pose_tracking_job(
+    session: Session,
+    *,
+    project_id: str,
+    workflow_run_id: str | None,
+    workflow_node_run_id: str | None,
+    video_id: str,
+    model_id: str,
+) -> Job | None:
+    """Reuse completed child tracking work after a workflow-node retry."""
+
+    if not workflow_run_id or not workflow_node_run_id:
+        return None
+
+    candidates = list(
+        session.scalars(
+            select(Job)
+            .where(
+                Job.project_id == project_id,
+                Job.job_type == "video_tracking",
+            )
+            .order_by(
+                Job.created_at.desc(),
+                Job.id,
+            )
+        )
+    )
+
+    for candidate in candidates:
+        request = dict(candidate.request_json or {})
+
+        if (
+            str(request.get("workflow_run_id") or "") != workflow_run_id
+            or str(request.get("workflow_node_run_id") or "") != workflow_node_run_id
+        ):
+            continue
+
+        if (
+            str(request.get("video_id") or "") != video_id
+            or str(request.get("model_id") or "") != model_id
+        ):
+            raise ValidationError(
+                "A recovered pose-inference node references "
+                "different video/model inputs than its persisted child job"
+            )
+
+        if candidate.status == "succeeded":
+            return candidate
+
+    return None
+
+
 def execute_pose_inference_adapter(
     session: Session,
     settings: Settings,
@@ -191,65 +243,77 @@ def execute_pose_inference_adapter(
     workflow_run_id = parameters.get("__workflow_run_id")
     workflow_node_run_id = parameters.get("__workflow_node_run_id")
 
-    child_job = runtime_adapters._run_child_job(
+    reusable_child_job = _reusable_pose_tracking_job(
         session,
-        Job(
-            project_id=project_id,
-            job_type="video_tracking",
-            status="queued",
-            progress_current=0,
-            progress_total=video.frame_count,
-            request_json={
-                "video_id": video.id,
-                "model_id": model.id,
-                "tracker": str(
-                    parameters.get(
-                        "tracker",
-                        "bytetrack.yaml",
-                    )
-                ),
-                "confidence": float(
-                    parameters.get(
-                        "confidence",
-                        0.25,
-                    )
-                ),
-                "iou": float(
-                    parameters.get(
-                        "iou",
-                        0.5,
-                    )
-                ),
-                "minimum_track_frames": int(
-                    parameters.get(
-                        "minimum_track_frames",
-                        1,
-                    )
-                ),
-                "device": str(
-                    parameters.get(
-                        "device",
-                        "auto",
-                    )
-                ),
-                "link_detections": True,
-                # Critical Phase 10 separation:
-                # normal video-pose jobs retain their existing automatic
-                # temporal association behavior. Workflow pose inference
-                # defers it to pose_temporal_association.
-                "build_pose_temporal_associations": False,
-                "created_by_workflow": True,
-                "workflow_run_id": workflow_run_id,
-                "workflow_node_run_id": workflow_node_run_id,
-            },
-            result_json={
-                "stage": "queued",
-                "created_by_workflow": True,
-            },
-        ),
-        process_video_tracking_job,
-        settings,
+        project_id=project_id,
+        workflow_run_id=(str(workflow_run_id) if workflow_run_id else None),
+        workflow_node_run_id=(str(workflow_node_run_id) if workflow_node_run_id else None),
+        video_id=video.id,
+        model_id=model.id,
     )
+
+    if reusable_child_job is None:
+        child_job = runtime_adapters._run_child_job(
+            session,
+            Job(
+                project_id=project_id,
+                job_type="video_tracking",
+                status="queued",
+                progress_current=0,
+                progress_total=video.frame_count,
+                request_json={
+                    "video_id": video.id,
+                    "model_id": model.id,
+                    "tracker": str(
+                        parameters.get(
+                            "tracker",
+                            "bytetrack.yaml",
+                        )
+                    ),
+                    "confidence": float(
+                        parameters.get(
+                            "confidence",
+                            0.25,
+                        )
+                    ),
+                    "iou": float(
+                        parameters.get(
+                            "iou",
+                            0.5,
+                        )
+                    ),
+                    "minimum_track_frames": int(
+                        parameters.get(
+                            "minimum_track_frames",
+                            1,
+                        )
+                    ),
+                    "device": str(
+                        parameters.get(
+                            "device",
+                            "auto",
+                        )
+                    ),
+                    "link_detections": True,
+                    # Critical Phase 10 separation:
+                    # normal video-pose jobs retain their existing automatic
+                    # temporal association behavior. Workflow pose inference
+                    # defers it to pose_temporal_association.
+                    "build_pose_temporal_associations": False,
+                    "created_by_workflow": True,
+                    "workflow_run_id": workflow_run_id,
+                    "workflow_node_run_id": workflow_node_run_id,
+                },
+                result_json={
+                    "stage": "queued",
+                    "created_by_workflow": True,
+                },
+            ),
+            process_video_tracking_job,
+            settings,
+        )
+    else:
+        child_job = reusable_child_job
 
     tracks = list(
         session.scalars(

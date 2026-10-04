@@ -27,7 +27,7 @@ from reefvision.db.models import (
     WorkflowNodeRun,
     WorkflowRun,
 )
-from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.jobs.inference import process_inference_job
 from reefvision.schemas.workflow_execution import (
     WorkflowArtifactResponse,
@@ -924,16 +924,51 @@ class WorkflowExecutionService:
         node_run: WorkflowNodeRun,
         specification: WorkflowArtifactSpec,
     ) -> WorkflowArtifact:
+        checksum = self.artifact_checksum(specification.payload)
+
+        existing = list(
+            self.session.scalars(
+                select(WorkflowArtifact)
+                .where(
+                    WorkflowArtifact.workflow_run_id == run_id,
+                    WorkflowArtifact.producer_node_run_id == node_run.id,
+                    WorkflowArtifact.producer_port_id == specification.port_id,
+                    WorkflowArtifact.data_type == specification.data_type,
+                )
+                .order_by(
+                    WorkflowArtifact.created_at,
+                    WorkflowArtifact.id,
+                )
+            )
+        )
+
+        for candidate in existing:
+            candidate_actual = self.artifact_checksum(dict(candidate.payload_json or {}))
+
+            if candidate_actual != candidate.payload_sha256:
+                raise ConflictError("Existing workflow artifact failed checksum verification")
+
+            if candidate.payload_sha256 == checksum:
+                return candidate
+
+        if existing:
+            raise ConflictError(
+                "Workflow node already persisted a different artifact for this output"
+            )
+
         artifact = WorkflowArtifact(
             workflow_run_id=run_id,
             producer_node_run_id=node_run.id,
-            producer_port_id=specification.port_id,
-            data_type=specification.data_type,
+            producer_port_id=(specification.port_id),
+            data_type=(specification.data_type),
             payload_json=dict(specification.payload),
-            payload_sha256=self.artifact_checksum(specification.payload),
+            payload_sha256=checksum,
         )
+
         self.session.add(artifact)
+
         self.session.flush()
+
         return artifact
 
     def run_counts(self, run_id: str) -> dict[str, int]:

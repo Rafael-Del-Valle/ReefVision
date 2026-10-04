@@ -208,6 +208,165 @@ def _seed_pose_model(
     return model
 
 
+def _completed_workflow_pose_training_run(
+    session: Session,
+    *,
+    project_id: str,
+    workflow_run_id: str | None,
+    workflow_node_run_id: str | None,
+    dataset: PoseTrainingDataset,
+    validation_dataset: PoseTrainingDataset | None,
+    split_manifest_sha256: str,
+    seed_model: ModelRegistration,
+    architecture: str,
+    device: str,
+    precision: str,
+    random_seed: int | None,
+    training_config: dict[str, Any],
+) -> TrainingRun | None:
+    """Find completed child science created by this exact workflow node."""
+
+    if not workflow_run_id or not workflow_node_run_id:
+        return None
+
+    candidates = list(
+        session.scalars(
+            select(TrainingRun)
+            .where(
+                TrainingRun.project_id == project_id,
+                TrainingRun.task == "pose",
+            )
+            .order_by(
+                TrainingRun.created_at.desc(),
+                TrainingRun.id,
+            )
+        )
+    )
+
+    expected_validation_id = validation_dataset.id if validation_dataset is not None else None
+
+    for candidate in candidates:
+        snapshot = dict(candidate.draft_snapshot_json or {})
+
+        if (
+            str(snapshot.get("workflow_run_id") or "") != workflow_run_id
+            or str(snapshot.get("workflow_node_run_id") or "") != workflow_node_run_id
+        ):
+            continue
+
+        if (
+            snapshot.get("pose_training_dataset_id") != dataset.id
+            or snapshot.get("pose_validation_dataset_id") != expected_validation_id
+        ):
+            raise ValidationError("Recovered pose-training node dataset identity changed")
+
+        if candidate.split_manifest_sha256 != split_manifest_sha256:
+            raise ValidationError("Recovered pose-training node split manifest changed")
+
+        if (
+            candidate.initial_checkpoint_model_id != seed_model.id
+            or candidate.resolved_model_checksum != seed_model.sha256
+        ):
+            raise ValidationError("Recovered pose-training seed model changed")
+
+        if (
+            candidate.architecture != architecture
+            or candidate.device != device
+            or candidate.precision != precision
+            or candidate.random_seed != random_seed
+            or dict(candidate.training_config_json or {}) != training_config
+        ):
+            raise ValidationError("Recovered pose-training node configuration changed")
+
+        if candidate.status == "completed":
+            return candidate
+
+    return None
+
+
+def _reused_pose_training_result(
+    session: Session,
+    settings: Settings,
+    *,
+    run: TrainingRun,
+    dataset: PoseTrainingDataset,
+    validation_dataset: PoseTrainingDataset | None,
+    workflow_run_id: str | None,
+    workflow_node_run_id: str | None,
+) -> dict[str, Any]:
+    """Recreate the workflow artifact from a completed persisted pose run."""
+
+    if run.job_id is None or not run.result_checkpoint_path:
+        raise ValidationError("Recovered pose training is missing its completed job/checkpoint")
+
+    job = session.get(
+        Job,
+        run.job_id,
+    )
+
+    if job is None or job.status != "succeeded" or run.status != "completed":
+        raise ValidationError("Recovered pose training is not durably complete")
+
+    checkpoint = resolve_managed_project_path(
+        settings,
+        run.result_checkpoint_path,
+    )
+
+    if not checkpoint.is_file():
+        raise ValidationError("Recovered pose training checkpoint is missing")
+
+    checkpoint_sha256, checkpoint_size = hash_model_file(checkpoint)
+
+    experiment = session.scalar(
+        select(ExperimentRecord).where(ExperimentRecord.training_run_id == run.id)
+    )
+
+    validation_mode = str(dict(run.evaluation_config_json or {}).get("validation_mode") or "none")
+
+    return {
+        "schema_version": ("workflow-training-result-0001"),
+        "project_id": run.project_id,
+        "created_by_workflow": True,
+        "workflow_run_id": (workflow_run_id),
+        "workflow_node_run_id": (workflow_node_run_id),
+        "training_run_id": run.id,
+        "training_job_id": job.id,
+        "training_draft_id": None,
+        "experiment_id": (experiment.id if experiment is not None else None),
+        "dataset_version_id": None,
+        "dataset_manifest_sha256": (run.dataset_manifest_sha256),
+        "split_manifest_sha256": (run.split_manifest_sha256),
+        "pose_training_dataset_id": (dataset.id),
+        "pose_validation_dataset_id": (
+            validation_dataset.id if validation_dataset is not None else None
+        ),
+        "pose_schema_id": (dataset.pose_schema_id),
+        "pose_schema_revision": (dataset.pose_schema_revision),
+        "pose_schema_content_hash": (dataset.pose_schema_content_hash),
+        "validation_mode": (validation_mode),
+        "task": run.task,
+        "provider_id": run.provider_id,
+        "architecture": run.architecture,
+        "initial_checkpoint_source": (run.initial_checkpoint_source),
+        "initial_checkpoint_model_id": (run.initial_checkpoint_model_id),
+        "resolved_model_asset_id": (run.resolved_model_asset_id),
+        "resolved_model_checksum": (run.resolved_model_checksum),
+        "parameter_registry_version": (run.parameter_registry_version),
+        "device": run.device,
+        "precision": run.precision,
+        "run_name": run.run_name,
+        "random_seed": run.random_seed,
+        "metrics": dict(run.metrics_json or {}),
+        "metrics_history": dict(run.metrics_history_json or {}),
+        "warnings": list(run.warnings_json or []),
+        "artifact_manifest": dict(run.artifact_manifest_json or {}),
+        "logs_path": run.logs_path,
+        "result_checkpoint_path": (run.result_checkpoint_path),
+        "result_checkpoint_sha256": (checkpoint_sha256),
+        "result_checkpoint_size_bytes": (checkpoint_size),
+    }
+
+
 def create_pose_workflow_training_result(
     session: Session,
     settings: Settings,
@@ -367,6 +526,13 @@ def create_pose_workflow_training_result(
     if not run_name:
         raise ValidationError("Pose training run_name cannot be blank")
 
+    device = str(
+        parameters.get(
+            "device",
+            "auto",
+        )
+    )
+
     random_seed = (
         int(parameters["random_seed"]) if parameters.get("random_seed") is not None else None
     )
@@ -378,6 +544,33 @@ def create_pose_workflow_training_result(
             "No separate frozen validation dataset was supplied. "
             "Validation is disabled and training metrics must not be "
             "reported as independent validation performance."
+        )
+
+    existing_completed_run = _completed_workflow_pose_training_run(
+        session,
+        project_id=project_id,
+        workflow_run_id=(workflow_run_id),
+        workflow_node_run_id=(workflow_node_run_id),
+        dataset=dataset,
+        validation_dataset=(validation_dataset),
+        split_manifest_sha256=(split_manifest_sha256),
+        seed_model=seed_model,
+        architecture=architecture,
+        device=device,
+        precision=precision,
+        random_seed=random_seed,
+        training_config=(training_config),
+    )
+
+    if existing_completed_run is not None:
+        return _reused_pose_training_result(
+            session,
+            settings,
+            run=existing_completed_run,
+            dataset=dataset,
+            validation_dataset=(validation_dataset),
+            workflow_run_id=(workflow_run_id),
+            workflow_node_run_id=(workflow_node_run_id),
         )
 
     run = TrainingRun(
@@ -397,12 +590,7 @@ def create_pose_workflow_training_result(
         parameter_registry_version=(provider_spec("ultralytics").provider_version),
         selected_preset=None,
         installation_state="ready",
-        device=str(
-            parameters.get(
-                "device",
-                "auto",
-            )
-        ),
+        device=device,
         precision=precision,
         run_name=run_name,
         notes=(str(parameters.get("notes")).strip() if parameters.get("notes") else None),

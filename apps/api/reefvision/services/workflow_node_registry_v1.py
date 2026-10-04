@@ -325,7 +325,10 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                     WorkflowPortDefinition(
                         port_id="tracks",
                         display_name="Temporal pose tracks",
-                        accepted_types=["pose_temporal_tracks"],
+                        accepted_types=[
+                            "pose_temporal_tracks",
+                            "reviewed_pose_tracks",
+                        ],
                     )
                 ],
                 output_ports=[

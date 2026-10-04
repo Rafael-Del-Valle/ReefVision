@@ -52,6 +52,7 @@ if ($LASTEXITCODE -ne 0) {
     apps/api/reefvision/tests/test_workflow_results_package_phase10.py `
     apps/api/reefvision/tests/test_workflow_pose_training_phase10.py `
     apps/api/reefvision/tests/test_workflow_pose_registration_phase10.py `
+    apps/api/reefvision/tests/test_workflow_phase10c_closeout.py `
     apps/api/reefvision/tests/test_workflow_review_phase10.py `
     apps/api/reefvision/tests/test_workflow_graphs_phase10.py `
     -q
@@ -74,3 +75,18 @@ Write-Host "Phase 10B-1 Results Package workflow integration validated."
 Write-Host "Phase 10B-2A Ultralytics pose retraining validated."
 
 Write-Host "Phase 10B-2B trained pose registration validated."
+
+
+Write-Host "Phase 10C resumability/provenance closeout validated."
+Write-Host ""
+Write-Host "Phase 10 final automated acceptance:"
+Write-Host "[x] Succeeded nodes survive restart without recomputation."
+Write-Host "[x] Persisted artifacts are checksum-verified before reuse."
+Write-Host "[x] Pose inference retry reuses completed child science."
+Write-Host "[x] Pose training retry reuses completed child science."
+Write-Host "[x] Scientist review gates remain explicit truth boundaries."
+Write-Host "[x] Verified pose truth freezes immutably before retraining."
+Write-Host "[x] Trained pose models reuse the exact frozen schema revision."
+Write-Host "[x] Results Packages verify after pose retraining."
+Write-Host "[x] Terminal workflow provenance is canonical and inspectable."
+Write-Host "[x] Saved scientist graph remains inspectable after reopen."

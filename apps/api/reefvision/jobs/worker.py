@@ -371,41 +371,109 @@ def recover_interrupted_jobs(
                 backup.completed_at = None
 
         for workflow_run in session.scalars(
-            select(WorkflowRun).where(WorkflowRun.status.in_(("running", "cancel_requested")))
+            select(WorkflowRun).where(
+                WorkflowRun.status.in_(
+                    (
+                        "running",
+                        "cancel_requested",
+                    )
+                )
+            )
         ):
-            if workflow_run.status == "cancel_requested":
+            previous_status = workflow_run.status
+
+            result = dict(workflow_run.result_json or {})
+
+            raw_history = result.get(
+                "recovery_history",
+                [],
+            )
+
+            history = (
+                list(raw_history)
+                if isinstance(
+                    raw_history,
+                    list,
+                )
+                else []
+            )
+
+            recovery_action = (
+                "cancelled_on_startup"
+                if previous_status == "cancel_requested"
+                else "requeued_on_startup"
+            )
+
+            history.append(
+                {
+                    "recovered_at": (recovered_at.isoformat()),
+                    "from_status": (previous_status),
+                    "action": (recovery_action),
+                }
+            )
+
+            if previous_status == "cancel_requested":
                 workflow_run.status = "cancelled"
                 workflow_run.completed_at = recovered_at
                 workflow_run.error_message = "Cancellation finalized after ReefVision restart"
                 workflow_run.result_json = {
-                    **dict(workflow_run.result_json or {}),
+                    **result,
                     "stage": "cancelled",
-                    "recovery": "cancelled_on_startup",
-                    "recovered_at": recovered_at.isoformat(),
+                    "recovery": ("cancelled_on_startup"),
+                    "recovered_at": (recovered_at.isoformat()),
+                    "recovery_history": (history),
                 }
 
                 for node in session.scalars(
                     select(WorkflowNodeRun).where(
                         WorkflowNodeRun.workflow_run_id == workflow_run.id,
                         WorkflowNodeRun.status.in_(
-                            ("pending", "running", "waiting_for_review", "review_approved")
+                            (
+                                "pending",
+                                "running",
+                                "waiting_for_review",
+                                "review_approved",
+                            )
                         ),
                     )
                 ):
                     node.status = "cancelled"
                     node.completed_at = recovered_at
                     node.error_message = "Workflow cancellation finalized after ReefVision restart"
+
             else:
                 workflow_run.status = "queued"
                 workflow_run.started_at = None
                 workflow_run.completed_at = None
                 workflow_run.error_message = "Recovered after interruption"
                 workflow_run.result_json = {
-                    **dict(workflow_run.result_json or {}),
+                    **result,
                     "stage": "queued",
-                    "recovery": "requeued_on_startup",
-                    "recovered_at": recovered_at.isoformat(),
+                    "recovery": ("requeued_on_startup"),
+                    "recovered_at": (recovered_at.isoformat()),
+                    "recovery_history": (history),
                 }
+
+                # Only the node that was actively executing is
+                # made pending again. Already-succeeded nodes and
+                # their artifact identities remain untouched.
+                for node in session.scalars(
+                    select(WorkflowNodeRun).where(
+                        WorkflowNodeRun.workflow_run_id == workflow_run.id,
+                        WorkflowNodeRun.status == "running",
+                    )
+                ):
+                    node.status = "pending"
+                    node.started_at = None
+                    node.completed_at = None
+                    node.error_message = "Recovered after interrupted workflow execution"
+                    node.result_json = {
+                        **dict(node.result_json or {}),
+                        "recovery": {
+                            "action": ("requeued_on_startup"),
+                            "recovered_at": (recovered_at.isoformat()),
+                        },
+                    }
 
         session.commit()
         return count

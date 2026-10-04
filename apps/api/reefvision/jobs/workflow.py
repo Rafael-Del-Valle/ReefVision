@@ -18,6 +18,11 @@ from reefvision.db.models import (
 from reefvision.schemas.workflow_graphs import WorkflowGraphRequest, WorkflowPlanInputBinding
 from reefvision.services.workflow_execution import WorkflowExecutionService
 from reefvision.services.workflow_graphs import WorkflowGraphService
+from reefvision.services.workflow_provenance import (
+    build_workflow_run_provenance,
+    verify_succeeded_node_artifacts,
+    verify_workflow_artifact,
+)
 from reefvision.services.workflow_review import WorkflowReviewRequired
 from reefvision.storage.datasets import canonical_json_sha256
 
@@ -176,7 +181,16 @@ def _input_artifacts(
             raise RuntimeError(
                 f"Node {step_node_id} is missing artifact {source_node_id}.{source_port_id}"
             )
-        inputs.setdefault(target_port_id, []).append(artifact)
+
+        verify_workflow_artifact(
+            artifact,
+            expected_run_id=run_id,
+        )
+
+        inputs.setdefault(
+            target_port_id,
+            [],
+        ).append(artifact)
         artifact_ids.append(artifact.id)
     return inputs, artifact_ids
 
@@ -276,6 +290,19 @@ def process_workflow_run_job(
                 if node_run is None:
                     raise RuntimeError(f"Workflow node-run record is missing: {step.node_id}")
                 if node_run.status == "succeeded":
+                    try:
+                        verify_succeeded_node_artifacts(
+                            session,
+                            run_id=run_id,
+                            node_run=node_run,
+                        )
+                    except Exception as exc:
+                        node_run.error_message = (
+                            f"Persisted succeeded-node artifact integrity check failed: {exc}"
+                        )
+                        session.commit()
+                        raise
+
                     completed_nodes += 1
                     continue
                 inputs, input_artifact_ids = _input_artifacts(
@@ -348,12 +375,14 @@ def process_workflow_run_job(
                 if job is not None:
                     job.progress_current = completed_nodes
                     job.result_json = {
+                        **dict(job.result_json or {}),
                         "stage": "running",
                         "workflow_run_id": run_id,
                         "completed_nodes": completed_nodes,
                     }
                 if run is not None:
                     run.result_json = {
+                        **dict(run.result_json or {}),
                         "stage": "running",
                         "completed_nodes": completed_nodes,
                     }
@@ -377,28 +406,61 @@ def process_workflow_run_job(
                 }
                 for artifact in artifacts
             ]
-            run = session.get(WorkflowRun, run_id)
-            job = session.get(Job, job_id)
+            run = session.get(
+                WorkflowRun,
+                run_id,
+            )
+            job = session.get(
+                Job,
+                job_id,
+            )
             now = _now()
-            if run is not None:
-                run.status = "succeeded"
-                run.completed_at = now
-                run.result_json = {
-                    "stage": "succeeded",
-                    "completed_nodes": completed_nodes,
-                    **counts,
-                    "artifacts": terminal_artifacts,
-                }
+
+            if run is None:
+                raise RuntimeError("Workflow run disappeared during terminal provenance closeout")
+
+            previous_run_result = dict(run.result_json or {})
+
+            run.status = "succeeded"
+            run.completed_at = now
+
             if job is not None:
                 job.status = "succeeded"
                 job.progress_current = completed_nodes
                 job.completed_at = now
+
+            session.flush()
+
+            provenance = build_workflow_run_provenance(
+                session,
+                run_id=run_id,
+            )
+
+            provenance_sha256 = canonical_json_sha256(provenance)
+
+            run.result_json = {
+                **previous_run_result,
+                "stage": "succeeded",
+                "completed_nodes": (completed_nodes),
+                **counts,
+                "artifacts": (terminal_artifacts),
+                "provenance_schema_version": (provenance["schema_version"]),
+                "provenance_sha256": (provenance_sha256),
+                "provenance_manifest": (provenance),
+            }
+
+            if job is not None:
+                previous_job_result = dict(job.result_json or {})
+
                 job.result_json = {
+                    **previous_job_result,
                     "stage": "succeeded",
-                    "workflow_run_id": run_id,
-                    "completed_nodes": completed_nodes,
+                    "workflow_run_id": (run_id),
+                    "completed_nodes": (completed_nodes),
                     **counts,
+                    "provenance_sha256": (provenance_sha256),
                 }
+
             session.commit()
         return True
     except WorkflowReviewRequired as exc:

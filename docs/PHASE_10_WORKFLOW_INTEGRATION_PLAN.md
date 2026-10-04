@@ -343,3 +343,90 @@ Phase 10B now supports the defensible chain:
 → `registered pose model`
 → `exact frozen schema binding`
 → `verified Results Package`
+
+
+## Phase 10C — End-to-end resumability, provenance, and final closeout
+
+Phase 10C hardens workflow persistence around the completed scientist-ready
+pose/retraining path.
+
+### Restart and resume semantics
+
+Interrupted workflow runs are requeued at startup.
+
+- already-succeeded nodes remain succeeded
+- their artifact IDs remain unchanged
+- only a node that was actively `running` is reset to `pending`
+- recovery events are retained in `recovery_history`
+- human-review pauses remain durable and are not treated as failures
+
+Before a succeeded node can be skipped during resume, every persisted input and
+output artifact is rehashed. Checksum failure blocks the workflow instead of
+silently rerunning or propagating corrupted scientific state.
+
+### Idempotent side-effect recovery
+
+The production pose path now closes the important crash windows:
+
+- Pose Inference reuses a succeeded child video-tracking job created by the
+  same workflow run/node.
+- Pose Model Training reuses a completed TrainingRun/Job created by the same
+  workflow run/node when dataset, split, seed model, architecture, device,
+  precision, random seed, and training configuration are unchanged.
+- Frozen pose datasets remain idempotent by source Active Learning round.
+- Pose Active Learning rounds remain idempotent by selection SHA-256.
+- Trained model registration remains idempotent through model-checkpoint
+  identity/checksum.
+- Workflow artifact persistence itself reuses an identical previously
+  persisted node/port/type payload and fails closed on conflicting output.
+
+### Canonical terminal provenance
+
+Every successful workflow run now stores:
+
+- `provenance_schema_version`
+- `provenance_sha256`
+- a canonical `provenance_manifest`
+
+The manifest records:
+
+- exact saved graph revision and graph SHA-256
+- workflow run/project/job identity
+- node order/type/parameters and parameter SHA-256
+- every input and output artifact ID/type/port/SHA-256
+- scientist review approvals
+- terminal artifact identities
+- restart/recovery history
+- execution timestamps
+
+The provenance manifest itself is canonical-JSON SHA-256 hashed and remains
+inspectable through the existing Workflow Run detail endpoint after reopening
+ReefVision.
+
+### Scientist-ready end-to-end acceptance scenario
+
+Phase 10C validates one saved graph across the complete loop:
+
+`registered pose model`
+→ `pose inference`
+→ `temporal association`
+→ `scientist pose review`
+→ `pose Active Learning`
+→ `scientist candidate verification`
+→ `immutable frozen pose dataset`
+→ `native pose-training export`
+→ `actual Ultralytics pose retraining`
+→ `trained pose registration`
+→ `exact frozen schema binding`
+→ `verified Results Package`
+
+The final graph is reopened after completion and must expose the identical
+terminal provenance SHA-256.
+
+## Phase 10 status: COMPLETE
+
+Phase 10 now provides executable workflow integration for pose inference,
+temporal identities, human review, behavior-ready reviewed pose state, pose
+Active Learning, verified immutable retraining truth, training/export,
+Ultralytics pose retraining, exact trained-model schema binding, Results
+Packages, restart-safe reuse, and inspectable end-to-end provenance.
