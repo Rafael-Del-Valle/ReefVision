@@ -1,0 +1,99 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { ProjectSummary } from "../../api/client";
+import { ProjectLauncher } from "./ProjectLauncher";
+
+const project: ProjectSummary = {
+  id: "project-1",
+  name: "Mesophotic Coral Study",
+  slug: "mesophotic-coral-study",
+  description: "Scientist-reviewed octocoral imagery",
+  storage_root: "projects/project-1",
+  default_annotation_type: "bbox",
+  georeference_height_offset_m: 0,
+  georeference_height_evidence: null,
+  created_at: "2026-10-01T00:00:00Z",
+  updated_at: "2026-10-05T00:00:00Z",
+  archived_at: null,
+  label_class_count: 6,
+  active_label_class_count: 6,
+};
+
+function renderLauncher(projects: ProjectSummary[] = [project]) {
+  const handlers = {
+    onCreateProject: vi.fn(),
+    onQuickStart: vi.fn(),
+    onOpenProject: vi.fn(),
+    onImportPackage: vi.fn(),
+    onOpenSystem: vi.fn(),
+    onOpenOnboarding: vi.fn(),
+  };
+
+  render(
+    <ProjectLauncher
+      projects={projects}
+      version="1.0.5"
+      serviceState="ready"
+      {...handlers}
+    />,
+  );
+
+  return handlers;
+}
+
+describe("ProjectLauncher", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("opens a recent project from the scientist launcher", async () => {
+    const handlers = renderLauncher();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open Mesophotic Coral Study" }),
+    );
+
+    expect(handlers.onOpenProject).toHaveBeenCalledWith("project-1");
+    expect(screen.getByText("Local / offline-capable")).toBeInTheDocument();
+  });
+
+  it("persists pinned projects locally without changing project data", async () => {
+    renderLauncher();
+
+    await userEvent.click(screen.getByRole("button", { name: "Pin" }));
+
+    expect(
+      window.localStorage.getItem("reefvision.ui.pinned-projects.v1"),
+    ).toContain("project-1");
+    expect(
+      screen.getByRole("button", { name: "Unpin" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("offers the octocoral and blank quick-start paths", async () => {
+    const handlers = renderLauncher();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /Octocoral monitoring/ }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /General image analysis/ }),
+    );
+
+    expect(handlers.onQuickStart).toHaveBeenNthCalledWith(1, "octocoral");
+    expect(handlers.onQuickStart).toHaveBeenNthCalledWith(2, "blank");
+  });
+
+  it("keeps package import unavailable until a target project exists", () => {
+    renderLauncher([]);
+
+    expect(
+      screen.getByRole("button", { name: "Import package" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("heading", { name: "No projects yet" }),
+    ).toBeInTheDocument();
+  });
+});
