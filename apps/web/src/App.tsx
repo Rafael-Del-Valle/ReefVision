@@ -40,6 +40,10 @@ import {
 import { StatusBadge } from "./components/ui/StatusBadge";
 import { ProjectLauncher } from "./components/layout/ProjectLauncher";
 import { ProjectWorkbenchShell } from "./components/layout/ProjectWorkbenchShell";
+import {
+  workspacePreset,
+  type WorkspacePresetId,
+} from "./components/layout/workspacePresets";
 import "./styles/design-system.css";
 import "./styles/app.css";
 import "./styles/phase12-workspace.css";
@@ -201,6 +205,8 @@ export function App() {
   const [description, setDescription] = useState("");
   const [template, setTemplate] = useState<"blank" | "octocoral">("octocoral");
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [workspacePresetId, setWorkspacePresetId] =
+    useState<WorkspacePresetId>("annotation");
 
   const health = useQuery({
     queryKey: ["health"],
@@ -252,6 +258,33 @@ export function App() {
       setShowOnboarding(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (!selectedProjectId) {
+      setWorkspacePresetId("annotation");
+      return;
+    }
+    const saved = window.localStorage.getItem(
+      `reefvision.ui.workspace-preset.${selectedProjectId}.v1`,
+    );
+    setWorkspacePresetId(
+      workspacePreset((saved ?? "annotation") as WorkspacePresetId).id,
+    );
+  }, [selectedProjectId]);
+
+  function selectWorkspacePreset(presetId: WorkspacePresetId): void {
+    const preset = workspacePreset(presetId);
+    setWorkspacePresetId(preset.id);
+    if (selectedProjectId) {
+      window.localStorage.setItem(
+        `reefvision.ui.workspace-preset.${selectedProjectId}.v1`,
+        preset.id,
+      );
+    }
+    if (preset.id !== "custom") {
+      setActiveView(preset.defaultView);
+    }
+  }
 
   function submitProject(event: FormEvent) {
     event.preventDefault();
@@ -452,6 +485,8 @@ export function App() {
               activeProjectItem?.description ??
               "Work with project data, models, review, and reproducible outputs."
             }
+            activePreset={workspacePresetId}
+            onPresetChange={selectWorkspacePreset}
             onHome={() => {
               setSelectedProjectId(null);
               setEditorLaunch(null);
