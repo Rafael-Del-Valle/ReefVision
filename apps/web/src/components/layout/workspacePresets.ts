@@ -14,11 +14,7 @@ export interface WorkspacePresetDefinition {
   shortLabel: string;
   description: string;
   defaultView:
-    | "gallery"
-    | "advanced_providers"
-    | "video"
-    | "workflows"
-    | "review_queue";
+    "gallery" | "advanced_providers" | "video" | "workflows" | "review_queue";
 }
 
 export const WORKSPACE_PRESETS: WorkspacePresetDefinition[] = [

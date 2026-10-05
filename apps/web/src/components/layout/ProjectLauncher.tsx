@@ -24,7 +24,8 @@ function formatUpdatedAt(value: string): string {
   return `Updated ${date.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
-    year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+    year:
+      date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
   })}`;
 }
 
@@ -78,7 +79,9 @@ export function ProjectLauncher({
     pinnedProjects.length > 0
       ? [
           ...pinnedProjects,
-          ...recentProjects.filter((project) => !pinnedIds.includes(project.id)),
+          ...recentProjects.filter(
+            (project) => !pinnedIds.includes(project.id),
+          ),
         ]
       : recentProjects;
 
@@ -110,13 +113,20 @@ export function ProjectLauncher({
             >
               Import package
             </button>
-            <button type="button" className="secondary" onClick={onOpenOnboarding}>
+            <button
+              type="button"
+              className="secondary"
+              onClick={onOpenOnboarding}
+            >
               Quick start guide
             </button>
           </div>
         </div>
 
-        <aside className="rv-launcher-release" aria-label="Local system summary">
+        <aside
+          className="rv-launcher-release"
+          aria-label="Local system summary"
+        >
           <div className="rv-launcher-release-heading">
             <span className="rv-brand-mark" aria-hidden="true">
               RV
@@ -166,9 +176,15 @@ export function ProjectLauncher({
       <div className="rv-launcher-section-heading">
         <div>
           <p className="eyebrow">Recent work</p>
-          <h3>{pinnedProjects.length > 0 ? "Pinned and recent projects" : "Recent projects"}</h3>
+          <h3>
+            {pinnedProjects.length > 0
+              ? "Pinned and recent projects"
+              : "Recent projects"}
+          </h3>
         </div>
-        <span>{projects.length} local project{projects.length === 1 ? "" : "s"}</span>
+        <span>
+          {projects.length} local project{projects.length === 1 ? "" : "s"}
+        </span>
       </div>
 
       {projectCollection.length > 0 ? (
@@ -187,11 +203,15 @@ export function ProjectLauncher({
                     {pinned ? "Pinned project" : "Research project"}
                   </span>
                   <strong>{project.name}</strong>
-                  <span>{project.description || "No project description."}</span>
+                  <span>
+                    {project.description || "No project description."}
+                  </span>
                   <small>
                     {project.active_label_class_count} active{" "}
-                    {project.active_label_class_count === 1 ? "class" : "classes"} ·{" "}
-                    {formatUpdatedAt(project.updated_at)}
+                    {project.active_label_class_count === 1
+                      ? "class"
+                      : "classes"}{" "}
+                    · {formatUpdatedAt(project.updated_at)}
                   </small>
                 </button>
                 <button

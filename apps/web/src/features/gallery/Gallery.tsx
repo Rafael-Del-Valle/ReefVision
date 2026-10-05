@@ -394,7 +394,10 @@ export function Gallery({
       setFocusedImageId(null);
       return;
     }
-    if (!focusedImageId || !visibleImages.some((image) => image.id === focusedImageId)) {
+    if (
+      !focusedImageId ||
+      !visibleImages.some((image) => image.id === focusedImageId)
+    ) {
       setFocusedImageId(visibleImages[0].id);
     }
   }, [focusedImageId, visibleImages]);
@@ -512,13 +515,20 @@ export function Gallery({
 
             <div className="rv-filmstrip-heading">
               <span>
-                Image {visibleImages.findIndex((image) => image.id === focusedImage.id) + 1}{" "}
+                Image{" "}
+                {visibleImages.findIndex(
+                  (image) => image.id === focusedImage.id,
+                ) + 1}{" "}
                 of {visibleImages.length} on this page
               </span>
               <span>Scroll the filmstrip to review nearby images</span>
             </div>
 
-            <div className="rv-media-filmstrip" role="list" aria-label="Nearby images">
+            <div
+              className="rv-media-filmstrip"
+              role="list"
+              aria-label="Nearby images"
+            >
               {visibleImages.map((image) => (
                 <button
                   key={image.id}
@@ -528,7 +538,9 @@ export function Gallery({
                     image.id === focusedImage.id ? "active" : undefined
                   }
                   aria-label={`Focus ${image.original_filename}`}
-                  aria-current={image.id === focusedImage.id ? "true" : undefined}
+                  aria-current={
+                    image.id === focusedImage.id ? "true" : undefined
+                  }
                   onClick={() => setFocusedImageId(image.id)}
                 >
                   <span className="rv-filmstrip-thumbnail">
@@ -559,7 +571,10 @@ export function Gallery({
             </div>
           </div>
 
-          <aside className="rv-media-context" aria-label="Focused image inspector">
+          <aside
+            className="rv-media-context"
+            aria-label="Focused image inspector"
+          >
             <p className="eyebrow">Image inspector</p>
             <h3>{focusedImage.original_filename}</h3>
             <dl>

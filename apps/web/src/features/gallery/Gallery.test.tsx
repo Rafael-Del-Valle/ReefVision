@@ -93,7 +93,9 @@ describe("Gallery", () => {
       });
 
     renderGallery();
-    expect(await screen.findByText("swiftia-01.png")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("article", { name: /swiftia-01\.png/ }),
+    ).toBeInTheDocument();
     await userEvent.type(
       screen.getByPlaceholderText("e.g. source-image-001"),
       "whole-image-7",
@@ -137,7 +139,7 @@ describe("Gallery", () => {
     });
 
     renderGallery(onOpenAnnotation);
-    await screen.findByText("swiftia-01.png");
+    await screen.findByRole("article", { name: /swiftia-01\.png/ });
     await userEvent.click(
       screen.getByRole("button", { name: "Select all visible" }),
     );

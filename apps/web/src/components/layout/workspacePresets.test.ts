@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  WORKSPACE_PRESETS,
-  workspacePreset,
-} from "./workspacePresets";
+import { WORKSPACE_PRESETS, workspacePreset } from "./workspacePresets";
 
 describe("workspace presets", () => {
   it("exposes every scientist workspace promised by the Phase 12 design", () => {

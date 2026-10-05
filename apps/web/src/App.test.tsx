@@ -1127,7 +1127,12 @@ describe("App", () => {
     renderApp();
 
     await userEvent.click(
-      await screen.findByRole("button", { name: /System status/ }),
+      within(await screen.findByLabelText("Local system summary")).getByRole(
+        "button",
+        {
+          name: /System status/,
+        },
+      ),
     );
 
     expect(await screen.findAllByText("1.0.1")).not.toHaveLength(0);
@@ -1147,7 +1152,12 @@ describe("App", () => {
     renderApp();
 
     await userEvent.click(
-      await screen.findByRole("button", { name: /System status/ }),
+      within(await screen.findByLabelText("Local system summary")).getByRole(
+        "button",
+        {
+          name: /System status/,
+        },
+      ),
     );
 
     await userEvent.click(

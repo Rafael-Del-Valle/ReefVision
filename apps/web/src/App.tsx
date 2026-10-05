@@ -503,7 +503,10 @@ export function App() {
               }
             }}
             navigation={
-              <nav className="rv-project-nav" aria-label="Project workspace navigation">
+              <nav
+                className="rv-project-nav"
+                aria-label="Project workspace navigation"
+              >
                 {PROJECT_NAV_GROUPS.map((group) => {
                   const selected = group.id === activeProjectGroup?.id;
                   return (

@@ -67,9 +67,10 @@ describe("ProjectLauncher", () => {
     expect(
       window.localStorage.getItem("reefvision.ui.pinned-projects.v1"),
     ).toContain("project-1");
-    expect(
-      screen.getByRole("button", { name: "Unpin" }),
-    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Unpin" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it("offers the octocoral and blank quick-start paths", async () => {

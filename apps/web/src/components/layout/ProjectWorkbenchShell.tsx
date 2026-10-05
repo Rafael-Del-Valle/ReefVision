@@ -87,7 +87,10 @@ export function ProjectWorkbenchShell({
         .filter(Boolean)
         .join(" ")}
     >
-      <aside className="rv-workbench-rail" aria-label="Project workspace navigation">
+      <aside
+        className="rv-workbench-rail"
+        aria-label="Project workspace navigation"
+      >
         {layout.navigationCollapsed ? (
           <div className="rv-collapsed-rail">
             <button
@@ -165,7 +168,11 @@ export function ProjectWorkbenchShell({
               <details>
                 <summary>Project options</summary>
                 <code>{project.storage_root}</code>
-                <button type="button" className="danger-ghost" onClick={onArchive}>
+                <button
+                  type="button"
+                  className="danger-ghost"
+                  onClick={onArchive}
+                >
                   Archive project
                 </button>
               </details>
@@ -185,7 +192,10 @@ export function ProjectWorkbenchShell({
             <h3>{contextTitle}</h3>
             <p>{contextDescription}</p>
           </div>
-          <div className="rv-workbench-toolbar-meta" aria-label="Workspace context">
+          <div
+            className="rv-workbench-toolbar-meta"
+            aria-label="Workspace context"
+          >
             <span>{preset.shortLabel}</span>
             <span>Local project</span>
             <span>
@@ -223,7 +233,10 @@ export function ProjectWorkbenchShell({
       </section>
 
       {!layout.inspectorCollapsed && (
-        <aside className="rv-workbench-inspector" aria-label="Workspace inspector">
+        <aside
+          className="rv-workbench-inspector"
+          aria-label="Workspace inspector"
+        >
           <div className="rv-inspector-heading">
             <p className="eyebrow">Inspector</p>
             <h3>{contextTitle}</h3>
@@ -236,7 +249,10 @@ export function ProjectWorkbenchShell({
                 <div>
                   <dt>Active classes</dt>
                   <dd>
-                    {project.label_classes.filter((item) => item.is_active).length}
+                    {
+                      project.label_classes.filter((item) => item.is_active)
+                        .length
+                    }
                   </dd>
                 </div>
                 <div>
