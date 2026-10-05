@@ -68,7 +68,7 @@ def test_managed_asset_requires_matching_checksum(tmp_path: Path) -> None:
 
     checkpoint.write_bytes(b"tampered")
 
-    with pytest.raises(RuntimeError, match="size mismatch|checksum mismatch"):
+    with pytest.raises(RuntimeError, match=r"size mismatch|checksum mismatch"):
         _managed_asset(settings, DETECTION_CATALOG_ID)
 
 
