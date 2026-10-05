@@ -55,17 +55,13 @@ def _managed_asset(
 
     relative = record.get("relative_path")
     if not isinstance(relative, str) or not relative:
-        raise RuntimeError(
-            f"Managed bundled checkpoint has no relative_path: {catalog_id}"
-        )
+        raise RuntimeError(f"Managed bundled checkpoint has no relative_path: {catalog_id}")
 
     path = (settings.resolved_data_dir / relative).resolve()
     try:
         path.relative_to(settings.resolved_data_dir.resolve())
     except ValueError as exc:
-        raise RuntimeError(
-            f"Managed checkpoint escaped data root: {catalog_id}"
-        ) from exc
+        raise RuntimeError(f"Managed checkpoint escaped data root: {catalog_id}") from exc
 
     files = record.get("files")
     if isinstance(files, list) and files:
@@ -165,9 +161,7 @@ def _detection_run(
         )
         model = getattr(provider, "_model", None)
         network = getattr(model, "model", None)
-        parameter = (
-            next(iter(network.parameters()), None) if network is not None else None
-        )
+        parameter = next(iter(network.parameters()), None) if network is not None else None
         actual_device = str(parameter.device) if parameter is not None else "unknown"
         if device == "cpu" and actual_device != "cpu":
             raise RuntimeError(f"CPU detection used unexpected device: {actual_device}")
@@ -207,9 +201,7 @@ def _depth_run(
         depth = np.load(prediction.relative_depth_path, allow_pickle=False)
         actual_device = str(getattr(provider, "_device", "unknown"))
         if device == "cpu" and actual_device != "cpu":
-            raise RuntimeError(
-                f"CPU depth inference used unexpected device: {actual_device}"
-            )
+            raise RuntimeError(f"CPU depth inference used unexpected device: {actual_device}")
         if device == "cuda" and not actual_device.startswith("cuda"):
             raise RuntimeError(f"CUDA depth inference silently used: {actual_device}")
         if depth.shape != (256, 384):
@@ -325,11 +317,7 @@ def run_packaged_provider_acceptance(settings: Settings) -> int:
     if cuda_available:
         required.extend(["yolo11n_cuda", "depth_anything_v2_cuda"])
 
-    status = (
-        "PASS"
-        if all(results[name]["status"] == "PASS" for name in required)
-        else "FAIL"
-    )
+    status = "PASS" if all(results[name]["status"] == "PASS" for name in required) else "FAIL"
 
     payload = {
         "schema_version": "reefvision-packaged-provider-acceptance-0001",
@@ -346,9 +334,7 @@ def run_packaged_provider_acceptance(settings: Settings) -> int:
             "cuda_device_count": torch.cuda.device_count(),
             "gpu_name": gpu_name,
             "total_gpu_vram_bytes": (
-                int(torch.cuda.get_device_properties(0).total_memory)
-                if cuda_available
-                else None
+                int(torch.cuda.get_device_properties(0).total_memory) if cuda_available else None
             ),
         },
         "bundled_models": {
