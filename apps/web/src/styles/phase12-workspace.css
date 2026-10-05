@@ -1,0 +1,724 @@
+/* Phase 12 Scientist Workspace redesign
+ *
+ * This layer intentionally sits after the legacy application styles. It
+ * changes composition and hierarchy while allowing existing feature
+ * workspaces to keep their validated component-level behavior.
+ */
+
+.rv-global-bar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rv-space-4);
+  min-height: 3.6rem;
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid var(--rv-border);
+  background: color-mix(in srgb, var(--rv-background, #081012) 94%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.rv-global-brand,
+.rv-global-actions,
+.rv-global-context {
+  display: flex;
+  align-items: center;
+  gap: var(--rv-space-3);
+}
+
+.rv-global-brand {
+  min-width: 0;
+}
+
+.rv-global-brand h1 {
+  margin: 0;
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+}
+
+.rv-global-brand p,
+.rv-global-context p {
+  margin: 0;
+}
+
+.rv-brand-mark {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--rv-accent) 45%, var(--rv-border));
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--rv-accent) 14%, transparent);
+  color: var(--rv-accent);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+}
+
+.rv-global-context {
+  min-width: 0;
+  color: var(--rv-muted-strong);
+  font-size: 0.8rem;
+}
+
+.rv-global-context strong {
+  max-width: 24rem;
+  overflow: hidden;
+  color: var(--rv-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rv-phase12-surface {
+  min-height: calc(100vh - 3.6rem);
+}
+
+/* Home / project launcher */
+
+.rv-launcher {
+  width: min(92rem, calc(100vw - 3rem));
+  margin: 0 auto;
+  padding: clamp(2rem, 4vw, 4rem) 0 4rem;
+}
+
+.rv-launcher-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(18rem, 0.75fr);
+  gap: clamp(1rem, 3vw, 2rem);
+  align-items: stretch;
+}
+
+.rv-launcher-copy,
+.rv-launcher-release,
+.rv-launcher-panel,
+.rv-project-launcher-card,
+.rv-launcher-empty {
+  border: 1px solid var(--rv-border);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 48%),
+    var(--rv-panel);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.14);
+}
+
+.rv-launcher-copy {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(2rem, 5vw, 4.5rem);
+  border-radius: 1.4rem;
+}
+
+.rv-launcher-copy::after {
+  position: absolute;
+  right: -5rem;
+  bottom: -8rem;
+  width: 25rem;
+  height: 25rem;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--rv-accent) 18%, transparent),
+    transparent 68%
+  );
+  content: "";
+  pointer-events: none;
+}
+
+.rv-launcher-copy h2 {
+  max-width: 14ch;
+  margin: 0;
+  font-size: clamp(2.3rem, 5.3vw, 4.9rem);
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+.rv-launcher-copy > p:not(.eyebrow) {
+  max-width: 46rem;
+  margin: 1.35rem 0 0;
+  color: var(--rv-muted-strong);
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+.rv-launcher-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1.8rem;
+}
+
+.rv-launcher-release {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  padding: 1.35rem;
+  border-radius: 1.4rem;
+}
+
+.rv-launcher-release-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.rv-launcher-release-heading div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.rv-launcher-release-heading small {
+  color: var(--rv-muted);
+}
+
+.rv-launcher-release dl,
+.rv-inspector-card dl {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.rv-launcher-release dl > div,
+.rv-inspector-card dl > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--rv-border);
+}
+
+.rv-launcher-release dt,
+.rv-inspector-card dt {
+  color: var(--rv-muted);
+  font-size: 0.78rem;
+}
+
+.rv-launcher-release dd,
+.rv-inspector-card dd {
+  margin: 0;
+  text-align: right;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.rv-launcher-section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 2.2rem 0 0.8rem;
+}
+
+.rv-launcher-section-heading h3,
+.rv-launcher-section-heading p {
+  margin: 0;
+}
+
+.rv-launcher-section-heading > span {
+  color: var(--rv-muted);
+  font-size: 0.78rem;
+}
+
+.rv-project-launcher-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.rv-project-launcher-card {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 1rem;
+}
+
+.rv-project-launcher-open {
+  display: grid;
+  width: 100%;
+  min-height: 12rem;
+  align-content: start;
+  gap: 0.55rem;
+  padding: 1.25rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.rv-project-launcher-open:hover {
+  background: color-mix(in srgb, var(--rv-accent) 7%, transparent);
+  transform: none;
+}
+
+.rv-project-launcher-open strong {
+  padding-right: 3rem;
+  font-size: 1.1rem;
+}
+
+.rv-project-launcher-open > span:not(.rv-project-card-kicker) {
+  min-height: 2.8rem;
+  color: var(--rv-muted-strong);
+  line-height: 1.4;
+}
+
+.rv-project-launcher-open small {
+  margin-top: auto;
+  color: var(--rv-muted);
+}
+
+.rv-project-card-kicker {
+  color: var(--rv-accent);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rv-pin-button {
+  position: absolute;
+  top: 0.9rem;
+  right: 0.9rem;
+  min-height: 1.9rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+}
+
+.rv-launcher-empty {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-radius: 1rem;
+}
+
+.rv-launcher-empty h3,
+.rv-launcher-empty p {
+  margin: 0;
+}
+
+.rv-launcher-empty p {
+  margin-top: 0.25rem;
+  color: var(--rv-muted-strong);
+}
+
+.rv-empty-glyph {
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  place-items: center;
+  border-radius: 0.9rem;
+  background: color-mix(in srgb, var(--rv-accent) 13%, transparent);
+  color: var(--rv-accent);
+  font-size: 1.7rem;
+}
+
+.rv-launcher-lower-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(18rem, 0.7fr);
+  gap: 0.9rem;
+  margin-top: 0.9rem;
+}
+
+.rv-launcher-panel {
+  padding: 1.25rem;
+  border-radius: 1rem;
+}
+
+.rv-launcher-panel .rv-launcher-section-heading {
+  margin-top: 0;
+}
+
+.rv-quick-start-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.rv-quick-start-grid button {
+  display: grid;
+  min-height: 9.8rem;
+  align-content: start;
+  gap: 0.4rem;
+  padding: 1rem;
+  border: 1px solid var(--rv-border);
+  background: rgba(255, 255, 255, 0.025);
+  color: inherit;
+  text-align: left;
+}
+
+.rv-quick-start-grid button:hover {
+  border-color: color-mix(in srgb, var(--rv-accent) 52%, var(--rv-border));
+  background: color-mix(in srgb, var(--rv-accent) 7%, transparent);
+}
+
+.rv-quick-start-grid button > span {
+  color: var(--rv-accent);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.rv-quick-start-grid small,
+.rv-whats-new p,
+.rv-whats-new li {
+  color: var(--rv-muted-strong);
+  line-height: 1.45;
+}
+
+.rv-whats-new h3 {
+  margin-top: 0;
+}
+
+.rv-whats-new ul {
+  margin: 1rem 0 0;
+  padding-left: 1.2rem;
+}
+
+/* Project workbench */
+
+.rv-project-workbench {
+  display: grid;
+  grid-template-columns: 17.5rem minmax(36rem, 1fr) 18.5rem;
+  width: 100%;
+  min-height: calc(100vh - 3.6rem);
+}
+
+.rv-workbench-rail,
+.rv-workbench-inspector {
+  position: sticky;
+  top: 3.6rem;
+  align-self: start;
+  height: calc(100vh - 3.6rem);
+  overflow: auto;
+  background: color-mix(in srgb, var(--rv-panel) 94%, var(--rv-background, #081012));
+}
+
+.rv-workbench-rail {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--rv-border);
+}
+
+.rv-workbench-inspector {
+  border-left: 1px solid var(--rv-border);
+}
+
+.rv-workbench-project {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--rv-border);
+}
+
+.rv-workbench-project h2,
+.rv-workbench-project p {
+  margin: 0;
+}
+
+.rv-workbench-project h2 {
+  overflow: hidden;
+  font-size: 0.98rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rv-workbench-project p:not(.eyebrow) {
+  display: -webkit-box;
+  margin-top: 0.2rem;
+  overflow: hidden;
+  color: var(--rv-muted);
+  font-size: 0.74rem;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.rv-home-button {
+  display: grid;
+  width: 2.45rem;
+  height: 2.45rem;
+  place-items: center;
+  padding: 0;
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--rv-accent) 12%, transparent);
+  color: var(--rv-accent);
+  font-size: 0.7rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+}
+
+.rv-project-nav {
+  display: grid;
+  gap: 0.9rem;
+  padding: 0.9rem;
+}
+
+.rv-project-nav-group {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.rv-project-nav-group > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 2.25rem;
+  padding: 0.42rem 0.6rem;
+  border: 0;
+  background: transparent;
+  color: var(--rv-muted-strong);
+  text-align: left;
+}
+
+.rv-project-nav-group > button strong {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rv-project-nav-group > button.active {
+  color: var(--rv-text);
+}
+
+.rv-project-nav-items {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.rv-project-nav-items button {
+  width: 100%;
+  min-height: 2.25rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--rv-muted-strong);
+  text-align: left;
+}
+
+.rv-project-nav-items button:hover,
+.rv-project-nav-items button.active {
+  border-color: var(--rv-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--rv-text);
+  transform: none;
+}
+
+.rv-project-nav-items button.active {
+  border-color: color-mix(in srgb, var(--rv-accent) 42%, var(--rv-border));
+  background: color-mix(in srgb, var(--rv-accent) 8%, transparent);
+}
+
+.rv-workbench-rail-footer {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: auto;
+  padding: 0.9rem;
+  border-top: 1px solid var(--rv-border);
+}
+
+.rv-workbench-rail-footer > button {
+  width: 100%;
+}
+
+.rv-workbench-rail-footer details {
+  color: var(--rv-muted);
+  font-size: 0.72rem;
+}
+
+.rv-workbench-rail-footer details[open] {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.rv-workbench-rail-footer code {
+  overflow-wrap: anywhere;
+}
+
+.rv-workbench-main {
+  min-width: 0;
+  background:
+    radial-gradient(
+      circle at 50% -10%,
+      color-mix(in srgb, var(--rv-accent) 5%, transparent),
+      transparent 28rem
+    ),
+    var(--rv-background, #081012);
+}
+
+.rv-workbench-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  min-height: 5.25rem;
+  padding: 0.8rem 1.25rem;
+  border-bottom: 1px solid var(--rv-border);
+  background: color-mix(in srgb, var(--rv-background, #081012) 94%, transparent);
+}
+
+.rv-workbench-toolbar h3,
+.rv-workbench-toolbar p {
+  margin: 0;
+}
+
+.rv-workbench-toolbar h3 {
+  font-size: 1rem;
+}
+
+.rv-workbench-toolbar > div:first-child > p:last-child {
+  max-width: 48rem;
+  margin-top: 0.2rem;
+  color: var(--rv-muted);
+  font-size: 0.75rem;
+}
+
+.rv-workbench-toolbar-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.rv-workbench-toolbar-meta span {
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--rv-border);
+  border-radius: 999px;
+  color: var(--rv-muted-strong);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.rv-workbench-stage {
+  min-width: 0;
+  padding: 1.15rem;
+}
+
+.rv-workbench-stage > .rv-workspace-shell,
+.rv-workbench-stage > .feature-workspace {
+  max-width: none;
+}
+
+.rv-workbench-inspector {
+  padding: 1rem;
+}
+
+.rv-inspector-heading {
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--rv-border);
+}
+
+.rv-inspector-heading h3,
+.rv-inspector-heading p {
+  margin: 0;
+}
+
+.rv-inspector-heading p:last-child {
+  margin-top: 0.35rem;
+  color: var(--rv-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.rv-inspector-card {
+  margin-top: 1rem;
+  padding: 0.9rem;
+  border: 1px solid var(--rv-border);
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.rv-inspector-card > p {
+  margin: 0.75rem 0 0;
+  color: var(--rv-muted);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.rv-system-surface {
+  width: min(92rem, calc(100vw - 3rem));
+  margin: 0 auto;
+  padding: 1.5rem 0 3rem;
+}
+
+@media (max-width: 82rem) {
+  .rv-project-workbench {
+    grid-template-columns: 15.5rem minmax(30rem, 1fr);
+  }
+
+  .rv-workbench-inspector {
+    display: none;
+  }
+}
+
+@media (max-width: 64rem) {
+  .rv-launcher-hero,
+  .rv-launcher-lower-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rv-project-launcher-grid,
+  .rv-quick-start-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rv-project-workbench {
+    grid-template-columns: 13rem minmax(0, 1fr);
+  }
+
+  .rv-workbench-toolbar-meta {
+    display: none;
+  }
+}
+
+@media (max-width: 46rem) {
+  .rv-global-context {
+    display: none;
+  }
+
+  .rv-global-actions button:not(:last-child) {
+    display: none;
+  }
+
+  .rv-launcher {
+    width: min(100% - 1rem, 92rem);
+    padding-top: 1rem;
+  }
+
+  .rv-launcher-copy {
+    padding: 1.5rem;
+  }
+
+  .rv-launcher-copy h2 {
+    font-size: clamp(2rem, 12vw, 3.6rem);
+  }
+
+  .rv-project-launcher-grid,
+  .rv-quick-start-grid,
+  .rv-launcher-empty {
+    grid-template-columns: 1fr;
+  }
+
+  .rv-project-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .rv-workbench-rail {
+    position: static;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--rv-border);
+  }
+
+  .rv-project-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rv-workbench-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
