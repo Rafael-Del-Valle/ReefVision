@@ -38,9 +38,11 @@ import {
   LoadingState,
 } from "./components/ui/AsyncState";
 import { StatusBadge } from "./components/ui/StatusBadge";
-import { WorkspaceShell } from "./components/ui/WorkspaceShell";
+import { ProjectLauncher } from "./components/layout/ProjectLauncher";
+import { ProjectWorkbenchShell } from "./components/layout/ProjectWorkbenchShell";
 import "./styles/design-system.css";
 import "./styles/app.css";
+import "./styles/phase12-workspace.css";
 
 interface AnnotationLaunchState {
   imageId: string;
@@ -296,18 +298,53 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">Marine computer vision workspace</p>
-          <h1>ReefVision</h1>
+      <header className="rv-global-bar">
+        <div className="rv-global-brand">
+          <span className="rv-brand-mark" aria-hidden="true">
+            RV
+          </span>
+          <div>
+            <p className="eyebrow">Marine computer vision</p>
+            <h1>ReefVision</h1>
+          </div>
         </div>
-        <div className="topbar-actions">
+
+        <div className="rv-global-context" aria-live="polite">
+          <span>{selectedProject ? "Project" : "Home"}</span>
+          <strong>{selectedProject?.name ?? "Scientist workspace"}</strong>
+        </div>
+
+        <div className="rv-global-actions">
+          {(selectedProjectId || activeView === "system") && (
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setSelectedProjectId(null);
+                setEditorLaunch(null);
+                setActiveView("gallery");
+              }}
+            >
+              Home
+            </button>
+          )}
           <button
             type="button"
             className="secondary"
             onClick={() => setShowOnboarding(true)}
           >
-            Help and onboarding
+            Help
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              setSelectedProjectId(null);
+              setEditorLaunch(null);
+              setActiveView("system");
+            }}
+          >
+            System status
           </button>
           <div className="api-status" aria-live="polite">
             <StatusBadge
@@ -330,184 +367,120 @@ export function App() {
         </div>
       </header>
 
-      <section className="workspace">
-        <aside className="sidebar" aria-label="Project dashboard">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Research projects</p>
-              <h2>Dashboard</h2>
-            </div>
-            <button type="button" onClick={() => setShowCreate(true)}>
-              New project
-            </button>
-          </div>
+      <section className="rv-phase12-surface">
+        {!selectedProjectId && activeView !== "system" && (
+          <ProjectLauncher
+            projects={projectSummaries.data ?? []}
+            version={health.data?.version ?? applicationVersion}
+            serviceState={
+              health.isPending
+                ? "pending"
+                : health.isError
+                  ? "unavailable"
+                  : "ready"
+            }
+            onCreateProject={() => setShowCreate(true)}
+            onQuickStart={(nextTemplate) => {
+              setTemplate(nextTemplate);
+              setShowCreate(true);
+            }}
+            onOpenProject={(projectId) => {
+              setSelectedProjectId(projectId);
+              setEditorLaunch(null);
+              setActiveView("gallery");
+            }}
+            onImportPackage={() => {
+              const target = [...(projectSummaries.data ?? [])].sort(
+                (a, b) =>
+                  new Date(b.updated_at).getTime() -
+                  new Date(a.updated_at).getTime(),
+              )[0];
+              if (!target) return;
+              setSelectedProjectId(target.id);
+              setEditorLaunch(null);
+              setActiveView("interoperability");
+            }}
+            onOpenSystem={() => {
+              setSelectedProjectId(null);
+              setEditorLaunch(null);
+              setActiveView("system");
+            }}
+            onOpenOnboarding={() => setShowOnboarding(true)}
+          />
+        )}
 
-          {projectSummaries.isPending && (
-            <LoadingState
-              title="Loading projects"
-              description="Finding your local ReefVision projects."
-            />
-          )}
-          {projectSummaries.error && (
-            <ErrorState
-              title="Projects could not be loaded"
-              message="ReefVision could not connect to its local service."
-              error={projectSummaries.error}
-              onRetry={() => void projectSummaries.refetch()}
-            />
-          )}
-          {projectSummaries.data?.length === 0 && (
-            <EmptyState
-              title="No projects yet"
-              description="Create a project to begin organizing images, annotations, and datasets."
-              action={
-                <button type="button" onClick={() => setShowCreate(true)}>
-                  Create project
-                </button>
-              }
-            />
-          )}
-          <div className="project-list">
-            <button
-              type="button"
-              className={`project-card ${activeView === "system" ? "selected" : ""}`}
-              onClick={() => {
-                setSelectedProjectId(null);
-                setEditorLaunch(null);
-                setActiveView("system");
-              }}
-            >
-              <strong>System status</strong>
-              <span>Application health, backups, and diagnostics</span>
-              <small>Local ReefVision service</small>
-            </button>
-            {projectSummaries.data?.map((project: ProjectSummary) => (
-              <button
-                type="button"
-                key={project.id}
-                className={`project-card ${selectedProjectId === project.id ? "selected" : ""}`}
-                onClick={() => {
-                  setSelectedProjectId(project.id);
-                  setEditorLaunch(null);
-                  setActiveView("gallery");
-                }}
-              >
-                <strong>{project.name}</strong>
-                <span>{project.description || "No description"}</span>
-                <small>
-                  {project.active_label_class_count} active{" "}
-                  {project.active_label_class_count === 1 ? "class" : "classes"}{" "}
-                  · Updated {new Date(project.updated_at).toLocaleDateString()}
-                </small>
-              </button>
-            ))}
-          </div>
-        </aside>
-
-        <section className="detail-panel" aria-live="polite">
-          {activeView === "system" && (
+        {activeView === "system" && (
+          <div className="rv-system-surface">
             <SystemPanel onOpenOnboarding={() => setShowOnboarding(true)} />
-          )}
-          {!selectedProjectId && activeView !== "system" && (
-            <WorkspaceShell
-              eyebrow="Local-first scientific workspace"
-              title="Welcome to ReefVision"
-              description="Open a research project to manage imagery, annotations, models, review, and reproducible datasets."
-              actions={
-                <button type="button" onClick={() => setShowCreate(true)}>
-                  Create project
-                </button>
-              }
-            >
-              <div className="dashboard-intro-grid">
-                <article>
-                  <h3>Keep research organized</h3>
-                  <p>
-                    Projects keep source imagery, stable classes, and scientific
-                    provenance together on this computer.
-                  </p>
-                </article>
-                <article>
-                  <h3>Work with confidence</h3>
-                  <p>
-                    Predictions remain separate from verified annotations until
-                    a researcher explicitly accepts them.
-                  </p>
-                </article>
-                <article>
-                  <h3>Build reproducible datasets</h3>
-                  <p>
-                    Create immutable dataset versions without changing original
-                    source images.
-                  </p>
-                </article>
-              </div>
-            </WorkspaceShell>
-          )}
-          {selectedProjectId &&
-            !selectedProject &&
-            selectedProjectQuery.isPending && (
+          </div>
+        )}
+
+        {selectedProjectId &&
+          activeView !== "system" &&
+          !selectedProject &&
+          selectedProjectQuery.isPending && (
+            <div className="rv-system-surface">
               <LoadingState
                 title={`Opening ${selectedProjectSummary?.name ?? "project"}`}
                 description="Loading classes, settings, and workspace details."
               />
-            )}
-          {selectedProjectId && selectedProjectQuery.error && (
-            <ErrorState
-              title="The requested project could not be loaded"
-              message={`${selectedProjectSummary?.name ?? "This project"} is currently unavailable.`}
-              error={selectedProjectQuery.error}
-              onRetry={() => void selectedProjectQuery.refetch()}
-              onBack={() => setSelectedProjectId(null)}
-            />
+            </div>
           )}
-          {selectedProject && activeView !== "system" && (
-            <div>
-              <div className="project-header">
-                <div>
-                  <p className="eyebrow">Open project</p>
-                  <h2>{selectedProject.name}</h2>
-                  <p>
-                    {selectedProject.description || "No project description."}
-                  </p>
-                  <details className="project-details">
-                    <summary>Project details</summary>
-                    <code>{selectedProject.storage_root}</code>
-                  </details>
-                </div>
-                <button
-                  type="button"
-                  className="danger-ghost"
-                  onClick={() => {
-                    if (window.confirm(`Archive ${selectedProject.name}?`)) {
-                      archiveMutation.mutate(selectedProject.id);
-                    }
-                  }}
-                >
-                  Archive project
-                </button>
-              </div>
 
-              <nav
-                className="project-navigation"
-                aria-label="Project workspace navigation"
-              >
-                <div
-                  className="project-nav-groups"
-                  role="tablist"
-                  aria-label="Workspace groups"
-                >
-                  {PROJECT_NAV_GROUPS.map((group) => {
-                    const selected = group.id === activeProjectGroup?.id;
-                    return (
+        {selectedProjectId &&
+          activeView !== "system" &&
+          selectedProjectQuery.error && (
+            <div className="rv-system-surface">
+              <ErrorState
+                title="The requested project could not be loaded"
+                message={`${selectedProjectSummary?.name ?? "This project"} is currently unavailable.`}
+                error={selectedProjectQuery.error}
+                onRetry={() => void selectedProjectQuery.refetch()}
+                onBack={() => {
+                  setSelectedProjectId(null);
+                  setActiveView("gallery");
+                }}
+              />
+            </div>
+          )}
+
+        {selectedProject && activeView !== "system" && (
+          <ProjectWorkbenchShell
+            project={selectedProject}
+            contextTitle={activeProjectItem?.label ?? "Project workspace"}
+            contextDescription={
+              activeProjectItem?.description ??
+              "Work with project data, models, review, and reproducible outputs."
+            }
+            onHome={() => {
+              setSelectedProjectId(null);
+              setEditorLaunch(null);
+              setActiveView("gallery");
+            }}
+            onSystem={() => {
+              setSelectedProjectId(null);
+              setEditorLaunch(null);
+              setActiveView("system");
+            }}
+            onArchive={() => {
+              if (window.confirm(`Archive ${selectedProject.name}?`)) {
+                archiveMutation.mutate(selectedProject.id);
+              }
+            }}
+            navigation={
+              <nav className="rv-project-nav" aria-label="Project workspace navigation">
+                {PROJECT_NAV_GROUPS.map((group) => {
+                  const selected = group.id === activeProjectGroup?.id;
+                  return (
+                    <section className="rv-project-nav-group" key={group.id}>
                       <button
-                        key={group.id}
                         type="button"
                         role="tab"
                         aria-label={group.label}
                         aria-selected={selected}
                         tabIndex={selected ? 0 : -1}
-                        className={selected ? "active" : "secondary"}
+                        className={selected ? "active" : ""}
+                        title={group.description}
                         onClick={() => setActiveView(group.items[0].id)}
                         onKeyDown={(event) =>
                           handleTabKeys(
@@ -524,143 +497,136 @@ export function App() {
                         }
                       >
                         <strong>{group.label}</strong>
-                        <span>{group.description}</span>
+                        <span aria-hidden="true">{selected ? "—" : "+"}</span>
                       </button>
-                    );
-                  })}
-                </div>
-                <div
-                  className="project-nav-items"
-                  role="tablist"
-                  aria-label={activeProjectGroup?.label ?? "Project sections"}
-                >
-                  {activeProjectGroup?.items.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={activeView === item.id}
-                      tabIndex={activeView === item.id ? 0 : -1}
-                      className={
-                        activeView === item.id ? "active" : "secondary"
-                      }
-                      onClick={() => setActiveView(item.id)}
-                      onKeyDown={(event) =>
-                        handleTabKeys(
-                          event,
-                          activeProjectGroup.items.map((value) => value.id),
-                          activeView as ProjectTab,
-                          setActiveView,
-                        )
-                      }
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-                {activeProjectItem && (
-                  <div className="workspace-context" aria-live="polite">
-                    <div>
-                      <p className="eyebrow">{activeProjectGroup?.label}</p>
-                      <h3>{activeProjectItem.label}</h3>
-                    </div>
-                    <p>{activeProjectItem.description}</p>
-                  </div>
-                )}
-              </nav>
 
-              {activeView === "gallery" && (
-                <Gallery
-                  project={selectedProject}
-                  onOpenAnnotation={(imageId) =>
-                    setEditorLaunch({
-                      imageId,
-                      returnLabel: "Back to gallery",
-                    })
-                  }
-                />
-              )}
-              {activeView === "versions" && (
-                <DatasetVersionsPanel project={selectedProject} />
-              )}
-              {activeView === "interoperability" && (
-                <InteroperabilityWorkspace project={selectedProject} />
-              )}
-              {activeView === "classification" && (
-                <ClassificationWorkspace project={selectedProject} />
-              )}
-              {activeView === "advanced_providers" && (
-                <AdvancedProviderWorkspace project={selectedProject} />
-              )}
-              {activeView === "workflows" && (
-                <WorkflowGraphWorkspace project={selectedProject} />
-              )}
-              {activeView === "video" && (
-                <>
-                  <VideoTrackingWorkspace project={selectedProject} />
-                  <VideoTrackExchangePanel project={selectedProject} />
-                </>
-              )}
-              {activeView === "active_learning" && (
-                <ActiveLearningWorkspace
-                  project={selectedProject}
-                  onOpenReviewQueue={() => setActiveView("review_queue")}
-                />
-              )}
-              {activeView === "models" && (
-                <ModelManager
-                  project={selectedProject}
-                  onSelectCatalogModel={(catalogId) => {
-                    setTrainingCatalogModelId(catalogId);
-                    setActiveView("training");
-                  }}
-                />
-              )}
-              {activeView === "training" && (
-                <TrainingWorkspace
-                  project={selectedProject}
-                  initialCatalogModelId={trainingCatalogModelId}
-                  onCatalogSelectionConsumed={() =>
-                    setTrainingCatalogModelId(null)
-                  }
-                />
-              )}
-              {activeView === "quality_control" && (
-                <QualityControlDashboard
-                  project={selectedProject}
-                  onOpenImage={(issue: QualityControlIssue) =>
-                    setEditorLaunch({
-                      imageId: issue.image_id as string,
-                      returnLabel: "Back to Quality Control",
-                      contextTitle: issue.title,
-                      contextDescription: issue.explanation,
-                      highlightAnnotationIds: issue.annotation_ids_json,
-                      highlightPredictionIds: issue.prediction_ids_json,
-                    })
-                  }
-                />
-              )}
-              {activeView === "review_queue" && (
-                <ReviewQueueDashboard
-                  project={selectedProject}
-                  onOpenImage={(item: ReviewQueueItem) =>
-                    setEditorLaunch({
-                      imageId: item.image_id,
-                      returnLabel: "Back to Review Queue",
-                      contextTitle: `Review score ${item.score.toFixed(2)}`,
-                      contextDescription:
-                        item.reason_summary ??
-                        "This image was ranked for human review.",
-                    })
-                  }
-                />
-              )}
-              {activeView === "classes" && (
-                <ClassManagerPanel project={selectedProject} />
-              )}
-            </div>
-          )}
-        </section>
+                      {selected && (
+                        <div
+                          className="rv-project-nav-items"
+                          role="tablist"
+                          aria-label={group.label}
+                        >
+                          {group.items.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              role="tab"
+                              aria-selected={activeView === item.id}
+                              tabIndex={activeView === item.id ? 0 : -1}
+                              className={activeView === item.id ? "active" : ""}
+                              title={item.description}
+                              onClick={() => setActiveView(item.id)}
+                              onKeyDown={(event) =>
+                                handleTabKeys(
+                                  event,
+                                  group.items.map((value) => value.id),
+                                  activeView as ProjectTab,
+                                  setActiveView,
+                                )
+                              }
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  );
+                })}
+              </nav>
+            }
+          >
+            {activeView === "gallery" && (
+              <Gallery
+                project={selectedProject}
+                onOpenAnnotation={(imageId) =>
+                  setEditorLaunch({
+                    imageId,
+                    returnLabel: "Back to gallery",
+                  })
+                }
+              />
+            )}
+            {activeView === "versions" && (
+              <DatasetVersionsPanel project={selectedProject} />
+            )}
+            {activeView === "interoperability" && (
+              <InteroperabilityWorkspace project={selectedProject} />
+            )}
+            {activeView === "classification" && (
+              <ClassificationWorkspace project={selectedProject} />
+            )}
+            {activeView === "advanced_providers" && (
+              <AdvancedProviderWorkspace project={selectedProject} />
+            )}
+            {activeView === "workflows" && (
+              <WorkflowGraphWorkspace project={selectedProject} />
+            )}
+            {activeView === "video" && (
+              <>
+                <VideoTrackingWorkspace project={selectedProject} />
+                <VideoTrackExchangePanel project={selectedProject} />
+              </>
+            )}
+            {activeView === "active_learning" && (
+              <ActiveLearningWorkspace
+                project={selectedProject}
+                onOpenReviewQueue={() => setActiveView("review_queue")}
+              />
+            )}
+            {activeView === "models" && (
+              <ModelManager
+                project={selectedProject}
+                onSelectCatalogModel={(catalogId) => {
+                  setTrainingCatalogModelId(catalogId);
+                  setActiveView("training");
+                }}
+              />
+            )}
+            {activeView === "training" && (
+              <TrainingWorkspace
+                project={selectedProject}
+                initialCatalogModelId={trainingCatalogModelId}
+                onCatalogSelectionConsumed={() =>
+                  setTrainingCatalogModelId(null)
+                }
+              />
+            )}
+            {activeView === "quality_control" && (
+              <QualityControlDashboard
+                project={selectedProject}
+                onOpenImage={(issue: QualityControlIssue) =>
+                  setEditorLaunch({
+                    imageId: issue.image_id as string,
+                    returnLabel: "Back to Quality Control",
+                    contextTitle: issue.title,
+                    contextDescription: issue.explanation,
+                    highlightAnnotationIds: issue.annotation_ids_json,
+                    highlightPredictionIds: issue.prediction_ids_json,
+                  })
+                }
+              />
+            )}
+            {activeView === "review_queue" && (
+              <ReviewQueueDashboard
+                project={selectedProject}
+                onOpenImage={(item: ReviewQueueItem) =>
+                  setEditorLaunch({
+                    imageId: item.image_id,
+                    returnLabel: "Back to Review Queue",
+                    contextTitle: `Review score ${item.score.toFixed(2)}`,
+                    contextDescription:
+                      item.reason_summary ??
+                      "This image was ranked for human review.",
+                  })
+                }
+              />
+            )}
+            {activeView === "classes" && (
+              <ClassManagerPanel project={selectedProject} />
+            )}
+          </ProjectWorkbenchShell>
+        )}
       </section>
 
       {selectedProject && !editorLaunch && (
