@@ -7,6 +7,7 @@ import {
   getJob,
   getImages,
   getModels,
+  imageDisplayUrl,
   imageThumbnailUrl,
   importImages,
   updateImage,
@@ -222,6 +223,7 @@ export function Gallery({
     total: number;
   } | null>(null);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
+  const [focusedImageId, setFocusedImageId] = useState<string | null>(null);
   const [selectedModelId, setSelectedModelId] = useState("");
   const [confidenceThreshold, setConfidenceThreshold] = useState("0.25");
   const [device, setDevice] = useState("cpu");
@@ -382,6 +384,20 @@ export function Gallery({
     detectorModels.data?.find((model) => model.id === selectedModelId) ?? null;
 
   const visibleImages = images.data?.items ?? [];
+  const focusedImage =
+    visibleImages.find((image) => image.id === focusedImageId) ??
+    visibleImages[0] ??
+    null;
+
+  useEffect(() => {
+    if (visibleImages.length === 0) {
+      setFocusedImageId(null);
+      return;
+    }
+    if (!focusedImageId || !visibleImages.some((image) => image.id === focusedImageId)) {
+      setFocusedImageId(visibleImages[0].id);
+    }
+  }, [focusedImageId, visibleImages]);
 
   function jumpToPage(event: FormEvent) {
     event.preventDefault();
@@ -454,6 +470,131 @@ export function Gallery({
         />
       )}
       {report && <ImportSummary report={report} />}
+
+      {focusedImage && (
+        <section className="rv-media-workbench" aria-label="Image workbench">
+          <div className="rv-media-viewer">
+            <div className="rv-media-viewer-toolbar">
+              <div>
+                <p className="eyebrow">Focused image</p>
+                <strong title={focusedImage.original_filename}>
+                  {focusedImage.original_filename}
+                </strong>
+              </div>
+              <div className="rv-media-viewer-actions">
+                <StatusBadge status={focusedImage.annotation_status} />
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => toggleSelected(focusedImage.id)}
+                >
+                  {selectedImageIds.includes(focusedImage.id)
+                    ? "Remove from batch"
+                    : "Add to batch"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenAnnotation?.(focusedImage.id)}
+                  disabled={!onOpenAnnotation}
+                >
+                  Open annotation editor
+                </button>
+              </div>
+            </div>
+
+            <div className="rv-media-canvas">
+              <img
+                src={imageDisplayUrl(focusedImage.id)}
+                alt={`Focused project image: ${focusedImage.original_filename}`}
+                decoding="async"
+              />
+            </div>
+
+            <div className="rv-filmstrip-heading">
+              <span>
+                Image {visibleImages.findIndex((image) => image.id === focusedImage.id) + 1}{" "}
+                of {visibleImages.length} on this page
+              </span>
+              <span>Scroll the filmstrip to review nearby images</span>
+            </div>
+
+            <div className="rv-media-filmstrip" role="list" aria-label="Nearby images">
+              {visibleImages.map((image) => (
+                <button
+                  key={image.id}
+                  type="button"
+                  role="listitem"
+                  className={
+                    image.id === focusedImage.id ? "active" : undefined
+                  }
+                  aria-label={`Focus ${image.original_filename}`}
+                  aria-current={image.id === focusedImage.id ? "true" : undefined}
+                  onClick={() => setFocusedImageId(image.id)}
+                >
+                  <span className="rv-filmstrip-thumbnail">
+                    {image.thumbnail_path ? (
+                      <img
+                        src={imageThumbnailUrl(image.id)}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    ) : (
+                      <span aria-hidden="true">…</span>
+                    )}
+                  </span>
+                  <span className="rv-filmstrip-meta">
+                    <strong>{image.original_filename}</strong>
+                    <small>
+                      {image.annotation_count} annotations ·{" "}
+                      {image.annotation_status.replaceAll("_", " ")}
+                    </small>
+                  </span>
+                  <span
+                    className={`rv-filmstrip-status status-${image.annotation_status}`}
+                    aria-hidden="true"
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <aside className="rv-media-context" aria-label="Focused image inspector">
+            <p className="eyebrow">Image inspector</p>
+            <h3>{focusedImage.original_filename}</h3>
+            <dl>
+              <div>
+                <dt>Dimensions</dt>
+                <dd>
+                  {focusedImage.width_px.toLocaleString()} ×{" "}
+                  {focusedImage.height_px.toLocaleString()}
+                </dd>
+              </div>
+              <div>
+                <dt>Annotations</dt>
+                <dd>{focusedImage.annotation_count}</dd>
+              </div>
+              <div>
+                <dt>Status</dt>
+                <dd>{focusedImage.annotation_status.replaceAll("_", " ")}</dd>
+              </div>
+              <div>
+                <dt>Revision</dt>
+                <dd>{focusedImage.annotation_revision}</dd>
+              </div>
+              <div>
+                <dt>Group</dt>
+                <dd>{focusedImage.group_key || "Unassigned"}</dd>
+              </div>
+            </dl>
+            <p>
+              The central viewer is for scientific review and navigation. Open
+              the annotation editor for geometry edits, model proposals, scale
+              calibration, and verified annotation changes.
+            </p>
+          </aside>
+        </section>
+      )}
 
       <section className="annotation-sidebar-section">
         <div className="section-heading">
