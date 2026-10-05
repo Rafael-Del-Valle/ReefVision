@@ -991,3 +991,116 @@
     min-height: 20rem;
   }
 }
+
+
+/* Presets, saved panel visibility, and Review Mode */
+
+.rv-preset-picker {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.9rem;
+  border-bottom: 1px solid var(--rv-border);
+}
+
+.rv-preset-picker label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--rv-muted-strong);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.rv-preset-picker select {
+  width: 100%;
+}
+
+.rv-preset-picker small {
+  color: var(--rv-muted);
+  font-size: 0.66rem;
+  line-height: 1.4;
+}
+
+.rv-project-workbench.navigation-collapsed {
+  grid-template-columns: 4.25rem minmax(36rem, 1fr) 18.5rem;
+}
+
+.rv-project-workbench.inspector-collapsed {
+  grid-template-columns: 17.5rem minmax(36rem, 1fr);
+}
+
+.rv-project-workbench.navigation-collapsed.inspector-collapsed {
+  grid-template-columns: 4.25rem minmax(36rem, 1fr);
+}
+
+.rv-collapsed-rail {
+  display: grid;
+  justify-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.4rem;
+}
+
+.rv-collapsed-rail .secondary {
+  width: 2.45rem;
+  min-width: 2.45rem;
+  height: 2.45rem;
+  padding: 0;
+}
+
+.rv-review-mode-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.55rem;
+  padding: 0.55rem 1.25rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--rv-warning) 45%, var(--rv-border));
+  background: color-mix(in srgb, var(--rv-warning) 7%, transparent);
+  color: var(--rv-muted-strong);
+  font-size: 0.76rem;
+}
+
+.rv-review-mode-banner strong {
+  color: var(--rv-warning);
+}
+
+.rv-project-workbench.review-mode .rv-workbench-toolbar {
+  border-bottom-color: color-mix(
+    in srgb,
+    var(--rv-warning) 42%,
+    var(--rv-border)
+  );
+}
+
+@media (max-width: 82rem) {
+  .rv-project-workbench.navigation-collapsed,
+  .rv-project-workbench.navigation-collapsed.inspector-collapsed {
+    grid-template-columns: 4.25rem minmax(30rem, 1fr);
+  }
+
+  .rv-project-workbench.inspector-collapsed {
+    grid-template-columns: 15.5rem minmax(30rem, 1fr);
+  }
+}
+
+@media (max-width: 64rem) {
+  .rv-project-workbench.navigation-collapsed,
+  .rv-project-workbench.navigation-collapsed.inspector-collapsed {
+    grid-template-columns: 4.25rem minmax(0, 1fr);
+  }
+
+  .rv-project-workbench.inspector-collapsed {
+    grid-template-columns: 13rem minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 46rem) {
+  .rv-project-workbench.navigation-collapsed,
+  .rv-project-workbench.navigation-collapsed.inspector-collapsed,
+  .rv-project-workbench.inspector-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .rv-collapsed-rail {
+    grid-template-columns: auto auto;
+    justify-content: space-between;
+  }
+}
