@@ -397,6 +397,12 @@ try {
         throw "Pinned provider or Scale Assistant marker-runtime preflight failed. Rerun .\scripts\bootstrap.ps1."
     }
 
+    Write-ReefVisionStep "Checking compiled Pydantic Core runtime before packaging"
+    & $VenvPython -c "import pydantic_core._pydantic_core as core; print('Pydantic Core extension:', core.__file__)"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Compiled pydantic_core runtime is unavailable in the ReefVision Python environment."
+    }
+
     Write-ReefVisionStep "Checking optional AI provider dependencies before packaging"
     & $VenvPython -c "import importlib.metadata as m; expected={'transformers':'4.57.2','huggingface-hub':'0.36.0','tokenizers':'0.22.1','safetensors':'0.7.0','sentencepiece':'0.2.1'}; actual={k:m.version(k) for k in expected}; bad={k:(expected[k],actual[k]) for k in expected if actual[k] != expected[k]}; assert not bad, f'advanced provider version mismatch: {bad}'; import transformers, huggingface_hub, tokenizers, safetensors, sentencepiece; print('Advanced provider packaging runtime OK:', actual)"
     if ($LASTEXITCODE -ne 0) {
