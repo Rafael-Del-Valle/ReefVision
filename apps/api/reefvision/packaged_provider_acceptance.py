@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import platform
+import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -159,8 +160,8 @@ def _detection_run(
         )
         model = getattr(provider, "_model", None)
         network = getattr(model, "model", None)
-        parameters = list(network.parameters()) if network is not None else []
-        actual_device = str(parameters[0].device) if parameters else "unknown"
+        parameter = next(iter(network.parameters()), None) if network is not None else None
+        actual_device = str(parameter.device) if parameter is not None else "unknown"
         if device == "cpu" and actual_device != "cpu":
             raise RuntimeError(f"CPU detection used unexpected device: {actual_device}")
         if device == "cuda" and not actual_device.startswith("cuda"):
@@ -325,7 +326,7 @@ def run_packaged_provider_acceptance(settings: Settings) -> int:
         "schema_version": "reefvision-packaged-provider-acceptance-0001",
         "created_at_utc": datetime.now(UTC).isoformat(),
         "status": status,
-        "packaged_runtime": bool(getattr(__import__("sys"), "frozen", False)),
+        "packaged_runtime": bool(getattr(sys, "frozen", False)),
         "network_downloads_allowed": False,
         "hardware": {
             "platform": platform.platform(),
