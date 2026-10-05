@@ -78,6 +78,7 @@ def test_packaged_acceptance_report_filename_is_json() -> None:
     assert REPORT_FILENAME.endswith(".json")
     assert json.loads('{"status":"PASS"}')["status"] == "PASS"
 
+
 def test_desktop_packaging_requires_compiled_pydantic_core() -> None:
     repo = Path(__file__).resolve().parents[4]
     build_script = (repo / "scripts" / "build-desktop-backend.ps1").read_text(
