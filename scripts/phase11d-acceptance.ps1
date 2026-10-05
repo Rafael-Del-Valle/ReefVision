@@ -191,12 +191,25 @@ try {
     $env:YOLO_AUTOINSTALL = "false"
 
     Write-Host "=== PACKAGED CPU / CUDA PROVIDER EXECUTION ==="
-    & $Backend.FullName `
-        --data-dir $DataRoot `
-        --safe-mode `
-        --provider-hardware-acceptance
-    if ($LASTEXITCODE -ne 0) {
-        throw "Packaged provider acceptance exited with code $LASTEXITCODE."
+    $ProviderLog = Join-Path $DataRoot "provider-hardware-acceptance.log"
+    $ProviderProcess = Start-Process `
+        -FilePath $Backend.FullName `
+        -ArgumentList @(
+            "--data-dir",
+            $DataRoot,
+            "--safe-mode",
+            "--provider-hardware-acceptance",
+            "--log-file",
+            $ProviderLog
+        ) `
+        -Wait `
+        -PassThru `
+        -WindowStyle Hidden
+    if ($ProviderProcess.ExitCode -ne 0) {
+        if (Test-Path -LiteralPath $ProviderLog -PathType Leaf) {
+            Get-Content -LiteralPath $ProviderLog -Tail 120 | Write-Host
+        }
+        throw "Packaged provider acceptance exited with code $($ProviderProcess.ExitCode)."
     }
 
     $RawReport = Join-Path $DataRoot "provider-hardware-acceptance.json"
