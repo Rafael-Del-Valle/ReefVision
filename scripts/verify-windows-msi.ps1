@@ -104,6 +104,15 @@ try {
     if (-not $ModelCatalog) {
         throw 'Extracted MSI does not contain model_catalog.json.'
     }
+    $PydanticCoreBinary = @(
+        $ExtractedFiles | Where-Object {
+            $_.Name -like '_pydantic_core*.pyd' -and
+            $_.FullName -match '[\\/]pydantic_core[\\/]'
+        }
+    ) | Select-Object -First 1
+    if (-not $PydanticCoreBinary) {
+        throw 'Extracted MSI does not contain the compiled pydantic_core extension.'
+    }
     $AlembicIni = @($ExtractedFiles | Where-Object { $_.Name -ieq 'alembic.ini' }) | Select-Object -First 1
     if (-not $AlembicIni) {
         throw 'Extracted MSI does not contain packaged alembic.ini.'
@@ -132,6 +141,7 @@ try {
     Write-Host "  $($Longest.FullName)"
     Write-Host "Desktop executable: $($DesktopExe.FullName)"
     Write-Host "Backend sidecar: $($SidecarExe.FullName)"
+    Write-Host "Pydantic Core: $($PydanticCoreBinary.FullName)"
     Write-Host "Migration files: $($MigrationFiles.Count)"
     Write-Host "Bundled model assets: $($Manifest.asset_count)"
 
