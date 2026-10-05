@@ -150,7 +150,10 @@ $CollectedProviderPackages = @(
     "huggingface_hub",
     "tokenizers",
     "safetensors",
-    "sentencepiece"
+    "sentencepiece",
+    "pydantic",
+    "pydantic_core",
+    "pydantic_settings"
 )
 $ProviderMetadataPackages = @(
     "numpy",
@@ -174,7 +177,10 @@ $ProviderMetadataPackages = @(
     "huggingface-hub",
     "tokenizers",
     "safetensors",
-    "sentencepiece"
+    "sentencepiece",
+    "pydantic",
+    "pydantic-core",
+    "pydantic-settings"
 )
 $BundledTorchDevelopmentPatterns = @(
     "*.lib"
@@ -337,6 +343,8 @@ $Arguments = @(
     "uvicorn.protocols.websockets.auto",
     "--hidden-import",
     "uvicorn.lifespan.on",
+    "--hidden-import",
+    "pydantic_core._pydantic_core",
     "--add-data",
     "${AlembicIni};alembic",
     "--add-data",
@@ -427,6 +435,21 @@ $SourceBundle = Join-Path $DistPath "reefvision-api"
 if (-not (Test-Path $SourceBundle -PathType Container)) {
     throw "PyInstaller did not produce the expected onedir backend bundle: $SourceBundle"
 }
+$PydanticCoreBinaries = @(
+    Get-ChildItem `
+        -LiteralPath (Join-Path $SourceBundle "_internal\pydantic_core") `
+        -Filter "_pydantic_core*.pyd" `
+        -File `
+        -ErrorAction SilentlyContinue
+)
+if ($PydanticCoreBinaries.Count -lt 1) {
+    throw "PyInstaller omitted the compiled pydantic_core extension required by Pydantic."
+}
+Write-Host (
+    "Packaged Pydantic Core extension: " +
+    $PydanticCoreBinaries[0].FullName
+) -ForegroundColor DarkGray
+
 $PyInstallerCatalog = Join-Path $SourceBundle "_internal\config\model_catalog.json"
 Assert-ReefVisionModelCatalog -Path $PyInstallerCatalog
 
@@ -489,6 +512,17 @@ if (Test-Path $LegacyTargetExe -PathType Leaf) {
 }
 
 Copy-Item -LiteralPath $SourceBundle -Destination $PackagedBackendPath -Recurse
+$StagedPydanticCoreBinaries = @(
+    Get-ChildItem `
+        -LiteralPath (Join-Path $PackagedBackendPath "_internal\pydantic_core") `
+        -Filter "_pydantic_core*.pyd" `
+        -File `
+        -ErrorAction SilentlyContinue
+)
+if ($StagedPydanticCoreBinaries.Count -lt 1) {
+    throw "Staged desktop backend omitted the compiled pydantic_core extension."
+}
+
 $StagedCatalog = Join-Path $PackagedBackendPath "_internal\config\model_catalog.json"
 Assert-ReefVisionModelCatalog -Path $StagedCatalog
 
