@@ -84,6 +84,21 @@ def test_parse_args_enables_packaged_self_test_without_starting_server() -> None
     assert options.log_file == Path("C:/reefvision-self-test.log")
 
 
+def test_parse_args_enables_packaged_provider_hardware_acceptance() -> None:
+    options = parse_args(
+        [
+            "--provider-hardware-acceptance",
+            "--safe-mode",
+            "--data-dir",
+            "C:/reefvision-provider-acceptance",
+        ]
+    )
+
+    assert options.provider_hardware_acceptance is True
+    assert options.safe_mode is True
+    assert options.data_dir == Path("C:/reefvision-provider-acceptance")
+
+
 def test_scale_assistant_marker_runtime_accepts_opencv_contrib(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
