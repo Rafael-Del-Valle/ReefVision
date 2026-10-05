@@ -44,6 +44,7 @@ class DesktopLaunchOptions:
     run_migrations: bool
     safe_mode: bool = False
     self_test: bool = False
+    provider_hardware_acceptance: bool = False
     video_tracking_job: str | None = None
     annotated_video_export_job: str | None = None
 
@@ -71,6 +72,14 @@ def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
         ),
     )
     parser.add_argument(
+        "--provider-hardware-acceptance",
+        action="store_true",
+        help=(
+            "Run packaged CPU/CUDA provider acceptance using installer-bundled "
+            "checkpoints, write evidence into the selected data directory, and exit"
+        ),
+    )
+    parser.add_argument(
         "--video-tracking-job",
         default=None,
         help="Process one queued video-tracking job and exit",
@@ -90,6 +99,7 @@ def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
         run_migrations=namespace.run_migrations,
         safe_mode=namespace.safe_mode,
         self_test=namespace.self_test,
+        provider_hardware_acceptance=namespace.provider_hardware_acceptance,
         video_tracking_job=namespace.video_tracking_job,
         annotated_video_export_job=namespace.annotated_video_export_job,
     )
@@ -512,6 +522,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if options.self_test:
             LOGGER.info("Running packaged ReefVision desktop self-test")
             return run_self_test(settings)
+        if options.provider_hardware_acceptance:
+            LOGGER.info("Running packaged ReefVision provider hardware acceptance")
+            from reefvision.packaged_provider_acceptance import (
+                run_packaged_provider_acceptance,
+            )
+
+            return run_packaged_provider_acceptance(settings)
         if options.video_tracking_job is not None:
             LOGGER.info(
                 "Running isolated video-tracking worker for job %s",
