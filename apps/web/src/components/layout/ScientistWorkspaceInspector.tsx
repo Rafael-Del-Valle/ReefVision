@@ -1,5 +1,6 @@
 import { ProjectInferenceInspector } from "./ProjectInferenceInspector";
 import { ProjectMorphometricsInspector } from "./ProjectMorphometricsInspector";
+import { ProjectTrainingMonitor } from "./ProjectTrainingMonitor";
 import type { WorkspacePresetId } from "./workspacePresets";
 import { workspacePreset } from "./workspacePresets";
 import {
@@ -128,6 +129,10 @@ export function ScientistWorkspaceInspector({
             onOpenMeasurements={onOpenMeasurements}
           />
         )}
+
+      {activeView === "training" && projectId && (
+        <ProjectTrainingMonitor projectId={projectId} />
+      )}
 
       <section
         className="rv-inspector-card"

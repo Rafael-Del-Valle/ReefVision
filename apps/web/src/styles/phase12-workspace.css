@@ -1560,3 +1560,163 @@
   border-color: color-mix(in srgb, var(--rv-accent) 48%, var(--rv-border));
   background: color-mix(in srgb, var(--rv-accent) 6%, transparent);
 }
+
+/* Phase 12D-4 training monitor */
+
+.rv-training-monitor {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.rv-training-monitor > p {
+  margin: 0;
+}
+
+.rv-training-monitor .rv-inspector-card-heading > span.training-active {
+  border-color: color-mix(in srgb, var(--rv-accent) 52%, var(--rv-border));
+  background: color-mix(in srgb, var(--rv-accent) 9%, transparent);
+  color: var(--rv-accent);
+}
+
+.rv-training-monitor-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.rv-training-monitor-run {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.65rem;
+  border: 1px solid var(--rv-border);
+  border-radius: 0.7rem;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.rv-training-monitor-run[data-training-status="training"],
+.rv-training-monitor-run[data-training-status="tuning"],
+.rv-training-monitor-run[data-training-status="running"],
+.rv-training-monitor-run[data-training-status="preparing_dataset"] {
+  border-color: color-mix(in srgb, var(--rv-accent) 34%, var(--rv-border));
+}
+
+.rv-training-monitor-run-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.rv-training-monitor-run-heading > div {
+  min-width: 0;
+}
+
+.rv-training-monitor-run-heading strong {
+  display: block;
+  overflow: hidden;
+  font-size: 0.69rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rv-training-monitor-run-heading small {
+  display: block;
+  margin-top: 0.18rem;
+  overflow: hidden;
+  color: var(--rv-muted);
+  font-size: 0.59rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rv-training-monitor-run-heading > span {
+  flex: 0 0 auto;
+  padding: 0.2rem 0.38rem;
+  border: 1px solid var(--rv-border);
+  border-radius: 999px;
+  color: var(--rv-muted-strong);
+  font-size: 0.57rem;
+  font-weight: 750;
+  text-transform: capitalize;
+}
+
+.rv-training-monitor-run-heading > span.active {
+  border-color: color-mix(in srgb, var(--rv-accent) 45%, var(--rv-border));
+  color: var(--rv-accent);
+}
+
+.rv-training-monitor-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.rv-training-monitor-meta span {
+  padding: 0.2rem 0.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--rv-border) 45%, transparent);
+  color: var(--rv-muted-strong);
+  font-size: 0.56rem;
+  text-transform: capitalize;
+}
+
+.rv-training-monitor-progress {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.rv-training-monitor-progress > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.rv-training-monitor-progress span {
+  color: var(--rv-muted);
+  font-size: 0.59rem;
+}
+
+.rv-training-monitor-progress strong {
+  font-size: 0.62rem;
+}
+
+.rv-training-monitor-progress progress {
+  width: 100%;
+  height: 0.45rem;
+}
+
+.rv-training-monitor-metrics {
+  margin: 0 !important;
+}
+
+.rv-training-monitor-metrics > div {
+  padding-bottom: 0.25rem !important;
+}
+
+.rv-training-monitor-metrics dt,
+.rv-training-monitor-metrics dd {
+  font-size: 0.59rem !important;
+}
+
+.rv-training-monitor-provenance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid color-mix(in srgb, var(--rv-border) 70%, transparent);
+}
+
+.rv-training-monitor-provenance span {
+  color: var(--rv-muted);
+  font-size: 0.58rem;
+}
+
+.rv-training-monitor-provenance code {
+  color: var(--rv-muted-strong);
+  font-size: 0.57rem;
+}
+
+.rv-training-monitor-run > button,
+.rv-training-monitor > button {
+  width: 100%;
+}

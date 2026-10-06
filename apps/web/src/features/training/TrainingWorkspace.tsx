@@ -1,4 +1,4 @@
-﻿import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -30,6 +30,7 @@ import {
 } from "../../api/client";
 import { TaskCapabilityMatrix } from "./TaskCapabilityMatrix";
 import { TrainingRunDetail } from "./TrainingRunDetail";
+import { trainingRunsContainActive } from "./trainingRunState";
 
 type TrainingSection =
   | "new_run"
@@ -331,22 +332,10 @@ export function TrainingWorkspace({
     queryKey: ["training_runs", project.id],
     queryFn: ({ signal }) => getTrainingRuns(project.id, signal),
     refetchOnMount: "always",
-    refetchInterval: (query) => {
-      const data = query.state.data as TrainingRun[] | undefined;
-      const hasActiveRun = data?.some((run) =>
-        [
-          "queued",
-          "preflight",
-          "preparing_dataset",
-          "training",
-          "tuning",
-          "running",
-          "cancel_requested",
-        ].includes(run.status),
-      );
-
-      return hasActiveRun ? 2000 : false;
-    },
+    refetchInterval: (query) =>
+      trainingRunsContainActive(query.state.data as TrainingRun[] | undefined)
+        ? 2000
+        : false,
   });
   const experiments = useQuery({
     queryKey: ["experiments", project.id],
