@@ -49,7 +49,7 @@ try {
 
     Write-Host ""
     Write-Host "=== PHASE 12 FOCUSED TESTS ==="
-    npm test -- src/components/layout/ProjectLauncher.test.tsx src/components/layout/workspacePresets.test.ts src/App.test.tsx
+    npm test -- src/components/layout/ProjectLauncher.test.tsx src/components/layout/workspacePresets.test.ts src/components/layout/ScientistWorkspaceInspector.test.tsx src/features/gallery/Gallery.test.tsx src/App.test.tsx
     if ($LASTEXITCODE -ne 0) {
         throw "Phase 12 focused UI tests failed."
     }
@@ -89,3 +89,4 @@ Write-Host "[ ] Image workspace presents a dominant viewer and bottom filmstrip.
 Write-Host "[ ] Workspace presets navigate existing canonical feature components."
 Write-Host "[ ] Panel visibility persists without changing scientific project state."
 Write-Host "[ ] Review preset makes the scientist-verification boundary visually explicit."
+Write-Host "[ ] Inspector content changes with workspace context without duplicating scientific state."

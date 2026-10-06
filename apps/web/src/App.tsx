@@ -39,6 +39,7 @@ import {
 } from "./components/ui/AsyncState";
 import { StatusBadge } from "./components/ui/StatusBadge";
 import { ProjectLauncher } from "./components/layout/ProjectLauncher";
+import { ScientistWorkspaceInspector } from "./components/layout/ScientistWorkspaceInspector";
 import { ProjectWorkbenchShell } from "./components/layout/ProjectWorkbenchShell";
 import {
   workspacePreset,
@@ -502,6 +503,21 @@ export function App() {
                 archiveMutation.mutate(selectedProject.id);
               }
             }}
+            inspector={
+              <ScientistWorkspaceInspector
+                activeView={activeView as Exclude<ProjectView, "system">}
+                activePreset={workspacePresetId}
+                activeClassCount={
+                  selectedProject.label_classes.filter((item) => item.is_active)
+                    .length
+                }
+                annotationType={selectedProject.default_annotation_type}
+                onNavigate={(view) => {
+                  setEditorLaunch(null);
+                  setActiveView(view);
+                }}
+              />
+            }
             navigation={
               <nav
                 className="rv-project-nav"
