@@ -1,3 +1,4 @@
+import { ProjectInferenceInspector } from "./ProjectInferenceInspector";
 import type { WorkspacePresetId } from "./workspacePresets";
 import { workspacePreset } from "./workspacePresets";
 import {
@@ -19,12 +20,16 @@ export function ScientistWorkspaceInspector({
   activePreset,
   activeClassCount,
   annotationType,
+  projectId,
+  inferenceSelectedImageIds = [],
   onNavigate,
 }: {
   activeView: WorkspaceInspectorView;
   activePreset: WorkspacePresetId;
   activeClassCount: number;
   annotationType: string;
+  projectId?: string;
+  inferenceSelectedImageIds?: string[];
   onNavigate: (view: WorkspaceInspectorView) => void;
 }) {
   const definition = workspaceInspectorDefinition(activeView);
@@ -96,6 +101,17 @@ export function ScientistWorkspaceInspector({
           </div>
         </div>
       </section>
+
+      {activeView === "gallery" &&
+        activePreset !== "morphometrics" &&
+        projectId && (
+          <ProjectInferenceInspector
+            projectId={projectId}
+            selectedImageIds={inferenceSelectedImageIds}
+            onOpenModelHub={() => onNavigate("models")}
+            onOpenAdvancedProviders={() => onNavigate("advanced_providers")}
+          />
+        )}
 
       <section
         className="rv-inspector-card"

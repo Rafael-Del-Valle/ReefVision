@@ -2,18 +2,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 
 import {
-  cancelJob,
-  createInferenceJob,
-  getJob,
   getImages,
-  getModels,
   imageDisplayUrl,
   imageThumbnailUrl,
   importImages,
   updateImage,
   type AnnotationStatus,
-  type JobRecord,
-  type ModelRegistration,
   type ImageImportReport,
   type Project,
   type ProjectImageListItem,
@@ -201,9 +195,11 @@ function ImportSummary({ report }: { report: ImageImportReport }) {
 export function Gallery({
   project,
   onOpenAnnotation,
+  onInferenceSelectionChange,
 }: {
   project: Project;
   onOpenAnnotation?: (imageId: string) => void;
+  onInferenceSelectionChange?: (imageIds: string[]) => void;
 }) {
   const queryClient = useQueryClient();
   const folderInput = useRef<HTMLInputElement | null>(null);
@@ -224,10 +220,6 @@ export function Gallery({
   } | null>(null);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [focusedImageId, setFocusedImageId] = useState<string | null>(null);
-  const [selectedModelId, setSelectedModelId] = useState("");
-  const [confidenceThreshold, setConfidenceThreshold] = useState("0.25");
-  const [device, setDevice] = useState("cpu");
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<
     "filename" | "newest" | "oldest" | "annotations"
   >("newest");
@@ -255,22 +247,6 @@ export function Gallery({
         },
         signal,
       ),
-  });
-  const detectorModels = useQuery({
-    queryKey: ["models", project.id, "detector"],
-    queryFn: () => getModels(project.id, "detector"),
-  });
-  const activeJob = useQuery({
-    queryKey: ["job", activeJobId],
-    queryFn: ({ signal }) => getJob(activeJobId as string, signal),
-    enabled: activeJobId !== null,
-    refetchInterval: (query) => {
-      const state = query.state.data as JobRecord | undefined;
-      return state &&
-        ["succeeded", "failed", "cancelled"].includes(state.status)
-        ? false
-        : 1000;
-    },
   });
   const importer = useMutation({
     mutationFn: async (files: File[]) => {
@@ -317,28 +293,6 @@ export function Gallery({
     },
     onSettled: () => setImportProgress(null),
   });
-  const inference = useMutation({
-    mutationFn: () =>
-      createInferenceJob(project.id, {
-        model_id: selectedModelId,
-        image_ids: selectedImageIds,
-        confidence_threshold: Number(confidenceThreshold),
-        device,
-      }),
-    onSuccess: (job) => {
-      setActiveJobId(job.id);
-    },
-  });
-  const cancelInference = useMutation({
-    mutationFn: (jobId: string) => cancelJob(jobId),
-    onSuccess: (job) => setActiveJobId(job.id),
-  });
-
-  useEffect(() => {
-    if (!selectedModelId && detectorModels.data?.[0]) {
-      setSelectedModelId(detectorModels.data[0].id);
-    }
-  }, [detectorModels.data, selectedModelId]);
 
   useEffect(() => {
     setSelectedImageIds([]);
@@ -350,6 +304,17 @@ export function Gallery({
     sortBy,
     project.id,
   ]);
+
+  useEffect(() => {
+    onInferenceSelectionChange?.(selectedImageIds);
+  }, [onInferenceSelectionChange, selectedImageIds]);
+
+  useEffect(
+    () => () => {
+      onInferenceSelectionChange?.([]);
+    },
+    [onInferenceSelectionChange, project.id],
+  );
 
   useEffect(() => {
     setPageDraft(String(page));
@@ -379,9 +344,6 @@ export function Gallery({
         : [...current, imageId],
     );
   }
-
-  const selectedModel =
-    detectorModels.data?.find((model) => model.id === selectedModelId) ?? null;
 
   const visibleImages = images.data?.items ?? [];
   const focusedImage =
@@ -610,104 +572,6 @@ export function Gallery({
           </aside>
         </section>
       )}
-
-      <section className="annotation-sidebar-section">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Project models</p>
-            <h3>Batch model deployment</h3>
-          </div>
-          <span>{detectorModels.data?.length ?? 0} project models</span>
-        </div>
-        <p className="annotation-helper">
-          Run a trained or imported project model such as best.pt on the
-          selected images. Grounding DINO and other prompted, open-vocabulary
-          tools remain separate assist workflows.
-        </p>
-        <label>
-          Trained or imported project model
-          <select
-            value={selectedModelId}
-            onChange={(event) => setSelectedModelId(event.target.value)}
-          >
-            {detectorModels.data?.length ? (
-              detectorModels.data.map((model: ModelRegistration) => (
-                <option key={model.id} value={model.id}>
-                  {model.display_name}
-                </option>
-              ))
-            ) : (
-              <option value="">No project models registered</option>
-            )}
-          </select>
-        </label>
-        <label>
-          Confidence threshold
-          <input
-            type="number"
-            min="0"
-            max="1"
-            step="0.05"
-            value={confidenceThreshold}
-            onChange={(event) => setConfidenceThreshold(event.target.value)}
-          />
-        </label>
-        <label>
-          Device
-          <select
-            value={device}
-            onChange={(event) => setDevice(event.target.value)}
-          >
-            <option value="auto">Auto</option>
-            <option value="cuda">CUDA</option>
-            <option value="cpu">CPU</option>
-          </select>
-        </label>
-        <div className="annotation-editor-inline-actions">
-          <button
-            type="button"
-            disabled={
-              !selectedModel ||
-              selectedImageIds.length === 0 ||
-              inference.isPending ||
-              activeJob.data?.status === "queued" ||
-              activeJob.data?.status === "running"
-            }
-            onClick={() => inference.mutate()}
-          >
-            {inference.isPending
-              ? "Queueing model..."
-              : "Run model on selected images"}
-          </button>
-          {activeJob.data &&
-            !["succeeded", "failed", "cancelled"].includes(
-              activeJob.data.status,
-            ) && (
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => cancelInference.mutate(activeJob.data.id)}
-              >
-                Cancel job
-              </button>
-            )}
-        </div>
-        {inference.error && (
-          <p className="form-error">{inference.error.message}</p>
-        )}
-        {cancelInference.error && (
-          <p className="form-error">{cancelInference.error.message}</p>
-        )}
-        {activeJob.data && (
-          <p className="annotation-helper">
-            Model job {activeJob.data.status}: {activeJob.data.progress_current}
-            /{activeJob.data.progress_total} images
-          </p>
-        )}
-        {activeJob.data?.error_message && (
-          <p className="form-error">{activeJob.data.error_message}</p>
-        )}
-      </section>
 
       <details
         className="gallery-advanced"

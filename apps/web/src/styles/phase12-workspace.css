@@ -1284,3 +1284,136 @@
   font-weight: 700;
   text-align: right;
 }
+
+/* Phase 12D-2 model + inference controls */
+
+.rv-inference-inspector {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.rv-inference-inspector > p,
+.rv-inference-inspector label {
+  margin: 0;
+}
+
+.rv-inference-inspector label {
+  display: grid;
+  gap: 0.3rem;
+  color: var(--rv-muted-strong);
+  font-size: 0.68rem;
+}
+
+.rv-inference-inspector input,
+.rv-inference-inspector select {
+  width: 100%;
+}
+
+.rv-inference-summary {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.6rem;
+  border: 1px solid var(--rv-border);
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.rv-inference-summary span:first-child {
+  color: var(--rv-text);
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.rv-inference-summary span:last-child {
+  color: var(--rv-muted);
+  font-size: 0.62rem;
+}
+
+.rv-inference-model-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.rv-inference-model-meta span {
+  padding: 0.22rem 0.4rem;
+  border: 1px solid var(--rv-border);
+  border-radius: 999px;
+  color: var(--rv-muted-strong);
+  font-size: 0.58rem;
+}
+
+.rv-inference-actions {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.rv-inference-actions button {
+  width: 100%;
+}
+
+.rv-inference-job {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.65rem;
+  border: 1px solid var(--rv-border);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--rv-accent) 5%, transparent);
+}
+
+.rv-inference-job > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.rv-inference-job span {
+  color: var(--rv-muted);
+  font-size: 0.62rem;
+}
+
+.rv-inference-job strong {
+  font-size: 0.67rem;
+  text-transform: capitalize;
+}
+
+.rv-inference-boundary {
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--rv-border);
+}
+
+.rv-inference-boundary strong {
+  color: var(--rv-text);
+  font-size: 0.68rem;
+}
+
+.rv-inference-boundary p {
+  margin: 0.25rem 0 0;
+  color: var(--rv-muted);
+  font-size: 0.64rem;
+  line-height: 1.4;
+}
+
+.rv-inspector-empty-control {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.65rem;
+  border: 1px dashed var(--rv-border);
+  border-radius: 0.65rem;
+}
+
+.rv-inspector-empty-control strong {
+  font-size: 0.7rem;
+}
+
+.rv-inspector-empty-control p {
+  margin: 0;
+  color: var(--rv-muted);
+  font-size: 0.64rem;
+  line-height: 1.4;
+}
+
+.rv-inspector-empty-control button {
+  width: 100%;
+}

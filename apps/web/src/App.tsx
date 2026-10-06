@@ -1,5 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  KeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import { version as applicationVersion } from "../package.json";
 
@@ -208,6 +215,9 @@ export function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [workspacePresetId, setWorkspacePresetId] =
     useState<WorkspacePresetId>("annotation");
+  const [inferenceSelectedImageIds, setInferenceSelectedImageIds] = useState<
+    string[]
+  >([]);
 
   const health = useQuery({
     queryKey: ["health"],
@@ -261,6 +271,8 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    setInferenceSelectedImageIds([]);
+
     if (!selectedProjectId) {
       setWorkspacePresetId("annotation");
       return;
@@ -272,6 +284,10 @@ export function App() {
       workspacePreset((saved ?? "annotation") as WorkspacePresetId).id,
     );
   }, [selectedProjectId]);
+
+  const handleInferenceSelectionChange = useCallback((imageIds: string[]) => {
+    setInferenceSelectedImageIds(imageIds);
+  }, []);
 
   function selectWorkspacePreset(presetId: WorkspacePresetId): void {
     const preset = workspacePreset(presetId);
@@ -512,6 +528,8 @@ export function App() {
                     .length
                 }
                 annotationType={selectedProject.default_annotation_type}
+                projectId={selectedProject.id}
+                inferenceSelectedImageIds={inferenceSelectedImageIds}
                 onNavigate={(view) => {
                   setEditorLaunch(null);
                   setActiveView(view);
@@ -593,6 +611,7 @@ export function App() {
             {activeView === "gallery" && (
               <Gallery
                 project={selectedProject}
+                onInferenceSelectionChange={handleInferenceSelectionChange}
                 onOpenAnnotation={(imageId) =>
                   setEditorLaunch({
                     imageId,
