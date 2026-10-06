@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "detached-scientist-panels",
+  "description": "Restricted capability for ReefVision detached scientist panel windows.",
+  "windows": ["reefvision-panel-*"],
+  "permissions": ["core:default", "core:window:allow-close"]
+}

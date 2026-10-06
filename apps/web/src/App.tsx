@@ -53,6 +53,14 @@ import { StatusBadge } from "./components/ui/StatusBadge";
 import { ProjectLauncher } from "./components/layout/ProjectLauncher";
 import { ScientistWorkspaceInspector } from "./components/layout/ScientistWorkspaceInspector";
 import { ProjectWorkbenchShell } from "./components/layout/ProjectWorkbenchShell";
+import { DetachedInspectorWindow } from "./components/layout/DetachedInspectorWindow";
+import {
+  detachedPanelChannelName,
+  isDetachedInspectorMessage,
+  parseDetachedPanelRequest,
+  type DetachedInspectorMessage,
+  type DetachedInspectorSnapshot,
+} from "./components/layout/detachedPanelBridge";
 import {
   workspacePreset,
   type WorkspacePresetId,
@@ -203,7 +211,7 @@ const PROJECT_NAV_GROUPS: Array<{
   },
 ];
 
-export function App() {
+function ReefVisionMainApp() {
   const queryClient = useQueryClient();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     null,
@@ -235,6 +243,9 @@ export function App() {
   const [videoWorkspaceCommand, setVideoWorkspaceCommand] =
     useState<VideoWorkspaceCommand | null>(null);
   const videoWorkspaceCommandSequenceRef = useRef(0);
+  const detachedInspectorSnapshotRef = useRef<DetachedInspectorSnapshot | null>(
+    null,
+  );
 
   const health = useQuery({
     queryKey: ["health"],
@@ -433,6 +444,155 @@ export function App() {
   const activeProjectItem = activeProjectGroup?.items.find(
     (item) => item.id === activeView,
   );
+
+  const detachedInspectorSnapshot =
+    useMemo<DetachedInspectorSnapshot | null>(() => {
+      if (!selectedProject || activeView === "system") {
+        return null;
+      }
+
+      return {
+        projectId: selectedProject.id,
+        projectName: selectedProject.name,
+        contextTitle: activeProjectItem?.label ?? "Project workspace",
+        contextDescription:
+          activeProjectItem?.description ??
+          "Work with project data, models, review, and reproducible outputs.",
+        activeView,
+        activePreset: workspacePresetId,
+        activeClassCount: selectedProject.label_classes.filter(
+          (item) => item.is_active,
+        ).length,
+        annotationType: selectedProject.default_annotation_type,
+        inferenceSelectedImageIds,
+        focusedImageId: focusedGalleryImageId,
+        selectedReviewQueueId,
+        videoWorkspaceContext,
+      };
+    }, [
+      activeProjectItem,
+      activeView,
+      focusedGalleryImageId,
+      inferenceSelectedImageIds,
+      selectedProject,
+      selectedReviewQueueId,
+      videoWorkspaceContext,
+      workspacePresetId,
+    ]);
+
+  useEffect(() => {
+    detachedInspectorSnapshotRef.current = detachedInspectorSnapshot;
+
+    if (!detachedInspectorSnapshot || typeof BroadcastChannel === "undefined") {
+      return;
+    }
+
+    const channel = new BroadcastChannel(
+      detachedPanelChannelName(detachedInspectorSnapshot.projectId),
+    );
+
+    const message: DetachedInspectorMessage = {
+      kind: "snapshot",
+      projectId: detachedInspectorSnapshot.projectId,
+      snapshot: detachedInspectorSnapshot,
+    };
+
+    channel.postMessage(message);
+    channel.close();
+  }, [detachedInspectorSnapshot]);
+
+  useEffect(() => {
+    if (!selectedProject || typeof BroadcastChannel === "undefined") {
+      return;
+    }
+
+    const projectId = selectedProject.id;
+    const channel = new BroadcastChannel(detachedPanelChannelName(projectId));
+
+    const receive = (event: MessageEvent<unknown>) => {
+      if (!isDetachedInspectorMessage(event.data)) {
+        return;
+      }
+
+      if (event.data.projectId !== projectId) {
+        return;
+      }
+
+      if (event.data.kind === "ready") {
+        const snapshot = detachedInspectorSnapshotRef.current;
+
+        if (snapshot && snapshot.projectId === projectId) {
+          const response: DetachedInspectorMessage = {
+            kind: "snapshot",
+            projectId,
+            snapshot,
+          };
+
+          channel.postMessage(response);
+        }
+
+        return;
+      }
+
+      if (event.data.kind !== "command") {
+        return;
+      }
+
+      const command = event.data.command;
+
+      switch (command.type) {
+        case "navigate":
+          setEditorLaunch(null);
+          setActiveView(command.view);
+          break;
+
+        case "open_measurements":
+          setEditorLaunch({
+            imageId: command.imageId,
+            returnLabel: "Back to morphometrics",
+            contextTitle: "Morphometrics & scale calibration",
+            contextDescription:
+              "Review masks, calibration, measurements, and skeleton-derived morphology.",
+            initialWorkspace: "masks",
+          });
+          break;
+
+        case "open_review_item":
+          handleOpenReviewItem(command.item);
+          break;
+
+        case "video_select":
+          handleVideoSelect(command.videoId);
+          break;
+
+        case "video_frame":
+          handleVideoFrameChange(command.frameIndex);
+          break;
+
+        case "video_track":
+          handleVideoTrackChange(command.trackId);
+          break;
+
+        case "dock":
+          // ProjectWorkbenchShell owns local layout
+          // state and handles this same channel event.
+          break;
+      }
+    };
+
+    channel.addEventListener("message", receive);
+
+    return () => {
+      channel.removeEventListener("message", receive);
+      channel.close();
+    };
+  }, [
+    handleOpenReviewItem,
+    handleVideoFrameChange,
+    handleVideoSelect,
+    handleVideoTrackChange,
+    selectedProject,
+  ]);
 
   return (
     <main className="app-shell">
@@ -898,4 +1058,14 @@ export function App() {
       )}
     </main>
   );
+}
+
+export function App() {
+  const detachedRequest = parseDetachedPanelRequest(window.location.search);
+
+  if (detachedRequest?.panelId === "inspector") {
+    return <DetachedInspectorWindow projectId={detachedRequest.projectId} />;
+  }
+
+  return <ReefVisionMainApp />;
 }

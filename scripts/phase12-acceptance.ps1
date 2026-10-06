@@ -49,7 +49,7 @@ try {
 
     Write-Host ""
     Write-Host "=== PHASE 12 FOCUSED TESTS ==="
-    npm test -- src/components/layout/ProjectLauncher.test.tsx src/components/layout/workspacePresets.test.ts src/components/layout/ScientistWorkspaceInspector.test.tsx src/components/layout/ProjectInferenceInspector.test.tsx src/components/layout/ProjectMorphometricsInspector.test.tsx src/components/layout/ProjectTrainingMonitor.test.tsx src/components/layout/ProjectReviewInspector.test.tsx src/components/layout/ProjectVideoPoseInspector.test.tsx src/features/gallery/Gallery.test.tsx src/features/annotation-editor/EnhancedAnnotationEditor.test.tsx src/features/annotation-editor/MaskMeasurementPanel.test.tsx src/features/training/TrainingWorkspace.test.tsx src/features/video/VideoTrackingWorkspace.test.tsx src/App.test.tsx
+    npm test -- src/components/layout/ProjectLauncher.test.tsx src/components/layout/workspacePresets.test.ts src/components/layout/ScientistWorkspaceInspector.test.tsx src/components/layout/ProjectInferenceInspector.test.tsx src/components/layout/ProjectMorphometricsInspector.test.tsx src/components/layout/ProjectTrainingMonitor.test.tsx src/components/layout/ProjectReviewInspector.test.tsx src/components/layout/ProjectVideoPoseInspector.test.tsx src/components/layout/detachedPanelBridge.test.ts src/components/layout/DetachedInspectorWindow.test.tsx src/components/layout/ProjectWorkbenchShell.test.tsx src/features/gallery/Gallery.test.tsx src/features/annotation-editor/EnhancedAnnotationEditor.test.tsx src/features/annotation-editor/MaskMeasurementPanel.test.tsx src/features/training/TrainingWorkspace.test.tsx src/features/video/VideoTrackingWorkspace.test.tsx src/App.test.tsx
     if ($LASTEXITCODE -ne 0) {
         throw "Phase 12 focused UI tests failed."
     }
@@ -95,3 +95,4 @@ Write-Host "[ ] Morphometrics inspector exposes reviewed calibration, Scale Assi
 Write-Host "[ ] Training inspector shows canonical live run status, progress, metrics, provenance, refresh, and safe cancellation."
 Write-Host "[ ] Review inspector mirrors the selected canonical queue, shows ranked reasons/QC state, and opens evidence in the annotation editor without auto-verifying it."
 Write-Host "[ ] Video inspector mirrors canonical video/track/frame state and provides timeline plus pose-keyframe navigation without duplicating pose scientific state."
+Write-Host "[ ] Inspector can detach into a native Tauri window, retain live project context, remember detached geometry, relay controls to canonical workspaces, and dock back without changing scientific truth."
