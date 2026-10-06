@@ -1,6 +1,8 @@
+import type { ReviewQueueItem } from "../../api/client";
 import { ProjectInferenceInspector } from "./ProjectInferenceInspector";
 import { ProjectMorphometricsInspector } from "./ProjectMorphometricsInspector";
 import { ProjectTrainingMonitor } from "./ProjectTrainingMonitor";
+import { ProjectReviewInspector } from "./ProjectReviewInspector";
 import type { WorkspacePresetId } from "./workspacePresets";
 import { workspacePreset } from "./workspacePresets";
 import {
@@ -25,7 +27,9 @@ export function ScientistWorkspaceInspector({
   projectId,
   inferenceSelectedImageIds = [],
   focusedImageId = null,
+  selectedReviewQueueId = null,
   onOpenMeasurements,
+  onOpenReviewItem,
   onNavigate,
 }: {
   activeView: WorkspaceInspectorView;
@@ -35,7 +39,9 @@ export function ScientistWorkspaceInspector({
   projectId?: string;
   inferenceSelectedImageIds?: string[];
   focusedImageId?: string | null;
+  selectedReviewQueueId?: string | null;
   onOpenMeasurements?: (imageId: string) => void;
+  onOpenReviewItem?: (item: ReviewQueueItem) => void;
   onNavigate: (view: WorkspaceInspectorView) => void;
 }) {
   const definition = workspaceInspectorDefinition(activeView);
@@ -132,6 +138,14 @@ export function ScientistWorkspaceInspector({
 
       {activeView === "training" && projectId && (
         <ProjectTrainingMonitor projectId={projectId} />
+      )}
+
+      {activeView === "review_queue" && projectId && onOpenReviewItem && (
+        <ProjectReviewInspector
+          projectId={projectId}
+          selectedQueueId={selectedReviewQueueId}
+          onOpenItem={onOpenReviewItem}
+        />
       )}
 
       <section

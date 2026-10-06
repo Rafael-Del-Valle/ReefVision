@@ -20,6 +20,10 @@ import {
   type ReviewQueueRecord,
   type ReviewScoreWeights,
 } from "../../api/client";
+import {
+  reviewQueueItemsQueryKey,
+  reviewQueuesQueryKey,
+} from "./reviewQueueState";
 
 const defaultWeights: ReviewScoreWeights = {
   low_mean_confidence: 24,
@@ -44,9 +48,11 @@ function queueLabel(queue: ReviewQueueRecord): string {
 export function ReviewQueueDashboard({
   project,
   onOpenImage,
+  onSelectedQueueChange,
 }: {
   project: Project;
   onOpenImage: (item: ReviewQueueItem) => void;
+  onSelectedQueueChange?: (queueId: string | null) => void;
 }) {
   const queryClient = useQueryClient();
   const [scopeType, setScopeType] = useState<"project" | "dataset_version">(
@@ -75,15 +81,14 @@ export function ReviewQueueDashboard({
         : getQualityControlRuns(project.id, signal),
   });
   const queues = useQuery({
-    queryKey: ["review_queues", project.id, scopeType, datasetVersionId],
+    queryKey: reviewQueuesQueryKey(project.id, scopeType, datasetVersionId),
     queryFn: ({ signal }) =>
       scopeType === "dataset_version" && datasetVersionId
         ? getDatasetVersionReviewQueues(datasetVersionId, signal)
         : getReviewQueues(project.id, signal),
   });
   const items = useQuery({
-    queryKey: [
-      "review_queue_items",
+    queryKey: reviewQueueItemsQueryKey(
       selectedQueueId,
       page,
       labelClassId,
@@ -91,7 +96,7 @@ export function ReviewQueueDashboard({
       qcSeverity,
       reviewState,
       modelId,
-    ],
+    ),
     queryFn: ({ signal }) =>
       getReviewQueueItems(
         selectedQueueId,
@@ -118,6 +123,17 @@ export function ReviewQueueDashboard({
       setSelectedQueueId(queues.data[0].id);
     }
   }, [queues.data, selectedQueueId]);
+
+  useEffect(() => {
+    onSelectedQueueChange?.(selectedQueueId || null);
+  }, [onSelectedQueueChange, selectedQueueId]);
+
+  useEffect(
+    () => () => {
+      onSelectedQueueChange?.(null);
+    },
+    [onSelectedQueueChange, project.id],
+  );
 
   useEffect(() => {
     setPage(1);

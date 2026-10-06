@@ -222,6 +222,9 @@ export function App() {
   const [focusedGalleryImageId, setFocusedGalleryImageId] = useState<
     string | null
   >(null);
+  const [selectedReviewQueueId, setSelectedReviewQueueId] = useState<
+    string | null
+  >(null);
 
   const health = useQuery({
     queryKey: ["health"],
@@ -277,6 +280,7 @@ export function App() {
   useEffect(() => {
     setInferenceSelectedImageIds([]);
     setFocusedGalleryImageId(null);
+    setSelectedReviewQueueId(null);
 
     if (!selectedProjectId) {
       setWorkspacePresetId("annotation");
@@ -300,6 +304,23 @@ export function App() {
     },
     [],
   );
+
+  const handleSelectedReviewQueueChange = useCallback(
+    (queueId: string | null) => {
+      setSelectedReviewQueueId(queueId);
+    },
+    [],
+  );
+
+  const handleOpenReviewItem = useCallback((item: ReviewQueueItem) => {
+    setEditorLaunch({
+      imageId: item.image_id,
+      returnLabel: "Back to Review Queue",
+      contextTitle: `Review score ${item.score.toFixed(2)}`,
+      contextDescription:
+        item.reason_summary ?? "This image was ranked for human review.",
+    });
+  }, []);
 
   function selectWorkspacePreset(presetId: WorkspacePresetId): void {
     const preset = workspacePreset(presetId);
@@ -543,6 +564,8 @@ export function App() {
                 projectId={selectedProject.id}
                 inferenceSelectedImageIds={inferenceSelectedImageIds}
                 focusedImageId={focusedGalleryImageId}
+                selectedReviewQueueId={selectedReviewQueueId}
+                onOpenReviewItem={handleOpenReviewItem}
                 onOpenMeasurements={(imageId) =>
                   setEditorLaunch({
                     imageId,
@@ -707,16 +730,8 @@ export function App() {
             {activeView === "review_queue" && (
               <ReviewQueueDashboard
                 project={selectedProject}
-                onOpenImage={(item: ReviewQueueItem) =>
-                  setEditorLaunch({
-                    imageId: item.image_id,
-                    returnLabel: "Back to Review Queue",
-                    contextTitle: `Review score ${item.score.toFixed(2)}`,
-                    contextDescription:
-                      item.reason_summary ??
-                      "This image was ranked for human review.",
-                  })
-                }
+                onOpenImage={handleOpenReviewItem}
+                onSelectedQueueChange={handleSelectedReviewQueueChange}
               />
             )}
             {activeView === "classes" && (
