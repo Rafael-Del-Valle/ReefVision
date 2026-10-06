@@ -658,17 +658,18 @@
 
 @media (max-width: 82rem) {
   .rv-project-workbench {
-    grid-template-columns: 15.5rem minmax(30rem, 1fr);
+    grid-template-columns: 15.5rem minmax(0, 1fr) 17rem;
   }
 
   .rv-workbench-inspector {
-    position: fixed;
+    position: sticky;
     top: 3.6rem;
-    right: 0;
-    z-index: 45;
+    right: auto;
+    z-index: auto;
     display: block;
-    width: min(20rem, calc(100vw - 5rem));
-    box-shadow: -1rem 0 3rem rgba(0, 0, 0, 0.36);
+    width: auto;
+    height: calc(100vh - 3.6rem);
+    box-shadow: none;
   }
 }
 
@@ -685,6 +686,19 @@
 
   .rv-project-workbench {
     grid-template-columns: 13rem minmax(0, 1fr);
+  }
+
+  .rv-workbench-inspector {
+    grid-column: 2;
+    position: static;
+    top: auto;
+    right: auto;
+    width: auto;
+    height: auto;
+    max-height: none;
+    border-top: 1px solid var(--rv-border);
+    border-left: 0;
+    box-shadow: none;
   }
 
   .rv-workbench-toolbar-meta {
@@ -722,6 +736,10 @@
 
   .rv-project-workbench {
     grid-template-columns: 1fr;
+  }
+
+  .rv-workbench-inspector {
+    grid-column: 1;
   }
 
   .rv-workbench-rail {
@@ -2324,8 +2342,8 @@
 
 @media (max-width: 46rem) {
   .rv-workbench-inspector {
-    right: 0.5rem;
-    width: calc(100vw - 1rem);
+    right: auto;
+    width: auto;
   }
 }
 

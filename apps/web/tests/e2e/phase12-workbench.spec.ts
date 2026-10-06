@@ -191,7 +191,20 @@ test("supports keyboard skip navigation and the minimum desktop viewport without
     page.getByRole("complementary", { name: "Project workspace navigation" }),
   ).toBeVisible();
 
-  await expect(page.getByLabel("Workspace inspector")).toBeVisible();
+  const inspector = page.getByLabel("Workspace inspector");
+
+  await expect(inspector).toBeVisible();
+
+  const stageBox = await page.locator(".rv-workbench-stage").boundingBox();
+
+  const inspectorBox = await inspector.boundingBox();
+
+  expect(stageBox).not.toBeNull();
+  expect(inspectorBox).not.toBeNull();
+
+  if (stageBox && inspectorBox) {
+    expect(stageBox.x + stageBox.width <= inspectorBox.x + 1).toBe(true);
+  }
 
   expect(await hasHorizontalOverflow(page)).toBe(false);
 });

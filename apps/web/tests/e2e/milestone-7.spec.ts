@@ -619,9 +619,18 @@ test("review-queue workflow preserves score context and item state transitions",
   await page.getByRole("tab", { name: "Review queue" }).click();
   await page.getByRole("button", { name: "Generate queue" }).click();
 
-  await expect(page.getByText("Rank #1")).toBeVisible();
+  const reviewQueueList = page.locator(".dashboard-list");
+
   await expect(
-    page.getByText("Unresolved QC severity", { exact: true }),
+    reviewQueueList.getByText("Rank #1", {
+      exact: true,
+    }),
+  ).toBeVisible();
+
+  await expect(
+    reviewQueueList.getByText("Unresolved QC severity", {
+      exact: true,
+    }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Start review" }).click();
   await expect(page.getByText("in_progress")).toBeVisible();
@@ -643,5 +652,9 @@ test("review-queue workflow preserves score context and item state transitions",
   await expect(
     page.getByRole("heading", { name: "Review Queue", exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("Rank #1")).toBeVisible();
+  await expect(
+    reviewQueueList.getByText("Rank #1", {
+      exact: true,
+    }),
+  ).toBeVisible();
 });

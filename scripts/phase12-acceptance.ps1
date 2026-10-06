@@ -97,6 +97,6 @@ Write-Host "[ ] Review inspector mirrors the selected canonical queue, shows ran
 Write-Host "[ ] Video inspector mirrors canonical video/track/frame state and provides timeline plus pose-keyframe navigation without duplicating pose scientific state."
 Write-Host "[ ] Inspector can detach into a native Tauri window, retain live project context, remember detached geometry, relay controls to canonical workspaces, and dock back without changing scientific truth."
 Write-Host "[ ] Keyboard users can skip directly to the scientist workspace and all layout controls remain operable without pointer input."
-Write-Host "[ ] Minimum supported desktop sizing avoids horizontal page overflow and keeps the contextual inspector reachable as an overlay."
+Write-Host "[ ] Minimum supported desktop sizing avoids horizontal page overflow and keeps the contextual inspector reachable without covering scientific workspace actions."
 Write-Host "[ ] Reduced-motion and Windows forced-colors preferences preserve usable controls and scientific state boundaries."
 Write-Host "[ ] Loading, empty, and error states expose appropriate status/alert semantics and explicit recovery actions."
