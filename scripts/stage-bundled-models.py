@@ -193,26 +193,37 @@ def stage_models(
 
     if include_base_assistant:
         api_root = Path(__file__).resolve().parents[1] / "apps" / "api"
+
         if str(api_root) not in sys.path:
-            sys.path.insert(0, str(api_root))
+            sys.path.insert(
+                0,
+                str(api_root),
+            )
 
-        from huggingface_hub import snapshot_download
-
+        from reefvision.config import Settings
         from reefvision.ml.optional_transformers_runtime import (
             OPTIONAL_MODEL_SPECS,
+            ensure_optional_model,
         )
 
         spec = OPTIONAL_MODEL_SPECS["smolvlm"]
 
         print(f"Bundling base Research Assistant model: {spec.display_name}")
 
-        snapshot = Path(
-            snapshot_download(
-                repo_id=spec.repo_id,
-                revision=spec.revision,
-                allow_patterns=list(spec.allow_patterns),
-                local_files_only=False,
-            )
+        # Keep packaging independent of Windows symlink privileges.
+        # ensure_optional_model() downloads directly into ReefVision's
+        # managed provider directory and performs pinned provenance and
+        # checksum verification before returning the usable directory.
+        provider_cache_root = Path(__file__).resolve().parents[1] / ".reefvision"
+
+        provider_settings = Settings(
+            data_dir=provider_cache_root,
+        )
+
+        snapshot = ensure_optional_model(
+            provider_settings,
+            spec.provider_id,
+            allow_download=True,
         )
 
         provider_root = output_root / "provider-models" / spec.provider_id
