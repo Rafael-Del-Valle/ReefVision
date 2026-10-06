@@ -15,6 +15,7 @@ interface AnnotationLaunchContext {
   contextDescription?: string;
   highlightAnnotationIds?: string[];
   highlightPredictionIds?: string[];
+  initialWorkspace?: "boxes" | "masks" | "raster";
 }
 
 interface EnhancedAnnotationEditorProps {
@@ -59,7 +60,9 @@ export function EnhancedAnnotationEditor({
   onClose,
 }: EnhancedAnnotationEditorProps) {
   const queryClient = useQueryClient();
-  const [workspace, setWorkspace] = useState<EditorWorkspace>("boxes");
+  const [workspace, setWorkspace] = useState<EditorWorkspace>(
+    launchContext?.initialWorkspace ?? "boxes",
+  );
   const [maskInitialTool, setMaskInitialTool] = useState<
     "polygon" | "fill" | "smart_close" | undefined
   >(undefined);
@@ -72,7 +75,9 @@ export function EnhancedAnnotationEditor({
 
   useEffect(() => {
     setActiveImageId(initialImageId);
-  }, [initialImageId]);
+    setWorkspace(launchContext?.initialWorkspace ?? "boxes");
+    setMaskInitialTool(undefined);
+  }, [initialImageId, launchContext?.initialWorkspace]);
 
   useEffect(() => {
     return queryClient.getQueryCache().subscribe((event) => {

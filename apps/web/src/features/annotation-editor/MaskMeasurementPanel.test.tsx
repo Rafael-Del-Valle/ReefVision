@@ -155,7 +155,7 @@ describe("MaskMeasurementPanel", () => {
   });
 
   it("exposes the Scale Assistant without removing manual calibration", async () => {
-    renderPanel([selectedMask]);
+    renderPanel([]);
 
     expect(screen.getByText("Scale Assistant")).toBeInTheDocument();
     expect(screen.getByText("Distance per pixel")).toBeInTheDocument();

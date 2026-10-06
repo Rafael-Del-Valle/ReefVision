@@ -49,7 +49,7 @@ try {
 
     Write-Host ""
     Write-Host "=== PHASE 12 FOCUSED TESTS ==="
-    npm test -- src/components/layout/ProjectLauncher.test.tsx src/components/layout/workspacePresets.test.ts src/components/layout/ScientistWorkspaceInspector.test.tsx src/components/layout/ProjectInferenceInspector.test.tsx src/features/gallery/Gallery.test.tsx src/App.test.tsx
+    npm test -- src/components/layout/ProjectLauncher.test.tsx src/components/layout/workspacePresets.test.ts src/components/layout/ScientistWorkspaceInspector.test.tsx src/components/layout/ProjectInferenceInspector.test.tsx src/components/layout/ProjectMorphometricsInspector.test.tsx src/features/gallery/Gallery.test.tsx src/features/annotation-editor/EnhancedAnnotationEditor.test.tsx src/features/annotation-editor/MaskMeasurementPanel.test.tsx src/App.test.tsx
     if ($LASTEXITCODE -ne 0) {
         throw "Phase 12 focused UI tests failed."
     }
@@ -91,3 +91,4 @@ Write-Host "[ ] Panel visibility persists without changing scientific project st
 Write-Host "[ ] Review preset makes the scientist-verification boundary visually explicit."
 Write-Host "[ ] Inspector content changes with workspace context without duplicating scientific state."
 Write-Host "[ ] Detection/annotation inspector exposes canonical batch model controls and provisional-output status."
+Write-Host "[ ] Morphometrics inspector exposes reviewed calibration, Scale Assistant, measurement exports, and direct mask-workspace entry."

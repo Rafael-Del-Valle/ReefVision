@@ -196,10 +196,12 @@ export function Gallery({
   project,
   onOpenAnnotation,
   onInferenceSelectionChange,
+  onFocusedImageChange,
 }: {
   project: Project;
   onOpenAnnotation?: (imageId: string) => void;
   onInferenceSelectionChange?: (imageIds: string[]) => void;
+  onFocusedImageChange?: (imageId: string | null) => void;
 }) {
   const queryClient = useQueryClient();
   const folderInput = useRef<HTMLInputElement | null>(null);
@@ -350,6 +352,17 @@ export function Gallery({
     visibleImages.find((image) => image.id === focusedImageId) ??
     visibleImages[0] ??
     null;
+
+  useEffect(() => {
+    onFocusedImageChange?.(focusedImage?.id ?? null);
+  }, [focusedImage?.id, onFocusedImageChange]);
+
+  useEffect(
+    () => () => {
+      onFocusedImageChange?.(null);
+    },
+    [onFocusedImageChange, project.id],
+  );
 
   useEffect(() => {
     if (visibleImages.length === 0) {

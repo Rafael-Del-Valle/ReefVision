@@ -63,6 +63,7 @@ interface AnnotationLaunchState {
   contextDescription?: string;
   highlightAnnotationIds?: string[];
   highlightPredictionIds?: string[];
+  initialWorkspace?: "boxes" | "masks" | "raster";
 }
 
 type ProjectView =
@@ -218,6 +219,9 @@ export function App() {
   const [inferenceSelectedImageIds, setInferenceSelectedImageIds] = useState<
     string[]
   >([]);
+  const [focusedGalleryImageId, setFocusedGalleryImageId] = useState<
+    string | null
+  >(null);
 
   const health = useQuery({
     queryKey: ["health"],
@@ -272,6 +276,7 @@ export function App() {
 
   useEffect(() => {
     setInferenceSelectedImageIds([]);
+    setFocusedGalleryImageId(null);
 
     if (!selectedProjectId) {
       setWorkspacePresetId("annotation");
@@ -288,6 +293,13 @@ export function App() {
   const handleInferenceSelectionChange = useCallback((imageIds: string[]) => {
     setInferenceSelectedImageIds(imageIds);
   }, []);
+
+  const handleFocusedGalleryImageChange = useCallback(
+    (imageId: string | null) => {
+      setFocusedGalleryImageId(imageId);
+    },
+    [],
+  );
 
   function selectWorkspacePreset(presetId: WorkspacePresetId): void {
     const preset = workspacePreset(presetId);
@@ -530,6 +542,17 @@ export function App() {
                 annotationType={selectedProject.default_annotation_type}
                 projectId={selectedProject.id}
                 inferenceSelectedImageIds={inferenceSelectedImageIds}
+                focusedImageId={focusedGalleryImageId}
+                onOpenMeasurements={(imageId) =>
+                  setEditorLaunch({
+                    imageId,
+                    returnLabel: "Back to morphometrics",
+                    contextTitle: "Morphometrics & scale calibration",
+                    contextDescription:
+                      "Review masks, calibration, measurements, and skeleton-derived morphology.",
+                    initialWorkspace: "masks",
+                  })
+                }
                 onNavigate={(view) => {
                   setEditorLaunch(null);
                   setActiveView(view);
@@ -612,6 +635,7 @@ export function App() {
               <Gallery
                 project={selectedProject}
                 onInferenceSelectionChange={handleInferenceSelectionChange}
+                onFocusedImageChange={handleFocusedGalleryImageChange}
                 onOpenAnnotation={(imageId) =>
                   setEditorLaunch({
                     imageId,

@@ -112,7 +112,11 @@ it("does not intercept Fill clicks when a previous node insertion mode is rememb
   expect(polygonInsertHandler).not.toHaveBeenCalled();
 });
 
-function renderEditor() {
+function renderEditor(
+  launchContext?: Parameters<
+    typeof EnhancedAnnotationEditor
+  >[0]["launchContext"],
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -123,6 +127,7 @@ function renderEditor() {
       <EnhancedAnnotationEditor
         project={project}
         initialImageId="image-1"
+        launchContext={launchContext}
         onClose={vi.fn()}
       />
     </QueryClientProvider>,
@@ -264,5 +269,18 @@ describe("EnhancedAnnotationEditor", () => {
     expect(polygonKeyHandler).toHaveBeenCalledTimes(2);
     expect(polygonKeyHandler.mock.calls[0][0].key).toBe("Delete");
     expect(polygonKeyHandler.mock.calls[1][0].key).toBe("Backspace");
+  });
+
+  it("opens directly in the mask workspace for a morphometrics launch", () => {
+    renderEditor({
+      returnLabel: "Back to morphometrics",
+      initialWorkspace: "masks",
+    });
+
+    expect(screen.getByTestId("mask-workspace")).toBeInTheDocument();
+    expect(screen.getByTestId("enhanced-annotation-editor")).toHaveAttribute(
+      "data-active-annotation-type",
+      "masks",
+    );
   });
 });

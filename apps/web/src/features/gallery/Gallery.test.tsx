@@ -53,6 +53,7 @@ function jsonResponse(payload: unknown, status = 200) {
 function renderGallery(
   onOpenAnnotation?: (imageId: string) => void,
   onInferenceSelectionChange?: (imageIds: string[]) => void,
+  onFocusedImageChange?: (imageId: string | null) => void,
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -63,6 +64,7 @@ function renderGallery(
         project={project}
         onOpenAnnotation={onOpenAnnotation}
         onInferenceSelectionChange={onInferenceSelectionChange}
+        onFocusedImageChange={onFocusedImageChange}
       />
     </QueryClientProvider>,
   );
@@ -336,6 +338,34 @@ describe("Gallery", () => {
 
     await waitFor(() =>
       expect(onInferenceSelectionChange).toHaveBeenLastCalledWith([]),
+    );
+  });
+
+  it("publishes the focused image for morphometrics context", async () => {
+    const onFocusedImageChange = vi.fn();
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+
+      if (url.includes(`/projects/${project.id}/images`)) {
+        return jsonResponse({
+          items: [image],
+          total: 1,
+          page: 1,
+          page_size: 24,
+          pages: 1,
+        });
+      }
+
+      throw new Error(`Unhandled request GET ${url}`);
+    });
+
+    renderGallery(undefined, undefined, onFocusedImageChange);
+
+    await screen.findByRole("article", { name: /swiftia-01\.png/ });
+
+    await waitFor(() =>
+      expect(onFocusedImageChange).toHaveBeenLastCalledWith("image-1"),
     );
   });
 });

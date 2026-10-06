@@ -1,4 +1,5 @@
 import { ProjectInferenceInspector } from "./ProjectInferenceInspector";
+import { ProjectMorphometricsInspector } from "./ProjectMorphometricsInspector";
 import type { WorkspacePresetId } from "./workspacePresets";
 import { workspacePreset } from "./workspacePresets";
 import {
@@ -22,6 +23,8 @@ export function ScientistWorkspaceInspector({
   annotationType,
   projectId,
   inferenceSelectedImageIds = [],
+  focusedImageId = null,
+  onOpenMeasurements,
   onNavigate,
 }: {
   activeView: WorkspaceInspectorView;
@@ -30,6 +33,8 @@ export function ScientistWorkspaceInspector({
   annotationType: string;
   projectId?: string;
   inferenceSelectedImageIds?: string[];
+  focusedImageId?: string | null;
+  onOpenMeasurements?: (imageId: string) => void;
   onNavigate: (view: WorkspaceInspectorView) => void;
 }) {
   const definition = workspaceInspectorDefinition(activeView);
@@ -110,6 +115,17 @@ export function ScientistWorkspaceInspector({
             selectedImageIds={inferenceSelectedImageIds}
             onOpenModelHub={() => onNavigate("models")}
             onOpenAdvancedProviders={() => onNavigate("advanced_providers")}
+          />
+        )}
+
+      {activeView === "gallery" &&
+        activePreset === "morphometrics" &&
+        projectId &&
+        onOpenMeasurements && (
+          <ProjectMorphometricsInspector
+            projectId={projectId}
+            imageId={focusedImageId}
+            onOpenMeasurements={onOpenMeasurements}
           />
         )}
 

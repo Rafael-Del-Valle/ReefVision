@@ -1417,3 +1417,146 @@
 .rv-inspector-empty-control button {
   width: 100%;
 }
+
+/* Phase 12D-3 morphometrics + calibration controls */
+
+.rv-morphometrics-inspector {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.rv-morphometrics-inspector > button {
+  width: 100%;
+}
+
+.rv-morphometrics-status,
+.rv-morphometrics-calibration {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.65rem;
+  border: 1px solid var(--rv-border);
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.rv-morphometrics-status > span,
+.rv-morphometrics-calibration span {
+  color: var(--rv-muted);
+  font-size: 0.61rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rv-morphometrics-status > strong {
+  overflow: hidden;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rv-morphometrics-status small {
+  color: var(--rv-muted);
+  font-size: 0.62rem;
+  line-height: 1.4;
+}
+
+.rv-morphometrics-status.uncalibrated {
+  border-style: dashed;
+}
+
+.rv-morphometrics-calibration > div {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--rv-border) 68%, transparent);
+}
+
+.rv-morphometrics-calibration > div:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.rv-morphometrics-calibration strong {
+  max-width: 9rem;
+  font-size: 0.66rem;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.rv-morphometrics-scale-assistant {
+  max-height: 34rem;
+  padding: 0.65rem;
+  overflow-y: auto;
+  border: 1px solid var(--rv-border);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--rv-panel) 92%, transparent);
+}
+
+.rv-morphometrics-scale-assistant label {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 0.55rem;
+  color: var(--rv-muted-strong);
+  font-size: 0.66rem;
+}
+
+.rv-morphometrics-scale-assistant input,
+.rv-morphometrics-scale-assistant select,
+.rv-morphometrics-scale-assistant textarea,
+.rv-morphometrics-scale-assistant button {
+  width: 100%;
+}
+
+.rv-morphometrics-scale-assistant details {
+  margin-top: 0.55rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--rv-border);
+}
+
+.rv-morphometrics-scale-assistant summary {
+  cursor: pointer;
+  color: var(--rv-muted-strong);
+  font-size: 0.67rem;
+  font-weight: 700;
+}
+
+.rv-morphometrics-results {
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--rv-border);
+}
+
+.rv-morphometrics-results > strong {
+  font-size: 0.7rem;
+}
+
+.rv-morphometrics-results > p {
+  margin: 0.3rem 0 0;
+  color: var(--rv-muted);
+  font-size: 0.64rem;
+  line-height: 1.4;
+}
+
+.rv-morphometrics-export-links {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+}
+
+.rv-morphometrics-export-links a {
+  display: block;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--rv-border);
+  border-radius: 0.55rem;
+  color: var(--rv-text);
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.rv-morphometrics-export-links a:hover {
+  border-color: color-mix(in srgb, var(--rv-accent) 48%, var(--rv-border));
+  background: color-mix(in srgb, var(--rv-accent) 6%, transparent);
+}
