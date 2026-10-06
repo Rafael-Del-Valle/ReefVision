@@ -1,8 +1,10 @@
 import type { ReviewQueueItem } from "../../api/client";
+import type { VideoWorkspaceContext } from "../../features/video/videoWorkspaceBridge";
 import { ProjectInferenceInspector } from "./ProjectInferenceInspector";
 import { ProjectMorphometricsInspector } from "./ProjectMorphometricsInspector";
 import { ProjectTrainingMonitor } from "./ProjectTrainingMonitor";
 import { ProjectReviewInspector } from "./ProjectReviewInspector";
+import { ProjectVideoPoseInspector } from "./ProjectVideoPoseInspector";
 import type { WorkspacePresetId } from "./workspacePresets";
 import { workspacePreset } from "./workspacePresets";
 import {
@@ -28,8 +30,12 @@ export function ScientistWorkspaceInspector({
   inferenceSelectedImageIds = [],
   focusedImageId = null,
   selectedReviewQueueId = null,
+  videoWorkspaceContext = null,
   onOpenMeasurements,
   onOpenReviewItem,
+  onVideoSelect,
+  onVideoFrameChange,
+  onVideoTrackChange,
   onNavigate,
 }: {
   activeView: WorkspaceInspectorView;
@@ -40,8 +46,12 @@ export function ScientistWorkspaceInspector({
   inferenceSelectedImageIds?: string[];
   focusedImageId?: string | null;
   selectedReviewQueueId?: string | null;
+  videoWorkspaceContext?: VideoWorkspaceContext | null;
   onOpenMeasurements?: (imageId: string) => void;
   onOpenReviewItem?: (item: ReviewQueueItem) => void;
+  onVideoSelect?: (videoId: string) => void;
+  onVideoFrameChange?: (frameIndex: number) => void;
+  onVideoTrackChange?: (trackId: string) => void;
   onNavigate: (view: WorkspaceInspectorView) => void;
 }) {
   const definition = workspaceInspectorDefinition(activeView);
@@ -147,6 +157,18 @@ export function ScientistWorkspaceInspector({
           onOpenItem={onOpenReviewItem}
         />
       )}
+
+      {activeView === "video" &&
+        onVideoSelect &&
+        onVideoFrameChange &&
+        onVideoTrackChange && (
+          <ProjectVideoPoseInspector
+            context={videoWorkspaceContext}
+            onSelectVideo={onVideoSelect}
+            onSeekFrame={onVideoFrameChange}
+            onSelectTrack={onVideoTrackChange}
+          />
+        )}
 
       <section
         className="rv-inspector-card"

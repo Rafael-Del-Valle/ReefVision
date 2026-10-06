@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -38,6 +39,10 @@ import { SystemPanel } from "./features/system/SystemPanel";
 import { TrainingWorkspace } from "./features/training/TrainingWorkspace";
 import { VideoTrackExchangePanel } from "./features/video/VideoTrackExchangePanel";
 import { VideoTrackingWorkspace } from "./features/video/VideoTrackingWorkspace";
+import type {
+  VideoWorkspaceCommand,
+  VideoWorkspaceContext,
+} from "./features/video/videoWorkspaceBridge";
 import { WorkflowGraphWorkspace } from "./features/workflow-graphs/WorkflowGraphWorkspace";
 import {
   EmptyState,
@@ -225,6 +230,11 @@ export function App() {
   const [selectedReviewQueueId, setSelectedReviewQueueId] = useState<
     string | null
   >(null);
+  const [videoWorkspaceContext, setVideoWorkspaceContext] =
+    useState<VideoWorkspaceContext | null>(null);
+  const [videoWorkspaceCommand, setVideoWorkspaceCommand] =
+    useState<VideoWorkspaceCommand | null>(null);
+  const videoWorkspaceCommandSequenceRef = useRef(0);
 
   const health = useQuery({
     queryKey: ["health"],
@@ -281,6 +291,8 @@ export function App() {
     setInferenceSelectedImageIds([]);
     setFocusedGalleryImageId(null);
     setSelectedReviewQueueId(null);
+    setVideoWorkspaceContext(null);
+    setVideoWorkspaceCommand(null);
 
     if (!selectedProjectId) {
       setWorkspacePresetId("annotation");
@@ -321,6 +333,49 @@ export function App() {
         item.reason_summary ?? "This image was ranked for human review.",
     });
   }, []);
+
+  const handleVideoWorkspaceContextChange = useCallback(
+    (context: VideoWorkspaceContext | null) => {
+      setVideoWorkspaceContext(context);
+    },
+    [],
+  );
+
+  const handleVideoSelect = useCallback((videoId: string) => {
+    videoWorkspaceCommandSequenceRef.current += 1;
+    setVideoWorkspaceCommand({
+      id: videoWorkspaceCommandSequenceRef.current,
+      type: "select_video",
+      videoId,
+    });
+  }, []);
+
+  const handleVideoFrameChange = useCallback((frameIndex: number) => {
+    videoWorkspaceCommandSequenceRef.current += 1;
+    setVideoWorkspaceCommand({
+      id: videoWorkspaceCommandSequenceRef.current,
+      type: "seek_frame",
+      frameIndex,
+    });
+  }, []);
+
+  const handleVideoTrackChange = useCallback((trackId: string) => {
+    videoWorkspaceCommandSequenceRef.current += 1;
+    setVideoWorkspaceCommand({
+      id: videoWorkspaceCommandSequenceRef.current,
+      type: "select_track",
+      trackId,
+    });
+  }, []);
+
+  const handleVideoWorkspaceCommandHandled = useCallback(
+    (commandId: number) => {
+      setVideoWorkspaceCommand((current) =>
+        current?.id === commandId ? null : current,
+      );
+    },
+    [],
+  );
 
   function selectWorkspacePreset(presetId: WorkspacePresetId): void {
     const preset = workspacePreset(presetId);
@@ -565,7 +620,11 @@ export function App() {
                 inferenceSelectedImageIds={inferenceSelectedImageIds}
                 focusedImageId={focusedGalleryImageId}
                 selectedReviewQueueId={selectedReviewQueueId}
+                videoWorkspaceContext={videoWorkspaceContext}
                 onOpenReviewItem={handleOpenReviewItem}
+                onVideoSelect={handleVideoSelect}
+                onVideoFrameChange={handleVideoFrameChange}
+                onVideoTrackChange={handleVideoTrackChange}
                 onOpenMeasurements={(imageId) =>
                   setEditorLaunch({
                     imageId,
@@ -684,7 +743,12 @@ export function App() {
             )}
             {activeView === "video" && (
               <>
-                <VideoTrackingWorkspace project={selectedProject} />
+                <VideoTrackingWorkspace
+                  project={selectedProject}
+                  onWorkspaceContextChange={handleVideoWorkspaceContextChange}
+                  workspaceCommand={videoWorkspaceCommand}
+                  onWorkspaceCommandHandled={handleVideoWorkspaceCommandHandled}
+                />
                 <VideoTrackExchangePanel project={selectedProject} />
               </>
             )}

@@ -3,6 +3,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Project } from "../../api/client";
+import type {
+  VideoWorkspaceCommand,
+  VideoWorkspaceContext,
+} from "./videoWorkspaceBridge";
 import { VideoTrackingWorkspace } from "./VideoTrackingWorkspace";
 import * as api from "./videoApi";
 import * as geographicApi from "./videoGeographicMovementAnalyticsApi";
@@ -122,15 +126,43 @@ const project: Project = {
   ],
 };
 
-function renderWorkspace() {
+function renderWorkspace(
+  options: {
+    onWorkspaceContextChange?: (context: VideoWorkspaceContext | null) => void;
+    workspaceCommand?: VideoWorkspaceCommand | null;
+    onWorkspaceCommandHandled?: (commandId: number) => void;
+  } = {},
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+
+  const renderTree = (
+    nextOptions: {
+      onWorkspaceContextChange?: (
+        context: VideoWorkspaceContext | null,
+      ) => void;
+      workspaceCommand?: VideoWorkspaceCommand | null;
+      onWorkspaceCommandHandled?: (commandId: number) => void;
+    } = options,
+  ) => (
     <QueryClientProvider client={queryClient}>
-      <VideoTrackingWorkspace project={project} />
-    </QueryClientProvider>,
+      <VideoTrackingWorkspace project={project} {...nextOptions} />
+    </QueryClientProvider>
   );
+
+  const result = render(renderTree());
+
+  return {
+    ...result,
+    rerenderWorkspace: (nextOptions: {
+      onWorkspaceContextChange?: (
+        context: VideoWorkspaceContext | null,
+      ) => void;
+      workspaceCommand?: VideoWorkspaceCommand | null;
+      onWorkspaceCommandHandled?: (commandId: number) => void;
+    }) => result.rerender(renderTree(nextOptions)),
+  };
 }
 
 describe("VideoTrackingWorkspace", () => {
@@ -913,4 +945,54 @@ it("shows SLEAP-NN instance tracking controls without Ultralytics tracker knobs"
       name: "Run SLEAP-NN pose + instance tracking",
     }),
   ).toBeEnabled();
+});
+
+it("publishes timeline context and handles inspector seek commands without moving scientific ownership", async () => {
+  const onWorkspaceContextChange = vi.fn();
+  const onWorkspaceCommandHandled = vi.fn();
+
+  const view = renderWorkspace({
+    onWorkspaceContextChange,
+    onWorkspaceCommandHandled,
+  });
+
+  await waitFor(() =>
+    expect(onWorkspaceContextChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: project.id,
+        selectedVideoId: "video-1",
+        selectedVideoFilename: "fish.mp4",
+        frameIndex: 0,
+        frameCount: 300,
+        fps: 30,
+      }),
+    ),
+  );
+
+  view.rerenderWorkspace({
+    onWorkspaceContextChange,
+    workspaceCommand: {
+      id: 1,
+      type: "seek_frame",
+      frameIndex: 42,
+    },
+    onWorkspaceCommandHandled,
+  });
+
+  await waitFor(() =>
+    expect(onWorkspaceCommandHandled).toHaveBeenCalledWith(1),
+  );
+
+  await waitFor(() =>
+    expect(onWorkspaceContextChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        selectedVideoId: "video-1",
+        frameIndex: 42,
+      }),
+    ),
+  );
+
+  expect(await screen.findByTestId("mock-active-map-frame")).toHaveTextContent(
+    "42",
+  );
 });

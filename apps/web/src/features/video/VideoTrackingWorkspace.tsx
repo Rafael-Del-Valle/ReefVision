@@ -56,6 +56,11 @@ import {
   type VideoTrackKeyframe,
 } from "./videoApi";
 import { trackingBenchmarkCsv, trackingBenchmarkJson } from "./trackingReport";
+import type {
+  VideoWorkspaceCommand,
+  VideoWorkspaceContext,
+  VideoWorkspaceTrackSource,
+} from "./videoWorkspaceBridge";
 import {
   frameIndexForVideoTime,
   videoTimeMatchesPendingSeek,
@@ -64,6 +69,9 @@ import {
 
 interface VideoTrackingWorkspaceProps {
   project: Project;
+  onWorkspaceContextChange?: (context: VideoWorkspaceContext | null) => void;
+  workspaceCommand?: VideoWorkspaceCommand | null;
+  onWorkspaceCommandHandled?: (commandId: number) => void;
 }
 
 function sortedKeyframes(items: VideoTrackKeyframe[]): VideoTrackKeyframe[] {
@@ -106,6 +114,9 @@ function toggleSelection(
 
 export function VideoTrackingWorkspace({
   project,
+  onWorkspaceContextChange,
+  workspaceCommand = null,
+  onWorkspaceCommandHandled,
 }: VideoTrackingWorkspaceProps) {
   const queryClient = useQueryClient();
   const desktopMode =
@@ -113,6 +124,7 @@ export function VideoTrackingWorkspace({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const pendingMapSeekRef = useRef<PendingVideoMapSeek | null>(null);
   const mapSeekSequenceRef = useRef(0);
+  const lastWorkspaceCommandIdRef = useRef(0);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [telemetryFile, setTelemetryFile] = useState<File | null>(null);
   const [airdataFile, setAirdataFile] = useState<File | null>(null);
@@ -245,6 +257,155 @@ export function VideoTrackingWorkspace({
       poseConfiguredLandmarkCount === poseExpectedLandmarkCount);
   const selectedTrackPoseSchema = poseLandmarkSchemaFromMetadata(
     selectedTrack?.metadata_json,
+  );
+
+  const videoWorkspaceContext = useMemo<VideoWorkspaceContext>(() => {
+    const videos = (videosQuery.data ?? []).map((video) => ({
+      id: video.id,
+      filename: video.original_filename,
+      status: video.status,
+      frameCount: video.frame_count,
+      fps: video.fps,
+      durationSeconds: video.duration_seconds,
+    }));
+
+    const sourceForTrack = (
+      track: NonNullable<typeof tracksQuery.data>[number],
+    ): VideoWorkspaceTrackSource => {
+      if (
+        track.status.toLowerCase().includes("imported") ||
+        track.metadata_json?.imported === true
+      ) {
+        return "imported";
+      }
+
+      return track.source_job_id ? "machine" : "manual";
+    };
+
+    const tracks = (tracksQuery.data ?? []).map((track) => ({
+      id: track.id,
+      trackNumber: track.track_number,
+      status: track.status,
+      source: sourceForTrack(track),
+      hasPose: poseLandmarkSchemaFromMetadata(track.metadata_json) !== null,
+      keyframeCount: track.keyframes_json.length,
+    }));
+
+    const selectedFrame =
+      selectedTrack?.keyframes_json.find(
+        (keyframe) => keyframe.frame === frameIndex,
+      ) ?? null;
+
+    const observations = selectedFrame?.pose_observations ?? [];
+    const keypoints = selectedFrame?.keypoints ?? [];
+
+    const confidenceValues =
+      observations.length > 0
+        ? observations
+            .map((observation) => observation.confidence)
+            .filter(
+              (confidence): confidence is number =>
+                typeof confidence === "number" && Number.isFinite(confidence),
+            )
+        : keypoints
+            .map((point) => point[2])
+            .filter(
+              (confidence) =>
+                typeof confidence === "number" &&
+                Number.isFinite(confidence) &&
+                confidence > 0,
+            );
+
+    const currentPoseObservationCount =
+      observations.length > 0 ? observations.length : keypoints.length;
+
+    const currentPoseVisibleCount =
+      observations.length > 0
+        ? observations.filter(
+            (observation) =>
+              observation.status === "visible" ||
+              observation.status === "uncertain",
+          ).length
+        : keypoints.filter((point) => point[2] > 0).length;
+
+    const currentPoseMeanConfidence =
+      confidenceValues.length > 0
+        ? confidenceValues.reduce((total, value) => total + value, 0) /
+          confidenceValues.length
+        : null;
+
+    const sortedRuns = [...(trackingRunsQuery.data ?? [])].sort(
+      (left, right) =>
+        new Date(right.created_at).getTime() -
+        new Date(left.created_at).getTime(),
+    );
+
+    const activeTrackingRuns = sortedRuns.filter(
+      (run) =>
+        !["succeeded", "failed", "cancelled"].includes(
+          run.status.toLowerCase(),
+        ),
+    );
+
+    return {
+      projectId: project.id,
+      videos,
+
+      selectedVideoId: selectedVideo?.id ?? null,
+      selectedVideoFilename: selectedVideo?.original_filename ?? null,
+      selectedVideoStatus: selectedVideo?.status ?? null,
+
+      frameIndex,
+      frameCount: selectedVideo?.frame_count ?? 0,
+      fps: selectedVideo?.fps ?? 0,
+      durationSeconds: selectedVideo?.duration_seconds ?? 0,
+
+      tracks,
+
+      selectedTrackId: selectedTrack?.id ?? null,
+      selectedTrackNumber: selectedTrack?.track_number ?? null,
+      selectedTrackStatus: selectedTrack?.status ?? null,
+      selectedTrackSource: selectedTrack ? sourceForTrack(selectedTrack) : null,
+      selectedTrackHasPose: selectedTrackPoseSchema !== null,
+      selectedTrackKeyframeFrames: selectedTrack
+        ? selectedTrack.keyframes_json
+            .map((keyframe) => keyframe.frame)
+            .sort((left, right) => left - right)
+        : [],
+
+      poseGroups:
+        selectedTrackPoseSchema?.groups.map((group) => ({
+          name: group.name,
+          count: group.count,
+        })) ?? [],
+
+      currentPoseObservationCount,
+      currentPoseVisibleCount,
+      currentPoseMeanConfidence,
+
+      activeTrackingRunCount: activeTrackingRuns.length,
+      latestTrackingRunStatus: sortedRuns[0]?.status ?? null,
+      latestTrackingRunStage: sortedRuns[0]?.stage ?? null,
+    };
+  }, [
+    frameIndex,
+    project.id,
+    selectedTrack,
+    selectedVideo,
+    trackingRunsQuery.data,
+    tracksQuery.data,
+    videosQuery.data,
+  ]);
+
+  useEffect(() => {
+    onWorkspaceContextChange?.(videoWorkspaceContext);
+  }, [onWorkspaceContextChange, videoWorkspaceContext]);
+
+  useEffect(
+    () => () => {
+      onWorkspaceContextChange?.(null);
+    },
+    [onWorkspaceContextChange, project.id],
   );
   const spatialMetricsQuery = useQuery({
     queryKey: [
@@ -904,6 +1065,59 @@ export function VideoTrackingWorkspace({
   ) => void = (selectedFrameIndex, frameTimeSeconds) => {
     seekVideoFromMap(selectedFrameIndex, frameTimeSeconds);
   };
+
+  useEffect(() => {
+    if (
+      !workspaceCommand ||
+      lastWorkspaceCommandIdRef.current === workspaceCommand.id
+    ) {
+      return;
+    }
+
+    lastWorkspaceCommandIdRef.current = workspaceCommand.id;
+
+    if (workspaceCommand.type === "select_video") {
+      if (
+        (videosQuery.data ?? []).some(
+          (video) => video.id === workspaceCommand.videoId,
+        )
+      ) {
+        setSelectedVideoId(workspaceCommand.videoId);
+      }
+    }
+
+    if (workspaceCommand.type === "select_track") {
+      if (
+        workspaceCommand.trackId === "" ||
+        (tracksQuery.data ?? []).some(
+          (track) => track.id === workspaceCommand.trackId,
+        )
+      ) {
+        setSelectedTrackId(workspaceCommand.trackId);
+      }
+    }
+
+    if (workspaceCommand.type === "seek_frame" && selectedVideo) {
+      const clampedFrame = Math.min(
+        Math.max(0, Math.round(workspaceCommand.frameIndex)),
+        Math.max(0, selectedVideo.frame_count - 1),
+      );
+
+      const frameTimeSeconds =
+        selectedVideo.fps > 0 ? clampedFrame / selectedVideo.fps : 0;
+
+      seekVideoFromMap(clampedFrame, frameTimeSeconds);
+      setPreviewFrameIndex(clampedFrame);
+    }
+
+    onWorkspaceCommandHandled?.(workspaceCommand.id);
+  }, [
+    onWorkspaceCommandHandled,
+    selectedVideo,
+    tracksQuery.data,
+    videosQuery.data,
+    workspaceCommand,
+  ]);
 
   return (
     <div
