@@ -329,6 +329,21 @@ def import_project_exchange(
                 if isinstance(old_id, str) and old_id:
                     id_map[old_id] = str(uuid4())
 
+        # Immutable revision-series identifiers are not primary keys, but they
+        # still must be remapped when a package is imported more than once.
+        # This keeps every imported project scientifically independent.
+        for rows in section_rows.values():
+            for row in rows:
+                for field in (
+                    "ethogram_series_id",
+                    "bout_series_id",
+                    "observation_series_id",
+                    "analysis_series_id",
+                ):
+                    value = row.get(field)
+                    if isinstance(value, str) and value:
+                        id_map.setdefault(value, str(uuid4()))
+
         media = _media_inventory(manifest)
         warnings = list(inspection.warnings)
         imported_counts: dict[str, int] = {}

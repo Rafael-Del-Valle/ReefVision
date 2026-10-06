@@ -12,6 +12,7 @@ from PIL import Image
 from reefvision.config import Settings
 from reefvision.jobs.export import process_export_job
 from reefvision.main import create_app
+from reefvision.tests.class_fixtures import seed_synthetic_label_classes
 
 MURICEA_OPEN_ID = "cdd8ac00-a5e9-489b-9b8a-c3f0275fe88c"
 
@@ -25,10 +26,18 @@ def _image_bytes() -> bytes:
 def _project_and_image(client: TestClient) -> tuple[dict[str, Any], str]:
     project_response = client.post(
         "/api/v1/projects",
-        json={"name": "Milestone 2 native import acceptance", "template": "octocoral"},
+        json={
+            "name": "Milestone 2 native import acceptance",
+            "template": "blank",
+        },
     )
     assert project_response.status_code == 201, project_response.text
-    project = cast(dict[str, Any], project_response.json())
+
+    project = seed_synthetic_label_classes(
+        client,
+        cast(dict[str, Any], project_response.json()),
+    )
+
     image_response = client.post(
         f"/api/v1/projects/{project['id']}/imports/images",
         files=[("files", ("coral.png", _image_bytes(), "image/png"))],

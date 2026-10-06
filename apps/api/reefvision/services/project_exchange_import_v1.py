@@ -15,6 +15,11 @@ from reefvision.config import Settings
 from reefvision.db.models import (
     ActiveLearningRound,
     AnnotationEvent,
+    BehaviorBoutRevision,
+    BehaviorClassifierModel,
+    BehaviorEthogramRevision,
+    BehaviorPrediction,
+    BehaviorStateDefinition,
     ClassOperation,
     ClassVisibilityPreference,
     DatasetVersion,
@@ -26,6 +31,7 @@ from reefvision.db.models import (
     ProjectExchangePackage,
     ReviewQueue,
     ReviewQueueItem,
+    SkeletonAnalysisRevision,
     TrainingDraft,
     VideoAsset,
     VideoTrack,
@@ -37,8 +43,16 @@ from reefvision.db.models.pose_active_learning import (
 from reefvision.db.models.pose_schema import (
     PoseLandmarkSchema,
     PoseLandmarkSchemaRevision,
+    PoseModelSchemaBinding,
 )
-from reefvision.db.models.pose_tracking import PoseLandmarkCorrection
+from reefvision.db.models.pose_tracking import (
+    PoseLandmarkAssociationCandidate,
+    PoseLandmarkAssociationDecision,
+    PoseLandmarkCorrection,
+    PoseLandmarkIdentityBreak,
+    PoseLandmarkObservation,
+    PoseLandmarkTrack,
+)
 from reefvision.db.models.pose_training_dataset import (
     PoseTrainingDataset,
     PoseTrainingDatasetItem,
@@ -76,37 +90,92 @@ def _register_v1_sections() -> None:
             "georeferenced_observations": GeoReferencedObservation,
             "pose_landmark_schemas": PoseLandmarkSchema,
             "pose_landmark_schema_revisions": PoseLandmarkSchemaRevision,
+            "pose_model_schema_bindings": PoseModelSchemaBinding,
+            "pose_landmark_tracks": PoseLandmarkTrack,
+            "pose_landmark_observations": PoseLandmarkObservation,
+            "pose_landmark_association_decisions": PoseLandmarkAssociationDecision,
+            "pose_landmark_association_candidates": PoseLandmarkAssociationCandidate,
             "pose_active_learning_rounds": PoseActiveLearningRound,
             "pose_landmark_corrections": PoseLandmarkCorrection,
+            "pose_landmark_identity_breaks": PoseLandmarkIdentityBreak,
             "pose_active_learning_candidates": PoseActiveLearningCandidate,
             "pose_training_datasets": PoseTrainingDataset,
             "pose_training_dataset_items": PoseTrainingDatasetItem,
+            "behavior_ethogram_revisions": BehaviorEthogramRevision,
+            "behavior_state_definitions": BehaviorStateDefinition,
+            "behavior_classifier_models": BehaviorClassifierModel,
+            "behavior_predictions": BehaviorPrediction,
+            "behavior_bout_revisions": BehaviorBoutRevision,
+            "skeleton_analysis_revisions": SkeletonAnalysisRevision,
         }
     )
-    _insert_after("project_class_visibility_defaults", "label_classes")
-    _insert_after("class_visibility_preferences", "project_class_visibility_defaults")
-    _insert_after("class_operations", "class_visibility_preferences")
+
+    _insert_after(
+        "project_class_visibility_defaults",
+        "label_classes",
+    )
+    _insert_after(
+        "class_visibility_preferences",
+        "project_class_visibility_defaults",
+    )
+    _insert_after(
+        "class_operations",
+        "class_visibility_preferences",
+    )
     _insert_after("training_drafts", "models")
     _insert_after("exports", "dataset_version_items")
     _insert_after("annotation_events", "annotations")
     _insert_after("mask_annotation_events", "mask_annotations")
-    _insert_after("georeferenced_observations", "video_tracks")
+    _insert_after(
+        "skeleton_analysis_revisions",
+        "mask_annotation_events",
+    )
+    _insert_after(
+        "georeferenced_observations",
+        "video_tracks",
+    )
+
     _insert_after("pose_landmark_schemas", "models")
     _insert_after(
         "pose_landmark_schema_revisions",
         "pose_landmark_schemas",
     )
     _insert_after(
-        "pose_active_learning_rounds",
+        "pose_model_schema_bindings",
+        "pose_landmark_schema_revisions",
+    )
+
+    _insert_after(
+        "pose_landmark_tracks",
         "video_tracks",
     )
     _insert_after(
+        "pose_landmark_observations",
+        "pose_landmark_tracks",
+    )
+    _insert_after(
+        "pose_landmark_association_decisions",
+        "pose_landmark_observations",
+    )
+    _insert_after(
+        "pose_landmark_association_candidates",
+        "pose_landmark_association_decisions",
+    )
+    _insert_after(
         "pose_landmark_corrections",
+        "pose_landmark_association_candidates",
+    )
+    _insert_after(
+        "pose_landmark_identity_breaks",
+        "pose_landmark_corrections",
+    )
+    _insert_after(
         "pose_active_learning_rounds",
+        "pose_landmark_identity_breaks",
     )
     _insert_after(
         "pose_active_learning_candidates",
-        "pose_landmark_corrections",
+        "pose_active_learning_rounds",
     )
     _insert_after(
         "pose_training_datasets",
@@ -115,6 +184,27 @@ def _register_v1_sections() -> None:
     _insert_after(
         "pose_training_dataset_items",
         "pose_training_datasets",
+    )
+
+    _insert_after(
+        "behavior_ethogram_revisions",
+        "video_tracks",
+    )
+    _insert_after(
+        "behavior_state_definitions",
+        "behavior_ethogram_revisions",
+    )
+    _insert_after(
+        "behavior_classifier_models",
+        "behavior_state_definitions",
+    )
+    _insert_after(
+        "behavior_predictions",
+        "behavior_classifier_models",
+    )
+    _insert_after(
+        "behavior_bout_revisions",
+        "behavior_predictions",
     )
 
 

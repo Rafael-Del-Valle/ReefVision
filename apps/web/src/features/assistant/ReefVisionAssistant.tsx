@@ -66,6 +66,26 @@ function guidanceFor(question: string, activeView: string): Guidance {
   const normalized = question.trim().toLowerCase();
 
   if (
+    /(shortcut|keybind|hotkey|keyboard|undo|redo|previous image|next image)/.test(
+      normalized,
+    )
+  ) {
+    return {
+      text:
+        "Annotation keyboard shortcuts are grounded in ReefVision's canonical editor: " +
+        "1–9 assign the selected annotation to the corresponding active class; " +
+        "Ctrl/Cmd+Z undoes; Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y redoes; " +
+        "B selects Box, V selects Select, P selects Pan, F fits the image, " +
+        "H hides/shows annotations, A moves to the previous image, D moves to " +
+        "the next image, J/K move through model proposals, and Delete/Backspace " +
+        "deletes the current selection. Shortcuts are ignored while typing in " +
+        "text fields so they do not interfere with data entry.",
+      navigateTo: "gallery",
+      navigateLabel: "Go to Images & annotation",
+    };
+  }
+
+  if (
     /(calibrat|scale bar|ruler|aruco|charuco|measurement|tle|surface area|density)/.test(
       normalized,
     )
@@ -369,13 +389,8 @@ export function ReefVisionAssistant({
   return (
     <div
       data-testid="reefvision-assistant"
-      style={{
-        position: "fixed",
-        right: 18,
-        bottom: 18,
-        zIndex: 1000,
-        width: open ? "min(430px, calc(100vw - 28px))" : "auto",
-      }}
+      data-open={open ? "true" : "false"}
+      className={`rv-research-assistant ${open ? "open" : "closed"}`}
     >
       {!open ? (
         <button type="button" onClick={() => setOpen(true)}>
@@ -383,13 +398,8 @@ export function ReefVisionAssistant({
         </button>
       ) : (
         <section
-          className="panel-card"
+          className="panel-card rv-research-assistant-panel"
           aria-label="ReefVision Assistant"
-          style={{
-            maxHeight: "min(720px, calc(100vh - 36px))",
-            overflow: "auto",
-            boxShadow: "0 14px 38px rgba(0, 0, 0, 0.28)",
-          }}
         >
           <div className="section-heading">
             <div>
@@ -409,8 +419,10 @@ export function ReefVisionAssistant({
           </div>
 
           <p className="annotation-helper">
-            Navigation and how-to help are deterministic. SmolVLM image analysis
-            is optional and advisory; it never changes research data.
+            Navigation, workflow, and keyboard help are grounded in ReefVision's
+            canonical controls. The base SmolVLM model provides optional local
+            image interpretation and remains advisory; it never changes research
+            data.
           </p>
 
           <div

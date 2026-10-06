@@ -106,7 +106,7 @@ describe("InteroperabilityWorkspace", () => {
     });
   });
 
-  it("queues complete exchanges when generated artifacts are selected", async () => {
+  it("queues complete exchanges with source media included by default", async () => {
     renderWorkspace();
     fireEvent.click(
       screen.getByLabelText(
@@ -121,7 +121,7 @@ describe("InteroperabilityWorkspace", () => {
       expect(exchangeApi.createProjectExchange).toHaveBeenCalledWith(
         project.id,
         {
-          include_media: false,
+          include_media: true,
           include_model_weights: false,
           include_generated_artifacts: true,
         },

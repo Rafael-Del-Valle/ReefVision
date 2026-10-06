@@ -19,6 +19,11 @@ from sqlalchemy import select
 from reefvision.db.base import Base
 from reefvision.db.models import (
     AnnotationEvent,
+    BehaviorBoutRevision,
+    BehaviorClassifierModel,
+    BehaviorEthogramRevision,
+    BehaviorPrediction,
+    BehaviorStateDefinition,
     ClassOperation,
     ClassVisibilityPreference,
     ExportRecord,
@@ -28,6 +33,7 @@ from reefvision.db.models import (
     MaskAnnotationEvent,
     Project,
     ProjectClassVisibilityDefault,
+    SkeletonAnalysisRevision,
     TrainingDraft,
     VideoAsset,
     WorkflowArtifact,
@@ -42,8 +48,16 @@ from reefvision.db.models.pose_active_learning import (
 from reefvision.db.models.pose_schema import (
     PoseLandmarkSchema,
     PoseLandmarkSchemaRevision,
+    PoseModelSchemaBinding,
 )
-from reefvision.db.models.pose_tracking import PoseLandmarkCorrection
+from reefvision.db.models.pose_tracking import (
+    PoseLandmarkAssociationCandidate,
+    PoseLandmarkAssociationDecision,
+    PoseLandmarkCorrection,
+    PoseLandmarkIdentityBreak,
+    PoseLandmarkObservation,
+    PoseLandmarkTrack,
+)
 from reefvision.db.models.pose_training_dataset import (
     PoseTrainingDataset,
     PoseTrainingDatasetItem,
@@ -64,6 +78,26 @@ def _file_sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _record_ids(
+    records: Sequence[Base],
+) -> list[str]:
+    """Return string primary IDs without assuming Base declares id."""
+
+    result: list[str] = []
+
+    for record in records:
+        record_id = getattr(
+            record,
+            "id",
+            None,
+        )
+
+        if isinstance(record_id, str):
+            result.append(record_id)
+
+    return result
 
 
 def _parent_first_review_queues(records: Sequence[Base]) -> list[Base]:
@@ -245,24 +279,6 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             else []
         )
 
-        correction_ids = [
-            item.correction_id
-            for item in pose_active_learning_candidates
-            if item.correction_id is not None
-        ]
-
-        pose_landmark_corrections = (
-            list(
-                self.session.scalars(
-                    select(PoseLandmarkCorrection).where(
-                        PoseLandmarkCorrection.id.in_(correction_ids)
-                    )
-                )
-            )
-            if correction_ids
-            else []
-        )
-
         pose_training_datasets = list(
             self.session.scalars(
                 select(PoseTrainingDataset).where(PoseTrainingDataset.project_id == project.id)
@@ -283,15 +299,204 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             else []
         )
 
+        model_ids = _record_ids(sections.get("models", []))
+
+        video_track_ids = _record_ids(sections.get("video_tracks", []))
+
+        mask_annotation_ids = _record_ids(sections.get("mask_annotations", []))
+
+        pose_model_schema_bindings = (
+            list(
+                self.session.scalars(
+                    select(PoseModelSchemaBinding).where(
+                        PoseModelSchemaBinding.model_id.in_(model_ids)
+                    )
+                )
+            )
+            if model_ids
+            else []
+        )
+
+        pose_landmark_tracks = (
+            list(
+                self.session.scalars(
+                    select(PoseLandmarkTrack).where(
+                        PoseLandmarkTrack.parent_video_track_id.in_(video_track_ids)
+                    )
+                )
+            )
+            if video_track_ids
+            else []
+        )
+
+        pose_landmark_observations = (
+            list(
+                self.session.scalars(
+                    select(PoseLandmarkObservation)
+                    .where(PoseLandmarkObservation.parent_video_track_id.in_(video_track_ids))
+                    .order_by(
+                        PoseLandmarkObservation.observation_series_id,
+                        PoseLandmarkObservation.revision,
+                    )
+                )
+            )
+            if video_track_ids
+            else []
+        )
+
+        pose_observation_ids = [item.id for item in pose_landmark_observations]
+
+        pose_landmark_association_decisions = (
+            list(
+                self.session.scalars(
+                    select(PoseLandmarkAssociationDecision)
+                    .where(PoseLandmarkAssociationDecision.observation_id.in_(pose_observation_ids))
+                    .order_by(
+                        PoseLandmarkAssociationDecision.observation_id,
+                        PoseLandmarkAssociationDecision.decision_revision,
+                    )
+                )
+            )
+            if pose_observation_ids
+            else []
+        )
+
+        pose_decision_ids = [item.id for item in pose_landmark_association_decisions]
+
+        pose_landmark_association_candidates = (
+            list(
+                self.session.scalars(
+                    select(PoseLandmarkAssociationCandidate).where(
+                        PoseLandmarkAssociationCandidate.association_decision_id.in_(
+                            pose_decision_ids
+                        )
+                    )
+                )
+            )
+            if pose_decision_ids
+            else []
+        )
+
+        all_pose_landmark_corrections = (
+            list(
+                self.session.scalars(
+                    select(PoseLandmarkCorrection).where(
+                        PoseLandmarkCorrection.parent_video_track_id.in_(video_track_ids)
+                    )
+                )
+            )
+            if video_track_ids
+            else []
+        )
+
+        pose_landmark_identity_breaks = (
+            list(
+                self.session.scalars(
+                    select(PoseLandmarkIdentityBreak).where(
+                        PoseLandmarkIdentityBreak.parent_video_track_id.in_(video_track_ids)
+                    )
+                )
+            )
+            if video_track_ids
+            else []
+        )
+
+        behavior_ethogram_revisions = list(
+            self.session.scalars(
+                select(BehaviorEthogramRevision)
+                .where(BehaviorEthogramRevision.project_id == project.id)
+                .order_by(
+                    BehaviorEthogramRevision.ethogram_series_id,
+                    BehaviorEthogramRevision.revision,
+                )
+            )
+        )
+
+        behavior_ethogram_ids = [item.id for item in behavior_ethogram_revisions]
+
+        behavior_state_definitions = (
+            list(
+                self.session.scalars(
+                    select(BehaviorStateDefinition).where(
+                        BehaviorStateDefinition.ethogram_revision_id.in_(behavior_ethogram_ids)
+                    )
+                )
+            )
+            if behavior_ethogram_ids
+            else []
+        )
+
+        behavior_classifier_models = list(
+            self.session.scalars(
+                select(BehaviorClassifierModel).where(
+                    BehaviorClassifierModel.project_id == project.id
+                )
+            )
+        )
+
+        behavior_predictions = (
+            list(
+                self.session.scalars(
+                    select(BehaviorPrediction).where(
+                        BehaviorPrediction.video_track_id.in_(video_track_ids)
+                    )
+                )
+            )
+            if video_track_ids
+            else []
+        )
+
+        behavior_bout_revisions = (
+            list(
+                self.session.scalars(
+                    select(BehaviorBoutRevision)
+                    .where(BehaviorBoutRevision.video_track_id.in_(video_track_ids))
+                    .order_by(
+                        BehaviorBoutRevision.bout_series_id,
+                        BehaviorBoutRevision.revision,
+                    )
+                )
+            )
+            if video_track_ids
+            else []
+        )
+
+        skeleton_analysis_revisions = (
+            list(
+                self.session.scalars(
+                    select(SkeletonAnalysisRevision)
+                    .where(SkeletonAnalysisRevision.mask_annotation_id.in_(mask_annotation_ids))
+                    .order_by(
+                        SkeletonAnalysisRevision.analysis_series_id,
+                        SkeletonAnalysisRevision.analysis_revision,
+                    )
+                )
+            )
+            if mask_annotation_ids
+            else []
+        )
+
         sections.update(
             {
                 "pose_landmark_schemas": pose_schemas,
                 "pose_landmark_schema_revisions": pose_schema_revisions,
+                "pose_model_schema_bindings": pose_model_schema_bindings,
+                "pose_landmark_tracks": pose_landmark_tracks,
+                "pose_landmark_observations": pose_landmark_observations,
+                "pose_landmark_association_decisions": pose_landmark_association_decisions,
+                "pose_landmark_association_candidates": pose_landmark_association_candidates,
                 "pose_active_learning_rounds": pose_active_learning_rounds,
-                "pose_landmark_corrections": pose_landmark_corrections,
-                "pose_active_learning_candidates": (pose_active_learning_candidates),
+                "pose_landmark_corrections": all_pose_landmark_corrections,
+                "pose_landmark_identity_breaks": pose_landmark_identity_breaks,
+                "pose_active_learning_candidates": pose_active_learning_candidates,
                 "pose_training_datasets": pose_training_datasets,
-                "pose_training_dataset_items": (pose_training_dataset_items),
+                "pose_training_dataset_items": pose_training_dataset_items,
+                "behavior_ethogram_revisions": behavior_ethogram_revisions,
+                "behavior_state_definitions": behavior_state_definitions,
+                "behavior_classifier_models": behavior_classifier_models,
+                "behavior_predictions": behavior_predictions,
+                "behavior_bout_revisions": behavior_bout_revisions,
+                "skeleton_analysis_revisions": skeleton_analysis_revisions,
             }
         )
 

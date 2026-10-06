@@ -73,26 +73,34 @@ describe("ProjectLauncher", () => {
     );
   });
 
-  it("offers the octocoral and blank quick-start paths", async () => {
+  it("offers only blank scientific quick-start paths", async () => {
     const handlers = renderLauncher();
 
     await userEvent.click(
-      screen.getByRole("button", { name: /Octocoral monitoring/ }),
-    );
-    await userEvent.click(
       screen.getByRole("button", { name: /General image analysis/ }),
     );
+    await userEvent.click(
+      screen.getByRole("button", { name: /Video \+ pose study/ }),
+    );
 
-    expect(handlers.onQuickStart).toHaveBeenNthCalledWith(1, "octocoral");
+    expect(handlers.onQuickStart).toHaveBeenNthCalledWith(1, "blank");
     expect(handlers.onQuickStart).toHaveBeenNthCalledWith(2, "blank");
+    expect(screen.queryByText(/six-class octocoral/i)).not.toBeInTheDocument();
   });
 
-  it("keeps package import unavailable until a target project exists", () => {
-    renderLauncher([]);
+  it("allows project import on a fresh installation", async () => {
+    const handlers = renderLauncher([]);
 
-    expect(
-      screen.getByRole("button", { name: "Import package" }),
-    ).toBeDisabled();
+    const importButtons = screen.getAllByRole("button", {
+      name: /Import (project|existing project)/,
+    });
+
+    expect(importButtons.length).toBeGreaterThan(0);
+    expect(importButtons[0]).toBeEnabled();
+
+    await userEvent.click(importButtons[0]);
+
+    expect(handlers.onImportPackage).toHaveBeenCalled();
     expect(
       screen.getByRole("heading", { name: "No projects yet" }),
     ).toBeInTheDocument();

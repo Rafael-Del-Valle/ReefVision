@@ -1417,7 +1417,7 @@ describe("App", () => {
     expect(screen.getByText("Generate ranking")).toBeInTheDocument();
   });
 
-  it("creates a project with the octocoral template selected", async () => {
+  it("creates a project with the blank class baseline", async () => {
     const fetchMock = mockApi({ projects: [] });
     renderApp();
 
@@ -1444,7 +1444,7 @@ describe("App", () => {
           body: JSON.stringify({
             name: "CPT Coral Study",
             description: "Octocoral polyp annotations",
-            template: "octocoral",
+            template: "blank",
           }),
         }),
       ),

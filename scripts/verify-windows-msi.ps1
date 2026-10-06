@@ -135,6 +135,83 @@ try {
         throw "Bundled-model manifest does not report any assets: $($BundledManifest.FullName)"
     }
 
+    $ProviderAssetsProperty =
+        $Manifest.PSObject.Properties["provider_assets"]
+
+    if (
+        $null -eq $ProviderAssetsProperty -or
+        $null -eq $ProviderAssetsProperty.Value
+    ) {
+        throw "Extracted MSI bundled-model manifest has no provider_assets section."
+    }
+
+    $SmolProperty =
+        $ProviderAssetsProperty.Value.PSObject.Properties["smolvlm"]
+
+    if (
+        $null -eq $SmolProperty -or
+        $null -eq $SmolProperty.Value
+    ) {
+        throw "Extracted MSI does not declare bundled SmolVLM."
+    }
+
+    $SmolFiles = @($SmolProperty.Value.files)
+
+    if ($SmolFiles.Count -eq 0) {
+        throw "Extracted MSI bundled SmolVLM declares no files."
+    }
+
+    foreach ($SmolFile in $SmolFiles) {
+        $RelativePath = [string]$SmolFile.relative_path
+
+        if ([string]::IsNullOrWhiteSpace($RelativePath)) {
+            throw "Bundled SmolVLM manifest contains an empty relative path."
+        }
+
+        $Candidate =
+            Join-Path `
+                $BundledManifest.Directory.FullName `
+                $RelativePath
+
+        if (
+            -not (
+                Test-Path `
+                    -LiteralPath $Candidate `
+                    -PathType Leaf
+            )
+        ) {
+            throw (
+                "Extracted MSI does not contain bundled SmolVLM provider files. " +
+                "Missing: $Candidate"
+            )
+        }
+
+        $ExpectedSha =
+            [string]$SmolFile.sha256
+
+        if (
+            -not [string]::IsNullOrWhiteSpace($ExpectedSha)
+        ) {
+            $ActualSha =
+                (
+                    Get-FileHash `
+                        -LiteralPath $Candidate `
+                        -Algorithm SHA256
+                ).Hash.ToLowerInvariant()
+
+            if (
+                $ActualSha -ne
+                $ExpectedSha.ToLowerInvariant()
+            ) {
+                throw (
+                    "Extracted bundled SmolVLM file failed SHA-256 verification: " +
+                    $Candidate
+                )
+            }
+        }
+    }
+
+
     $Longest = $ExtractedFiles | Sort-Object { $_.FullName.Length } -Descending | Select-Object -First 1
     Write-Host "Extracted file count: $($ExtractedFiles.Count)"
     Write-Host "Longest extracted path: $($Longest.FullName.Length) characters"

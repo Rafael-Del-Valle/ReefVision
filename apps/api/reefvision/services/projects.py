@@ -27,7 +27,6 @@ from reefvision.db.models import (
     ReviewQueueItem,
 )
 from reefvision.domain.errors import ConflictError, NotFoundError
-from reefvision.domain.templates import OCTOCORAL_TEMPLATE
 from reefvision.repositories.projects import LabelClassRepository, ProjectRepository
 from reefvision.schemas.projects import (
     LabelClassCreate,
@@ -196,9 +195,6 @@ class ProjectService:
             georeference_height_evidence=payload.georeference_height_evidence,
         )
         self.projects.add(project)
-        if payload.template == "octocoral":
-            for display_order, item in enumerate(OCTOCORAL_TEMPLATE):
-                project.label_classes.append(LabelClass(display_order=display_order, **item))
 
         try:
             self.session.commit()

@@ -50,6 +50,7 @@ function renderAssistant(onNavigate = vi.fn()) {
 
 describe("ReefVisionAssistant", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     window.localStorage.clear();
     vi.mocked(listAdvancedProviderImages).mockResolvedValue([
       {
@@ -98,6 +99,36 @@ describe("ReefVisionAssistant", () => {
       screen.getByRole("button", { name: "Go to Images & annotation" }),
     );
     expect(onNavigate).toHaveBeenCalledWith("gallery");
+  });
+
+  it("answers canonical keyboard shortcut questions without invoking a model", async () => {
+    renderAssistant();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Ask ReefVision",
+      }),
+    );
+
+    fireEvent.change(screen.getByLabelText("Question"), {
+      target: {
+        value: "What are the keyboard shortcuts?",
+      },
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Ask",
+      }),
+    );
+
+    expect(await screen.findByText(/Ctrl\/Cmd\+Z undoes/)).toBeInTheDocument();
+
+    expect(
+      screen.getByText(/Delete\/Backspace deletes the current selection/),
+    ).toBeInTheDocument();
+
+    expect(executeAdvancedProvider).not.toHaveBeenCalled();
   });
 
   it("uses SmolVLM only after explicit image opt-in", async () => {

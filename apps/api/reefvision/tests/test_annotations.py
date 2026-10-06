@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from reefvision.db.models import Annotation, AnnotationEvent, ImageAsset
+from reefvision.tests.class_fixtures import seed_synthetic_label_classes
 
 
 def image_bytes(format_name: str = "PNG", size: tuple[int, int] = (80, 60)) -> bytes:
@@ -17,10 +18,23 @@ def image_bytes(format_name: str = "PNG", size: tuple[int, int] = (80, 60)) -> b
     return stream.getvalue()
 
 
-def create_project(client: TestClient, name: str = "Annotation project") -> dict[str, Any]:
-    response = client.post("/api/v1/projects", json={"name": name, "template": "octocoral"})
-    assert response.status_code == 201
-    return cast(dict[str, Any], response.json())
+def create_project(
+    client: TestClient,
+    name: str = "Annotation project",
+) -> dict[str, Any]:
+    response = client.post(
+        "/api/v1/projects",
+        json={
+            "name": name,
+            "template": "blank",
+        },
+    )
+    assert response.status_code == 201, response.text
+
+    return seed_synthetic_label_classes(
+        client,
+        cast(dict[str, Any], response.json()),
+    )
 
 
 def import_one(

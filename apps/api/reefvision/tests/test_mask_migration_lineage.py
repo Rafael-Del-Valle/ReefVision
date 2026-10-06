@@ -1,9 +1,12 @@
+from pathlib import Path
+
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
 
 def test_mask_migrations_form_one_linear_head() -> None:
-    config = Config("apps/api/alembic.ini")
+    api_root = Path(__file__).resolve().parents[2]
+    config = Config(str(api_root / "alembic.ini"))
     scripts = ScriptDirectory.from_config(config)
 
     assert scripts.get_heads() == ["0037"]

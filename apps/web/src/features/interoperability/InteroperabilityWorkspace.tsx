@@ -18,7 +18,7 @@ export function InteroperabilityWorkspace({
   project,
 }: InteroperabilityWorkspaceProps) {
   const queryClient = useQueryClient();
-  const [includeMedia, setIncludeMedia] = useState(false);
+  const [includeMedia, setIncludeMedia] = useState(true);
   const [includeModelWeights, setIncludeModelWeights] = useState(false);
   const [includeGeneratedArtifacts, setIncludeGeneratedArtifacts] =
     useState(false);

@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from reefvision.db.models import Annotation, ImageAsset, LabelClass, MaskAnnotation
+from reefvision.tests.class_fixtures import seed_synthetic_label_classes
 
 CLASS_MAPPING = {
     "Swiftia C": {
@@ -67,13 +68,32 @@ def image_bytes(size: tuple[int, int] = (100, 80)) -> bytes:
     return stream.getvalue()
 
 
-def create_project(client: TestClient, template: str = "octocoral") -> dict[str, Any]:
+def create_project(
+    client: TestClient,
+    *,
+    seed_classes: bool = True,
+) -> dict[str, Any]:
     response = client.post(
         "/api/v1/projects",
-        json={"name": f"Import {template}", "template": template},
+        json={
+            "name": "Annotation import test",
+            "template": "blank",
+        },
     )
-    assert response.status_code == 201
-    return cast(dict[str, Any], response.json())
+    assert response.status_code == 201, response.text
+
+    project = cast(
+        dict[str, Any],
+        response.json(),
+    )
+
+    if seed_classes:
+        return seed_synthetic_label_classes(
+            client,
+            project,
+        )
+
+    return project
 
 
 def import_image(client: TestClient, project_id: str) -> str:
@@ -229,7 +249,7 @@ def test_coralnet_toolbox_import_creates_native_boxes_and_masks(client: TestClie
 def test_import_can_create_missing_class_without_reindexing_existing_classes(
     client: TestClient,
 ) -> None:
-    project = create_project(client, template="blank")
+    project = create_project(client, seed_classes=False)
     image_id = import_image(client, project["id"])
     payload = {
         "coral.png": [

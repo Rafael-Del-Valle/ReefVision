@@ -44,7 +44,7 @@ export function ProjectLauncher({
   version: string;
   serviceState: "pending" | "ready" | "unavailable";
   onCreateProject: () => void;
-  onQuickStart: (template: "blank" | "octocoral") => void;
+  onQuickStart: (template: "blank") => void;
   onOpenProject: (projectId: string) => void;
   onImportPackage: () => void;
   onOpenSystem: () => void;
@@ -104,14 +104,9 @@ export function ProjectLauncher({
               type="button"
               className="secondary"
               onClick={onImportPackage}
-              disabled={projects.length === 0}
-              title={
-                projects.length === 0
-                  ? "Create or open a project before importing an exchange package."
-                  : "Open Project Exchange import in the most recent project."
-              }
+              title="Import a portable ReefVision project package as a new local project."
             >
-              Import package
+              Import project
             </button>
             <button
               type="button"
@@ -253,27 +248,28 @@ export function ProjectLauncher({
             </div>
           </div>
           <div className="rv-quick-start-grid">
-            <button type="button" onClick={() => onQuickStart("octocoral")}>
+            <button type="button" onClick={() => onQuickStart("blank")}>
               <span>01</span>
-              <strong>Octocoral monitoring</strong>
+              <strong>General image analysis</strong>
               <small>
-                Start with the six-class octocoral annotation template.
+                Empty class list for detection, segmentation, measurements,
+                classification, or custom scientific annotation.
               </small>
             </button>
             <button type="button" onClick={() => onQuickStart("blank")}>
               <span>02</span>
-              <strong>General image analysis</strong>
-              <small>
-                Blank project for detection, segmentation, measurements, or
-                classification.
-              </small>
-            </button>
-            <button type="button" onClick={() => onQuickStart("blank")}>
-              <span>03</span>
               <strong>Video + pose study</strong>
               <small>
-                Blank project ready for video tracking, repeated landmarks, and
-                behavior workflows.
+                Empty class list ready for video tracking, repeated landmarks,
+                behavior workflows, and custom taxonomies.
+              </small>
+            </button>
+            <button type="button" onClick={onImportPackage}>
+              <span>03</span>
+              <strong>Import existing project</strong>
+              <small>
+                Receive a portable ReefVision project from another computer or
+                collaborator.
               </small>
             </button>
           </div>

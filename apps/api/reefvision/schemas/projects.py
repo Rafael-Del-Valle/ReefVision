@@ -34,7 +34,7 @@ class ProjectCreate(BaseModel):
     description: str | None = Field(default=None, max_length=5000)
     georeference_height_offset_m: float = Field(default=0.0, ge=-10000.0, le=10000.0)
     georeference_height_evidence: str | None = Field(default=None, max_length=2000)
-    template: Literal["blank", "octocoral"] = "blank"
+    template: Literal["blank"] = "blank"
 
     @field_validator("name", "slug", "description", "georeference_height_evidence")
     @classmethod

@@ -21,17 +21,42 @@ from reefvision.db.models import (
     ReviewQueue,
     ReviewQueueItem,
 )
-from reefvision.domain.templates import OCTOCORAL_TEMPLATE
 from reefvision.main import create_app
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.tests.class_fixtures import seed_synthetic_label_classes
 
 
-def create_project(client: TestClient, **overrides: object) -> dict[str, Any]:
-    payload: dict[str, object] = {"name": "CPT Coral Study", "template": "octocoral"}
+def create_project(
+    client: TestClient,
+    **overrides: object,
+) -> dict[str, Any]:
+    seed_classes = bool(overrides.pop("seed_classes", True))
+
+    payload: dict[str, object] = {
+        "name": "CPT Coral Study",
+        "template": "blank",
+    }
     payload.update(overrides)
-    response = client.post("/api/v1/projects", json=payload)
+
+    response = client.post(
+        "/api/v1/projects",
+        json=payload,
+    )
+
     assert response.status_code == 201, response.text
-    return cast(dict[str, Any], response.json())
+
+    project = cast(
+        dict[str, Any],
+        response.json(),
+    )
+
+    if seed_classes:
+        project = seed_synthetic_label_classes(
+            client,
+            project,
+        )
+
+    return project
 
 
 def create_label_class(
@@ -54,22 +79,20 @@ def create_label_class(
     return cast(dict[str, Any], response.json())
 
 
-def test_octocoral_project_creation_and_restart_persistence(
+def test_blank_project_creation_and_restart_persistence(
     client: TestClient, test_settings: Settings
 ) -> None:
-    project = create_project(client)
+    project = create_project(client, seed_classes=False)
 
     assert project["slug"] == "cpt-coral-study"
-    classes = project["label_classes"]
-    assert [item["class_index"] for item in classes] == list(range(6))
-    assert [item["name"] for item in classes] == [item["name"] for item in OCTOCORAL_TEMPLATE]
+    assert project["label_classes"] == []
 
     storage_path = test_settings.resolved_data_dir / str(project["storage_root"])
     assert storage_path.is_dir()
 
     fetched = client.get(f"/api/v1/projects/{project['id']}")
     assert fetched.status_code == 200
-    assert fetched.json()["label_classes"] == classes
+    assert fetched.json()["label_classes"] == []
 
 
 def test_project_reopens_after_application_restart(tmp_path: Path) -> None:
@@ -93,16 +116,30 @@ def test_project_reopens_after_application_restart(tmp_path: Path) -> None:
         Base.metadata.drop_all(second_app.state.engine)
 
 
+def test_octocoral_template_is_not_a_supported_project_baseline(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/v1/projects",
+        json={
+            "name": "Legacy starter",
+            "template": "octocoral",
+        },
+    )
+
+    assert response.status_code == 422
+
+
 def test_generated_slugs_are_deterministically_disambiguated(client: TestClient) -> None:
-    first = create_project(client, name="Reef Study", template="blank")
-    second = create_project(client, name="Reef Study", template="blank")
+    first = create_project(client, name="Reef Study", seed_classes=False)
+    second = create_project(client, name="Reef Study", seed_classes=False)
 
     assert first["slug"] == "reef-study"
     assert second["slug"] == "reef-study-2"
 
 
 def test_explicit_duplicate_slug_is_rejected(client: TestClient) -> None:
-    create_project(client, name="One", slug="shared", template="blank")
+    create_project(client, name="One", slug="shared", seed_classes=False)
     response = client.post(
         "/api/v1/projects", json={"name": "Two", "slug": "shared", "template": "blank"}
     )
@@ -111,7 +148,7 @@ def test_explicit_duplicate_slug_is_rejected(client: TestClient) -> None:
 
 
 def test_project_archive_hides_from_default_dashboard(client: TestClient) -> None:
-    project = create_project(client, template="blank")
+    project = create_project(client, seed_classes=False)
 
     archived = client.post(f"/api/v1/projects/{project['id']}/archive")
     assert archived.status_code == 200
@@ -121,7 +158,7 @@ def test_project_archive_hides_from_default_dashboard(client: TestClient) -> Non
 
 
 def test_project_summaries_include_class_counts(client: TestClient) -> None:
-    create_project(client, template="octocoral")
+    create_project(client, seed_classes=True)
 
     response = client.get("/api/v1/project-summaries")
 
@@ -133,8 +170,8 @@ def test_project_summaries_include_class_counts(client: TestClient) -> None:
 
 
 def test_class_uniqueness_is_project_local(client: TestClient) -> None:
-    first = create_project(client, name="First", template="blank")
-    second = create_project(client, name="Second", template="blank")
+    first = create_project(client, name="First", seed_classes=False)
+    second = create_project(client, name="Second", seed_classes=False)
     class_payload = {
         "class_index": 0,
         "name": "Polyp",
@@ -159,7 +196,7 @@ def test_class_uniqueness_is_project_local(client: TestClient) -> None:
 
 
 def test_class_update_reorder_and_deactivate(client: TestClient) -> None:
-    project = create_project(client, template="octocoral")
+    project = create_project(client, seed_classes=True)
     label_class = project["label_classes"][0]
 
     updated = client.patch(
@@ -177,7 +214,7 @@ def test_class_update_reorder_and_deactivate(client: TestClient) -> None:
 
 
 def test_class_description_archive_restore_usage_and_delete(client: TestClient) -> None:
-    project = create_project(client, template="blank")
+    project = create_project(client, seed_classes=False)
     label_class = create_label_class(
         client,
         project["id"],
@@ -220,7 +257,7 @@ def test_class_description_archive_restore_usage_and_delete(client: TestClient) 
 
 
 def test_used_class_delete_is_blocked_and_usage_is_reported(client: TestClient) -> None:
-    project = create_project(client, template="blank")
+    project = create_project(client, seed_classes=False)
     source_class = create_label_class(
         client,
         project["id"],
@@ -537,7 +574,7 @@ def test_storage_path_cannot_escape_data_root(test_settings: Settings) -> None:
 
 
 def test_project_update_and_not_found(client: TestClient) -> None:
-    project = create_project(client, template="blank")
+    project = create_project(client, seed_classes=False)
     response = client.patch(
         f"/api/v1/projects/{project['id']}",
         json={"name": "Updated Study", "description": "Research-ready project"},
@@ -550,7 +587,7 @@ def test_project_update_and_not_found(client: TestClient) -> None:
 def test_project_georeference_height_offset_is_configurable(client: TestClient) -> None:
     project = create_project(
         client,
-        template="blank",
+        seed_classes=False,
         georeference_height_offset_m=5.0,
         georeference_height_evidence="Surveyed takeoff pad is 5 m above the water surface",
     )
@@ -591,7 +628,7 @@ def test_project_height_offset_creation_requires_evidence(client: TestClient) ->
 
 
 def test_project_height_offset_update_requires_evidence(client: TestClient) -> None:
-    project = create_project(client, template="blank")
+    project = create_project(client, seed_classes=False)
     response = client.patch(
         f"/api/v1/projects/{project['id']}",
         json={"georeference_height_offset_m": 5.0},
@@ -602,6 +639,6 @@ def test_project_height_offset_update_requires_evidence(client: TestClient) -> N
 def test_project_georeference_height_offset_defaults_to_unconfigured(
     client: TestClient,
 ) -> None:
-    project = create_project(client, template="blank")
+    project = create_project(client, seed_classes=False)
     assert project["georeference_height_offset_m"] == 0.0
     assert project["georeference_height_evidence"] is None

@@ -235,7 +235,7 @@ export interface ProjectCreate {
   description?: string;
   georeference_height_offset_m?: number;
   georeference_height_evidence?: string;
-  template: "blank" | "octocoral";
+  template: "blank";
 }
 
 export interface LabelClassCreate {

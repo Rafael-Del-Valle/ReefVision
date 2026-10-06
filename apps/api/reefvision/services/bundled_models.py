@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import sys
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -16,6 +17,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import Job
+from reefvision.ml.optional_transformers_runtime import OPTIONAL_MODEL_SPECS
 from reefvision.services.model_catalog import _load_static_model_catalog
 from reefvision.storage.catalog_models import (
     catalog_asset_path,
@@ -261,6 +263,118 @@ def install_bundled_catalog_models(settings: Settings) -> tuple[list[str], list[
             },
         )
         installed.append(entry.catalog_id)
+
+    provider_assets = bundle_manifest.get(
+        "provider_assets",
+        {},
+    )
+
+    if isinstance(provider_assets, dict):
+        for provider_id, raw_record in provider_assets.items():
+            if provider_id != "smolvlm":
+                continue
+
+            if not isinstance(raw_record, dict):
+                warnings.append(f"Bundled provider metadata is invalid for {provider_id}.")
+                continue
+
+            spec = OPTIONAL_MODEL_SPECS.get(provider_id)
+
+            if spec is None:
+                warnings.append(
+                    f"Bundled provider is unknown to this ReefVision build: {provider_id}."
+                )
+                continue
+
+            raw_files = raw_record.get("files")
+
+            if not isinstance(raw_files, list) or not raw_files:
+                warnings.append(f"Bundled provider file list is missing for {provider_id}.")
+                continue
+
+            target_root = settings.resolved_data_dir / "provider-models" / provider_id
+
+            target_root.mkdir(parents=True, exist_ok=True)
+
+            provider_failed = False
+
+            for raw_file in raw_files:
+                if not isinstance(raw_file, dict):
+                    provider_failed = True
+                    break
+
+                filename = str(raw_file.get("filename") or "")
+                relative_path = str(raw_file.get("relative_path") or "")
+                expected_sha = str(raw_file.get("sha256") or "")
+                expected_size = int(raw_file.get("size_bytes") or 0)
+
+                if (
+                    not filename
+                    or Path(filename).name != filename
+                    or not relative_path
+                    or len(expected_sha) != 64
+                    or expected_size <= 0
+                ):
+                    provider_failed = True
+                    break
+
+                source = (bundle_root / relative_path).resolve()
+
+                try:
+                    source.relative_to(bundle_root.resolve())
+                except ValueError:
+                    provider_failed = True
+                    break
+
+                if (
+                    not source.is_file()
+                    or source.stat().st_size != expected_size
+                    or _sha256(source) != expected_sha
+                ):
+                    provider_failed = True
+                    break
+
+                destination = target_root / filename
+
+                if (
+                    destination.is_file()
+                    and destination.stat().st_size == expected_size
+                    and _sha256(destination) == expected_sha
+                ):
+                    continue
+
+                temporary = destination.with_suffix(destination.suffix + ".bundled.part")
+
+                temporary.unlink(missing_ok=True)
+                shutil.copyfile(source, temporary)
+
+                if temporary.stat().st_size != expected_size or _sha256(temporary) != expected_sha:
+                    temporary.unlink(missing_ok=True)
+                    provider_failed = True
+                    break
+
+                os.replace(temporary, destination)
+
+            if provider_failed:
+                warnings.append(f"Could not verify/install bundled provider {provider_id}.")
+                continue
+
+            manifest_path = target_root / ".reefvision-model.json"
+
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "model": asdict(spec),
+                        "transformers_version": None,
+                        "cache_source": "reefvision",
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
 
     return installed, warnings
 

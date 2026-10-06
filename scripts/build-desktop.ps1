@@ -100,7 +100,7 @@ $BundledModels = Join-Path $Root ".desktop\bundled-models"
 # Verified files already present in .desktop\bundled-models are reused, so only
 # a changed catalog entry requires another network download on the build machine.
 Write-ReefVisionStep "Staging verified pretrained catalog checkpoints"
-& $VenvPython $BundleScript --catalog $ModelCatalog --output $BundledModels
+& $VenvPython $BundleScript --catalog $ModelCatalog --output $BundledModels --include-base-assistant
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to stage the pretrained catalog checkpoints."
 }
@@ -112,6 +112,13 @@ $BundleMetadata = Get-Content -LiteralPath $BundledManifest -Raw | ConvertFrom-J
 if ($BundleMetadata.asset_count -le 0) {
     throw "The desktop installer model bundle contains no checkpoints."
 }
+if (
+    $null -eq $BundleMetadata.provider_assets -or
+    $null -eq $BundleMetadata.provider_assets.smolvlm
+) {
+    throw "Base Research Assistant model is missing from the desktop bundle."
+}
+
 Write-Host "Bundling $($BundleMetadata.asset_count) verified checkpoints ($([math]::Round($BundleMetadata.total_size_bytes / 1MB, 1)) MB)." -ForegroundColor Green
 
 & (Join-Path $PSScriptRoot "build-desktop-backend.ps1") -TargetTriple $TargetTriple

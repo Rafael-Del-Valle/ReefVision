@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import sys
 import urllib.request
 from contextlib import suppress
@@ -93,7 +94,12 @@ def _download(
         raise
 
 
-def stage_models(catalog_path: Path, output_root: Path) -> dict[str, Any]:
+def stage_models(
+    catalog_path: Path,
+    output_root: Path,
+    *,
+    include_base_assistant: bool = False,
+) -> dict[str, Any]:
     payload = json.loads(catalog_path.read_text(encoding="utf-8"))
     models = payload.get("models")
     if not isinstance(models, list):
@@ -183,13 +189,93 @@ def stage_models(catalog_path: Path, output_root: Path) -> dict[str, Any]:
             "revision": first.get("revision"),
         }
 
+    provider_assets: dict[str, dict[str, Any]] = {}
+
+    if include_base_assistant:
+        api_root = Path(__file__).resolve().parents[1] / "apps" / "api"
+        if str(api_root) not in sys.path:
+            sys.path.insert(0, str(api_root))
+
+        from huggingface_hub import snapshot_download
+
+        from reefvision.ml.optional_transformers_runtime import (
+            OPTIONAL_MODEL_SPECS,
+        )
+
+        spec = OPTIONAL_MODEL_SPECS["smolvlm"]
+
+        print(f"Bundling base Research Assistant model: {spec.display_name}")
+
+        snapshot = Path(
+            snapshot_download(
+                repo_id=spec.repo_id,
+                revision=spec.revision,
+                allow_patterns=list(spec.allow_patterns),
+                local_files_only=False,
+            )
+        )
+
+        provider_root = output_root / "provider-models" / spec.provider_id
+
+        if provider_root.exists():
+            shutil.rmtree(provider_root)
+
+        provider_root.mkdir(parents=True, exist_ok=True)
+
+        provider_files: list[dict[str, Any]] = []
+
+        for pattern in spec.allow_patterns:
+            source = snapshot / pattern
+            if not source.is_file():
+                continue
+
+            destination = provider_root / source.name
+            shutil.copy2(source, destination)
+
+            digest = _sha256(destination)
+            size = destination.stat().st_size
+
+            provider_files.append(
+                {
+                    "filename": destination.name,
+                    "relative_path": destination.relative_to(output_root).as_posix(),
+                    "sha256": digest,
+                    "size_bytes": size,
+                }
+            )
+
+            total_bytes += size
+
+        weight = provider_root / spec.weight_filename
+
+        if not weight.is_file():
+            raise RuntimeError(f"Base SmolVLM bundle is missing {spec.weight_filename}")
+
+        actual_weight_sha = _sha256(weight)
+
+        if spec.weight_sha256 is not None and actual_weight_sha != spec.weight_sha256:
+            raise RuntimeError("Base SmolVLM weight failed pinned checksum verification")
+
+        provider_assets[spec.provider_id] = {
+            "provider_id": spec.provider_id,
+            "display_name": spec.display_name,
+            "repo_id": spec.repo_id,
+            "revision": spec.revision,
+            "weight_filename": spec.weight_filename,
+            "weight_sha256": spec.weight_sha256,
+            "license_summary": spec.license_summary,
+            "files": provider_files,
+        }
+
     manifest = {
         "manifest_version": MANIFEST_VERSION,
         "catalog_schema_version": payload.get("schema_version"),
         "catalog_version": payload.get("catalog_version"),
         "asset_count": len(assets),
+        "provider_asset_count": len(provider_assets),
         "total_size_bytes": total_bytes,
         "assets": assets,
+        "provider_assets": provider_assets,
     }
     manifest_path = output_root / "manifest.json"
     temporary_manifest = manifest_path.with_suffix(".json.part")
@@ -205,6 +291,21 @@ def stage_models(catalog_path: Path, output_root: Path) -> dict[str, Any]:
                     relative_path = str(file_record.get("relative_path") or "")
                     if relative_path:
                         declared_paths.add(output_root / relative_path)
+
+    for provider_record in provider_assets.values():
+        files = provider_record.get("files")
+
+        if not isinstance(files, list):
+            continue
+
+        for file_record in files:
+            if not isinstance(file_record, dict):
+                continue
+
+            relative_path = str(file_record.get("relative_path") or "")
+
+            if relative_path:
+                declared_paths.add(output_root / relative_path)
 
     for candidate in output_root.rglob("*"):
         if candidate.is_file() and candidate not in declared_paths:
@@ -229,8 +330,17 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--catalog", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--include-base-assistant",
+        action="store_true",
+        help="Bundle pinned SmolVLM for the offline Research Assistant.",
+    )
     args = parser.parse_args()
-    stage_models(args.catalog.resolve(), args.output.resolve())
+    stage_models(
+        args.catalog.resolve(),
+        args.output.resolve(),
+        include_base_assistant=args.include_base_assistant,
+    )
     return 0
 
 

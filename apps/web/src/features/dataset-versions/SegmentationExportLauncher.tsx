@@ -131,16 +131,9 @@ export function SegmentationExportLauncher() {
       {!editorOpen && (
         <button
           type="button"
-          className="secondary"
+          className="secondary rv-dataset-export-launcher"
           data-testid="open-dataset-export-launcher"
           onClick={() => setOpen(true)}
-          style={{
-            position: "fixed",
-            left: "1rem",
-            bottom: "1rem",
-            zIndex: 40,
-            boxShadow: "0 0.5rem 1.5rem rgba(0, 0, 0, 0.22)",
-          }}
         >
           Dataset exports
         </button>
@@ -148,9 +141,8 @@ export function SegmentationExportLauncher() {
 
       {open && !editorOpen && (
         <div
-          className="modal-backdrop"
+          className="modal-backdrop rv-dataset-export-backdrop"
           role="presentation"
-          style={{ zIndex: 12000 }}
         >
           <section
             className="modal"

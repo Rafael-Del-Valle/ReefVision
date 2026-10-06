@@ -2381,3 +2381,142 @@
     border-color: Highlight;
   }
 }
+
+/* =====================================================================
+   ReefVision 1.0 RC polish:
+   opaque utility surfaces, non-overlapping launchers, denser video layout
+   ===================================================================== */
+
+.rv-research-assistant {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 11000;
+}
+
+.rv-research-assistant.open {
+  width: min(27rem, calc(100vw - 2rem));
+}
+
+.rv-research-assistant-panel {
+  max-height: min(46rem, calc(100vh - 2rem));
+  overflow: auto;
+  border: 1px solid var(--rv-border);
+  background: #10191c !important;
+  opacity: 1 !important;
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.62);
+  backdrop-filter: none !important;
+}
+
+.rv-research-assistant-panel .annotation-selection-row,
+.rv-research-assistant-panel details,
+.rv-research-assistant-panel textarea,
+.rv-research-assistant-panel select {
+  background-color: #182327;
+}
+
+.rv-dataset-export-launcher {
+  position: fixed !important;
+  right: 10.5rem !important;
+  left: auto !important;
+  bottom: 1rem !important;
+  z-index: 10900 !important;
+  border-color: var(--rv-border) !important;
+  background: #162328 !important;
+  opacity: 1 !important;
+  box-shadow: 0 0.65rem 1.75rem rgba(0, 0, 0, 0.48) !important;
+  backdrop-filter: none !important;
+}
+
+.rv-dataset-export-backdrop {
+  z-index: 12000;
+}
+
+body:has([data-testid="reefvision-assistant"][data-open="true"])
+  .rv-dataset-export-launcher {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+.rv-project-baseline-note,
+.rv-project-import-summary {
+  padding: 0.85rem;
+  border: 1px solid var(--rv-border);
+  border-radius: 0.75rem;
+  background: #152125;
+}
+
+.rv-project-baseline-note p {
+  margin: 0.35rem 0 0;
+  color: var(--rv-muted-strong);
+  line-height: 1.45;
+}
+
+.rv-project-import-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.rv-project-import-summary > div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.rv-project-import-summary span {
+  color: var(--rv-muted);
+  font-size: 0.72rem;
+}
+
+.rv-project-import-dialog {
+  background: #10191c;
+}
+
+/* Video workspace should use the full scientific stage rather than leaving
+   a narrow import column and a large unused void. */
+[data-testid="video-tracking-workspace"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 1rem;
+}
+
+[data-testid="video-tracking-workspace"] > .workspace-guide-card {
+  grid-column: 1 / -1;
+}
+
+[data-testid="video-tracking-workspace"] > .management-card {
+  min-width: 0;
+  width: 100%;
+}
+
+[data-testid="video-tracking-workspace"] > .management-card > label,
+[data-testid="video-tracking-workspace"] > .management-card > button {
+  width: 100%;
+}
+
+@media (max-width: 74rem) {
+  [data-testid="video-tracking-workspace"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  [data-testid="video-tracking-workspace"] > .workspace-guide-card {
+    grid-column: 1;
+  }
+}
+
+@media (max-width: 48rem) {
+  .rv-research-assistant.open {
+    right: 0.5rem;
+    bottom: 0.5rem;
+    width: calc(100vw - 1rem);
+  }
+
+  .rv-dataset-export-launcher {
+    right: 0.5rem !important;
+    bottom: 4.5rem !important;
+  }
+
+  .rv-project-import-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

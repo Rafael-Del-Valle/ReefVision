@@ -51,6 +51,7 @@ import {
 } from "./components/ui/AsyncState";
 import { StatusBadge } from "./components/ui/StatusBadge";
 import { ProjectLauncher } from "./components/layout/ProjectLauncher";
+import { ProjectImportDialog } from "./components/layout/ProjectImportDialog";
 import { ScientistWorkspaceInspector } from "./components/layout/ScientistWorkspaceInspector";
 import { ProjectWorkbenchShell } from "./components/layout/ProjectWorkbenchShell";
 import { DetachedInspectorWindow } from "./components/layout/DetachedInspectorWindow";
@@ -217,6 +218,7 @@ function ReefVisionMainApp() {
     null,
   );
   const [showCreate, setShowCreate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [editorLaunch, setEditorLaunch] =
     useState<AnnotationLaunchState | null>(null);
   const [trainingCatalogModelId, setTrainingCatalogModelId] = useState<
@@ -225,7 +227,6 @@ function ReefVisionMainApp() {
   const [activeView, setActiveView] = useState<ProjectView>("gallery");
   const [projectName, setProjectName] = useState("");
   const [description, setDescription] = useState("");
-  const [template, setTemplate] = useState<"blank" | "octocoral">("octocoral");
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [workspacePresetId, setWorkspacePresetId] =
     useState<WorkspacePresetId>("annotation");
@@ -262,7 +263,7 @@ function ReefVisionMainApp() {
   });
   const createMutation = useMutation({
     mutationFn: () =>
-      createProject({ name: projectName, description, template }),
+      createProject({ name: projectName, description, template: "blank" }),
     onSuccess: async (created) => {
       setShowCreate(false);
       setProjectName("");
@@ -685,8 +686,7 @@ function ReefVisionMainApp() {
                   : "ready"
             }
             onCreateProject={() => setShowCreate(true)}
-            onQuickStart={(nextTemplate) => {
-              setTemplate(nextTemplate);
+            onQuickStart={() => {
               setShowCreate(true);
             }}
             onOpenProject={(projectId) => {
@@ -695,15 +695,7 @@ function ReefVisionMainApp() {
               setActiveView("gallery");
             }}
             onImportPackage={() => {
-              const target = [...(projectSummaries.data ?? [])].sort(
-                (a, b) =>
-                  new Date(b.updated_at).getTime() -
-                  new Date(a.updated_at).getTime(),
-              )[0];
-              if (!target) return;
-              setSelectedProjectId(target.id);
-              setEditorLaunch(null);
-              setActiveView("interoperability");
+              setShowImport(true);
             }}
             onOpenSystem={() => {
               setSelectedProjectId(null);
@@ -1015,20 +1007,14 @@ function ReefVisionMainApp() {
                   onChange={(event) => setDescription(event.target.value)}
                 />
               </label>
-              <label>
-                Class template
-                <select
-                  value={template}
-                  onChange={(event) =>
-                    setTemplate(event.target.value as "blank" | "octocoral")
-                  }
-                >
-                  <option value="octocoral">
-                    Six-class octocoral template
-                  </option>
-                  <option value="blank">Blank class list</option>
-                </select>
-              </label>
+              <div className="rv-project-baseline-note">
+                <strong>Empty class list</strong>
+                <p>
+                  ReefVision projects start without a built-in taxonomy. Add
+                  study-specific classes in the Classes workspace after
+                  creation.
+                </p>
+              </div>
               <div className="modal-actions">
                 <button
                   type="button"
@@ -1047,6 +1033,17 @@ function ReefVisionMainApp() {
             </form>
           </section>
         </div>
+      )}
+      {showImport && (
+        <ProjectImportDialog
+          onClose={() => setShowImport(false)}
+          onImported={(projectId) => {
+            setShowImport(false);
+            setSelectedProjectId(projectId);
+            setEditorLaunch(null);
+            setActiveView("gallery");
+          }}
+        />
       )}
       {showOnboarding && (
         <OnboardingModal
