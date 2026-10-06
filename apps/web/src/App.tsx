@@ -596,6 +596,9 @@ function ReefVisionMainApp() {
 
   return (
     <main className="app-shell">
+      <a className="rv-skip-link" href="#reefvision-main-content">
+        Skip to main content
+      </a>
       <header className="rv-global-bar">
         <div className="rv-global-brand">
           <span className="rv-brand-mark" aria-hidden="true">
@@ -665,7 +668,11 @@ function ReefVisionMainApp() {
         </div>
       </header>
 
-      <section className="rv-phase12-surface">
+      <section
+        id="reefvision-main-content"
+        className="rv-phase12-surface"
+        tabIndex={-1}
+      >
         {!selectedProjectId && activeView !== "system" && (
           <ProjectLauncher
             projects={projectSummaries.data ?? []}

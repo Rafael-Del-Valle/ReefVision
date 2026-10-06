@@ -72,7 +72,9 @@ const baseImage = {
 async function mountBuiltApp(page: Parameters<typeof test>[0]["page"]) {
   const assetDirectory = path.resolve("dist/assets");
   const assets = await readdir(assetDirectory);
-  const scriptName = assets.find((name) => name.endsWith(".js"));
+  const scriptName = assets.find(
+    (name) => name.startsWith("index-") && name.endsWith(".js"),
+  );
   const styleName = assets.find((name) => name.endsWith(".css"));
   if (!scriptName || !styleName) {
     throw new Error("Vite build assets are missing");

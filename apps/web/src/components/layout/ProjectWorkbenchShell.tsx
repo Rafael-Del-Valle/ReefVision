@@ -131,7 +131,7 @@ export function ProjectWorkbenchShell({
     return () => {
       void closeDetachedPanelWindow(project.id, "inspector");
     };
-  }, [project.id, project.name, inspector]);
+  }, [project.id, project.name]);
 
   useEffect(() => {
     if (typeof BroadcastChannel === "undefined") {
@@ -377,7 +377,8 @@ export function ProjectWorkbenchShell({
                   <button
                     type="button"
                     className="secondary"
-                    aria-pressed={!layout.inspectorCollapsed}
+                    aria-expanded={!layout.inspectorCollapsed}
+                    aria-controls="reefvision-workspace-inspector"
                     onClick={() =>
                       patchLayout({
                         inspectorCollapsed: !layout.inspectorCollapsed,
@@ -457,6 +458,7 @@ export function ProjectWorkbenchShell({
 
       {!layout.inspectorCollapsed && !layout.inspectorDetached && (
         <aside
+          id="reefvision-workspace-inspector"
           className="rv-workbench-inspector"
           aria-label="Workspace inspector"
         >

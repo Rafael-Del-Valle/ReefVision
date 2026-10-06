@@ -662,7 +662,13 @@
   }
 
   .rv-workbench-inspector {
-    display: none;
+    position: fixed;
+    top: 3.6rem;
+    right: 0;
+    z-index: 45;
+    display: block;
+    width: min(20rem, calc(100vw - 5rem));
+    box-shadow: -1rem 0 3rem rgba(0, 0, 0, 0.36);
   }
 }
 
@@ -2284,5 +2290,76 @@
   .rv-detached-panel-banner {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+/* Phase 12E final accessibility + responsive hardening */
+
+.rv-skip-link {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 1000;
+  padding: 0.65rem 0.85rem;
+  border: 2px solid var(--rv-accent);
+  border-radius: 0.55rem;
+  background: var(--rv-background, #081012);
+  color: var(--rv-text);
+  font-weight: 750;
+  text-decoration: none;
+  transform: translateY(-180%);
+}
+
+.rv-skip-link:focus {
+  transform: translateY(0);
+}
+
+#reefvision-main-content:focus {
+  outline: none;
+}
+
+.rv-workbench-inspector {
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 46rem) {
+  .rv-workbench-inspector {
+    right: 0.5rem;
+    width: calc(100vw - 1rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  button:hover:not(:disabled) {
+    transform: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .rv-review-mode-banner,
+  .rv-detached-panel-banner,
+  .rv-panel-layout-error,
+  .rv-inspector-card,
+  .rv-media-viewer,
+  .rv-media-context {
+    border-color: CanvasText;
+  }
+
+  .rv-filmstrip-status {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+  }
+
+  .rv-skip-link {
+    border-color: Highlight;
   }
 }

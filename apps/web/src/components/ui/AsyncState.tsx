@@ -34,7 +34,11 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="empty-state shared-empty-state">
+    <div
+      className="empty-state shared-empty-state"
+      role="status"
+      aria-live="polite"
+    >
       <span className="empty-state-mark" aria-hidden="true">
         +
       </span>
@@ -70,9 +74,13 @@ export function ErrorState({
         <p>{message}</p>
         {(onRetry || onBack) && (
           <div className="state-actions">
-            {onRetry && <button onClick={onRetry}>Retry</button>}
+            {onRetry && (
+              <button type="button" onClick={onRetry}>
+                Retry
+              </button>
+            )}
             {onBack && (
-              <button className="secondary" onClick={onBack}>
+              <button type="button" className="secondary" onClick={onBack}>
                 Go back
               </button>
             )}

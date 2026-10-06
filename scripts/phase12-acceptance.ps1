@@ -49,7 +49,7 @@ try {
 
     Write-Host ""
     Write-Host "=== PHASE 12 FOCUSED TESTS ==="
-    npm test -- src/components/layout/ProjectLauncher.test.tsx src/components/layout/workspacePresets.test.ts src/components/layout/ScientistWorkspaceInspector.test.tsx src/components/layout/ProjectInferenceInspector.test.tsx src/components/layout/ProjectMorphometricsInspector.test.tsx src/components/layout/ProjectTrainingMonitor.test.tsx src/components/layout/ProjectReviewInspector.test.tsx src/components/layout/ProjectVideoPoseInspector.test.tsx src/components/layout/detachedPanelBridge.test.ts src/components/layout/DetachedInspectorWindow.test.tsx src/components/layout/ProjectWorkbenchShell.test.tsx src/features/gallery/Gallery.test.tsx src/features/annotation-editor/EnhancedAnnotationEditor.test.tsx src/features/annotation-editor/MaskMeasurementPanel.test.tsx src/features/training/TrainingWorkspace.test.tsx src/features/video/VideoTrackingWorkspace.test.tsx src/App.test.tsx
+    npm test -- src/components/ui/AsyncState.test.tsx src/components/layout/ProjectLauncher.test.tsx src/components/layout/workspacePresets.test.ts src/components/layout/ScientistWorkspaceInspector.test.tsx src/components/layout/ProjectInferenceInspector.test.tsx src/components/layout/ProjectMorphometricsInspector.test.tsx src/components/layout/ProjectTrainingMonitor.test.tsx src/components/layout/ProjectReviewInspector.test.tsx src/components/layout/ProjectVideoPoseInspector.test.tsx src/components/layout/detachedPanelBridge.test.ts src/components/layout/DetachedInspectorWindow.test.tsx src/components/layout/ProjectWorkbenchShell.test.tsx src/components/layout/ProjectWorkbenchShellStability.test.tsx src/features/gallery/Gallery.test.tsx src/features/annotation-editor/EnhancedAnnotationEditor.test.tsx src/features/annotation-editor/MaskMeasurementPanel.test.tsx src/features/training/TrainingWorkspace.test.tsx src/features/video/VideoTrackingWorkspace.test.tsx src/App.test.tsx
     if ($LASTEXITCODE -ne 0) {
         throw "Phase 12 focused UI tests failed."
     }
@@ -96,3 +96,7 @@ Write-Host "[ ] Training inspector shows canonical live run status, progress, me
 Write-Host "[ ] Review inspector mirrors the selected canonical queue, shows ranked reasons/QC state, and opens evidence in the annotation editor without auto-verifying it."
 Write-Host "[ ] Video inspector mirrors canonical video/track/frame state and provides timeline plus pose-keyframe navigation without duplicating pose scientific state."
 Write-Host "[ ] Inspector can detach into a native Tauri window, retain live project context, remember detached geometry, relay controls to canonical workspaces, and dock back without changing scientific truth."
+Write-Host "[ ] Keyboard users can skip directly to the scientist workspace and all layout controls remain operable without pointer input."
+Write-Host "[ ] Minimum supported desktop sizing avoids horizontal page overflow and keeps the contextual inspector reachable as an overlay."
+Write-Host "[ ] Reduced-motion and Windows forced-colors preferences preserve usable controls and scientific state boundaries."
+Write-Host "[ ] Loading, empty, and error states expose appropriate status/alert semantics and explicit recovery actions."
