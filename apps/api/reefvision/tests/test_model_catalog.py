@@ -11,15 +11,21 @@ from reefvision.services import model_catalog as model_catalog_service
 from reefvision.tests.test_annotations import create_project
 
 
-def test_source_catalog_is_schema_v2_and_contains_required_models() -> None:
-    path = model_catalog_service._resolve_catalog_resource(
-        model_catalog_service.MODEL_CATALOG_FILENAME
+def _source_model_catalog_path() -> Path:
+    return (
+        Path(__file__).resolve().parents[4]
+        / "config"
+        / model_catalog_service.MODEL_CATALOG_FILENAME
     )
+
+
+def test_source_catalog_is_schema_v2_and_contains_required_models() -> None:
+    path = _source_model_catalog_path()
     payload = json.loads(path.read_text(encoding="utf-8"))
 
     assert path.name == "model_catalog.json"
     assert payload["schema_version"] == 2
-    assert payload["catalog_version"] == "2.0.0"
+    assert payload["catalog_version"] == model_catalog_service.EXPECTED_MODEL_CATALOG_VERSION
     ids = {entry["catalog_id"] for entry in payload["models"]}
     assert len(ids) == len(payload["models"])
     assert len(ids) >= 43
@@ -115,11 +121,7 @@ def test_smart_mask_catalog_filters_only_by_task(client: TestClient) -> None:
 def test_invalid_entry_is_reported_without_rejecting_catalog(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    source = json.loads(
-        model_catalog_service._resolve_catalog_resource(
-            model_catalog_service.MODEL_CATALOG_FILENAME
-        ).read_text(encoding="utf-8")
-    )
+    source = json.loads(_source_model_catalog_path().read_text(encoding="utf-8"))
     source["models"][0].pop("display_name")
     (tmp_path / model_catalog_service.MODEL_CATALOG_FILENAME).write_text(
         json.dumps(source), encoding="utf-8"
@@ -153,7 +155,7 @@ def test_missing_catalog_returns_structured_error(
         assert detail["expected_path"].endswith("model_catalog.json")
         assert detail["execution_mode"]
         assert detail["application_version"]
-        assert detail["catalog_version"] == "2.0.0"
+        assert detail["catalog_version"] == model_catalog_service.EXPECTED_MODEL_CATALOG_VERSION
         assert detail["recovery_action"]
     finally:
         model_catalog_service.clear_model_catalog_cache()
@@ -233,3 +235,58 @@ def test_bootstrap_auxiliary_failure_keeps_catalog_visible(
     degraded_catalog_ids = {item["catalog_id"] for item in payload["catalog"]["models"]}
     assert degraded_catalog_ids == baseline_catalog_ids
     assert len(payload["validation_warnings"]) == (len(baseline_payload["validation_warnings"]) + 4)
+
+
+def test_all_available_models_have_real_install_paths() -> None:
+    path = model_catalog_service._resolve_catalog_resource(
+        model_catalog_service.MODEL_CATALOG_FILENAME
+    )
+    payload = json.loads(path.read_text(encoding="utf-8"))
+
+    provider_backed = {
+        "grounding_dino",
+        "sam2",
+        "smolvlm",
+        "video_depth_anything",
+        "scale_label_ocr",
+    }
+
+    optional_network = 0
+
+    for entry in payload["models"]:
+        if entry["availability"] != "available":
+            continue
+
+        assert entry["selection_kind"] == "managed_catalog_model"
+
+        if entry["expected_files"]:
+            for expected in entry["expected_files"]:
+                assert expected["source_url"].startswith("https://")
+                assert len(expected["sha256"]) == 64
+                assert expected["size_bytes"] > 0
+
+            if entry["desktop_package_status"] == "optional_network_download":
+                optional_network += 1
+            else:
+                assert entry["desktop_package_status"] in {
+                    "base_sidecar_provider",
+                    "base_bundled_checkpoint",
+                }
+        else:
+            assert entry["provider_id"] in provider_backed
+
+    assert optional_network == 17
+
+
+def test_sam2_preserves_native_pinned_provider_route() -> None:
+    path = model_catalog_service._resolve_catalog_resource(
+        model_catalog_service.MODEL_CATALOG_FILENAME
+    )
+    payload = json.loads(path.read_text(encoding="utf-8"))
+
+    sam2 = next(entry for entry in payload["models"] if entry["catalog_id"] == "sam2/image/base")
+
+    assert sam2["availability"] == "available"
+    assert sam2["provider_id"] == "sam2"
+    assert sam2["download_source_type"] == "huggingface_pinned_revision"
+    assert sam2["expected_files"] == []

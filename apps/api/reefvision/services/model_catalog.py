@@ -44,7 +44,7 @@ from reefvision.storage.catalog_models import (
 MODEL_CATALOG_FILENAME = "model_catalog.json"
 TRACKER_CATALOG_FILENAME = "tracker_catalog.json"
 EXPECTED_MODEL_CATALOG_SCHEMA = 2
-EXPECTED_MODEL_CATALOG_VERSION = "2.0.0"
+EXPECTED_MODEL_CATALOG_VERSION = "2.1.0"
 
 
 @dataclass(frozen=True)

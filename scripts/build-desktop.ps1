@@ -97,6 +97,15 @@ $BundleScript = Join-Path $PSScriptRoot "stage-bundled-models.py"
 $ModelCatalog = Join-Path $Root "config\model_catalog.json"
 $BundledModels = Join-Path $Root ".desktop\bundled-models"
 
+$ModelAuditScript = Join-Path $PSScriptRoot "audit-model-downloadability.py"
+
+Write-ReefVisionStep "Auditing shipped Model Hub downloadability"
+& $VenvPython $ModelAuditScript --catalog $ModelCatalog
+if ($LASTEXITCODE -ne 0) {
+    throw "Model Hub downloadability audit failed."
+}
+
+
 # Verified files already present in .desktop\bundled-models are reused, so only
 # a changed catalog entry requires another network download on the build machine.
 Write-ReefVisionStep "Staging verified pretrained catalog checkpoints"

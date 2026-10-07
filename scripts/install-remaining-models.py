@@ -56,11 +56,14 @@ OPTIONAL_MODELS: tuple[OptionalModel, ...] = (
             task="segment",
             architecture="YOLO11",
             variant=size,
-            display_summary=f"Official YOLO11 {size.upper()} pretrained instance-segmentation checkpoint.",
+            display_summary=(
+                f"Official YOLO11 {size.upper()} pretrained instance-segmentation checkpoint."
+            ),
             provider_version="8.3.228",
             provider_pack_id="ultralytics-base",
             limitations=(
-                "ReefVision currently converts segmentation results into boxed review proposals; mask editing remains under development.",
+                "ReefVision currently converts segmentation results into boxed "
+                "review proposals; mask editing remains under development.",
                 "Segmentation training is not enabled in the current Training workspace.",
             ),
         )
@@ -74,12 +77,15 @@ OPTIONAL_MODELS: tuple[OptionalModel, ...] = (
             task="segment",
             architecture="YOLOv8",
             variant=size,
-            display_summary=f"Official YOLOv8 {size.upper()} pretrained instance-segmentation checkpoint.",
+            display_summary=(
+                f"Official YOLOv8 {size.upper()} pretrained instance-segmentation checkpoint."
+            ),
             provider_version="8.3.228",
             provider_pack_id="ultralytics-base",
             preferred_tags=("v8.2.0", "v8.3.0", "v8.1.0", "v0.0.0"),
             limitations=(
-                "ReefVision currently converts segmentation results into boxed review proposals; mask editing remains under development.",
+                "ReefVision currently converts segmentation results into boxed "
+                "review proposals; mask editing remains under development.",
                 "Segmentation training is not enabled in the current Training workspace.",
             ),
         )
@@ -119,7 +125,10 @@ OPTIONAL_MODELS: tuple[OptionalModel, ...] = (
         display_summary="Official SAM ViT-B compatible checkpoint for Smart Mask prompting.",
         provider_version="1.0+reefvision-pack",
         provider_pack_id=None,
-        limitations=("This Ultralytics-distributed SAM checkpoint is loaded through the packaged Smart Mask adapter.",),
+        limitations=(
+            "This Ultralytics-distributed SAM checkpoint is loaded through "
+            "the packaged Smart Mask adapter.",
+        ),
     ),
     OptionalModel(
         catalog_id="sam2/image/base",
@@ -154,7 +163,9 @@ OPTIONAL_MODELS: tuple[OptionalModel, ...] = (
         display_summary="Official FastSAM Small checkpoint for fast Smart Mask proposals.",
         provider_version="1.0+reefvision-pack",
         provider_pack_id=None,
-        limitations=("FastSAM point and box prompting is adapted to ReefVision's Smart Mask interface.",),
+        limitations=(
+            "FastSAM point and box prompting is adapted to ReefVision's Smart Mask interface.",
+        ),
     ),
     OptionalModel(
         catalog_id="ultralytics/yolo_world/base",
@@ -167,7 +178,9 @@ OPTIONAL_MODELS: tuple[OptionalModel, ...] = (
         provider_version="8.3.228",
         provider_pack_id="ultralytics-base",
         preferred_tags=("v8.2.0", "v8.3.0", "v8.1.0", "v0.0.0"),
-        limitations=("Text-class prompt controls are not yet exposed in the ReefVision interface.",),
+        limitations=(
+            "Text-class prompt controls are not yet exposed in the ReefVision interface.",
+        ),
     ),
     OptionalModel(
         catalog_id="ultralytics/yoloe/base",
@@ -179,13 +192,15 @@ OPTIONAL_MODELS: tuple[OptionalModel, ...] = (
         display_summary="Official YOLOE-11 Small prompt-free segmentation checkpoint.",
         provider_version="8.3.228",
         provider_pack_id="ultralytics-base",
-        limitations=("Prompt controls and native mask review are not yet exposed in the ReefVision interface.",),
+        limitations=(
+            "Prompt controls and native mask review are not yet exposed "
+            "in the ReefVision interface.",
+        ),
     ),
 )
 
 
 UNIMPLEMENTED_CATALOG_IDS: tuple[str, ...] = (
-    "transformers/grounding_dino/tiny",
     "transformers/grounding_dino/base",
     "transformers/owlv2/base",
     "transformers/owlv2/large",
@@ -238,7 +253,10 @@ def download_official_asset(model: OptionalModel, destination: Path) -> str:
         )
         try:
             print(f"Downloading {model.filename} from {url}")
-            with urllib.request.urlopen(request, timeout=60) as response, partial.open("wb") as output:
+            with (
+                urllib.request.urlopen(request, timeout=60) as response,
+                partial.open("wb") as output,
+            ):
                 shutil.copyfileobj(response, output, length=CHUNK_SIZE)
             if partial.stat().st_size <= 0:
                 raise OSError("downloaded file is empty")
@@ -248,8 +266,7 @@ def download_official_asset(model: OptionalModel, destination: Path) -> str:
             partial.unlink(missing_ok=True)
             errors.append(f"{url}: {exc}")
     raise RuntimeError(
-        f"No approved official release asset was found for {model.filename}. "
-        + " | ".join(errors)
+        f"No approved official release asset was found for {model.filename}. " + " | ".join(errors)
     )
 
 
@@ -312,8 +329,14 @@ def patch_entry(
             "selection_kind": "managed_catalog_model",
             "architecture_reference": None,
             "resolved_model_id": None,
-            "license_summary": "Official Ultralytics-distributed pretrained weights; AGPL-3.0 or an applicable Ultralytics enterprise license.",
-            "model_weight_license": "Official Ultralytics-distributed pretrained weights; review applicable Ultralytics licensing before use.",
+            "license_summary": (
+                "Official Ultralytics-distributed pretrained weights; "
+                "AGPL-3.0 or an applicable Ultralytics enterprise license."
+            ),
+            "model_weight_license": (
+                "Official Ultralytics-distributed pretrained weights; "
+                "review applicable Ultralytics licensing before use."
+            ),
             "package_license": "See the packaged provider metadata and upstream model license.",
         }
     )
@@ -455,10 +478,7 @@ def main() -> int:
         f"Local catalog override: {data_dir / 'config' / 'model_catalog.json'}\n"
         "Restart ReefVision and choose Refresh catalog."
     )
-    print(
-        "Still unavailable by design: "
-        + ", ".join(UNIMPLEMENTED_CATALOG_IDS)
-    )
+    print("Still unavailable by design: " + ", ".join(UNIMPLEMENTED_CATALOG_IDS))
     return 1 if failed else 0
 
 

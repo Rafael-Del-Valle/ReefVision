@@ -17,6 +17,11 @@ from typing import Any
 CHUNK_SIZE = 1024 * 1024
 MANIFEST_VERSION = 1
 
+DESKTOP_BUNDLED_PACKAGE_STATUSES = {
+    "base_sidecar_provider",
+    "base_bundled_checkpoint",
+}
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -107,7 +112,7 @@ def stage_models(
 
     output_root.mkdir(parents=True, exist_ok=True)
     assets: dict[str, dict[str, Any]] = {}
-    skipped_unavailable = 0
+    skipped_catalog_only = 0
     total_bytes = 0
 
     for model in models:
@@ -115,8 +120,13 @@ def stage_models(
             continue
         catalog_id = str(model.get("catalog_id") or "")
         expected_files = model.get("expected_files")
-        if model.get("availability") != "available" or not expected_files:
-            skipped_unavailable += 1
+        package_status = str(model.get("desktop_package_status") or "")
+        if (
+            model.get("availability") != "available"
+            or not expected_files
+            or package_status not in DESKTOP_BUNDLED_PACKAGE_STATUSES
+        ):
+            skipped_catalog_only += 1
             continue
         if not isinstance(expected_files, list):
             raise RuntimeError(
@@ -332,7 +342,7 @@ def stage_models(
     print(
         f"Bundled {len(assets)} catalog models "
         f"({total_bytes / (1024 * 1024):.1f} MB); "
-        f"{skipped_unavailable} unavailable/planned entries remain catalog-only."
+        f"{skipped_catalog_only} entries remain outside the base installer bundle."
     )
     return manifest
 

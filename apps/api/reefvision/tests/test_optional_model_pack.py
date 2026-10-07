@@ -37,7 +37,7 @@ def test_runtime_factories_use_expanded_adapters() -> None:
     assert provider_hub.SegmentAnythingAssistProvider is UnifiedSegmentAnythingAssistProvider
 
 
-def test_optional_pack_repair_marks_verified_model_available(
+def test_optional_pack_preserves_shipped_downloadable_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     installer = _load_script("install-remaining-models.py", "reefvision_optional_model_pack")
@@ -65,7 +65,7 @@ def test_optional_pack_repair_marks_verified_model_available(
     catalog_path = tmp_path / "config" / "model_catalog.json"
     before = json.loads(catalog_path.read_text())
     before_entry = next(item for item in before["models"] if item["catalog_id"] == model.catalog_id)
-    assert before_entry["availability"] == "unavailable"
+    assert before_entry["availability"] == "available"
 
     repaired, skipped = repair.repair_catalog(tmp_path)
 
@@ -93,3 +93,93 @@ def test_optional_pack_repair_marks_verified_model_available(
     assert record["filename"] == model.filename
     assert record["size_bytes"] == len(payload)
     assert (tmp_path / record["relative_path"]).read_bytes() == payload
+
+
+def test_desktop_stager_skips_optional_network_downloads(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import hashlib
+
+    stager = _load_script(
+        "stage-bundled-models.py",
+        "reefvision_optional_bundle_policy",
+    )
+
+    base_payload = b"base"
+    optional_payload = b"optional"
+
+    def entry(
+        catalog_id: str,
+        filename: str,
+        payload: bytes,
+        package_status: str,
+    ) -> dict[str, object]:
+        return {
+            "catalog_id": catalog_id,
+            "availability": "available",
+            "desktop_package_status": package_status,
+            "provider_version": "test",
+            "expected_files": [
+                {
+                    "filename": filename,
+                    "source_url": f"https://example.invalid/{filename}",
+                    "revision": "test",
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                    "size_bytes": len(payload),
+                }
+            ],
+        }
+
+    catalog = {
+        "schema_version": 2,
+        "catalog_version": "test",
+        "models": [
+            entry(
+                "base/test",
+                "base.pt",
+                base_payload,
+                "base_bundled_checkpoint",
+            ),
+            entry(
+                "optional/test",
+                "optional.pt",
+                optional_payload,
+                "optional_network_download",
+            ),
+        ],
+    }
+
+    catalog_path = tmp_path / "catalog.json"
+    catalog_path.write_text(
+        json.dumps(catalog),
+        encoding="utf-8",
+    )
+
+    def fake_download(
+        url: str,
+        destination: Path,
+        expected_size: int,
+        expected_sha256: str,
+    ) -> None:
+        payload = base_payload if destination.name == "base.pt" else optional_payload
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(payload)
+
+    monkeypatch.setattr(
+        stager,
+        "_download",
+        fake_download,
+    )
+
+    output = tmp_path / "bundle"
+
+    manifest = stager.stage_models(
+        catalog_path,
+        output,
+        include_base_assistant=False,
+    )
+
+    assert manifest["asset_count"] == 1
+    assert set(manifest["assets"]) == {"base/test"}
+    assert not (output / "optional" / "test" / "optional.pt").exists()
