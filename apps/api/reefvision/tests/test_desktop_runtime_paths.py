@@ -4,6 +4,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
@@ -99,7 +100,7 @@ def test_current_database_revision_skips_alembic_upgrade(
         raise AssertionError("Alembic upgrade must not run when the database is already at head")
 
     monkeypatch.setattr(
-        desktop.command,
+        command,
         "upgrade",
         unexpected_upgrade,
     )
@@ -123,7 +124,7 @@ def test_older_database_revision_still_invokes_alembic_upgrade(
         calls.append(target)
 
     monkeypatch.setattr(
-        desktop.command,
+        command,
         "upgrade",
         record_upgrade,
     )

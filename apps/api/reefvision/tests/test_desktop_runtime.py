@@ -1,11 +1,14 @@
 """Tests for the packaged Windows desktop event-loop configuration."""
 
+import asyncio
+import sys
 from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 
 from reefvision import desktop
+from reefvision.config import clear_settings_cache
 
 
 def test_frozen_windows_sidecar_uses_selector_policy(
@@ -15,15 +18,15 @@ def test_frozen_windows_sidecar_uses_selector_policy(
     policy_factory = Mock(return_value=policy)
     set_policy = Mock()
 
-    monkeypatch.setattr(desktop.sys, "platform", "win32")
+    monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(desktop, "is_frozen_bundle", lambda: True)
     monkeypatch.setattr(
-        desktop.asyncio,
+        asyncio,
         "WindowsSelectorEventLoopPolicy",
         policy_factory,
         raising=False,
     )
-    monkeypatch.setattr(desktop.asyncio, "set_event_loop_policy", set_policy)
+    monkeypatch.setattr(asyncio, "set_event_loop_policy", set_policy)
 
     desktop.configure_windows_event_loop_policy()
 
@@ -36,9 +39,9 @@ def test_non_frozen_process_keeps_default_event_loop_policy(
 ) -> None:
     set_policy = Mock()
 
-    monkeypatch.setattr(desktop.sys, "platform", "win32")
+    monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(desktop, "is_frozen_bundle", lambda: False)
-    monkeypatch.setattr(desktop.asyncio, "set_event_loop_policy", set_policy)
+    monkeypatch.setattr(asyncio, "set_event_loop_policy", set_policy)
 
     desktop.configure_windows_event_loop_policy()
 
@@ -50,9 +53,9 @@ def test_non_windows_process_keeps_default_event_loop_policy(
 ) -> None:
     set_policy = Mock()
 
-    monkeypatch.setattr(desktop.sys, "platform", "linux")
+    monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(desktop, "is_frozen_bundle", lambda: True)
-    monkeypatch.setattr(desktop.asyncio, "set_event_loop_policy", set_policy)
+    monkeypatch.setattr(asyncio, "set_event_loop_policy", set_policy)
 
     desktop.configure_windows_event_loop_policy()
 
@@ -66,7 +69,7 @@ def test_normal_desktop_launch_overrides_inherited_safe_mode(
     monkeypatch.setenv("REEFVISION_SAFE_MODE", "true")
     monkeypatch.setenv("REEFVISION_BACKGROUND_WORKER_ENABLED", "false")
 
-    desktop.clear_settings_cache()
+    clear_settings_cache()
     try:
         settings = desktop.build_settings(
             desktop.DesktopLaunchOptions(
@@ -83,7 +86,7 @@ def test_normal_desktop_launch_overrides_inherited_safe_mode(
         assert settings.safe_mode is False
         assert settings.background_worker_enabled is True
     finally:
-        desktop.clear_settings_cache()
+        clear_settings_cache()
 
 
 def test_explicit_desktop_safe_mode_disables_worker(
@@ -93,7 +96,7 @@ def test_explicit_desktop_safe_mode_disables_worker(
     monkeypatch.setenv("REEFVISION_SAFE_MODE", "false")
     monkeypatch.setenv("REEFVISION_BACKGROUND_WORKER_ENABLED", "true")
 
-    desktop.clear_settings_cache()
+    clear_settings_cache()
     try:
         settings = desktop.build_settings(
             desktop.DesktopLaunchOptions(
@@ -110,4 +113,4 @@ def test_explicit_desktop_safe_mode_disables_worker(
         assert settings.safe_mode is True
         assert settings.background_worker_enabled is False
     finally:
-        desktop.clear_settings_cache()
+        clear_settings_cache()

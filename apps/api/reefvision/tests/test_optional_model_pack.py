@@ -33,8 +33,14 @@ def test_runtime_factories_use_expanded_adapters() -> None:
     apply_catalog_expansion_runtime_patches()
     apply_fastsam_runtime_patch()
 
-    assert provider_hub.UltralyticsDetectionProvider is ExpandedUltralyticsDetectionProvider
-    assert provider_hub.SegmentAnythingAssistProvider is UnifiedSegmentAnythingAssistProvider
+    assert (
+        provider_hub.UltralyticsDetectionProvider
+        is ExpandedUltralyticsDetectionProvider
+    )
+    assert (
+        provider_hub.SegmentAnythingAssistProvider
+        is UnifiedSegmentAnythingAssistProvider
+    )
 
 
 def test_optional_pack_preserves_shipped_downloadable_model(

@@ -4,6 +4,7 @@ import io
 import json
 import zipfile
 
+import cv2
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
@@ -118,7 +119,7 @@ def test_frozen_dataset_exports_exact_frames_and_loss_manifest(
     )
 
     monkeypatch.setattr(
-        export_module.cv2,
+        cv2,
         "VideoCapture",
         _FakeCapture,
     )
@@ -171,12 +172,12 @@ def test_frozen_dataset_exports_exact_frames_and_loss_manifest(
 
         frame_bytes = archive.read(frame_record["path"])
 
-        decoded = export_module.cv2.imdecode(
+        decoded = cv2.imdecode(
             np.frombuffer(
                 frame_bytes,
                 dtype=np.uint8,
             ),
-            export_module.cv2.IMREAD_COLOR,
+            cv2.IMREAD_COLOR,
         )
 
         assert decoded is not None
@@ -244,7 +245,7 @@ def test_text_training_exports_do_not_require_sleap_io(
     )
 
     monkeypatch.setattr(
-        export_module.cv2,
+        cv2,
         "VideoCapture",
         _FakeCapture,
     )

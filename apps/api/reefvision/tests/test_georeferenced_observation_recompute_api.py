@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from fastapi.routing import APIRoute
 
 from reefvision.api.routes import (
     georeferenced_observations as routes,
@@ -21,7 +22,9 @@ def test_recompute_route_is_registered_as_post() -> None:
     matches = [route for route in routes.router.routes if getattr(route, "path", None) == path]
 
     assert len(matches) == 1
-    assert "POST" in matches[0].methods
+    route = matches[0]
+    assert isinstance(route, APIRoute)
+    assert "POST" in route.methods
 
 
 def test_recompute_route_uses_request_settings_and_session(

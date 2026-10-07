@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -129,7 +130,9 @@ def test_sync_tolerance_changes_production_hash() -> None:
 def test_invalid_alignment_metadata_is_rejected() -> None:
     instance = service()
 
-    instance.video_assets.video.metadata_json["airdata_alignment"] = "invalid"
+    video_assets = cast(VideoAssets, instance.video_assets)
+    video = cast(SimpleNamespace, video_assets.video)
+    video.metadata_json["airdata_alignment"] = "invalid"
 
     with pytest.raises(
         ValidationError,

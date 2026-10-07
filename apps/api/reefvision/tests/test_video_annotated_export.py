@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
+import cv2
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -45,17 +46,17 @@ def test_annotation_label_uses_readable_text_and_class_border(
         shape = (100, 200, 3)
 
     monkeypatch.setattr(
-        renderer.cv2,
+        cv2,
         "getTextSize",
         lambda *args, **kwargs: ((60, 12), 3),
     )
     monkeypatch.setattr(
-        renderer.cv2,
+        cv2,
         "rectangle",
         lambda *args, **kwargs: rectangle_calls.append((args, kwargs)),
     )
     monkeypatch.setattr(
-        renderer.cv2,
+        cv2,
         "putText",
         lambda *args, **kwargs: text_calls.append((args, kwargs)),
     )
@@ -74,7 +75,7 @@ def test_annotation_label_uses_readable_text_and_class_border(
 
     assert len(rectangle_calls) == 2
     assert rectangle_calls[0][0][3] == (245, 245, 245)
-    assert rectangle_calls[0][0][4] == renderer.cv2.FILLED
+    assert rectangle_calls[0][0][4] == cv2.FILLED
     assert rectangle_calls[1][0][3] == class_color
     assert text_calls[0][0][5] == (0, 0, 0)
 
