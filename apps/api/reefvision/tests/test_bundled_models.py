@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from reefvision.schemas.model_catalog import (
     CatalogExpectedFile,
@@ -90,7 +91,7 @@ def _write_bundle(
 
 
 def test_bundled_checkpoint_is_seeded_and_ready(
-    client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     payload = b"installer-bundled-checkpoint"
     checksum, entry = _bundle_catalog(monkeypatch, payload)
@@ -124,7 +125,7 @@ def test_bundled_checkpoint_is_seeded_and_ready(
 
 
 def test_corrupt_bundled_checkpoint_is_rejected(
-    client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     expected_payload = b"expected-checkpoint"
     checksum, entry = _bundle_catalog(monkeypatch, expected_payload)
@@ -145,7 +146,7 @@ def test_corrupt_bundled_checkpoint_is_rejected(
 
 
 def test_multifile_bundled_model_is_seeded(
-    client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     original_catalog = _load_static_model_catalog()
     original = next(

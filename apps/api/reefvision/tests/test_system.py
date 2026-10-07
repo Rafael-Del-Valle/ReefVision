@@ -5,6 +5,7 @@ import sqlite3
 import subprocess
 from pathlib import Path
 
+import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
@@ -56,7 +57,7 @@ def test_system_version_reports_paths_and_schema(
 
 def test_system_service_uses_resolved_alembic_paths(
     client: TestClient,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     api_root = Path(__file__).resolve().parents[2]
     expected_ini = api_root / "alembic.ini"
@@ -126,7 +127,7 @@ def test_system_logs_location_reports_api_log_file(
 
 
 def test_system_command_shortcuts_report_repair_required(
-    client: TestClient, monkeypatch, tmp_path: Path
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     monkeypatch.setenv("Path", r"C:\Windows\System32")
@@ -144,7 +145,7 @@ def test_system_command_shortcuts_report_repair_required(
 
 
 def test_system_command_shortcut_repair_runs_installer(
-    client: TestClient, monkeypatch, tmp_path: Path
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     command_root = tmp_path / "ReefVision"
     command_dir = command_root / "bin"

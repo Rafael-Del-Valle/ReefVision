@@ -1,5 +1,6 @@
 import csv
 import json
+from pathlib import Path
 
 import pytest
 
@@ -23,7 +24,7 @@ from reefvision.tests.whaledrone_report import (
 )
 
 
-def test_report_metrics_exclusions_and_csv_roundtrip(tmp_path):
+def test_report_metrics_exclusions_and_csv_roundtrip(tmp_path: Path) -> None:
     calibration = CameraCalibration(
         width_px=1000,
         height_px=800,
@@ -90,7 +91,7 @@ def test_report_metrics_exclusions_and_csv_roundtrip(tmp_path):
     assert json.loads(json_path.read_text())["excluded"] == 1
 
 
-def test_loader_retains_invalid_rows_and_both_sync_identifiers(tmp_path):
+def test_loader_retains_invalid_rows_and_both_sync_identifiers(tmp_path: Path) -> None:
     path = tmp_path / "annotations.csv"
     path.write_text(
         "name,frame,time,video,length,image_x,image_y,lat,lon\n"
@@ -124,7 +125,7 @@ def test_loader_retains_invalid_rows_and_both_sync_identifiers(tmp_path):
     assert timed_points[0].source_time_value == "1.0"
 
 
-def test_empty_report_does_not_claim_operational_success():
+def test_empty_report_does_not_claim_operational_success() -> None:
     summary = build_summary([], {"video": None, "calibration": None})
     assert summary["mean_error_m"] is None and summary["attempted"] == 0
     assert not summary["operationally_projected"]

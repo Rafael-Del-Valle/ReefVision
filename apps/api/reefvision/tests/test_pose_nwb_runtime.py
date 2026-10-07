@@ -1,6 +1,7 @@
 """Offline tests for scientific NWB storage using the optional pinned runtime."""
 
 from importlib.metadata import version
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -16,7 +17,7 @@ def require_runtime(request):
 
 
 @pytest.fixture
-def pose_labels(tmp_path):
+def pose_labels(tmp_path: Path):
     import imageio.v3 as iio
     import sleap_io as sio
 
@@ -51,7 +52,7 @@ def pose_labels(tmp_path):
     return labels, source, np.array(video[4])
 
 
-def test_nwb_external_pose_and_embedded_media_are_valid(pose_labels, tmp_path):
+def test_nwb_external_pose_and_embedded_media_are_valid(pose_labels, tmp_path: Path) -> None:
     import pynwb
     import sleap_io as sio
 
@@ -95,7 +96,9 @@ def test_nwb_external_pose_and_embedded_media_are_valid(pose_labels, tmp_path):
     assert labels[0].frame_idx == 4  # export must not mutate observations
 
 
-def test_nwb_changed_pose_cannot_be_overwritten_by_stale_metadata(pose_labels, tmp_path):
+def test_nwb_changed_pose_cannot_be_overwritten_by_stale_metadata(
+    pose_labels, tmp_path: Path
+) -> None:
     import h5py
     import sleap_io as sio
 
@@ -111,7 +114,9 @@ def test_nwb_changed_pose_cannot_be_overwritten_by_stale_metadata(pose_labels, t
         read_nwb(sio, output)
 
 
-def test_nwb_multiple_sparse_frames_tracks_and_unknown_confidence(pose_labels, tmp_path):
+def test_nwb_multiple_sparse_frames_tracks_and_unknown_confidence(
+    pose_labels, tmp_path: Path
+) -> None:
     import pynwb
     import sleap_io as sio
 
@@ -144,7 +149,7 @@ def test_nwb_multiple_sparse_frames_tracks_and_unknown_confidence(pose_labels, t
     assert restored.provenance["reefvision_warnings"]
 
 
-def test_nwb_modified_embedded_media_rejects_metadata(pose_labels, tmp_path):
+def test_nwb_modified_embedded_media_rejects_metadata(pose_labels, tmp_path: Path) -> None:
     import h5py
     import sleap_io as sio
 
@@ -159,7 +164,9 @@ def test_nwb_modified_embedded_media_rejects_metadata(pose_labels, tmp_path):
         read_nwb(sio, output)
 
 
-def test_nwb_without_frame_mapping_is_rejected_before_silent_reindexing(pose_labels, tmp_path):
+def test_nwb_without_frame_mapping_is_rejected_before_silent_reindexing(
+    pose_labels, tmp_path: Path
+) -> None:
     import h5py
     import sleap_io as sio
 

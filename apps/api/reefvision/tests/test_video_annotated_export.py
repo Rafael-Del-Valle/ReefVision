@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -35,7 +36,7 @@ def test_annotated_export_preset_defaults() -> None:
 
 
 def test_annotation_label_uses_readable_text_and_class_border(
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rectangle_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
     text_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
@@ -80,7 +81,7 @@ def test_annotation_label_uses_readable_text_and_class_border(
 
 def test_annotated_export_job_and_download(
     client: TestClient,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project = create_project(client, "Annotated export")
     classes = cast(list[dict[str, object]], project["label_classes"])

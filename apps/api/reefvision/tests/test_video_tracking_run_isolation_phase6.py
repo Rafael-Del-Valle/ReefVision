@@ -4,6 +4,7 @@ import io
 from pathlib import Path
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -92,7 +93,7 @@ def _fake_metadata(_path: Path) -> dict[str, float | int]:
 
 def test_separate_tracker_jobs_from_same_model_keep_both_track_sets(
     client: TestClient,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project = create_project(client, "Independent tracker runs")
     monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)

@@ -3,6 +3,7 @@
 import json
 import zipfile
 from importlib.metadata import version
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -13,7 +14,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(autouse=True)
-def require_runtime(request, monkeypatch, tmp_path):
+def require_runtime(request, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     if not request.config.getoption("--pose-interop-integration"):
         pytest.skip("opt in with --pose-interop-integration")
     assert version("sleap-io") == "0.9.2"
@@ -26,7 +27,7 @@ def require_runtime(request, monkeypatch, tmp_path):
 
 
 @pytest.fixture
-def pose(tmp_path):
+def pose(tmp_path: Path):
     import sleap_io as sio
     from PIL import Image
 
@@ -62,7 +63,7 @@ def pose(tmp_path):
 
 
 @pytest.mark.parametrize("fmt", ["coco", "dlc_csv", "ultralytics_pose"])
-def test_text_roundtrip_preserves_occlusion_and_frame(pose, tmp_path, fmt):
+def test_text_roundtrip_preserves_occlusion_and_frame(pose, tmp_path: Path, fmt) -> None:
     from reefvision.storage.pose_exchange_text import read_text, write_text
 
     sio, labels = pose
@@ -79,7 +80,7 @@ def test_text_roundtrip_preserves_occlusion_and_frame(pose, tmp_path, fmt):
     )
 
 
-def test_yolo_assets_are_original_decoded_pixels(pose, tmp_path):
+def test_yolo_assets_are_original_decoded_pixels(pose, tmp_path: Path) -> None:
     from io import BytesIO
 
     import yaml
@@ -101,7 +102,7 @@ def test_yolo_assets_are_original_decoded_pixels(pose, tmp_path):
         np.testing.assert_allclose(values[8:11], [17 / 60, 18 / 40, 1])
 
 
-def test_coco_external_edits_cannot_be_overridden_by_sidecar(pose, tmp_path):
+def test_coco_external_edits_cannot_be_overridden_by_sidecar(pose, tmp_path: Path) -> None:
     from reefvision.storage.pose_exchange_text import read_text, write_text
 
     sio, labels = pose
@@ -114,7 +115,7 @@ def test_coco_external_edits_cannot_be_overridden_by_sidecar(pose, tmp_path):
 
 
 @pytest.mark.parametrize("fmt", ["dlc_csv", "ultralytics_pose"])
-def test_corrupt_archive_is_domain_error(pose, tmp_path, fmt):
+def test_corrupt_archive_is_domain_error(pose, tmp_path: Path, fmt) -> None:
     from reefvision.storage.pose_exchange_text import read_text
 
     sio, _ = pose
@@ -124,7 +125,7 @@ def test_corrupt_archive_is_domain_error(pose, tmp_path, fmt):
         read_text(sio, path, fmt)
 
 
-def test_ultralytics_real_parser_accepts_package(pose, tmp_path):
+def test_ultralytics_real_parser_accepts_package(pose, tmp_path: Path) -> None:
     from ultralytics.data.utils import verify_image_label
 
     from reefvision.storage.pose_exchange_text import write_text
@@ -142,7 +143,9 @@ def test_ultralytics_real_parser_accepts_package(pose, tmp_path):
     np.testing.assert_allclose(result[4][0, 1], [17 / 60, 18 / 40, 1])
 
 
-def test_ultralytics_dataset_resolves_from_another_directory(pose, tmp_path, monkeypatch):
+def test_ultralytics_dataset_resolves_from_another_directory(
+    pose, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from pathlib import Path
 
     from ultralytics.data import utils
@@ -167,7 +170,7 @@ def test_ultralytics_dataset_resolves_from_another_directory(pose, tmp_path, mon
 
 
 @pytest.mark.parametrize("failure", ["dimensions", "duplicate_nodes", "bounds", "frame"])
-def test_external_coco_validation(pose, tmp_path, failure):
+def test_external_coco_validation(pose, tmp_path: Path, failure) -> None:
     from reefvision.storage.pose_exchange_text import read_text, write_text
 
     sio, labels = pose
@@ -188,7 +191,7 @@ def test_external_coco_validation(pose, tmp_path, failure):
 
 
 @pytest.mark.parametrize("fmt", ["coco", "dlc_csv"])
-def test_missing_image_references_are_explicit(pose, tmp_path, fmt):
+def test_missing_image_references_are_explicit(pose, tmp_path: Path, fmt) -> None:
     from reefvision.storage.pose_exchange_text import read_text, write_text
 
     sio, labels = pose
@@ -200,7 +203,7 @@ def test_missing_image_references_are_explicit(pose, tmp_path, fmt):
     assert exchange["frame_mapping"][0]["frame_idx"] == 4
 
 
-def test_zip_path_traversal_is_rejected(pose, tmp_path):
+def test_zip_path_traversal_is_rejected(pose, tmp_path: Path) -> None:
     from reefvision.storage.pose_exchange_text import read_text
 
     sio, _ = pose
@@ -211,7 +214,7 @@ def test_zip_path_traversal_is_rejected(pose, tmp_path):
         read_text(sio, path, "ultralytics_pose")
 
 
-def test_yolo_missing_image_is_rejected(pose, tmp_path):
+def test_yolo_missing_image_is_rejected(pose, tmp_path: Path) -> None:
     from reefvision.storage.pose_exchange_text import read_text, write_text
 
     sio, labels = pose
@@ -226,7 +229,7 @@ def test_yolo_missing_image_is_rejected(pose, tmp_path):
 
 
 @pytest.mark.parametrize("fmt", ["dlc_csv", "ultralytics_pose"])
-def test_modified_external_coordinates_reject_stale_sidecar(pose, tmp_path, fmt):
+def test_modified_external_coordinates_reject_stale_sidecar(pose, tmp_path: Path, fmt) -> None:
     from reefvision.storage.pose_exchange_text import read_text, write_text
 
     sio, labels = pose
@@ -242,7 +245,7 @@ def test_modified_external_coordinates_reject_stale_sidecar(pose, tmp_path, fmt)
         read_text(sio, path, fmt)
 
 
-def test_duplicate_track_in_frame_is_rejected(pose, tmp_path):
+def test_duplicate_track_in_frame_is_rejected(pose, tmp_path: Path) -> None:
     from reefvision.storage.pose_exchange_text import write_text
 
     sio, labels = pose
@@ -251,7 +254,7 @@ def test_duplicate_track_in_frame_is_rejected(pose, tmp_path):
         write_text(sio, labels, tmp_path, "dlc_csv")
 
 
-def test_yolo_requires_source_digest(pose, tmp_path):
+def test_yolo_requires_source_digest(pose, tmp_path: Path) -> None:
     from reefvision.storage.pose_exchange_text import write_text
 
     sio, labels = pose
@@ -260,7 +263,7 @@ def test_yolo_requires_source_digest(pose, tmp_path):
         write_text(sio, labels, tmp_path, "ultralytics_pose")
 
 
-def test_raw_dlc_csv_requires_metadata_with_actionable_error(pose, tmp_path):
+def test_raw_dlc_csv_requires_metadata_with_actionable_error(pose, tmp_path: Path) -> None:
     from reefvision.storage.pose_exchange_text import read_text
 
     sio, _ = pose
@@ -270,7 +273,7 @@ def test_raw_dlc_csv_requires_metadata_with_actionable_error(pose, tmp_path):
         read_text(sio, path, "dlc_csv")
 
 
-def test_source_pixel_upper_bound_is_excluded(pose, tmp_path):
+def test_source_pixel_upper_bound_is_excluded(pose, tmp_path: Path) -> None:
     from reefvision.storage.pose_exchange_text import write_text
 
     sio, labels = pose

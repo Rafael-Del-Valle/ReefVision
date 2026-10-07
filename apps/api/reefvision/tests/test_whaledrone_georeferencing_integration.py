@@ -25,7 +25,7 @@ from reefvision.tests.whaledrone_report import (
 
 
 @pytest.mark.integration
-def test_external_whaledrone_georeferencing(request):
+def test_external_whaledrone_georeferencing(request) -> None:
     if not request.config.getoption("--whaledrone-integration"):
         pytest.skip("Explicit --whaledrone-integration opt-in required")
     root = get_whaledrone_root()

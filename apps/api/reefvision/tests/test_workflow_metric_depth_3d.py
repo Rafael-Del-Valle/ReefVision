@@ -4,6 +4,7 @@ import io
 from types import SimpleNamespace
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -35,7 +36,7 @@ def test_automatic_scientific_3d_node_is_registered() -> None:
 
 def test_automatic_scientific_3d_workflow_adapter_runs_child_job(
     client: TestClient,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project = create_project(client, "Automatic Scientific 3D workflow")
     monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)

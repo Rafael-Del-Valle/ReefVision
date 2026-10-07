@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -171,7 +172,9 @@ def test_image_and_crop_classification_datasets_are_immutable(client: TestClient
     assert stored.json()["manifest_sha256"] == image_payload["manifest_sha256"]
 
 
-def test_classification_training_inference_and_review(client: TestClient, monkeypatch) -> None:
+def test_classification_training_inference_and_review(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     project, image_ids, version_id = _seed_project(client)
     dataset = client.post(
         f"/api/v1/projects/{project['id']}/classification-datasets",

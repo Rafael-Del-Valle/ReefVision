@@ -11,6 +11,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from fastapi.testclient import TestClient
 
 from reefvision.db.models import VideoAsset, VideoTrack
 from reefvision.ml.sleap_nn_provider import SLEAP_IO_SUPPORTED_VERSION
@@ -245,7 +246,7 @@ def test_real_sleap_io_round_trip_preserves_reefvision_pose_identity(
 
 
 @pytest.fixture
-def real_service_pose(client, tmp_path):
+def real_service_pose(client: TestClient, tmp_path: Path):
     import imageio.v3 as iio
 
     path = tmp_path / "service-runtime.mp4"
@@ -279,9 +280,9 @@ def real_service_pose(client, tmp_path):
     ["slp", "nwb", "coco", "dlc_csv", "ultralytics_pose"],
 )
 def test_real_service_export_import_round_trip(
-    client,
+    client: TestClient,
     real_service_pose,
-    tmp_path,
+    tmp_path: Path,
     exchange_format: str,
 ) -> None:
     project, video, track_id = real_service_pose
@@ -357,9 +358,9 @@ def test_real_service_export_import_round_trip(
 @pytest.mark.filterwarnings("ignore::DeprecationWarning")
 @pytest.mark.filterwarnings("ignore::ResourceWarning")
 def test_real_slp_export_remains_self_contained_after_source_removal(
-    client,
+    client: TestClient,
     real_service_pose,
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     import sleap_io as sio
 

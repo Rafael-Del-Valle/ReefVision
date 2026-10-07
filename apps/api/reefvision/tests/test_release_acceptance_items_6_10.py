@@ -9,6 +9,7 @@ from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from PIL import Image
 
 import reefvision.ml.semantic_segmentation as semantic_module
@@ -99,7 +100,7 @@ class _NoGrad:
 
 
 def test_trocr_reuses_model_hub_checkpoint_without_implicit_download(
-    client,
+    client: TestClient,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -11,7 +11,7 @@ from reefvision.geospatial.validation import (
 )
 
 
-def test_known_error_statistics():
+def test_known_error_statistics() -> None:
     stats = summarize_errors([0, 1, 2, 3, 4])
     assert stats.sample_count == 5
     assert stats.mean_m == 2 and stats.median_m == 2
@@ -21,7 +21,7 @@ def test_known_error_statistics():
     assert stats.std_m == pytest.approx(2**0.5)  # Population standard deviation.
 
 
-def test_validation_reports_successes_sync_failures_and_projection_failures():
+def test_validation_reports_successes_sync_failures_and_projection_failures() -> None:
     calibration = CameraCalibration(
         width_px=1000,
         height_px=800,
@@ -77,11 +77,11 @@ def test_validation_reports_successes_sync_failures_and_projection_failures():
     assert report.observations[2].telemetry.time_s == 1
 
 
-def test_empty_error_statistics_do_not_fabricate_zero_accuracy():
+def test_empty_error_statistics_do_not_fabricate_zero_accuracy() -> None:
     assert summarize_errors([]) is None
 
 
-def test_relative_time_and_frame_precedence_keep_original_time():
+def test_relative_time_and_frame_precedence_keep_original_time() -> None:
     calibration = CameraCalibration(
         width_px=1000,
         height_px=800,

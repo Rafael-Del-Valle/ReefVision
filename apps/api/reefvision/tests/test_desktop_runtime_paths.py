@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
@@ -43,7 +44,7 @@ def _stamp_database(settings: Settings, revision: str) -> Path:
 
 def test_provider_runtime_dir_uses_desktop_data_dir_environment(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     data_dir = tmp_path / "desktop-data"
     working_dir = tmp_path / "program-files-like-cwd"
@@ -57,7 +58,7 @@ def test_provider_runtime_dir_uses_desktop_data_dir_environment(
 
 def test_provider_runtime_explicit_inputs_override_environment(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     environment_dir = tmp_path / "environment"
     settings_dir = tmp_path / "settings"
@@ -74,7 +75,7 @@ def test_provider_runtime_explicit_inputs_override_environment(
 
 def test_current_database_revision_skips_alembic_upgrade(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings = _desktop_settings(tmp_path / "current")
 
@@ -110,7 +111,7 @@ def test_current_database_revision_skips_alembic_upgrade(
 
 def test_older_database_revision_still_invokes_alembic_upgrade(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings = _desktop_settings(tmp_path / "older")
     _stamp_database(settings, "0034")

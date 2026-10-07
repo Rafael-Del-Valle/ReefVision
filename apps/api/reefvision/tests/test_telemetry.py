@@ -11,7 +11,7 @@ from reefvision.storage.telemetry import find_paired_srt, load_dji_srt
 FIXTURES = Path(__file__).parent / "fixtures" / "telemetry"
 
 
-def test_modern_fields_and_missing_values():
+def test_modern_fields_and_missing_values() -> None:
     samples = load_dji_srt(FIXTURES / "modern.SRT").samples
     assert len(samples) == 3
     first = samples[0]
@@ -32,7 +32,7 @@ def test_modern_fields_and_missing_values():
     assert samples[1].iso is None and samples[1].absolute_altitude_m is None
 
 
-def test_legacy_variant_and_units():
+def test_legacy_variant_and_units() -> None:
     first, second = load_dji_srt(FIXTURES / "legacy.srt").samples
     assert (first.latitude, first.longitude, first.absolute_altitude_m) == (25.125, -80.25, 42.5)
     assert first.relative_altitude_m == 12.5
@@ -45,12 +45,12 @@ def test_legacy_variant_and_units():
 
 
 @pytest.mark.parametrize("text", ["", "not an srt", "1\n00:00:00,000 --> 00:00:01,000\nHello"])
-def test_empty_or_non_telemetry_is_useful_error(text):
+def test_empty_or_non_telemetry_is_useful_error(text) -> None:
     with pytest.raises(ValidationError, match="telemetry"):
         parse_dji_srt(text)
 
 
-def test_malformed_blocks_and_values_do_not_poison_valid_samples():
+def test_malformed_blocks_and_values_do_not_poison_valid_samples() -> None:
     valid = (FIXTURES / "modern.SRT").read_text()
     text = "9\nbad timestamp\n[latitude: 20]\n\n" + valid
     text += (
@@ -64,7 +64,7 @@ def test_malformed_blocks_and_values_do_not_poison_valid_samples():
 
 
 @pytest.mark.parametrize("suffix", [".SRT", ".srt", ".SrT"])
-def test_pairing_case_insensitive(tmp_path, suffix):
+def test_pairing_case_insensitive(tmp_path: Path, suffix) -> None:
     video = tmp_path / "DJI_0001.MP4"
     video.touch()
     sidecar = tmp_path / ("dji_0001" + suffix)
@@ -72,7 +72,7 @@ def test_pairing_case_insensitive(tmp_path, suffix):
     assert find_paired_srt(video) == sidecar
 
 
-def test_pairing_absent_and_unrelated(tmp_path):
+def test_pairing_absent_and_unrelated(tmp_path: Path) -> None:
     video = tmp_path / "fish.mp4"
     (tmp_path / "other.srt").touch()
     assert find_paired_srt(video) is None
@@ -82,7 +82,7 @@ def test_pairing_absent_and_unrelated(tmp_path):
     ("time_s", "matched", "delta"),
     [(0, 0, 0), (0.1, 0.1, 0), (0.08, 0.1, 0.02), (0.05, 0, -0.05), (4, 0.1, -3.9), (20, 10, -10)],
 )
-def test_nearest_time_endpoints_ties_and_gap(time_s, matched, delta):
+def test_nearest_time_endpoints_ties_and_gap(time_s, matched, delta) -> None:
     source = load_dji_srt(FIXTURES / "modern.SRT")
     match = source.sample_for_time(time_s)
     assert match.sample.time_s == matched
@@ -90,7 +90,7 @@ def test_nearest_time_endpoints_ties_and_gap(time_s, matched, delta):
     assert match.error_s == pytest.approx(abs(delta))
 
 
-def test_srt_is_primary_and_airdata_requires_explicit_alignment_for_fallback():
+def test_srt_is_primary_and_airdata_requires_explicit_alignment_for_fallback() -> None:
     srt = IndexedTelemetrySource(
         [
             TelemetrySample(
@@ -148,7 +148,7 @@ def test_srt_is_primary_and_airdata_requires_explicit_alignment_for_fallback():
     assert aligned_match.provenance.gimbal_yaw_source == "airdata"
 
 
-def test_non_integer_fps_and_first_sample_after_video_start():
+def test_non_integer_fps_and_first_sample_after_video_start() -> None:
     source = IndexedTelemetrySource([TelemetrySample(sample_index=1, time_s=1.001, latitude=25)])
     assert source.sample_for_frame(30, 30000 / 1001).error_s == pytest.approx(0)
     assert source.sample_for_frame(0, 29.97).delta_s == 1.001
@@ -158,13 +158,13 @@ def test_non_integer_fps_and_first_sample_after_video_start():
 @pytest.mark.parametrize(
     ("frame", "fps"), [(-1, 30), (1, 0), (1, -1), (1, float("nan")), (1, float("inf"))]
 )
-def test_invalid_frame_requests(frame, fps):
+def test_invalid_frame_requests(frame, fps) -> None:
     source = load_dji_srt(FIXTURES / "modern.SRT")
     with pytest.raises(ValidationError):
         source.sample_for_frame(frame, fps)
 
 
-def test_sorting_duplicates_and_empty_source():
+def test_sorting_duplicates_and_empty_source() -> None:
     source = IndexedTelemetrySource(
         [
             TelemetrySample(sample_index=3, time_s=2),
@@ -178,14 +178,14 @@ def test_sorting_duplicates_and_empty_source():
 
 
 @pytest.mark.parametrize("encoding", ["utf-8-sig", "utf-16"])
-def test_file_encoding_and_crlf(tmp_path, encoding):
+def test_file_encoding_and_crlf(tmp_path: Path, encoding) -> None:
     path = tmp_path / "telemetry.srt"
     text = (FIXTURES / "modern.SRT").read_text().replace("\n", "\r\n")
     path.write_bytes(text.encode(encoding))
     assert len(load_dji_srt(path).samples) == 3
 
 
-def test_bad_cue_after_good_cue_does_not_overwrite_coordinates():
+def test_bad_cue_after_good_cue_does_not_overwrite_coordinates() -> None:
     text = (
         "1\n00:00:00,000 --> 00:00:00,100\n[latitude: 25]\n\n"
         "2\n00:99:00,000 --> 00:99:01,000\n[latitude: 55]\n\n"
@@ -196,7 +196,7 @@ def test_bad_cue_after_good_cue_does_not_overwrite_coordinates():
     assert samples[0].latitude == 25
 
 
-def test_explicit_legacy_gps_order_and_uninterpreted_fields():
+def test_explicit_legacy_gps_order_and_uninterpreted_fields() -> None:
     samples = parse_dji_srt(
         "1\n00:00:00,000 --> 00:00:00,100\n"
         "GPS(25,-80,42) BAROMETER(15) [yaw: 45] [focal_len: 24mm]",
@@ -209,18 +209,20 @@ def test_explicit_legacy_gps_order_and_uninterpreted_fields():
 
 
 @pytest.mark.parametrize("time_s", [-1, float("nan"), float("inf")])
-def test_invalid_relative_time(time_s):
+def test_invalid_relative_time(time_s) -> None:
     with pytest.raises(ValidationError):
         IndexedTelemetrySource([]).sample_for_time(time_s)
 
 
 @pytest.mark.parametrize("delta", [-1, float("nan"), float("inf")])
-def test_invalid_gap_limit(delta):
+def test_invalid_gap_limit(delta) -> None:
     with pytest.raises(ValidationError):
         IndexedTelemetrySource([]).sample_for_time(0, max_delta_s=delta)
 
 
-def test_missing_unreadable_or_oversized_source(tmp_path, monkeypatch):
+def test_missing_unreadable_or_oversized_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from reefvision.storage import telemetry
 
     path = tmp_path / "absent.srt"
@@ -235,7 +237,7 @@ def test_missing_unreadable_or_oversized_source(tmp_path, monkeypatch):
         load_dji_srt(path)
 
 
-def test_legacy_units_are_not_silently_truncated():
+def test_legacy_units_are_not_silently_truncated() -> None:
     sample = parse_dji_srt(
         "1\n00:00:00,000 --> 00:00:01,000\nGPS(-80,25,40) H 100ft H.S 20mph V.S 5ft/s"
     )[0]
@@ -244,7 +246,7 @@ def test_legacy_units_are_not_silently_truncated():
     assert sample.vertical_speed_mps is None
 
 
-def test_malformed_adjacent_cue_without_blank_separator_is_isolated():
+def test_malformed_adjacent_cue_without_blank_separator_is_isolated() -> None:
     samples = parse_dji_srt(
         "1\n00:00:00,000 --> 00:00:01,000\n[latitude: 25] [longitude: -80]\n"
         "2\nbad timestamp\n[latitude: 50] [longitude: -10]"
@@ -254,14 +256,14 @@ def test_malformed_adjacent_cue_without_blank_separator_is_isolated():
 
 
 @pytest.mark.parametrize("part", ["hours", "index"])
-def test_extreme_numeric_cues_are_domain_errors(part):
+def test_extreme_numeric_cues_are_domain_errors(part) -> None:
     index = "9" * 4301 if part == "index" else "1"
     hours = "9" * 310 if part == "hours" else "00"
     with pytest.raises(ValidationError, match="telemetry"):
         parse_dji_srt(f"{index}\n{hours}:00:00,000 --> {hours}:00:01,000\n[latitude: 25]")
 
 
-def test_reordered_legacy_scalars_before_tuples():
+def test_reordered_legacy_scalars_before_tuples() -> None:
     sample = parse_dji_srt(
         "1\n00:00:00,000 --> 00:00:01,000\n"
         "ISO 200 SS 500 G.PRY(-90,0,179) "

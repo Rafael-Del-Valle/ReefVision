@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import cast
 
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from PIL import Image
 
 from reefvision.db.models import Job, ModelRegistration, PredictionProposal
@@ -35,7 +36,7 @@ def _mask_png_base64(width: int, height: int) -> str:
 
 
 def test_grounding_dino_enters_prediction_review_system(
-    client,
+    client: TestClient,
     tmp_path: Path,
 ) -> None:
     project = create_project(client, "Grounding DINO proposals")
@@ -93,7 +94,7 @@ def test_grounding_dino_enters_prediction_review_system(
 
 
 def test_sam2_becomes_raster_mask_proposal_and_accepts(
-    client,
+    client: TestClient,
     tmp_path: Path,
 ) -> None:
     project = create_project(client, "SAM 2 proposals")

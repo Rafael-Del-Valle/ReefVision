@@ -5,6 +5,7 @@ import zipfile
 from pathlib import Path
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -35,7 +36,7 @@ from reefvision.tests.test_pose_training_datasets_phase9 import (
 def _archive_with_pose_training_truth(
     client: TestClient,
     test_settings: Settings,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[
     bytes,
     dict[str, object],
@@ -106,7 +107,7 @@ def _archive_with_pose_training_truth(
 def test_pose_training_truth_round_trips_through_project_exchange(
     client: TestClient,
     test_settings: Settings,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     (
         archive,
@@ -278,7 +279,7 @@ def test_pose_training_truth_round_trips_through_project_exchange(
 def test_pose_training_exchange_inspection_detects_section_tampering(
     client: TestClient,
     test_settings: Settings,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     (
         archive_bytes,

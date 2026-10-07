@@ -2,6 +2,7 @@ import io
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from reefvision.db.models import VideoAsset
 from reefvision.services import video_assets as video_assets_module
@@ -12,14 +13,16 @@ from reefvision.tests.test_telemetry import FIXTURES
 from reefvision.tests.test_video_tracking_phase6 import _fake_metadata
 
 
-def _upload(client, project_id, *, srt_name="fish.SRT", srt=None):
+def _upload(client: TestClient, project_id, *, srt_name="fish.SRT", srt=None):
     files = {"file": ("fish.mp4", io.BytesIO(b"fake-video"), "video/mp4")}
     if srt is not None:
         files["telemetry_file"] = (srt_name, io.BytesIO(srt), "application/x-subrip")
     return client.post(f"/api/v1/projects/{project_id}/imports/videos", files=files)
 
 
-def test_uploaded_sidecar_survives_new_session_and_frame_extraction(client, monkeypatch):
+def test_uploaded_sidecar_survives_new_session_and_frame_extraction(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
     project = create_project(client, "Telemetry")
     response = _upload(client, project["id"], srt=(FIXTURES / "modern.SRT").read_bytes())
@@ -40,7 +43,9 @@ def test_uploaded_sidecar_survives_new_session_and_frame_extraction(client, monk
     assert client.get(f"/api/v1/videos/{video['id']}").json()["telemetry"] == metadata
 
 
-def test_ordinary_and_old_videos_have_no_telemetry(client, monkeypatch):
+def test_ordinary_and_old_videos_have_no_telemetry(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
     project = create_project(client, "Ordinary")
     response = _upload(client, project["id"])
@@ -60,8 +65,8 @@ def test_ordinary_and_old_videos_have_no_telemetry(client, monkeypatch):
 
 @pytest.mark.parametrize(("name", "data"), [("other.srt", b"bad"), ("fish.srt", b"bad")])
 def test_explicit_invalid_upload_returns_domain_error_without_import(
-    client, monkeypatch, name, data
-):
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, name, data
+) -> None:
     monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
     project = create_project(client, "Bad upload")
     response = _upload(client, project["id"], srt_name=name, srt=data)
@@ -69,7 +74,9 @@ def test_explicit_invalid_upload_returns_domain_error_without_import(
     assert client.get(f"/api/v1/projects/{project['id']}/videos").json() == []
 
 
-def test_path_pairing_metadata_and_missing_external_source(client, monkeypatch, tmp_path):
+def test_path_pairing_metadata_and_missing_external_source(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
     monkeypatch.delenv("REEFVISION_WHALEDRONE_ROOT", raising=False)
     project = create_project(client, "Path import")
@@ -93,7 +100,9 @@ def test_path_pairing_metadata_and_missing_external_source(client, monkeypatch, 
 @pytest.mark.parametrize(
     "corrupt", ["malformed", "1\n" + "9" * 310 + ":00:00,000 --> 00:00:01,000\n[latitude: 25]"]
 )
-def test_invalid_auto_sidecar_does_not_block_video_import(client, monkeypatch, tmp_path, corrupt):
+def test_invalid_auto_sidecar_does_not_block_video_import(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, corrupt
+) -> None:
     monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
     project = create_project(client, "Invalid auto sidecar")
     video_path = tmp_path / "DJI.mp4"
@@ -108,7 +117,9 @@ def test_invalid_auto_sidecar_does_not_block_video_import(client, monkeypatch, t
         assert video.status == "imported"
 
 
-def test_duplicate_import_can_attach_previously_missing_telemetry(client, monkeypatch):
+def test_duplicate_import_can_attach_previously_missing_telemetry(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
     project = create_project(client, "Duplicate")
     original = _upload(client, project["id"]).json()
@@ -119,7 +130,9 @@ def test_duplicate_import_can_attach_previously_missing_telemetry(client, monkey
     assert len(client.get(f"/api/v1/projects/{project['id']}/videos").json()) == 1
 
 
-def test_failed_video_import_does_not_leave_sidecar(client, monkeypatch):
+def test_failed_video_import_does_not_leave_sidecar(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from reefvision.domain.errors import ValidationError
 
     def fail(_):
@@ -132,7 +145,9 @@ def test_failed_video_import_does_not_leave_sidecar(client, monkeypatch):
     assert list(client.app.state.settings.resolved_data_dir.rglob("*.srt")) == []
 
 
-def test_failed_database_commit_removes_new_managed_media(client, monkeypatch):
+def test_failed_database_commit_removes_new_managed_media(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
     project = create_project(client, "Commit rollback")
 
@@ -164,7 +179,9 @@ AIRDATA_CSV = (
 )
 
 
-def test_uploaded_srt_is_primary_and_aligned_airdata_fills_missing_fields(client, monkeypatch):
+def test_uploaded_srt_is_primary_and_aligned_airdata_fills_missing_fields(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
     project = create_project(client, "SRT precedence")
     files = {
@@ -221,7 +238,9 @@ def test_uploaded_srt_is_primary_and_aligned_airdata_fills_missing_fields(client
         assert fallback_match.sample.latitude == 25.126
 
 
-def test_airdata_nonzero_offset_requires_evidence_and_does_not_import(client, monkeypatch):
+def test_airdata_nonzero_offset_requires_evidence_and_does_not_import(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
     project = create_project(client, "AirData evidence")
     files = {
@@ -237,7 +256,9 @@ def test_airdata_nonzero_offset_requires_evidence_and_does_not_import(client, mo
     assert client.get(f"/api/v1/projects/{project['id']}/videos").json() == []
 
 
-def test_failed_video_import_removes_managed_airdata(client, monkeypatch):
+def test_failed_video_import_removes_managed_airdata(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from reefvision.domain.errors import ValidationError
 
     def fail(_):
@@ -256,10 +277,10 @@ def test_failed_video_import_removes_managed_airdata(client, monkeypatch):
 
 
 def test_path_import_auto_discovers_unique_airdata(
-    client,
-    monkeypatch,
-    tmp_path,
-):
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     project = create_project(client, "Automatic AirData discovery")
 
     monkeypatch.setattr(
@@ -304,10 +325,10 @@ def test_path_import_auto_discovers_unique_airdata(
 
 
 def test_path_import_does_not_guess_between_multiple_airdata_logs(
-    client,
-    monkeypatch,
-    tmp_path,
-):
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     project = create_project(client, "Ambiguous AirData discovery")
 
     monkeypatch.setattr(
@@ -344,10 +365,10 @@ def test_path_import_does_not_guess_between_multiple_airdata_logs(
 
 
 def test_path_import_api_auto_discovers_sibling_telemetry(
-    client,
-    monkeypatch,
-    tmp_path,
-):
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     project = create_project(
         client,
         "Desktop automatic telemetry import",

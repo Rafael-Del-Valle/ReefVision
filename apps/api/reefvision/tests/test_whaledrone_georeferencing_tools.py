@@ -1,4 +1,5 @@
 import csv
+from pathlib import Path
 
 import pytest
 from openpyxl import Workbook
@@ -10,7 +11,7 @@ from reefvision.tests.whaledrone_georeferencing import (
 )
 
 
-def _dataset(tmp_path, *, ambiguous=False):
+def _dataset(tmp_path: Path, *, ambiguous=False):
     for name in ("videos", "telemetry", "annotations"):
         (tmp_path / name).mkdir()
     book = Workbook()
@@ -71,7 +72,7 @@ def _dataset(tmp_path, *, ambiguous=False):
     return annotation
 
 
-def test_documented_index_mapping_and_frame_base(tmp_path):
+def test_documented_index_mapping_and_frame_base(tmp_path: Path) -> None:
     _dataset(tmp_path)
     clip = select_validation_clip(tmp_path)
     assert clip.video_path.name == "synthetic.mp4"
@@ -81,7 +82,7 @@ def test_documented_index_mapping_and_frame_base(tmp_path):
     assert points[0].frame_index == 30 and points[0].reference_height_m == 100
 
 
-def test_published_flight_subdirectory_layout(tmp_path):
+def test_published_flight_subdirectory_layout(tmp_path: Path) -> None:
     _dataset(tmp_path)
     flight_directory = tmp_path / "videos" / "flight"
     flight_directory.mkdir()
@@ -91,20 +92,20 @@ def test_published_flight_subdirectory_layout(tmp_path):
     assert clip.srt_path == tmp_path / "telemetry" / "synthetic.SRT"
 
 
-def test_ambiguous_index_mapping_is_never_guessed(tmp_path):
+def test_ambiguous_index_mapping_is_never_guessed(tmp_path: Path) -> None:
     _dataset(tmp_path, ambiguous=True)
     with pytest.raises(ValidationError, match="unambiguous"):
         select_validation_clip(tmp_path)
 
 
-def test_explicit_video_resolves_ambiguous_index_mapping(tmp_path):
+def test_explicit_video_resolves_ambiguous_index_mapping(tmp_path: Path) -> None:
     _dataset(tmp_path, ambiguous=True)
     clip = select_validation_clip(tmp_path, video_name="synthetic.mp4")
     assert clip.video_path.name == "synthetic.mp4"
     assert clip.srt_path.name == "synthetic.SRT"
 
 
-def test_malformed_annotation_is_not_silently_dropped(tmp_path):
+def test_malformed_annotation_is_not_silently_dropped(tmp_path: Path) -> None:
     annotation = _dataset(tmp_path)
     text = annotation.read_text().replace("500", "not-a-number")
     annotation.write_text(text)
@@ -114,7 +115,7 @@ def test_malformed_annotation_is_not_silently_dropped(tmp_path):
 
 
 @pytest.mark.parametrize("field_count", [2, 3, 8, 9])
-def test_truncated_annotation_row_reports_validation_error(tmp_path, field_count):
+def test_truncated_annotation_row_reports_validation_error(tmp_path: Path, field_count) -> None:
     annotation = _dataset(tmp_path)
     lines = annotation.read_text().splitlines()
     annotation.write_text(lines[0] + "\n" + ",".join(lines[1].split(",")[:field_count]) + "\n")

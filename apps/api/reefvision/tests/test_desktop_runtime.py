@@ -1,5 +1,6 @@
 """Tests for the packaged Windows desktop event-loop configuration."""
 
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -60,7 +61,7 @@ def test_non_windows_process_keeps_default_event_loop_policy(
 
 def test_normal_desktop_launch_overrides_inherited_safe_mode(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     monkeypatch.setenv("REEFVISION_SAFE_MODE", "true")
     monkeypatch.setenv("REEFVISION_BACKGROUND_WORKER_ENABLED", "false")
@@ -87,7 +88,7 @@ def test_normal_desktop_launch_overrides_inherited_safe_mode(
 
 def test_explicit_desktop_safe_mode_disables_worker(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     monkeypatch.setenv("REEFVISION_SAFE_MODE", "false")
     monkeypatch.setenv("REEFVISION_BACKGROUND_WORKER_ENABLED", "true")

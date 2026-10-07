@@ -8,7 +8,7 @@ from reefvision.tests.whaledrone import find_whaledrone_srt, get_whaledrone_root
 
 
 @pytest.mark.integration
-def test_external_whaledrone_pair(request):
+def test_external_whaledrone_pair(request) -> None:
     if not request.config.getoption("--whaledrone-integration"):
         pytest.skip("Explicit --whaledrone-integration opt-in required")
     root = get_whaledrone_root()
