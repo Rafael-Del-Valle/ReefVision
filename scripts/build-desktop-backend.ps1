@@ -82,8 +82,8 @@ function Assert-ReefVisionModelCatalog {
     catch {
         throw "Required Model Hub catalog is not valid JSON: $Path ($($_.Exception.Message))"
     }
-    if ($Catalog.schema_version -ne 2 -or $Catalog.catalog_version -ne "2.0.0") {
-        throw "Model Hub catalog must use schema 2 and catalog version 2.0.0: $Path"
+    if ($Catalog.schema_version -ne 2) {
+        throw "Model Hub catalog must use schema 2: $Path"
     }
     $SourceCatalogPath = Join-Path $Root "config\model_catalog.json"
     if (-not (Test-Path -LiteralPath $SourceCatalogPath -PathType Leaf)) {
@@ -94,6 +94,18 @@ function Assert-ReefVisionModelCatalog {
     }
     catch {
         throw "Source Model Hub catalog is not valid JSON: $SourceCatalogPath ($($_.Exception.Message))"
+    }
+
+    if ($SourceCatalog.schema_version -ne 2) {
+        throw "Source Model Hub catalog must use schema 2: $SourceCatalogPath"
+    }
+
+    if ($Catalog.catalog_version -ne $SourceCatalog.catalog_version) {
+        throw (
+            "Packaged Model Hub catalog version must match the source catalog. " +
+            "Source=$($SourceCatalog.catalog_version); " +
+            "Packaged=$($Catalog.catalog_version): $Path"
+        )
     }
 
     $ExpectedCatalogIds = @(
