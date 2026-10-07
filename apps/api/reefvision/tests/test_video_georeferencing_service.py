@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from starlette.requests import Request
@@ -29,9 +31,13 @@ from reefvision.services.video_georeferencing_readiness import (
     VideoGeoreferencingReadinessService,
 )
 
+ServiceContext = tuple[Settings, Any, str]
+
 
 @pytest.fixture
-def service_context(tmp_path: Path):
+def service_context(
+    tmp_path: Path,
+) -> Iterator[ServiceContext]:
     settings = Settings(
         env="test",
         data_dir=tmp_path / "data",
@@ -147,7 +153,7 @@ def _source_for_video(
 
 
 def test_georeference_point_success(
-    service_context,
+    service_context: ServiceContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -181,7 +187,7 @@ def test_georeference_point_success(
 
 
 def test_georeference_point_requires_project_surface_evidence(
-    service_context,
+    service_context: ServiceContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -209,7 +215,7 @@ def test_georeference_point_requires_project_surface_evidence(
 
 
 def test_georeference_point_reports_missing_telemetry(
-    service_context,
+    service_context: ServiceContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -228,7 +234,7 @@ def test_georeference_point_reports_missing_telemetry(
 
 
 def test_georeference_point_reports_out_of_sync_telemetry(
-    service_context,
+    service_context: ServiceContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -247,7 +253,7 @@ def test_georeference_point_reports_out_of_sync_telemetry(
 
 
 def test_georeference_point_rejects_frame_outside_video(
-    service_context,
+    service_context: ServiceContext,
 ) -> None:
     settings, factory, video_id = service_context
     with factory() as session:
@@ -263,7 +269,7 @@ def test_georeference_point_rejects_frame_outside_video(
 
 
 def test_georeference_point_reports_missing_calibration(
-    service_context,
+    service_context: ServiceContext,
 ) -> None:
     settings, factory, video_id = service_context
     with factory() as session:
@@ -281,7 +287,7 @@ def test_georeference_point_reports_missing_calibration(
 
 
 def test_georeference_point_reports_corrupt_calibration_resolution(
-    service_context,
+    service_context: ServiceContext,
 ) -> None:
     settings, factory, video_id = service_context
     with factory() as session:
@@ -306,7 +312,7 @@ def test_georeference_point_reports_corrupt_calibration_resolution(
 
 
 def test_georeference_point_reports_calibration_checksum_mismatch(
-    service_context,
+    service_context: ServiceContext,
 ) -> None:
     settings, factory, video_id = service_context
     with factory() as session:
@@ -333,7 +339,7 @@ def test_georeference_point_reports_calibration_checksum_mismatch(
 
 
 def test_georeference_point_reports_zoom_mismatch(
-    service_context,
+    service_context: ServiceContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -356,7 +362,7 @@ def test_georeference_point_reports_zoom_mismatch(
 
 
 def test_georeference_point_rejects_unstable_near_horizon_projection(
-    service_context,
+    service_context: ServiceContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -393,7 +399,7 @@ def test_georeference_point_rejects_unstable_near_horizon_projection(
 
 
 def test_georeference_point_returns_projection_failure(
-    service_context,
+    service_context: ServiceContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -419,7 +425,7 @@ def test_georeference_point_returns_projection_failure(
 
 
 def test_georeferencing_readiness_reports_all_missing_inputs(
-    service_context,
+    service_context: ServiceContext,
 ) -> None:
     settings, factory, video_id = service_context
     with factory() as session:
@@ -443,7 +449,7 @@ def test_georeferencing_readiness_reports_all_missing_inputs(
 
 
 def test_georeferencing_readiness_reports_ready_for_synced_video(
-    service_context,
+    service_context: ServiceContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -481,7 +487,7 @@ def test_georeferencing_readiness_reports_ready_for_synced_video(
 
 
 def test_georeferencing_readiness_reports_airdata_alignment_problem(
-    service_context,
+    service_context: ServiceContext,
 ) -> None:
     settings, factory, video_id = service_context
     with factory() as session:
@@ -513,7 +519,7 @@ def test_georeferencing_readiness_reports_airdata_alignment_problem(
 
 
 def test_georeferencing_readiness_reports_synchronization_problem(
-    service_context,
+    service_context: ServiceContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -549,7 +555,7 @@ def test_georeferencing_readiness_reports_synchronization_problem(
 
 
 def test_georeferencing_readiness_allows_zoom_mismatch(
-    service_context,
+    service_context: ServiceContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -596,13 +602,13 @@ def test_georeferencing_readiness_allows_zoom_mismatch(
     ids=["mixed", "all-wrong", "all-matching", "zoom-tolerance", "other-failure"],
 )
 def test_georeference_tracks_skips_only_zoom_mismatches(
-    service_context,
+    service_context: ServiceContext,
     monkeypatch: pytest.MonkeyPatch,
-    zooms,
-    missing_roll_frame,
-    expected_frames,
-    skipped,
-    failed,
+    zooms: tuple[float, ...],
+    missing_roll_frame: int | None,
+    expected_frames: list[int],
+    skipped: int,
+    failed: int,
 ) -> None:
     settings, factory, video_id = service_context
     frames = [0, 75, 150, 224, 299]
@@ -684,11 +690,13 @@ def test_georeference_tracks_skips_only_zoom_mismatches(
             assert row.configuration_hash == response["configuration_hash"]
             observation = persistence.to_response(row)
             assert observation.calibration.zoom_state == 1.0
-            assert observation.telemetry.field_provenance["position_source"] == "dji_srt"
+            field_provenance = observation.telemetry.field_provenance
+            assert field_provenance is not None
+            assert field_provenance["position_source"] == "dji_srt"
 
 
 def test_georeference_detection_prefers_explicit_representative_pixel(
-    service_context,
+    service_context: ServiceContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -740,7 +748,7 @@ def test_georeference_detection_prefers_explicit_representative_pixel(
 
 
 def test_georeference_detection_falls_back_to_bbox_center(
-    service_context,
+    service_context: ServiceContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context
@@ -786,7 +794,7 @@ def test_georeference_detection_falls_back_to_bbox_center(
 
 
 def test_georeference_detection_rejects_explicit_pixel_outside_bbox(
-    service_context,
+    service_context: ServiceContext,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings, factory, video_id = service_context

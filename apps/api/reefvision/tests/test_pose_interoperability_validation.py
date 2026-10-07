@@ -2,7 +2,7 @@
 
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
-from typing import cast
+from typing import Any, Never, cast
 
 import pytest
 from fastapi import FastAPI
@@ -26,7 +26,9 @@ from reefvision.tests.test_pose_interoperability import (
 def test_missing_runtime_is_actionable_and_capability_is_available(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def missing(_name):
+    def missing(
+        _name: str,
+    ) -> Never:
         raise PackageNotFoundError("sleap-io")
 
     monkeypatch.setattr(module, "version", missing)
@@ -40,11 +42,15 @@ def test_missing_runtime_is_actionable_and_capability_is_available(
 
 @pytest.mark.parametrize("problem", ["version", "import"])
 def test_incompatible_or_broken_runtime_is_actionable(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch, problem
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    problem: str,
 ) -> None:
     monkeypatch.setattr(module, "version", lambda _: "0.1.0" if problem == "version" else "0.9.2")
 
-    def broken(_):
+    def broken(
+        _name: str,
+    ) -> Never:
         raise ImportError("incomplete runtime")
 
     monkeypatch.setattr(module, "import_module", broken)
@@ -67,11 +73,19 @@ def test_incompatible_or_broken_runtime_is_actionable(
     ],
 )
 def test_invalid_import_is_atomic_and_identifies_source(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch, failure
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
 ) -> None:
     project = create_project(client, "Invalid import")
     video = _pose_video(client, project["id"], monkeypatch)
-    labels = _external_labels(video["sha256"], include_provenance=True)
+    labels = cast(
+        Any,
+        _external_labels(
+            cast(str, video["sha256"]),
+            include_provenance=True,
+        ),
+    )
     if failure == "frame":
         labels.labeled_frames[1].frame_idx = 200
     elif failure == "fractional_frame":
@@ -104,12 +118,15 @@ def test_invalid_import_is_atomic_and_identifies_source(
 
 
 def test_invalid_extension_rejected_before_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
-    def unexpected():
+    def unexpected() -> Never:
         pytest.fail("runtime must not be accessed for an invalid extension")
 
     monkeypatch.setattr(Service, "_sleap_io", staticmethod(unexpected))
     with pytest.raises(ValidationError, match="extension"):
-        Service(None, None)._load_labels("slp", b"data", "wrong.csv")
+        Service(
+            cast(Any, None),
+            cast(Any, None),
+        )._load_labels("slp", b"data", "wrong.csv")
 
 
 def test_corrupt_zip_has_actionable_error(tmp_path: Path) -> None:
@@ -122,11 +139,20 @@ def test_partial_write_failure_rolls_back_schema_and_tracks(
 ) -> None:
     project = create_project(client, "Rollback")
     video = _pose_video(client, project["id"], monkeypatch)
-    labels = _external_labels(video["sha256"], include_provenance=True)
+    labels = cast(
+        Any,
+        _external_labels(
+            cast(str, video["sha256"]),
+            include_provenance=True,
+        ),
+    )
     monkeypatch.setattr(Service, "_load_labels", lambda *_a, **_kw: labels)
     original = Service._resolve_import_schema
 
-    def fail_after_schema(self, *args):
+    def fail_after_schema(
+        self: Service,
+        *args: Any,
+    ) -> Never:
         original(self, *args)
         self.session.flush()
         raise RuntimeError("injected write failure")
@@ -145,7 +171,9 @@ def test_partial_write_failure_rolls_back_schema_and_tracks(
 
 @pytest.mark.parametrize("problem", ["missing_media", "changed_media", "dimensions"])
 def test_export_rejects_invalid_source_media(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch, problem
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    problem: str,
 ) -> None:
     project = create_project(client, "Invalid source")
     video = _pose_video(client, project["id"], monkeypatch)
@@ -174,4 +202,10 @@ def test_export_rejects_invalid_source_media(
 
 def test_unsupported_export_format_fails_before_database_access() -> None:
     with pytest.raises(ValidationError, match="Unsupported pose interoperability format"):
-        Service(None, None).export("video", "invalid")
+        Service(
+            cast(Any, None),
+            cast(Any, None),
+        ).export(
+            "video",
+            cast(Any, "invalid"),
+        )

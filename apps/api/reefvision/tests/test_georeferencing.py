@@ -1,6 +1,7 @@
 import json
 import math
 from pathlib import Path
+from typing import Any
 
 import cv2
 import numpy as np
@@ -25,7 +26,7 @@ from reefvision.storage.georeferencing import load_camera_calibration
 
 
 @pytest.fixture
-def calibration():
+def calibration() -> CameraCalibration:
     return CameraCalibration(
         width_px=1000,
         height_px=800,
@@ -39,7 +40,7 @@ def calibration():
 
 
 @pytest.fixture
-def telemetry():
+def telemetry() -> TelemetrySample:
     return TelemetrySample(
         sample_index=1,
         time_s=0,
@@ -54,14 +55,13 @@ def telemetry():
 
 
 @pytest.fixture
-def surface():
+def surface() -> SurfaceReference:
     return SurfaceReference(
         takeoff_height_above_surface_m=0, evidence="Synthetic coincident planes"
     )
 
 
-def synthetic_external_calibration():
-    # Schema-compatible synthetic values, not the WhaleDrone calibration asset.
+def synthetic_external_calibration() -> dict[str, Any]:
     return {
         "image_resolution": {"width_px": 1000, "height_px": 800},
         "camera_matrix": {
@@ -102,7 +102,10 @@ def test_external_calibration_loader_and_existing_intrinsics(tmp_path: Path) -> 
         {"height_px": 1.5},
     ],
 )
-def test_invalid_calibration(bad, calibration) -> None:
+def test_invalid_calibration(
+    bad: dict[str, Any],
+    calibration: CameraCalibration,
+) -> None:
     data = calibration.model_dump()
     if bad:
         data.update(bad)
@@ -123,7 +126,9 @@ def test_contradictory_matrix_and_malformed_file(tmp_path: Path) -> None:
         load_camera_calibration(path)
 
 
-def test_camera_ray_axes(calibration) -> None:
+def test_camera_ray_axes(
+    calibration: CameraCalibration,
+) -> None:
     assert pixel_to_camera_ray(500, 400, calibration) == pytest.approx((0, 0, 1))
     left = pixel_to_camera_ray(400, 400, calibration)
     right = pixel_to_camera_ray(600, 400, calibration)
@@ -133,7 +138,9 @@ def test_camera_ray_axes(calibration) -> None:
     assert sum(x * x for x in right) == pytest.approx(1)
 
 
-def test_distortion_inversion_recovers_known_ray(calibration) -> None:
+def test_distortion_inversion_recovers_known_ray(
+    calibration: CameraCalibration,
+) -> None:
     calibration = calibration.model_copy(
         update={"distortion_coefficients": (0.12, -0.04, 0.001, -0.002, 0.01)}
     )
@@ -145,7 +152,12 @@ def test_distortion_inversion_recovers_known_ray(calibration) -> None:
         k,
         np.array(calibration.distortion_coefficients),
     )
-    ray = pixel_to_camera_ray(*pixel.reshape(2), calibration)
+    pixel_xy = pixel.reshape(2)
+    ray = pixel_to_camera_ray(
+        float(pixel_xy[0]),
+        float(pixel_xy[1]),
+        calibration,
+    )
     assert ray == pytest.approx(np.array([0.3, -0.2, 1]) / math.sqrt(1.13), abs=1e-9)
 
 
@@ -159,7 +171,11 @@ def test_native_resize_and_letterbox_restoration() -> None:
         pixel_to_native(20, 10, pad_top_px=50, **args)
 
 
-def test_nadir_center_and_metric_offsets(calibration, telemetry, surface) -> None:
+def test_nadir_center_and_metric_offsets(
+    calibration: CameraCalibration,
+    telemetry: TelemetrySample,
+    surface: SurfaceReference,
+) -> None:
     center = georeference_pixel(
         pixel_x=500, pixel_y=400, telemetry=telemetry, calibration=calibration, surface=surface
     )
@@ -173,14 +189,24 @@ def test_nadir_center_and_metric_offsets(calibration, telemetry, surface) -> Non
 @pytest.mark.parametrize(
     ("yaw", "expected"), [(0, (0, 100)), (90, (100, 0)), (180, (0, -100)), (270, (-100, 0))]
 )
-def test_oblique_yaw_and_pitch(calibration, telemetry, surface, yaw, expected) -> None:
+def test_oblique_yaw_and_pitch(
+    calibration: CameraCalibration,
+    telemetry: TelemetrySample,
+    surface: SurfaceReference,
+    yaw: float,
+    expected: tuple[float, float],
+) -> None:
     pose = telemetry.model_copy(update={"gimbal_yaw_deg": yaw, "gimbal_pitch_deg": -45})
     assert project_pixel_to_local_surface(500, 400, calibration, pose, surface) == pytest.approx(
         expected, abs=1e-10
     )
 
 
-def test_roll_rotation_and_nadir_camera_basis(calibration, telemetry, surface) -> None:
+def test_roll_rotation_and_nadir_camera_basis(
+    calibration: CameraCalibration,
+    telemetry: TelemetrySample,
+    surface: SurfaceReference,
+) -> None:
     pose = telemetry.model_copy(update={"gimbal_roll_deg": 90})
     assert project_pixel_to_local_surface(550, 400, calibration, pose, surface) == pytest.approx(
         (0, -10), abs=1e-10
@@ -188,7 +214,11 @@ def test_roll_rotation_and_nadir_camera_basis(calibration, telemetry, surface) -
     assert camera_ray_to_enu((0, 0, 1), telemetry) == pytest.approx((0, 0, -1), abs=1e-12)
 
 
-def test_combined_angles_preserve_rotation_order(calibration, telemetry, surface) -> None:
+def test_combined_angles_preserve_rotation_order(
+    calibration: CameraCalibration,
+    telemetry: TelemetrySample,
+    surface: SurfaceReference,
+) -> None:
     pose = telemetry.model_copy(
         update={"gimbal_yaw_deg": 90, "gimbal_pitch_deg": -45, "gimbal_roll_deg": 90}
     )
@@ -200,12 +230,18 @@ def test_combined_angles_preserve_rotation_order(calibration, telemetry, surface
 
 
 @pytest.mark.parametrize("pixel", [(-1, 400), (1000, 400), (500, 800), (float("nan"), 0)])
-def test_out_of_bounds_or_nonfinite_pixels_rejected(calibration, pixel) -> None:
+def test_out_of_bounds_or_nonfinite_pixels_rejected(
+    calibration: CameraCalibration,
+    pixel: tuple[float, float],
+) -> None:
     with pytest.raises(ValidationError, match="pixel"):
-        pixel_to_camera_ray(*pixel, calibration)
+        pixel_to_camera_ray(pixel[0], pixel[1], calibration)
 
 
-def test_explicit_surface_datum_and_range_limit(calibration, telemetry) -> None:
+def test_explicit_surface_datum_and_range_limit(
+    calibration: CameraCalibration,
+    telemetry: TelemetrySample,
+) -> None:
     surface = SurfaceReference(takeoff_height_above_surface_m=5, evidence="Synthetic 5 m datum")
     assert project_pixel_to_local_surface(550, 400, calibration, telemetry, surface)[
         0
@@ -223,11 +259,11 @@ def test_explicit_surface_datum_and_range_limit(calibration, telemetry) -> None:
     ],
 )
 def test_minimum_ray_depression_stability_guard(
-    calibration,
-    telemetry,
-    surface,
-    pitch_deg,
-    accepted,
+    calibration: CameraCalibration,
+    telemetry: TelemetrySample,
+    surface: SurfaceReference,
+    pitch_deg: float,
+    accepted: bool,
 ) -> None:
     pose = telemetry.model_copy(update={"gimbal_pitch_deg": pitch_deg})
 
@@ -261,7 +297,10 @@ def test_default_minimum_ray_depression_is_eight_degrees() -> None:
 
 @pytest.mark.parametrize("pitch", [0, 45, -0.0000001])
 def test_upward_parallel_or_near_parallel_ray_rejected(
-    calibration, telemetry, surface, pitch
+    calibration: CameraCalibration,
+    telemetry: TelemetrySample,
+    surface: SurfaceReference,
+    pitch: float,
 ) -> None:
     pose = telemetry.model_copy(update={"gimbal_pitch_deg": pitch})
     with pytest.raises(ValidationError):
@@ -279,7 +318,12 @@ def test_upward_parallel_or_near_parallel_ray_rejected(
         "gimbal_roll_deg",
     ],
 )
-def test_missing_telemetry_rejected(calibration, telemetry, surface, field) -> None:
+def test_missing_telemetry_rejected(
+    calibration: CameraCalibration,
+    telemetry: TelemetrySample,
+    surface: SurfaceReference,
+    field: str,
+) -> None:
     pose = telemetry.model_copy(update={field: None})
     with pytest.raises(ValidationError):
         georeference_pixel(
@@ -287,7 +331,10 @@ def test_missing_telemetry_rejected(calibration, telemetry, surface, field) -> N
         )
 
 
-def test_surface_reference_is_explicit_and_zoom_must_match(calibration, telemetry) -> None:
+def test_surface_reference_is_explicit_and_zoom_must_match(
+    calibration: CameraCalibration,
+    telemetry: TelemetrySample,
+) -> None:
     with pytest.raises(SchemaError):
         SurfaceReference(evidence="No height supplied")
     surface = SurfaceReference(camera_height_m=25, evidence="Independent height measurement")

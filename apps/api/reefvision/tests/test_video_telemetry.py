@@ -5,6 +5,7 @@ from typing import cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from httpx import Response
 
 from reefvision.db.models import VideoAsset
 from reefvision.services import video_assets as video_assets_module
@@ -15,11 +16,20 @@ from reefvision.tests.test_telemetry import FIXTURES
 from reefvision.tests.test_video_tracking_phase6 import _fake_metadata
 
 
-def _upload(client: TestClient, project_id, *, srt_name="fish.SRT", srt=None):
+def _upload(
+    client: TestClient,
+    project_id: str,
+    *,
+    srt_name: str = "fish.SRT",
+    srt: bytes | None = None,
+) -> Response:
     files = {"file": ("fish.mp4", io.BytesIO(b"fake-video"), "video/mp4")}
     if srt is not None:
         files["telemetry_file"] = (srt_name, io.BytesIO(srt), "application/x-subrip")
-    return client.post(f"/api/v1/projects/{project_id}/imports/videos", files=files)
+    return cast(
+        Response,
+        client.post(f"/api/v1/projects/{project_id}/imports/videos", files=files),
+    )
 
 
 def test_uploaded_sidecar_survives_new_session_and_frame_extraction(
@@ -73,7 +83,10 @@ def test_ordinary_and_old_videos_have_no_telemetry(
 
 @pytest.mark.parametrize(("name", "data"), [("other.srt", b"bad"), ("fish.srt", b"bad")])
 def test_explicit_invalid_upload_returns_domain_error_without_import(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch, name, data
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    data: bytes,
 ) -> None:
     monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
     project = create_project(client, "Bad upload")
@@ -113,7 +126,10 @@ def test_path_pairing_metadata_and_missing_external_source(
     "corrupt", ["malformed", "1\n" + "9" * 310 + ":00:00,000 --> 00:00:01,000\n[latitude: 25]"]
 )
 def test_invalid_auto_sidecar_does_not_block_video_import(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, corrupt
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    corrupt: str,
 ) -> None:
     monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
     project = create_project(client, "Invalid auto sidecar")
@@ -147,7 +163,7 @@ def test_failed_video_import_does_not_leave_sidecar(
 ) -> None:
     from reefvision.domain.errors import ValidationError
 
-    def fail(_):
+    def fail(_path: Path) -> None:
         raise ValidationError("bad video")
 
     monkeypatch.setattr(video_assets_module, "_inspect_video", fail)
@@ -163,7 +179,7 @@ def test_failed_database_commit_removes_new_managed_media(
     monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
     project = create_project(client, "Commit rollback")
 
-    def fail_commit():
+    def fail_commit() -> None:
         raise RuntimeError("simulated database failure")
 
     settings = cast(FastAPI, client.app).state.settings
@@ -273,7 +289,7 @@ def test_failed_video_import_removes_managed_airdata(
 ) -> None:
     from reefvision.domain.errors import ValidationError
 
-    def fail(_):
+    def fail(_path: Path) -> None:
         raise ValidationError("bad video")
 
     monkeypatch.setattr(video_assets_module, "_inspect_video", fail)
