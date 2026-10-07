@@ -4,10 +4,12 @@ import json
 import sqlite3
 import subprocess
 from pathlib import Path
+from typing import cast
 
 import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision import __version__
@@ -68,7 +70,9 @@ def test_system_service_uses_resolved_alembic_paths(
         lambda: (expected_ini, expected_migrations),
     )
 
-    service = SystemService(client.app.state.settings, client.app.state.engine)
+    service = SystemService(
+        cast(FastAPI, client.app).state.settings, cast(FastAPI, client.app).state.engine
+    )
     script = service._alembic_script_directory()
 
     assert Path(script.dir) == expected_migrations

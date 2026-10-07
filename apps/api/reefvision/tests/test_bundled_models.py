@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.schemas.model_catalog import (
@@ -99,23 +101,27 @@ def test_bundled_checkpoint_is_seeded_and_ready(
     _write_bundle(bundle_root, entry, payload, checksum)
     monkeypatch.setenv("REEFVISION_BUNDLED_MODELS_DIR", str(bundle_root))
 
-    installed, warnings = bundled_models.install_bundled_catalog_models(client.app.state.settings)
+    installed, warnings = bundled_models.install_bundled_catalog_models(
+        cast(FastAPI, client.app).state.settings
+    )
 
     assert warnings == []
     assert installed == [entry.catalog_id]
     destination = catalog_asset_path(
-        client.app.state.settings,
+        cast(FastAPI, client.app).state.settings,
         entry.catalog_id,
         entry.expected_files[0].filename,
     )
     assert destination.read_bytes() == payload
-    record = catalog_manifest_record(client.app.state.settings, entry.catalog_id)
+    record = catalog_manifest_record(cast(FastAPI, client.app).state.settings, entry.catalog_id)
     assert record is not None
     assert record["sha256"] == checksum
     assert record["source"] == "bundled_installer"
 
-    with client.app.state.session_factory() as session:
-        state = ModelCatalogService(session, client.app.state.settings)._compose_static_state(
+    with cast(FastAPI, client.app).state.session_factory() as session:
+        state = ModelCatalogService(
+            session, cast(FastAPI, client.app).state.settings
+        )._compose_static_state(
             entry,
             job=None,
             manifest={"manifest_version": 1, "assets": {entry.catalog_id: record}},
@@ -133,12 +139,14 @@ def test_corrupt_bundled_checkpoint_is_rejected(
     _write_bundle(bundle_root, entry, b"short", checksum)
     monkeypatch.setenv("REEFVISION_BUNDLED_MODELS_DIR", str(bundle_root))
 
-    installed, warnings = bundled_models.install_bundled_catalog_models(client.app.state.settings)
+    installed, warnings = bundled_models.install_bundled_catalog_models(
+        cast(FastAPI, client.app).state.settings
+    )
 
     assert installed == []
     assert any("metadata does not match" in warning for warning in warnings)
     destination = catalog_asset_path(
-        client.app.state.settings,
+        cast(FastAPI, client.app).state.settings,
         entry.catalog_id,
         entry.expected_files[0].filename,
     )
@@ -235,16 +243,18 @@ def test_multifile_bundled_model_is_seeded(
     )
     monkeypatch.setenv("REEFVISION_BUNDLED_MODELS_DIR", str(bundle_root))
 
-    installed, warnings = bundled_models.install_bundled_catalog_models(client.app.state.settings)
+    installed, warnings = bundled_models.install_bundled_catalog_models(
+        cast(FastAPI, client.app).state.settings
+    )
 
     assert warnings == []
     assert installed == [entry.catalog_id]
     for expected in entry.expected_files:
         destination = catalog_asset_path(
-            client.app.state.settings, entry.catalog_id, expected.filename
+            cast(FastAPI, client.app).state.settings, entry.catalog_id, expected.filename
         )
         assert destination.read_bytes() == payloads[expected.filename]
-    record = catalog_manifest_record(client.app.state.settings, entry.catalog_id)
+    record = catalog_manifest_record(cast(FastAPI, client.app).state.settings, entry.catalog_id)
     assert record is not None
     assert record["sha256"] is None
     assert len(record["files"]) == 3

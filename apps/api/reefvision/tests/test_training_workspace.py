@@ -3,8 +3,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from typing import cast
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.jobs.training import _read_results_csv, _read_results_table, process_training_job
@@ -370,7 +372,7 @@ def test_training_job_processing_creates_completed_run_and_experiment(
                 if cancel:
                     from reefvision.db.models import Job
 
-                    with client.app.state.session_factory() as session:
+                    with cast(FastAPI, client.app).state.session_factory() as session:
                         session.get(Job, run["job_id"]).status = "cancel_requested"
                         session.commit()
                 with results_csv.open("a", encoding="utf-8") as handle:
@@ -393,7 +395,9 @@ def test_training_job_processing_creates_completed_run_and_experiment(
                 if statement.lstrip().upper().startswith(("UPDATE ", "INSERT ")):
                     writes.append(statement)
 
-            event.listen(client.app.state.engine, "before_cursor_execute", track_writes)
+            event.listen(
+                cast(FastAPI, client.app).state.engine, "before_cursor_execute", track_writes
+            )
             try:
                 validator = SimpleNamespace(training=False)
                 for event_name in ("on_val_start", "on_val_end"):
@@ -404,7 +408,9 @@ def test_training_job_processing_creates_completed_run_and_experiment(
                     callback(self.trainer)
                 assert writes == []
             finally:
-                event.remove(client.app.state.engine, "before_cursor_execute", track_writes)
+                event.remove(
+                    cast(FastAPI, client.app).state.engine, "before_cursor_execute", track_writes
+                )
             for callback in self.callbacks.get("on_train_end", []):
                 callback(self.trainer)
 
@@ -440,8 +446,8 @@ def test_training_job_processing_creates_completed_run_and_experiment(
     run = run_response.json()
 
     processed = process_training_job(
-        client.app.state.settings,
-        client.app.state.session_factory,
+        cast(FastAPI, client.app).state.settings,
+        cast(FastAPI, client.app).state.session_factory,
         run["job_id"],
     )
     if cancel:
@@ -449,7 +455,7 @@ def test_training_job_processing_creates_completed_run_and_experiment(
         assert cancelled["status"] == cancelled["stage"] == "cancelled"
         assert client.get(f"/api/v1/jobs/{run['job_id']}").json()["status"] == "cancelled"
         assert client.get(f"/api/v1/projects/{project['id']}/experiments").json() == []
-        assert list(client.app.state.settings.resolved_data_dir.rglob("best.pt"))
+        assert list(cast(FastAPI, client.app).state.settings.resolved_data_dir.rglob("best.pt"))
         return
     if not processed:
         failed_job = client.get(f"/api/v1/jobs/{run['job_id']}").json()

@@ -7,10 +7,11 @@ from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.db.models import VideoAsset, VideoTrack
@@ -310,7 +311,7 @@ def test_real_service_export_import_round_trip(
             assert manifest["format"] == exchange_format
             assert manifest["frames"][0]["reefvision_frame_index"] == 4
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         track = session.get(VideoTrack, track_id)
         assert track is not None
         track.deleted_at = datetime.now(UTC)
@@ -365,11 +366,11 @@ def test_real_slp_export_remains_self_contained_after_source_removal(
     import sleap_io as sio
 
     _, video, _ = real_service_pose
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         asset = session.get(VideoAsset, video["id"])
         assert asset is not None
         source = resolve_managed_project_path(
-            client.app.state.settings,
+            cast(FastAPI, client.app).state.settings,
             asset.managed_path,
         )
     expected = sio.Video.from_filename(

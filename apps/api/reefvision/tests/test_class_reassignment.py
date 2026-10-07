@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -59,7 +60,7 @@ def seed_reassignment_records(
     include_deleted_annotation: bool = True,
     include_historical_prediction: bool = True,
 ) -> None:
-    with Session(client.app.state.engine) as session:
+    with Session(cast(FastAPI, client.app).state.engine) as session:
         image = ImageAsset(
             id="image-1",
             project_id=project["id"],
@@ -389,7 +390,7 @@ def test_reassign_preview_and_execution_updates_only_mutable_records(client: Tes
     assert execute_payload["status"] == "completed"
     assert execute_payload["final_state"] == "reassigned"
 
-    with Session(client.app.state.engine) as session:
+    with Session(cast(FastAPI, client.app).state.engine) as session:
         active_annotation = session.get(Annotation, "annotation-active")
         deleted_annotation = session.get(Annotation, "annotation-deleted")
         pending_proposal = session.get(PredictionProposal, "proposal-pending")
@@ -469,7 +470,7 @@ def test_reassign_preview_checksum_blocks_scope_drift(client: TestClient) -> Non
     assert preview.status_code == 201, preview.text
     preview_payload = preview.json()
 
-    with Session(client.app.state.engine) as session:
+    with Session(cast(FastAPI, client.app).state.engine) as session:
         session.add(
             Annotation(
                 id="annotation-new",
@@ -581,7 +582,7 @@ def test_reassign_delete_deletes_source_after_safe_reassignment(client: TestClie
     assert execute_payload["final_state"] == "reassigned_and_deleted"
     assert execute_payload["source_class"]["name"] == source_class["name"]
 
-    with Session(client.app.state.engine) as session:
+    with Session(cast(FastAPI, client.app).state.engine) as session:
         assert session.get(LabelClass, source_class["id"]) is None
         active_annotation = session.get(Annotation, "annotation-active")
         pending_proposal = session.get(PredictionProposal, "proposal-pending")

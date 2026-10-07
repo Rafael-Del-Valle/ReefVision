@@ -2,8 +2,10 @@
 
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
+from typing import cast
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
@@ -96,7 +98,7 @@ def test_invalid_import_is_atomic_and_identifies_source(
     assert "broken.slp" in response.json()["detail"]
     assert "Nothing was imported" in response.json()["detail"]
     assert "atomic" in response.json()["detail"]
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         assert session.scalar(select(func.count()).select_from(VideoTrack)) == 0
         assert session.scalar(select(func.count()).select_from(PoseLandmarkSchema)) == 0
 
@@ -136,7 +138,7 @@ def test_partial_write_failure_rolls_back_schema_and_tracks(
         files={"file": ("broken.slp", b"data", "application/octet-stream")},
     )
     assert response.status_code == 400, response.text
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         assert session.scalar(select(func.count()).select_from(VideoTrack)) == 0
         assert session.scalar(select(func.count()).select_from(PoseLandmarkSchema)) == 0
 
@@ -149,9 +151,11 @@ def test_export_rejects_invalid_source_media(
     video = _pose_video(client, project["id"], monkeypatch)
     _persist_pose_track(client, project, video)
     monkeypatch.setattr(Service, "_sleap_io", staticmethod(lambda: _FakeSio))
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         asset = session.get(VideoAsset, video["id"])
-        path = resolve_managed_project_path(client.app.state.settings, asset.managed_path)
+        path = resolve_managed_project_path(
+            cast(FastAPI, client.app).state.settings, asset.managed_path
+        )
         if problem == "missing_media":
             path.unlink()  # Synthetic test media under the isolated pytest directory.
         elif problem == "changed_media":

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from typing import cast
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.db.models import Job
@@ -13,7 +15,7 @@ from reefvision.tests.test_annotations import create_project
 
 
 def _queued_job(client: TestClient, project_id: str, job_type: str) -> str:
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = Job(
             project_id=project_id,
             job_type=job_type,
@@ -36,18 +38,20 @@ def test_unsupported_job_is_failed_and_does_not_poison_queue(client: TestClient)
 
     assert (
         worker.process_next_thumbnail_job(
-            client.app.state.settings, client.app.state.session_factory
+            cast(FastAPI, client.app).state.settings,
+            cast(FastAPI, client.app).state.session_factory,
         )
         is True
     )
     assert (
         worker.process_next_thumbnail_job(
-            client.app.state.settings, client.app.state.session_factory
+            cast(FastAPI, client.app).state.settings,
+            cast(FastAPI, client.app).state.session_factory,
         )
         is True
     )
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         first = session.get(Job, first_id)
         second = session.get(Job, second_id)
         assert first is not None
@@ -74,18 +78,20 @@ def test_unexpected_handler_error_is_contained_and_queue_continues(
 
     assert (
         worker.process_next_thumbnail_job(
-            client.app.state.settings, client.app.state.session_factory
+            cast(FastAPI, client.app).state.settings,
+            cast(FastAPI, client.app).state.session_factory,
         )
         is True
     )
     assert (
         worker.process_next_thumbnail_job(
-            client.app.state.settings, client.app.state.session_factory
+            cast(FastAPI, client.app).state.settings,
+            cast(FastAPI, client.app).state.session_factory,
         )
         is True
     )
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         crashing = session.get(Job, crashing_id)
         following = session.get(Job, next_id)
         assert crashing is not None
@@ -101,7 +107,7 @@ def test_isolated_background_job_claim_is_atomic(
 ) -> None:
     project = create_project(client, "Atomic isolated job claim")
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = Job(
             project_id=project["id"],
             job_type="video_tracking",
@@ -117,17 +123,17 @@ def test_isolated_background_job_claim_is_atomic(
         job_id = job.id
 
     assert worker._claim_isolated_job(
-        client.app.state.session_factory,
+        cast(FastAPI, client.app).state.session_factory,
         job_id,
         "video_tracking",
     )
     assert not worker._claim_isolated_job(
-        client.app.state.session_factory,
+        cast(FastAPI, client.app).state.session_factory,
         job_id,
         "video_tracking",
     )
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         claimed = session.get(Job, job_id)
         assert claimed is not None
         assert claimed.status == "running"
@@ -147,7 +153,7 @@ def test_isolated_video_tracking_launch_completes_without_asyncio_subprocess(
             self.returncode: int | None = None
 
         def wait(self) -> int:
-            with client.app.state.session_factory() as session:
+            with cast(FastAPI, client.app).state.session_factory() as session:
                 job = session.get(Job, job_id)
                 assert job is not None
                 job.status = "succeeded"
@@ -171,8 +177,8 @@ def test_isolated_video_tracking_launch_completes_without_asyncio_subprocess(
 
     async def run() -> bool:
         return await worker.process_isolated_video_tracking_job(
-            client.app.state.settings,
-            client.app.state.session_factory,
+            cast(FastAPI, client.app).state.settings,
+            cast(FastAPI, client.app).state.session_factory,
             job_id,
             asyncio.Event(),
         )
@@ -182,7 +188,7 @@ def test_isolated_video_tracking_launch_completes_without_asyncio_subprocess(
     assert "--video-tracking-job" in launched[0]
     assert job_id in launched[0]
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = session.get(Job, job_id)
         assert job is not None
         assert job.status == "succeeded"
@@ -202,15 +208,15 @@ def test_isolated_video_tracking_launch_failure_is_terminal(
 
     async def run() -> bool:
         return await worker.process_isolated_video_tracking_job(
-            client.app.state.settings,
-            client.app.state.session_factory,
+            cast(FastAPI, client.app).state.settings,
+            cast(FastAPI, client.app).state.session_factory,
             job_id,
             asyncio.Event(),
         )
 
     assert asyncio.run(run()) is True
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = session.get(Job, job_id)
         assert job is not None
         assert job.status == "failed"
@@ -233,15 +239,15 @@ def test_isolated_annotated_export_launch_failure_is_terminal(
 
     async def run() -> bool:
         return await worker.process_isolated_annotated_video_export_job(
-            client.app.state.settings,
-            client.app.state.session_factory,
+            cast(FastAPI, client.app).state.settings,
+            cast(FastAPI, client.app).state.session_factory,
             job_id,
             asyncio.Event(),
         )
 
     assert asyncio.run(run()) is True
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = session.get(Job, job_id)
         assert job is not None
         assert job.status == "failed"
@@ -255,7 +261,7 @@ def test_preclaimed_video_tracking_job_is_accepted_by_child(
 ) -> None:
     project = create_project(client, "Preclaimed tracking handoff")
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = Job(
             project_id=project["id"],
             job_type="video_tracking",
@@ -274,21 +280,21 @@ def test_preclaimed_video_tracking_job_is_accepted_by_child(
         job_id = job.id
 
     assert worker._claim_isolated_job(
-        client.app.state.session_factory,
+        cast(FastAPI, client.app).state.session_factory,
         job_id,
         "video_tracking",
     )
 
     assert (
         video_tracking_module.process_video_tracking_job(
-            client.app.state.settings,
-            client.app.state.session_factory,
+            cast(FastAPI, client.app).state.settings,
+            cast(FastAPI, client.app).state.session_factory,
             job_id,
         )
         is False
     )
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = session.get(Job, job_id)
         assert job is not None
         assert job.status == "failed"
@@ -302,7 +308,7 @@ def test_preclaimed_annotated_export_job_is_accepted_by_child(
 ) -> None:
     project = create_project(client, "Preclaimed export handoff")
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = Job(
             project_id=project["id"],
             job_type="video_annotated_export",
@@ -321,21 +327,21 @@ def test_preclaimed_annotated_export_job_is_accepted_by_child(
         job_id = job.id
 
     assert worker._claim_isolated_job(
-        client.app.state.session_factory,
+        cast(FastAPI, client.app).state.session_factory,
         job_id,
         "video_annotated_export",
     )
 
     assert (
         video_annotated_export_module.process_video_annotated_export_job(
-            client.app.state.settings,
-            client.app.state.session_factory,
+            cast(FastAPI, client.app).state.settings,
+            cast(FastAPI, client.app).state.session_factory,
             job_id,
         )
         is False
     )
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = session.get(Job, job_id)
         assert job is not None
         assert job.status == "failed"
@@ -347,7 +353,7 @@ def test_interrupted_video_tracking_is_not_silently_requeued(
 ) -> None:
     project = create_project(client, "Interrupted tracking recovery")
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = Job(
             project_id=project["id"],
             job_type="video_tracking",
@@ -367,13 +373,13 @@ def test_interrupted_video_tracking_is_not_silently_requeued(
         job_id = job.id
 
     recovered = worker.recover_interrupted_jobs(
-        client.app.state.session_factory,
-        client.app.state.settings,
+        cast(FastAPI, client.app).state.session_factory,
+        cast(FastAPI, client.app).state.settings,
     )
 
     assert recovered >= 1
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = session.get(Job, job_id)
         assert job is not None
         assert job.status == "failed"
@@ -389,7 +395,7 @@ def test_interrupted_video_tracking_cancellation_finishes_cancelled(
 ) -> None:
     project = create_project(client, "Interrupted tracking cancellation")
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = Job(
             project_id=project["id"],
             job_type="video_tracking",
@@ -405,11 +411,11 @@ def test_interrupted_video_tracking_cancellation_finishes_cancelled(
         job_id = job.id
 
     worker.recover_interrupted_jobs(
-        client.app.state.session_factory,
-        client.app.state.settings,
+        cast(FastAPI, client.app).state.session_factory,
+        cast(FastAPI, client.app).state.settings,
     )
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = session.get(Job, job_id)
         assert job is not None
         assert job.status == "cancelled"
@@ -423,7 +429,7 @@ def test_generic_interrupted_job_is_requeued(
 ) -> None:
     project = create_project(client, "Generic interrupted recovery")
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = Job(
             project_id=project["id"],
             job_type="diagnostics",
@@ -439,11 +445,11 @@ def test_generic_interrupted_job_is_requeued(
         job_id = job.id
 
     worker.recover_interrupted_jobs(
-        client.app.state.session_factory,
-        client.app.state.settings,
+        cast(FastAPI, client.app).state.session_factory,
+        cast(FastAPI, client.app).state.settings,
     )
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = session.get(Job, job_id)
         assert job is not None
         assert job.status == "queued"
@@ -458,7 +464,7 @@ def test_generic_interrupted_cancellation_is_not_requeued(
 ) -> None:
     project = create_project(client, "Generic interrupted cancellation")
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = Job(
             project_id=project["id"],
             job_type="diagnostics",
@@ -474,11 +480,11 @@ def test_generic_interrupted_cancellation_is_not_requeued(
         job_id = job.id
 
     worker.recover_interrupted_jobs(
-        client.app.state.session_factory,
-        client.app.state.settings,
+        cast(FastAPI, client.app).state.session_factory,
+        cast(FastAPI, client.app).state.settings,
     )
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = session.get(Job, job_id)
         assert job is not None
         assert job.status == "cancelled"
@@ -493,7 +499,7 @@ def test_running_cooperative_job_can_request_cancellation(
 ) -> None:
     project = create_project(client, "Cooperative cancellation")
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = Job(
             project_id=project["id"],
             job_type="diagnostics",
@@ -513,7 +519,7 @@ def test_running_cooperative_job_can_request_cancellation(
     assert response.status_code == 200
     assert response.json()["status"] == "cancel_requested"
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = session.get(Job, job_id)
         assert job is not None
         assert job.status == "cancel_requested"
@@ -524,7 +530,7 @@ def test_running_noncooperative_job_rejects_cancellation(
 ) -> None:
     project = create_project(client, "Noncooperative cancellation")
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = Job(
             project_id=project["id"],
             job_type="classification_inference",
@@ -544,7 +550,7 @@ def test_running_noncooperative_job_rejects_cancellation(
     assert response.status_code == 409
     assert "do not support cooperative cancellation" in response.json()["detail"]
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = session.get(Job, job_id)
         assert job is not None
         assert job.status == "running"
@@ -555,7 +561,7 @@ def test_queued_noncooperative_job_can_still_be_cancelled(
 ) -> None:
     project = create_project(client, "Queued cancellation")
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = Job(
             project_id=project["id"],
             job_type="classification_inference",
@@ -575,7 +581,7 @@ def test_queued_noncooperative_job_can_still_be_cancelled(
     assert response.status_code == 200
     assert response.json()["status"] == "cancelled"
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = session.get(Job, job_id)
         assert job is not None
         assert job.status == "cancelled"

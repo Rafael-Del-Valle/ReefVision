@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import io
+from typing import cast
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.db.models import Job
@@ -110,30 +112,32 @@ def _directory_entry() -> tuple[ModelCatalogEntryResponse, dict[str, bytes]]:
 def _stage_directory_entry(client: TestClient, entry, files, manifest_files=None) -> None:
     records = []
     for expected in entry.expected_files:
-        path = catalog_asset_path(client.app.state.settings, entry.catalog_id, expected.filename)
+        path = catalog_asset_path(
+            cast(FastAPI, client.app).state.settings, entry.catalog_id, expected.filename
+        )
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(files[expected.filename])
         records.append(
             {
                 "filename": expected.filename,
                 "relative_path": path.relative_to(
-                    client.app.state.settings.resolved_data_dir
+                    cast(FastAPI, client.app).state.settings.resolved_data_dir
                 ).as_posix(),
                 "sha256": expected.sha256,
                 "size_bytes": expected.size_bytes,
             }
         )
     write_catalog_manifest_record(
-        client.app.state.settings,
+        cast(FastAPI, client.app).state.settings,
         entry.catalog_id,
         {
             "filename": entry.expected_files[0].filename,
             "relative_path": catalog_asset_path(
-                client.app.state.settings,
+                cast(FastAPI, client.app).state.settings,
                 entry.catalog_id,
                 entry.expected_files[0].filename,
             )
-            .parent.relative_to(client.app.state.settings.resolved_data_dir)
+            .parent.relative_to(cast(FastAPI, client.app).state.settings.resolved_data_dir)
             .as_posix(),
             "size_bytes": entry.expected_size,
             "files": records if manifest_files is None else manifest_files,
@@ -142,11 +146,13 @@ def _stage_directory_entry(client: TestClient, entry, files, manifest_files=None
 
 
 def _directory_state(client: TestClient, entry: ModelCatalogEntryResponse):
-    with client.app.state.session_factory() as session:
-        return ModelCatalogService(session, client.app.state.settings)._compose_static_state(
+    with cast(FastAPI, client.app).state.session_factory() as session:
+        return ModelCatalogService(
+            session, cast(FastAPI, client.app).state.settings
+        )._compose_static_state(
             entry,
             job=None,
-            manifest=load_catalog_manifest(client.app.state.settings),
+            manifest=load_catalog_manifest(cast(FastAPI, client.app).state.settings),
         )
 
 
@@ -159,16 +165,18 @@ def test_verified_directory_model_is_ready(client: TestClient) -> None:
 def test_directory_model_missing_file_is_corrupted(client: TestClient) -> None:
     entry, files = _directory_entry()
     _stage_directory_entry(client, entry, files)
-    catalog_asset_path(client.app.state.settings, entry.catalog_id, "model.safetensors").unlink()
+    catalog_asset_path(
+        cast(FastAPI, client.app).state.settings, entry.catalog_id, "model.safetensors"
+    ).unlink()
     assert _directory_state(client, entry).installation_state == "Corrupted"
 
 
 def test_directory_model_wrong_size_is_corrupted(client: TestClient) -> None:
     entry, files = _directory_entry()
     _stage_directory_entry(client, entry, files)
-    catalog_asset_path(client.app.state.settings, entry.catalog_id, "config.json").write_bytes(
-        b"wrong-size"
-    )
+    catalog_asset_path(
+        cast(FastAPI, client.app).state.settings, entry.catalog_id, "config.json"
+    ).write_bytes(b"wrong-size")
     assert _directory_state(client, entry).installation_state == "Corrupted"
 
 
@@ -178,7 +186,7 @@ def test_directory_model_wrong_checksum_is_corrupted(client: TestClient) -> None
     original = files["model.safetensors"]
     replacement = bytes([original[0] ^ 1]) + original[1:]
     catalog_asset_path(
-        client.app.state.settings, entry.catalog_id, "model.safetensors"
+        cast(FastAPI, client.app).state.settings, entry.catalog_id, "model.safetensors"
     ).write_bytes(replacement)
     assert _directory_state(client, entry).installation_state == "Corrupted"
 
@@ -225,27 +233,27 @@ def test_successful_install_verifies_persists_and_can_be_removed(
     job_id = response.json()["id"]
 
     processed = process_model_install_job(
-        client.app.state.settings,
-        client.app.state.session_factory,
+        cast(FastAPI, client.app).state.settings,
+        cast(FastAPI, client.app).state.session_factory,
         job_id,
     )
 
     assert processed is True
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = session.get(Job, job_id)
         assert job is not None
         assert job.status == "succeeded"
         assert job.progress_current == len(payload)
         assert job.result_json["sha256"] == hashlib.sha256(payload).hexdigest()
-        service = ModelCatalogService(session, client.app.state.settings)
+        service = ModelCatalogService(session, cast(FastAPI, client.app).state.settings)
         state = service._compose_static_state(
             entry,
             job=service._latest_install_jobs(project["id"]).get(entry.catalog_id),
-            manifest=load_catalog_manifest(client.app.state.settings),
+            manifest=load_catalog_manifest(cast(FastAPI, client.app).state.settings),
         )
         assert state.installation_state == "Ready"
         assert state.installed_asset_id == f"catalog_model:{entry.catalog_id}"
-    record = catalog_manifest_record(client.app.state.settings, entry.catalog_id)
+    record = catalog_manifest_record(cast(FastAPI, client.app).state.settings, entry.catalog_id)
     assert record is not None
     assert record["sha256"] == hashlib.sha256(payload).hexdigest()
 
@@ -258,10 +266,12 @@ def test_successful_install_verifies_persists_and_can_be_removed(
     remove_response = client.delete(endpoint)
     assert remove_response.status_code == 204
     path = catalog_asset_path(
-        client.app.state.settings, entry.catalog_id, entry.expected_files[0].filename
+        cast(FastAPI, client.app).state.settings, entry.catalog_id, entry.expected_files[0].filename
     )
     assert not path.exists()
-    assert catalog_manifest_record(client.app.state.settings, entry.catalog_id) is None
+    assert (
+        catalog_manifest_record(cast(FastAPI, client.app).state.settings, entry.catalog_id) is None
+    )
 
 
 def test_directory_install_downloads_and_verifies_every_file(
@@ -284,11 +294,11 @@ def test_directory_install_downloads_and_verifies_every_file(
     response = client.post(endpoint, json={"confirmed": True})
     assert response.status_code == 200, response.text
     assert process_model_install_job(
-        client.app.state.settings,
-        client.app.state.session_factory,
+        cast(FastAPI, client.app).state.settings,
+        cast(FastAPI, client.app).state.session_factory,
         response.json()["id"],
     )
-    record = catalog_manifest_record(client.app.state.settings, entry.catalog_id)
+    record = catalog_manifest_record(cast(FastAPI, client.app).state.settings, entry.catalog_id)
     assert record is not None
     assert len(record["files"]) == 3
     assert _directory_state(client, entry).installation_state == "Ready"
@@ -307,17 +317,19 @@ def test_corrupt_download_is_rejected(client: TestClient, monkeypatch: pytest.Mo
 
     assert (
         process_model_install_job(
-            client.app.state.settings, client.app.state.session_factory, job_id
+            cast(FastAPI, client.app).state.settings,
+            cast(FastAPI, client.app).state.session_factory,
+            job_id,
         )
         is False
     )
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = session.get(Job, job_id)
         assert job is not None
         assert job.status == "failed"
         assert "Checksum mismatch" in (job.error_message or "")
     path = catalog_asset_path(
-        client.app.state.settings, entry.catalog_id, entry.expected_files[0].filename
+        cast(FastAPI, client.app).state.settings, entry.catalog_id, entry.expected_files[0].filename
     )
     assert not path.exists()
 
@@ -338,7 +350,9 @@ def test_install_job_cancellation_is_persistent(
     assert response.json()["completed_at"] is not None
     assert (
         process_model_install_job(
-            client.app.state.settings, client.app.state.session_factory, job["id"]
+            cast(FastAPI, client.app).state.settings,
+            cast(FastAPI, client.app).state.session_factory,
+            job["id"],
         )
         is False
     )
@@ -352,26 +366,28 @@ def test_ready_catalog_model_resolves_training_provenance(
     _patch_entry(monkeypatch, entry)
     project = create_project(client, "Training provenance")
     expected = entry.expected_files[0]
-    path = catalog_asset_path(client.app.state.settings, entry.catalog_id, expected.filename)
+    path = catalog_asset_path(
+        cast(FastAPI, client.app).state.settings, entry.catalog_id, expected.filename
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(payload)
     from reefvision.storage.catalog_models import write_catalog_manifest_record
 
     write_catalog_manifest_record(
-        client.app.state.settings,
+        cast(FastAPI, client.app).state.settings,
         entry.catalog_id,
         {
             "filename": expected.filename,
             "relative_path": path.relative_to(
-                client.app.state.settings.resolved_data_dir
+                cast(FastAPI, client.app).state.settings.resolved_data_dir
             ).as_posix(),
             "sha256": expected.sha256,
             "size_bytes": expected.size_bytes,
         },
     )
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         selection = ModelCatalogService(
-            session, client.app.state.settings
+            session, cast(FastAPI, client.app).state.settings
         ).resolve_training_selection(project["id"], entry.catalog_id)
 
     assert selection.initial_checkpoint_source == "managed_catalog"
@@ -385,7 +401,7 @@ def test_install_is_rejected_in_safe_mode(
 ) -> None:
     entry = _mini_entry(b"safe-mode-checkpoint")
     _patch_entry(monkeypatch, entry)
-    monkeypatch.setattr(client.app.state.settings, "safe_mode", True)
+    monkeypatch.setattr(cast(FastAPI, client.app).state.settings, "safe_mode", True)
 
     project = create_project(client, "Safe mode install")
     endpoint = f"/api/v1/projects/{project['id']}/model-installs/ultralytics%2Fyolo11%2Fdetect%2Fn"

@@ -1,7 +1,9 @@
 import io
 from pathlib import Path
+from typing import cast
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.db.models import VideoAsset
@@ -33,9 +35,9 @@ def test_uploaded_sidecar_survives_new_session_and_frame_extraction(
     assert metadata["source_type"] == "dji_srt" and metadata["sample_count"] == 3
     assert metadata["path_kind"] == "managed"
     assert not Path(metadata["source_path"]).is_absolute()
-    settings = client.app.state.settings
+    settings = cast(FastAPI, client.app).state.settings
     assert resolve_managed_project_path(settings, metadata["source_path"]).is_file()
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         source = VideoAssetService(session, settings).telemetry_source(video["id"])
         assert source.sample_for_frame(1, 10).sample.latitude == 25.126
     queued = client.post(f"/api/v1/videos/{video['id']}/extract", json={"every_n_frames": 5})
@@ -52,12 +54,14 @@ def test_ordinary_and_old_videos_have_no_telemetry(
     assert response.status_code == 201
     video = response.json()
     assert not video["telemetry"]["available"]
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         record = session.get(VideoAsset, video["id"])
         record.metadata_json = {"file_size_bytes": 10}
         session.commit()
         assert (
-            VideoAssetService(session, client.app.state.settings).telemetry_source(video["id"])
+            VideoAssetService(session, cast(FastAPI, client.app).state.settings).telemetry_source(
+                video["id"]
+            )
             is None
         )
     assert not client.get(f"/api/v1/videos/{video['id']}").json()["telemetry"]["found"]
@@ -84,8 +88,8 @@ def test_path_pairing_metadata_and_missing_external_source(
     video_path.write_bytes(b"fake-video")
     sidecar = tmp_path / "DJI.SRT"
     sidecar.write_bytes((FIXTURES / "modern.SRT").read_bytes())
-    settings = client.app.state.settings
-    with client.app.state.session_factory() as session:
+    settings = cast(FastAPI, client.app).state.settings
+    with cast(FastAPI, client.app).state.session_factory() as session:
         service = VideoAssetService(session, settings)
         video = service.import_video_path(project["id"], video_path)
         assert video.telemetry.path_kind == "external"
@@ -108,10 +112,10 @@ def test_invalid_auto_sidecar_does_not_block_video_import(
     video_path = tmp_path / "DJI.mp4"
     video_path.write_bytes(b"fake-video")
     (tmp_path / "DJI.srt").write_text(corrupt)
-    with client.app.state.session_factory() as session:
-        video = VideoAssetService(session, client.app.state.settings).import_video_path(
-            project["id"], video_path
-        )
+    with cast(FastAPI, client.app).state.session_factory() as session:
+        video = VideoAssetService(
+            session, cast(FastAPI, client.app).state.settings
+        ).import_video_path(project["id"], video_path)
         assert video.telemetry.found and not video.telemetry.available
         assert video.telemetry.error
         assert video.status == "imported"
@@ -142,7 +146,7 @@ def test_failed_video_import_does_not_leave_sidecar(
     project = create_project(client, "Rollback")
     response = _upload(client, project["id"], srt=(FIXTURES / "modern.SRT").read_bytes())
     assert response.status_code == 400
-    assert list(client.app.state.settings.resolved_data_dir.rglob("*.srt")) == []
+    assert list(cast(FastAPI, client.app).state.settings.resolved_data_dir.rglob("*.srt")) == []
 
 
 def test_failed_database_commit_removes_new_managed_media(
@@ -154,8 +158,8 @@ def test_failed_database_commit_removes_new_managed_media(
     def fail_commit():
         raise RuntimeError("simulated database failure")
 
-    settings = client.app.state.settings
-    with client.app.state.session_factory() as session:
+    settings = cast(FastAPI, client.app).state.settings
+    with cast(FastAPI, client.app).state.session_factory() as session:
         monkeypatch.setattr(session, "commit", fail_commit)
         with pytest.raises(RuntimeError, match="database failure"):
             VideoAssetService(session, settings).import_video(
@@ -209,10 +213,10 @@ def test_uploaded_srt_is_primary_and_aligned_airdata_fills_missing_fields(
     assert video["airdata_alignment"]["time_offset_s"] == 10.0
     assert video["airdata_alignment"]["evidence"]
 
-    settings = client.app.state.settings
+    settings = cast(FastAPI, client.app).state.settings
     airdata_path = resolve_managed_project_path(settings, video["airdata_telemetry"]["source_path"])
     assert airdata_path.is_file()
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         source = VideoAssetService(session, settings).telemetry_source(video["id"])
         assert source is not None
         primary_match = source.sample_for_frame(0, 10)
@@ -272,7 +276,7 @@ def test_failed_video_import_removes_managed_airdata(
     }
     response = client.post(f"/api/v1/projects/{project['id']}/imports/videos", files=files)
     assert response.status_code == 400
-    settings = client.app.state.settings
+    settings = cast(FastAPI, client.app).state.settings
     assert list(settings.resolved_data_dir.rglob("*.airdata.csv")) == []
 
 
@@ -306,9 +310,9 @@ def test_path_import_auto_discovers_unique_airdata(
         encoding="utf-8",
     )
 
-    settings = client.app.state.settings
+    settings = cast(FastAPI, client.app).state.settings
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         video = VideoAssetService(
             session,
             settings,
@@ -348,9 +352,9 @@ def test_path_import_does_not_guess_between_multiple_airdata_logs(
     (tmp_path / "Flight-A-Airdata.csv").write_bytes(AIRDATA_CSV)
     (tmp_path / "Flight-B-Airdata.csv").write_bytes(AIRDATA_CSV)
 
-    settings = client.app.state.settings
+    settings = cast(FastAPI, client.app).state.settings
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         video = VideoAssetService(
             session,
             settings,

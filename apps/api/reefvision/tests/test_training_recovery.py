@@ -2,9 +2,11 @@
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 from zipfile import ZipFile
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -15,7 +17,7 @@ from reefvision.tests.test_annotations import create_project
 
 def seed_interrupted_run(client: TestClient, *, epoch: int = 50) -> tuple[str, str, Path]:
     project = create_project(client)
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         job = Job(project_id=project["id"], job_type="training", status="running")
         session.add(job)
         session.flush()
@@ -43,7 +45,7 @@ def seed_interrupted_run(client: TestClient, *, epoch: int = 50) -> tuple[str, s
         job.request_json = {"training_run_id": run.id}
         job.progress_current = epoch
         job.progress_total = 50
-        root = client.app.state.settings.resolved_data_dir
+        root = cast(FastAPI, client.app).state.settings.resolved_data_dir
         output = root / project["storage_root"] / "training" / run.id / "runs" / "detect"
         output.mkdir(parents=True)
         (output / "weights").mkdir()
@@ -83,12 +85,12 @@ def test_restart_finalizes_without_rerunning_or_losing_artifacts(
     run_id, job_id, output = seed_interrupted_run(client, epoch=epoch)
     files = {p.relative_to(output): p.read_bytes() for p in output.rglob("*") if p.is_file()}
     mtimes = {p.relative_to(output): p.stat().st_mtime_ns for p in output.rglob("*") if p.is_file()}
-    factory = client.app.state.session_factory
+    factory = cast(FastAPI, client.app).state.session_factory
     with factory() as session:
         session.get(Job, job_id).status = previous_status
         session.commit()
 
-    assert recover_interrupted_jobs(factory, client.app.state.settings) == 1
+    assert recover_interrupted_jobs(factory, cast(FastAPI, client.app).state.settings) == 1
     with factory() as session:
         run, job = session.get(TrainingRun, run_id), session.get(Job, job_id)
         assert (run.status, run.stage, job.status) == (expected_run, expected_run, expected_job)
@@ -108,7 +110,7 @@ def test_restart_finalizes_without_rerunning_or_losing_artifacts(
         else:
             assert "restart" in run.error_message.lower()
 
-    assert recover_interrupted_jobs(factory, client.app.state.settings) == 0
+    assert recover_interrupted_jobs(factory, cast(FastAPI, client.app).state.settings) == 0
     with factory() as session:
         assert session.get(TrainingRun, run_id).completed_at == completed_at
         assert len(list(session.scalars(select(ExperimentRecord)))) == len(experiments)
@@ -121,7 +123,7 @@ def test_restart_finalizes_without_rerunning_or_losing_artifacts(
 @pytest.mark.parametrize("job_status", ["running", "cancel_requested", "succeeded"])
 def test_completed_run_remains_completed(client: TestClient, job_status: str) -> None:
     run_id, job_id, _ = seed_interrupted_run(client)
-    factory = client.app.state.session_factory
+    factory = cast(FastAPI, client.app).state.session_factory
     with factory() as session:
         run = session.get(TrainingRun, run_id)
         run.status = run.stage = "completed"
@@ -129,7 +131,7 @@ def test_completed_run_remains_completed(client: TestClient, job_status: str) ->
         run.metrics_json = {"final_metric": 0.9}
         session.get(Job, job_id).status = job_status
         session.commit()
-    recover_interrupted_jobs(factory, client.app.state.settings)
+    recover_interrupted_jobs(factory, cast(FastAPI, client.app).state.settings)
     with factory() as session:
         run = session.get(TrainingRun, run_id)
         assert run.status == "completed"
@@ -169,8 +171,10 @@ def test_progress_alone_cannot_prove_completion(client: TestClient, damage: str)
                 checkpoint.unlink()
             else:
                 checkpoint.write_bytes(b"truncated checkpoint")
-    recover_interrupted_jobs(client.app.state.session_factory, client.app.state.settings)
-    with client.app.state.session_factory() as session:
+    recover_interrupted_jobs(
+        cast(FastAPI, client.app).state.session_factory, cast(FastAPI, client.app).state.settings
+    )
+    with cast(FastAPI, client.app).state.session_factory() as session:
         assert session.get(TrainingRun, run_id).status == "failed"
         assert session.get(Job, job_id).status == "failed"
         assert not list(session.scalars(select(ExperimentRecord)))
@@ -178,11 +182,13 @@ def test_progress_alone_cannot_prove_completion(client: TestClient, damage: str)
 
 def test_csv_can_prove_completion_when_progress_write_was_interrupted(client: TestClient) -> None:
     run_id, _, _ = seed_interrupted_run(client)
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         session.get(TrainingRun, run_id).progress_epoch = 49
         session.commit()
-    recover_interrupted_jobs(client.app.state.session_factory, client.app.state.settings)
-    with client.app.state.session_factory() as session:
+    recover_interrupted_jobs(
+        cast(FastAPI, client.app).state.session_factory, cast(FastAPI, client.app).state.settings
+    )
+    with cast(FastAPI, client.app).state.session_factory() as session:
         run = session.get(TrainingRun, run_id)
         assert run.status == "completed" and run.progress_epoch == 50
 
@@ -199,7 +205,7 @@ def test_late_callbacks_do_not_rewrite_final_epoch_or_completed_state(
     from reefvision.jobs.training import _on_fit_epoch_end, _on_train_end
 
     run_id, job_id, output = seed_interrupted_run(client)
-    factory = client.app.state.session_factory
+    factory = cast(FastAPI, client.app).state.session_factory
     trainer = SimpleNamespace(csv=output / "results.csv", epoch=callback_epoch, epochs=50)
     writes = []
 
@@ -207,15 +213,19 @@ def test_late_callbacks_do_not_rewrite_final_epoch_or_completed_state(
         if statement.lstrip().upper().startswith("UPDATE "):
             writes.append(statement)
 
-    event.listen(client.app.state.engine, "before_cursor_execute", track_writes)
+    event.listen(cast(FastAPI, client.app).state.engine, "before_cursor_execute", track_writes)
     try:
-        _on_fit_epoch_end(client.app.state.settings, factory, job_id, run_id, trainer, {})
+        _on_fit_epoch_end(
+            cast(FastAPI, client.app).state.settings, factory, job_id, run_id, trainer, {}
+        )
         assert writes == []
     finally:
-        event.remove(client.app.state.engine, "before_cursor_execute", track_writes)
-    recover_interrupted_jobs(factory, client.app.state.settings)
-    _on_train_end(client.app.state.settings, factory, job_id, run_id, trainer)
-    _on_fit_epoch_end(client.app.state.settings, factory, job_id, run_id, trainer, {})
+        event.remove(cast(FastAPI, client.app).state.engine, "before_cursor_execute", track_writes)
+    recover_interrupted_jobs(factory, cast(FastAPI, client.app).state.settings)
+    _on_train_end(cast(FastAPI, client.app).state.settings, factory, job_id, run_id, trainer)
+    _on_fit_epoch_end(
+        cast(FastAPI, client.app).state.settings, factory, job_id, run_id, trainer, {}
+    )
     with factory() as session:
         run = session.get(TrainingRun, run_id)
         assert (run.status, run.stage, run.progress_epoch) == ("completed", "completed", 50)
@@ -224,8 +234,10 @@ def test_late_callbacks_do_not_rewrite_final_epoch_or_completed_state(
 def test_corrupt_best_falls_back_to_intact_last_checkpoint(client: TestClient) -> None:
     run_id, _, output = seed_interrupted_run(client)
     (output / "weights" / "best.pt").write_bytes(b"torn write")
-    recover_interrupted_jobs(client.app.state.session_factory, client.app.state.settings)
-    with client.app.state.session_factory() as session:
+    recover_interrupted_jobs(
+        cast(FastAPI, client.app).state.session_factory, cast(FastAPI, client.app).state.settings
+    )
+    with cast(FastAPI, client.app).state.session_factory() as session:
         run = session.get(TrainingRun, run_id)
         assert run.status == "completed"
         assert run.result_checkpoint_path.endswith("/weights/last.pt")
@@ -241,8 +253,12 @@ def test_decompression_failure_does_not_abort_other_recoveries(client: TestClien
         data[offset + 10 : offset + 12] = b"\x08\x00"
         path.write_bytes(data)
     assert (
-        recover_interrupted_jobs(client.app.state.session_factory, client.app.state.settings) == 2
+        recover_interrupted_jobs(
+            cast(FastAPI, client.app).state.session_factory,
+            cast(FastAPI, client.app).state.settings,
+        )
+        == 2
     )
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         assert session.get(TrainingRun, failed_id).status == "failed"
         assert session.get(TrainingRun, completed_id).status == "completed"

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+from typing import cast
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.db.models import Job
@@ -49,13 +51,13 @@ def test_install_response_is_frozen_before_background_start(
         "get_static_catalog_item",
         lambda self, catalog_id: entry,
     )
-    monkeypatch.setattr(client.app.state.settings, "background_worker_enabled", True)
+    monkeypatch.setattr(cast(FastAPI, client.app).state.settings, "background_worker_enabled", True)
 
     started: list[str] = []
 
     def mutate_job_immediately(settings: object, factory: object, job_id: str) -> None:
         started.append(job_id)
-        with client.app.state.session_factory() as session:
+        with cast(FastAPI, client.app).state.session_factory() as session:
             job = session.get(Job, job_id)
             assert job is not None
             job.status = "running"
@@ -76,7 +78,7 @@ def test_install_response_is_frozen_before_background_start(
     assert payload["status"] == "queued"
     assert started == [payload["id"]]
 
-    with client.app.state.session_factory() as session:
+    with cast(FastAPI, client.app).state.session_factory() as session:
         persisted = session.get(Job, payload["id"])
         assert persisted is not None
         assert persisted.status == "running"

@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -273,7 +274,7 @@ def test_used_class_delete_is_blocked_and_usage_is_reported(client: TestClient) 
         display_color="#2A9D8F",
     )
 
-    with Session(client.app.state.engine) as session:
+    with Session(cast(FastAPI, client.app).state.engine) as session:
         image = ImageAsset(
             id="image-1",
             project_id=project["id"],
@@ -536,7 +537,7 @@ def test_used_class_delete_is_blocked_and_usage_is_reported(client: TestClient) 
     assert merge_payload["source_class"]["is_active"] is False
     assert merge_payload["source_class"]["archived_at"] is not None
 
-    with Session(client.app.state.engine) as session:
+    with Session(cast(FastAPI, client.app).state.engine) as session:
         active_annotation = session.get(Annotation, "annotation-active")
         deleted_annotation = session.get(Annotation, "annotation-deleted")
         proposal = session.get(PredictionProposal, "proposal-1")
