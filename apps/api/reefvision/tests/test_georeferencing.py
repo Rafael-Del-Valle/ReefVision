@@ -81,6 +81,7 @@ def test_external_calibration_loader_and_existing_intrinsics(tmp_path: Path) -> 
     loaded = load_camera_calibration(path)
     assert loaded.width_px == 1000 and loaded.fx_px == 500
     assert loaded.distortion_coefficients == (0.01, -0.02, 0.001, 0, 0)
+    assert loaded.source_id is not None
     assert loaded.source_id.startswith("sha256:")
     adapted = CameraCalibration.from_intrinsics(
         VideoCameraIntrinsicsSetRequest(fx_px=400, fy_px=450, cx_px=300, cy_px=200),

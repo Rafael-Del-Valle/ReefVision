@@ -13,6 +13,7 @@ from reefvision.geospatial.validation import (
 
 def test_known_error_statistics() -> None:
     stats = summarize_errors([0, 1, 2, 3, 4])
+    assert stats is not None
     assert stats.sample_count == 5
     assert stats.mean_m == 2 and stats.median_m == 2
     assert stats.rmse_m == pytest.approx(6**0.5)
@@ -68,12 +69,15 @@ def test_validation_reports_successes_sync_failures_and_projection_failures() ->
         max_delta_s=0.05,
     )
     assert report.attempted_count == 3 and report.failed_count == 2
+    assert report.statistics is not None
     assert report.statistics.sample_count == 1 and report.statistics.max_m < 1e-8
     assert report.observations[0].sync_delta_s == 0
     assert report.observations[1].error is not None
+    assert report.observations[2].error is not None
     assert "sync" in report.observations[2].error.lower()
     assert report.observations[2].sync_delta_s == -2
     assert report.observations[2].sync_error_s == 2
+    assert report.observations[2].telemetry is not None
     assert report.observations[2].telemetry.time_s == 1
 
 
@@ -136,6 +140,8 @@ def test_relative_time_and_frame_precedence_keep_original_time() -> None:
     )
     assert report.failed_count == 0
     first, second = report.observations
+    assert first.telemetry is not None
+    assert second.telemetry is not None
     assert first.video_time_s == pytest.approx(0.1)
     assert first.point.video_time_s == 0.9  # Retained, not silently rewritten.
     assert first.telemetry.time_s == 0  # Earlier sample wins an exact tie.

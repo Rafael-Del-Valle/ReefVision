@@ -39,7 +39,10 @@ def test_uploaded_sidecar_survives_new_session_and_frame_extraction(
     assert resolve_managed_project_path(settings, metadata["source_path"]).is_file()
     with cast(FastAPI, client.app).state.session_factory() as session:
         source = VideoAssetService(session, settings).telemetry_source(video["id"])
-        assert source.sample_for_frame(1, 10).sample.latitude == 25.126
+        assert source is not None
+        match = source.sample_for_frame(1, 10)
+        assert match is not None
+        assert match.sample.latitude == 25.126
     queued = client.post(f"/api/v1/videos/{video['id']}/extract", json={"every_n_frames": 5})
     assert queued.status_code == 200
     assert client.get(f"/api/v1/videos/{video['id']}").json()["telemetry"] == metadata
@@ -56,6 +59,7 @@ def test_ordinary_and_old_videos_have_no_telemetry(
     assert not video["telemetry"]["available"]
     with cast(FastAPI, client.app).state.session_factory() as session:
         record = session.get(VideoAsset, video["id"])
+        assert record is not None
         record.metadata_json = {"file_size_bytes": 10}
         session.commit()
         assert (
@@ -95,7 +99,11 @@ def test_path_pairing_metadata_and_missing_external_source(
         assert video.telemetry.path_kind == "external"
         assert video.telemetry.source_path == str(sidecar.resolve())
         assert video.telemetry.sample_count == 3
-        assert service.telemetry_source(video.id).sample_for_frame(0, video.fps).error_s == 0
+        source = service.telemetry_source(video.id)
+        assert source is not None
+        match = source.sample_for_frame(0, video.fps)
+        assert match is not None
+        assert match.error_s == 0
         sidecar.unlink()
         assert service.telemetry_source(video.id) is None
     assert list(settings.resolved_data_dir.rglob("*.srt")) == []

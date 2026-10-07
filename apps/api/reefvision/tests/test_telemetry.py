@@ -85,6 +85,7 @@ def test_pairing_absent_and_unrelated(tmp_path: Path) -> None:
 def test_nearest_time_endpoints_ties_and_gap(time_s, matched, delta) -> None:
     source = load_dji_srt(FIXTURES / "modern.SRT")
     match = source.sample_for_time(time_s)
+    assert match is not None
     assert match.sample.time_s == matched
     assert match.delta_s == pytest.approx(delta)
     assert match.error_s == pytest.approx(abs(delta))
@@ -150,8 +151,12 @@ def test_srt_is_primary_and_airdata_requires_explicit_alignment_for_fallback() -
 
 def test_non_integer_fps_and_first_sample_after_video_start() -> None:
     source = IndexedTelemetrySource([TelemetrySample(sample_index=1, time_s=1.001, latitude=25)])
-    assert source.sample_for_frame(30, 30000 / 1001).error_s == pytest.approx(0)
-    assert source.sample_for_frame(0, 29.97).delta_s == 1.001
+    frame_match = source.sample_for_frame(30, 30000 / 1001)
+    assert frame_match is not None
+    assert frame_match.error_s == pytest.approx(0)
+    start_match = source.sample_for_frame(0, 29.97)
+    assert start_match is not None
+    assert start_match.delta_s == 1.001
     assert source.sample_for_time(30, max_delta_s=0.5) is None
 
 
@@ -172,8 +177,12 @@ def test_sorting_duplicates_and_empty_source() -> None:
             TelemetrySample(sample_index=2, time_s=1),
         ]
     )
-    assert source.sample_for_time(1).sample.sample_index == 1
-    assert source.sample_for_time(3).sample.sample_index == 3
+    first_match = source.sample_for_time(1)
+    second_match = source.sample_for_time(3)
+    assert first_match is not None
+    assert second_match is not None
+    assert first_match.sample.sample_index == 1
+    assert second_match.sample.sample_index == 3
     assert IndexedTelemetrySource([]).sample_for_frame(0, 30) is None
 
 
