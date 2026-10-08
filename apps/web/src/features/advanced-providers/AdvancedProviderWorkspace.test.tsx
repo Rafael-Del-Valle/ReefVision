@@ -117,6 +117,20 @@ describe("AdvancedProviderWorkspace", () => {
     >);
   });
 
+  it("requires local registration when an optional provider has no model", async () => {
+    vi.mocked(apiClient.getProjectModelCatalog).mockResolvedValue({
+      models: [],
+    } as unknown as apiClient.ModelCatalogResponse);
+    renderWorkspace();
+    expect(
+      await screen.findByText(
+        /Model required — register a compatible model to use this feature/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run provider" })).toBeDisabled();
+    expect(providerApi.executeAdvancedProvider).not.toHaveBeenCalled();
+  });
+
   it("distinguishes Provider Lab execution from an existing workflow", async () => {
     renderWorkspace();
 

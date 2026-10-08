@@ -1,8 +1,45 @@
 import { describe, expect, it } from "vitest";
 
-import { workflowTemplates } from "./workflowTemplates";
+import {
+  createPoseArchitectureWorkflow,
+  workflowTemplates,
+} from "./workflowTemplates";
 
 describe("workflowTemplates", () => {
+  it("builds seed-free pose architecture training from an immutable dataset", () => {
+    const graph = createPoseArchitectureWorkflow("yolo11m-pose.yaml");
+    expect(
+      graph.nodes.find((node) => node.node_type === "pose_training_dataset")
+        ?.parameters,
+    ).toEqual({ dataset_id: "" });
+    expect(
+      graph.nodes.find((node) => node.node_type === "pose_model_training")
+        ?.parameters,
+    ).toMatchObject({
+      architecture: "yolo11m-pose.yaml",
+      initialization_mode: "random",
+    });
+    expect(
+      graph.edges.some((edge) => edge.target_port_id === "initial_model"),
+    ).toBe(false);
+    expect(graph.edges.some((edge) => edge.target_node_id === "register")).toBe(
+      true,
+    );
+  });
+
+  it("explicitly continues the researcher registered model in the pose retraining template", () => {
+    const template = workflowTemplates.find(
+      (item) => item.id === "pose-active-learning-retrain",
+    )!;
+    const graph = template.graph as {
+      nodes: Array<{ node_type: string; parameters: Record<string, unknown> }>;
+    };
+    expect(
+      graph.nodes.find((node) => node.node_type === "pose_model_training")
+        ?.parameters.initialization_mode,
+    ).toBe("registered_model");
+  });
+
   it("includes the scientist-gated pose Active Learning retraining loop", () => {
     const template = workflowTemplates.find(
       (item) => item.id === "pose-active-learning-retrain",

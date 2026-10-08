@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
@@ -21,14 +21,9 @@ from reefvision import __version__
 from reefvision.config import Settings
 from reefvision.db.models import Job, ModelRegistration, Project
 from reefvision.domain.errors import CatalogResourceError, NotFoundError, ValidationError
-from reefvision.ml.optional_transformers_runtime import (
-    OPTIONAL_MODEL_SPECS,
-    optional_model_status,
-)
 from reefvision.repositories.models import ModelRepository
 from reefvision.repositories.projects import ProjectRepository
 from reefvision.schemas.model_catalog import (
-    CatalogInstallationState,
     CatalogTask,
     CatalogWorkflow,
     ModelCatalogEntryResponse,
@@ -36,15 +31,13 @@ from reefvision.schemas.model_catalog import (
     TrackerCatalogResponse,
 )
 from reefvision.storage.catalog_models import (
-    catalog_asset_path,
     load_catalog_manifest,
-    relative_catalog_asset_path,
 )
 
 MODEL_CATALOG_FILENAME = "model_catalog.json"
 TRACKER_CATALOG_FILENAME = "tracker_catalog.json"
 EXPECTED_MODEL_CATALOG_SCHEMA = 2
-EXPECTED_MODEL_CATALOG_VERSION = "2.1.0"
+EXPECTED_MODEL_CATALOG_VERSION = "3.0.0"
 
 
 @dataclass(frozen=True)
@@ -208,7 +201,7 @@ def _task_allowed_for_workflow(task: CatalogTask, workflow: CatalogWorkflow | No
     if workflow is None or workflow == "model_hub":
         return True
     if workflow == "training":
-        return task in {"detect", "segment", "semantic_segment"}
+        return task in {"detect", "segment", "semantic_segment", "pose", "classify"}
     if workflow == "prompt_assist":
         return task in {
             "assist_segmentation",
@@ -287,227 +280,25 @@ class ModelCatalogService:
             "installed_checksum": None,
         }
         if entry.availability == "unavailable":
+            updates.update(installation_state="Unavailable")
+        elif entry.selection_kind == "builtin_architecture":
+            ready = _installed_provider_version(entry.provider_id) is not None
             updates.update(
-                installation_state="Unavailable",
-                installation_reason=entry.installation_reason
-                or "This catalog definition is not available for installation.",
-            )
-            return entry.model_copy(update=updates)
-
-        if job is not None and job.status in {"queued", "running", "cancel_requested"}:
-            stage = str((job.result_json or {}).get("stage") or "downloading")
-            state: CatalogInstallationState = (
-                "Verifying"
-                if stage == "verifying"
-                else "Installing"
-                if stage in {"finalizing", "provider_preflight"}
-                else "Downloading"
-            )
-            updates.update(
-                installation_state=state,
+                installation_state="Available" if ready else "Provider Required",
                 installation_reason=(
-                    "Cancellation requested; the worker is stopping safely."
-                    if job.status == "cancel_requested"
-                    else f"Installation job is {stage.replace('_', ' ')}."
+                    "Architecture available offline. Train a new model or "
+                    "register an existing model."
+                    if ready
+                    else "The compatible provider runtime is required for training."
                 ),
-                installation_job_id=job.id,
             )
-            return entry.model_copy(update=updates)
-
-        if entry.provider_id in OPTIONAL_MODEL_SPECS:
-            runtime_status = optional_model_status(self.settings, entry.provider_id)
-            spec = OPTIONAL_MODEL_SPECS[entry.provider_id]
+        else:
             updates.update(
-                installed_asset_id=(
-                    f"optional_model:{entry.provider_id}" if runtime_status["cached"] else None
+                installation_state="Model Required",
+                installation_reason=(
+                    "Model required ? register a compatible model to use this feature."
                 ),
-                installed_path=(str(runtime_status["path"]) if runtime_status["cached"] else None),
-                installed_checksum=(spec.weight_sha256 if runtime_status["verified"] else None),
             )
-            if runtime_status["ready"]:
-                updates.update(
-                    installation_state="Ready",
-                    installation_reason=(
-                        "Pinned optional model is cached, checksum-verified, "
-                        f"and ready via {runtime_status.get('cache_source') or 'local cache'}."
-                    ),
-                )
-            elif runtime_status["cached"] and not runtime_status["verified"]:
-                updates.update(
-                    installation_state="Corrupted",
-                    installation_reason=runtime_status["reason"]
-                    or "The optional model cache could not be verified.",
-                )
-            elif runtime_status["transformers_version"] is None:
-                updates.update(
-                    installation_state="Provider Required",
-                    installation_reason=(
-                        "Install the ReefVision advanced-provider runtime before using this model."
-                    ),
-                )
-            elif job is not None and job.status == "failed":
-                updates.update(
-                    installation_state="Blocked",
-                    installation_reason=job.error_message
-                    or "The previous optional-model installation failed.",
-                    installation_job_id=job.id,
-                )
-            else:
-                updates.update(
-                    installation_state="Not Installed",
-                    installation_reason=(
-                        "The pinned optional model is not installed yet. Use Download in Model Hub."
-                    ),
-                )
-            return entry.model_copy(update=updates)
-
-        record_value = manifest.get("assets", {}).get(entry.catalog_id)
-        record = dict(record_value) if isinstance(record_value, dict) else None
-        if manifest.get("corrupted"):
-            updates.update(
-                installation_state="Corrupted",
-                installation_reason="The managed catalog manifest is corrupted.",
-            )
-            return entry.model_copy(update=updates)
-        if record is not None and entry.expected_files:
-            expected = entry.expected_files[0]
-            path = catalog_asset_path(self.settings, entry.catalog_id, expected.filename)
-            record_files = record.get("files")
-            records_by_name = (
-                {str(item.get("filename")): item for item in record_files if isinstance(item, dict)}
-                if isinstance(record_files, list)
-                else {str(record.get("filename")): record}
-            )
-            missing = next(
-                (
-                    item
-                    for item in entry.expected_files
-                    if not catalog_asset_path(
-                        self.settings, entry.catalog_id, item.filename
-                    ).is_file()
-                ),
-                None,
-            )
-            wrong_size = next(
-                (
-                    item
-                    for item in entry.expected_files
-                    if catalog_asset_path(self.settings, entry.catalog_id, item.filename).is_file()
-                    and catalog_asset_path(self.settings, entry.catalog_id, item.filename)
-                    .stat()
-                    .st_size
-                    != item.size_bytes
-                ),
-                None,
-            )
-            wrong_manifest = next(
-                (
-                    item
-                    for item in entry.expected_files
-                    if not isinstance(records_by_name.get(item.filename), dict)
-                    or records_by_name[item.filename].get("sha256") != item.sha256
-                    or records_by_name[item.filename].get("size_bytes") != item.size_bytes
-                ),
-                None,
-            )
-            wrong_checksum = next(
-                (
-                    item
-                    for item in entry.expected_files
-                    if catalog_asset_path(self.settings, entry.catalog_id, item.filename).is_file()
-                    and catalog_asset_path(self.settings, entry.catalog_id, item.filename)
-                    .stat()
-                    .st_size
-                    == item.size_bytes
-                    and _file_sha256(
-                        catalog_asset_path(self.settings, entry.catalog_id, item.filename)
-                    )
-                    != item.sha256
-                ),
-                None,
-            )
-            updates.update(
-                installed_asset_id=f"catalog_model:{entry.catalog_id}",
-                installed_path=relative_catalog_asset_path(
-                    self.settings,
-                    path if len(entry.expected_files) == 1 else path.parent,
-                ),
-                installed_checksum=str(record.get("sha256") or "") or None,
-            )
-            if missing is not None:
-                updates.update(
-                    installation_state="Corrupted",
-                    installation_reason=(
-                        f"The managed model file {missing.filename} is missing "
-                        "from application data."
-                    ),
-                )
-            elif wrong_size is not None:
-                updates.update(
-                    installation_state="Corrupted",
-                    installation_reason=(
-                        f"The managed model file {wrong_size.filename} size no "
-                        "longer matches the catalog."
-                    ),
-                )
-            elif wrong_manifest is not None:
-                updates.update(
-                    installation_state="Corrupted",
-                    installation_reason=(
-                        "The managed model file manifest is incomplete or invalid."
-                    ),
-                )
-            elif wrong_checksum is not None:
-                updates.update(
-                    installation_state="Corrupted",
-                    installation_reason=(
-                        f"The managed model file {wrong_checksum.filename} checksum is invalid."
-                    ),
-                )
-            else:
-                updates.update(
-                    installation_state="Ready",
-                    installation_reason=(
-                        "Managed checkpoint is installed and verified for offline use."
-                    ),
-                )
-            return entry.model_copy(update=updates)
-
-        if entry.expected_files:
-            provider_version = _installed_provider_version(entry.provider_id)
-            if entry.provider_pack_id and provider_version is None:
-                updates.update(
-                    installation_state="Provider Required",
-                    installation_reason=(
-                        f"Provider pack {entry.provider_pack_id} is required. "
-                        "The catalog definition remains available."
-                    ),
-                )
-            elif job is not None and job.status == "failed":
-                updates.update(
-                    installation_state="Blocked",
-                    installation_reason=job.error_message or "The previous installation failed.",
-                    installation_job_id=job.id,
-                )
-            else:
-                updates.update(
-                    installation_state="Not Installed",
-                    installation_reason="The verified pretrained checkpoint is not installed yet.",
-                )
-            return entry.model_copy(update=updates)
-
-        if entry.selection_kind == "builtin_architecture":
-            updates.update(
-                installation_state="Ready",
-                installation_reason="Bundled architecture definition is available offline.",
-                installed_asset_id=f"builtin_architecture:{entry.architecture_reference}",
-            )
-            return entry.model_copy(update=updates)
-
-        updates.update(
-            installation_state="Unavailable",
-            installation_reason=entry.installation_reason or "No validated installer is available.",
-        )
         return entry.model_copy(update=updates)
 
     def list_project_catalog(
@@ -544,7 +335,7 @@ class ModelCatalogService:
             [*models, *dynamic],
             key=lambda item: (
                 0
-                if item.category == "pretrained_catalog"
+                if item.category == "architecture"
                 else 1
                 if item.category == "my_trained_models"
                 else 2,
@@ -581,26 +372,10 @@ class ModelCatalogService:
         entry = self.get_project_catalog_item(project_id, catalog_id)
         if entry.installation_state not in {"Ready", "Available"}:
             raise ValidationError(entry.installation_reason or "The selected model is not ready.")
-        if entry.task not in {"detect", "segment", "semantic_segment"}:
+        if entry.task not in {"detect", "segment", "semantic_segment", "pose", "classify"}:
             raise ValidationError("The selected catalog model is not a training model")
         if not entry.trainable:
             raise ValidationError("The selected catalog model is not marked trainable")
-        if entry.selection_kind == "managed_catalog_model":
-            if not entry.installed_asset_id or not entry.installed_checksum:
-                raise ValidationError("The managed catalog checkpoint is not verified")
-            return ResolvedTrainingCatalogSelection(
-                catalog_model_id=entry.catalog_id,
-                task=entry.task,
-                provider_id=entry.provider_id,
-                architecture=entry.architecture_reference,
-                initial_checkpoint_source="managed_catalog",
-                initial_checkpoint_model_id=None,
-                resolved_model_asset_id=entry.installed_asset_id,
-                resolved_model_checksum=entry.installed_checksum,
-                parameter_registry_version=entry.provider_version,
-                installation_state=entry.installation_state,
-                selected_preset=entry.display_name,
-            )
         if entry.selection_kind == "builtin_architecture":
             if not entry.architecture_reference:
                 raise ValidationError("The selected model is missing its architecture reference")
@@ -650,6 +425,8 @@ class ModelCatalogService:
         )
         advanced_only = category == "imported_custom_models"
         task: CatalogTask = "assist_segmentation" if model.purpose == "assist" else "detect"
+        if model.task in {"pose", "classify", "segment", "semantic_segment"}:
+            task = cast(CatalogTask, model.task)
         architecture_reference = None
         source_architecture = metadata.get("source_architecture")
         if isinstance(source_architecture, str) and source_architecture.strip():
@@ -678,7 +455,9 @@ class ModelCatalogService:
             architecture=architecture_family,
             variant=str(model_size or model.task),
             task=task,
-            trainable=model.purpose == "detector",
+            trainable=model.task in {"detect", "segment", "pose", "classify", "semantic_segment"},
+            training_supported=model.task
+            in {"detect", "segment", "pose", "classify", "semantic_segment"},
             inference_supported=True,
             checkpoint_identifier=model.source_filename,
             download_source_type="project_model_registration",

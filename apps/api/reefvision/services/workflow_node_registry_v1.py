@@ -480,12 +480,33 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         }
     )
 
+    registry["pose_training_dataset"] = WorkflowNodeDefinitionResponse(
+        node_type="pose_training_dataset",
+        display_name="Frozen Pose Dataset",
+        category="Inputs",
+        description="Select an existing immutable scientist-verified pose training dataset.",
+        input_ports=[],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="dataset",
+                display_name="Frozen pose dataset",
+                accepted_types=["pose_training_dataset"],
+                required=False,
+            )
+        ],
+        required_parameters=["dataset_id"],
+        optional_parameters={},
+        execution_state="executable_pose_dataset",
+        executable=True,
+        implementation_notes=["Preserves the frozen dataset manifest and landmark schema."],
+    )
+
     registry["pose_model_training"] = WorkflowNodeDefinitionResponse(
         node_type="pose_model_training",
-        display_name="Retrain Pose Model",
+        display_name="Train Pose Model",
         category="Training",
         description=(
-            "Retrain a registered Ultralytics pose model from an immutable, "
+            "Train a YOLO11 pose architecture or continue a registered model from an immutable, "
             "scientist-verified ReefVision pose dataset."
         ),
         input_ports=[
@@ -502,8 +523,9 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             ),
             WorkflowPortDefinition(
                 port_id="initial_model",
-                display_name="Seed pose model",
+                display_name="Initial registered pose model",
                 accepted_types=["model_reference"],
+                required=False,
             ),
         ],
         output_ports=[
@@ -517,6 +539,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         ],
         required_parameters=[],
         optional_parameters={
+            "initialization_mode": None,
+            "architecture": "yolo11n-pose.yaml",
             "run_name": "workflow-pose-retrain",
             "notes": None,
             "device": "auto",
@@ -543,7 +567,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 "scientist-verified pose_training_dataset."
             ),
             (
-                "The seed checkpoint must be a registered Ultralytics "
+                "Random initialization uses a weight-free YOLO11 pose architecture. "
+                "For registered initialization, the checkpoint must be an Ultralytics "
                 "task=pose model whose bound landmark schema matches the "
                 "frozen dataset."
             ),

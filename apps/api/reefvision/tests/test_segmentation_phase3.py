@@ -238,9 +238,9 @@ def test_segmentation_catalog_exposes_installed_scratch_architecture(
         ).list_project_catalog(project["id"], workflow="training", task="segment")
     entries = [item for item in catalog.models if item.task == "segment"]
     assert entries
-    assert entries[0].selection_kind == "builtin_architecture"
-    assert entries[0].architecture_reference == "yolo11n-seg.yaml"
-    assert entries[0].installation_state == "Ready"
+    scratch = next(item for item in entries if item.architecture_reference == "yolo11n-seg.yaml")
+    assert scratch.selection_kind == "builtin_architecture"
+    assert scratch.installation_state == "Available"
     assert entries[0].expected_files == []
 
 

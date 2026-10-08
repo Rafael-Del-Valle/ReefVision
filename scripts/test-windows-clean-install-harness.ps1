@@ -17,6 +17,19 @@ function Assert-Throws([scriptblock]$Action, [string]$Message) {
 }
 
 $defaultData = Join-Path $env:APPDATA 'org.reefvision.desktop'
+$OldConfig = $env:REEFVISION_CONFIG_DIR
+$HadConfig = Test-Path Env:REEFVISION_CONFIG_DIR
+try {
+    $env:REEFVISION_CONFIG_DIR = 'C:\developer-config-must-not-leak'
+    Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -Action {
+        Assert-True (-not (Test-Path Env:REEFVISION_CONFIG_DIR)) 'Developer config leaked into acceptance.'
+        Assert-True ($env:HF_HOME -eq 'C:\isolated-acceptance\cache\huggingface') 'Hugging Face cache was not isolated.'
+        Assert-True ($env:HF_HUB_OFFLINE -eq '1') 'Offline policy was not enforced.'
+    }
+    Assert-True ($env:REEFVISION_CONFIG_DIR -eq 'C:\developer-config-must-not-leak') 'Caller configuration was not restored.'
+} finally {
+    if ($HadConfig) { $env:REEFVISION_CONFIG_DIR = $OldConfig } else { Remove-Item Env:REEFVISION_CONFIG_DIR -ErrorAction SilentlyContinue }
+}
 $safeRoot = Join-Path $env:SystemDrive 'reefvision-clean-acceptance-tests'
 Assert-True ((Assert-ReefVisionSafeAcceptanceRoot -Path $safeRoot -RepositoryRoot $Root -DefaultDataRoot $defaultData) -eq (Resolve-ReefVisionAcceptancePath $safeRoot)) 'Safe temp root was rejected.'
 Assert-Throws { Assert-ReefVisionSafeAcceptanceRoot -Path $Root -RepositoryRoot $Root -DefaultDataRoot $defaultData } 'Repository root must be rejected.'
@@ -66,9 +79,11 @@ $ownedRun = Join-Path $cleanupRoot 'owned-run'
 $foreign = Join-Path $cleanupRoot 'foreign'
 New-Item -ItemType Directory -Path $ownedRun,$foreign -Force | Out-Null
 Set-Content -LiteralPath (Join-Path $ownedRun '.reefvision-acceptance-run') -Value 'owned'
+if (-not (Test-ReefVisionPathWithin -Path $ownedRun -Parent (Join-Path $Root '.artifacts'))) { throw 'Unsafe harness test cleanup path.' }
 Remove-Item -LiteralPath $ownedRun -Recurse -Force
 Assert-True (-not (Test-Path $ownedRun)) 'Owned run was not removed.'
 Assert-True (Test-Path $foreign) 'Cleanup crossed the owned-run boundary.'
+if (-not (Test-ReefVisionPathWithin -Path $cleanupRoot -Parent (Join-Path $Root '.artifacts'))) { throw 'Unsafe harness test cleanup root.' }
 Remove-Item -LiteralPath $cleanupRoot -Recurse -Force
 
 Write-Host "Windows clean-install harness unit tests passed: $passed assertions." -ForegroundColor Green

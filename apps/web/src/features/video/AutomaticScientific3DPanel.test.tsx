@@ -88,6 +88,14 @@ describe("AutomaticScientific3DPanel", () => {
     });
   });
 
+  it("requires a registered compatible depth model without offering acquisition", () => {
+    renderPanel();
+    expect(
+      screen.getByText(/Model required — register a compatible/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Install.*from Models/)).not.toBeInTheDocument();
+  });
+
   it("shows the model-estimated metric safety tier", () => {
     renderPanel();
     expect(screen.getByText("Video → Depth & 3D")).toBeInTheDocument();

@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import Any, Protocol, cast
 
 from reefvision.domain.errors import ValidationError
+from reefvision.ml.adapters.ultralytics_training import (
+    architecture_source,
+    configure_local_training_runtime,
+)
 
 CLASSIFICATION_TASK = "classify"
 
@@ -95,10 +99,13 @@ class UltralyticsClassificationProvider:
         if not dataset_root.is_dir():
             raise ValidationError("Classification dataset directory is missing")
         run_root.parent.mkdir(parents=True, exist_ok=True)
-        model = self._ultralytics.YOLO(architecture)
+        configure_local_training_runtime()
+        model = self._ultralytics.YOLO(architecture_source(architecture))
         result = model.train(
             data=str(dataset_root),
             task="classify",
+            pretrained=False,
+            amp=False,
             epochs=epochs,
             imgsz=image_size,
             batch=batch,

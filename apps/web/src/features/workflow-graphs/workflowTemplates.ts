@@ -760,6 +760,7 @@ const poseActiveLearningRetrain = {
       node_type: "pose_model_training",
       parameters: {
         run_name: "workflow-pose-retrain",
+        initialization_mode: "registered_model",
         device: "auto",
         precision: "fp32",
         training_config: {
@@ -896,7 +897,81 @@ const poseActiveLearningRetrain = {
   ],
 };
 
+export function createPoseArchitectureWorkflow(
+  architecture = "yolo11n-pose.yaml",
+) {
+  return {
+    graph_id: "pose-architecture-training",
+    name: "Pose architecture training",
+    schema_version: "workflow-graph-0001",
+    metadata: { truth_policy: "scientist_verified_only" },
+    nodes: [
+      {
+        node_id: "dataset",
+        node_type: "pose_training_dataset",
+        parameters: { dataset_id: "" },
+        position: { x: 40, y: 80 },
+      },
+      {
+        node_id: "train",
+        node_type: "pose_model_training",
+        parameters: {
+          run_name: "pose-from-scratch",
+          initialization_mode: "random",
+          architecture,
+          device: "auto",
+          precision: "fp32",
+          training_config: { epochs: 50, batch: 8, imgsz: 640, workers: 2 },
+        },
+        position: { x: 360, y: 80 },
+      },
+      {
+        node_id: "register",
+        node_type: "register_trained_model",
+        parameters: {},
+        position: { x: 680, y: 80 },
+      },
+      {
+        node_id: "results",
+        node_type: "training_results_package",
+        parameters: {},
+        position: { x: 680, y: 320 },
+      },
+    ],
+    edges: [
+      {
+        edge_id: "dataset-train",
+        source_node_id: "dataset",
+        source_port_id: "dataset",
+        target_node_id: "train",
+        target_port_id: "dataset",
+      },
+      {
+        edge_id: "train-register",
+        source_node_id: "train",
+        source_port_id: "training",
+        target_node_id: "register",
+        target_port_id: "training",
+      },
+      {
+        edge_id: "train-results",
+        source_node_id: "train",
+        source_port_id: "training",
+        target_node_id: "results",
+        target_port_id: "training",
+      },
+    ],
+  };
+}
+
 export const workflowTemplates: WorkflowTemplate[] = [
+  {
+    id: "pose-architecture-training",
+    name: "Pose architecture → train from scratch",
+    description:
+      "Choose a frozen scientist-verified pose dataset and a YOLO11 pose architecture. Train from random initialization, then register the output with its landmark schema and provenance.",
+    graph: createPoseArchitectureWorkflow(),
+  },
   {
     id: "pose-active-learning-retrain",
     name: "Pose Active Learning → retrain",

@@ -81,11 +81,11 @@ function Build-ReefVisionSplitCabinetMsi {
 
 $TauriConfigPath = Join-Path $Root "apps\web\src-tauri\tauri.conf.json"
 $TauriConfig = Get-Content -LiteralPath $TauriConfigPath -Raw | ConvertFrom-Json
-if ($TauriConfig.bundle.resources.'binaries/' -ne 'backend/') {
-    throw "Tauri must map the complete staged binaries directory to backend/."
+if ($TauriConfig.bundle.resources.'../../../.desktop/release-1.0.0/backend/' -ne 'backend/') {
+    throw "Tauri must map the complete weight-free release backend directory to backend/."
 }
-if ($TauriConfig.bundle.resources.'../../../.desktop/bundled-models/' -ne 'bundled-models/') {
-    throw "Tauri must package the verified catalog checkpoints as bundled-models/."
+if ($TauriConfig.bundle.resources.'../../../.desktop/release-1.0.0/bundled-models/' -ne 'bundled-models/') {
+    throw "Tauri must package the weight-free manifest as bundled-models/."
 }
 
 if (-not (Test-Path ".venv" -PathType Container)) {
@@ -95,42 +95,30 @@ if (-not (Test-Path ".venv" -PathType Container)) {
 $VenvPython = Join-Path $Root ".venv\Scripts\python.exe"
 $BundleScript = Join-Path $PSScriptRoot "stage-bundled-models.py"
 $ModelCatalog = Join-Path $Root "config\model_catalog.json"
-$BundledModels = Join-Path $Root ".desktop\bundled-models"
+$BundledModels = Join-Path $Root ".desktop\release-1.0.0\bundled-models"
 
 $ModelAuditScript = Join-Path $PSScriptRoot "audit-model-downloadability.py"
 
-Write-ReefVisionStep "Auditing shipped Model Hub downloadability"
+Write-ReefVisionStep "Checking ReefVision 1.0.0 public versions"
+& $VenvPython (Join-Path $PSScriptRoot "check-release-version.py")
+if ($LASTEXITCODE -ne 0) { throw "Release version consistency check failed." }
+
+Write-ReefVisionStep "Auditing the architecture-first model catalog"
 & $VenvPython $ModelAuditScript --catalog $ModelCatalog
-if ($LASTEXITCODE -ne 0) {
-    throw "Model Hub downloadability audit failed."
-}
+if ($LASTEXITCODE -ne 0) { throw "No-pretrained model policy audit failed." }
 
-
-# Verified files already present in .desktop\bundled-models are reused, so only
-# a changed catalog entry requires another network download on the build machine.
-Write-ReefVisionStep "Staging verified pretrained catalog checkpoints"
-& $VenvPython $BundleScript --catalog $ModelCatalog --output $BundledModels --include-base-assistant
-if ($LASTEXITCODE -ne 0) {
-    throw "Failed to stage the pretrained catalog checkpoints."
-}
-$BundledManifest = Join-Path $BundledModels "manifest.json"
-if (-not (Test-Path $BundledManifest -PathType Leaf)) {
-    throw "Model bundle staging did not produce its manifest: $BundledManifest"
-}
-$BundleMetadata = Get-Content -LiteralPath $BundledManifest -Raw | ConvertFrom-Json
-if ($BundleMetadata.asset_count -le 0) {
-    throw "The desktop installer model bundle contains no checkpoints."
-}
-if (
-    $null -eq $BundleMetadata.provider_assets -or
-    $null -eq $BundleMetadata.provider_assets.smolvlm
-) {
-    throw "Base Research Assistant model is missing from the desktop bundle."
-}
-
-Write-Host "Bundling $($BundleMetadata.asset_count) verified checkpoints ($([math]::Round($BundleMetadata.total_size_bytes / 1MB, 1)) MB)." -ForegroundColor Green
+# Use a separate release staging tree. Legacy bundles and researcher caches are preserved.
+Write-ReefVisionStep "Staging the weight-free model manifest"
+& $VenvPython $BundleScript --catalog $ModelCatalog --output $BundledModels
+if ($LASTEXITCODE -ne 0) { throw "Failed to stage the weight-free manifest." }
+& $VenvPython $ModelAuditScript --catalog $ModelCatalog --bundle-root $BundledModels
+if ($LASTEXITCODE -ne 0) { throw "Staged model resource audit failed." }
 
 & (Join-Path $PSScriptRoot "build-desktop-backend.ps1") -TargetTriple $TargetTriple
+
+$ReleaseBackend = Join-Path $Root ".desktop\release-1.0.0\backend"
+& $VenvPython $ModelAuditScript --catalog $ModelCatalog --bundle-root $BundledModels --runtime-root $ReleaseBackend
+if ($LASTEXITCODE -ne 0) { throw "Release backend contains prohibited model assets." }
 
 Write-ReefVisionStep "Building the Tauri MSI installer"
 $GeneratedWixDirectory = Join-Path $CargoTargetDirectory "$TargetTriple\release\wix\x64"
@@ -211,7 +199,7 @@ foreach ($GeneratedCab in $GeneratedCabFiles) {
     Write-Host "External cabinet output: $DestinationCab" -ForegroundColor Green
 }
 
-$StagedCatalog = Join-Path $Root "apps\web\src-tauri\binaries\reefvision-api\_internal\config\model_catalog.json"
+$StagedCatalog = Join-Path $Root ".desktop\release-1.0.0\backend\reefvision-api\_internal\config\model_catalog.json"
 if (-not (Test-Path $StagedCatalog -PathType Leaf)) {
     throw "Desktop packaging lost the required Model Hub catalog: $StagedCatalog"
 }

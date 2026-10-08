@@ -6,7 +6,7 @@ import hashlib
 import json
 import shutil
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
@@ -289,78 +289,10 @@ def ensure_optional_model(
         if _weight_matches_spec(weight, spec):
             return existing
 
-    target = optional_model_root(settings, provider_id)
-    if target.exists() and any(target.iterdir()) and not allow_download:
-        raise ValidationError(
-            status["reason"]
-            or (
-                "The optional model cache is incomplete. Enable explicit model "
-                "download to repair it."
-            )
-        )
-    if not allow_download:
-        raise ValidationError(
-            "This optional model is not installed. Install it from Models & AI "
-            "→ Model Hub before running this provider."
-        )
-
-    shutil.rmtree(target, ignore_errors=True)
-    target.mkdir(parents=True, exist_ok=True)
-
-    try:
-        from huggingface_hub import snapshot_download
-        from tqdm.auto import tqdm  # type: ignore[import-untyped]
-    except Exception as exc:
-        raise ValidationError(f"huggingface_hub download runtime is unavailable: {exc}") from exc
-
-    class _ReefVisionSnapshotProgress(tqdm):  # type: ignore[misc]
-        def update(self, n: int | float = 1) -> bool | None:
-            result = super().update(n)
-            if progress_callback is not None:
-                total = int(self.total or 0)
-                current = min(int(self.n), total) if total > 0 else int(self.n)
-                progress_callback(current, total)
-            return result  # type: ignore[no-any-return]
-
-    try:
-        snapshot_download(
-            repo_id=spec.repo_id,
-            revision=spec.revision,
-            local_dir=target,
-            allow_patterns=list(spec.allow_patterns),
-            local_files_only=False,
-            max_workers=4,
-            tqdm_class=_ReefVisionSnapshotProgress,
-        )
-    except Exception as exc:
-        raise ValidationError(
-            f"Could not download the pinned {spec.display_name} files: {exc}"
-        ) from exc
-
-    weight = target / spec.weight_filename
-    if not weight.is_file():
-        raise ValidationError(f"Downloaded {spec.display_name} is missing {spec.weight_filename}")
-    if not _weight_matches_spec(weight, spec):
-        shutil.rmtree(target, ignore_errors=True)
-        raise ValidationError(
-            f"Downloaded {spec.display_name} failed checksum verification; the cache was removed."
-        )
-
-    _manifest_path(settings, provider_id).write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "model": asdict(spec),
-                "transformers_version": _transformers_version(),
-                "cache_source": "reefvision",
-            },
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
+    raise ValidationError(
+        "Model required — register a compatible local model to use this feature. "
+        "ReefVision does not download model weights."
     )
-    return target
 
 
 def resolve_torch_device(requested: str) -> str:

@@ -32,6 +32,10 @@ from reefvision.jobs.training import (
     _relative_to_data_dir,
     _resolve_model_source,
 )
+from reefvision.ml.adapters.ultralytics_training import (
+    configure_local_training_runtime,
+    local_training_arguments,
+)
 from reefvision.ml.dependencies import (
     configure_provider_runtime,
     require_provider_ready,
@@ -210,6 +214,8 @@ def process_segmentation_training_job(
             }
             session.commit()
 
+        configure_local_training_runtime(settings)
+
         from ultralytics import YOLO
 
         cancellation_requested = {"value": False}
@@ -252,7 +258,21 @@ def process_segmentation_training_job(
                 raise RuntimeError("Training run disappeared before launch")
             train_args = dict(run.training_config_json)
             device = resolve_torch_device(run.device)
-            train_args["amp"] = run.precision == "amp"
+            train_args["amp"] = False
+            run.artifact_manifest_json = {
+                **dict(run.artifact_manifest_json or {}),
+                "initialization_mode": "registered_model"
+                if run.initial_checkpoint_model_id
+                else "random",
+                "effective_precision": "fp32",
+                "pretrained": False,
+            }
+            if run.precision == "amp":
+                run.warnings_json = [
+                    *list(run.warnings_json or []),
+                    "AMP requires an upstream pretrained-weight check; this run uses fp32 offline.",
+                ]
+            session.commit()
             if run.random_seed is not None:
                 train_args["seed"] = run.random_seed
             train_args.update(
@@ -285,7 +305,7 @@ def process_segmentation_training_job(
                 (f"[{datetime.now(UTC).isoformat()}] launching Ultralytics segment training"),
             )
 
-        model.train(**train_args)
+        model.train(**local_training_arguments(train_args))
 
         with factory() as session:
             run = session.get(TrainingRun, run_id)

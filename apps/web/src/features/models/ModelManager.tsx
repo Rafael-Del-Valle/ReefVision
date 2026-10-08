@@ -3,28 +3,35 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
   ApiRequestError,
-  cancelJob,
   deleteModel,
-  getJob,
   getModelProviderPreflight,
   getModelHubBootstrap,
   getProjectModelCatalog,
   getRuntimeProviderStatuses,
   getUltralyticsTrainingRegistrySummary,
-  installCatalogModel,
-  removeCatalogModel,
   type ModelCatalogEntry,
   type ModelCatalogResponse,
   type ModelProvider,
-  type JobRecord,
   registerModel,
+  registerProviderModel,
   type ModelRegistration,
   type ProviderDependencyStatus,
   type Project,
   type RuntimeProviderStatus,
   type UltralyticsTrainingRegistrySummarySnapshot,
-  verifyCatalogModel,
 } from "../../api/client";
+
+const optionalModelProviders = [
+  { id: "grounding_dino", label: "Grounding DINO", extension: ".zip" },
+  { id: "sam2", label: "SAM2", extension: ".zip" },
+  { id: "smolvlm", label: "SmolVLM", extension: ".zip" },
+  { id: "scale_label_ocr", label: "Scale label OCR", extension: ".zip" },
+  {
+    id: "video_depth_anything",
+    label: "Metric Video Depth Anything",
+    extension: ".pth",
+  },
+];
 
 function ModelRow({
   model,
@@ -64,7 +71,11 @@ function ModelRow({
           </span>
         </div>
         <small>Provider: {model.provider_name}</small>
-        <small>Checksum: {model.sha256.slice(0, 12)}...</small>
+        <small title={model.sha256}>
+          Checksum: {model.sha256.slice(0, 12)}...
+        </small>
+        <small>Project: {model.project_id}</small>
+        <small>Registered: {new Date(model.created_at).toLocaleString()}</small>
         {labelEntries.length > 0 && (
           <div className="annotation-selection-list">
             {labelEntries.map((entry) => (
@@ -90,223 +101,95 @@ function ModelRow({
   );
 }
 
-function formatBytes(value: number | null): string {
-  if (value == null) return "Not declared";
-  if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 function CatalogModelCard({
   model,
-  job,
-  onInstall,
-  onCancel,
-  onVerify,
-  onRemove,
   onSelect,
-  onViewReason,
-  verificationResult,
+  onRegister,
 }: {
   model: ModelCatalogEntry;
-  job?: JobRecord;
-  onInstall?: (model: ModelCatalogEntry) => void;
-  onCancel?: (jobId: string) => void;
-  onVerify?: (model: ModelCatalogEntry) => void;
-  onRemove?: (model: ModelCatalogEntry) => void;
   onSelect?: (model: ModelCatalogEntry) => void;
-  onViewReason?: (model: ModelCatalogEntry) => void;
-  verificationResult?: {
-    state: "verifying" | "passed" | "failed";
-    message: string;
-  };
+  onRegister?: () => void;
 }) {
-  const state = model.installation_state;
-  const architecture = model.architecture ?? model.architecture_family;
-  const runtimes = model.supported_runtimes ?? model.supported_runtime ?? [];
-  const license = model.license_summary ?? model.model_weight_license;
-  const progressTotal = job?.progress_total ?? model.expected_size ?? 0;
-  const progressCurrent = job?.progress_current ?? 0;
-  const progress =
-    progressTotal > 0
-      ? Math.min(100, Math.round((progressCurrent / progressTotal) * 100))
-      : 0;
-  const active = ["Downloading", "Verifying", "Installing"].includes(state);
+  const architecture = model.category === "architecture";
+  const registered = model.selection_kind === "registered_model";
+  const canTrain =
+    architecture &&
+    (model.training_supported ?? model.trainable) &&
+    model.installation_state === "Available";
   return (
     <article className="image-card">
       <div className="image-card-body">
         <div>
           <h4>{model.display_name}</h4>
           <p>
-            {model.category.replaceAll("_", " ")} | {model.installation_state}
+            {architecture
+              ? "Architecture"
+              : registered
+                ? "Registered model"
+                : "Optional provider"}{" "}
+            |{" "}
+            {architecture
+              ? model.installation_state === "Ready"
+                ? "Available"
+                : model.installation_state
+              : registered
+                ? model.installation_state
+                : "Model Required"}
           </p>
         </div>
         <small>
-          {architecture} | {model.task.replaceAll("_", " ")}
+          {model.architecture_family} | {model.task.replaceAll("_", " ")}
         </small>
         <small>
-          Provider {model.provider} {model.provider_version}
+          Provider: {model.provider} {model.provider_version}
         </small>
-        <small>Runtime: {runtimes.join(", ") || "Not declared"}</small>
-        {model.checkpoint_identifier && (
-          <small>Checkpoint: {model.checkpoint_identifier}</small>
+        {architecture && (
+          <small>Configuration: {model.architecture_reference}</small>
         )}
-        {model.installed_path && (
+        {registered && model.installed_path && (
           <small>Location: {model.installed_path}</small>
         )}
-        <small>
-          Devices: {model.supported_devices.join(", ") || "Not declared"}
-        </small>
+        {registered && model.installed_checksum && (
+          <small>Checksum: {model.installed_checksum}</small>
+        )}
         <p>{model.display_summary}</p>
+        {architecture ? (
+          <p className="annotation-helper">
+            Train from random initialization using verified data. This
+            architecture contains no trained weights.
+          </p>
+        ) : !registered ? (
+          <p className="annotation-helper">
+            Model required — register a compatible model to use this feature.
+          </p>
+        ) : (
+          <p>
+            Source:{" "}
+            {model.category === "my_trained_models"
+              ? "ReefVision training output"
+              : "Researcher-registered checkpoint"}
+          </p>
+        )}
         {model.installation_reason && (
           <p className="annotation-helper">{model.installation_reason}</p>
         )}
-        {verificationResult && (
-          <p
-            className={
-              verificationResult.state === "failed"
-                ? "form-error"
-                : "annotation-helper"
-            }
-            role={verificationResult.state === "failed" ? "alert" : undefined}
-            aria-live="polite"
-          >
-            {verificationResult.state === "verifying"
-              ? "Verifying checkpoint integrity..."
-              : verificationResult.state === "passed"
-                ? `Verification passed: ${verificationResult.message}`
-                : `Verification failed: ${verificationResult.message}`}
-          </p>
-        )}
-        <div className="annotation-selection-list">
-          <div className="annotation-selection-row">
-            <strong>Trainable</strong>
-            <span>{model.trainable ? "Yes" : "No"}</span>
-          </div>
-          <div className="annotation-selection-row">
-            <strong>Mode</strong>
-            <span>{model.trainable ? "Trainable" : "Inference only"}</span>
-          </div>
-          <div className="annotation-selection-row">
-            <strong>Download</strong>
-            <span>{formatBytes(model.expected_size)}</span>
-          </div>
-          <div className="annotation-selection-row">
-            <strong>Recommended VRAM</strong>
-            <span>
-              {model.recommended_vram == null
-                ? "Not declared"
-                : `${model.recommended_vram} GB`}
-            </span>
-          </div>
-          <div className="annotation-selection-row">
-            <strong>License</strong>
-            <span>{license}</span>
-          </div>
-        </div>
-        {active && (
-          <div>
-            <progress value={progressCurrent} max={progressTotal || 1} />
-            <small aria-live="polite">
-              {state}: {progress}% (
-              {job?.result_json?.progress_unit === "files"
-                ? `${progressCurrent} / ${progressTotal} files`
-                : `${formatBytes(progressCurrent)} / ${formatBytes(progressTotal)}`}
-              )
-            </small>
-          </div>
-        )}
+        <small>
+          Recommended VRAM:{" "}
+          {model.recommended_vram == null
+            ? "Not declared"
+            : `${model.recommended_vram} GB`}
+        </small>
+        <small>License: {model.license_summary ?? model.package_license}</small>
         <div className="image-card-actions">
-          {(state === "Not Installed" || state === "Provider Required") &&
-            onInstall && (
-              <button type="button" onClick={() => onInstall(model)}>
-                {state === "Provider Required"
-                  ? "Install Provider and Model"
-                  : "Install"}
-              </button>
-            )}
-          {state === "Update Available" && onInstall && (
-            <button type="button" onClick={() => onInstall(model)}>
-              Update
+          {canTrain && onSelect && (
+            <button type="button" onClick={() => onSelect(model)}>
+              Train New Model
             </button>
           )}
-          {state === "Ready" && (
-            <>
-              {model.trainable && onSelect && (
-                <button type="button" onClick={() => onSelect(model)}>
-                  Select
-                </button>
-              )}
-              {onVerify && (
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => onVerify(model)}
-                  disabled={verificationResult?.state === "verifying"}
-                >
-                  {verificationResult?.state === "verifying"
-                    ? "Verifying..."
-                    : verificationResult?.state === "passed"
-                      ? "Verify again"
-                      : "Verify"}
-                </button>
-              )}
-              {onRemove && (
-                <button
-                  type="button"
-                  className="danger-ghost"
-                  onClick={() => onRemove(model)}
-                >
-                  Remove
-                </button>
-              )}
-            </>
-          )}
-          {active && job && onCancel && (
-            <button
-              type="button"
-              className="danger-ghost"
-              onClick={() => onCancel(job.id)}
-            >
-              Cancel
+          {!registered && !architecture && onRegister && (
+            <button type="button" onClick={onRegister}>
+              Register Existing Model
             </button>
-          )}
-          {state === "Corrupted" && onInstall && onRemove && (
-            <>
-              <button type="button" onClick={() => onInstall(model)}>
-                Repair
-              </button>
-              <button
-                type="button"
-                className="danger-ghost"
-                onClick={() => onRemove(model)}
-              >
-                Remove
-              </button>
-            </>
-          )}
-          {(state === "Unavailable" || state === "Incompatible") &&
-            onViewReason && (
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => onViewReason(model)}
-              >
-                View Reason
-              </button>
-            )}
-          {state === "Blocked" && onInstall && onViewReason && (
-            <>
-              <button type="button" onClick={() => onInstall(model)}>
-                Retry
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => onViewReason(model)}
-              >
-                View Reason
-              </button>
-            </>
           )}
         </div>
       </div>
@@ -347,51 +230,34 @@ function loadCachedCatalog(projectId: string): ModelCatalogResponse | null {
   }
 }
 
-function jobState(job: JobRecord): ModelCatalogEntry["installation_state"] {
-  const stage = String(job.result_json?.stage ?? "downloading");
-  if (stage === "verifying") return "Verifying";
-  if (stage === "finalizing" || stage === "provider_preflight")
-    return "Installing";
-  return "Downloading";
-}
-
 export function ModelManager({
   project,
   onSelectCatalogModel,
+  onTrainPoseArchitecture,
+  onTrainClassificationArchitecture,
 }: {
   project: Project;
   onSelectCatalogModel?: (catalogId: string) => void;
+  onTrainPoseArchitecture?: (architecture: string) => void;
+  onTrainClassificationArchitecture?: (architecture: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
+  const [providerFile, setProviderFile] = useState<File | null>(null);
+  const [optionalProviderId, setOptionalProviderId] =
+    useState("grounding_dino");
   const [purpose, setPurpose] = useState<"detector" | "assist">("detector");
   const [providerName, setProviderName] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [notes, setNotes] = useState("");
   const [cachedCatalog, setCachedCatalog] =
     useState<ModelCatalogResponse | null>(() => loadCachedCatalog(project.id));
-  const [confirmationModel, setConfirmationModel] =
-    useState<ModelCatalogEntry | null>(null);
-  const [reasonModel, setReasonModel] = useState<ModelCatalogEntry | null>(
-    null,
-  );
-  const [installJobs, setInstallJobs] = useState<Record<string, JobRecord>>({});
   const [operationMessage, setOperationMessage] = useState<string | null>(null);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogFilter, setCatalogFilter] = useState<
-    "all" | "ready" | "installable" | "training" | "segmentation" | "assist"
+    "all" | "available" | "training" | "segmentation" | "assist"
   >("all");
   const [showUnavailable, setShowUnavailable] = useState(false);
-  const [verificationResults, setVerificationResults] = useState<
-    Record<
-      string,
-      {
-        state: "verifying" | "passed" | "failed";
-        message: string;
-      }
-    >
-  >({});
-
   const catalogQuery = useQuery({
     queryKey: ["model_catalog", project.id, "model_hub"],
     queryFn: ({ signal }) =>
@@ -465,10 +331,12 @@ export function ModelManager({
   const selectedProviderPreflight = selectedProvider
     ? (preflightByName.get(selectedProvider.provider_id) ?? null)
     : null;
-  const pretrainedCatalogModels = useMemo(
+  const architectureCatalogModels = useMemo(
     () =>
-      (modelCatalog?.models ?? []).filter(
-        (item) => item.category === "pretrained_catalog",
+      (modelCatalog?.models ?? []).filter((item) =>
+        ["architecture", "provider_requirement", "pretrained_catalog"].includes(
+          item.category,
+        ),
       ),
     [modelCatalog?.models],
   );
@@ -487,32 +355,18 @@ export function ModelManager({
     [modelCatalog?.models],
   );
 
-  const catalogSummary = useMemo(() => {
-    const entries = pretrainedCatalogModels;
-    return {
-      ready: entries.filter((item) => item.installation_state === "Ready")
-        .length,
-      installable: entries.filter((item) =>
-        ["Not Installed", "Provider Required", "Update Available"].includes(
-          item.installation_state,
-        ),
-      ).length,
-      active: entries.filter((item) =>
-        ["Downloading", "Verifying", "Installing"].includes(
-          item.installation_state,
-        ),
-      ).length,
-      attention: entries.filter((item) =>
-        ["Blocked", "Corrupted", "Incompatible"].includes(
-          item.installation_state,
-        ),
-      ).length,
-    };
-  }, [pretrainedCatalogModels]);
+  const catalogSummary = {
+    available: architectureCatalogModels.filter(
+      (item) =>
+        item.category === "architecture" &&
+        item.installation_state === "Available",
+    ).length,
+    ready: trainedCatalogModels.length + importedCatalogModels.length,
+  };
 
-  const filteredPretrainedCatalogModels = useMemo(() => {
+  const filteredArchitectureCatalogModels = useMemo(() => {
     const query = catalogSearch.trim().toLocaleLowerCase();
-    return pretrainedCatalogModels.filter((model) => {
+    return architectureCatalogModels.filter((model) => {
       if (!showUnavailable && model.installation_state === "Unavailable") {
         return false;
       }
@@ -536,16 +390,11 @@ export function ModelManager({
 
       if (!matchesSearch) return false;
 
-      if (catalogFilter === "ready") {
-        return model.installation_state === "Ready";
-      }
-      if (catalogFilter === "installable") {
-        return [
-          "Not Installed",
-          "Provider Required",
-          "Update Available",
-        ].includes(model.installation_state);
-      }
+      if (catalogFilter === "available")
+        return (
+          model.category === "architecture" &&
+          model.installation_state === "Available"
+        );
       if (catalogFilter === "training") {
         return model.trainable;
       }
@@ -567,18 +416,22 @@ export function ModelManager({
       }
       return true;
     });
-  }, [catalogFilter, catalogSearch, pretrainedCatalogModels, showUnavailable]);
+  }, [
+    catalogFilter,
+    catalogSearch,
+    architectureCatalogModels,
+    showUnavailable,
+  ]);
 
   function jumpToModelSection(sectionId: string) {
-    document.getElementById(sectionId)?.scrollIntoView({
+    document.getElementById(sectionId)?.scrollIntoView?.({
       behavior: "smooth",
       block: "start",
     });
   }
 
   function openCatalogFilter(
-    filter:
-      "all" | "ready" | "installable" | "training" | "segmentation" | "assist",
+    filter: "all" | "available" | "training" | "segmentation" | "assist",
   ) {
     setCatalogFilter(filter);
     jumpToModelSection("model-ai-catalog");
@@ -592,91 +445,6 @@ export function ModelManager({
       JSON.stringify(catalogQuery.data),
     );
   }, [catalogQuery.data, project.id]);
-
-  const activeJobEntries = useMemo(() => {
-    const entries = new Map<string, string>();
-    for (const model of modelCatalog?.models ?? []) {
-      const localJob = installJobs[model.catalog_id];
-      const jobId = localJob?.id ?? model.installation_job_id;
-      const status = localJob?.status;
-      if (
-        jobId &&
-        (!status || ["queued", "running", "cancel_requested"].includes(status))
-      ) {
-        entries.set(model.catalog_id, jobId);
-      }
-    }
-    return Array.from(entries.entries());
-  }, [installJobs, modelCatalog?.models]);
-  const activeJobSignature = activeJobEntries
-    .map(([catalogId, jobId]) => `${catalogId}:${jobId}`)
-    .join("|");
-
-  useEffect(() => {
-    if (!activeJobSignature) return;
-    let stopped = false;
-    let inFlight = false;
-    const refresh = async () => {
-      // Never stack polling requests. Overlapping responses can arrive out
-      // of order and make a live progress bar appear frozen or move backward.
-      if (stopped || inFlight) return;
-      inFlight = true;
-      try {
-        const updates = await Promise.all(
-          activeJobEntries.map(
-            async ([catalogId, jobId]) =>
-              [catalogId, await getJob(jobId)] as const,
-          ),
-        );
-        if (stopped) return;
-        setInstallJobs((current) => {
-          const next = { ...current };
-          for (const [catalogId, job] of updates) {
-            const previous = next[catalogId];
-            const terminal = ![
-              "queued",
-              "running",
-              "cancel_requested",
-            ].includes(job.status);
-            if (
-              terminal ||
-              !previous ||
-              previous.id !== job.id ||
-              job.progress_current >= previous.progress_current
-            ) {
-              next[catalogId] = job;
-            }
-          }
-          return next;
-        });
-        if (
-          updates.some(
-            ([, job]) =>
-              !["queued", "running", "cancel_requested"].includes(job.status),
-          )
-        ) {
-          void queryClient.invalidateQueries({
-            queryKey: ["model_catalog", project.id],
-          });
-          void queryClient.invalidateQueries({
-            queryKey: ["model_hub_bootstrap", project.id],
-          });
-        }
-      } catch (error) {
-        if (!stopped) {
-          console.error("Failed to refresh model-install progress", error);
-        }
-      } finally {
-        inFlight = false;
-      }
-    };
-    void refresh();
-    const interval = window.setInterval(() => void refresh(), 500);
-    return () => {
-      stopped = true;
-      window.clearInterval(interval);
-    };
-  }, [activeJobSignature, project.id, queryClient]);
 
   useEffect(() => {
     if (selectedProvider && selectedProvider.provider_id === providerName) {
@@ -714,125 +482,41 @@ export function ModelManager({
     },
   });
 
+  const registerProviderMutation = useMutation({
+    mutationFn: () => {
+      if (!providerFile)
+        throw new Error("Choose a compatible local model file first");
+      return registerProviderModel(
+        project.id,
+        optionalProviderId,
+        providerFile,
+      );
+    },
+    onSuccess: () => {
+      setProviderFile(null);
+      void Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["model_catalog", project.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["model_hub_bootstrap", project.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["advanced-provider-model-catalog", project.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["reefvision-assistant-model-catalog", project.id],
+        }),
+        providerPreflight.refetch(),
+      ]);
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (modelId: string) => deleteModel(modelId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ["model_hub_bootstrap", project.id],
-      });
-    },
-  });
-
-  const installMutation = useMutation({
-    mutationFn: async (model: ModelCatalogEntry) => ({
-      model,
-      job: await installCatalogModel(project.id, model.catalog_id),
-    }),
-    onSuccess: ({ model, job }) => {
-      setConfirmationModel(null);
-      setVerificationResults((current) => {
-        const next = { ...current };
-        delete next[model.catalog_id];
-        return next;
-      });
-      setOperationMessage(`Installation started for ${model.display_name}.`);
-      setInstallJobs((current) => ({ ...current, [model.catalog_id]: job }));
-      void queryClient.invalidateQueries({
-        queryKey: ["model_catalog", project.id],
-      });
-    },
-  });
-
-  const cancelInstallMutation = useMutation({
-    mutationFn: (jobId: string) => cancelJob(jobId),
-    onSuccess: (job) => {
-      setOperationMessage(
-        "Cancellation requested. Partial downloads will be removed safely.",
-      );
-      setInstallJobs((current) => {
-        const next = { ...current };
-        for (const [catalogId, currentJob] of Object.entries(next)) {
-          if (currentJob.id === job.id) next[catalogId] = job;
-        }
-        return next;
-      });
-    },
-  });
-
-  const verifyMutation = useMutation({
-    mutationFn: async (model: ModelCatalogEntry) => ({
-      model,
-      result: await verifyCatalogModel(project.id, model.catalog_id),
-    }),
-    onMutate: (model) => {
-      setVerificationResults((current) => ({
-        ...current,
-        [model.catalog_id]: {
-          state: "verifying",
-          message:
-            "Checking the installed checkpoint against its pinned checksum.",
-        },
-      }));
-      setOperationMessage(`Verifying ${model.display_name}...`);
-    },
-    onSuccess: ({ model, result }) => {
-      const message = result.verified
-        ? result.actual_checksum
-          ? `SHA-256 ${result.actual_checksum.slice(0, 12)}… matches the trusted model.`
-          : "The installed checkpoint matches the trusted model."
-        : (result.reason ??
-          "The installed checkpoint did not pass verification.");
-
-      setVerificationResults((current) => ({
-        ...current,
-        [model.catalog_id]: {
-          state: result.verified ? "passed" : "failed",
-          message,
-        },
-      }));
-      setOperationMessage(
-        result.verified
-          ? `${model.display_name} verification passed.`
-          : `${model.display_name} verification failed.`,
-      );
-      void queryClient.invalidateQueries({
-        queryKey: ["model_catalog", project.id],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: ["model_hub_bootstrap", project.id],
-      });
-    },
-    onError: (error, model) => {
-      setVerificationResults((current) => ({
-        ...current,
-        [model.catalog_id]: {
-          state: "failed",
-          message: error.message,
-        },
-      }));
-      setOperationMessage(`${model.display_name} verification failed.`);
-    },
-  });
-
-  const removeCatalogMutation = useMutation({
-    mutationFn: async (model: ModelCatalogEntry) => ({
-      model,
-      result: await removeCatalogModel(project.id, model.catalog_id),
-    }),
-    onSuccess: ({ model }) => {
-      setVerificationResults((current) => {
-        const next = { ...current };
-        delete next[model.catalog_id];
-        return next;
-      });
-      setOperationMessage(
-        "Managed catalog model removed. The definition remains available.",
-      );
-      void queryClient.invalidateQueries({
-        queryKey: ["model_catalog", project.id],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: ["training_workspace_bootstrap", project.id],
       });
     },
   });
@@ -860,12 +544,6 @@ export function ModelManager({
     catalogQuery.error instanceof ApiRequestError
       ? catalogQuery.error.details
       : null;
-  const operationError =
-    installMutation.error ??
-    cancelInstallMutation.error ??
-    verifyMutation.error ??
-    removeCatalogMutation.error;
-
   return (
     <section className="gallery-panel model-ai-workspace">
       <div className="section-heading gallery-heading model-ai-header">
@@ -873,8 +551,8 @@ export function ModelManager({
           <p className="eyebrow">Models & AI</p>
           <h3>AI workspace</h3>
           <span>
-            Find, install, verify, and manage models without digging through
-            provider internals.
+            Train from supported architectures or register your own trained
+            models. No model weights are bundled or downloaded.
           </span>
         </div>
         <div className="image-card-actions">
@@ -906,18 +584,20 @@ export function ModelManager({
         <button
           type="button"
           className="model-ai-overview-card"
-          onClick={() => openCatalogFilter("installable")}
+          onClick={() => openCatalogFilter("available")}
         >
-          <span className="model-ai-overview-label">Available to install</span>
-          <strong>{catalogSummary.installable}</strong>
-          <small>Browse models that can be added now</small>
+          <span className="model-ai-overview-label">
+            Available architectures
+          </span>
+          <strong>{catalogSummary.available}</strong>
+          <small>Choose a configuration for training</small>
         </button>
         <button
           type="button"
           className="model-ai-overview-card"
-          onClick={() => openCatalogFilter("ready")}
+          onClick={() => jumpToModelSection("model-ai-project-models")}
         >
-          <span className="model-ai-overview-label">Installed & ready</span>
+          <span className="model-ai-overview-label">Registered models</span>
           <strong>{catalogSummary.ready}</strong>
           <small>See models that ReefVision can use now</small>
         </button>
@@ -936,23 +616,20 @@ export function ModelManager({
           onClick={() => jumpToModelSection("model-ai-advanced")}
         >
           <span className="model-ai-overview-label">System status</span>
-          <strong>
-            {catalogSummary.active > 0
-              ? `${catalogSummary.active} active`
-              : catalogSummary.attention > 0
-                ? `${catalogSummary.attention} needs attention`
-                : "Healthy"}
-          </strong>
+          <strong>Provider status</strong>
           <small>Provider, runtime, and compatibility diagnostics</small>
         </button>
       </div>
 
       <nav className="model-ai-jumpbar" aria-label="Models and AI navigation">
         <button type="button" onClick={() => openCatalogFilter("all")}>
-          Browse models
+          Architectures
         </button>
-        <button type="button" onClick={() => openCatalogFilter("ready")}>
-          Installed
+        <button
+          type="button"
+          onClick={() => jumpToModelSection("model-ai-project-models")}
+        >
+          Registered Models
         </button>
         <button
           type="button"
@@ -962,9 +639,13 @@ export function ModelManager({
         </button>
         <button
           type="button"
-          onClick={() => jumpToModelSection("model-ai-custom-models")}
+          onClick={() =>
+            document
+              .getElementById("model-registration")
+              ?.setAttribute("open", "")
+          }
         >
-          Custom imports
+          Register Existing Model
         </button>
         <button
           type="button"
@@ -983,7 +664,7 @@ export function ModelManager({
         <div className="section-heading gallery-heading">
           <div>
             <p className="eyebrow">Model catalog</p>
-            <h3>Validated presets</h3>
+            <h3>Architectures</h3>
             <span>Search by task or choose what you want ReefVision to do</span>
           </div>
           <button
@@ -1038,10 +719,6 @@ export function ModelManager({
             {operationMessage}
           </p>
         )}
-        {operationError && (
-          <p className="form-error">{operationError.message}</p>
-        )}
-
         <div className="model-ai-catalog-toolbar">
           <label className="model-ai-search">
             <span>Search models</span>
@@ -1060,8 +737,7 @@ export function ModelManager({
             {(
               [
                 ["all", "All"],
-                ["ready", "Installed"],
-                ["installable", "Available"],
+                ["available", "Available"],
                 ["training", "Training"],
                 ["segmentation", "Segmentation"],
                 ["assist", "AI assist"],
@@ -1090,11 +766,12 @@ export function ModelManager({
         </div>
 
         <p className="system-subtle">
-          Showing {filteredPretrainedCatalogModels.length} of{" "}
-          {pretrainedCatalogModels.length} pretrained models.
+          Showing {filteredArchitectureCatalogModels.length} of{" "}
+          {architectureCatalogModels.length} architectures and provider
+          capabilities.
         </p>
 
-        {filteredPretrainedCatalogModels.length === 0 && (
+        {filteredArchitectureCatalogModels.length === 0 && (
           <div className="empty-state gallery-empty">
             <h4>No models match these filters</h4>
             <p>Try another search or switch back to All.</p>
@@ -1112,143 +789,69 @@ export function ModelManager({
         )}
 
         <div className="image-grid model-ai-model-grid">
-          {filteredPretrainedCatalogModels.map((model) => {
-            const job = installJobs[model.catalog_id];
-            const displayedModel =
-              job &&
-              ["queued", "running", "cancel_requested"].includes(job.status)
-                ? {
-                    ...model,
-                    installation_state: jobState(job),
-                    installation_job_id: job.id,
-                  }
-                : model;
-            return (
-              <CatalogModelCard
-                key={model.catalog_id}
-                model={displayedModel}
-                job={job}
-                onInstall={setConfirmationModel}
-                onCancel={(jobId) => cancelInstallMutation.mutate(jobId)}
-                onVerify={(item) => verifyMutation.mutate(item)}
-                onRemove={(item) => {
-                  if (
-                    window.confirm(
-                      `Remove the managed ${item.display_name} checkpoint?`,
-                    )
-                  ) {
-                    removeCatalogMutation.mutate(item);
-                  }
-                }}
-                onSelect={(item) => {
-                  setOperationMessage(
-                    `${item.display_name} selected for a new training draft.`,
-                  );
-                  void queryClient.invalidateQueries({
-                    queryKey: ["training_workspace_bootstrap", project.id],
-                  });
-                  onSelectCatalogModel?.(item.catalog_id);
-                }}
-                onViewReason={setReasonModel}
-                verificationResult={verificationResults[model.catalog_id]}
-              />
-            );
-          })}
+          {filteredArchitectureCatalogModels.map((model) => (
+            <CatalogModelCard
+              key={model.catalog_id}
+              model={model}
+              onSelect={
+                onSelectCatalogModel
+                  ? (item) => {
+                      setOperationMessage(
+                        `${item.display_name} selected for training from scratch.`,
+                      );
+                      if (item.task === "pose") {
+                        if (item.architecture_reference)
+                          onTrainPoseArchitecture?.(
+                            item.architecture_reference,
+                          );
+                      } else if (item.task === "classify") {
+                        if (item.architecture_reference)
+                          onTrainClassificationArchitecture?.(
+                            item.architecture_reference,
+                          );
+                      } else {
+                        onSelectCatalogModel(item.catalog_id);
+                      }
+                    }
+                  : undefined
+              }
+              onRegister={() => {
+                if (
+                  optionalModelProviders.some(
+                    (provider) => provider.id === model.provider_id,
+                  )
+                ) {
+                  setOptionalProviderId(model.provider_id);
+                  setProviderFile(null);
+                  document
+                    .getElementById("optional-provider-registration")
+                    ?.setAttribute("open", "");
+                  jumpToModelSection("optional-provider-registration");
+                  return;
+                }
+                const form = document.getElementById("model-registration");
+                form?.setAttribute("open", "");
+                jumpToModelSection("model-registration");
+              }}
+            />
+          ))}
         </div>
-        {confirmationModel && (
-          <div className="modal-backdrop" role="presentation">
-            <section
-              className="modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="model-install-title"
-            >
-              <p className="eyebrow">Confirm managed installation</p>
-              <h3 id="model-install-title">{confirmationModel.display_name}</h3>
-              <p>{confirmationModel.license_summary}</p>
-              <div className="annotation-selection-list">
-                <div className="annotation-selection-row">
-                  <strong>Download</strong>
-                  <span>{formatBytes(confirmationModel.expected_size)}</span>
-                </div>
-                <div className="annotation-selection-row">
-                  <strong>RAM / VRAM</strong>
-                  <span>
-                    {confirmationModel.recommended_ram ?? "n/a"} GB /{" "}
-                    {confirmationModel.recommended_vram ?? "n/a"} GB
-                  </span>
-                </div>
-                <div className="annotation-selection-row">
-                  <strong>Provider pack</strong>
-                  <span>
-                    {confirmationModel.provider_pack_id ??
-                      "Bundled base runtime"}
-                  </span>
-                </div>
-              </div>
-              <p className="annotation-helper">
-                ReefVision will download from the declared trusted source,
-                verify the pinned SHA-256, and store the finalized checkpoint in
-                application data.
-              </p>
-              <div className="image-card-actions">
-                <button
-                  type="button"
-                  onClick={() => installMutation.mutate(confirmationModel)}
-                  disabled={installMutation.isPending}
-                >
-                  {installMutation.isPending
-                    ? "Starting..."
-                    : "Confirm Install"}
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => setConfirmationModel(null)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </section>
-          </div>
-        )}
-        {reasonModel && (
-          <div className="modal-backdrop" role="presentation">
-            <section
-              className="modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="model-reason-title"
-            >
-              <h3 id="model-reason-title">{reasonModel.display_name}</h3>
-              <p>
-                {reasonModel.installation_reason ??
-                  "No additional reason was provided."}
-              </p>
-              {reasonModel.known_limitations.map((limitation) => (
-                <p key={limitation} className="annotation-helper">
-                  {limitation}
-                </p>
-              ))}
-              <button type="button" onClick={() => setReasonModel(null)}>
-                Close
-              </button>
-            </section>
-          </div>
-        )}
       </section>
 
       <section id="model-ai-project-models" className="gallery-panel">
         <div className="section-heading gallery-heading">
           <div>
             <p className="eyebrow">My Trained Models</p>
-            <h3>Project-trained checkpoints</h3>
-            <span>One-click selection through the managed registry</span>
+            <h3>Registered Models</h3>
+            <span>
+              ReefVision training outputs with project and training-run
+              provenance
+            </span>
           </div>
         </div>
         {!trainedCatalogModels.length && (
           <p className="system-subtle">
-            Completed training runs will appear here after you register them.
+            Registered training outputs appear here after a successful run.
           </p>
         )}
         <div className="image-grid">
@@ -1262,16 +865,16 @@ export function ModelManager({
         <div className="section-heading gallery-heading">
           <div>
             <p className="eyebrow">Imported Custom Models</p>
-            <h3>Advanced project imports</h3>
+            <h3>Researcher-registered checkpoints</h3>
             <span>
-              Custom checkpoints stay outside the normal pretrained flow
+              Your compatible local models, with explicit source and schema
+              binding
             </span>
           </div>
         </div>
         {!importedCatalogModels.length && (
           <p className="system-subtle">
-            Import a custom checkpoint from the advanced workflow to surface it
-            here.
+            Register a compatible trained checkpoint to use it in this project.
           </p>
         )}
         <div className="image-grid">
@@ -1431,10 +1034,100 @@ export function ModelManager({
       </details>
 
       <details
-        id="model-ai-import"
+        id="optional-provider-registration"
         className="gallery-panel model-ai-import-shell"
       >
-        <summary>Advanced · Import custom checkpoint</summary>
+        <summary>Register optional provider model</summary>
+        <form
+          className="new-class-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            registerProviderMutation.mutate();
+          }}
+        >
+          <h3>Optional provider model</h3>
+          <p>
+            Provide your own compatible trained model. Transformers bundles must
+            contain the configuration, processor/tokenizer files and trained
+            weights in a ZIP. Metric video depth accepts a local .pth
+            checkpoint.
+          </p>
+          <p>
+            This registration activates the local model for this provider across
+            ReefVision projects. Existing model files are preserved.
+          </p>
+          <label>
+            Optional model provider
+            <select
+              value={optionalProviderId}
+              onChange={(event) => {
+                setOptionalProviderId(event.target.value);
+                setProviderFile(null);
+                registerProviderMutation.reset();
+              }}
+            >
+              {optionalModelProviders.map((provider) => (
+                <option key={provider.id} value={provider.id}>
+                  {provider.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Provider model file
+            <input
+              key={optionalProviderId}
+              type="file"
+              accept={
+                optionalModelProviders.find(
+                  (provider) => provider.id === optionalProviderId,
+                )?.extension
+              }
+              onChange={(event) =>
+                setProviderFile(event.target.files?.[0] ?? null)
+              }
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={!providerFile || registerProviderMutation.isPending}
+          >
+            {registerProviderMutation.isPending
+              ? "Registering..."
+              : "Register provider model"}
+          </button>
+          {registerProviderMutation.error && (
+            <p className="form-error" role="alert">
+              {registerProviderMutation.error.message}
+            </p>
+          )}
+          {registerProviderMutation.data && (
+            <div role="status">
+              <p>
+                Registered {registerProviderMutation.data.original_filename}
+              </p>
+              <p>
+                Provider: {registerProviderMutation.data.provider_id} | Task:{" "}
+                {registerProviderMutation.data.task}
+              </p>
+              <p>Project: {registerProviderMutation.data.project_id}</p>
+              <p>
+                Registered:{" "}
+                {new Date(
+                  registerProviderMutation.data.registered_at,
+                ).toLocaleString()}
+              </p>
+              <code>{registerProviderMutation.data.sha256}</code>
+            </div>
+          )}
+        </form>
+      </details>
+
+      <details
+        id="model-registration"
+        className="gallery-panel model-ai-import-shell"
+      >
+        <summary>Register Existing Model</summary>
         <form className="new-class-form" onSubmit={submit}>
           <h3>Import a local checkpoint</h3>
           <label>
@@ -1493,9 +1186,9 @@ export function ModelManager({
             />
           </label>
           <p className="annotation-helper">
-            Imported custom models remain part of the advanced workflow. The
-            normal pretrained selector comes from the validated Model Catalog
-            instead.
+            Register a local trained checkpoint. ReefVision preserves its
+            source, checksum, provider and class mapping. Pose models and SLEAP
+            bundles use the schema-aware registration in Pose Tracking.
           </p>
           {selectedProvider && (
             <p className="annotation-helper">
@@ -1522,7 +1215,7 @@ export function ModelManager({
           >
             {registerMutation.isPending
               ? "Importing..."
-              : "Import custom model"}
+              : "Register Existing Model"}
           </button>
           {registerMutation.error && (
             <p className="form-error">{registerMutation.error.message}</p>
@@ -1657,9 +1350,7 @@ function ProviderReadinessCard({
         )}
         <small>Requirements: {provider.requirements_file}</small>
         <small>
-          Downloads{" "}
-          {provider.automatic_downloads_disabled ? "disabled" : "enabled"} |
-          local checkpoint{" "}
+          Automatic weight downloads disabled | local checkpoint{" "}
           {provider.explicit_checkpoint_required ? "required" : "optional"}
         </small>
         {provider.issues.length > 0 && (
@@ -1746,8 +1437,8 @@ function UltralyticsTrainingCompatibility({
           {registry.supported_modes.join(", ")}
         </small>
         <small>
-          Full training execution is still in progress. This release adds the
-          versioned registry and strict argument validation foundation first.
+          Training uses local architecture configurations or explicitly
+          registered checkpoints.
         </small>
         <div className="annotation-selection-list">
           <div className="annotation-selection-row">

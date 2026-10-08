@@ -1,7 +1,7 @@
 """Packaged ReefVision provider CPU/CUDA acceptance.
 
 This module is intentionally invoked from the frozen desktop sidecar. It uses
-only installer-bundled, checksum-verified checkpoints and deterministic
+only explicitly supplied local, checksum-verified checkpoints and deterministic
 synthetic imagery. The resulting evidence proves packaged runtime execution,
 not biological model accuracy.
 """
@@ -18,6 +18,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -29,8 +30,6 @@ from reefvision.ml.providers import (
     UltralyticsDetectionProvider,
     resolve_torch_device,
 )
-from reefvision.services.bundled_models import install_bundled_catalog_models
-from reefvision.storage.catalog_models import catalog_manifest_record
 
 REPORT_FILENAME = "provider-hardware-acceptance.json"
 DETECTION_CATALOG_ID = "ultralytics/yolo11/detect/n"
@@ -45,48 +44,40 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _managed_asset(
-    settings: Settings,
-    catalog_id: str,
-) -> tuple[Path, dict[str, Any]]:
-    record = catalog_manifest_record(settings, catalog_id)
-    if record is None:
-        raise RuntimeError(f"Managed bundled checkpoint is missing: {catalog_id}")
-
-    relative = record.get("relative_path")
-    if not isinstance(relative, str) or not relative:
-        raise RuntimeError(f"Managed bundled checkpoint has no relative_path: {catalog_id}")
-
-    path = (settings.resolved_data_dir / relative).resolve()
-    try:
-        path.relative_to(settings.resolved_data_dir.resolve())
-    except ValueError as exc:
-        raise RuntimeError(f"Managed checkpoint escaped data root: {catalog_id}") from exc
-
+def _explicit_local_asset(models: dict[str, Any], kind: str) -> tuple[Path, dict[str, Any]]:
+    """Verify researcher-selected inputs without searching installer/user caches."""
+    record = models.get(kind)
+    if not isinstance(record, dict) or not record.get("path"):
+        raise RuntimeError(f"An explicit local {kind} model and checksum manifest are required.")
+    path = Path(str(record["path"])).expanduser()
+    if not path.is_absolute() or not path.exists():
+        raise RuntimeError(f"Explicit local model is missing or not absolute: {path}")
+    path = path.resolve()
     files = record.get("files")
-    if isinstance(files, list) and files:
-        for item in files:
-            if not isinstance(item, dict):
-                raise RuntimeError(f"Malformed managed manifest entry: {catalog_id}")
-            file_relative = item.get("relative_path")
-            if not isinstance(file_relative, str) or not file_relative:
-                raise RuntimeError(f"Managed manifest file has no path: {catalog_id}")
-            file_path = (settings.resolved_data_dir / file_relative).resolve()
-            try:
-                file_path.relative_to(settings.resolved_data_dir.resolve())
-            except ValueError as exc:
-                raise RuntimeError(
-                    f"Managed checkpoint file escaped data root: {catalog_id}"
-                ) from exc
-            if not file_path.is_file():
-                raise RuntimeError(f"Managed checkpoint file is missing: {file_path}")
-            if file_path.stat().st_size != int(item["size_bytes"]):
-                raise RuntimeError(f"Managed checkpoint size mismatch: {file_path}")
-            if sha256_file(file_path) != str(item["sha256"]):
-                raise RuntimeError(f"Managed checkpoint checksum mismatch: {file_path}")
-
-    if not path.exists():
-        raise RuntimeError(f"Managed checkpoint path is missing: {path}")
+    if not isinstance(files, list) or not files:
+        raise RuntimeError(f"An explicit checksum manifest is required for {path}")
+    verified = set()
+    for item in files:
+        if not isinstance(item, dict):
+            raise RuntimeError("Malformed explicit checksum manifest")
+        file_path = Path(str(item.get("path") or ""))
+        if not file_path.is_absolute():
+            raise RuntimeError("Explicit model files must have absolute paths")
+        file_path = file_path.resolve()
+        if (path.is_file() and file_path != path) or (
+            path.is_dir() and not file_path.is_relative_to(path)
+        ):
+            raise RuntimeError(f"Checksum manifest file is outside the selected model: {file_path}")
+        if not file_path.is_file():
+            raise RuntimeError(f"Explicit model file is missing: {file_path}")
+        if file_path.stat().st_size != item.get("size_bytes"):
+            raise RuntimeError(f"Explicit model size mismatch: {file_path}")
+        if sha256_file(file_path) != item.get("sha256"):
+            raise RuntimeError(f"Explicit model checksum mismatch: {file_path}")
+        verified.add(file_path)
+    actual = {p.resolve() for p in path.rglob("*") if p.is_file()} if path.is_dir() else {path}
+    if actual != verified:
+        raise RuntimeError(f"Checksum manifest does not cover every model file: {path}")
     return path, record
 
 
@@ -117,7 +108,13 @@ def _timed_run(
 
     started = time.perf_counter()
     try:
-        details = action()
+        with (
+            patch("socket.socket.connect", side_effect=RuntimeError("Acceptance network blocked")),
+            patch(
+                "socket.create_connection", side_effect=RuntimeError("Acceptance network blocked")
+            ),
+        ):
+            details = action()
         if device == "cuda":
             torch.cuda.synchronize()
         elapsed = time.perf_counter() - started
@@ -238,16 +235,22 @@ def run_packaged_provider_acceptance(settings: Settings) -> int:
     report_path = settings.resolved_data_dir / REPORT_FILENAME
     report_path.unlink(missing_ok=True)
 
-    installed, warnings = install_bundled_catalog_models(settings)
-
-    detection_path, detection_record = _managed_asset(
-        settings,
-        DETECTION_CATALOG_ID,
-    )
-    depth_path, depth_record = _managed_asset(
-        settings,
-        DEPTH_CATALOG_ID,
-    )
+    manifest_name = os.environ.get("REEFVISION_ACCEPTANCE_MODEL_MANIFEST")
+    if not manifest_name:
+        raise RuntimeError(
+            "Set REEFVISION_ACCEPTANCE_MODEL_MANIFEST to an explicit local "
+            "model checksum manifest. No bundled checkpoint or developer "
+            "cache is used."
+        )
+    manifest_path = Path(manifest_name)
+    if not manifest_path.is_absolute() or not manifest_path.is_file():
+        raise RuntimeError("Acceptance model manifest must be an existing absolute local path.")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+    models = manifest.get("models")
+    if not isinstance(models, dict):
+        raise RuntimeError("Acceptance manifest must contain a models object.")
+    detection_path, detection_record = _explicit_local_asset(models, "detection")
+    depth_asset = _explicit_local_asset(models, "depth") if models.get("depth") else None
 
     input_path = settings.resolved_data_dir / "provider-acceptance-input.png"
     _write_input(input_path)
@@ -263,11 +266,21 @@ def run_packaged_provider_acceptance(settings: Settings) -> int:
         input_path,
         "cpu",
     )
-    results["depth_anything_v2_cpu"] = _depth_run(
-        depth_path,
-        input_path,
-        settings.resolved_data_dir / "provider-acceptance-output",
-        "cpu",
+    model_required = {
+        "status": "MODEL_REQUIRED",
+        "failure_message": (
+            "Register/provide a compatible local depth model to test this optional capability."
+        ),
+    }
+    results["depth_anything_v2_cpu"] = (
+        _depth_run(
+            depth_asset[0],
+            input_path,
+            settings.resolved_data_dir / "provider-acceptance-output",
+            "cpu",
+        )
+        if depth_asset
+        else dict(model_required)
     )
 
     if cuda_available:
@@ -276,11 +289,15 @@ def run_packaged_provider_acceptance(settings: Settings) -> int:
             input_path,
             "cuda",
         )
-        results["depth_anything_v2_cuda"] = _depth_run(
-            depth_path,
-            input_path,
-            settings.resolved_data_dir / "provider-acceptance-output",
-            "cuda",
+        results["depth_anything_v2_cuda"] = (
+            _depth_run(
+                depth_asset[0],
+                input_path,
+                settings.resolved_data_dir / "provider-acceptance-output",
+                "cuda",
+            )
+            if depth_asset
+            else dict(model_required)
         )
     else:
         blocked = {
@@ -311,16 +328,19 @@ def run_packaged_provider_acceptance(settings: Settings) -> int:
 
     required = [
         "yolo11n_cpu",
-        "depth_anything_v2_cpu",
         "invalid_device_rejection",
     ]
     if cuda_available:
-        required.extend(["yolo11n_cuda", "depth_anything_v2_cuda"])
+        required.append("yolo11n_cuda")
+    if depth_asset:
+        required.append("depth_anything_v2_cpu")
+        if cuda_available:
+            required.append("depth_anything_v2_cuda")
 
     status = "PASS" if all(results[name]["status"] == "PASS" for name in required) else "FAIL"
 
     payload = {
-        "schema_version": "reefvision-packaged-provider-acceptance-0001",
+        "schema_version": "reefvision-packaged-provider-acceptance-0002",
         "created_at_utc": datetime.now(UTC).isoformat(),
         "status": status,
         "packaged_runtime": bool(getattr(sys, "frozen", False)),
@@ -337,20 +357,16 @@ def run_packaged_provider_acceptance(settings: Settings) -> int:
                 int(torch.cuda.get_device_properties(0).total_memory) if cuda_available else None
             ),
         },
-        "bundled_models": {
-            "installed_catalog_ids": installed,
-            "warnings": warnings,
-            "detection": {
-                "catalog_id": DETECTION_CATALOG_ID,
-                "path": str(detection_path),
-                "manifest": detection_record,
-            },
-            "depth": {
-                "catalog_id": DEPTH_CATALOG_ID,
-                "path": str(depth_path),
-                "manifest": depth_record,
-            },
+        "model_policy": "explicit_local_models_only",
+        "model_inputs": {
+            "source_manifest": str(manifest_path),
+            "detection": {"path": str(detection_path), "manifest": detection_record},
+            "depth": (
+                {"path": str(depth_asset[0]), "manifest": depth_asset[1]} if depth_asset else None
+            ),
         },
+        "required_results": required,
+        "optional_depth_tested": depth_asset is not None,
         "input": {
             "path": str(input_path),
             "kind": "deterministic_synthetic_execution_only",

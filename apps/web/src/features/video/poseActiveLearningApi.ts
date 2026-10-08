@@ -217,3 +217,13 @@ export function poseTrainingDatasetExportUrl(
 
   return `${getApiBaseUrl()}/pose-training-datasets/${encodeURIComponent(datasetId)}/export?${query.toString()}`;
 }
+
+export function getPoseTrainingDatasets(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<PoseTrainingDataset[]> {
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/pose-training-datasets`,
+    { signal },
+  );
+}

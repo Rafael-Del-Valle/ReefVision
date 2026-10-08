@@ -19,10 +19,12 @@ import {
 
 interface ClassificationWorkspaceProps {
   project: Project;
+  initialArchitecture?: string | null;
 }
 
 export function ClassificationWorkspace({
   project,
+  initialArchitecture,
 }: ClassificationWorkspaceProps) {
   const queryClient = useQueryClient();
   const [selectedImageId, setSelectedImageId] = useState("");
@@ -33,7 +35,9 @@ export function ClassificationWorkspace({
     "image" | "box_crop" | "mask_crop"
   >("image");
   const [trainingDatasetId, setTrainingDatasetId] = useState("");
-  const [architecture, setArchitecture] = useState("yolo11n-cls.pt");
+  const [architecture, setArchitecture] = useState(
+    initialArchitecture ?? "yolo11n-cls.yaml",
+  );
   const [epochs, setEpochs] = useState(50);
   const [classifierId, setClassifierId] = useState("");
 
@@ -330,6 +334,10 @@ export function ClassificationWorkspace({
       <section className="management-card">
         <p className="eyebrow">Training</p>
         <h3>Ultralytics classifier</h3>
+        <p className="annotation-helper">
+          Train from random initialization with your verified dataset. No
+          trained weights are used.
+        </p>
         <label>
           Dataset
           <select
@@ -349,9 +357,11 @@ export function ClassificationWorkspace({
             value={architecture}
             onChange={(event) => setArchitecture(event.target.value)}
           >
-            <option value="yolo11n-cls.pt">Nano — fastest</option>
-            <option value="yolo11s-cls.pt">Small — balanced</option>
-            <option value="yolo11m-cls.pt">Medium — higher capacity</option>
+            <option value="yolo11n-cls.yaml">Nano — fastest</option>
+            <option value="yolo11s-cls.yaml">Small — balanced</option>
+            <option value="yolo11m-cls.yaml">Medium — higher capacity</option>
+            <option value="yolo11l-cls.yaml">Large</option>
+            <option value="yolo11x-cls.yaml">Extra large</option>
           </select>
         </label>
         <label>

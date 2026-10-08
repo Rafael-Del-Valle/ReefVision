@@ -12,11 +12,10 @@ from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
 from reefvision.db.models import Job
-from reefvision.domain.errors import ConflictError, ValidationError
+from reefvision.domain.errors import ValidationError
 from reefvision.ml.optional_transformers_runtime import (
     OPTIONAL_MODEL_SPECS,
     optional_model_status,
-    remove_optional_model_cache,
 )
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.model_catalog import (
@@ -29,7 +28,6 @@ from reefvision.storage.catalog_models import (
     catalog_asset_path,
     catalog_manifest_record,
     relative_catalog_asset_path,
-    remove_catalog_manifest_record,
     write_catalog_manifest_record,
 )
 
@@ -53,42 +51,11 @@ class ModelInstallService:
     def create_install_job(
         self, project_id: str, catalog_id: str, *, confirmed: bool
     ) -> JobResponse:
-        if self.settings.safe_mode:
-            raise ConflictError(
-                "Model installation is unavailable in Safe Mode. "
-                "Restart ReefVision normally and try again."
-            )
-        if not confirmed:
-            raise ValidationError("Confirm the model license, hardware, and download information")
-        entry = self.catalog.get_project_catalog_item(project_id, catalog_id)
-        if entry.availability != "available" or entry.selection_kind != "managed_catalog_model":
-            raise ValidationError(
-                entry.installation_reason or "This model has no validated installer"
-            )
-        if not entry.expected_files and entry.provider_id not in OPTIONAL_MODEL_SPECS:
-            raise ValidationError("Catalog entry is missing its trusted download manifest")
-        if entry.installation_state == "Ready":
-            raise ConflictError("This catalog model is already installed and ready")
-        active = self._active_job(project_id, catalog_id)
-        if active is not None:
-            return JobResponse.model_validate(active)
-        job = Job(
-            project_id=project_id,
-            job_type="model_install",
-            status="queued",
-            progress_current=0,
-            progress_total=entry.expected_size or 0,
-            request_json={
-                "catalog_id": catalog_id,
-                "confirmed": True,
-                "source_type": entry.download_source_type,
-            },
-            result_json={"stage": "queued"},
+        self.catalog.get_project_catalog_item(project_id, catalog_id)
+        raise ValidationError(
+            "Model downloads are disabled. Train from an architecture or register "
+            "a compatible local model."
         )
-        self.session.add(job)
-        self.session.commit()
-        self.session.refresh(job)
-        return JobResponse.model_validate(job)
 
     def _active_job(self, project_id: str, catalog_id: str) -> Job | None:
         jobs = list(
@@ -216,16 +183,11 @@ class ModelInstallService:
         )
 
     def remove(self, project_id: str, catalog_id: str) -> None:
-        entry = self.catalog.get_project_catalog_item(project_id, catalog_id)
-        active = self._active_job(project_id, catalog_id)
-        if active is not None:
-            raise ConflictError("Cancel the active installation before removing this model")
-        if entry.provider_id in OPTIONAL_MODEL_SPECS:
-            remove_optional_model_cache(self.settings, entry.provider_id)
-            return
-        for expected in entry.expected_files:
-            catalog_asset_path(self.settings, catalog_id, expected.filename).unlink(missing_ok=True)
-        remove_catalog_manifest_record(self.settings, catalog_id)
+        self.catalog.get_project_catalog_item(project_id, catalog_id)
+        raise ValidationError(
+            "Catalog removal is disabled. Registered models are managed separately; "
+            "legacy cache cleanup requires a provenance-verified preview."
+        )
 
     def readiness(self, project_id: str, catalog_id: str) -> CatalogReadinessResponse:
         entry = self.catalog.get_project_catalog_item(project_id, catalog_id)

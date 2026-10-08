@@ -58,6 +58,7 @@ $report = [ordered]@{
     shortcuts = New-ReefVisionEvidenceResult
     first_launch = New-ReefVisionEvidenceResult
     frontend_backend_connectivity = New-ReefVisionEvidenceResult
+    model_policy = New-ReefVisionEvidenceResult
     project_persistence = New-ReefVisionEvidenceResult
     restart = New-ReefVisionEvidenceResult
     project_exchange = New-ReefVisionEvidenceResult
@@ -71,7 +72,7 @@ function Save-Report { Write-ReefVisionEvidenceReport -Report $report -Path $Rep
 function Run-Msi([string]$Action, [string]$PackageOrProduct, [string]$LogName, [string]$TargetRoot = '') {
     $log = Join-Path $EvidenceRoot $LogName
     $arguments = New-ReefVisionMsiArguments -Action $Action -PackageOrProduct $PackageOrProduct -InstallRoot $TargetRoot -LogPath $log
-    $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList $arguments -Wait -PassThru
+    $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
     if ($process.ExitCode -notin @(0, 3010)) { throw "msiexec $Action failed with exit code $($process.ExitCode). See $log" }
     return $process.ExitCode
 }
@@ -104,10 +105,12 @@ function Wait-BackendPort(
 function Start-AcceptanceDesktop {
     $BackendPortPath = Join-Path $DataRoot 'runtime\backend-port.txt'
     Remove-Item -LiteralPath $BackendPortPath -Force -ErrorAction SilentlyContinue
-    $env:REEFVISION_WINDOWS_ACCEPTANCE = '1'
-    $env:REEFVISION_ACCEPTANCE_DATA_DIR = $DataRoot
-    try { return Start-Process -FilePath (Join-Path $InstallRoot 'ReefVision.exe') -PassThru }
-    finally { Remove-Item Env:REEFVISION_WINDOWS_ACCEPTANCE,Env:REEFVISION_ACCEPTANCE_DATA_DIR -ErrorAction SilentlyContinue }
+    return Invoke-ReefVisionIsolatedEnvironment -DataRoot $DataRoot -AdditionalEnvironment @{
+        REEFVISION_WINDOWS_ACCEPTANCE = '1'
+        REEFVISION_ACCEPTANCE_DATA_DIR = $DataRoot
+    } -Action {
+        Start-Process -FilePath (Join-Path $InstallRoot 'ReefVision.exe') -WorkingDirectory $InstallRoot -PassThru -WindowStyle Hidden
+    }
 }
 function Stop-AcceptanceDesktop($Process) {
     if ($Process.HasExited) { return }
@@ -177,6 +180,18 @@ try {
 
     $project = Invoke-RestMethod "$api/projects" -Method Post -ContentType 'application/json' -Body (@{name="Clean install $Token";template='octocoral'} | ConvertTo-Json)
     $projectId = $project.id
+    $Catalog = Invoke-RestMethod "$api/projects/$projectId/model-catalog"
+    $Architectures = @($Catalog.models | Where-Object { $_.selection_kind -eq 'architecture' })
+    if ($Architectures.Count -lt 15) { throw 'Fresh profile does not expose the supported YOLO11 architecture families.' }
+    $UnexpectedModels = @($Catalog.models | Where-Object {
+        $_.selection_kind -eq 'managed_catalog_model' -or $_.installation_state -eq 'Ready' -or @($_.expected_files).Count -gt 0
+    })
+    if ($UnexpectedModels.Count -gt 0) { throw 'Fresh profile reports pretrained/downloadable or already-ready models.' }
+    $CachedWeights = @(Get-ChildItem -LiteralPath $DataRoot -Recurse -File | Where-Object {
+        $_.Extension -in @('.pt', '.pth', '.ckpt', '.safetensors', '.onnx', '.engine', '.bin', '.h5')
+    })
+    if ($CachedWeights.Count -gt 0) { throw 'Fresh profile contains unexpected model weights.' }
+    $report.model_policy = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "$($Architectures.Count) architectures; zero pretrained/downloadable models; zero cached weights; isolated provider caches."
     $import = Import-AcceptanceImage "$api/projects/$projectId/imports/images"
     $imageId = $import.successful[0].image_id
     $session = Invoke-RestMethod "$api/images/$imageId/annotations"
@@ -246,6 +261,8 @@ try {
     $report.completed_at_utc = [DateTime]::UtcNow.ToString('o')
     Save-Report
     if (-not $KeepArtifacts -and (Test-Path (Join-Path $RunRoot '.reefvision-acceptance-run')) -and $report.uninstall.status -eq 'PASS') {
+        $ExpectedRunRoot = [System.IO.Path]::GetFullPath((Join-Path $AcceptanceRoot "reefvision-clean-$Token"))
+        if ([System.IO.Path]::GetFullPath($RunRoot) -ne $ExpectedRunRoot) { throw 'Refusing cleanup outside the generated acceptance run.' }
         Remove-Item -LiteralPath $RunRoot -Recurse -Force
     }
 }

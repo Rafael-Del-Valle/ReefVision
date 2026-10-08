@@ -1,430 +1,93 @@
+"""Retired catalog acquisition must fail closed and preserve researchers' files."""
+
 from __future__ import annotations
 
-import hashlib
-import io
+from pathlib import Path
 from typing import cast
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from reefvision.db.models import Job
 from reefvision.jobs.model_install import process_model_install_job
-from reefvision.schemas.model_catalog import CatalogExpectedFile, ModelCatalogEntryResponse
 from reefvision.services.model_catalog import ModelCatalogService
-from reefvision.storage.catalog_models import (
-    catalog_asset_path,
-    catalog_manifest_record,
-    load_catalog_manifest,
-    write_catalog_manifest_record,
-)
 from reefvision.tests.test_annotations import create_project
 
 
-class FakeDownload(io.BytesIO):
-    def __enter__(self) -> FakeDownload:
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        self.close()
-
-
-def _mini_entry(payload: bytes) -> ModelCatalogEntryResponse:
-    from reefvision.services.model_catalog import _load_static_model_catalog
-
-    original = next(
-        item
-        for item in _load_static_model_catalog().models
-        if item.catalog_id == "ultralytics/yolo11/detect/n"
-    )
-    sha256 = hashlib.sha256(payload).hexdigest()
-    expected = CatalogExpectedFile(
-        filename="yolo11n.pt",
-        source_url=("https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n.pt"),
-        revision="test-v8.3.0",
-        sha256=sha256,
-        size_bytes=len(payload),
-    )
-    return original.model_copy(
-        update={
-            "expected_files": [expected],
-            "expected_size": len(payload),
-            "expected_checksum": sha256,
-            "expected_file_size": len(payload),
-            "installation_state": "Not Installed",
-            "installation_reason": "Test checkpoint is not installed.",
-        }
-    )
-
-
-def _patch_entry(monkeypatch: pytest.MonkeyPatch, entry: ModelCatalogEntryResponse) -> None:
-    monkeypatch.setattr(
-        ModelCatalogService,
-        "get_static_catalog_item",
-        lambda self, catalog_id: entry,
-    )
-    monkeypatch.setattr(
-        ModelCatalogService,
-        "get_project_catalog_item",
-        lambda self, project_id, catalog_id: self._compose_static_state(
-            entry,
-            job=self._latest_install_jobs(project_id).get(entry.catalog_id),
-            manifest=load_catalog_manifest(self.settings),
-        ),
-    )
-
-
-def _directory_entry() -> tuple[ModelCatalogEntryResponse, dict[str, bytes]]:
-    files = {
-        "config.json": b'{"model_type":"depth_anything"}',
-        "preprocessor_config.json": b'{"image_processor_type":"DepthAnythingImageProcessor"}',
-        "model.safetensors": b"safe-depth-weights",
-    }
-    revision = "5426e4f0f36572d16453bbda7a8389317b1bef99"
-    expected_files = [
-        CatalogExpectedFile(
-            filename=name,
-            source_url=(
-                "https://huggingface.co/depth-anything/"
-                f"Depth-Anything-V2-Small-hf/resolve/{revision}/{name}"
-            ),
-            revision=revision,
-            sha256=hashlib.sha256(payload).hexdigest(),
-            size_bytes=len(payload),
-        )
-        for name, payload in files.items()
-    ]
-    return (
-        _mini_entry(b"seed").model_copy(
-            update={
-                "catalog_id": "transformers/depth_anything_v2/small",
-                "provider": "depth_anything_v2",
-                "provider_id": "depth_anything_v2",
-                "task": "relative_depth",
-                "expected_files": expected_files,
-                "expected_size": sum(len(payload) for payload in files.values()),
-            }
-        ),
-        files,
-    )
-
-
-def _stage_directory_entry(client: TestClient, entry, files, manifest_files=None) -> None:
-    records = []
-    for expected in entry.expected_files:
-        path = catalog_asset_path(
-            cast(FastAPI, client.app).state.settings, entry.catalog_id, expected.filename
-        )
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(files[expected.filename])
-        records.append(
-            {
-                "filename": expected.filename,
-                "relative_path": path.relative_to(
-                    cast(FastAPI, client.app).state.settings.resolved_data_dir
-                ).as_posix(),
-                "sha256": expected.sha256,
-                "size_bytes": expected.size_bytes,
-            }
-        )
-    write_catalog_manifest_record(
-        cast(FastAPI, client.app).state.settings,
-        entry.catalog_id,
-        {
-            "filename": entry.expected_files[0].filename,
-            "relative_path": catalog_asset_path(
-                cast(FastAPI, client.app).state.settings,
-                entry.catalog_id,
-                entry.expected_files[0].filename,
-            )
-            .parent.relative_to(cast(FastAPI, client.app).state.settings.resolved_data_dir)
-            .as_posix(),
-            "size_bytes": entry.expected_size,
-            "files": records if manifest_files is None else manifest_files,
-        },
-    )
-
-
-def _directory_state(client: TestClient, entry: ModelCatalogEntryResponse):
-    with cast(FastAPI, client.app).state.session_factory() as session:
-        return ModelCatalogService(
-            session, cast(FastAPI, client.app).state.settings
-        )._compose_static_state(
-            entry,
-            job=None,
-            manifest=load_catalog_manifest(cast(FastAPI, client.app).state.settings),
-        )
-
-
-def test_verified_directory_model_is_ready(client: TestClient) -> None:
-    entry, files = _directory_entry()
-    _stage_directory_entry(client, entry, files)
-    assert _directory_state(client, entry).installation_state == "Ready"
-
-
-def test_directory_model_missing_file_is_corrupted(client: TestClient) -> None:
-    entry, files = _directory_entry()
-    _stage_directory_entry(client, entry, files)
-    catalog_asset_path(
-        cast(FastAPI, client.app).state.settings, entry.catalog_id, "model.safetensors"
-    ).unlink()
-    assert _directory_state(client, entry).installation_state == "Corrupted"
-
-
-def test_directory_model_wrong_size_is_corrupted(client: TestClient) -> None:
-    entry, files = _directory_entry()
-    _stage_directory_entry(client, entry, files)
-    catalog_asset_path(
-        cast(FastAPI, client.app).state.settings, entry.catalog_id, "config.json"
-    ).write_bytes(b"wrong-size")
-    assert _directory_state(client, entry).installation_state == "Corrupted"
-
-
-def test_directory_model_wrong_checksum_is_corrupted(client: TestClient) -> None:
-    entry, files = _directory_entry()
-    _stage_directory_entry(client, entry, files)
-    original = files["model.safetensors"]
-    replacement = bytes([original[0] ^ 1]) + original[1:]
-    catalog_asset_path(
-        cast(FastAPI, client.app).state.settings, entry.catalog_id, "model.safetensors"
-    ).write_bytes(replacement)
-    assert _directory_state(client, entry).installation_state == "Corrupted"
-
-
-def test_directory_model_incomplete_manifest_is_not_ready(client: TestClient) -> None:
-    entry, files = _directory_entry()
-    _stage_directory_entry(client, entry, files, manifest_files=[])
-    assert _directory_state(client, entry).installation_state == "Corrupted"
-
-
-def test_install_requires_confirmation_and_creates_background_job(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("confirmed", [True, False])
+@pytest.mark.parametrize("safe_mode", [True, False])
+def test_legacy_install_request_never_queues_job(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, confirmed: bool, safe_mode: bool
 ) -> None:
-    entry = _mini_entry(b"trusted-checkpoint")
-    _patch_entry(monkeypatch, entry)
-    project = create_project(client, "Install confirmation")
-    endpoint = f"/api/v1/projects/{project['id']}/model-installs/ultralytics%2Fyolo11%2Fdetect%2Fn"
-
-    rejected = client.post(endpoint, json={"confirmed": False})
-    accepted = client.post(endpoint, json={"confirmed": True})
-
-    assert rejected.status_code == 400
-    assert accepted.status_code == 200, accepted.text
-    job = accepted.json()
-    assert job["job_type"] == "model_install"
-    assert job["status"] == "queued"
-    assert job["request_json"]["catalog_id"] == entry.catalog_id
+    project = create_project(client, "No model acquisition")
+    app = cast(FastAPI, client.app)
+    monkeypatch.setattr(app.state.settings, "safe_mode", safe_mode)
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/model-installs/ultralytics/yolo11/detect/n",
+        json={"confirmed": confirmed},
+    )
+    assert response.status_code == 400
+    assert "register" in response.text
+    with app.state.session_factory() as session:
+        assert list(session.scalars(select(Job).where(Job.job_type == "model_install"))) == []
 
 
-def test_successful_install_verifies_persists_and_can_be_removed(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("job_status", ["queued", "running", "succeeded", "cancel_requested"])
+def test_legacy_worker_retires_only_queued_jobs_without_mutating_assets(
+    client: TestClient, job_status: str, tmp_path: Path
 ) -> None:
-    payload = b"trusted-checkpoint-for-offline-use"
-    entry = _mini_entry(payload)
-    _patch_entry(monkeypatch, entry)
-    monkeypatch.setattr(
-        "reefvision.jobs.model_install.urllib.request.urlopen",
-        lambda *args, **kwargs: FakeDownload(payload),
-    )
-    project = create_project(client, "Managed install")
-    endpoint = f"/api/v1/projects/{project['id']}/model-installs/ultralytics%2Fyolo11%2Fdetect%2Fn"
-    response = client.post(endpoint, json={"confirmed": True})
-    assert response.status_code == 200, response.text
-    job_id = response.json()["id"]
-
-    processed = process_model_install_job(
-        cast(FastAPI, client.app).state.settings,
-        cast(FastAPI, client.app).state.session_factory,
-        job_id,
-    )
-
-    assert processed is True
-    with cast(FastAPI, client.app).state.session_factory() as session:
-        job = session.get(Job, job_id)
-        assert job is not None
-        assert job.status == "succeeded"
-        assert job.progress_current == len(payload)
-        assert job.result_json["sha256"] == hashlib.sha256(payload).hexdigest()
-        service = ModelCatalogService(session, cast(FastAPI, client.app).state.settings)
-        state = service._compose_static_state(
-            entry,
-            job=service._latest_install_jobs(project["id"]).get(entry.catalog_id),
-            manifest=load_catalog_manifest(cast(FastAPI, client.app).state.settings),
+    project = create_project(client, "Legacy upgrade")
+    app = cast(FastAPI, client.app)
+    local_model = tmp_path / "researcher.pt"
+    local_model.write_bytes(b"user-file-do-not-modify")
+    with app.state.session_factory() as session:
+        job = Job(
+            project_id=project["id"],
+            job_type="model_install",
+            status=job_status,
+            request_json={"catalog_id": "ultralytics/yolo11/detect/n"},
+            result_json={"original": "retained until retirement"},
         )
-        assert state.installation_state == "Ready"
-        assert state.installed_asset_id == f"catalog_model:{entry.catalog_id}"
-    record = catalog_manifest_record(cast(FastAPI, client.app).state.settings, entry.catalog_id)
-    assert record is not None
-    assert record["sha256"] == hashlib.sha256(payload).hexdigest()
-
-    verify_response = client.post(
-        f"/api/v1/projects/{project['id']}/model-verifications/ultralytics%2Fyolo11%2Fdetect%2Fn"
-    )
-    assert verify_response.status_code == 200
-    assert verify_response.json()["verified"] is True
-
-    remove_response = client.delete(endpoint)
-    assert remove_response.status_code == 204
-    path = catalog_asset_path(
-        cast(FastAPI, client.app).state.settings, entry.catalog_id, entry.expected_files[0].filename
-    )
-    assert not path.exists()
-    assert (
-        catalog_manifest_record(cast(FastAPI, client.app).state.settings, entry.catalog_id) is None
-    )
+        session.add(job)
+        session.commit()
+        job_id = job.id
+    changed = process_model_install_job(app.state.settings, app.state.session_factory, job_id)
+    assert changed is (job_status == "queued")
+    with app.state.session_factory() as session:
+        persisted = session.get(Job, job_id)
+        assert persisted is not None
+        assert persisted.status == ("failed" if job_status == "queued" else job_status)
+        if job_status == "queued":
+            assert persisted.completed_at is not None
+            assert "register" in str(persisted.error_message)
+    assert local_model.read_bytes() == b"user-file-do-not-modify"
+    assert not process_model_install_job(app.state.settings, app.state.session_factory, job_id)
 
 
-def test_directory_install_downloads_and_verifies_every_file(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    entry, files = _directory_entry()
-    _patch_entry(monkeypatch, entry)
-
-    def download(request, **kwargs):
-        return FakeDownload(files[request.full_url.rsplit("/", 1)[-1]])
-
-    monkeypatch.setattr(
-        "reefvision.jobs.model_install.urllib.request.urlopen",
-        download,
-    )
-    project = create_project(client, "Managed directory install")
-    endpoint = (
-        f"/api/v1/projects/{project['id']}/model-installs/transformers%2Fdepth_anything_v2%2Fsmall"
-    )
-    response = client.post(endpoint, json={"confirmed": True})
-    assert response.status_code == 200, response.text
-    assert process_model_install_job(
-        cast(FastAPI, client.app).state.settings,
-        cast(FastAPI, client.app).state.session_factory,
-        response.json()["id"],
-    )
-    record = catalog_manifest_record(cast(FastAPI, client.app).state.settings, entry.catalog_id)
-    assert record is not None
-    assert len(record["files"]) == 3
-    assert _directory_state(client, entry).installation_state == "Ready"
-
-
-def test_corrupt_download_is_rejected(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    entry = _mini_entry(b"expected")
-    _patch_entry(monkeypatch, entry)
-    monkeypatch.setattr(
-        "reefvision.jobs.model_install.urllib.request.urlopen",
-        lambda *args, **kwargs: FakeDownload(b"corrupt!"),
-    )
-    project = create_project(client, "Corrupt install")
-    endpoint = f"/api/v1/projects/{project['id']}/model-installs/ultralytics%2Fyolo11%2Fdetect%2Fn"
-    job_id = client.post(endpoint, json={"confirmed": True}).json()["id"]
-
-    assert (
-        process_model_install_job(
-            cast(FastAPI, client.app).state.settings,
-            cast(FastAPI, client.app).state.session_factory,
-            job_id,
+def test_architecture_resolves_random_training_without_checksum(client: TestClient) -> None:
+    project = create_project(client, "Random initialization")
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        result = ModelCatalogService(session, app.state.settings).resolve_training_selection(
+            project["id"], "ultralytics/yolo11/detect/n"
         )
-        is False
+    assert result.initial_checkpoint_source == "scratch"
+    assert result.initial_checkpoint_model_id is None
+    assert result.resolved_model_checksum is None
+    assert result.architecture == "yolo11n.yaml"
+
+
+def test_catalog_removal_cannot_delete_uncertain_legacy_assets(client: TestClient) -> None:
+    project = create_project(client, "Protect models")
+    app = cast(FastAPI, client.app)
+    root = app.state.settings.resolved_data_dir / "provider-models" / "grounding_dino"
+    root.mkdir(parents=True)
+    weight = root / "model.safetensors"
+    weight.write_bytes(b"researcher model")
+    response = client.delete(
+        f"/api/v1/projects/{project['id']}/model-installs/transformers/grounding_dino/tiny"
     )
-    with cast(FastAPI, client.app).state.session_factory() as session:
-        job = session.get(Job, job_id)
-        assert job is not None
-        assert job.status == "failed"
-        assert "Checksum mismatch" in (job.error_message or "")
-    path = catalog_asset_path(
-        cast(FastAPI, client.app).state.settings, entry.catalog_id, entry.expected_files[0].filename
-    )
-    assert not path.exists()
-
-
-def test_install_job_cancellation_is_persistent(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    entry = _mini_entry(b"cancelled")
-    _patch_entry(monkeypatch, entry)
-    project = create_project(client, "Cancelled install")
-    endpoint = f"/api/v1/projects/{project['id']}/model-installs/ultralytics%2Fyolo11%2Fdetect%2Fn"
-    job = client.post(endpoint, json={"confirmed": True}).json()
-
-    response = client.post(f"/api/v1/jobs/{job['id']}/cancel")
-
-    assert response.status_code == 200
-    assert response.json()["status"] == "cancelled"
-    assert response.json()["completed_at"] is not None
-    assert (
-        process_model_install_job(
-            cast(FastAPI, client.app).state.settings,
-            cast(FastAPI, client.app).state.session_factory,
-            job["id"],
-        )
-        is False
-    )
-
-
-def test_ready_catalog_model_resolves_training_provenance(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    payload = b"training-seed"
-    entry = _mini_entry(payload)
-    _patch_entry(monkeypatch, entry)
-    project = create_project(client, "Training provenance")
-    expected = entry.expected_files[0]
-    path = catalog_asset_path(
-        cast(FastAPI, client.app).state.settings, entry.catalog_id, expected.filename
-    )
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(payload)
-    from reefvision.storage.catalog_models import write_catalog_manifest_record
-
-    write_catalog_manifest_record(
-        cast(FastAPI, client.app).state.settings,
-        entry.catalog_id,
-        {
-            "filename": expected.filename,
-            "relative_path": path.relative_to(
-                cast(FastAPI, client.app).state.settings.resolved_data_dir
-            ).as_posix(),
-            "sha256": expected.sha256,
-            "size_bytes": expected.size_bytes,
-        },
-    )
-    with cast(FastAPI, client.app).state.session_factory() as session:
-        selection = ModelCatalogService(
-            session, cast(FastAPI, client.app).state.settings
-        ).resolve_training_selection(project["id"], entry.catalog_id)
-
-    assert selection.initial_checkpoint_source == "managed_catalog"
-    assert selection.resolved_model_asset_id == f"catalog_model:{entry.catalog_id}"
-    assert selection.resolved_model_checksum == expected.sha256
-
-
-def test_install_is_rejected_in_safe_mode(
-    client: TestClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    entry = _mini_entry(b"safe-mode-checkpoint")
-    _patch_entry(monkeypatch, entry)
-    monkeypatch.setattr(cast(FastAPI, client.app).state.settings, "safe_mode", True)
-
-    project = create_project(client, "Safe mode install")
-    endpoint = f"/api/v1/projects/{project['id']}/model-installs/ultralytics%2Fyolo11%2Fdetect%2Fn"
-
-    response = client.post(endpoint, json={"confirmed": True})
-
-    assert response.status_code == 409
-    assert "Safe Mode" in response.json()["detail"]
-
-
-def test_job_status_response_disables_http_caching(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    entry = _mini_entry(b"live-progress")
-    _patch_entry(monkeypatch, entry)
-    project = create_project(client, "Live install progress")
-    endpoint = f"/api/v1/projects/{project['id']}/model-installs/ultralytics%2Fyolo11%2Fdetect%2Fn"
-    created = client.post(endpoint, json={"confirmed": True})
-    assert created.status_code == 200, created.text
-
-    response = client.get(f"/api/v1/jobs/{created.json()['id']}?poll=1")
-
-    assert response.status_code == 200
-    assert response.headers["cache-control"] == "no-store, no-cache, must-revalidate"
-    assert response.headers["pragma"] == "no-cache"
-    assert response.headers["expires"] == "0"
+    assert response.status_code == 400
+    assert weight.read_bytes() == b"researcher model"

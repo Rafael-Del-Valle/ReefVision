@@ -1,5 +1,39 @@
 Set-StrictMode -Version Latest
 
+function Invoke-ReefVisionIsolatedEnvironment {
+    param(
+        [Parameter(Mandatory = $true)][string]$DataRoot,
+        [hashtable]$AdditionalEnvironment = @{},
+        [Parameter(Mandatory = $true)][scriptblock]$Action
+    )
+    $Isolated = @{
+        HF_HOME = (Join-Path $DataRoot 'cache\huggingface')
+        HF_HUB_CACHE = (Join-Path $DataRoot 'cache\huggingface\hub')
+        HF_ASSETS_CACHE = (Join-Path $DataRoot 'cache\huggingface\assets')
+        TORCH_HOME = (Join-Path $DataRoot 'cache\torch')
+        YOLO_CONFIG_DIR = (Join-Path $DataRoot 'cache\ultralytics')
+        XDG_CACHE_HOME = (Join-Path $DataRoot 'cache')
+        HF_HUB_OFFLINE = '1'
+        TRANSFORMERS_OFFLINE = '1'
+        YOLO_AUTOINSTALL = 'false'
+    }
+    foreach ($Key in $AdditionalEnvironment.Keys) { $Isolated[$Key] = $AdditionalEnvironment[$Key] }
+    $Names = @(@(Get-ChildItem Env: | Where-Object { $_.Name -like 'REEFVISION_*' } | ForEach-Object { $_.Name }) +
+        @($Isolated.Keys) + @('PYTHONPATH', 'PYTHONHOME', 'TRANSFORMERS_CACHE')) | Select-Object -Unique
+    $Previous = @{}
+    foreach ($Name in $Names) {
+        $Previous[$Name] = [Environment]::GetEnvironmentVariable($Name, 'Process')
+        [Environment]::SetEnvironmentVariable($Name, $null, 'Process')
+    }
+    try {
+        foreach ($Name in $Isolated.Keys) { [Environment]::SetEnvironmentVariable($Name, $Isolated[$Name], 'Process') }
+        & $Action
+    }
+    finally {
+        foreach ($Name in $Names) { [Environment]::SetEnvironmentVariable($Name, $Previous[$Name], 'Process') }
+    }
+}
+
 function Resolve-ReefVisionAcceptancePath {
     param([Parameter(Mandatory = $true)][string]$Path)
     return [System.IO.Path]::GetFullPath($Path).TrimEnd('\')

@@ -8,11 +8,15 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 CatalogCategory = Literal[
+    "architecture",
+    "provider_requirement",
     "pretrained_catalog",
     "my_trained_models",
     "imported_custom_models",
 ]
 CatalogTask = Literal[
+    "pose",
+    "classify",
     "detect",
     "segment",
     "semantic_segment",
@@ -27,6 +31,7 @@ CatalogTask = Literal[
     "metric_video_depth",
 ]
 CatalogInstallationState = Literal[
+    "Model Required",
     "Available",
     "Not Installed",
     "Provider Required",
@@ -41,6 +46,7 @@ CatalogInstallationState = Literal[
     "Unavailable",
 ]
 CatalogSelectionKind = Literal[
+    "model_required",
     "builtin_architecture",
     "managed_catalog_model",
     "registered_model",
@@ -166,6 +172,9 @@ class ModelCatalogEntryResponse(BaseModel):
     requires_confirmation: bool = False
     selection_kind: CatalogSelectionKind
     architecture_reference: str | None = None
+    architecture_id: str | None = None
+    training_supported: bool = False
+    inference_requires_registered_model: bool = False
     resolved_model_id: str | None = None
 
     @field_validator(
@@ -206,6 +215,13 @@ class ModelCatalogEntryResponse(BaseModel):
 
     @model_validator(mode="after")
     def validate_selection_fields(self) -> ModelCatalogEntryResponse:
+        if self.category in {"architecture", "provider_requirement"}:
+            if self.expected_files or self.expected_checksum or self.expected_size:
+                raise ValueError("Architecture/provider definitions must not contain weight assets")
+            if self.selection_kind == "managed_catalog_model":
+                raise ValueError("Architecture/provider definitions cannot acquire weights")
+        if self.category == "architecture" and self.selection_kind != "builtin_architecture":
+            raise ValueError("Architecture entries require builtin_architecture selection")
         if self.selection_kind == "builtin_architecture" and not self.architecture_reference:
             raise ValueError("builtin_architecture entries require architecture_reference")
         if self.selection_kind == "managed_catalog_model" and not self.expected_files:

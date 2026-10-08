@@ -125,7 +125,7 @@ const WORKSPACE_INSPECTORS: Record<
   models: {
     title: "Model registry",
     summary:
-      "Inspect verified pretrained models and project-specific checkpoints available to ReefVision.",
+      "Inspect supported architectures and registered project checkpoints.",
     boundary: "provisional",
     recordPolicy:
       "Registering or selecting a model never converts its predictions into scientist-verified annotations.",

@@ -1373,16 +1373,18 @@ describe("App", () => {
     expect(screen.getByText("Ultralytics 8.3.228")).toBeInTheDocument();
     expect(
       screen.getByText(
-        /versioned registry and strict argument validation foundation/i,
+        /Training uses local architecture configurations or explicitly registered checkpoints/i,
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Advanced · Import custom checkpoint"),
+      screen.getAllByRole("button", { name: "Register Existing Model" })[0],
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Model provider catalog" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Grounding DINO")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Grounding DINO" }),
+    ).toBeInTheDocument();
   });
 
   it("opens the quality-control dashboard for a project", async () => {

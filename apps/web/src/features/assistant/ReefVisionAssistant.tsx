@@ -123,7 +123,7 @@ function guidanceFor(question: string, activeView: string): Guidance {
   ) {
     return {
       text:
-        "Use Models & AI to install, verify, remove, and inspect managed checkpoints. " +
+        "Use Models & AI to train from architectures or register compatible local models. " +
         "Advanced Providers reuses those Model Hub checkpoints instead of maintaining a second copy.",
       navigateTo: "models",
       navigateLabel: "Go to Models & AI",
@@ -506,11 +506,11 @@ export function ReefVisionAssistant({
               SmolVLM status:{" "}
               {modelCatalogQuery.isPending
                 ? "Checking…"
-                : (smolvlm?.installation_state ?? "Not installed")}
+                : (smolvlm?.installation_state ?? "Model Required")}
             </p>
             {!smolvlmReady && !modelCatalogQuery.isPending && (
               <p className="form-error">
-                Install SmolVLM in Models &amp; AI → Model Hub before using
+                Model required — register a compatible SmolVLM model to use
                 image interpretation.
               </p>
             )}

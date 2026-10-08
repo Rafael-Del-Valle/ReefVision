@@ -109,6 +109,49 @@ afterEach(() => {
 });
 
 describe("TrainingWorkspace launch", () => {
+  it("selects an available architecture with explicit random initialization and no checkpoint", async () => {
+    const architecture = {
+      catalog_id: "ultralytics/yolo11/detect/n",
+      category: "architecture",
+      task: "detect",
+      provider: "ultralytics",
+      architecture_family: "YOLO11",
+      architecture_reference: "yolo11n.yaml",
+      display_name: "YOLO11 Nano",
+      installation_state: "Available",
+      selection_kind: "builtin_architecture",
+      trainable: true,
+      resolved_model_id: null,
+    } as api.ModelCatalogEntry;
+    vi.mocked(api.getTrainingWorkspaceBootstrap).mockResolvedValue({
+      providers: [],
+      catalog: { models: [architecture] },
+      draft_summaries: [draft],
+      selected_draft: draft,
+    } as unknown as api.TrainingWorkspaceBootstrapResponse);
+    vi.mocked(api.updateTrainingDraft).mockResolvedValue({
+      ...draft,
+      catalog_model_id: architecture.catalog_id,
+    });
+    renderWorkspace();
+    fireEvent.change(await screen.findByLabelText("Model size or preset"), {
+      target: { value: architecture.catalog_id },
+    });
+    await waitFor(() =>
+      expect(api.updateTrainingDraft).toHaveBeenCalledWith(
+        draft.id,
+        expect.objectContaining({
+          architecture: "yolo11n.yaml",
+          initial_checkpoint_source: "scratch",
+          initial_checkpoint_model_id: null,
+        }),
+      ),
+    );
+    expect(
+      screen.getByText(/Random initialization.*No trained weights/),
+    ).toBeInTheDocument();
+  });
+
   it("rechecks stale blocked validation and only launches after a fresh ready preflight", async () => {
     vi.mocked(api.getTrainingWorkspaceBootstrap).mockResolvedValue({
       providers: [],

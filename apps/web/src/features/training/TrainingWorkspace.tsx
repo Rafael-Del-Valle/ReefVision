@@ -54,6 +54,8 @@ const sections: Array<{ id: TrainingSection; label: string }> = [
 ];
 
 const taskLabels: Record<ModelCatalogTask, string> = {
+  pose: "Pose",
+  classify: "Classification",
   detect: "Object detection",
   segment: "Instance segmentation",
   semantic_segment: "Semantic segmentation",
@@ -384,21 +386,24 @@ export function TrainingWorkspace({
     (selectedDraft?.catalog_model_id
       ? (catalogEntryById.get(selectedDraft.catalog_model_id) ?? null)
       : null) ?? null;
-  const pretrainedTrainingEntries = useMemo(
+  const architectureTrainingEntries = useMemo(
     () =>
       trainingCatalogEntries.filter(
-        (item) => item.category === "pretrained_catalog" && !item.advanced_only,
+        (item) =>
+          item.category === "architecture" &&
+          ["detect", "segment"].includes(item.task) &&
+          !item.advanced_only,
       ),
     [trainingCatalogEntries],
   );
-  const selectablePretrainedEntries = useMemo(
+  const selectableArchitectureEntries = useMemo(
     () =>
-      pretrainedTrainingEntries.filter(
+      architectureTrainingEntries.filter(
         (item) =>
           item.installation_state === "Ready" ||
           item.installation_state === "Available",
       ),
-    [pretrainedTrainingEntries],
+    [architectureTrainingEntries],
   );
   const myTrainedEntries = useMemo(
     () =>
@@ -415,7 +420,6 @@ export function TrainingWorkspace({
       trainingCatalogEntries.filter(
         (item) =>
           item.category === "imported_custom_models" &&
-          item.advanced_only &&
           (item.installation_state === "Ready" ||
             item.installation_state === "Available"),
       ),
@@ -424,33 +428,33 @@ export function TrainingWorkspace({
   const taskOptions = useMemo(
     () =>
       Array.from(
-        new Set(selectablePretrainedEntries.map((item) => item.task)),
+        new Set(selectableArchitectureEntries.map((item) => item.task)),
       ).sort((left, right) => taskLabel(left).localeCompare(taskLabel(right))),
-    [selectablePretrainedEntries],
+    [selectableArchitectureEntries],
   );
   const selectedTaskForCatalog =
-    selectedCatalogEntry?.category === "pretrained_catalog"
+    selectedCatalogEntry?.category === "architecture"
       ? selectedCatalogEntry.task
       : (taskOptions[0] ?? "detect");
   const architectureFamilies = useMemo(
     () =>
       Array.from(
         new Set(
-          selectablePretrainedEntries
+          selectableArchitectureEntries
             .filter((item) => item.task === selectedTaskForCatalog)
             .map((item) => item.architecture_family),
         ),
       ),
-    [selectablePretrainedEntries, selectedTaskForCatalog],
+    [selectableArchitectureEntries, selectedTaskForCatalog],
   );
   const selectedArchitectureFamily =
-    selectedCatalogEntry?.category === "pretrained_catalog" &&
+    selectedCatalogEntry?.category === "architecture" &&
     selectedCatalogEntry.task === selectedTaskForCatalog
       ? selectedCatalogEntry.architecture_family
       : (architectureFamilies[0] ?? "");
   const presetOptions = useMemo(
     () =>
-      selectablePretrainedEntries
+      selectableArchitectureEntries
         .filter(
           (item) =>
             item.task === selectedTaskForCatalog &&
@@ -462,7 +466,7 @@ export function TrainingWorkspace({
           return delta || left.display_name.localeCompare(right.display_name);
         }),
     [
-      selectablePretrainedEntries,
+      selectableArchitectureEntries,
       selectedArchitectureFamily,
       selectedTaskForCatalog,
       taskOptions,
@@ -799,9 +803,7 @@ export function TrainingWorkspace({
       initial_checkpoint_source:
         entry.selection_kind === "registered_model"
           ? "registered_model"
-          : entry.selection_kind === "managed_catalog_model"
-            ? "managed_catalog"
-            : "scratch",
+          : "scratch",
       initial_checkpoint_model_id: entry.resolved_model_id,
     });
   }
@@ -815,7 +817,8 @@ export function TrainingWorkspace({
       return;
     }
     const entry = catalogEntryById.get(initialCatalogModelId);
-    if (!entry || entry.installation_state !== "Ready") return;
+    if (!entry || !["Ready", "Available"].includes(entry.installation_state))
+      return;
     consumedCatalogSelectionRef.current = initialCatalogModelId;
     if (selectedDraft) {
       applyCatalogSelection(entry);
@@ -836,7 +839,7 @@ export function TrainingWorkspace({
 
   function selectTaskPreset(task: ModelCatalogTask) {
     const nextEntry =
-      selectablePretrainedEntries.find((item) => item.task === task) ?? null;
+      selectableArchitectureEntries.find((item) => item.task === task) ?? null;
     if (nextEntry) {
       applyCatalogSelection(nextEntry);
     }
@@ -847,7 +850,7 @@ export function TrainingWorkspace({
       presetOptions.find(
         (item) => item.architecture_family === architectureFamily,
       ) ??
-      selectablePretrainedEntries.find(
+      selectableArchitectureEntries.find(
         (item) =>
           item.task === selectedTaskForCatalog &&
           item.architecture_family === architectureFamily,
@@ -1090,6 +1093,12 @@ export function TrainingWorkspace({
 
                   <article className="system-card">
                     <h4>Task-first model selection</h4>
+                    <p className="annotation-helper">
+                      {selectedDraft.initial_checkpoint_source ===
+                      "registered_model"
+                        ? "Registered model initialization — uses your selected local checkpoint."
+                        : "Random initialization — No trained weights are used."}
+                    </p>
                     {workspaceBootstrap.isPending && !modelCatalog && (
                       <p className="system-subtle">
                         Loading the validated model catalog...
@@ -1138,8 +1147,7 @@ export function TrainingWorkspace({
                           Model size or preset
                           <select
                             value={
-                              selectedCatalogEntry?.category ===
-                              "pretrained_catalog"
+                              selectedCatalogEntry?.category === "architecture"
                                 ? selectedCatalogEntry.catalog_id
                                 : (presetOptions[0]?.catalog_id ?? "")
                             }
@@ -1166,8 +1174,9 @@ export function TrainingWorkspace({
                       </>
                     ) : (
                       <p className="form-error">
-                        No ready training presets are currently available in the
-                        validated model catalog.
+                        No supported training architectures are currently
+                        available. Register a compatible model or check provider
+                        availability.
                       </p>
                     )}
 
@@ -1248,10 +1257,10 @@ export function TrainingWorkspace({
                     )}
 
                     <details>
-                      <summary>Advanced custom imports</summary>
+                      <summary>Registered model initialization</summary>
                       {importedCustomEntries.length > 0 ? (
                         <label>
-                          Imported custom detector
+                          Registered checkpoint
                           <select
                             value={
                               selectedCatalogEntry?.category ===
@@ -1283,13 +1292,14 @@ export function TrainingWorkspace({
                         </label>
                       ) : (
                         <p className="system-subtle">
-                          No imported custom detector models are registered for
-                          this project.
+                          No compatible trained models are registered for this
+                          project.
                         </p>
                       )}
                       <p className="system-subtle">
-                        Imported checkpoints stay outside the normal pretrained
-                        workflow and remain part of the advanced path.
+                        Selecting a registered model uses that checkpoint for
+                        initialization and preserves its provenance. Selecting
+                        an architecture starts from random initialization.
                       </p>
                     </details>
                   </article>

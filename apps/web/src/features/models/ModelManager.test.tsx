@@ -1,16 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
-  JobRecord,
   ModelCatalogEntry,
   ModelCatalogResponse,
   Project,
@@ -39,7 +32,7 @@ function entry(
     catalog_id: "ultralytics/yolo11/detect/x",
     display_name: "YOLO11 X",
     display_summary: "Official verified YOLO11 X detector.",
-    category: "pretrained_catalog",
+    category: "architecture",
     provider_id: "ultralytics",
     architecture: "YOLO11",
     variant: "x",
@@ -96,7 +89,7 @@ function entry(
     known_limitations: [],
     installation_state: state,
     installation_reason:
-      state === "Ready" ? "Installed and verified." : "Not installed yet.",
+      state === "Available" ? "Weight-free architecture configuration." : null,
     installation_job_id: null,
     installed_asset_id:
       state === "Ready" ? "catalog_model:ultralytics/yolo11/detect/x" : null,
@@ -105,7 +98,7 @@ function entry(
     installed_checksum: state === "Ready" ? "7".repeat(64) : null,
     advanced_only: false,
     requires_confirmation: true,
-    selection_kind: "managed_catalog_model",
+    selection_kind: "builtin_architecture",
     architecture_reference: "yolo11x.yaml",
     resolved_model_id: null,
   };
@@ -173,131 +166,231 @@ afterEach(() => {
 });
 
 describe("ModelManager catalog", () => {
-  it("renders returned entries and never reports zero while loading", async () => {
-    let resolveCatalog: ((response: Response) => void) | undefined;
-    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+  function serve(modelCatalog: ModelCatalogResponse) {
+    return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.includes("/model-catalog")) {
-        return new Promise<Response>((resolve) => {
-          resolveCatalog = resolve;
-        });
-      }
+      if (url.includes("/model-catalog")) return jsonResponse(modelCatalog);
+      if (url.includes("/model-hub/bootstrap"))
+        return jsonResponse(bootstrap(modelCatalog));
+      if (url.includes("/models/provider-preflight"))
+        return jsonResponse({ providers: [] });
+      if (url.includes("/runtime-providers/status")) return jsonResponse([]);
+      return new Promise<Response>(() => undefined);
+    });
+  }
+  it("separates architectures and registered models and selects scratch training without acquisition", async () => {
+    const fetchSpy = serve(catalog("Available"));
+    const onSelect = renderManager();
+    expect(
+      await screen.findByRole("heading", { name: "Architectures" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Registered Models" }),
+    ).toBeInTheDocument();
+    const card = (
+      await screen.findByRole("heading", { name: "YOLO11 X" })
+    ).closest("article")!;
+    expect(
+      within(card).getByText(/architecture.*Available/i),
+    ).toBeInTheDocument();
+    expect(within(card).queryByText(/Installed|Ready/)).not.toBeInTheDocument();
+    await userEvent.click(
+      within(card).getByRole("button", { name: "Train New Model" }),
+    );
+    expect(onSelect).toHaveBeenCalledWith("ultralytics/yolo11/detect/x");
+    expect(
+      fetchSpy.mock.calls.every(
+        ([input, init]) =>
+          !String(input).includes("/model-installs") &&
+          (!init?.method || init.method === "GET"),
+      ),
+    ).toBe(true);
+  });
+  it("never exposes acquisition actions for legacy catalog states", async () => {
+    const modelCatalog = catalog("Not Installed");
+    Object.assign(modelCatalog.models[0], {
+      category: "pretrained_catalog",
+      selection_kind: "managed_catalog_model",
+    });
+    const fetchSpy = serve(modelCatalog);
+    renderManager();
+    await screen.findByRole("heading", { name: "YOLO11 X" });
+    expect(
+      screen.queryByRole("button", {
+        name: /^(Install|Install Provider and Model|Update|Repair|Retry|Confirm Install)$/,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getAllByText(
+        /Model required .*register a compatible model to use this feature/,
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(
+      fetchSpy.mock.calls.some(([input]) =>
+        String(input).includes("/model-installs"),
+      ),
+    ).toBe(false);
+  });
+  it("offers registration for provider capabilities requiring researcher models", async () => {
+    const modelCatalog = catalog("Model Required");
+    Object.assign(modelCatalog.models[0], {
+      category: "provider_requirement",
+      selection_kind: "model_required",
+      trainable: false,
+    });
+    serve(modelCatalog);
+    renderManager();
+    const card = (
+      await screen.findByRole("heading", { name: "YOLO11 X" })
+    ).closest("article")!;
+    expect(
+      within(card).getByText(/Model required .*register a compatible model/),
+    ).toBeInTheDocument();
+    expect(
+      within(card).queryByRole("button", { name: "Train New Model" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      within(card).getByRole("button", { name: "Register Existing Model" }),
+    );
+    expect(screen.getByLabelText("Checkpoint file")).toBeVisible();
+  });
+  it("preserves registered checkpoint identity, class bindings and project provenance", async () => {
+    const response = bootstrap(catalog("Available"));
+    const registered = {
+      id: "registered-1",
+      project_id: project.id,
+      purpose: "detector",
+      display_name: "Researcher coral model",
+      source_filename: "coral-custom.pt",
+      file_size_bytes: 2048,
+      framework: "ultralytics",
+      task: "detect",
+      provider_name: "ultralytics",
+      sha256: "abcdef123456".repeat(5),
+      class_map_json: { labels: ["Coral"], mapping: { Coral: "class-1" } },
+      metadata_json: {},
+      created_at: "2026-10-07T12:00:00Z",
+      notes: "Researcher-provided checkpoint",
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input).includes("/model-hub/bootstrap"))
+        return jsonResponse({ ...response, models: [registered] });
+      if (String(input).includes("/model-catalog"))
+        return jsonResponse(response.catalog);
       return new Promise<Response>(() => undefined);
     });
     renderManager();
+    const card = (
+      await screen.findByRole("heading", { name: registered.display_name })
+    ).closest("article")!;
+    expect(within(card).getByText("coral-custom.pt")).toBeInTheDocument();
+    expect(within(card).getByText(/abcdef123456/)).toBeInTheDocument();
+    expect(within(card).getByText("Coral")).toBeInTheDocument();
+    expect(within(card).getByText("Mapped")).toBeInTheDocument();
+    expect(
+      within(card).getByText(`Project: ${project.id}`),
+    ).toBeInTheDocument();
+    expect(within(card).getByText(/Registered: /)).toBeInTheDocument();
+  });
 
+  it("routes pose architectures to their schema-aware workflow", async () => {
+    const modelCatalog = catalog("Available");
+    Object.assign(modelCatalog.models[0], {
+      task: "pose",
+      architecture_reference: "yolo11x-pose.yaml",
+    });
+    serve(modelCatalog);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const poseTraining = vi.fn();
+    const detectorTraining = vi.fn();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ModelManager
+          project={project}
+          onSelectCatalogModel={detectorTraining}
+          onTrainPoseArchitecture={poseTraining}
+        />
+      </QueryClientProvider>,
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Train New Model" }),
+    );
+    expect(poseTraining).toHaveBeenCalledWith("yolo11x-pose.yaml");
+    expect(detectorTraining).not.toHaveBeenCalled();
+  });
+
+  it("registers a researcher provider bundle locally and displays its provenance", async () => {
+    const modelCatalog = catalog("Model Required");
+    Object.assign(modelCatalog.models[0], {
+      category: "provider_requirement",
+      provider_id: "smolvlm",
+      provider: "smolvlm",
+      selection_kind: "model_required",
+      trainable: false,
+    });
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith("/provider-models/smolvlm/register"))
+          return jsonResponse({
+            id: "provider-model-1",
+            provider_id: "smolvlm",
+            task: "visual_question",
+            original_filename: "my-smolvlm.zip",
+            sha256: "b".repeat(64),
+            project_id: project.id,
+            registered_at: "2026-10-07T12:00:00Z",
+          });
+        if (url.includes("/model-hub/bootstrap"))
+          return jsonResponse(bootstrap(modelCatalog));
+        if (url.includes("/model-catalog")) return jsonResponse(modelCatalog);
+        return new Promise<Response>(() => undefined);
+      });
+    renderManager();
+    const card = (
+      await screen.findByRole("heading", { name: "YOLO11 X" })
+    ).closest("article")!;
+    await userEvent.click(
+      within(card).getByRole("button", { name: "Register Existing Model" }),
+    );
+    expect(screen.getByLabelText("Optional model provider")).toHaveValue(
+      "smolvlm",
+    );
+    const file = new File(["local checkpoint bundle"], "my-smolvlm.zip", {
+      type: "application/zip",
+    });
+    await userEvent.upload(screen.getByLabelText("Provider model file"), file);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Register provider model" }),
+    );
+    expect(
+      await screen.findByText(/Registered my-smolvlm.zip/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("b".repeat(64))).toBeInTheDocument();
+    const upload = fetchSpy.mock.calls.find(([input]) =>
+      String(input).includes("/provider-models/smolvlm/register"),
+    );
+    expect(upload?.[1]?.method).toBe("POST");
+    const uploadedFile = (upload?.[1]?.body as FormData).get("file");
+    expect(uploadedFile).toBeInstanceOf(File);
+    expect((uploadedFile as File).name).toBe("my-smolvlm.zip");
+    expect((uploadedFile as File).size).toBe(file.size);
+    expect(
+      fetchSpy.mock.calls.some(([input]) =>
+        String(input).includes("/model-installs"),
+      ),
+    ).toBe(false);
+  });
+
+  it("never reports zero catalog entries while loading", () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      () => new Promise<Response>(() => undefined),
+    );
+    renderManager();
     expect(screen.getByText("Loading catalog...")).toBeInTheDocument();
     expect(screen.queryByText("0 catalog entries")).not.toBeInTheDocument();
-
-    resolveCatalog?.(jsonResponse(catalog("Not Installed")));
-    expect(
-      await screen.findByRole("heading", { name: "YOLO11 X" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("1 catalog entries")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Install" })).toBeInTheDocument();
-    const pretrained = screen
-      .getByRole("heading", { name: "Validated presets" })
-      .closest("section");
-    expect(pretrained).not.toBeNull();
-    expect(
-      within(pretrained as HTMLElement).queryByLabelText(/Checkpoint file/i),
-    ).toBeNull();
-  });
-
-  it("confirms installation, shows progress, and cancels the background job", async () => {
-    const modelCatalog = catalog("Not Installed");
-    let jobStatus: JobRecord["status"] = "running";
-    let jobPollUrl = "";
-    let jobPollCache: RequestCache | undefined;
-    const job: JobRecord = {
-      id: "job-1",
-      project_id: project.id,
-      job_type: "model_install",
-      status: "queued",
-      progress_current: 0,
-      progress_total: 114_636_239,
-      request_json: { catalog_id: entry("Not Installed").catalog_id },
-      result_json: { stage: "queued" },
-      error_message: null,
-      created_at: "2026-07-11T00:00:00Z",
-      started_at: null,
-      completed_at: null,
-    };
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      const url = String(input);
-      if (url.includes("/model-catalog")) return jsonResponse(modelCatalog);
-      if (url.includes("/model-hub/bootstrap"))
-        return jsonResponse(bootstrap(modelCatalog));
-      if (url.includes("/models/provider-preflight"))
-        return jsonResponse({ providers: [] });
-      if (url.includes("/runtime-providers/status")) return jsonResponse([]);
-      if (url.includes("/training-registry/summary"))
-        return new Promise<Response>(() => undefined);
-      if (url.includes("/model-installs/") && init?.method === "POST") {
-        return jsonResponse(job);
-      }
-      if (
-        url.includes("/jobs/job-1?poll=") &&
-        (!init?.method || init.method === "GET")
-      ) {
-        jobPollUrl = url;
-        jobPollCache = init?.cache;
-        return jsonResponse({
-          ...job,
-          status: jobStatus,
-          progress_current: 57_318_119,
-          result_json: { stage: "downloading" },
-        });
-      }
-      if (url.endsWith("/jobs/job-1/cancel")) {
-        jobStatus = "cancelled";
-        return jsonResponse({
-          ...job,
-          status: "cancelled",
-          result_json: { stage: "cancelled" },
-        });
-      }
-      return jsonResponse({ detail: "Unexpected request" }, 404);
-    });
-    renderManager();
-
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Install" }),
-    );
-    const dialog = screen.getByRole("dialog", { name: "YOLO11 X" });
-    expect(dialog).toBeInTheDocument();
-    expect(within(dialog).getByText(/109\.3 MB/)).toBeInTheDocument();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Confirm Install" }),
-    );
-    expect(
-      await screen.findByRole("button", { name: "Cancel" }),
-    ).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText(/50%/)).toBeInTheDocument());
-    expect(jobPollUrl).toContain("/jobs/job-1?poll=");
-    expect(jobPollCache).toBe("no-store");
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(jobStatus).toBe("cancelled"));
-  });
-
-  it("selects a ready managed model for Training", async () => {
-    const modelCatalog = catalog("Ready");
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const url = String(input);
-      if (url.includes("/model-catalog")) return jsonResponse(modelCatalog);
-      if (url.includes("/model-hub/bootstrap"))
-        return jsonResponse(bootstrap(modelCatalog));
-      if (url.includes("/models/provider-preflight"))
-        return jsonResponse({ providers: [] });
-      if (url.includes("/runtime-providers/status")) return jsonResponse([]);
-      return new Promise<Response>(() => undefined);
-    });
-    const onSelect = renderManager();
-
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Select" }),
-    );
-
-    expect(onSelect).toHaveBeenCalledWith("ultralytics/yolo11/detect/x");
   });
 });

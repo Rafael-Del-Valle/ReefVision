@@ -174,6 +174,69 @@ const runDetail = {
 } as unknown as WorkflowRunDetail;
 
 describe("WorkflowVisualEditor", () => {
+  it("exposes explicit pose initialization and all five weight-free YOLO11 pose sizes", () => {
+    const onChange = vi.fn();
+    const poseGraph = {
+      ...graph,
+      nodes: [
+        {
+          node_id: "train",
+          node_type: "pose_model_training",
+          parameters: {
+            initialization_mode: "random",
+            architecture: "yolo11n-pose.yaml",
+          },
+        },
+      ],
+    };
+    render(
+      <WorkflowVisualEditor
+        graph={poseGraph}
+        registry={registry}
+        onChange={onChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Configure" }));
+    expect(screen.getByLabelText("Initialization mode")).toHaveValue("random");
+    const sizes = screen.getByLabelText(
+      "Pose architecture",
+    ) as HTMLSelectElement;
+    expect(Array.from(sizes.options).map((option) => option.value)).toEqual([
+      "yolo11n-pose.yaml",
+      "yolo11s-pose.yaml",
+      "yolo11m-pose.yaml",
+      "yolo11l-pose.yaml",
+      "yolo11x-pose.yaml",
+    ]);
+    fireEvent.change(sizes, { target: { value: "yolo11x-pose.yaml" } });
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        nodes: [
+          expect.objectContaining({
+            parameters: expect.objectContaining({
+              architecture: "yolo11x-pose.yaml",
+              initialization_mode: "random",
+            }),
+          }),
+        ],
+      }),
+    );
+    fireEvent.change(screen.getByLabelText("Initialization mode"), {
+      target: { value: "registered_model" },
+    });
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        nodes: [
+          expect.objectContaining({
+            parameters: expect.objectContaining({
+              initialization_mode: "registered_model",
+            }),
+          }),
+        ],
+      }),
+    );
+  });
+
   it("distinguishes scientist review, live run state, and next-iteration feedback", () => {
     render(
       <WorkflowVisualEditor

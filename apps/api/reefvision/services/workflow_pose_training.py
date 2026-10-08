@@ -217,7 +217,7 @@ def _completed_workflow_pose_training_run(
     dataset: PoseTrainingDataset,
     validation_dataset: PoseTrainingDataset | None,
     split_manifest_sha256: str,
-    seed_model: ModelRegistration,
+    seed_model: ModelRegistration | None,
     architecture: str,
     device: str,
     precision: str,
@@ -263,10 +263,9 @@ def _completed_workflow_pose_training_run(
         if candidate.split_manifest_sha256 != split_manifest_sha256:
             raise ValidationError("Recovered pose-training node split manifest changed")
 
-        if (
-            candidate.initial_checkpoint_model_id != seed_model.id
-            or candidate.resolved_model_checksum != seed_model.sha256
-        ):
+        if candidate.initial_checkpoint_model_id != (
+            seed_model.id if seed_model else None
+        ) or candidate.resolved_model_checksum != (seed_model.sha256 if seed_model else None):
             raise ValidationError("Recovered pose-training seed model changed")
 
         if (
@@ -347,6 +346,9 @@ def _reused_pose_training_result(
         "task": run.task,
         "provider_id": run.provider_id,
         "architecture": run.architecture,
+        "initialization_mode": (
+            "registered_model" if run.initial_checkpoint_model_id else "random"
+        ),
         "initial_checkpoint_source": (run.initial_checkpoint_source),
         "initial_checkpoint_model_id": (run.initial_checkpoint_model_id),
         "resolved_model_asset_id": (run.resolved_model_asset_id),
@@ -373,7 +375,7 @@ def create_pose_workflow_training_result(
     *,
     project_id: str,
     dataset_payload: dict[str, Any],
-    initial_model_payload: dict[str, Any],
+    initial_model_payload: dict[str, Any] | None = None,
     parameters: dict[str, Any],
     validation_dataset_payload: dict[str, Any] | None = None,
     workflow_run_id: str | None = None,
@@ -431,12 +433,24 @@ def create_pose_workflow_training_result(
             "This pose retraining configuration requires a separate frozen validation dataset"
         )
 
-    seed_model = _seed_pose_model(
-        session,
-        settings,
-        project_id=project_id,
-        payload=initial_model_payload,
-        dataset=dataset,
+    initialization_mode = str(
+        parameters.get("initialization_mode")
+        or ("registered_model" if initial_model_payload else "random")
+    )
+    if initialization_mode not in {"random", "registered_model"}:
+        raise ValidationError("Pose initialization_mode must be random or registered_model")
+    if initialization_mode == "random" and initial_model_payload:
+        raise ValidationError("Random initialization cannot use an initial model")
+    seed_model = (
+        _seed_pose_model(
+            session,
+            settings,
+            project_id=project_id,
+            payload=initial_model_payload or {},
+            dataset=dataset,
+        )
+        if initialization_mode == "registered_model"
+        else None
     )
 
     precision = str(
@@ -513,13 +527,16 @@ def create_pose_workflow_training_result(
 
     split_manifest_sha256 = canonical_json_sha256(split_manifest)
 
-    metadata = dict(seed_model.metadata_json or {})
+    metadata = dict(seed_model.metadata_json or {}) if seed_model else {}
 
     architecture = str(
         parameters.get("architecture")
         or metadata.get("source_architecture")
-        or seed_model.source_filename
+        or (seed_model.source_filename if seed_model else "yolo11n-pose.yaml")
     ).strip()
+
+    if seed_model is None and architecture not in {f"yolo11{scale}-pose.yaml" for scale in "nslmx"}:
+        raise ValidationError("Random pose training requires a YOLO11 n/s/m/l/x pose architecture")
 
     run_name = str(parameters.get("run_name") or "workflow-pose-retrain").strip()
 
@@ -583,10 +600,14 @@ def create_pose_workflow_training_result(
         catalog_model_id=None,
         provider_id="ultralytics",
         architecture=architecture,
-        initial_checkpoint_source=("registered_model"),
-        initial_checkpoint_model_id=(seed_model.id),
-        resolved_model_asset_id=(f"registered_model:{seed_model.id}"),
-        resolved_model_checksum=(seed_model.sha256),
+        initial_checkpoint_source=("registered_model" if seed_model else "scratch"),
+        initial_checkpoint_model_id=(seed_model.id if seed_model else None),
+        resolved_model_asset_id=(
+            f"registered_model:{seed_model.id}"
+            if seed_model
+            else f"builtin_architecture:{architecture}"
+        ),
+        resolved_model_checksum=(seed_model.sha256 if seed_model else None),
         parameter_registry_version=(provider_spec("ultralytics").provider_version),
         selected_preset=None,
         installation_state="ready",
@@ -622,8 +643,9 @@ def create_pose_workflow_training_result(
             "pose_schema_revision": (dataset.pose_schema_revision),
             "pose_schema_content_hash": (dataset.pose_schema_content_hash),
             "split_manifest": (split_manifest),
-            "seed_model_id": (seed_model.id),
-            "seed_model_sha256": (seed_model.sha256),
+            "initialization_mode": initialization_mode,
+            "seed_model_id": (seed_model.id if seed_model else None),
+            "seed_model_sha256": (seed_model.sha256 if seed_model else None),
             "workflow_run_id": (workflow_run_id),
             "workflow_node_run_id": (workflow_node_run_id),
         },
@@ -752,6 +774,9 @@ def create_pose_workflow_training_result(
         "task": run.task,
         "provider_id": run.provider_id,
         "architecture": run.architecture,
+        "initialization_mode": (
+            "registered_model" if run.initial_checkpoint_model_id else "random"
+        ),
         "initial_checkpoint_source": (run.initial_checkpoint_source),
         "initial_checkpoint_model_id": (run.initial_checkpoint_model_id),
         "resolved_model_asset_id": (run.resolved_model_asset_id),
@@ -787,7 +812,7 @@ def execute_pose_model_training_adapter(
         "dataset",
     )
 
-    initial_model = _single_payload(
+    initial_model = _optional_payload(
         inputs,
         "initial_model",
     )
@@ -818,7 +843,32 @@ def execute_pose_model_training_adapter(
     ]
 
 
+def execute_pose_training_dataset_adapter(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    dataset = _pose_dataset(session, project_id=project_id, payload=parameters, role="training")
+    return [
+        {
+            "port_id": "dataset",
+            "data_type": "pose_training_dataset",
+            "payload": {
+                "project_id": project_id,
+                "dataset_id": dataset.id,
+                "manifest_sha256": dataset.manifest_sha256,
+                "pose_schema_id": dataset.pose_schema_id,
+                "pose_schema_revision": dataset.pose_schema_revision,
+                "pose_schema_content_hash": dataset.pose_schema_content_hash,
+            },
+        }
+    ]
+
+
 _POSE_TRAINING_ADAPTERS = {
+    "pose_training_dataset": execute_pose_training_dataset_adapter,
     "pose_model_training": (execute_pose_model_training_adapter),
 }
 

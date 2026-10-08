@@ -285,9 +285,8 @@ export function AutomaticScientific3DPanel({
       </div>
 
       <p className="annotation-helper">
-        Install <strong>Metric Video Depth Anything Small</strong> from Models
-        &amp; AI before running this analysis. Automatic downloads remain
-        disabled during analysis so model provenance cannot change silently.
+        Model required — register a compatible Metric Video Depth Anything model
+        to use this feature. Automatic weight downloads are disabled.
       </p>
 
       <button

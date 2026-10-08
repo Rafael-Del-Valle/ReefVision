@@ -121,12 +121,15 @@ def _semantic_architecture_entry() -> ModelCatalogEntryResponse:
         display_summary=(
             "Self-configuring semantic segmentation for indexed polygon and raster mask datasets."
         ),
-        category="pretrained_catalog",
+        category="architecture",
         provider_id=NNUNET_PROVIDER_ID,
         architecture="nnU-Net v2",
         variant=NNUNET_CONFIGURATION,
         task=SEMANTIC_SEGMENTATION_TASK,
         trainable=True,
+        training_supported=True,
+        inference_requires_registered_model=True,
+        architecture_id="nnunet/v2/semantic/2d",
         inference_supported=False,
         checkpoint_identifier=NNUNET_CONFIGURATION,
         download_source_type="builtin_architecture",
@@ -173,7 +176,7 @@ def _semantic_architecture_entry() -> ModelCatalogEntryResponse:
             "This first slice supports the 2D configuration and scratch training.",
             "Training progress is stage-level until nnU-Net subprocess streaming is added.",
         ],
-        installation_state="Ready" if ready else "Provider Required",
+        installation_state="Available" if ready else "Provider Required",
         installation_reason=(
             "The nnU-Net command-line provider is installed and ready."
             if ready
@@ -195,11 +198,7 @@ def _catalog_entry_sort_key(
     item: ModelCatalogEntryResponse,
 ) -> tuple[int, int, str, str, str, str]:
     category_rank = (
-        0
-        if item.category == "pretrained_catalog"
-        else 1
-        if item.category == "my_trained_models"
-        else 2
+        0 if item.category == "architecture" else 1 if item.category == "my_trained_models" else 2
     )
     availability_rank = 0 if item.installation_state in {"Ready", "Available"} else 1
     return (
@@ -232,9 +231,11 @@ class SegmentationModelCatalogService(ModelCatalogService):
         available = installed_ultralytics_segmentation_architectures()
         architecture_entries: list[ModelCatalogEntryResponse] = []
         if workflow in {None, "model_hub", "training"} and task in {None, "segment"}:
-            seen_architectures: set[str] = set()
+            seen_architectures = {
+                item.architecture_reference for item in catalog.models if item.task == "segment"
+            }
             for entry in catalog.models:
-                if entry.task != "detect" or entry.category != "pretrained_catalog":
+                if entry.task != "detect" or entry.category != "architecture":
                     continue
                 segment_architecture = _segmentation_architecture_name(entry.architecture_reference)
                 if (

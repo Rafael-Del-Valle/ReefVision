@@ -96,7 +96,7 @@ type ProjectView =
   | "workflows"
   | "system";
 
-const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.0.5";
+const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.0.0";
 
 type ProjectTab = Exclude<ProjectView, "system">;
 
@@ -146,7 +146,8 @@ const PROJECT_NAV_GROUPS: Array<{
       {
         id: "models",
         label: "Model Hub",
-        description: "Manage verified pretrained and project-specific models.",
+        description:
+          "Train from architectures and register local trained models.",
       },
       {
         id: "training",
@@ -222,6 +223,10 @@ function ReefVisionMainApp() {
   const [editorLaunch, setEditorLaunch] =
     useState<AnnotationLaunchState | null>(null);
   const [trainingCatalogModelId, setTrainingCatalogModelId] = useState<
+    string | null
+  >(null);
+  const [poseArchitecture, setPoseArchitecture] = useState<string | null>(null);
+  const [classificationArchitecture, setClassificationArchitecture] = useState<
     string | null
   >(null);
   const [activeView, setActiveView] = useState<ProjectView>("gallery");
@@ -892,13 +897,19 @@ function ReefVisionMainApp() {
               <InteroperabilityWorkspace project={selectedProject} />
             )}
             {activeView === "classification" && (
-              <ClassificationWorkspace project={selectedProject} />
+              <ClassificationWorkspace
+                project={selectedProject}
+                initialArchitecture={classificationArchitecture}
+              />
             )}
             {activeView === "advanced_providers" && (
               <AdvancedProviderWorkspace project={selectedProject} />
             )}
             {activeView === "workflows" && (
-              <WorkflowGraphWorkspace project={selectedProject} />
+              <WorkflowGraphWorkspace
+                project={selectedProject}
+                initialPoseArchitecture={poseArchitecture}
+              />
             )}
             {activeView === "video" && (
               <>
@@ -920,6 +931,14 @@ function ReefVisionMainApp() {
             {activeView === "models" && (
               <ModelManager
                 project={selectedProject}
+                onTrainPoseArchitecture={(architecture) => {
+                  setPoseArchitecture(architecture);
+                  setActiveView("workflows");
+                }}
+                onTrainClassificationArchitecture={(architecture) => {
+                  setClassificationArchitecture(architecture);
+                  setActiveView("classification");
+                }}
                 onSelectCatalogModel={(catalogId) => {
                   setTrainingCatalogModelId(catalogId);
                   setActiveView("training");

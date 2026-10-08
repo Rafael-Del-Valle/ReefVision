@@ -29,6 +29,11 @@ from reefvision.db.models import (
     TrainingRun,
 )
 from reefvision.domain.errors import ValidationError
+from reefvision.ml.adapters.ultralytics_training import (
+    architecture_source,
+    configure_local_training_runtime,
+    local_training_arguments,
+)
 from reefvision.ml.dependencies import configure_provider_runtime, require_provider_ready
 from reefvision.ml.providers import resolve_torch_device
 from reefvision.ml.ultralytics_tuning import (
@@ -37,7 +42,6 @@ from reefvision.ml.ultralytics_tuning import (
     effective_search_space,
     normalize_tuning_csv,
 )
-from reefvision.storage.catalog_models import catalog_asset_path, catalog_manifest_record
 from reefvision.storage.datasets import write_yolo_detection_export
 from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
@@ -280,6 +284,11 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
             run.stage = "tuning" if tuning_enabled else "training"
             run.logs_path = _relative_to_data_dir(settings, logs_path)
             run.artifact_manifest_json = {
+                "initialization_mode": "registered_model"
+                if run.initial_checkpoint_model_id
+                else "random",
+                "effective_precision": "fp32",
+                "pretrained": False,
                 "dataset_output_path": dataset_output_path,
                 "dataset_manifest_path": dataset_manifest_path,
                 "dataset_archive_path": dataset_archive_path,
@@ -287,6 +296,8 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
             }
             job.result_json = {"stage": "training", "dataset_output_path": dataset_output_path}
             session.commit()
+
+        configure_local_training_runtime(settings)
 
         from ultralytics import YOLO
 
@@ -330,6 +341,12 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
             if sys.platform == "win32":
                 train_args["workers"] = 0
             precision = run.precision
+            if precision == "amp":
+                run.warnings_json = [
+                    *list(run.warnings_json or []),
+                    "AMP requires an upstream pretrained-weight check; this run uses fp32 offline.",
+                ]
+                session.commit()
             device = resolve_torch_device(run.device)
             if precision == "fp32":
                 train_args["amp"] = False
@@ -355,6 +372,7 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
                 f"[{datetime.now(UTC).isoformat()}] launching Ultralytics detect training",
             )
 
+        train_args = local_training_arguments(train_args)
         tuning_config = dict(run.tuning_config_json)
         if tuning_config.get("mode", "disabled") != "disabled":
             iterations = int(tuning_config.get("max_trials", 20))
@@ -454,26 +472,13 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
 
 def _resolve_model_source(settings: Settings, session: Session, run: TrainingRun) -> str:
     resolved_asset_id = (run.resolved_model_asset_id or "").strip()
-    if resolved_asset_id.startswith("catalog_model:"):
-        catalog_id = resolved_asset_id.partition(":")[2].strip()
-        if not catalog_id:
-            raise RuntimeError("Training run is missing its managed catalog model id")
-        from reefvision.services.model_catalog import ModelCatalogService
-
-        entry = ModelCatalogService(session, settings).get_static_catalog_item(catalog_id)
-        if len(entry.expected_files) != 1:
-            raise RuntimeError("Managed catalog model has an invalid expected-file manifest")
-        expected = entry.expected_files[0]
-        path = catalog_asset_path(settings, catalog_id, expected.filename)
-        record = catalog_manifest_record(settings, catalog_id)
-        if record is None or not path.is_file():
-            raise RuntimeError("The selected managed catalog checkpoint is missing")
-        checksum, size = hash_model_file(path)
-        if checksum != expected.sha256 or size != expected.size_bytes:
-            raise RuntimeError("The selected managed catalog checkpoint failed verification")
-        if run.resolved_model_checksum and checksum != run.resolved_model_checksum:
-            raise RuntimeError("Training provenance checksum does not match the managed checkpoint")
-        return str(path)
+    if (
+        resolved_asset_id.startswith("catalog_model:")
+        or run.initial_checkpoint_source == "managed_catalog"
+    ):
+        raise ValidationError(
+            "Catalog weights are disabled; select an architecture or registered model"
+        )
     if resolved_asset_id.startswith("registered_model:"):
         model_id = resolved_asset_id.partition(":")[2].strip() or run.initial_checkpoint_model_id
         if not model_id:
@@ -481,20 +486,48 @@ def _resolve_model_source(settings: Settings, session: Session, run: TrainingRun
         model = session.get(ModelRegistration, model_id)
         if model is None:
             raise RuntimeError("The selected initial checkpoint is missing")
-        return str(resolve_managed_project_path(settings, model.managed_path))
+        path = resolve_managed_project_path(settings, model.managed_path)
+        if not path.is_file():
+            raise ValidationError(
+                "The selected registered checkpoint is missing; register a local model"
+            )
+        if model.project_id != run.project_id or model.task != run.task:
+            raise ValidationError(
+                "The selected registered checkpoint does not match this project/task"
+            )
+        checksum, _ = hash_model_file(path)
+        if checksum != model.sha256 or (
+            run.resolved_model_checksum and checksum != run.resolved_model_checksum
+        ):
+            raise ValidationError("The selected registered checkpoint checksum changed")
+        return str(path)
     if resolved_asset_id.startswith("builtin_architecture:"):
         architecture = resolved_asset_id.partition(":")[2].strip()
         if architecture:
-            return architecture
+            return architecture_source(architecture)
     if run.initial_checkpoint_source == "registered_model":
         if run.initial_checkpoint_model_id is None:
             raise RuntimeError("Training run is missing its initial checkpoint model")
         model = session.get(ModelRegistration, run.initial_checkpoint_model_id)
         if model is None:
             raise RuntimeError("The selected initial checkpoint is missing")
-        return str(resolve_managed_project_path(settings, model.managed_path))
+        path = resolve_managed_project_path(settings, model.managed_path)
+        if not path.is_file():
+            raise ValidationError(
+                "The selected registered checkpoint is missing; register a local model"
+            )
+        if model.project_id != run.project_id or model.task != run.task:
+            raise ValidationError(
+                "The selected registered checkpoint does not match this project/task"
+            )
+        checksum, _ = hash_model_file(path)
+        if checksum != model.sha256 or (
+            run.resolved_model_checksum and checksum != run.resolved_model_checksum
+        ):
+            raise ValidationError("The selected registered checkpoint checksum changed")
+        return str(path)
     if run.architecture:
-        return run.architecture
+        return architecture_source(run.architecture)
     raise RuntimeError("Training run is missing its architecture selection")
 
 

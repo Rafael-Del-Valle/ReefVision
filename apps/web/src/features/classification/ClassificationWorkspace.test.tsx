@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Project } from "../../api/client";
@@ -18,6 +18,7 @@ vi.mock("./classificationApi", async () => {
     getClassifierModels: vi.fn(),
     getImageClassificationLabels: vi.fn(),
     getClassificationPredictions: vi.fn(),
+    createClassificationTrainingJob: vi.fn(),
   };
 });
 
@@ -98,6 +99,31 @@ describe("ClassificationWorkspace", () => {
     vi.mocked(api.getClassifierModels).mockResolvedValue([]);
     vi.mocked(api.getImageClassificationLabels).mockResolvedValue([]);
     vi.mocked(api.getClassificationPredictions).mockResolvedValue([]);
+  });
+
+  it("trains from a YAML architecture rather than a downloadable checkpoint", async () => {
+    vi.mocked(api.getClassificationDatasets).mockResolvedValue([
+      { id: "dataset-1", mode: "whole_image", sample_count: 2 },
+    ] as Awaited<ReturnType<typeof api.getClassificationDatasets>>);
+    vi.mocked(api.createClassificationTrainingJob).mockResolvedValue({
+      id: "job-1",
+    } as Awaited<ReturnType<typeof api.createClassificationTrainingJob>>);
+    renderWorkspace();
+    expect(screen.getByLabelText("Model size")).toHaveValue("yolo11n-cls.yaml");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Launch classification training" }),
+      ).toBeEnabled(),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Launch classification training" }),
+    );
+    await waitFor(() =>
+      expect(api.createClassificationTrainingJob).toHaveBeenCalledWith(
+        project.id,
+        expect.objectContaining({ architecture: "yolo11n-cls.yaml" }),
+      ),
+    );
   });
 
   it("shows label, dataset, training, and inference sections", async () => {

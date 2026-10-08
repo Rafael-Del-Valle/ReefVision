@@ -389,9 +389,15 @@ export interface ModelRegistration {
 }
 
 export type ModelCatalogCategory =
-  "pretrained_catalog" | "my_trained_models" | "imported_custom_models";
+  | "architecture"
+  | "provider_requirement"
+  | "pretrained_catalog"
+  | "my_trained_models"
+  | "imported_custom_models";
 
 export type ModelCatalogTask =
+  | "pose"
+  | "classify"
   | "detect"
   | "segment"
   | "semantic_segment"
@@ -406,6 +412,7 @@ export type ModelCatalogTask =
   | "metric_video_depth";
 
 export type ModelCatalogInstallationState =
+  | "Model Required"
   | "Available"
   | "Not Installed"
   | "Provider Required"
@@ -420,6 +427,7 @@ export type ModelCatalogInstallationState =
   | "Unavailable";
 
 export type ModelCatalogSelectionKind =
+  | "model_required"
   | "builtin_architecture"
   | "managed_catalog_model"
   | "registered_model"
@@ -429,6 +437,9 @@ export type ModelCatalogWorkflow =
   "training" | "prompt_assist" | "smart_mask" | "video" | "model_hub";
 
 export interface ModelCatalogEntry {
+  architecture_id?: string | null;
+  training_supported?: boolean;
+  inference_requires_registered_model?: boolean;
   catalog_id: string;
   display_name: string;
   display_summary: string;
@@ -2466,6 +2477,22 @@ export async function validateUltralyticsTrainingConfiguration(payload: {
       body: JSON.stringify(payload),
     },
   );
+}
+
+export interface ProviderModelRegistration {
+  id: string;
+  provider_id: string;
+  task: string;
+  original_filename: string;
+  sha256: string;
+  registered_at: string;
+  project_id: string;
+}
+
+export async function registerProviderModel(projectId: string, providerId: string, file: File): Promise<ProviderModelRegistration> {
+  const formData = new FormData();
+  formData.append("file", file, file.name);
+  return request<ProviderModelRegistration>(`/projects/${encodeURIComponent(projectId)}/provider-models/${encodeURIComponent(providerId)}/register`, {method: "POST", body: formData});
 }
 
 export async function registerModel(

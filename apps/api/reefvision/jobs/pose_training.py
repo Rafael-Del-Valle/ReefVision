@@ -17,7 +17,6 @@ from sqlalchemy.orm import Session, sessionmaker
 from reefvision.config import Settings
 from reefvision.db.models import (
     Job,
-    ModelRegistration,
     PoseTrainingDataset,
     Project,
     TrainingRun,
@@ -31,6 +30,12 @@ from reefvision.jobs.training import (
     _on_train_end,
     _on_train_start,
     _relative_to_data_dir,
+    _resolve_model_source,
+)
+from reefvision.ml.adapters.ultralytics_training import (
+    configure_local_training_runtime,
+    local_training_arguments,
+    pose_trainer_class,
 )
 from reefvision.ml.dependencies import (
     configure_provider_runtime,
@@ -335,33 +340,29 @@ def process_pose_training_job(
             if project is None:
                 raise ValidationError("Pose training project is unavailable")
 
-            if not run.initial_checkpoint_model_id:
-                raise ValidationError("Pose retraining requires a registered seed pose model")
-
-            seed_model = session.get(
-                ModelRegistration,
-                run.initial_checkpoint_model_id,
-            )
-
-            if (
-                seed_model is None
-                or seed_model.project_id != run.project_id
-                or seed_model.purpose != "detector"
-                or seed_model.task != "pose"
-                or seed_model.provider_name != "ultralytics"
-            ):
+            if run.initial_checkpoint_source == "scratch":
+                if run.initial_checkpoint_model_id:
+                    raise ValidationError("Random pose initialization cannot use a seed checkpoint")
+                if run.architecture not in {f"yolo11{scale}-pose.yaml" for scale in "nslmx"}:
+                    raise ValidationError(
+                        "Random pose training requires a YOLO11 pose architecture"
+                    )
+            elif run.initial_checkpoint_source != "registered_model":
                 raise ValidationError(
-                    "Pose retraining seed must be a registered "
-                    "Ultralytics pose model from this project"
+                    "Pose training requires random or registered_model initialization"
                 )
+            checkpoint_source = _resolve_model_source(settings, session, run)
+            if run.initial_checkpoint_model_id:
+                # Recheck schema and checksum at execution, after any queue delay.
+                from reefvision.services.workflow_pose_training import _seed_pose_model
 
-            seed_checkpoint = resolve_managed_project_path(
-                settings,
-                seed_model.managed_path,
-            )
-
-            if not seed_checkpoint.is_file():
-                raise ValidationError("Pose retraining seed checkpoint is missing")
+                _seed_pose_model(
+                    session,
+                    settings,
+                    project_id=run.project_id,
+                    payload={"model_id": run.initial_checkpoint_model_id},
+                    dataset=training_dataset,
+                )
 
             require_provider_ready(
                 "ultralytics",
@@ -451,6 +452,11 @@ def process_pose_training_job(
 
             run.artifact_manifest_json = {
                 **dict(run.artifact_manifest_json or {}),
+                "initialization_mode": "registered_model"
+                if run.initial_checkpoint_model_id
+                else "random",
+                "effective_precision": "fp32",
+                "pretrained": False,
                 "task": "pose",
                 "dataset_format": ("ultralytics_pose"),
                 "pose_training_dataset_id": (training_dataset.id),
@@ -482,11 +488,13 @@ def process_pose_training_job(
 
             session.commit()
 
+        configure_local_training_runtime(settings)
+
         from ultralytics import YOLO
 
         cancellation_requested = {"value": False}
 
-        model = YOLO(str(seed_checkpoint))
+        model = YOLO(checkpoint_source)
 
         last_reported_epoch = {"value": 0}
 
@@ -595,7 +603,13 @@ def process_pose_training_job(
             if sys.platform == "win32":
                 train_args["workers"] = 0
 
-            train_args["amp"] = run.precision == "amp"
+            train_args["amp"] = False
+            if run.precision == "amp":
+                run.warnings_json = [
+                    *list(run.warnings_json or []),
+                    "AMP requires an upstream pretrained-weight check; this run uses fp32 offline.",
+                ]
+                session.commit()
 
             if run.random_seed is not None:
                 train_args["seed"] = run.random_seed
@@ -636,7 +650,7 @@ def process_pose_training_job(
                 ),
             )
 
-        model.train(**train_args)
+        model.train(trainer=pose_trainer_class(), **local_training_arguments(train_args))
 
         with factory() as session:
             run = session.get(

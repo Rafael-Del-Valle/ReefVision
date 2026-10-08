@@ -1,4 +1,7 @@
 param(
+    [Parameter(Mandatory = $true)][string]$DetectionCheckpoint,
+    [string]$DepthModelDirectory = "",
+    [string]$InstallerDirectory = "",
     [string]$ExpectedGpuSubstring = "RTX 4060",
     [string]$TargetTriple = "x86_64-pc-windows-msvc",
     [switch]$SkipBuild,
@@ -10,8 +13,17 @@ Set-StrictMode -Version Latest
 
 $Repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Python = Join-Path $Repo ".venv\Scripts\python.exe"
-$BranchExpected = "feat/scientist-ready-phase11-packaging-hardware-20261004"
-$InstallerDirectory = Join-Path $Repo "apps\web\src-tauri\target\$TargetTriple\release\bundle\msi"
+$BranchExpected = "feat/scientist-ready-phase12-ui-redesign-20261005"
+if (-not $InstallerDirectory) {
+    $InstallerDirectory = Join-Path $Repo "apps\web\src-tauri\target\$TargetTriple\release\bundle\msi"
+}
+. (Join-Path $PSScriptRoot "lib\windows-clean-acceptance.ps1")
+$DetectionCheckpoint = (Resolve-Path -LiteralPath $DetectionCheckpoint).Path
+if (-not (Test-Path -LiteralPath $DetectionCheckpoint -PathType Leaf)) { throw "DetectionCheckpoint must be a local model file." }
+if ($DepthModelDirectory) {
+    $DepthModelDirectory = (Resolve-Path -LiteralPath $DepthModelDirectory).Path
+    if (-not (Test-Path -LiteralPath $DepthModelDirectory -PathType Container)) { throw "DepthModelDirectory must contain a local compatible model bundle." }
+}
 
 Set-Location $Repo
 
@@ -137,14 +149,22 @@ function Save-Summary {
 }
 Save-Summary
 
-$PreviousBundled = $env:REEFVISION_BUNDLED_MODELS_DIR
-$HadBundled = Test-Path Env:REEFVISION_BUNDLED_MODELS_DIR
-$PreviousHfOffline = $env:HF_HUB_OFFLINE
-$HadHfOffline = Test-Path Env:HF_HUB_OFFLINE
-$PreviousTransformersOffline = $env:TRANSFORMERS_OFFLINE
-$HadTransformersOffline = Test-Path Env:TRANSFORMERS_OFFLINE
-$PreviousYoloAutoinstall = $env:YOLO_AUTOINSTALL
-$HadYoloAutoinstall = Test-Path Env:YOLO_AUTOINSTALL
+function New-ExplicitModelRecord([string]$ModelPath) {
+    $Files = if (Test-Path -LiteralPath $ModelPath -PathType Container) {
+        @(Get-ChildItem -LiteralPath $ModelPath -Recurse -File)
+    } else { @(Get-Item -LiteralPath $ModelPath) }
+    if ($Files.Count -eq 0) { throw "Explicit model directory is empty: $ModelPath" }
+    return [ordered]@{
+        path = $ModelPath
+        files = @($Files | ForEach-Object {
+            [ordered]@{ path = $_.FullName; size_bytes = $_.Length; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
+        })
+    }
+}
+$InputManifest = Join-Path $EvidenceRoot "explicit-model-inputs.json"
+$InputModels = [ordered]@{ detection = (New-ExplicitModelRecord $DetectionCheckpoint) }
+if ($DepthModelDirectory) { $InputModels.depth = New-ExplicitModelRecord $DepthModelDirectory }
+[ordered]@{ models = $InputModels } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $InputManifest -Encoding UTF8
 
 try {
     Write-Host ""
@@ -156,7 +176,7 @@ try {
         ('TARGETDIR="{0}"' -f $ExtractRoot),
         "/L*v",
         ('"{0}"' -f $MsiLog)
-    ) -Wait -PassThru
+    ) -Wait -PassThru -WindowStyle Hidden
     if ($MsiProcess.ExitCode -notin @(0, 3010)) {
         throw "MSI administrative extraction failed with exit code $($MsiProcess.ExitCode). See $MsiLog"
     }
@@ -185,26 +205,19 @@ try {
     Write-Host "  $BundledRoot"
     Write-Host ""
 
-    $env:REEFVISION_BUNDLED_MODELS_DIR = $BundledRoot
-    $env:HF_HUB_OFFLINE = "1"
-    $env:TRANSFORMERS_OFFLINE = "1"
-    $env:YOLO_AUTOINSTALL = "false"
+    $ExtractedCatalog = Join-Path $Backend.Directory.FullName "_internal\config\model_catalog.json"
+    & $Python (Join-Path $PSScriptRoot "audit-model-downloadability.py") --catalog $ExtractedCatalog --bundle-root $BundledRoot --runtime-root $ExtractRoot
+    if ($LASTEXITCODE -ne 0) { throw "Extracted release violates the no-pretrained model policy." }
 
     Write-Host "=== PACKAGED CPU / CUDA PROVIDER EXECUTION ==="
     $ProviderLog = Join-Path $DataRoot "provider-hardware-acceptance.log"
-    $ProviderProcess = Start-Process `
-        -FilePath $Backend.FullName `
-        -ArgumentList @(
-            "--data-dir",
-            $DataRoot,
-            "--safe-mode",
-            "--provider-hardware-acceptance",
-            "--log-file",
-            $ProviderLog
-        ) `
-        -Wait `
-        -PassThru `
-        -WindowStyle Hidden
+    $ProviderProcess = Invoke-ReefVisionIsolatedEnvironment -DataRoot $DataRoot -AdditionalEnvironment @{
+        REEFVISION_ACCEPTANCE_MODEL_MANIFEST = $InputManifest
+    } -Action {
+        Start-Process -FilePath $Backend.FullName -WorkingDirectory $DataRoot -ArgumentList @(
+            "--data-dir", $DataRoot, "--safe-mode", "--provider-hardware-acceptance", "--log-file", $ProviderLog
+        ) -Wait -PassThru -WindowStyle Hidden
+    }
     if ($ProviderProcess.ExitCode -ne 0) {
         if (Test-Path -LiteralPath $ProviderLog -PathType Leaf) {
             Get-Content -LiteralPath $ProviderLog -Tail 120 | Write-Host
@@ -236,10 +249,11 @@ try {
     $Required = @(
         "yolo11n_cpu",
         "yolo11n_cuda",
-        "depth_anything_v2_cpu",
-        "depth_anything_v2_cuda",
         "invalid_device_rejection"
     )
+    if ($DepthModelDirectory) { $Required += @("depth_anything_v2_cpu", "depth_anything_v2_cuda") }
+    elseif ($Report.results.depth_anything_v2_cpu.status -ne "MODEL_REQUIRED") { throw "Missing optional depth model was not reported accurately." }
+    if ($Report.model_policy -ne "explicit_local_models_only") { throw "Acceptance did not use explicit local model inputs." }
     foreach ($Name in $Required) {
         $Result = $Report.results.$Name
         if ($null -eq $Result -or [string]$Result.status -ne "PASS") {
@@ -250,7 +264,7 @@ try {
     if ([string]$Report.results.yolo11n_cuda.device_actually_used -notlike "cuda*") {
         throw "YOLO CUDA acceptance did not actually use CUDA."
     }
-    if ([string]$Report.results.depth_anything_v2_cuda.device_actually_used -notlike "cuda*") {
+    if ($DepthModelDirectory -and [string]$Report.results.depth_anything_v2_cuda.device_actually_used -notlike "cuda*") {
         throw "Depth Anything CUDA acceptance did not actually use CUDA."
     }
 
@@ -270,11 +284,11 @@ catch {
     throw
 }
 finally {
-    if ($HadBundled) { $env:REEFVISION_BUNDLED_MODELS_DIR = $PreviousBundled } else { Remove-Item Env:REEFVISION_BUNDLED_MODELS_DIR -ErrorAction SilentlyContinue }
-    if ($HadHfOffline) { $env:HF_HUB_OFFLINE = $PreviousHfOffline } else { Remove-Item Env:HF_HUB_OFFLINE -ErrorAction SilentlyContinue }
-    if ($HadTransformersOffline) { $env:TRANSFORMERS_OFFLINE = $PreviousTransformersOffline } else { Remove-Item Env:TRANSFORMERS_OFFLINE -ErrorAction SilentlyContinue }
-    if ($HadYoloAutoinstall) { $env:YOLO_AUTOINSTALL = $PreviousYoloAutoinstall } else { Remove-Item Env:YOLO_AUTOINSTALL -ErrorAction SilentlyContinue }
     if (-not $KeepExtracted) {
+        if ([System.IO.Path]::GetFullPath($ExtractRoot) -ne (Join-Path $SystemDrive "rv11d-$Token") -or
+            [System.IO.Path]::GetFullPath($DataRoot) -ne (Join-Path $SystemDrive "rv11d-data-$Token")) {
+            throw "Refusing cleanup outside generated provider acceptance directories."
+        }
         Remove-Item -LiteralPath $ExtractRoot -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath $DataRoot -Recurse -Force -ErrorAction SilentlyContinue
     }

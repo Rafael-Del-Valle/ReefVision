@@ -692,73 +692,143 @@ export function WorkflowVisualEditor({
                 <p className="muted-copy">{selectedDefinition.description}</p>
               )}
 
+              {selectedNode.node_type === "pose_model_training" && (
+                <div className="workflow-parameter-grid">
+                  <label>
+                    Initialization mode
+                    <select
+                      value={String(
+                        selectedNode.parameters?.initialization_mode ??
+                          (currentGraph.edges.some(
+                            (edge) =>
+                              edge.target_node_id === selectedNode.node_id &&
+                              edge.target_port_id === "initial_model",
+                          )
+                            ? "registered_model"
+                            : "random"),
+                      )}
+                      onChange={(event) =>
+                        replaceSelectedParameters({
+                          ...selectedNode.parameters,
+                          initialization_mode: event.target.value,
+                          architecture:
+                            selectedNode.parameters?.architecture ??
+                            "yolo11n-pose.yaml",
+                        })
+                      }
+                    >
+                      <option value="random">
+                        From scratch — random initialization
+                      </option>
+                      <option value="registered_model">
+                        Registered model — continue local checkpoint
+                      </option>
+                    </select>
+                  </label>
+                  <label>
+                    Pose architecture
+                    <select
+                      value={String(
+                        selectedNode.parameters?.architecture ??
+                          "yolo11n-pose.yaml",
+                      )}
+                      onChange={(event) =>
+                        setSelectedParameter("architecture", event.target.value)
+                      }
+                    >
+                      {["n", "s", "m", "l", "x"].map((size) => (
+                        <option key={size} value={`yolo11${size}-pose.yaml`}>
+                          YOLO11 {size.toUpperCase()} Pose
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="annotation-helper">
+                    From scratch uses the selected configuration and the frozen
+                    dataset's landmark schema, without weights. Registered model
+                    mode requires a compatible local model connected to
+                    initial_model. Remove that connection when choosing from
+                    scratch; modes never switch automatically.
+                  </p>
+                </div>
+              )}
+
               {parameterKeys.length > 0 && (
                 <div className="workflow-parameter-grid">
-                  {parameterKeys.map((key) => {
-                    const fallback =
-                      selectedDefinition?.optional_parameters[key];
-                    const value =
-                      selectedNode.parameters &&
-                      Object.prototype.hasOwnProperty.call(
-                        selectedNode.parameters,
-                        key,
-                      )
-                        ? selectedNode.parameters[key]
-                        : fallback;
-                    const required =
-                      selectedDefinition?.required_parameters.includes(key) ??
-                      false;
-                    if (!isPrimitive(value)) {
+                  {parameterKeys
+                    .filter(
+                      (key) =>
+                        selectedNode.node_type !== "pose_model_training" ||
+                        !["initialization_mode", "architecture"].includes(key),
+                    )
+                    .map((key) => {
+                      const fallback =
+                        selectedDefinition?.optional_parameters[key];
+                      const value =
+                        selectedNode.parameters &&
+                        Object.prototype.hasOwnProperty.call(
+                          selectedNode.parameters,
+                          key,
+                        )
+                          ? selectedNode.parameters[key]
+                          : fallback;
+                      const required =
+                        selectedDefinition?.required_parameters.includes(key) ??
+                        false;
+                      if (!isPrimitive(value)) {
+                        return (
+                          <div className="workflow-parameter-field" key={key}>
+                            <strong>{key}</strong>
+                            <small>
+                              Nested setting · edit in Advanced parameter JSON.
+                            </small>
+                          </div>
+                        );
+                      }
+                      if (typeof value === "boolean") {
+                        return (
+                          <label
+                            className="workflow-parameter-toggle"
+                            key={key}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={value}
+                              onChange={(event) =>
+                                setSelectedParameter(key, event.target.checked)
+                              }
+                            />
+                            <span>
+                              {key}
+                              {required ? " *" : ""}
+                            </span>
+                          </label>
+                        );
+                      }
                       return (
-                        <div className="workflow-parameter-field" key={key}>
-                          <strong>{key}</strong>
-                          <small>
-                            Nested setting · edit in Advanced parameter JSON.
-                          </small>
-                        </div>
-                      );
-                    }
-                    if (typeof value === "boolean") {
-                      return (
-                        <label className="workflow-parameter-toggle" key={key}>
-                          <input
-                            type="checkbox"
-                            checked={value}
-                            onChange={(event) =>
-                              setSelectedParameter(key, event.target.checked)
-                            }
-                          />
+                        <label className="workflow-parameter-field" key={key}>
                           <span>
                             {key}
                             {required ? " *" : ""}
                           </span>
+                          <input
+                            type={typeof value === "number" ? "number" : "text"}
+                            value={
+                              value === null || value === undefined
+                                ? ""
+                                : String(value)
+                            }
+                            onChange={(event) => {
+                              const next =
+                                typeof value === "number"
+                                  ? Number(event.target.value)
+                                  : event.target.value;
+                              setSelectedParameter(key, next);
+                            }}
+                          />
                         </label>
                       );
-                    }
-                    return (
-                      <label className="workflow-parameter-field" key={key}>
-                        <span>
-                          {key}
-                          {required ? " *" : ""}
-                        </span>
-                        <input
-                          type={typeof value === "number" ? "number" : "text"}
-                          value={
-                            value === null || value === undefined
-                              ? ""
-                              : String(value)
-                          }
-                          onChange={(event) => {
-                            const next =
-                              typeof value === "number"
-                                ? Number(event.target.value)
-                                : event.target.value;
-                            setSelectedParameter(key, next);
-                          }}
-                        />
-                      </label>
-                    );
-                  })}
+                    })}
                 </div>
               )}
 

@@ -44,11 +44,11 @@ $BundledRuntimeLibraries = foreach ($library in $RequiredRuntimeLibraries) {
     }
 }
 
-$OutputRoot = Join-Path $Root ".desktop\pyinstaller\$TargetTriple"
+$OutputRoot = Join-Path $Root ".desktop\release-1.0.0\pyinstaller\$TargetTriple"
 $DistPath = Join-Path $OutputRoot "dist"
 $WorkPath = Join-Path $OutputRoot "work"
 $SpecPath = Join-Path $OutputRoot "spec"
-$BinariesPath = Join-Path $Root "apps\web\src-tauri\binaries"
+$BinariesPath = Join-Path $Root ".desktop\release-1.0.0\backend"
 $PackagedBackendPath = Join-Path $BinariesPath "reefvision-api"
 $ProviderRuntimePath = Join-Path $Root ".desktop\provider-runtime"
 $VdaRuntimeRoot = Join-Path $ProviderRuntimePath "video-depth-anything"
@@ -213,6 +213,11 @@ $PackagingDebrisFilePatterns = @(
 function Remove-ReefVisionPackagingDebris {
     param([Parameter(Mandatory = $true)][string]$BundlePath)
 
+    $ResolvedBundle = [System.IO.Path]::GetFullPath($BundlePath)
+    $ExpectedBundle = [System.IO.Path]::GetFullPath((Join-Path $DistPath "reefvision-api"))
+    if ($ResolvedBundle -ne $ExpectedBundle) {
+        throw "Refusing to trim outside the generated backend bundle: $ResolvedBundle"
+    }
     $RemovedDirectories = 0
     $RemovedFiles = 0
     foreach ($DirectoryName in $PackagingDebrisDirectoryNames) {
@@ -221,6 +226,10 @@ function Remove-ReefVisionPackagingDebris {
             Sort-Object { $_.FullName.Length } -Descending)
         foreach ($Directory in $Directories) {
             if (Test-Path -LiteralPath $Directory.FullName -PathType Container) {
+                $ResolvedDirectory = [System.IO.Path]::GetFullPath($Directory.FullName)
+                if (-not $ResolvedDirectory.StartsWith($ResolvedBundle + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    throw "Refusing to trim outside the generated backend bundle: $ResolvedDirectory"
+                }
                 Remove-Item -LiteralPath $Directory.FullName -Recurse -Force
                 $RemovedDirectories += 1
             }
@@ -253,6 +262,12 @@ foreach ($path in @($DistPath, $WorkPath, $SpecPath, $BinariesPath, $ProviderRun
 }
 
 Assert-ReefVisionModelCatalog -Path $ModelCatalogFile
+$ModelAuditScript = Join-Path $PSScriptRoot "audit-model-downloadability.py"
+& $VenvPython (Join-Path $PSScriptRoot "check-release-version.py")
+if ($LASTEXITCODE -ne 0) { throw "Release version consistency check failed." }
+& $VenvPython $ModelAuditScript --catalog $ModelCatalogFile --runtime-root $DistPath --runtime-root $BinariesPath --runtime-root $ProviderRuntimePath
+if ($LASTEXITCODE -ne 0) { throw "Existing release staging contains prohibited model assets; files were preserved." }
+
 
 if (-not (Test-Path -LiteralPath $VdaSourcePath -PathType Container)) {
     throw "Pinned Video Depth Anything source is missing: $VdaSourcePath"
@@ -468,6 +483,9 @@ Write-Host (
     $PydanticCoreBinaries[0].FullName
 ) -ForegroundColor DarkGray
 
+& $VenvPython $ModelAuditScript --catalog $ModelCatalogFile --runtime-root $SourceBundle
+if ($LASTEXITCODE -ne 0) { throw "Packaged backend contains prohibited model assets." }
+
 $PyInstallerCatalog = Join-Path $SourceBundle "_internal\config\model_catalog.json"
 Assert-ReefVisionModelCatalog -Path $PyInstallerCatalog
 
@@ -521,7 +539,17 @@ if (Test-Path $TorchLibPath -PathType Container) {
 }
 
 if (Test-Path $PackagedBackendPath) {
-    Remove-Item -LiteralPath $PackagedBackendPath -Recurse -Force
+    $ResolvedBackendPath = [System.IO.Path]::GetFullPath($PackagedBackendPath)
+    $ExpectedBackendPath = [System.IO.Path]::GetFullPath((Join-Path $Root ".desktop\release-1.0.0\backend\reefvision-api"))
+    if ($ResolvedBackendPath -ne $ExpectedBackendPath) { throw "Unsafe backend staging path: $ResolvedBackendPath" }
+    # Preserve prior staged files rather than deleting a possible researcher model.
+    # Keep preserved builds outside the Tauri resource directory.
+    $ArchiveRoot = Join-Path $Root ".desktop\release-1.0.0\previous-backends"
+    New-Item -ItemType Directory -Path $ArchiveRoot -Force | Out-Null
+    $ArchiveDestination = Join-Path $ArchiveRoot ([Guid]::NewGuid().ToString('N'))
+    $ResolvedArchive = [System.IO.Path]::GetFullPath($ArchiveDestination)
+    if (-not $ResolvedArchive.StartsWith([System.IO.Path]::GetFullPath($ArchiveRoot) + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) { throw "Unsafe preservation path." }
+    Move-Item -LiteralPath $ResolvedBackendPath -Destination $ResolvedArchive
 }
 
 $LegacyTargetExe = Join-Path $BinariesPath "reefvision-api-$TargetTriple.exe"

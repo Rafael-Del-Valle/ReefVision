@@ -50,10 +50,7 @@ def test_source_catalog_is_schema_v2_and_contains_required_models() -> None:
         "task",
         "trainable",
         "inference_supported",
-        "checkpoint_identifier",
         "download_source_type",
-        "expected_files",
-        "expected_size",
         "license_summary",
         "provider_pack_id",
         "recommended_ram",
@@ -82,10 +79,10 @@ def test_project_model_catalog_returns_all_definitions(client: TestClient) -> No
         if item["catalog_id"].startswith("ultralytics/yolo11/detect/")
     }
     assert len(yolo_models) == 5
-    assert all(item["selection_kind"] == "managed_catalog_model" for item in yolo_models.values())
-    assert all(item["expected_files"] for item in yolo_models.values())
+    assert all(item["selection_kind"] == "builtin_architecture" for item in yolo_models.values())
+    assert all(not item["expected_files"] for item in yolo_models.values())
     assert all(
-        item["installation_state"] in {"Not Installed", "Provider Required"}
+        item["installation_state"] in {"Available", "Provider Required"}
         for item in yolo_models.values()
     )
 
@@ -237,45 +234,18 @@ def test_bootstrap_auxiliary_failure_keeps_catalog_visible(
     assert len(payload["validation_warnings"]) == (len(baseline_payload["validation_warnings"]) + 4)
 
 
-def test_all_available_models_have_real_install_paths() -> None:
-    path = model_catalog_service._resolve_catalog_resource(
-        model_catalog_service.MODEL_CATALOG_FILENAME
-    )
-    payload = json.loads(path.read_text(encoding="utf-8"))
-
-    provider_backed = {
-        "grounding_dino",
-        "sam2",
-        "smolvlm",
-        "video_depth_anything",
-        "scale_label_ocr",
-    }
-
-    optional_network = 0
-
-    for entry in payload["models"]:
-        if entry["availability"] != "available":
-            continue
-
-        assert entry["selection_kind"] == "managed_catalog_model"
-
-        if entry["expected_files"]:
-            for expected in entry["expected_files"]:
-                assert expected["source_url"].startswith("https://")
-                assert len(expected["sha256"]) == 64
-                assert expected["size_bytes"] > 0
-
-            if entry["desktop_package_status"] == "optional_network_download":
-                optional_network += 1
-            else:
-                assert entry["desktop_package_status"] in {
-                    "base_sidecar_provider",
-                    "base_bundled_checkpoint",
-                }
+def test_all_available_definitions_have_explicit_architecture_or_registration_paths() -> None:
+    catalog = model_catalog_service._load_static_model_catalog()
+    for entry in catalog.models:
+        assert not entry.expected_files
+        assert entry.expected_checksum is None
+        assert entry.selection_kind in {"builtin_architecture", "model_required"}
+        if entry.selection_kind == "builtin_architecture":
+            assert entry.architecture_reference
+            assert entry.trainable
+            assert entry.inference_requires_registered_model
         else:
-            assert entry["provider_id"] in provider_backed
-
-    assert optional_network == 17
+            assert not entry.trainable
 
 
 def test_sam2_preserves_native_pinned_provider_route() -> None:
@@ -288,5 +258,5 @@ def test_sam2_preserves_native_pinned_provider_route() -> None:
 
     assert sam2["availability"] == "available"
     assert sam2["provider_id"] == "sam2"
-    assert sam2["download_source_type"] == "huggingface_pinned_revision"
-    assert sam2["expected_files"] == []
+    assert sam2["download_source_type"] == "user_registration"
+    assert not sam2.get("expected_files")

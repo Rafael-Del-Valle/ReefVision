@@ -505,6 +505,7 @@ def _ultralytics_training_registry_uncached(
     installed_version = _installed_ultralytics_version()
     cfg_module, yolo_class = _import_ultralytics_runtime(settings)
     defaults = dict(cfg_module.get_cfg())
+    defaults["pretrained"] = False
     help_texts = _parse_default_yaml_comments()
     method_signatures = {
         "train": str(inspect.signature(yolo_class.train)),
@@ -827,8 +828,8 @@ def _validate_special_value(name: str, value: Any, record: UltralyticsParameterR
 
     if name == "cache" and not (isinstance(value, bool) or value in {"ram", "disk"}):
         raise ValidationError("'cache' must be False, True, 'ram', or 'disk'.")
-    if name == "pretrained" and not isinstance(value, (bool, str)):
-        raise ValidationError("'pretrained' must be a bool or a checkpoint path string.")
+    if name == "pretrained" and value is not False:
+        raise ValidationError("'pretrained' must be False; select a registered model explicitly.")
     if name == "compile" and not (
         isinstance(value, bool)
         or value in {"default", "reduce-overhead", "max-autotune-no-cudagraphs"}

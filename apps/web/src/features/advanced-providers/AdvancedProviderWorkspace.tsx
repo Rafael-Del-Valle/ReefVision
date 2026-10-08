@@ -164,8 +164,8 @@ export function AdvancedProviderWorkspace({
           <h3>Advanced Provider Lab</h3>
           <p>
             Run optional vision providers through a guided, fail-closed
-            workflow. Managed checkpoints come from Model Hub; this workspace
-            never downloads or maintains a separate copy.
+            workflow. Register a compatible local checkpoint before using a
+            provider. This workspace never downloads weights.
           </p>
         </div>
       </div>
@@ -233,7 +233,7 @@ export function AdvancedProviderWorkspace({
                 <span>
                   {modelCatalogQuery.isPending
                     ? "Checking…"
-                    : (managedModel?.installation_state ?? "Not installed")}
+                    : (managedModel?.installation_state ?? "Model Required")}
                 </span>
               </div>
               {managedModel?.checkpoint_identifier && (
@@ -248,9 +248,8 @@ export function AdvancedProviderWorkspace({
             !managedModelReady &&
             !modelCatalogQuery.isPending && (
               <p className="form-error" role="alert">
-                Install or repair this model in Models &amp; AI → Model Hub
-                first. Advanced Providers will not download a separate
-                checkpoint.
+                Model required — register a compatible model to use this
+                feature. Automatic weight downloads are disabled.
               </p>
             )}
           {managedCatalogId && managedModelReady && (

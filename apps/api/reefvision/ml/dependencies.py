@@ -162,6 +162,7 @@ def configure_provider_runtime(
     runtime_dir = provider_runtime_dir(settings, data_dir=data_dir)
     runtime_dir.mkdir(parents=True, exist_ok=True)
     os.environ["YOLO_AUTOINSTALL"] = "false"
+    os.environ["YOLO_OFFLINE"] = "true"
     # API workers and the frozen sidecar have no GUI event loop. Select the
     # file-rendering backend before importing providers/pyplot, including threads.
     os.environ["MPLBACKEND"] = "Agg"

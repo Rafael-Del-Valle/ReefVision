@@ -2,6 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import type { Project } from "../../api/client";
+import { getPoseTrainingDatasets } from "../video/poseActiveLearningApi";
 import {
   cancelWorkflowRunJob,
   getWorkflowNodeRegistry,
@@ -14,11 +15,15 @@ import {
   saveWorkflowGraph,
   validateWorkflowGraph,
 } from "./workflowGraphApi";
-import { workflowTemplates } from "./workflowTemplates";
+import {
+  createPoseArchitectureWorkflow,
+  workflowTemplates,
+} from "./workflowTemplates";
 import { WorkflowVisualEditor } from "./WorkflowVisualEditor";
 
 interface WorkflowGraphWorkspaceProps {
   project: Project;
+  initialPoseArchitecture?: string | null;
 }
 
 function statusIsActive(status: string | undefined): boolean {
@@ -47,14 +52,38 @@ function safeParseGraph(value: string): Record<string, unknown> | null {
 
 export function WorkflowGraphWorkspace({
   project,
+  initialPoseArchitecture,
 }: WorkflowGraphWorkspaceProps) {
   const [graphJson, setGraphJson] = useState(() =>
-    JSON.stringify(workflowTemplates[0]?.graph ?? {}, null, 2),
+    JSON.stringify(
+      initialPoseArchitecture
+        ? createPoseArchitectureWorkflow(initialPoseArchitecture)
+        : (workflowTemplates[0]?.graph ?? {}),
+      null,
+      2,
+    ),
   );
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState(
     workflowTemplates[0]?.id ?? "",
   );
+
+  const visualGraph = safeParseGraph(graphJson);
+  const graphNodes = Array.isArray(visualGraph?.nodes)
+    ? (visualGraph.nodes as Array<{
+        node_id: string;
+        node_type: string;
+        parameters?: Record<string, unknown>;
+      }>)
+    : [];
+  const poseDatasetSources = graphNodes.filter(
+    (node) => node.node_type === "pose_training_dataset",
+  );
+  const poseDatasets = useQuery({
+    queryKey: ["pose-training-datasets", project.id],
+    queryFn: ({ signal }) => getPoseTrainingDatasets(project.id, signal),
+    enabled: poseDatasetSources.length > 0,
+  });
 
   const registryQuery = useQuery({
     queryKey: ["workflow-node-registry"],
@@ -146,7 +175,6 @@ export function WorkflowGraphWorkspace({
     resumeReviewMutation.error ??
     cancelMutation.error;
   const selectedRun = runDetailQuery.data?.run;
-  const visualGraph = safeParseGraph(graphJson);
   const selectedProvenanceSha =
     typeof selectedRun?.result_json.provenance_sha256 === "string"
       ? selectedRun.result_json.provenance_sha256
@@ -234,6 +262,64 @@ export function WorkflowGraphWorkspace({
           }
         </p>
       </div>
+
+      {poseDatasetSources.length > 0 && (
+        <section className="panel-card">
+          <h4>Verified pose training data</h4>
+          <p>
+            Choose an immutable dataset frozen after scientist review. The
+            dataset supplies its landmark schema and revision to training.
+          </p>
+          {poseDatasetSources.map((source) => (
+            <label key={source.node_id}>
+              Frozen pose dataset
+              <select
+                value={String(source.parameters?.dataset_id ?? "")}
+                onChange={(event) =>
+                  setGraphJson(
+                    JSON.stringify(
+                      {
+                        ...visualGraph,
+                        nodes: graphNodes.map((node) =>
+                          node.node_id === source.node_id
+                            ? {
+                                ...node,
+                                parameters: {
+                                  ...node.parameters,
+                                  dataset_id: event.target.value,
+                                },
+                              }
+                            : node,
+                        ),
+                      },
+                      null,
+                      2,
+                    ),
+                  )
+                }
+              >
+                <option value="">Choose a verified pose dataset</option>
+                {(poseDatasets.data ?? []).map((dataset) => (
+                  <option key={dataset.id} value={dataset.id}>
+                    {dataset.name} — {dataset.item_count} observations — schema
+                    revision {dataset.pose_schema_revision}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+          {poseDatasets.isPending && <p>Loading frozen pose datasets...</p>}
+          {poseDatasets.error && (
+            <p className="form-error">{poseDatasets.error.message}</p>
+          )}
+          {poseDatasets.data?.length === 0 && (
+            <p>
+              Review pose annotations and freeze a verified dataset in Pose
+              Tracking before training.
+            </p>
+          )}
+        </section>
+      )}
 
       <div className="panel-card" style={{ marginTop: 12 }}>
         <h4>Visual workflow editor</h4>

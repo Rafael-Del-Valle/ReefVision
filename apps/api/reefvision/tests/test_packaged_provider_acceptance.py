@@ -6,70 +6,60 @@ from pathlib import Path
 
 import pytest
 
-from reefvision.config import Settings
-from reefvision.packaged_provider_acceptance import (
-    DETECTION_CATALOG_ID,
-    _managed_asset,
-)
-from reefvision.storage.catalog_models import write_catalog_manifest_record
+from reefvision.packaged_provider_acceptance import _explicit_local_asset
 
 
-def _settings(tmp_path: Path) -> Settings:
-    return Settings(
-        env="test",
-        data_dir=tmp_path / "data",
-        database_url=f"sqlite:///{(tmp_path / 'data' / 'reefvision.db').as_posix()}",
-        web_origin="http://testserver",
-        background_worker_enabled=False,
-    )
-
-
-def test_managed_asset_requires_matching_checksum(tmp_path: Path) -> None:
-    settings = _settings(tmp_path)
-    settings.ensure_directories()
-    checkpoint = (
-        settings.resolved_data_dir
-        / "models"
-        / "catalog-models"
-        / "ultralytics"
-        / "yolo11"
-        / "detect"
-        / "n"
-        / "yolo11n.pt"
-    )
-    checkpoint.parent.mkdir(parents=True, exist_ok=True)
-    payload = b"packaged-checkpoint"
+def test_explicit_acceptance_model_requires_matching_checksum(tmp_path: Path) -> None:
+    checkpoint = tmp_path / "researcher.pt"
+    payload = b"researcher-supplied-checkpoint"
     checkpoint.write_bytes(payload)
-    relative = checkpoint.relative_to(settings.resolved_data_dir).as_posix()
-
-    write_catalog_manifest_record(
-        settings,
-        DETECTION_CATALOG_ID,
-        {
-            "filename": checkpoint.name,
-            "relative_path": relative,
-            "sha256": hashlib.sha256(payload).hexdigest(),
-            "size_bytes": len(payload),
-            "files": [
-                {
-                    "filename": checkpoint.name,
-                    "relative_path": relative,
-                    "sha256": hashlib.sha256(payload).hexdigest(),
-                    "size_bytes": len(payload),
-                }
-            ],
-        },
-    )
-
-    resolved, record = _managed_asset(settings, DETECTION_CATALOG_ID)
-
+    record = {
+        "path": str(checkpoint),
+        "files": [
+            {
+                "path": str(checkpoint),
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "size_bytes": len(payload),
+            }
+        ],
+    }
+    resolved, provenance = _explicit_local_asset({"detection": record}, "detection")
     assert resolved == checkpoint.resolve()
-    assert record["sha256"] == hashlib.sha256(payload).hexdigest()
-
+    assert provenance == record
     checkpoint.write_bytes(b"tampered")
-
     with pytest.raises(RuntimeError, match=r"size mismatch|checksum mismatch"):
-        _managed_asset(settings, DETECTION_CATALOG_ID)
+        _explicit_local_asset({"detection": record}, "detection")
+    assert checkpoint.read_bytes() == b"tampered"
+
+
+def test_acceptance_never_falls_back_to_managed_or_bundled_assets(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match="explicit local"):
+        _explicit_local_asset({}, "detection")
+    with pytest.raises(RuntimeError, match="missing"):
+        _explicit_local_asset(
+            {"detection": {"path": str(tmp_path / "missing.pt"), "files": []}}, "detection"
+        )
+
+
+def test_acceptance_refuses_unverified_file_and_directory_escape(tmp_path: Path) -> None:
+    checkpoint = tmp_path / "model.pt"
+    checkpoint.write_bytes(b"local")
+    with pytest.raises(RuntimeError, match="checksum manifest"):
+        _explicit_local_asset({"detection": {"path": str(checkpoint), "files": []}}, "detection")
+    model_dir = tmp_path / "depth"
+    model_dir.mkdir()
+    record = {
+        "path": str(model_dir),
+        "files": [
+            {
+                "path": str(checkpoint),
+                "sha256": hashlib.sha256(b"local").hexdigest(),
+                "size_bytes": 5,
+            }
+        ],
+    }
+    with pytest.raises(RuntimeError, match="outside"):
+        _explicit_local_asset({"depth": record}, "depth")
 
 
 def test_packaged_acceptance_report_filename_is_json() -> None:
@@ -77,6 +67,72 @@ def test_packaged_acceptance_report_filename_is_json() -> None:
 
     assert REPORT_FILENAME.endswith(".json")
     assert json.loads('{"status":"PASS"}')["status"] == "PASS"
+
+
+def test_packaged_provider_execution_blocks_network() -> None:
+    import socket
+
+    from reefvision.packaged_provider_acceptance import _timed_run
+
+    def attempted_download() -> dict[str, object]:
+        socket.create_connection(("example.invalid", 443))
+        return {}
+
+    result = _timed_run("cpu", attempted_download)
+    assert result["status"] == "FAIL"
+    assert result["failure_message"] == "Acceptance network blocked"
+
+
+def test_optional_depth_reports_model_required_without_loading(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import torch
+
+    from reefvision import packaged_provider_acceptance as acceptance
+    from reefvision.config import Settings
+
+    checkpoint = tmp_path / "researcher.pt"
+    checkpoint.write_bytes(b"explicit input fixture")
+    manifest = tmp_path / "inputs.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "models": {
+                    "detection": {
+                        "path": str(checkpoint),
+                        "files": [
+                            {
+                                "path": str(checkpoint),
+                                "size_bytes": checkpoint.stat().st_size,
+                                "sha256": hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
+                            }
+                        ],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("REEFVISION_ACCEPTANCE_MODEL_MANIFEST", str(manifest))
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+
+    def detection(path: Path, image: Path, device: str) -> dict[str, object]:
+        assert path == checkpoint and image.exists() and device == "cpu"
+        return {"status": "PASS", "device_actually_used": "cpu"}
+
+    def unexpected_depth(*args: object) -> dict[str, object]:
+        pytest.fail("Optional depth model must not be loaded or acquired when absent")
+
+    monkeypatch.setattr(acceptance, "_detection_run", detection)
+    monkeypatch.setattr(acceptance, "_depth_run", unexpected_depth)
+    settings = Settings(env="test", data_dir=tmp_path / "fresh-profile")
+    assert acceptance.run_packaged_provider_acceptance(settings) == 0
+    report = json.loads((settings.resolved_data_dir / acceptance.REPORT_FILENAME).read_text())
+    assert report["optional_depth_tested"] is False
+    assert report["results"]["depth_anything_v2_cpu"]["status"] == "MODEL_REQUIRED"
+    assert "depth_anything_v2_cpu" not in report["required_results"]
+    assert report["model_inputs"]["detection"]["path"] == str(checkpoint)
+    assert not list(settings.resolved_data_dir.rglob("*.pt"))
 
 
 def test_desktop_packaging_requires_compiled_pydantic_core() -> None:

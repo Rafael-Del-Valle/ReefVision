@@ -81,6 +81,20 @@ describe("ReefVisionAssistant", () => {
     });
   });
 
+  it("explains local registration when image interpretation has no model", async () => {
+    vi.mocked(getProjectModelCatalog).mockResolvedValue({
+      models: [],
+    } as never);
+    renderAssistant();
+    fireEvent.click(screen.getByRole("button", { name: "Ask ReefVision" }));
+    expect(
+      await screen.findByText(
+        /Model required — register a compatible SmolVLM model/,
+      ),
+    ).toBeInTheDocument();
+    expect(executeAdvancedProvider).not.toHaveBeenCalled();
+  });
+
   it("provides deterministic navigation without invoking a model", async () => {
     const onNavigate = renderAssistant();
 

@@ -328,8 +328,11 @@ def test_training_job_processing_creates_completed_run_and_experiment(
         "reefvision.jobs.training.configure_provider_runtime", lambda settings: None
     )
     monkeypatch.setattr(
+        "reefvision.jobs.training.configure_local_training_runtime", lambda settings: None
+    )
+    monkeypatch.setattr(
         "reefvision.jobs.training._resolve_model_source",
-        lambda settings, session, run: "yolo11x.pt",
+        lambda settings, session, run: "yolo11x.yaml",
     )
 
     fake_ultralytics = ModuleType("ultralytics")
@@ -345,7 +348,7 @@ def test_training_job_processing_creates_completed_run_and_experiment(
 
         def train(self, **kwargs) -> None:
             assert kwargs["device"] == device
-            assert kwargs["amp"] == (precision == "amp")
+            assert kwargs["amp"] is False
             assert (kwargs["epochs"], kwargs["batch"], kwargs["imgsz"]) == (2, 2, 64)
             if sys.platform == "win32":
                 assert kwargs["workers"] == 0

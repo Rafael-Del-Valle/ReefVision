@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 TrainingCheckpointSource = Literal["scratch", "registered_model", "managed_catalog"]
 TrainingPreflightStatus = Literal["ready", "ready_with_warnings", "blocked"]
@@ -18,7 +18,34 @@ def _strip(value: str | None) -> str | None:
     return stripped or None
 
 
-class TrainingDraftWriteRequest(BaseModel):
+class TrainingInitializationRequest(BaseModel):
+    initialization_mode: Literal["random", "registered_model"] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reconcile_initialization(cls, value: Any) -> Any:
+        if not isinstance(value, dict) or value.get("initialization_mode") is None:
+            return value
+        data = dict(value)
+        mode = data["initialization_mode"]
+        source = "scratch" if mode == "random" else "registered_model"
+        if data.get("initial_checkpoint_source") not in {None, source}:
+            raise ValueError("initialization_mode conflicts with initial_checkpoint_source")
+        if mode == "random" and data.get("initial_checkpoint_model_id"):
+            raise ValueError("random initialization cannot use an initial checkpoint model")
+        data["initial_checkpoint_source"] = source
+        return data
+
+
+class TrainingInitializationResponse(BaseModel):
+    initial_checkpoint_source: str
+
+    @computed_field
+    def initialization_mode(self) -> str:
+        return "random" if self.initial_checkpoint_source == "scratch" else "registered_model"
+
+
+class TrainingDraftWriteRequest(TrainingInitializationRequest):
     name: str = Field(min_length=1, max_length=200)
     run_name: str | None = Field(default=None, max_length=200)
     notes: str | None = Field(default=None, max_length=5000)
@@ -53,7 +80,7 @@ class TrainingDraftWriteRequest(BaseModel):
         return _strip(value) if isinstance(value, str) or value is None else value
 
 
-class TrainingDraftPatchRequest(BaseModel):
+class TrainingDraftPatchRequest(TrainingInitializationRequest):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     run_name: str | None = Field(default=None, max_length=200)
     notes: str | None = Field(default=None, max_length=5000)
@@ -142,7 +169,7 @@ class TrainingPreflightResponse(BaseModel):
     provider_dependency_status: dict[str, Any]
 
 
-class TrainingDraftResponse(BaseModel):
+class TrainingDraftResponse(TrainingInitializationResponse):
     id: str
     project_id: str
     name: str
@@ -175,7 +202,7 @@ class TrainingDraftResponse(BaseModel):
     updated_at: datetime
 
 
-class TrainingDraftSummaryResponse(BaseModel):
+class TrainingDraftSummaryResponse(TrainingInitializationResponse):
     id: str
     project_id: str
     name: str
@@ -197,7 +224,7 @@ class TrainingRunCreateRequest(BaseModel):
     draft_id: str = Field(min_length=1, max_length=36)
 
 
-class TrainingRunResponse(BaseModel):
+class TrainingRunResponse(TrainingInitializationResponse):
     id: str
     project_id: str
     draft_id: str | None
