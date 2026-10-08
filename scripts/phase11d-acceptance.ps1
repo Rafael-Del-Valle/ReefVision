@@ -150,9 +150,11 @@ function Save-Summary {
 Save-Summary
 
 function New-ExplicitModelRecord([string]$ModelPath) {
-    $Files = if (Test-Path -LiteralPath $ModelPath -PathType Container) {
-        @(Get-ChildItem -LiteralPath $ModelPath -Recurse -File)
-    } else { @(Get-Item -LiteralPath $ModelPath) }
+    $Files = @(if (Test-Path -LiteralPath $ModelPath -PathType Container) {
+        Get-ChildItem -LiteralPath $ModelPath -Recurse -File
+    } else {
+        Get-Item -LiteralPath $ModelPath
+    })
     if ($Files.Count -eq 0) { throw "Explicit model directory is empty: $ModelPath" }
     return [ordered]@{
         path = $ModelPath
