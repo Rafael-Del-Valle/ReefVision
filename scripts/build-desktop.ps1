@@ -9,8 +9,21 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
+function Test-ReefVisionSourceTreeClean {
+    git diff --quiet --ignore-submodules --
+    if ($LASTEXITCODE -ne 0) { return $false }
+
+    git diff --cached --quiet --ignore-submodules --
+    if ($LASTEXITCODE -ne 0) { return $false }
+
+    $Untracked = @(git ls-files --others --exclude-standard)
+    if ($LASTEXITCODE -ne 0 -or $Untracked.Count -gt 0) { return $false }
+
+    return $true
+}
+
 $BuildCommit = (git rev-parse HEAD)
-if ($LASTEXITCODE -ne 0 -or (git status --porcelain)) {
+if ($LASTEXITCODE -ne 0 -or -not (Test-ReefVisionSourceTreeClean)) {
     throw 'Production installers must be built from a clean committed source tree.'
 }
 
@@ -269,7 +282,7 @@ else {
     Write-Warning "MSI verification was explicitly skipped. This build is not release-validated."
 }
 
-if ((git rev-parse HEAD) -ne $BuildCommit -or (git status --porcelain)) {
+if ((git rev-parse HEAD) -ne $BuildCommit -or -not (Test-ReefVisionSourceTreeClean)) {
     throw 'Source tree changed while packaging; do not release these artifacts.'
 }
 $BuildArtifactRecords = @(Get-ChildItem -LiteralPath $InstallerDirectory -File |
