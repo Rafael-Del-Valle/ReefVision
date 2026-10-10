@@ -48,6 +48,10 @@ jobs:
         shell: pwsh
         run: ./scripts/bootstrap.ps1 -NonInteractive -SkipPlaywrightBrowser
 
+      - name: Stage pinned Video Depth Anything source for packaging
+        shell: pwsh
+        run: ./.venv/Scripts/python.exe scripts/install-video-depth-anything-source.py
+
       - name: Run focused backend tests
         shell: pwsh
         run: >-
