@@ -1476,6 +1476,52 @@ export function AnnotationEditor({
         return;
       }
 
+      // Shift+Digit1/2 are editor actions, while plain 1–9 still choose classes.
+      if (event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey &&
+          event.code === "Digit1") {
+        event.preventDefault();
+        if (samAssistMutation.isPending || samInstallMutation.isPending || samPendingBox) {
+          setShortcutMessage("SAM is still processing or downloading.");
+          return;
+        }
+        const selectedBox = state.document.annotations.find(
+          (annotation) => state.selectedIds.includes(annotation.id),
+        );
+        if (selectedBox) {
+          setShortcutMessage("Running SAM on the selected box...");
+          samAssistMutation.mutate({
+            imageId: currentImageId,
+            variant: samModelVariant,
+            box: [
+              selectedBox.x_min,
+              selectedBox.y_min,
+              selectedBox.x_max,
+              selectedBox.y_max,
+            ],
+          });
+        } else {
+          setSamPromptArmed(true);
+          setShortcutMessage("SAM prompt mode: draw a box around an object.");
+        }
+        return;
+      }
+      if (event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey &&
+          event.code === "Digit2") {
+        event.preventDefault();
+        if (!deployModelId) {
+          setShortcutMessage("Select or register a trained model to predict this image.");
+        } else if (deployModelMutation.isPending ||
+                   deployJobQuery.data?.status === "queued" ||
+                   deployJobQuery.data?.status === "running") {
+          setShortcutMessage("Model predictions are already running.");
+        } else {
+          setShortcutMessage("Running model predictions on the current image...");
+          setShowPredictions(true);
+          deployModelMutation.mutate();
+        }
+        return;
+      }
+
       const numberIndex =
         event.key.length === 1 ? Number.parseInt(event.key, 10) : Number.NaN;
       if (
@@ -1571,6 +1617,16 @@ export function AnnotationEditor({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     applyClassToSelection,
+    currentImageId,
+    deployModelId,
+    deployModelMutation,
+    deployJobQuery.data?.status,
+    samAssistMutation,
+    samInstallMutation.isPending,
+    samPendingBox,
+    samModelVariant,
+    state.document.annotations,
+    state.selectedIds,
     deleteSelection,
     fitToScreen,
     flushPendingSave,
@@ -2058,6 +2114,39 @@ export function AnnotationEditor({
             title="Open a floating low-confidence prediction reviewer"
           >
             Quick review (≤{quickReviewConfidence}%)
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={samAssistMutation.isPending || samInstallMutation.isPending}
+            title="Segment the selected box, or draw a SAM prompt box (Shift+1)"
+            onClick={() => {
+              const box = state.document.annotations.find(
+                (annotation) => state.selectedIds.includes(annotation.id),
+              );
+              if (box) runSamOnBox(box);
+              else {
+                setSamPromptArmed(true);
+                setShortcutMessage("SAM prompt mode: draw a box around an object.");
+              }
+            }}
+          >
+            SAM segment (Shift+1)
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={!deployModelId || deployModelMutation.isPending ||
+              deployJobQuery.data?.status === "queued" ||
+              deployJobQuery.data?.status === "running"}
+            title="Run the current trained model on this image (Shift+2)"
+            onClick={() => {
+              setShortcutMessage("Running model predictions on this image...");
+              setShowPredictions(true);
+              deployModelMutation.mutate();
+            }}
+          >
+            Predict image (Shift+2)
           </button>
           <button
             type="button"
@@ -3110,9 +3199,39 @@ export function AnnotationEditor({
               Next image (D)
             </button>
             <span>{dirty ? "Autosave pending" : "All changes synced"}</span>
+          {shortcutMessage && <span role="status">{shortcutMessage}</span>}
+          {samAssistMutation.error && (
+            <span role="alert">{samAssistMutation.error.message}</span>
+          )}
+          {samInstallMutation.error && (
+            <span role="alert">{samInstallMutation.error.message}</span>
+          )}
+          <label>
+            SAM 2.1 model
+            <select
+              aria-label="SAM 2.1 model for editor shortcuts"
+              value={samModelVariant}
+              onChange={(event) => {
+                setSamModelVariant(event.target.value);
+                setSamPendingBox(null);
+                setSamInstallJobId(null);
+              }}
+            >
+              <option value="tiny">Tiny</option>
+              <option value="small">Small</option>
+              <option value="base-plus">Base+</option>
+              <option value="large">Large</option>
+            </select>
+          </label>
           </div>
 
           <div className="annotation-canvas-frame" ref={viewportRef}>
+            {samPromptArmed && (
+              <p className="annotation-helper" role="status">
+                SAM prompt ready: drag a bounding box around the object. Shift+1
+                on an existing selected box segments it immediately.
+              </p>
+            )}
             <svg
               ref={svgRef}
               className={`annotation-canvas tool-${state.tool}`}
