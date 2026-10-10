@@ -1915,6 +1915,14 @@ export function AnnotationEditor({
           <button
             type="button"
             className="secondary"
+            onClick={() => setQuickReviewOpen(true)}
+            title="Open a floating low-confidence prediction reviewer"
+          >
+            Quick review ({Math.round(Number(quickReviewConfidence) * 100)}%)
+          </button>
+          <button
+            type="button"
+            className="secondary"
             onClick={() => void saveNow()}
           >
             Save now
