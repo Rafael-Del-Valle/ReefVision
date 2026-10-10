@@ -107,7 +107,7 @@ describe("QuickConfidenceReviewDialog", () => {
       counts_by_class: [],
       previous_image_id: null,
       next_image_id: null,
-    } as Awaited<ReturnType<typeof getAnnotationSession>>);
+    } as unknown as Awaited<ReturnType<typeof getAnnotationSession>>);
     vi.mocked(getPredictions).mockResolvedValue({
       items: [
         proposal("low", 0.4),
