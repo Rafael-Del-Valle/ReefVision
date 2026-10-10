@@ -134,6 +134,19 @@ describe("QuickConfidenceReviewDialog", () => {
     expect(acceptPrediction).not.toHaveBeenCalledWith("high", expect.anything());
   });
 
+  it("allows a researcher to accept and create an unmapped .pt class", async () => {
+    vi.mocked(getPredictions).mockResolvedValue({
+      items: [{ ...proposal("unmapped", 0.3), label_class_id: null, predicted_label: "New coral" }],
+      counts: { pending: 1 },
+    });
+    renderDialog();
+    await screen.findByRole("button", { name: "Accept and create class" });
+    fireEvent.click(screen.getByRole("button", { name: "Accept and create class" }));
+    await waitFor(() => {
+      expect(acceptPrediction).toHaveBeenCalledWith("unmapped", {});
+    });
+  });
+
   it("has navigation and a close action without leaving the page", async () => {
     const { onClose, onNextImage } = renderDialog();
     await screen.findByRole("dialog");
