@@ -76,8 +76,8 @@ def convert_coco(
             warnings.append(f"COCO annotation #{index}: invalid record")
             continue
         image_name = images.get(int(raw.get("image_id", -1)))
-        label = categories.get(int(raw.get("category_id", -1)))
-        if image_name is None or label is None:
+        annotation_label = categories.get(int(raw.get("category_id", -1)))
+        if image_name is None or annotation_label is None:
             warnings.append(f"COCO annotation #{index}: unknown image/category ID")
             continue
         record: dict[str, Any] = {
