@@ -40,6 +40,6 @@ def test_low_confidence_queue_excludes_images_without_pending_model_proposals(
     assert [item["image_id"] for item in ungated_items.json()["items"]] == [image_id]
 
     regenerated = client.post(f"/api/v1/review-queues/{queue['id']}/regenerate")
-    assert regenerated.status_code == 201, regenerated.text
+    assert regenerated.status_code == 200, regenerated.text
     assert regenerated.json()["configuration_json"]["review_below_confidence"] == 0.5
     assert regenerated.json()["item_count"] == 0
