@@ -476,9 +476,17 @@ export function ModelManager({
       setFile(null);
       setDisplayName("");
       setNotes("");
-      await queryClient.invalidateQueries({
-        queryKey: ["model_hub_bootstrap", project.id],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["model_hub_bootstrap", project.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["project", project.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["projects"],
+        }),
+      ]);
     },
   });
 
