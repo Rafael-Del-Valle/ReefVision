@@ -39,8 +39,11 @@ Invoke-Required "Fetch the 1.0.1 development branch" {
 }
 $CurrentBranch = (git branch --show-current).Trim()
 if ($CurrentBranch -ne $Branch) {
-    & git switch $Branch 2>$null
-    if ($LASTEXITCODE -ne 0) {
+    $LocalBranch = @(git branch --list $Branch)
+    if ($LocalBranch.Count -gt 0) {
+        Invoke-Required "Switch to existing 1.0.1 branch" { git switch $Branch }
+    }
+    else {
         Invoke-Required "Create local tracking branch" {
             git switch --track -c $Branch "origin/$Branch"
         }
@@ -73,10 +76,13 @@ try {
     Invoke-Required "Install exact frontend dependencies" {
         & npm --prefix apps/web ci
     }
+    Invoke-Required "Apply Python Ruff formatting" {
+        & $Python -m ruff format apps/api
+    }
     Invoke-Required "Apply Python Ruff automatic fixes" {
         & $Python -m ruff check apps/api --fix
     }
-    Invoke-Required "Apply Python Ruff formatting" {
+    Invoke-Required "Finalize Python Ruff formatting" {
         & $Python -m ruff format apps/api
     }
     Invoke-Required "Apply frontend Prettier formatting" {
@@ -150,7 +156,7 @@ try {
 catch {
     Write-Host "Validation/build failed: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host "Copy the last 80 log lines to ChatGPT:"
-    Write-Host "  Get-Content -LiteralPath \"$Log\" -Tail 80"
+    Write-Host ('  Get-Content -LiteralPath "' + $Log + '" -Tail 80')
     throw
 }
 finally {
