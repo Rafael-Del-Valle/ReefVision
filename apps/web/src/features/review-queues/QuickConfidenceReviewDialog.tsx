@@ -53,6 +53,9 @@ export function QuickConfidenceReviewDialog({
 }: QuickConfidenceReviewDialogProps) {
   const queryClient = useQueryClient();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
   const [classOverrides, setClassOverrides] = useState<Record<string, string>>({});
 
@@ -67,7 +70,25 @@ export function QuickConfidenceReviewDialog({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        event.stopPropagation();
+        onCloseRef.current();
+      } else if (event.key === "Tab" && dialogRef.current) {
+        const focusable = Array.from(
+          dialogRef.current.querySelectorAll<HTMLElement>(
+            "button:not(:disabled), input:not(:disabled), select:not(:disabled), " +
+            "textarea:not(:disabled), [tabindex]:not([tabindex='-1'])",
+          ),
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
       }
     };
     document.addEventListener("keydown", onKeyDown);
@@ -75,7 +96,7 @@ export function QuickConfidenceReviewDialog({
       document.removeEventListener("keydown", onKeyDown);
       if (previousFocus instanceof HTMLElement) previousFocus.focus();
     };
-  }, [onClose]);
+  }, []);
 
   const imageQuery = useQuery({
     queryKey: ["annotations", item.image_id, "quick-review"],
@@ -130,6 +151,7 @@ export function QuickConfidenceReviewDialog({
   return createPortal(
     <div className="rv-quick-review-backdrop" role="presentation">
       <section
+        ref={dialogRef}
         className="rv-quick-review-dialog"
         role="dialog"
         aria-modal="true"
