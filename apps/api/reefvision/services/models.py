@@ -151,6 +151,7 @@ class ModelService:
                         "predictions still require explicit acceptance."
                     ),
                     display_color=colors[next_index % len(colors)],
+                    is_active=True,
                 )
                 self.session.add(label_class)
                 by_name[key] = label_class
