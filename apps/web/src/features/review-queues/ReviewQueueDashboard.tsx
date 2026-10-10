@@ -551,7 +551,7 @@ export function ReviewQueueDashboard({
                       className="secondary"
                       onClick={() => onOpenImage(item)}
                     >
-                      Open full editor
+                      Open image
                     </button>
                     {item.review_state === "pending" && (
                       <button
