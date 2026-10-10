@@ -1,0 +1,75 @@
+name: ReefVision 1.0.1 Format Fix
+on:
+  push:
+    branches:
+      - feat/reefvision-1.0.1-sam-class-review-import-20261010
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reefvision-101-format-fix
+  cancel-in-progress: false
+
+jobs:
+  apply-format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/reefvision-1.0.1-sam-class-review-import-20261010
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install formatters
+        run: python -m pip install 'ruff>=0.9,<1'
+      - name: Install pinned frontend dependencies
+        working-directory: apps/web
+        run: npm ci
+      - name: Format Python source and safe lint
+        run: |
+          python -m ruff format apps/api
+          python -m ruff check apps/api --fix
+          python -m ruff format apps/api
+          python -m ruff check apps/api
+          python -m ruff format --check apps/api
+      - name: Format modified frontend
+        working-directory: apps/web
+        run: |
+          npx prettier --write \
+            src/features/annotation-editor/AnnotationEditor.tsx \
+            src/features/annotation-editor/AnnotationEditor.test.tsx \
+            src/features/review-queues/QuickConfidenceReviewDialog.tsx \
+            src/features/review-queues/QuickConfidenceReviewDialog.test.tsx \
+            src/features/review-queues/quickConfidenceReview.css \
+            src/features/review-queues/ReviewQueueDashboard.tsx \
+            src/features/advanced-providers/AdvancedProviderWorkspace.tsx \
+            src/features/advanced-providers/advancedProvidersApi.ts \
+            src/features/models/ModelManager.tsx \
+            src/features/gallery/AnnotationImportControls.tsx \
+            src/api/client.ts \
+            src/App.tsx
+          npm run format:check
+      - name: Commit branch-only mechanical formatter changes
+        env:
+          BRANCH_NAME: feat/reefvision-1.0.1-sam-class-review-import-20261010
+        run: |
+          git diff --check
+          git add apps/api apps/web
+          if ! git diff --cached --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "style(1.0.1): apply Ruff and Prettier to patch source"
+            git push origin "HEAD:$BRANCH_NAME"
+          else
+            echo "Patch is already formatted."
+          fi
