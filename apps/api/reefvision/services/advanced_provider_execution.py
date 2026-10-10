@@ -325,6 +325,10 @@ class AdvancedProviderExecutionService:
             score=score,
             box=proposal_box,
             prompt_fields=dict(request.prompt_fields),
+            source_repo_id=variant_repo(variant),
+            source_revision=str(installed["revision"]),
+            source_checksum=str(installed["weight_sha256"]),
+            source_variant=variant,
         )
         return AdvancedProviderExecutionResponse(
             provider_id="sam2",
