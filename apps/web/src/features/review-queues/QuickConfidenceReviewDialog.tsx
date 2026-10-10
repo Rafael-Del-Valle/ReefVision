@@ -14,16 +14,17 @@ import {
 import "./quickConfidenceReview.css";
 
 interface QuickConfidenceReviewDialogProps {
-  item: ReviewQueueItem;
+  item: Pick<ReviewQueueItem, "image_id" | "project_id" | "review_queue_id" | "review_state">;
   reviewBelowConfidence: number | null;
   position: number;
   total: number;
   onClose: () => void;
   onPreviousImage: () => void;
   onNextImage: () => void;
-  onOpenFullEditor: () => void;
-  onMarkComplete: () => void;
-  markingComplete: boolean;
+  onOpenFullEditor?: () => void;
+  onMarkComplete?: () => void;
+  onReviewSaved?: () => void;
+  markingComplete?: boolean;
 }
 
 function eligibleProposals(
@@ -47,7 +48,8 @@ export function QuickConfidenceReviewDialog({
   onNextImage,
   onOpenFullEditor,
   onMarkComplete,
-  markingComplete,
+  onReviewSaved,
+  markingComplete = false,
 }: QuickConfidenceReviewDialogProps) {
   const queryClient = useQueryClient();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -121,6 +123,7 @@ export function QuickConfidenceReviewDialog({
         queryClient.invalidateQueries({ queryKey: ["review_queue_items", item.review_queue_id] }),
         queryClient.invalidateQueries({ queryKey: ["images", item.project_id] }),
       ]);
+      onReviewSaved?.();
     },
   });
 
@@ -204,9 +207,11 @@ export function QuickConfidenceReviewDialog({
               The overlay previews prediction geometry. For detailed edits,
               overlapping objects, or raster masks, use the full annotation editor.
             </p>
-            <button type="button" onClick={onOpenFullEditor}>
-              Open full annotation editor
-            </button>
+            {onOpenFullEditor && (
+              <button type="button" onClick={onOpenFullEditor}>
+                Open full annotation editor
+              </button>
+            )}
           </div>
           <div className="rv-quick-review-decision-column">
             <h4>Pending predictions</h4>
@@ -326,13 +331,20 @@ export function QuickConfidenceReviewDialog({
               Next image
             </button>
           </div>
-          <button
-            type="button"
-            disabled={proposals.length > 0 || predictionsQuery.isPending || markingComplete}
-            onClick={onMarkComplete}
-          >
-            {markingComplete ? "Saving…" : "Mark image review complete"}
-          </button>
+          {onMarkComplete && (
+            <button
+              type="button"
+              disabled={
+                proposals.length > 0 ||
+                predictionsQuery.isPending ||
+                Boolean(predictionsQuery.error) ||
+                markingComplete
+              }
+              onClick={onMarkComplete}
+            >
+              {markingComplete ? "Saving…" : "Mark image review complete"}
+            </button>
+          )}
         </footer>
       </section>
     </div>,
