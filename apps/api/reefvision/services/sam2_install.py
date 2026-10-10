@@ -69,6 +69,7 @@ def sam2_status(settings: Settings, variant: str) -> dict[str, Any]:
         "repo_id": repo_id,
         "license_summary": LICENSE,
         "ready": False,
+        "installed": False,
         "revision": None,
         "weight_sha256": None,
         "path": None,
@@ -95,14 +96,14 @@ def sam2_status(settings: Settings, variant: str) -> dict[str, Any]:
                 raise ValueError(f"Missing or modified file: {filename}")
         from importlib.util import find_spec
 
-        if find_spec("transformers") is None or find_spec("torch") is None:
-            raise ValueError("Optional Transformers/PyTorch runtime is unavailable")
+        runtime_ready = find_spec("transformers") is not None and find_spec("torch") is not None
         result.update(
-            ready=True,
+            installed=True,
+            ready=runtime_ready,
             revision=revision,
             weight_sha256=files["model.safetensors"],
             path=str(target),
-            reason=None,
+            reason=None if runtime_ready else "Checkpoint installed, but Transformers/PyTorch runtime is unavailable.",
         )
     except (OSError, ValueError, TypeError, ImportError) as exc:
         result["reason"] = f"Checkpoint is not ready: {exc}"
@@ -126,7 +127,7 @@ def queue_sam2_install(session: Session, project_id: str, variant: str) -> Job:
         project_id=project_id,
         job_type="sam2_install",
         status="queued",
-        request_json={"variant": variant, "repo_id": variant_repo(variant), "user_approved": True},
+        request_json={"variant": variant, "repo_id": variant_repo(variant), "auto_install_on_model_selection": True},
         progress_current=0,
         progress_total=0,
         result_json={"stage": "queued"},
@@ -156,9 +157,9 @@ def process_sam2_install(
         data = job.request_json or {}
         variant = str(data.get("variant", ""))
         repo_id = variant_repo(variant)
-        if data.get("user_approved") is not True or data.get("repo_id") != repo_id:
+        if data.get("repo_id") != repo_id:
             job.status = "failed"
-            job.error_message = "SAM 2.1 install requires explicit approval and a listed repository"
+            job.error_message = "SAM 2.1 install requires an allowlisted repository"
             job.completed_at = datetime.now(UTC)
             session.commit()
             return True
@@ -232,7 +233,7 @@ def process_sam2_install(
         )
         # Preserve existing installations until a complete staged download exists.
         if target.exists():
-            if sam2_status(settings, variant)["ready"]:
+            if sam2_status(settings, variant)["installed"]:
                 shutil.rmtree(stage)
                 stage = target
             else:
