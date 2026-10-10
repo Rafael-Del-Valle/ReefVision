@@ -215,7 +215,7 @@ class ReviewQueueService:
                 if item.review_status == "pending"
                 and (
                     request.review_below_confidence is None
-                    or item.confidence < request.review_below_confidence
+                    or item.confidence <= request.review_below_confidence
                 )
             ]
             # Explicit confidence gating is a review-selection rule, not a
