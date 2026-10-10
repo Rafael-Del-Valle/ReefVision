@@ -22,6 +22,7 @@ from reefvision.ml.optional_transformers_runtime import (
     resolve_torch_device,
 )
 from reefvision.ml.providers import mask_to_box
+from reefvision.services.sam2_install import sam2_status, variant_repo
 from reefvision.repositories.images import ImageRepository
 from reefvision.schemas.advanced_provider_execution import (
     AdvancedProviderExecutionRequest,
@@ -229,8 +230,8 @@ class AdvancedProviderExecutionService:
         return AdvancedProviderExecutionResponse(
             provider_id="grounding_dino",
             task=request.task,
-            model_id=spec.repo_id,
-            model_revision=spec.revision,
+            model_id=variant_repo(variant),
+            model_revision=str(installed["revision"]),
             result={
                 "image_id": image_id,
                 "detections": persisted_detections,
@@ -254,11 +255,12 @@ class AdvancedProviderExecutionService:
         _, image = _image(
             self.session, self.settings, project_id, request.prompt_fields.get("image_id")
         )
-        model_path = ensure_optional_model(
-            self.settings,
-            "sam2",
-            allow_download=request.allow_model_download,
-        )
+        variant = str(request.prompt_fields.get("sam2_variant", "small"))
+        variant_repo(variant)
+        installed = sam2_status(self.settings, variant)
+        if not installed["ready"]:
+            raise ValidationError(str(installed["reason"]))
+        model_path = Path(str(installed["path"]))
         try:
             import numpy as np
             import torch
@@ -304,7 +306,6 @@ class AdvancedProviderExecutionService:
         score = 0.0
         if getattr(outputs, "iou_scores", None) is not None:
             score = float(outputs.iou_scores.detach().cpu().reshape(-1)[0].item())
-        spec = OPTIONAL_MODEL_SPECS["sam2"]
         image_id = str(request.prompt_fields.get("image_id") or "")
         mask_png_base64 = _mask_png_base64(mask)
         proposal_box = {
