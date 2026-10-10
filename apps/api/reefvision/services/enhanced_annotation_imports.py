@@ -5,7 +5,9 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+from collections import defaultdict
 from contextlib import suppress
+from pathlib import PureWindowsPath
 from io import BytesIO
 from typing import Any, BinaryIO
 
@@ -26,6 +28,12 @@ from reefvision.domain.errors import ValidationError
 from reefvision.schemas.annotation_imports import AnnotationImportIssue, AnnotationImportResponse
 from reefvision.schemas.annotations import MaskAnnotationDraft, PolygonPoint
 from reefvision.services.annotation_imports import AnnotationImportService
+from reefvision.services.annotation_format_adapters import (
+    convert_coco,
+    convert_yolo,
+    is_coco,
+    yolo_names,
+)
 from reefvision.services.annotations import mask_annotation_snapshot
 from reefvision.storage.masks import write_mask_png
 
@@ -393,6 +401,43 @@ class EnhancedAnnotationImportService(AnnotationImportService):
             metadata["label_long_code"] = short_code
         return metadata
 
+    @classmethod
+    def _decode_external_coco_rle(cls, segmentation: object) -> Image.Image:
+        if not isinstance(segmentation, dict):
+            raise ValidationError("COCO RLE mask must be an object")
+        size = segmentation.get("size")
+        if not isinstance(size, list) or len(size) != 2:
+            raise ValidationError("COCO RLE requires [height,width]")
+        height, width = int(size[0]), int(size[1])
+        if height <= 0 or width <= 0:
+            raise ValidationError("COCO RLE dimensions must be positive")
+        counts = segmentation.get("counts")
+        if isinstance(counts, str):
+            # Standard COCO encoded RLE is ASCII. The legacy CoralNet decoder
+            # accepts base64-wrapped COCO bytes; convert the representation.
+            return cls._decode_rle_image({
+                "size": [height, width],
+                "counts": base64.b64encode(counts.encode("ascii")).decode("ascii"),
+            })
+        if isinstance(counts, list):
+            raster = bytearray(height * width)
+            offset = 0
+            for index, raw_length in enumerate(counts):
+                if not isinstance(raw_length, int) or raw_length < 0:
+                    raise ValidationError("COCO run lengths must be nonnegative integers")
+                end = offset + raw_length
+                if end > len(raster):
+                    raise ValidationError("COCO RLE exceeds the declared dimensions")
+                if index % 2:
+                    raster[offset:end] = b"\\xff" * raw_length
+                offset = end
+            if offset != len(raster):
+                raise ValidationError("COCO RLE does not fill the declared dimensions")
+            return Image.frombytes(
+                "L", (height, width), bytes(raster)
+            ).transpose(Image.Transpose.TRANSPOSE)
+        raise ValidationError("COCO RLE counts must be an ASCII string or integer list")
+
     def import_streams(
         self,
         project_id: str,
@@ -401,6 +446,40 @@ class EnhancedAnnotationImportService(AnnotationImportService):
         buffered: list[tuple[str, bytes]] = []
         for raw_filename, stream in uploads:
             buffered.append((str(raw_filename or "annotations.json"), self._stream_bytes(stream)))
+
+        # Resolve YOLO data.yaml even when uploaded after .txt files.
+        names_by_index: dict[int, str] = {}
+        for filename, data in buffered:
+            if filename.casefold().endswith((".txt",)):
+                if not names_by_index:
+                    import_warnings.append(AnnotationImportIssue(
+                        source_file=filename,
+                        detail="YOLO TXT requires a companion data.yaml with class names",
+                    ))
+                    continue
+                converted, warnings = convert_yolo(
+                    filename, data.decode("utf-8-sig"), names_by_index, known_images
+                )
+                import_warnings.extend(
+                    AnnotationImportIssue(source_file=filename, detail=warning)
+                    for warning in warnings
+                )
+                base_uploads.append((
+                    filename + ".json",
+                    BytesIO(json.dumps(converted).encode("utf-8")),
+                ))
+                continue
+            if filename.casefold().endswith((".yaml", ".yml")):
+                try:
+                    names_by_index.update(yolo_names(yaml.safe_load(data)))
+                except (ValueError, TypeError, yaml.YAMLError):
+                    pass
+        known_images: dict[str, list[tuple[str, int, int]]] = defaultdict(list)
+        for item in self.session.scalars(
+            select(ImageAsset).where(ImageAsset.project_id == project_id)
+        ):
+            stem = PureWindowsPath(item.original_filename).stem.casefold()
+            known_images[stem].append((item.original_filename, item.width_px, item.height_px))
 
         before_revisions = {
             image.id: image.annotation_revision
@@ -411,6 +490,9 @@ class EnhancedAnnotationImportService(AnnotationImportService):
         class_mapping: dict[str, dict[str, Any]] = {}
         dataset_indices: dict[str, int] = {}
         semantic_annotations: list[tuple[str, str, dict[str, Any]]] = []
+        coco_rle_annotations: list[tuple[str, str, str, dict[str, Any]]] = []
+        import_warnings: list[AnnotationImportIssue] = []
+        external_class_names: set[str] = set(names_by_index.values())
         base_uploads: list[tuple[str | None, BinaryIO]] = []
 
         for filename, data in buffered:
@@ -423,6 +505,23 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                 payload = self._as_mapping(json.loads(data.decode("utf-8-sig")))
             except (UnicodeDecodeError, json.JSONDecodeError):
                 payload = None
+            if payload is not None and is_coco(payload):
+                converted, mapping, warnings, rle_masks = convert_coco(payload, filename)
+                class_mapping.update(mapping)
+                external_class_names.update(mapping)
+                coco_rle_annotations.extend(
+                    (filename, image_ref, label, annotation)
+                    for image_ref, label, annotation in rle_masks
+                )
+                import_warnings.extend(
+                    AnnotationImportIssue(source_file=filename, detail=warning)
+                    for warning in warnings
+                )
+                base_uploads.append((
+                    filename + ".converted.json",
+                    BytesIO(json.dumps(converted).encode("utf-8")),
+                ))
+                continue
             if payload is not None and self._looks_like_class_mapping(payload):
                 class_mapping.update(
                     {str(key): value for key, value in payload.items() if isinstance(value, dict)}
@@ -447,9 +546,43 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                 continue
             base_uploads.append((filename, BytesIO(data)))
 
+        if class_mapping:
+            base_uploads.append((
+                ".reefvision-external-class-mapping.json",
+                BytesIO(json.dumps(class_mapping).encode("utf-8")),
+            ))
         report = super().import_streams(project_id, base_uploads)
-        if not semantic_annotations:
-            return report
+
+        # Transfer class catalogs even when some classes have zero annotations.
+        project = self._project(project_id)
+        project_classes = list(project.label_classes)
+        precreated_class_ids: set[str] = set()
+        catalog_matched: set[str] = set()
+        for label in sorted(external_class_names):
+            if not label or not label.strip():
+                continue
+            self._ensure_class(
+                project_id=project_id,
+                annotation={
+                    "label_short_code": label,
+                    "label_long_code": label,
+                    "label_id": class_mapping.get(label, {}).get("id"),
+                },
+                class_mapping=class_mapping,
+                dataset_indices=dataset_indices,
+                project_classes=project_classes,
+                matched_class_ids=catalog_matched,
+                created_class_ids=precreated_class_ids,
+            )
+        if precreated_class_ids:
+            self.session.commit()
+
+        if not semantic_annotations and not coco_rle_annotations:
+            return report.model_copy(update={
+                "files_processed": len(buffered),
+                "classes_created": report.classes_created + len(precreated_class_ids),
+                "issues": [*report.issues, *import_warnings],
+            })
 
         project = self._project(project_id)
         project_classes = list(project.label_classes)
@@ -549,6 +682,79 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                     )
                 )
 
+        # COCO polygon/box annotations went through the shared vector importer.
+        # Decode COCO RLE directly as editable raster masks, never flatten masks
+        # into bounding boxes or silently claim external labels are verified.
+        for source_file, image_reference, label, raw in coco_rle_annotations:
+            image = self._match_image(image_reference, by_basename, by_import_source)
+            if image is None:
+                semantic_unmatched.add(image_reference)
+                semantic_issues.append(AnnotationImportIssue(
+                    source_file=source_file,
+                    image_reference=image_reference,
+                    annotation_id=str(raw.get("id", "")),
+                    detail="No unique ReefVision image matched the COCO image reference",
+                ))
+                continue
+            try:
+                label_class = self._ensure_class(
+                    project_id=project_id,
+                    annotation={
+                        "label_short_code": label,
+                        "label_long_code": label,
+                        "label_id": f"coco:{source_file}:{raw.get('category_id')}",
+                    },
+                    class_mapping=class_mapping,
+                    dataset_indices=dataset_indices,
+                    project_classes=project_classes,
+                    matched_class_ids=matched_class_ids,
+                    created_class_ids=created_class_ids,
+                )
+                if label_class is None:
+                    raise ValidationError("COCO category could not be resolved")
+                raster = self._decode_external_coco_rle(raw.get("segmentation"))
+                annotation = {
+                    "id": f"coco:{source_file}:{raw.get('id')}",
+                    "label_id": f"coco:{source_file}:{raw.get('category_id')}",
+                    "label_short_code": label,
+                    "label_long_code": label,
+                    "verified": False,
+                    "data": {
+                        "external_format": "coco",
+                        "external_category_id": raw.get("category_id"),
+                    },
+                }
+                result = self._add_raster_mask(
+                    project_id=project_id,
+                    image=image,
+                    label_class=label_class,
+                    annotation=annotation,
+                    source_file=source_file,
+                    image_reference=image_reference,
+                    external_type="COCO_RLE",
+                    raster=raster,
+                    suffix="coco-rle",
+                    extra_provenance={
+                        "external_format": "coco",
+                        "external_category_id": raw.get("category_id"),
+                        "source_annotation_id": raw.get("id"),
+                        "requires_researcher_review": True,
+                    },
+                )
+                if result == "duplicate":
+                    semantic_duplicates += 1
+                else:
+                    semantic_imported += 1
+                    semantic_modified[image.id] = False
+            except (ValidationError, ValueError, TypeError, KeyError) as exc:
+                semantic_skipped += 1
+                semantic_issues.append(AnnotationImportIssue(
+                    source_file=source_file,
+                    image_reference=image_reference,
+                    annotation_id=str(raw.get("id", "")),
+                    detail=f"COCO RLE mask import: {exc}",
+                ))
+
         for image_id, all_verified in semantic_modified.items():
             image = self.session.get(ImageAsset, image_id)
             if image is None:
@@ -565,12 +771,13 @@ class EnhancedAnnotationImportService(AnnotationImportService):
         return report.model_copy(
             update={
                 "classes_matched": report.classes_matched + len(matched_class_ids),
-                "classes_created": report.classes_created + len(created_class_ids),
+                "classes_created": report.classes_created + len(created_class_ids) + len(precreated_class_ids),
                 "masks_imported": report.masks_imported + semantic_imported,
                 "duplicate_annotations": report.duplicate_annotations + semantic_duplicates,
                 "unmatched_images": report.unmatched_images + len(semantic_unmatched),
                 "unknown_classes": report.unknown_classes + semantic_unknown_classes,
                 "skipped_annotations": report.skipped_annotations + semantic_skipped,
-                "issues": [*report.issues, *semantic_issues],
+                "files_processed": len(buffered),
+                "issues": [*report.issues, *import_warnings, *semantic_issues],
             }
         )
