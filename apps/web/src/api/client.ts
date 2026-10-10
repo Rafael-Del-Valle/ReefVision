@@ -2489,10 +2489,17 @@ export interface ProviderModelRegistration {
   project_id: string;
 }
 
-export async function registerProviderModel(projectId: string, providerId: string, file: File): Promise<ProviderModelRegistration> {
+export async function registerProviderModel(
+  projectId: string,
+  providerId: string,
+  file: File,
+): Promise<ProviderModelRegistration> {
   const formData = new FormData();
   formData.append("file", file, file.name);
-  return request<ProviderModelRegistration>(`/projects/${encodeURIComponent(projectId)}/provider-models/${encodeURIComponent(providerId)}/register`, {method: "POST", body: formData});
+  return request<ProviderModelRegistration>(
+    `/projects/${encodeURIComponent(projectId)}/provider-models/${encodeURIComponent(providerId)}/register`,
+    { method: "POST", body: formData },
+  );
 }
 
 export async function registerModel(

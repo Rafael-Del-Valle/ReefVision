@@ -1235,21 +1235,38 @@ describe("AnnotationEditor", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       requests.push({ url, init });
-      if (url.endsWith(`/images/${session.image.id}/annotations`) &&
-          (!init?.method || init.method === "GET")) return jsonResponse(session);
-      if (url.includes(`/projects/${project.id}/sam2-models`) &&
-          (!init?.method || init.method === "GET")) {
-        return jsonResponse([{
-          variant: "small", repo_id: "facebook/sam2.1-hiera-small",
-          ready: true, installed: true, revision: "a".repeat(40),
-          weight_sha256: "f".repeat(64), path: "C:/models/sam2",
-          reason: null, license_summary: "Apache-2.0",
-        }]);
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      )
+        return jsonResponse(session);
+      if (
+        url.includes(`/projects/${project.id}/sam2-models`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse([
+          {
+            variant: "small",
+            repo_id: "facebook/sam2.1-hiera-small",
+            ready: true,
+            installed: true,
+            revision: "a".repeat(40),
+            weight_sha256: "f".repeat(64),
+            path: "C:/models/sam2",
+            reason: null,
+            license_summary: "Apache-2.0",
+          },
+        ]);
       }
-      if (url.includes("/advanced-providers/sam2/execute") && init?.method === "POST") {
+      if (
+        url.includes("/advanced-providers/sam2/execute") &&
+        init?.method === "POST"
+      ) {
         return jsonResponse({
-          provider_id: "sam2", task: "assist_segmentation",
-          status: "succeeded", model_id: "facebook/sam2.1-hiera-small",
+          provider_id: "sam2",
+          task: "assist_segmentation",
+          status: "succeeded",
+          model_id: "facebook/sam2.1-hiera-small",
           model_revision: "a".repeat(40),
           result: { proposal_id: "sam-proposal-1", proposal_count: 1 },
           warnings: [],
@@ -1261,14 +1278,18 @@ describe("AnnotationEditor", () => {
     });
 
     renderEditor();
-    await screen.findByRole("heading", { name: session.image.original_filename });
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
     fireEvent.pointerDown(screen.getByTestId("annotation-annotation-1"), {
-      button: 0, clientX: 145, clientY: 185,
+      button: 0,
+      clientX: 145,
+      clientY: 185,
     });
     fireEvent.keyDown(window, { key: "!", code: "Digit1", shiftKey: true });
     await waitFor(() => {
-      const request = requests.find(
-        (entry) => entry.url.includes("/advanced-providers/sam2/execute"),
+      const request = requests.find((entry) =>
+        entry.url.includes("/advanced-providers/sam2/execute"),
       );
       expect(request).toBeDefined();
       const body = JSON.parse(String(request?.init?.body));
@@ -1285,30 +1306,61 @@ describe("AnnotationEditor", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       requests.push({ url, init });
-      if (url.endsWith(`/images/${session.image.id}/annotations`) &&
-          (!init?.method || init.method === "GET")) return jsonResponse(session);
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      )
+        return jsonResponse(session);
       if (url.includes(`/projects/${project.id}/models?purpose=detector`)) {
-        return jsonResponse([{
-          id: "detector-best", project_id: project.id, purpose: "detector",
-          display_name: "Coral best.pt", source_filename: "best.pt",
-          managed_path: "models/best.pt", sha256: "d".repeat(64),
-          file_size_bytes: 2048, framework: "ultralytics", task: "detect",
-          provider_name: "ultralytics", provider_version: "8.3",
-          class_map_json: {}, input_size_json: null, metadata_json: {},
-          notes: null, created_at: "2026-10-10T00:00:00Z",
-          updated_at: "2026-10-10T00:00:00Z",
-        }]);
+        return jsonResponse([
+          {
+            id: "detector-best",
+            project_id: project.id,
+            purpose: "detector",
+            display_name: "Coral best.pt",
+            source_filename: "best.pt",
+            managed_path: "models/best.pt",
+            sha256: "d".repeat(64),
+            file_size_bytes: 2048,
+            framework: "ultralytics",
+            task: "detect",
+            provider_name: "ultralytics",
+            provider_version: "8.3",
+            class_map_json: {},
+            input_size_json: null,
+            metadata_json: {},
+            notes: null,
+            created_at: "2026-10-10T00:00:00Z",
+            updated_at: "2026-10-10T00:00:00Z",
+          },
+        ]);
       }
-      if (url.endsWith(`/projects/${project.id}/inference-jobs`) &&
-          init?.method === "POST") {
-        return jsonResponse({ id: "job-shortcut", project_id: project.id,
-          job_type: "inference", status: "queued", progress_current: 0,
-          progress_total: 1, result_json: {}, error_message: null });
+      if (
+        url.endsWith(`/projects/${project.id}/inference-jobs`) &&
+        init?.method === "POST"
+      ) {
+        return jsonResponse({
+          id: "job-shortcut",
+          project_id: project.id,
+          job_type: "inference",
+          status: "queued",
+          progress_current: 0,
+          progress_total: 1,
+          result_json: {},
+          error_message: null,
+        });
       }
       if (url.includes("/jobs/job-shortcut")) {
-        return jsonResponse({ id: "job-shortcut", project_id: project.id,
-          job_type: "inference", status: "succeeded", progress_current: 1,
-          progress_total: 1, result_json: {}, error_message: null });
+        return jsonResponse({
+          id: "job-shortcut",
+          project_id: project.id,
+          job_type: "inference",
+          status: "succeeded",
+          progress_current: 1,
+          progress_total: 1,
+          result_json: {},
+          error_message: null,
+        });
       }
       const fallback = handleDefaultEditorRequests(url, init);
       if (fallback) return fallback;
@@ -1316,20 +1368,25 @@ describe("AnnotationEditor", () => {
     });
 
     renderEditor();
-    await screen.findByRole("heading", { name: session.image.original_filename });
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Predict image (Shift+2)" }))
-        .not.toBeDisabled(),
+      expect(
+        screen.getByRole("button", { name: "Predict image (Shift+2)" }),
+      ).not.toBeDisabled(),
     );
     fireEvent.keyDown(window, { key: "@", code: "Digit2", shiftKey: true });
     await waitFor(() => {
-      const request = requests.find((entry) =>
-        entry.url.endsWith(`/projects/${project.id}/inference-jobs`) &&
-        entry.init?.method === "POST",
+      const request = requests.find(
+        (entry) =>
+          entry.url.endsWith(`/projects/${project.id}/inference-jobs`) &&
+          entry.init?.method === "POST",
       );
       expect(request).toBeDefined();
       expect(JSON.parse(String(request?.init?.body))).toMatchObject({
-        model_id: "detector-best", image_ids: [session.image.id],
+        model_id: "detector-best",
+        image_ids: [session.image.id],
       });
     });
   });

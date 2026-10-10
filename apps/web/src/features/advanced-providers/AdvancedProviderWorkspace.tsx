@@ -85,20 +85,35 @@ export function AdvancedProviderWorkspace({
     queryFn: () => getJob(sam2InstallJobId!),
     enabled: Boolean(sam2InstallJobId),
     refetchInterval: (query) =>
-      ["succeeded", "failed", "cancelled"].includes(query.state.data?.status ?? "")
+      ["succeeded", "failed", "cancelled"].includes(
+        query.state.data?.status ?? "",
+      )
         ? false
         : 1250,
   });
-  const selectedSam2Model = sam2Models.data?.find((item) => item.variant === sam2Variant);
+  const selectedSam2Model = sam2Models.data?.find(
+    (item) => item.variant === sam2Variant,
+  );
   const sam2Ready = Boolean(selectedSam2Model?.ready);
 
   useEffect(() => {
-    if (providerId !== "sam2" || !selectedSam2Model ||
-        selectedSam2Model.installed || sam2Install.isPending ||
-        autoInstallAttempted.current.has(sam2Variant)) return;
+    if (
+      providerId !== "sam2" ||
+      !selectedSam2Model ||
+      selectedSam2Model.installed ||
+      sam2Install.isPending ||
+      autoInstallAttempted.current.has(sam2Variant)
+    )
+      return;
     autoInstallAttempted.current.add(sam2Variant);
     sam2Install.mutate();
-  }, [providerId, sam2Variant, selectedSam2Model, sam2Install.isPending, sam2Install.mutate]);
+  }, [
+    providerId,
+    sam2Variant,
+    selectedSam2Model,
+    sam2Install.isPending,
+    sam2Install.mutate,
+  ]);
 
   const manifestsQuery = useQuery({
     queryKey: ["advanced-provider-manifests"],
@@ -133,8 +148,10 @@ export function AdvancedProviderWorkspace({
     [managedCatalogId, modelCatalogQuery.data?.models],
   );
   const managedModelReady =
-    providerId === "sam2" ? sam2Ready
-    : managedCatalogId == null || managedModel?.installation_state === "Ready";
+    providerId === "sam2"
+      ? sam2Ready
+      : managedCatalogId == null ||
+        managedModel?.installation_state === "Ready";
 
   useEffect(() => {
     const preferred = manifestsQuery.data?.find(
@@ -270,24 +287,33 @@ export function AdvancedProviderWorkspace({
                   <option value="tiny">Hiera Tiny</option>
                   <option value="small">Hiera Small</option>
                   <option value="base-plus">Hiera Base+</option>
-                  <option value="large">Hiera Large (more VRAM required)</option>
+                  <option value="large">
+                    Hiera Large (more VRAM required)
+                  </option>
                 </select>
               </label>
               <p>
-                {selectedSam2Model?.ready ? "Installed and verified" :
-                  selectedSam2Model?.installed ? "Checkpoint cached; runtime unavailable" :
-                  selectedSam2Model?.reason ?? "Checking installation..."}
+                {selectedSam2Model?.ready
+                  ? "Installed and verified"
+                  : selectedSam2Model?.installed
+                    ? "Checkpoint cached; runtime unavailable"
+                    : (selectedSam2Model?.reason ?? "Checking installation...")}
               </p>
               <p className="annotation-helper">
                 SAM 2.1 model weights are automatically downloaded and cached
-                when you select a size. No approval dialog is required.
-                Meta's Apache-2.0 source, revision, and SHA-256 are recorded.
-                Large models can require substantial disk space and bandwidth.
+                when you select a size. No approval dialog is required. Meta's
+                Apache-2.0 source, revision, and SHA-256 are recorded. Large
+                models can require substantial disk space and bandwidth.
               </p>
               <button
                 type="button"
-                disabled={Boolean(selectedSam2Model?.installed) || sam2Install.isPending ||
-                  ["queued", "running"].includes(sam2InstallJob.data?.status ?? "")}
+                disabled={
+                  Boolean(selectedSam2Model?.installed) ||
+                  sam2Install.isPending ||
+                  ["queued", "running"].includes(
+                    sam2InstallJob.data?.status ?? "",
+                  )
+                }
                 onClick={() => sam2Install.mutate()}
               >
                 {sam2Ready ? "SAM 2.1 ready" : "Retry SAM 2.1 download"}
@@ -296,12 +322,16 @@ export function AdvancedProviderWorkspace({
                 <p role="status">
                   Installation: {sam2InstallJob.data.status} ·
                   {sam2InstallJob.data.progress_current.toLocaleString()} /
-                  {sam2InstallJob.data.progress_total.toLocaleString()} bytes/files
+                  {sam2InstallJob.data.progress_total.toLocaleString()}{" "}
+                  bytes/files
                 </p>
               )}
-              {(sam2Install.error || sam2InstallJob.error || sam2InstallJob.data?.error_message) && (
+              {(sam2Install.error ||
+                sam2InstallJob.error ||
+                sam2InstallJob.data?.error_message) && (
                 <p className="form-error">
-                  {sam2Install.error?.message || sam2InstallJob.error?.message ||
+                  {sam2Install.error?.message ||
+                    sam2InstallJob.error?.message ||
                     sam2InstallJob.data?.error_message}
                 </p>
               )}
@@ -332,7 +362,8 @@ export function AdvancedProviderWorkspace({
               )}
             </div>
           )}
-          {managedCatalogId && providerId !== "sam2" &&
+          {managedCatalogId &&
+            providerId !== "sam2" &&
             !managedModelReady &&
             !modelCatalogQuery.isPending && (
               <p className="form-error" role="alert">

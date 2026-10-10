@@ -29,7 +29,6 @@ from reefvision.jobs.diagnostics import process_diagnostics_job
 from reefvision.jobs.export import process_export_job
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.model_install import process_model_install_job
-from reefvision.services.sam2_install import process_sam2_install
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
 from reefvision.jobs.quality_control import process_quality_control_job
 from reefvision.jobs.restores import process_restore_job
@@ -41,6 +40,7 @@ from reefvision.jobs.video_metric_depth import process_video_metric_depth_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.repositories.jobs import JobRepository
+from reefvision.services.sam2_install import process_sam2_install
 from reefvision.storage.images import create_thumbnail
 from reefvision.storage.projects import resolve_managed_project_path
 

@@ -51,11 +51,13 @@ def test_sam2_installed_provenance_is_verified(tmp_path, monkeypatch) -> None:
         (target / name).write_bytes(data)
         hashes[name] = sha256(data).hexdigest()
     (target / ".reefvision-model.json").write_text(
-        json.dumps({
-            "repo_id": variant_repo("small"),
-            "revision": "a" * 40,
-            "files": hashes,
-        }),
+        json.dumps(
+            {
+                "repo_id": variant_repo("small"),
+                "revision": "a" * 40,
+                "files": hashes,
+            }
+        ),
         encoding="utf-8",
     )
     result = sam2_status(settings, "small")
@@ -73,9 +75,7 @@ def test_sam2_install_endpoint_creates_background_job_without_confirmation(
     import reefvision.api.routes.sam2_models as routes
 
     monkeypatch.setattr(routes, "_launch_sam2_thread", lambda *args: None)
-    response = client.post(
-        f"/api/v1/projects/{project['id']}/sam2-models/large/install"
-    )
+    response = client.post(f"/api/v1/projects/{project['id']}/sam2-models/large/install")
     assert response.status_code == 200, response.text
     job = response.json()
     assert job["job_type"] == "sam2_install"

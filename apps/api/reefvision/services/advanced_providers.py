@@ -11,7 +11,6 @@ from reefvision.config import Settings
 from reefvision.db.models import ModelRegistration, Project
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.ml.provider_hub import list_model_providers
-from reefvision.services.sam2_install import sam2_status, variant_repo
 from reefvision.schemas.advanced_providers import (
     AdvancedProviderManifestResponse,
     AdvancedProviderPreflightRequest,
@@ -21,6 +20,7 @@ from reefvision.services.advanced_provider_execution import (
     PROVIDER_LAB_EXECUTION_IDS,
     optional_provider_runtime_status,
 )
+from reefvision.services.sam2_install import sam2_status
 
 AdvancedProviderExecutionSurface = Literal[
     "provider_lab",
@@ -374,9 +374,7 @@ class AdvancedProviderService:
             if provider_id == "nnunet" and runtime and not runtime.get("ready"):
                 blockers.append(str(runtime.get("reason") or "nnU-Net runtime is not ready"))
             elif runtime and not runtime.get("ready"):
-                blockers.append(
-                    str(runtime.get("reason") or "Optional model is not installed.")
-                )
+                blockers.append(str(runtime.get("reason") or "Optional model is not installed."))
         elif descriptor is None:
             blockers.append("The provider is not registered in the main provider hub")
         elif descriptor.availability_status != "ready":

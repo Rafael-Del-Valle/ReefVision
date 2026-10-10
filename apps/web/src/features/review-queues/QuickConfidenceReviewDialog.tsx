@@ -14,7 +14,10 @@ import {
 import "./quickConfidenceReview.css";
 
 interface QuickConfidenceReviewDialogProps {
-  item: Pick<ReviewQueueItem, "image_id" | "project_id" | "review_queue_id" | "review_state">;
+  item: Pick<
+    ReviewQueueItem,
+    "image_id" | "project_id" | "review_queue_id" | "review_state"
+  >;
   reviewBelowConfidence: number | null;
   position: number;
   total: number;
@@ -56,8 +59,12 @@ export function QuickConfidenceReviewDialog({
   const dialogRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
-  const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
-  const [classOverrides, setClassOverrides] = useState<Record<string, string>>({});
+  const [selectedProposalId, setSelectedProposalId] = useState<string | null>(
+    null,
+  );
+  const [classOverrides, setClassOverrides] = useState<Record<string, string>>(
+    {},
+  );
 
   useEffect(() => {
     setSelectedProposalId(null);
@@ -76,7 +83,7 @@ export function QuickConfidenceReviewDialog({
         const focusable = Array.from(
           dialogRef.current.querySelectorAll<HTMLElement>(
             "button:not(:disabled), input:not(:disabled), select:not(:disabled), " +
-            "textarea:not(:disabled), [tabindex]:not([tabindex='-1'])",
+              "textarea:not(:disabled), [tabindex]:not([tabindex='-1'])",
           ),
         );
         if (focusable.length === 0) return;
@@ -108,7 +115,11 @@ export function QuickConfidenceReviewDialog({
       getPredictions(item.image_id, { reviewStatus: "pending" }, signal),
   });
   const proposals = useMemo(
-    () => eligibleProposals(predictionsQuery.data?.items ?? [], reviewBelowConfidence),
+    () =>
+      eligibleProposals(
+        predictionsQuery.data?.items ?? [],
+        reviewBelowConfidence,
+      ),
     [predictionsQuery.data?.items, reviewBelowConfidence],
   );
   const selectedProposal =
@@ -120,7 +131,9 @@ export function QuickConfidenceReviewDialog({
     : -1;
   const classes = imageQuery.data?.label_classes ?? [];
   const chosenClassId = selectedProposal
-    ? (classOverrides[selectedProposal.id] ?? selectedProposal.label_class_id ?? "")
+    ? (classOverrides[selectedProposal.id] ??
+      selectedProposal.label_class_id ??
+      "")
     : "";
   const chosenClass = classes.find((item) => item.id === chosenClassId);
   const canCreateMissingClass =
@@ -140,7 +153,9 @@ export function QuickConfidenceReviewDialog({
         return acceptPrediction(selectedProposal.id, {});
       }
       if (!chosenClass || !chosenClass.is_active) {
-        throw new Error("Select an active project class before accepting this prediction.");
+        throw new Error(
+          "Select an active project class before accepting this prediction.",
+        );
       }
       return acceptPrediction(selectedProposal.id, {
         label_class_id: chosenClass.id,
@@ -149,10 +164,18 @@ export function QuickConfidenceReviewDialog({
     onSuccess: async () => {
       setSelectedProposalId(null);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["predictions", item.image_id] }),
-        queryClient.invalidateQueries({ queryKey: ["annotations", item.image_id] }),
-        queryClient.invalidateQueries({ queryKey: ["review_queue_items", item.review_queue_id] }),
-        queryClient.invalidateQueries({ queryKey: ["images", item.project_id] }),
+        queryClient.invalidateQueries({
+          queryKey: ["predictions", item.image_id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["annotations", item.image_id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["review_queue_items", item.review_queue_id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["images", item.project_id],
+        }),
       ]);
       onReviewSaved?.();
     },
@@ -211,8 +234,14 @@ export function QuickConfidenceReviewDialog({
                     <rect
                       x={selectedProposal.x_min}
                       y={selectedProposal.y_min}
-                      width={Math.max(0, selectedProposal.x_max - selectedProposal.x_min)}
-                      height={Math.max(0, selectedProposal.y_max - selectedProposal.y_min)}
+                      width={Math.max(
+                        0,
+                        selectedProposal.x_max - selectedProposal.x_min,
+                      )}
+                      height={Math.max(
+                        0,
+                        selectedProposal.y_max - selectedProposal.y_min,
+                      )}
                       fill="none"
                       stroke="#fbc02d"
                       strokeWidth={Math.max(2, image.width_px / 400)}
@@ -237,7 +266,8 @@ export function QuickConfidenceReviewDialog({
             )}
             <p className="annotation-helper">
               The overlay previews prediction geometry. For detailed edits,
-              overlapping objects, or raster masks, use the full annotation editor.
+              overlapping objects, or raster masks, use the full annotation
+              editor.
             </p>
             {onOpenFullEditor && (
               <button type="button" onClick={onOpenFullEditor}>
@@ -264,7 +294,9 @@ export function QuickConfidenceReviewDialog({
                     type="button"
                     className="secondary"
                     disabled={currentIndex <= 0 || review.isPending}
-                    onClick={() => setSelectedProposalId(proposals[currentIndex - 1].id)}
+                    onClick={() =>
+                      setSelectedProposalId(proposals[currentIndex - 1].id)
+                    }
                   >
                     Previous prediction
                   </button>
@@ -274,8 +306,12 @@ export function QuickConfidenceReviewDialog({
                   <button
                     type="button"
                     className="secondary"
-                    disabled={currentIndex >= proposals.length - 1 || review.isPending}
-                    onClick={() => setSelectedProposalId(proposals[currentIndex + 1].id)}
+                    disabled={
+                      currentIndex >= proposals.length - 1 || review.isPending
+                    }
+                    onClick={() =>
+                      setSelectedProposalId(proposals[currentIndex + 1].id)
+                    }
                   >
                     Next prediction
                   </button>
@@ -285,7 +321,9 @@ export function QuickConfidenceReviewDialog({
                   <dd>{selectedProposal.predicted_label}</dd>
                   <dt>Raw model confidence</dt>
                   <dd>
-                    <strong>{(selectedProposal.confidence * 100).toFixed(1)}%</strong>
+                    <strong>
+                      {(selectedProposal.confidence * 100).toFixed(1)}%
+                    </strong>
                     <small> Not a calibrated correctness probability</small>
                   </dd>
                   <dt>Source model</dt>
@@ -303,11 +341,13 @@ export function QuickConfidenceReviewDialog({
                     }
                   >
                     <option value="">Choose a class</option>
-                    {classes.filter((item) => item.is_active).map((labelClass) => (
-                      <option key={labelClass.id} value={labelClass.id}>
-                        {labelClass.name}
-                      </option>
-                    ))}
+                    {classes
+                      .filter((item) => item.is_active)
+                      .map((labelClass) => (
+                        <option key={labelClass.id} value={labelClass.id}>
+                          {labelClass.name}
+                        </option>
+                      ))}
                   </select>
                 </label>
                 {canCreateMissingClass && (
@@ -326,7 +366,9 @@ export function QuickConfidenceReviewDialog({
                     }
                     onClick={() => review.mutate("accept")}
                   >
-                    {canCreateMissingClass ? "Accept and create class" : "Accept prediction"}
+                    {canCreateMissingClass
+                      ? "Accept and create class"
+                      : "Accept prediction"}
                   </button>
                   <button
                     type="button"
@@ -342,14 +384,20 @@ export function QuickConfidenceReviewDialog({
               !predictionsQuery.isPending &&
               !predictionsQuery.error && (
                 <p className="rv-quick-review-empty">
-                  No pending predictions meet this confidence rule for the selected image.
+                  No pending predictions meet this confidence rule for the
+                  selected image.
                 </p>
               )
             )}
-            {review.error && <p className="form-error" role="alert">{review.error.message}</p>}
+            {review.error && (
+              <p className="form-error" role="alert">
+                {review.error.message}
+              </p>
+            )}
             <p className="annotation-helper">
-              Accept and reject are explicit researcher decisions. High-confidence
-              predictions excluded from this view remain unverified.
+              Accept and reject are explicit researcher decisions.
+              High-confidence predictions excluded from this view remain
+              unverified.
             </p>
           </div>
         </div>

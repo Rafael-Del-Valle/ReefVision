@@ -211,7 +211,8 @@ class ReviewQueueService:
             annotations = project_context.annotations_by_image.get(image.image_id, [])
             predictions = project_context.predictions_by_image.get(image.image_id, [])
             pending_predictions = [
-                item for item in predictions
+                item
+                for item in predictions
                 if item.review_status == "pending"
                 and (
                     request.review_below_confidence is None

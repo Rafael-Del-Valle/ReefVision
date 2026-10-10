@@ -22,7 +22,6 @@ from reefvision.ml.optional_transformers_runtime import (
     resolve_torch_device,
 )
 from reefvision.ml.providers import mask_to_box
-from reefvision.services.sam2_install import sam2_status, variant_repo
 from reefvision.repositories.images import ImageRepository
 from reefvision.schemas.advanced_provider_execution import (
     AdvancedProviderExecutionRequest,
@@ -32,6 +31,7 @@ from reefvision.services.advanced_provider_proposals import (
     persist_grounding_dino_proposals,
     persist_sam2_proposal,
 )
+from reefvision.services.sam2_install import sam2_status, variant_repo
 from reefvision.storage.projects import resolve_managed_project_path
 
 PROVIDER_LAB_EXECUTION_IDS: frozenset[str] = frozenset(

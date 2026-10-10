@@ -27,8 +27,12 @@ def test_coco_json_preserves_categories_annotations_and_unreferenced_labels(
         ],
         "annotations": [
             {"id": 1, "image_id": 23, "category_id": 42, "bbox": [5, 5, 20, 15]},
-            {"id": 2, "image_id": 23, "category_id": 42,
-             "segmentation": [[12, 12, 18, 12, 18, 20, 12, 20]]},
+            {
+                "id": 2,
+                "image_id": 23,
+                "category_id": 42,
+                "segmentation": [[12, 12, 18, 12, 18, 20, 12, 20]],
+            },
         ],
     }
     response = client.post(
@@ -41,12 +45,18 @@ def test_coco_json_preserves_categories_annotations_and_unreferenced_labels(
     assert payload["masks_imported"] == 1
 
     with cast(FastAPI, client.app).state.session_factory() as session:
-        labels = list(session.scalars(select(LabelClass).where(LabelClass.project_id == project["id"])))
+        labels = list(
+            session.scalars(select(LabelClass).where(LabelClass.project_id == project["id"]))
+        )
         expected = {c.name: c.id for c in labels}
         assert "Swiftia exserta" in expected
         assert "Muricea pendula" in expected  # class without any annotation
-        annotations = list(session.scalars(select(Annotation).where(Annotation.image_id == image_id)))
-        masks = list(session.scalars(select(MaskAnnotation).where(MaskAnnotation.image_id == image_id)))
+        annotations = list(
+            session.scalars(select(Annotation).where(Annotation.image_id == image_id))
+        )
+        masks = list(
+            session.scalars(select(MaskAnnotation).where(MaskAnnotation.image_id == image_id))
+        )
         assert len(annotations) == len(masks) == 1
         assert annotations[0].label_class_id == expected["Swiftia exserta"]
         assert masks[0].label_class_id == expected["Swiftia exserta"]
@@ -70,10 +80,14 @@ def test_coco_uncompressed_rle_remains_editable_mask(
     coco = {
         "images": [{"id": 1, "file_name": "rle.png", "height": 60, "width": 80}],
         "categories": [{"id": 2, "name": "Thesea nivea"}],
-        "annotations": [{
-            "id": 4, "image_id": 1, "category_id": 2,
-            "segmentation": {"size": [60, 80], "counts": [0, 10, 4790]},
-        }],
+        "annotations": [
+            {
+                "id": 4,
+                "image_id": 1,
+                "category_id": 2,
+                "segmentation": {"size": [60, 80], "counts": [0, 10, 4790]},
+            }
+        ],
     }
     response = client.post(
         f"/api/v1/projects/{project['id']}/imports/annotations",
@@ -82,7 +96,9 @@ def test_coco_uncompressed_rle_remains_editable_mask(
     assert response.status_code == 200, response.text
     assert response.json()["masks_imported"] == 1
     with cast(FastAPI, client.app).state.session_factory() as session:
-        masks = list(session.scalars(select(MaskAnnotation).where(MaskAnnotation.image_id == image_id)))
+        masks = list(
+            session.scalars(select(MaskAnnotation).where(MaskAnnotation.image_id == image_id))
+        )
         assert len(masks) == 1
         assert masks[0].area_pixels == 10
         assert masks[0].status == "needs_review"
@@ -105,7 +121,9 @@ def test_yolo_data_yaml_and_labels_transfer_all_class_names(
     assert response.status_code == 200, response.text
     assert response.json()["boxes_imported"] == 1
     with cast(FastAPI, client.app).state.session_factory() as session:
-        labels = list(session.scalars(select(LabelClass).where(LabelClass.project_id == project["id"])))
+        labels = list(
+            session.scalars(select(LabelClass).where(LabelClass.project_id == project["id"]))
+        )
         classes = {c.name: c.id for c in labels}
         assert "Jellyfish" in classes
         assert "Octocoral" in classes

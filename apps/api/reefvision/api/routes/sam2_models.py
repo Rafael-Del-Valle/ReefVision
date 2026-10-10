@@ -24,9 +24,7 @@ router = APIRouter(tags=["sam2-models"])
 DbSession = Annotated[Session, Depends(get_db_session)]
 
 
-def _launch_sam2_thread(
-    settings: Settings, factory: sessionmaker[Session], job_id: str
-) -> None:
+def _launch_sam2_thread(settings: Settings, factory: sessionmaker[Session], job_id: str) -> None:
     Thread(
         target=process_sam2_install,
         args=(settings, factory, job_id),
@@ -36,9 +34,7 @@ def _launch_sam2_thread(
 
 
 @router.get("/projects/{project_id}/sam2-models")
-def sam2_models(
-    project_id: str, request: Request, session: DbSession
-) -> list[dict[str, object]]:
+def sam2_models(project_id: str, request: Request, session: DbSession) -> list[dict[str, object]]:
     if session.get(Project, project_id) is None:
         raise NotFoundError("Project not found")
     settings: Settings = request.app.state.settings

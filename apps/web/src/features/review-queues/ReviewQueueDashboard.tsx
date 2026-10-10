@@ -70,8 +70,11 @@ export function ReviewQueueDashboard({
   const [modelId, setModelId] = useState("");
   const [weights, setWeights] = useState<ReviewScoreWeights>(defaultWeights);
   const [reviewBelowConfidence, setReviewBelowConfidence] = useState("");
-  const [quickReviewItemId, setQuickReviewItemId] = useState<string | null>(null);
-  const [openQuickReviewWhenReady, setOpenQuickReviewWhenReady] = useState(false);
+  const [quickReviewItemId, setQuickReviewItemId] = useState<string | null>(
+    null,
+  );
+  const [openQuickReviewWhenReady, setOpenQuickReviewWhenReady] =
+    useState(false);
 
   const versions = useQuery({
     queryKey: ["dataset_versions", project.id],
@@ -154,8 +157,10 @@ export function ReviewQueueDashboard({
       const payload = {
         source_quality_control_run_id: selectedRunId || undefined,
         signal_weights: weights,
-        review_below_confidence: reviewBelowConfidence === ""
-          ? undefined : Number(reviewBelowConfidence) / 100,
+        review_below_confidence:
+          reviewBelowConfidence === ""
+            ? undefined
+            : Number(reviewBelowConfidence) / 100,
       };
       return scopeType === "dataset_version" && datasetVersionId
         ? createDatasetVersionReviewQueue(datasetVersionId, payload)
@@ -226,16 +231,14 @@ export function ReviewQueueDashboard({
   const quickReviewIndex = quickReviewItems.findIndex(
     (item) => item.id === quickReviewItemId,
   );
-  const quickReviewItem = quickReviewIndex >= 0
-    ? quickReviewItems[quickReviewIndex]
-    : null;
-  const storedThreshold = selectedQueue?.configuration_json.review_below_confidence;
+  const quickReviewItem =
+    quickReviewIndex >= 0 ? quickReviewItems[quickReviewIndex] : null;
+  const storedThreshold =
+    selectedQueue?.configuration_json.review_below_confidence;
   const activeReviewThreshold =
     typeof storedThreshold === "number" && Number.isFinite(storedThreshold)
       ? storedThreshold
       : null;
-
-
 
   return (
     <section className="dashboard-panel">
@@ -316,13 +319,15 @@ export function ReviewQueueDashboard({
                 step="1"
                 placeholder="50"
                 value={reviewBelowConfidence}
-                onChange={(event) => setReviewBelowConfidence(event.target.value)}
+                onChange={(event) =>
+                  setReviewBelowConfidence(event.target.value)
+                }
               />
             </label>
             <p className="annotation-helper">
               Enter 50 to review predictions with confidence 50% or lower.
-              Predictions above 50% are ignored by this queue, not
-              automatically accepted or human-verified.
+              Predictions above 50% are ignored by this queue, not automatically
+              accepted or human-verified.
             </p>
             <div className="dashboard-grid compact-grid">
               {Object.entries(weights).map(([key, value]) => (
@@ -535,7 +540,10 @@ export function ReviewQueueDashboard({
                     </div>
                   </div>
                   <div className="dashboard-actions">
-                    <button type="button" onClick={() => setQuickReviewItemId(item.id)}>
+                    <button
+                      type="button"
+                      onClick={() => setQuickReviewItemId(item.id)}
+                    >
                       Quick review
                     </button>
                     <button
@@ -619,10 +627,14 @@ export function ReviewQueueDashboard({
           total={quickReviewItems.length}
           onClose={() => setQuickReviewItemId(null)}
           onPreviousImage={() =>
-            setQuickReviewItemId(quickReviewItems[quickReviewIndex - 1]?.id ?? null)
+            setQuickReviewItemId(
+              quickReviewItems[quickReviewIndex - 1]?.id ?? null,
+            )
           }
           onNextImage={() =>
-            setQuickReviewItemId(quickReviewItems[quickReviewIndex + 1]?.id ?? null)
+            setQuickReviewItemId(
+              quickReviewItems[quickReviewIndex + 1]?.id ?? null,
+            )
           }
           onOpenFullEditor={() => {
             setQuickReviewItemId(null);

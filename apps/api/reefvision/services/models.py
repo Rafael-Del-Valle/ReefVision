@@ -11,7 +11,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.db.models import ExperimentRecord, Job, LabelClass, ModelRegistration, Project, TrainingRun
+from reefvision.db.models import (
+    ExperimentRecord,
+    Job,
+    LabelClass,
+    ModelRegistration,
+    Project,
+    TrainingRun,
+)
 from reefvision.domain.enums import MODEL_PURPOSES
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.ml.depth_anything_v2_provider import (

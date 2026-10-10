@@ -83,7 +83,8 @@ def _ensure_catalog_proxy_registration(
 
     spec = OPTIONAL_MODEL_SPECS[provider_id]
     catalog_id = (
-        f"sam2/image/{source_variant}" if provider_id == "sam2" and source_variant
+        f"sam2/image/{source_variant}"
+        if provider_id == "sam2" and source_variant
         else _PROVIDER_CATALOG_IDS[provider_id]
     )
     purpose, task = _PROVIDER_REGISTRATION[provider_id]
@@ -118,8 +119,7 @@ def _ensure_catalog_proxy_registration(
     marker_bytes = (json.dumps(marker, sort_keys=True, indent=2) + "\n").encode("utf-8")
     suffix = f"-{source_variant}" if provider_id == "sam2" and source_variant else ""
     relative_path = (
-        f"{project.storage_root}/models/catalog-proxies/"
-        f"{provider_id}{suffix}.catalog-link.json"
+        f"{project.storage_root}/models/catalog-proxies/{provider_id}{suffix}.catalog-link.json"
     )
     marker_path = resolve_managed_project_path(settings, relative_path)
     marker_path.parent.mkdir(parents=True, exist_ok=True)

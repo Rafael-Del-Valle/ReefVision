@@ -298,7 +298,9 @@ class ModelCatalogService:
                         else str(local_status["reason"])
                     ),
                     installed_path=local_status["path"] if local_status["ready"] else None,
-                    installed_checksum=local_status["weight_sha256"] if local_status["ready"] else None,
+                    installed_checksum=local_status["weight_sha256"]
+                    if local_status["ready"]
+                    else None,
                 )
                 return entry.model_copy(update=updates)
         if entry.availability == "unavailable":

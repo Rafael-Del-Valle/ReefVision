@@ -78,7 +78,11 @@ class PredictionService:
         No annotation is automatically accepted. Only an explicit acceptance
         may create a missing class for an unmapped legacy model prediction.
         """
-        class_id = payload.label_class_id if payload and payload.label_class_id else proposal.label_class_id
+        class_id = (
+            payload.label_class_id
+            if payload and payload.label_class_id
+            else proposal.label_class_id
+        )
         if class_id is not None:
             label_class = self._label_class(image, class_id)
             if not label_class.is_active:
@@ -86,9 +90,13 @@ class PredictionService:
             return class_id
 
         model = self.models.get(proposal.model_id)
-        if model is None or model.purpose != "detector" or (
-            isinstance(model.metadata_json, dict)
-            and model.metadata_json.get("managed_catalog_proxy")
+        if (
+            model is None
+            or model.purpose != "detector"
+            or (
+                isinstance(model.metadata_json, dict)
+                and model.metadata_json.get("managed_catalog_proxy")
+            )
         ):
             raise ValidationError(
                 "Select a biologically meaningful project class before accepting "
@@ -101,12 +109,14 @@ class PredictionService:
         if project is None:
             raise NotFoundError("Project not found")
         classes = list(
-            self.session.scalars(
-                select(LabelClass).where(LabelClass.project_id == project.id)
-            )
+            self.session.scalars(select(LabelClass).where(LabelClass.project_id == project.id))
         )
         match = next(
-            (item for item in classes if item.name.strip().casefold() == predicted_label.casefold()),
+            (
+                item
+                for item in classes
+                if item.name.strip().casefold() == predicted_label.casefold()
+            ),
             None,
         )
         if match is not None and not match.is_active:

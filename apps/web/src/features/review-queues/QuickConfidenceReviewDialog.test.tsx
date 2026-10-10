@@ -1,6 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ComponentProps } from "react";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -103,11 +109,19 @@ describe("QuickConfidenceReviewDialog", () => {
       next_image_id: null,
     } as Awaited<ReturnType<typeof getAnnotationSession>>);
     vi.mocked(getPredictions).mockResolvedValue({
-      items: [proposal("low", 0.4), proposal("equal", 0.5), proposal("high", 0.9)],
+      items: [
+        proposal("low", 0.4),
+        proposal("equal", 0.5),
+        proposal("high", 0.9),
+      ],
       counts: { pending: 3 },
     });
-    vi.mocked(acceptPrediction).mockResolvedValue({} as Awaited<ReturnType<typeof acceptPrediction>>);
-    vi.mocked(rejectPrediction).mockResolvedValue({} as Awaited<ReturnType<typeof rejectPrediction>>);
+    vi.mocked(acceptPrediction).mockResolvedValue(
+      {} as Awaited<ReturnType<typeof acceptPrediction>>,
+    );
+    vi.mocked(rejectPrediction).mockResolvedValue(
+      {} as Awaited<ReturnType<typeof rejectPrediction>>,
+    );
   });
 
   afterEach(() => {
@@ -116,11 +130,15 @@ describe("QuickConfidenceReviewDialog", () => {
 
   it("shows only predictions below the configured review threshold", async () => {
     renderDialog();
-    const dialog = await screen.findByRole("dialog", { name: "Confidence-based review" });
+    const dialog = await screen.findByRole("dialog", {
+      name: "Confidence-based review",
+    });
     expect(await within(dialog).findByText("40.0%")).toBeTruthy();
     expect(within(dialog).queryByText("90.0%")).toBeNull();
     expect(within(dialog).getByText(/review at or below 50%/)).toBeTruthy();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Next prediction" }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Next prediction" }),
+    );
     expect(await within(dialog).findByText("50.0%")).toBeTruthy();
   });
 
@@ -133,17 +151,28 @@ describe("QuickConfidenceReviewDialog", () => {
         label_class_id: "class-1",
       });
     });
-    expect(acceptPrediction).not.toHaveBeenCalledWith("high", expect.anything());
+    expect(acceptPrediction).not.toHaveBeenCalledWith(
+      "high",
+      expect.anything(),
+    );
   });
 
   it("allows a researcher to accept and create an unmapped .pt class", async () => {
     vi.mocked(getPredictions).mockResolvedValue({
-      items: [{ ...proposal("unmapped", 0.3), label_class_id: null, predicted_label: "New coral" }],
+      items: [
+        {
+          ...proposal("unmapped", 0.3),
+          label_class_id: null,
+          predicted_label: "New coral",
+        },
+      ],
       counts: { pending: 1 },
     });
     renderDialog();
     await screen.findByRole("button", { name: "Accept and create class" });
-    fireEvent.click(screen.getByRole("button", { name: "Accept and create class" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Accept and create class" }),
+    );
     await waitFor(() => {
       expect(acceptPrediction).toHaveBeenCalledWith("unmapped", {});
     });

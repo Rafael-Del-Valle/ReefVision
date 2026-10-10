@@ -4,11 +4,7 @@ from pathlib import Path
 
 
 def _script(name: str) -> str:
-    return (
-        Path(__file__).resolve().parents[4]
-        / "scripts"
-        / name
-    ).read_text(encoding="utf-8")
+    return (Path(__file__).resolve().parents[4] / "scripts" / name).read_text(encoding="utf-8")
 
 
 def test_phase11c_wrapper_remains_windows_powershell_ascii_safe() -> None:

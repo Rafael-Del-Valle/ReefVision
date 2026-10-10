@@ -415,10 +415,12 @@ class EnhancedAnnotationImportService(AnnotationImportService):
         if isinstance(counts, str):
             # Standard COCO encoded RLE is ASCII. The legacy CoralNet decoder
             # accepts base64-wrapped COCO bytes; convert the representation.
-            return cls._decode_rle_image({
-                "size": [height, width],
-                "counts": base64.b64encode(counts.encode("ascii")).decode("ascii"),
-            })
+            return cls._decode_rle_image(
+                {
+                    "size": [height, width],
+                    "counts": base64.b64encode(counts.encode("ascii")).decode("ascii"),
+                }
+            )
         if isinstance(counts, list):
             raster = bytearray(height * width)
             offset = 0
@@ -433,9 +435,9 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                 offset = end
             if offset != len(raster):
                 raise ValidationError("COCO RLE does not fill the declared dimensions")
-            return Image.frombytes(
-                "L", (height, width), bytes(raster)
-            ).transpose(Image.Transpose.TRANSPOSE)
+            return Image.frombytes("L", (height, width), bytes(raster)).transpose(
+                Image.Transpose.TRANSPOSE
+            )
         raise ValidationError("COCO RLE counts must be an ASCII string or integer list")
 
     def import_streams(
@@ -477,29 +479,35 @@ class EnhancedAnnotationImportService(AnnotationImportService):
         for filename, data in buffered:
             if filename.casefold().endswith((".txt",)):
                 if not names_by_index:
-                    import_warnings.append(AnnotationImportIssue(
-                        source_file=filename,
-                        detail="YOLO TXT requires a companion data.yaml with class names",
-                    ))
+                    import_warnings.append(
+                        AnnotationImportIssue(
+                            source_file=filename,
+                            detail="YOLO TXT requires a companion data.yaml with class names",
+                        )
+                    )
                     continue
                 try:
                     converted, warnings = convert_yolo(
                         filename, data.decode("utf-8-sig"), names_by_index, known_images
                     )
                 except UnicodeDecodeError as exc:
-                    import_warnings.append(AnnotationImportIssue(
-                        source_file=filename, detail=f"Invalid YOLO UTF-8 text: {exc}"
-                    ))
+                    import_warnings.append(
+                        AnnotationImportIssue(
+                            source_file=filename, detail=f"Invalid YOLO UTF-8 text: {exc}"
+                        )
+                    )
                     continue
                 import_warnings.extend(
                     AnnotationImportIssue(source_file=filename, detail=warning)
                     for warning in warnings
                 )
                 if converted:
-                    base_uploads.append((
-                        filename + ".json",
-                        BytesIO(json.dumps(converted).encode("utf-8")),
-                    ))
+                    base_uploads.append(
+                        (
+                            filename + ".json",
+                            BytesIO(json.dumps(converted).encode("utf-8")),
+                        )
+                    )
                 continue
             if filename.casefold().endswith((".yaml", ".yml")):
                 with suppress(yaml.YAMLError):
@@ -514,9 +522,11 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                 try:
                     converted, mapping, warnings, rle_masks = convert_coco(payload, filename)
                 except (ValidationError, ValueError, KeyError, TypeError) as exc:
-                    import_warnings.append(AnnotationImportIssue(
-                        source_file=filename, detail=f"Invalid COCO JSON: {exc}"
-                    ))
+                    import_warnings.append(
+                        AnnotationImportIssue(
+                            source_file=filename, detail=f"Invalid COCO JSON: {exc}"
+                        )
+                    )
                     continue
                 class_mapping.update(mapping)
                 external_class_names.update(mapping)
@@ -529,10 +539,12 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                     for warning in warnings
                 )
                 if converted:
-                    base_uploads.append((
-                        filename + ".converted.json",
-                        BytesIO(json.dumps(converted).encode("utf-8")),
-                    ))
+                    base_uploads.append(
+                        (
+                            filename + ".converted.json",
+                            BytesIO(json.dumps(converted).encode("utf-8")),
+                        )
+                    )
                 continue
             if payload is not None and self._looks_like_class_mapping(payload):
                 class_mapping.update(
@@ -540,7 +552,8 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                 )
                 external_class_names.update(
                     str(value.get("long_label_code") or value.get("short_label_code") or key)
-                    for key, value in payload.items() if isinstance(value, dict)
+                    for key, value in payload.items()
+                    if isinstance(value, dict)
                 )
                 base_uploads.append((filename, BytesIO(data)))
                 continue
@@ -563,10 +576,12 @@ class EnhancedAnnotationImportService(AnnotationImportService):
             base_uploads.append((filename, BytesIO(data)))
 
         if class_mapping:
-            base_uploads.append((
-                ".reefvision-external-class-mapping.json",
-                BytesIO(json.dumps(class_mapping).encode("utf-8")),
-            ))
+            base_uploads.append(
+                (
+                    ".reefvision-external-class-mapping.json",
+                    BytesIO(json.dumps(class_mapping).encode("utf-8")),
+                )
+            )
         report = super().import_streams(project_id, base_uploads)
 
         # Transfer class catalogs even when some classes have zero annotations.
@@ -594,11 +609,13 @@ class EnhancedAnnotationImportService(AnnotationImportService):
             self.session.commit()
 
         if not semantic_annotations and not coco_rle_annotations:
-            return report.model_copy(update={
-                "files_processed": len(buffered),
-                "classes_created": report.classes_created + len(precreated_class_ids),
-                "issues": [*report.issues, *import_warnings],
-            })
+            return report.model_copy(
+                update={
+                    "files_processed": len(buffered),
+                    "classes_created": report.classes_created + len(precreated_class_ids),
+                    "issues": [*report.issues, *import_warnings],
+                }
+            )
 
         project = self._project(project_id)
         project_classes = list(project.label_classes)
@@ -705,12 +722,14 @@ class EnhancedAnnotationImportService(AnnotationImportService):
             image = self._match_image(image_reference, by_basename, by_import_source)
             if image is None:
                 semantic_unmatched.add(image_reference)
-                semantic_issues.append(AnnotationImportIssue(
-                    source_file=source_file,
-                    image_reference=image_reference,
-                    annotation_id=str(raw.get("id", "")),
-                    detail="No unique ReefVision image matched the COCO image reference",
-                ))
+                semantic_issues.append(
+                    AnnotationImportIssue(
+                        source_file=source_file,
+                        image_reference=image_reference,
+                        annotation_id=str(raw.get("id", "")),
+                        detail="No unique ReefVision image matched the COCO image reference",
+                    )
+                )
                 continue
             try:
                 label_class = self._ensure_class(
@@ -764,12 +783,14 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                     semantic_modified[image.id] = False
             except (ValidationError, ValueError, TypeError, KeyError) as exc:
                 semantic_skipped += 1
-                semantic_issues.append(AnnotationImportIssue(
-                    source_file=source_file,
-                    image_reference=image_reference,
-                    annotation_id=str(raw.get("id", "")),
-                    detail=f"COCO RLE mask import: {exc}",
-                ))
+                semantic_issues.append(
+                    AnnotationImportIssue(
+                        source_file=source_file,
+                        image_reference=image_reference,
+                        annotation_id=str(raw.get("id", "")),
+                        detail=f"COCO RLE mask import: {exc}",
+                    )
+                )
 
         for image_id, all_verified in semantic_modified.items():
             image = self.session.get(ImageAsset, image_id)

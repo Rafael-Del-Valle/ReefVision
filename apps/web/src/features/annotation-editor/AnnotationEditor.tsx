@@ -963,7 +963,9 @@ export function AnnotationEditor({
     mutationFn: (variant: string) => installSam2Model(project.id, variant),
     onSuccess: (job) => {
       setSamInstallJobId(job.id);
-      setShortcutMessage("SAM 2.1 is downloading. Your segmentation prompt is queued.");
+      setShortcutMessage(
+        "SAM 2.1 is downloading. Your segmentation prompt is queued.",
+      );
     },
     onError: (error: Error) => setShortcutMessage(error.message),
   });
@@ -1002,13 +1004,16 @@ export function AnnotationEditor({
       setSamPendingBox(null);
       setSamInstallJobId(null);
       setSamPromptArmed(false);
-      setShortcutMessage("SAM mask created as a pending proposal. Review and accept it.");
+      setShortcutMessage(
+        "SAM mask created as a pending proposal. Review and accept it.",
+      );
       setShowPredictions(true);
       await queryClient.invalidateQueries({
         queryKey: ["predictions", input.imageId],
       });
       const proposalId = result.result.proposal_id;
-      if (typeof proposalId === "string") setSelectedPredictionIds([proposalId]);
+      if (typeof proposalId === "string")
+        setSelectedPredictionIds([proposalId]);
     },
     onError: (error: Error) => {
       setShortcutMessage(error.message);
@@ -1017,22 +1022,29 @@ export function AnnotationEditor({
   });
 
   useEffect(() => {
-    if (!samPendingBox || samInstallJobQuery.data?.status !== "succeeded") return;
-    if (samPendingBox.imageId !== currentImageId || samPendingBox.variant !== samModelVariant) {
+    if (!samPendingBox || samInstallJobQuery.data?.status !== "succeeded")
+      return;
+    if (
+      samPendingBox.imageId !== currentImageId ||
+      samPendingBox.variant !== samModelVariant
+    ) {
       setSamPendingBox(null);
       setSamInstallJobId(null);
       return;
     }
     samAssistMutation.mutate(samPendingBox);
-  // Job state changes only after the single background install completes.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Job state changes only after the single background install completes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [samInstallJobQuery.data?.status]);
 
   useEffect(() => {
-    if (samInstallJobQuery.data?.status === "failed" ||
-        samInstallJobQuery.data?.status === "cancelled") {
+    if (
+      samInstallJobQuery.data?.status === "failed" ||
+      samInstallJobQuery.data?.status === "cancelled"
+    ) {
       setShortcutMessage(
-        samInstallJobQuery.data.error_message ?? "SAM model download did not finish.",
+        samInstallJobQuery.data.error_message ??
+          "SAM model download did not finish.",
       );
       setSamPendingBox(null);
       setSamInstallJobId(null);
@@ -1470,7 +1482,10 @@ export function AnnotationEditor({
         return;
       }
       const prompt: [number, number, number, number] = [
-        box.x_min, box.y_min, box.x_max, box.y_max,
+        box.x_min,
+        box.y_min,
+        box.x_max,
+        box.y_max,
       ];
       if (prompt[2] <= prompt[0] || prompt[3] <= prompt[1]) {
         setShortcutMessage("Draw a non-empty box for SAM segmentation.");
@@ -1494,15 +1509,24 @@ export function AnnotationEditor({
       }
 
       // Shift+Digit1/2 are editor actions, while plain 1–9 still choose classes.
-      if (event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey &&
-          event.code === "Digit1") {
+      if (
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        event.code === "Digit1"
+      ) {
         event.preventDefault();
-        if (samAssistMutation.isPending || samInstallMutation.isPending || samPendingBox) {
+        if (
+          samAssistMutation.isPending ||
+          samInstallMutation.isPending ||
+          samPendingBox
+        ) {
           setShortcutMessage("SAM is still processing or downloading.");
           return;
         }
-        const selectedBox = state.document.annotations.find(
-          (annotation) => state.selectedIds.includes(annotation.id),
+        const selectedBox = state.document.annotations.find((annotation) =>
+          state.selectedIds.includes(annotation.id),
         );
         if (selectedBox) {
           setShortcutMessage("Running SAM on the selected box...");
@@ -1522,17 +1546,28 @@ export function AnnotationEditor({
         }
         return;
       }
-      if (event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey &&
-          event.code === "Digit2") {
+      if (
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        event.code === "Digit2"
+      ) {
         event.preventDefault();
         if (!deployModelId) {
-          setShortcutMessage("Select or register a trained model to predict this image.");
-        } else if (deployModelMutation.isPending ||
-                   deployJobQuery.data?.status === "queued" ||
-                   deployJobQuery.data?.status === "running") {
+          setShortcutMessage(
+            "Select or register a trained model to predict this image.",
+          );
+        } else if (
+          deployModelMutation.isPending ||
+          deployJobQuery.data?.status === "queued" ||
+          deployJobQuery.data?.status === "running"
+        ) {
           setShortcutMessage("Model predictions are already running.");
         } else {
-          setShortcutMessage("Running model predictions on the current image...");
+          setShortcutMessage(
+            "Running model predictions on the current image...",
+          );
           setShowPredictions(true);
           deployModelMutation.mutate();
         }
@@ -1767,7 +1802,14 @@ export function AnnotationEditor({
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
     };
-  }, [activeClassId, commitDocument, imageSize, interaction, samPromptArmed, runSamOnBox]);
+  }, [
+    activeClassId,
+    commitDocument,
+    imageSize,
+    interaction,
+    samPromptArmed,
+    runSamOnBox,
+  ]);
 
   const navigateToImage = useCallback(
     async (imageId: string | null) => {
@@ -2111,16 +2153,20 @@ export function AnnotationEditor({
           <button
             type="button"
             className="secondary"
-            disabled={samAssistMutation.isPending || samInstallMutation.isPending}
+            disabled={
+              samAssistMutation.isPending || samInstallMutation.isPending
+            }
             title="Segment the selected box, or draw a SAM prompt box (Shift+1)"
             onClick={() => {
-              const box = state.document.annotations.find(
-                (annotation) => state.selectedIds.includes(annotation.id),
+              const box = state.document.annotations.find((annotation) =>
+                state.selectedIds.includes(annotation.id),
               );
               if (box) runSamOnBox(box);
               else {
                 setSamPromptArmed(true);
-                setShortcutMessage("SAM prompt mode: draw a box around an object.");
+                setShortcutMessage(
+                  "SAM prompt mode: draw a box around an object.",
+                );
               }
             }}
           >
@@ -2129,9 +2175,12 @@ export function AnnotationEditor({
           <button
             type="button"
             className="secondary"
-            disabled={!deployModelId || deployModelMutation.isPending ||
+            disabled={
+              !deployModelId ||
+              deployModelMutation.isPending ||
               deployJobQuery.data?.status === "queued" ||
-              deployJobQuery.data?.status === "running"}
+              deployJobQuery.data?.status === "running"
+            }
             title="Run the current trained model on this image (Shift+2)"
             onClick={() => {
               setShortcutMessage("Running model predictions on this image...");
@@ -2348,7 +2397,9 @@ export function AnnotationEditor({
                 max="100"
                 step="1"
                 value={quickReviewConfidence}
-                onChange={(event) => setQuickReviewConfidence(event.target.value)}
+                onChange={(event) =>
+                  setQuickReviewConfidence(event.target.value)
+                }
               />
             </label>
             <button
@@ -3192,30 +3243,30 @@ export function AnnotationEditor({
               Next image (D)
             </button>
             <span>{dirty ? "Autosave pending" : "All changes synced"}</span>
-          {shortcutMessage && <span role="status">{shortcutMessage}</span>}
-          {samAssistMutation.error && (
-            <span role="alert">{samAssistMutation.error.message}</span>
-          )}
-          {samInstallMutation.error && (
-            <span role="alert">{samInstallMutation.error.message}</span>
-          )}
-          <label>
-            SAM 2.1 model
-            <select
-              aria-label="SAM 2.1 model for editor shortcuts"
-              value={samModelVariant}
-              onChange={(event) => {
-                setSamModelVariant(event.target.value);
-                setSamPendingBox(null);
-                setSamInstallJobId(null);
-              }}
-            >
-              <option value="tiny">Tiny</option>
-              <option value="small">Small</option>
-              <option value="base-plus">Base+</option>
-              <option value="large">Large</option>
-            </select>
-          </label>
+            {shortcutMessage && <span role="status">{shortcutMessage}</span>}
+            {samAssistMutation.error && (
+              <span role="alert">{samAssistMutation.error.message}</span>
+            )}
+            {samInstallMutation.error && (
+              <span role="alert">{samInstallMutation.error.message}</span>
+            )}
+            <label>
+              SAM 2.1 model
+              <select
+                aria-label="SAM 2.1 model for editor shortcuts"
+                value={samModelVariant}
+                onChange={(event) => {
+                  setSamModelVariant(event.target.value);
+                  setSamPendingBox(null);
+                  setSamInstallJobId(null);
+                }}
+              >
+                <option value="tiny">Tiny</option>
+                <option value="small">Small</option>
+                <option value="base-plus">Base+</option>
+                <option value="large">Large</option>
+              </select>
+            </label>
           </div>
 
           <div className="annotation-canvas-frame" ref={viewportRef}>

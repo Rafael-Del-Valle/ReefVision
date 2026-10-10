@@ -67,8 +67,8 @@ export function AnnotationImportControls({ projectId }: { projectId: string }) {
       </div>
       <p>
         Import CoralNet JSON, COCO annotations JSON, or YOLO .txt labels with
-        their data.yaml class mapping. Select related files together so ReefVision
-        can preserve names, indices, geometry, and source provenance.
+        their data.yaml class mapping. Select related files together so
+        ReefVision can preserve names, indices, geometry, and source provenance.
         Imported COCO/YOLO annotations remain subject to researcher review.
       </p>
       <label className="button-label">

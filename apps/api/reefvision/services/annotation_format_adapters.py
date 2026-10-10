@@ -54,7 +54,11 @@ def convert_coco(
         if cid in categories and categories[cid] != label:
             raise ValidationError(f"Conflicting COCO category id {cid}")
         categories[cid] = label
-        mappings[label] = {"id": f"coco:{source_file}:{cid}", "short_label_code": label, "long_label_code": label}
+        mappings[label] = {
+            "id": f"coco:{source_file}:{cid}",
+            "short_label_code": label,
+            "long_label_code": label,
+        }
 
     images: dict[int, str] = {}
     for raw in payload["images"]:
@@ -95,10 +99,14 @@ def convert_coco(
                     warnings.append(f"COCO annotation #{index}: malformed polygon skipped")
                     polygons.clear()
                     break
-                polygons.append({
-                    "points": [[float(ring[i]), float(ring[i + 1])] for i in range(0, len(ring), 2)],
-                    "holes": [],
-                })
+                polygons.append(
+                    {
+                        "points": [
+                            [float(ring[i]), float(ring[i + 1])] for i in range(0, len(ring), 2)
+                        ],
+                        "holes": [],
+                    }
+                )
             if not polygons:
                 continue
             if len(polygons) == 1:
@@ -147,7 +155,9 @@ def convert_yolo(
     stem = PureWindowsPath(_image_name(filename)).stem.casefold()
     matches = images_by_stem.get(stem, [])
     if len(matches) != 1:
-        return {}, [f"{filename}: YOLO label filename must uniquely match an imported project image"]
+        return {}, [
+            f"{filename}: YOLO label filename must uniquely match an imported project image"
+        ]
     image_name, width, height = matches[0]
     result: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -190,7 +200,9 @@ def convert_yolo(
         elif len(coords) >= 6 and len(coords) % 2 == 0:
             record.update(
                 type="PolygonAnnotation",
-                points=[[coords[i] * width, coords[i + 1] * height] for i in range(0, len(coords), 2)],
+                points=[
+                    [coords[i] * width, coords[i + 1] * height] for i in range(0, len(coords), 2)
+                ],
                 holes=[],
             )
         else:

@@ -90,12 +90,18 @@ def sam2_status(settings: Settings, variant: str) -> dict[str, Any]:
         if manifest.get("repo_id") != repo_id:
             raise ValueError("Repository mismatch")
         revision = manifest.get("revision")
-        if not isinstance(revision, str) or len(revision) != 40 or any(
-            c not in "0123456789abcdef" for c in revision
+        if (
+            not isinstance(revision, str)
+            or len(revision) != 40
+            or any(c not in "0123456789abcdef" for c in revision)
         ):
             raise ValueError("Missing immutable source commit")
         files = manifest.get("files")
-        if not isinstance(files, dict) or "model.safetensors" not in files or "config.json" not in files:
+        if (
+            not isinstance(files, dict)
+            or "model.safetensors" not in files
+            or "config.json" not in files
+        ):
             raise ValueError("Incomplete manifest")
         if any(name not in ALLOWED_FILES for name in files):
             raise ValueError("Unexpected model file")
@@ -111,7 +117,9 @@ def sam2_status(settings: Settings, variant: str) -> dict[str, Any]:
             revision=revision,
             weight_sha256=files["model.safetensors"],
             path=str(target),
-            reason=None if runtime_ready else "Checkpoint installed, but Transformers/PyTorch runtime is unavailable.",
+            reason=None
+            if runtime_ready
+            else "Checkpoint installed, but Transformers/PyTorch runtime is unavailable.",
         )
     except (OSError, ValueError, TypeError, ImportError, AttributeError) as exc:
         result["reason"] = f"Checkpoint is not ready: {exc}"
@@ -122,12 +130,14 @@ def queue_sam2_install(session: Session, project_id: str, variant: str) -> Job:
     variant_repo(variant)
     if session.get(Project, project_id) is None:
         raise NotFoundError("Project not found")
-    pending = list(session.scalars(
-        select(Job).where(
-            Job.job_type == "sam2_install",
-            Job.status.in_(("queued", "running", "cancel_requested")),
+    pending = list(
+        session.scalars(
+            select(Job).where(
+                Job.job_type == "sam2_install",
+                Job.status.in_(("queued", "running", "cancel_requested")),
+            )
         )
-    ))
+    )
     existing = next(
         (job for job in pending if dict(job.request_json or {}).get("variant") == variant),
         None,
@@ -141,7 +151,11 @@ def queue_sam2_install(session: Session, project_id: str, variant: str) -> Job:
         project_id=project_id,
         job_type="sam2_install",
         status="queued",
-        request_json={"variant": variant, "repo_id": variant_repo(variant), "auto_install_on_model_selection": True},
+        request_json={
+            "variant": variant,
+            "repo_id": variant_repo(variant),
+            "auto_install_on_model_selection": True,
+        },
         progress_current=0,
         progress_total=0,
         result_json={"stage": "queued"},
@@ -152,15 +166,17 @@ def queue_sam2_install(session: Session, project_id: str, variant: str) -> Job:
     return job
 
 
-def process_sam2_install(
-    settings: Settings, factory: sessionmaker[Session], job_id: str
-) -> bool:
+def process_sam2_install(settings: Settings, factory: sessionmaker[Session], job_id: str) -> bool:
     """Only a verified user-approved queue item is eligible to download."""
     with factory() as session:
         row = session.execute(
             update(Job)
             .where(Job.id == job_id, Job.job_type == "sam2_install", Job.status == "queued")
-            .values(status="running", started_at=datetime.now(UTC), result_json={"stage": "resolving_revision"})
+            .values(
+                status="running",
+                started_at=datetime.now(UTC),
+                result_json={"stage": "resolving_revision"},
+            )
         )
         session.commit()
         if getattr(row, "rowcount", 0) != 1:
@@ -186,8 +202,10 @@ def process_sam2_install(
         # Resolve main ONCE, then download files from the immutable 40-hex commit.
         info = HfApi().model_info(repo_id, revision="main", files_metadata=True)
         revision = info.sha
-        if not isinstance(revision, str) or len(revision) != 40 or any(
-            c not in "0123456789abcdef" for c in revision
+        if (
+            not isinstance(revision, str)
+            or len(revision) != 40
+            or any(c not in "0123456789abcdef" for c in revision)
         ):
             raise ValidationError("Hugging Face did not return a pinned commit SHA")
         siblings = {f.rfilename: f for f in (info.siblings or [])}
@@ -211,12 +229,14 @@ def process_sam2_install(
                 job = session.get(Job, job_id)
                 if job is None or job.status == "cancel_requested":
                     raise ValidationError("SAM 2.1 download cancelled")
-            local = Path(hf_hub_download(
-                repo_id=repo_id,
-                filename=filename,
-                revision=revision,
-                local_dir=stage,
-            ))
+            local = Path(
+                hf_hub_download(
+                    repo_id=repo_id,
+                    filename=filename,
+                    revision=revision,
+                    local_dir=stage,
+                )
+            )
             if local.resolve().parent != stage.resolve():
                 raise ValidationError("Unexpected checkpoint path")
             files[filename] = _sha256(local)
@@ -227,8 +247,11 @@ def process_sam2_install(
                     return False
                 job.progress_current = min(completed, job.progress_total)
                 job.result_json = {
-                    "stage": "downloading", "completed_files": index + 1,
-                    "total_files": len(filenames), "repo_id": repo_id, "revision": revision,
+                    "stage": "downloading",
+                    "completed_files": index + 1,
+                    "total_files": len(filenames),
+                    "repo_id": repo_id,
+                    "revision": revision,
                 }
                 session.commit()
 
@@ -266,8 +289,11 @@ def process_sam2_install(
             job.status = "succeeded"
             job.progress_current = job.progress_total
             job.result_json = {
-                "stage": "ready", "repo_id": repo_id, "revision": revision,
-                "variant": variant, "weight_sha256": files["model.safetensors"],
+                "stage": "ready",
+                "repo_id": repo_id,
+                "revision": revision,
+                "variant": variant,
+                "weight_sha256": files["model.safetensors"],
                 "path": str(target),
             }
             job.completed_at = datetime.now(UTC)
