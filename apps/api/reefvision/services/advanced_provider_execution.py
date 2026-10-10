@@ -230,8 +230,8 @@ class AdvancedProviderExecutionService:
         return AdvancedProviderExecutionResponse(
             provider_id="grounding_dino",
             task=request.task,
-            model_id=variant_repo(variant),
-            model_revision=str(installed["revision"]),
+            model_id=spec.repo_id,
+            model_revision=spec.revision,
             result={
                 "image_id": image_id,
                 "detections": persisted_detections,
