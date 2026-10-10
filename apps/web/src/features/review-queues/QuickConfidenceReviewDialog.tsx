@@ -34,7 +34,7 @@ function eligibleProposals(
   return proposals.filter(
     (proposal) =>
       proposal.review_status === "pending" &&
-      (threshold === null || proposal.confidence < threshold),
+      (threshold === null || proposal.confidence <= threshold),
   );
 }
 
@@ -172,7 +172,7 @@ export function QuickConfidenceReviewDialog({
             <p>
               Ranked image {position} of {total} · {item.review_state}
               {reviewBelowConfidence !== null
-                ? ` · review below ${Math.round(reviewBelowConfidence * 100)}%`
+                ? ` · review at or below ${Math.round(reviewBelowConfidence * 100)}%`
                 : " · all pending confidences"}
             </p>
           </div>
