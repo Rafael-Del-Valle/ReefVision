@@ -7,6 +7,7 @@ import pipeline. Ambiguous image or class identity is reported, not guessed.
 from __future__ import annotations
 
 from collections import defaultdict
+from math import isfinite
 from pathlib import PureWindowsPath
 from typing import Any
 
@@ -30,10 +31,16 @@ def _image_name(value: object) -> str:
 def convert_coco(
     payload: dict[str, Any],
     source_file: str,
-) -> tuple[dict[str, list[dict[str, Any]]], dict[str, dict[str, Any]], list[str]]:
+) -> tuple[
+    dict[str, list[dict[str, Any]]],
+    dict[str, dict[str, Any]],
+    list[str],
+    list[tuple[str, str, dict[str, Any]]],
+]:
     categories: dict[int, str] = {}
     mappings: dict[str, dict[str, Any]] = {}
     warnings: list[str] = []
+    coco_masks: list[tuple[str, str, dict[str, Any]]] = []
     for raw in payload["categories"]:
         if not isinstance(raw, dict):
             raise ValidationError("COCO categories must be objects")
@@ -79,9 +86,7 @@ def convert_coco(
         }
         segmentation = raw.get("segmentation")
         if isinstance(segmentation, dict):
-            warnings.append(
-                f"COCO annotation #{index}: RLE masks require lossless raster-mask import; not converted to a bounding box"
-            )
+            coco_masks.append((image_name, label, dict(raw)))
             continue
         if isinstance(segmentation, list) and segmentation:
             polygons: list[dict[str, Any]] = []
@@ -110,7 +115,7 @@ def convert_coco(
             except (ValueError, TypeError):
                 warnings.append(f"COCO annotation #{index}: invalid bbox")
                 continue
-            if width <= 0 or height <= 0:
+            if any(not isfinite(v) for v in (x, y, width, height)) or width <= 0 or height <= 0:
                 warnings.append(f"COCO annotation #{index}: empty bbox")
                 continue
             record.update(
@@ -119,7 +124,7 @@ def convert_coco(
                 bottom_right=[x + width, y + height],
             )
         output[image_name].append(record)
-    return dict(output), mappings, warnings
+    return dict(output), mappings, warnings, coco_masks
 
 
 def yolo_names(dataset: object) -> dict[int, str]:
@@ -160,7 +165,7 @@ def convert_yolo(
         if class_id not in names or not names[class_id]:
             warnings.append(f"{filename}:{line_number}: class {class_id} absent from data.yaml")
             continue
-        if not coords or any(not 0 <= value <= 1 for value in coords):
+        if not coords or any(not isfinite(value) or not 0 <= value <= 1 for value in coords):
             warnings.append(f"{filename}:{line_number}: coordinates must be normalized 0..1")
             continue
         label = names[class_id]
