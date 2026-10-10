@@ -11,6 +11,7 @@ import json
 import os
 import shutil
 from datetime import UTC, datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -52,12 +53,19 @@ def model_directory(settings: Settings, variant: str) -> Path:
     return settings.resolved_data_dir / "provider-models" / "sam2" / variant
 
 
-def _sha256(path: Path) -> str:
+@lru_cache(maxsize=128)
+def _hashed_file(path_str: str, size: int, modification_ns: int) -> str:
+    path = Path(path_str)
     digest = hashlib.sha256()
     with path.open("rb") as source:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _sha256(path: Path) -> str:
+    stat = path.stat()
+    return _hashed_file(str(path.resolve()), stat.st_size, stat.st_mtime_ns)
 
 
 def sam2_status(settings: Settings, variant: str) -> dict[str, Any]:
@@ -105,7 +113,7 @@ def sam2_status(settings: Settings, variant: str) -> dict[str, Any]:
             path=str(target),
             reason=None if runtime_ready else "Checkpoint installed, but Transformers/PyTorch runtime is unavailable.",
         )
-    except (OSError, ValueError, TypeError, ImportError) as exc:
+    except (OSError, ValueError, TypeError, ImportError, AttributeError) as exc:
         result["reason"] = f"Checkpoint is not ready: {exc}"
     return result
 
@@ -114,14 +122,14 @@ def queue_sam2_install(session: Session, project_id: str, variant: str) -> Job:
     variant_repo(variant)
     if session.get(Project, project_id) is None:
         raise NotFoundError("Project not found")
-    pending = session.scalar(
+    pending = list(session.scalars(
         select(Job).where(
             Job.job_type == "sam2_install",
             Job.status.in_(("queued", "running", "cancel_requested")),
         )
-    )
-    if pending is not None:
-        raise ConflictError("A SAM 2.1 installation is already running for this project")
+    ))
+    if any(dict(job.request_json or {}).get("variant") == variant for job in pending):
+        raise ConflictError(f"SAM 2.1 {variant} is already downloading")
     job = Job(
         id=str(uuid4()),
         project_id=project_id,
