@@ -290,7 +290,7 @@ export function AnnotationEditor({
   );
   const [deployModelId, setDeployModelId] = useState("");
   const [deployConfidence, setDeployConfidence] = useState("0.25");
-  const [quickReviewConfidence, setQuickReviewConfidence] = useState("0.50");
+  const [quickReviewConfidence, setQuickReviewConfidence] = useState("50");
   const [quickReviewOpen, setQuickReviewOpen] = useState(false);
   const [deployDevice, setDeployDevice] = useState("auto");
   const [deployJobId, setDeployJobId] = useState<string | null>(null);
@@ -1918,7 +1918,7 @@ export function AnnotationEditor({
             onClick={() => setQuickReviewOpen(true)}
             title="Open a floating low-confidence prediction reviewer"
           >
-            Quick review ({Math.round(Number(quickReviewConfidence) * 100)}%)
+            Quick review (≤{quickReviewConfidence}%)
           </button>
           <button
             type="button"
@@ -2120,12 +2120,12 @@ export function AnnotationEditor({
               <p className="form-error">{deployJobQuery.data.error_message}</p>
             )}
             <label>
-              Quick-review confidence cutoff (0–1)
+              Review predictions at or below confidence (%)
               <input
                 type="number"
                 min="0"
-                max="1"
-                step="0.05"
+                max="100"
+                step="1"
                 value={quickReviewConfidence}
                 onChange={(event) => setQuickReviewConfidence(event.target.value)}
               />
@@ -2137,15 +2137,17 @@ export function AnnotationEditor({
                 quickReviewConfidence.trim() === "" ||
                 !Number.isFinite(Number(quickReviewConfidence)) ||
                 Number(quickReviewConfidence) < 0 ||
-                Number(quickReviewConfidence) > 1
+                Number(quickReviewConfidence) > 100
               }
               onClick={() => setQuickReviewOpen(true)}
             >
               Quick-review predictions in popout
             </button>
             <p className="annotation-helper">
-              Check predictions below the cutoff without scrolling to the
-              prediction list. All others remain pending and unverified.
+              Only review model predictions at or below this percentage.
+              Higher-confidence predictions are skipped, not automatically
+              human-verified. Set deployment confidence low enough to retain
+              detections that you want reviewed (for example 0.05).
             </p>
           </section>
 
@@ -3244,7 +3246,7 @@ export function AnnotationEditor({
             review_queue_id: "",
             review_state: "pending",
           }}
-          reviewBelowConfidence={Number(quickReviewConfidence)}
+          reviewBelowConfidence={Number(quickReviewConfidence) / 100}
           position={1}
           total={1}
           onClose={() => setQuickReviewOpen(false)}
