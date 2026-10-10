@@ -85,6 +85,9 @@ def test_segment_worker_exports_polygons_and_preserves_mask_metrics(
     captured: dict[str, Any] = {}
     monkeypatch.setattr(worker_module, "require_provider_ready", lambda *args: None)
     monkeypatch.setattr(worker_module, "configure_provider_runtime", lambda settings: None)
+    # The test uses a deliberately minimal FakeYOLO, not the real Ultralytics
+    # package. Keep the real package's offline-safety hooks in production.
+    monkeypatch.setattr(worker_module, "configure_local_training_runtime", lambda settings: None)
     monkeypatch.setattr(worker_module, "resolve_torch_device", lambda device: "cpu")
     monkeypatch.setattr(
         worker_module,
