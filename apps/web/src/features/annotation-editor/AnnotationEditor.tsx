@@ -1863,7 +1863,7 @@ export function AnnotationEditor({
         !imageSize ||
         event.button === 1 ||
         event.button === 2 ||
-        state.tool === "pan"
+        (state.tool === "pan" && !samPromptArmed)
       ) {
         if (currentView) {
           setInteraction({
