@@ -74,13 +74,27 @@ def _ensure_catalog_proxy_registration(
     project: Project,
     provider_id: str,
     runtime_path: Path,
+    source_repo_id: str | None = None,
+    source_revision: str | None = None,
+    source_checksum: str | None = None,
+    source_variant: str | None = None,
 ) -> ModelRegistration:
-    """Create a tiny project FK/provenance record without duplicating model weights."""
+    """Create a project FK/provenance record without duplicating model weights."""
 
     spec = OPTIONAL_MODEL_SPECS[provider_id]
-    catalog_id = _PROVIDER_CATALOG_IDS[provider_id]
+    catalog_id = (
+        f"sam2/image/{source_variant}" if provider_id == "sam2" and source_variant
+        else _PROVIDER_CATALOG_IDS[provider_id]
+    )
     purpose, task = _PROVIDER_REGISTRATION[provider_id]
-    display_name = _catalog_proxy_name(provider_id)
+    display_name = (
+        f"ReefVision managed · SAM 2.1 Hiera {source_variant}"
+        if provider_id == "sam2" and source_variant
+        else _catalog_proxy_name(provider_id)
+    )
+    resolved_repo = source_repo_id or spec.repo_id
+    resolved_revision = source_revision or spec.revision
+    resolved_checksum = source_checksum or spec.weight_sha256
 
     existing = session.scalar(
         select(ModelRegistration).where(
@@ -96,13 +110,17 @@ def _ensure_catalog_proxy_registration(
         "project_id": project.id,
         "provider_id": provider_id,
         "catalog_id": catalog_id,
-        "repo_id": spec.repo_id,
-        "revision": spec.revision,
-        "checkpoint_sha256": spec.weight_sha256,
+        "repo_id": resolved_repo,
+        "revision": resolved_revision,
+        "checkpoint_sha256": resolved_checksum,
         "runtime_path": str(runtime_path),
     }
     marker_bytes = (json.dumps(marker, sort_keys=True, indent=2) + "\n").encode("utf-8")
-    relative_path = f"{project.storage_root}/models/catalog-proxies/{provider_id}.catalog-link.json"
+    suffix = f"-{source_variant}" if provider_id == "sam2" and source_variant else ""
+    relative_path = (
+        f"{project.storage_root}/models/catalog-proxies/"
+        f"{provider_id}{suffix}.catalog-link.json"
+    )
     marker_path = resolve_managed_project_path(settings, relative_path)
     marker_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = marker_path.with_suffix(marker_path.suffix + ".tmp")
@@ -123,16 +141,16 @@ def _ensure_catalog_proxy_registration(
         framework="transformers",
         task=task,
         provider_name=provider_id,
-        provider_version=f"pinned:{spec.revision[:12]}",
+        provider_version=f"pinned:{resolved_revision[:12]}",
         class_map_json={},
         input_size_json=None,
         metadata_json={
             "managed_catalog_proxy": True,
             "hidden_from_normal_model_selection": True,
             "catalog_id": catalog_id,
-            "repo_id": spec.repo_id,
-            "revision": spec.revision,
-            "checkpoint_sha256": spec.weight_sha256,
+            "repo_id": resolved_repo,
+            "revision": resolved_revision,
+            "checkpoint_sha256": resolved_checksum,
             "runtime_path": str(runtime_path),
             "runtime_managed_by": "model_hub",
         },
@@ -280,7 +298,7 @@ def persist_grounding_dino_proposals(
             image_id=image.id,
             model_id=model.id,
             inference_job_id=job.id,
-            model_checksum=spec.weight_sha256 or model.sha256,
+            model_checksum=resolved_checksum or model.sha256,
             label_class_id=matched_class.id if matched_class else None,
             predicted_label=label,
             predicted_index=matched_class.class_index if matched_class else None,
@@ -375,10 +393,17 @@ def persist_sam2_proposal(
     score: float,
     box: dict[str, float],
     prompt_fields: dict[str, Any],
+    source_repo_id: str | None = None,
+    source_revision: str | None = None,
+    source_checksum: str | None = None,
+    source_variant: str | None = None,
 ) -> str:
     project = _project(session, project_id)
     image = _image(session, project_id, image_id)
     spec = OPTIONAL_MODEL_SPECS["sam2"]
+    resolved_repo = source_repo_id or spec.repo_id
+    resolved_revision = source_revision or spec.revision
+    resolved_checksum = source_checksum or spec.weight_sha256
 
     try:
         x_min = float(box["x_min"])
@@ -413,6 +438,10 @@ def persist_sam2_proposal(
         project=project,
         provider_id="sam2",
         runtime_path=runtime_path,
+        source_repo_id=resolved_repo,
+        source_revision=resolved_revision,
+        source_checksum=resolved_checksum,
+        source_variant=source_variant,
     )
     job = _new_inference_job(
         session,
@@ -456,9 +485,10 @@ def persist_sam2_proposal(
             "source": "advanced_provider",
             "provider_id": "sam2",
             "catalog_id": _PROVIDER_CATALOG_IDS["sam2"],
-            "repo_id": spec.repo_id,
-            "model_revision": spec.revision,
-            "checkpoint_sha256": spec.weight_sha256,
+            "repo_id": resolved_repo,
+            "model_revision": resolved_revision,
+            "model_variant": source_variant or "small",
+            "checkpoint_sha256": resolved_checksum,
             "project_proxy_model_id": model.id,
             "proposal_geometry": "raster_mask",
             "prompt_kind": prompt_kind,
