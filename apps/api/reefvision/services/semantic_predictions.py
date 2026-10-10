@@ -79,14 +79,7 @@ class SemanticPredictionService(SegmentationPredictionService):
             raise NotFoundError("Project not found")
         if proposal.review_status != "pending":
             raise ConflictError("Only pending prediction proposals can be reviewed")
-        label_class_id = (
-            payload.label_class_id
-            if payload and payload.label_class_id
-            else proposal.label_class_id
-        )
-        if label_class_id is None:
-            raise ValidationError("Choose a project class before accepting this prediction")
-        self._label_class(image, label_class_id)
+        label_class_id = self._resolve_accept_class(image, proposal, payload)
         if not proposal.mask_content_sha256:
             raise ValidationError("Semantic proposal mask metadata is missing")
         source_path = self.raster_mask_file(proposal.id)
