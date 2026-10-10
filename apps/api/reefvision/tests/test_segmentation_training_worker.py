@@ -132,11 +132,17 @@ def test_segment_worker_exports_polygons_and_preserves_mask_metrics(
     module.YOLO = FakeYOLO
     monkeypatch.setitem(sys.modules, "ultralytics", module)
     app = cast(FastAPI, client.app)
-    assert process_segmentation_training_job(
+    result = process_segmentation_training_job(
         app.state.settings,
         app.state.session_factory,
         job_id,
     )
+    with app.state.session_factory() as debug_session:
+        debug_job = debug_session.get(Job, job_id)
+        assert result, (
+            f"Segmentation training worker failed: "
+            f"{debug_job.error_message if debug_job else 'job missing'}"
+        )
     assert captured["name"] == "segment"
     assert Path(captured["data"]).name == "data.yaml"
 
