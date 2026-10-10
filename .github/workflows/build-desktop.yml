@@ -80,10 +80,13 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      - name: Upload Windows installer
+      - name: Upload complete Windows installer (MSI and external CABs)
         uses: actions/upload-artifact@v4
         with:
           name: ReefVision-Windows-Installer
-          path: apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+          path: |
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.cab
+            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/build-provenance.json
           if-no-files-found: error
           retention-days: 14
