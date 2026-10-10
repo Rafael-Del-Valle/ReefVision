@@ -16,6 +16,7 @@ function ImportReport({ report }: { report: AnnotationImportReport }) {
       <span>{report.masks_imported} editable masks imported</span>
       <span>{report.duplicate_annotations} duplicates skipped</span>
       <span>{report.classes_created} classes created</span>
+      <span>{report.classes_matched} classes matched</span>
       <span>{report.unmatched_images} unmatched image references</span>
       <span>{report.skipped_annotations} annotations skipped</span>
       {report.issues.slice(0, 10).map((issue, index) => (
@@ -61,20 +62,21 @@ export function AnnotationImportControls({ projectId }: { projectId: string }) {
       <div className="section-heading">
         <div>
           <p className="eyebrow">Annotation interoperability</p>
-          <h3>Import CoralNet-Toolbox annotations</h3>
+          <h3>Import annotations (CoralNet, COCO, YOLO)</h3>
         </div>
       </div>
       <p>
-        Select one or more annotation JSON files. You can select
-        class_mapping.json and data.yaml in the same import so ReefVision can
-        preserve the original labels, colors, and class metadata.
+        Import CoralNet JSON, COCO annotations JSON, or YOLO .txt labels with
+        their data.yaml class mapping. Select related files together so ReefVision
+        can preserve names, indices, geometry, and source provenance.
+        Imported COCO/YOLO annotations remain subject to researcher review.
       </p>
       <label className="button-label">
         Import annotations
         <input
           className="visually-hidden"
           type="file"
-          accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml"
+          accept=".json,.yaml,.yml,.txt,application/json,application/yaml,text/yaml,text/plain"
           multiple
           onChange={(event) => importFiles(event.target.files)}
         />
