@@ -1306,20 +1306,34 @@ describe("AnnotationEditor", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       requests.push({ url, init });
-      if (url.endsWith(`/images/${session.image.id}/annotations`) &&
-          (!init?.method || init.method === "GET")) return jsonResponse(session);
-      if (url.includes(`/projects/${project.id}/sam2-models`) &&
-          (!init?.method || init.method === "GET")) {
-        return jsonResponse([{
-          variant: "small", ready: true, installed: true,
-          revision: "a".repeat(40), weight_sha256: "f".repeat(64),
-        }]);
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      )
+        return jsonResponse(session);
+      if (
+        url.includes(`/projects/${project.id}/sam2-models`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse([
+          {
+            variant: "small",
+            ready: true,
+            installed: true,
+            revision: "a".repeat(40),
+            weight_sha256: "f".repeat(64),
+          },
+        ]);
       }
-      if (url.includes("/advanced-providers/sam2/execute") &&
-          init?.method === "POST") {
+      if (
+        url.includes("/advanced-providers/sam2/execute") &&
+        init?.method === "POST"
+      ) {
         return jsonResponse({
-          provider_id: "sam2", task: "assist_segmentation",
-          status: "succeeded", model_id: "sam2-small",
+          provider_id: "sam2",
+          task: "assist_segmentation",
+          status: "succeeded",
+          model_id: "sam2-small",
           model_revision: "a".repeat(40),
           result: { proposal_id: "sam-drawn-1" },
           warnings: [],
@@ -1331,11 +1345,15 @@ describe("AnnotationEditor", () => {
     });
 
     renderEditor();
-    await screen.findByRole("heading", { name: session.image.original_filename });
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
     stubCanvasRect();
     await userEvent.click(screen.getByRole("button", { name: "Pan tool" }));
     fireEvent.keyDown(window, { key: "!", code: "Digit1", shiftKey: true });
-    expect(screen.getByText(/SAM prompt ready: drag a bounding box/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/SAM prompt ready: drag a bounding box/),
+    ).toBeInTheDocument();
     const canvas = screen.getByTestId("annotation-canvas");
     fireEvent.pointerDown(canvas, { button: 0, clientX: 150, clientY: 150 });
     fireEvent.pointerMove(window, { clientX: 250, clientY: 240 });
@@ -1347,8 +1365,12 @@ describe("AnnotationEditor", () => {
       expect(request).toBeDefined();
       const body = JSON.parse(String(request?.init?.body));
       expect(body.prompt_fields.sam2_variant).toBe("small");
-      expect(body.prompt_fields.box[2]).toBeGreaterThan(body.prompt_fields.box[0]);
-      expect(body.prompt_fields.box[3]).toBeGreaterThan(body.prompt_fields.box[1]);
+      expect(body.prompt_fields.box[2]).toBeGreaterThan(
+        body.prompt_fields.box[0],
+      );
+      expect(body.prompt_fields.box[3]).toBeGreaterThan(
+        body.prompt_fields.box[1],
+      );
     });
   });
 

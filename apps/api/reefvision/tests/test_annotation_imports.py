@@ -294,8 +294,12 @@ def test_import_can_create_missing_class_without_reindexing_existing_classes(
             for item in session.query(LabelClass).filter_by(project_id=project["id"]).all()
         }
         assert imported_names == {
-            "Muricea Closed", "Muricea Open", "Thesea Closed", "Thesea Open",
-            "Swiftia Closed", "Swiftia Open",
+            "Muricea Closed",
+            "Muricea Open",
+            "Thesea Closed",
+            "Thesea Open",
+            "Swiftia Closed",
+            "Swiftia Open",
         }
         assert session.query(Annotation).filter_by(image_id=image_id).count() == 1
 
