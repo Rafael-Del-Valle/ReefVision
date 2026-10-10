@@ -7,8 +7,8 @@ import binascii
 import json
 from collections import defaultdict
 from contextlib import suppress
-from pathlib import PureWindowsPath
 from io import BytesIO
+from pathlib import PureWindowsPath
 from typing import Any, BinaryIO
 
 import yaml
@@ -27,13 +27,13 @@ from reefvision.db.models import (
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.annotation_imports import AnnotationImportIssue, AnnotationImportResponse
 from reefvision.schemas.annotations import MaskAnnotationDraft, PolygonPoint
-from reefvision.services.annotation_imports import AnnotationImportService
 from reefvision.services.annotation_format_adapters import (
     convert_coco,
     convert_yolo,
     is_coco,
     yolo_names,
 )
+from reefvision.services.annotation_imports import AnnotationImportService
 from reefvision.services.annotations import mask_annotation_snapshot
 from reefvision.storage.masks import write_mask_png
 
@@ -451,10 +451,8 @@ class EnhancedAnnotationImportService(AnnotationImportService):
         names_by_index: dict[int, str] = {}
         for filename, data in buffered:
             if filename.casefold().endswith((".yaml", ".yml")):
-                try:
+                with suppress(ValueError, TypeError, yaml.YAMLError):
                     names_by_index.update(yolo_names(yaml.safe_load(data)))
-                except (ValueError, TypeError, yaml.YAMLError):
-                    pass
         known_images: dict[str, list[tuple[str, int, int]]] = defaultdict(list)
         for item in self.session.scalars(
             select(ImageAsset).where(ImageAsset.project_id == project_id)
@@ -789,7 +787,9 @@ class EnhancedAnnotationImportService(AnnotationImportService):
         return report.model_copy(
             update={
                 "classes_matched": report.classes_matched + len(matched_class_ids),
-                "classes_created": report.classes_created + len(created_class_ids) + len(precreated_class_ids),
+                "classes_created": (
+                    report.classes_created + len(created_class_ids) + len(precreated_class_ids)
+                ),
                 "masks_imported": report.masks_imported + semantic_imported,
                 "duplicate_annotations": report.duplicate_annotations + semantic_duplicates,
                 "unmatched_images": report.unmatched_images + len(semantic_unmatched),
