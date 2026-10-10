@@ -429,7 +429,7 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                 if end > len(raster):
                     raise ValidationError("COCO RLE exceeds the declared dimensions")
                 if index % 2:
-                    raster[offset:end] = b"\\xff" * raw_length
+                    raster[offset:end] = bytes([255]) * raw_length
                 offset = end
             if offset != len(raster):
                 raise ValidationError("COCO RLE does not fill the declared dimensions")
@@ -450,25 +450,6 @@ class EnhancedAnnotationImportService(AnnotationImportService):
         # Resolve YOLO data.yaml even when uploaded after .txt files.
         names_by_index: dict[int, str] = {}
         for filename, data in buffered:
-            if filename.casefold().endswith((".txt",)):
-                if not names_by_index:
-                    import_warnings.append(AnnotationImportIssue(
-                        source_file=filename,
-                        detail="YOLO TXT requires a companion data.yaml with class names",
-                    ))
-                    continue
-                converted, warnings = convert_yolo(
-                    filename, data.decode("utf-8-sig"), names_by_index, known_images
-                )
-                import_warnings.extend(
-                    AnnotationImportIssue(source_file=filename, detail=warning)
-                    for warning in warnings
-                )
-                base_uploads.append((
-                    filename + ".json",
-                    BytesIO(json.dumps(converted).encode("utf-8")),
-                ))
-                continue
             if filename.casefold().endswith((".yaml", ".yml")):
                 try:
                     names_by_index.update(yolo_names(yaml.safe_load(data)))
@@ -496,6 +477,26 @@ class EnhancedAnnotationImportService(AnnotationImportService):
         base_uploads: list[tuple[str | None, BinaryIO]] = []
 
         for filename, data in buffered:
+            if filename.casefold().endswith((".txt",)):
+                if not names_by_index:
+                    import_warnings.append(AnnotationImportIssue(
+                        source_file=filename,
+                        detail="YOLO TXT requires a companion data.yaml with class names",
+                    ))
+                    continue
+                converted, warnings = convert_yolo(
+                    filename, data.decode("utf-8-sig"), names_by_index, known_images
+                )
+                import_warnings.extend(
+                    AnnotationImportIssue(source_file=filename, detail=warning)
+                    for warning in warnings
+                )
+                if converted:
+                    base_uploads.append((
+                        filename + ".json",
+                        BytesIO(json.dumps(converted).encode("utf-8")),
+                    ))
+                continue
             if filename.casefold().endswith((".yaml", ".yml")):
                 with suppress(yaml.YAMLError):
                     dataset_indices.update(self._parse_dataset_names(yaml.safe_load(data)))
@@ -517,10 +518,11 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                     AnnotationImportIssue(source_file=filename, detail=warning)
                     for warning in warnings
                 )
-                base_uploads.append((
-                    filename + ".converted.json",
-                    BytesIO(json.dumps(converted).encode("utf-8")),
-                ))
+                if converted:
+                    base_uploads.append((
+                        filename + ".converted.json",
+                        BytesIO(json.dumps(converted).encode("utf-8")),
+                    ))
                 continue
             if payload is not None and self._looks_like_class_mapping(payload):
                 class_mapping.update(
