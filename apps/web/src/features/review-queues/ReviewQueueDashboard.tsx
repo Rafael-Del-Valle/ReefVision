@@ -20,6 +20,7 @@ import {
   type ReviewQueueRecord,
   type ReviewScoreWeights,
 } from "../../api/client";
+import { QuickConfidenceReviewDialog } from "./QuickConfidenceReviewDialog";
 import {
   reviewQueueItemsQueryKey,
   reviewQueuesQueryKey,
@@ -69,6 +70,8 @@ export function ReviewQueueDashboard({
   const [modelId, setModelId] = useState("");
   const [weights, setWeights] = useState<ReviewScoreWeights>(defaultWeights);
   const [reviewBelowConfidence, setReviewBelowConfidence] = useState("");
+  const [quickReviewItemId, setQuickReviewItemId] = useState<string | null>(null);
+  const [openQuickReviewWhenReady, setOpenQuickReviewWhenReady] = useState(false);
 
   const versions = useQuery({
     queryKey: ["dataset_versions", project.id],
@@ -140,6 +143,12 @@ export function ReviewQueueDashboard({
     setPage(1);
   }, [labelClassId, split, qcSeverity, reviewState, modelId]);
 
+  useEffect(() => {
+    if (!openQuickReviewWhenReady || !items.data || !selectedQueueId) return;
+    setOpenQuickReviewWhenReady(false);
+    setQuickReviewItemId(items.data.items[0]?.id ?? null);
+  }, [items.data, openQuickReviewWhenReady, selectedQueueId]);
+
   const createQueue = useMutation({
     mutationFn: async () => {
       const payload = {
@@ -154,6 +163,8 @@ export function ReviewQueueDashboard({
     },
     onSuccess: async (queue) => {
       setSelectedQueueId(queue.id);
+      setQuickReviewItemId(null);
+      setOpenQuickReviewWhenReady(reviewBelowConfidence !== "");
       await queryClient.invalidateQueries({
         queryKey: ["review_queues", project.id],
       });
@@ -211,6 +222,20 @@ export function ReviewQueueDashboard({
     () => queues.data?.find((queue) => queue.id === selectedQueueId) ?? null,
     [queues.data, selectedQueueId],
   );
+  const quickReviewItems = items.data?.items ?? [];
+  const quickReviewIndex = quickReviewItems.findIndex(
+    (item) => item.id === quickReviewItemId,
+  );
+  const quickReviewItem = quickReviewIndex >= 0
+    ? quickReviewItems[quickReviewIndex]
+    : null;
+  const storedThreshold = selectedQueue?.configuration_json.review_below_confidence;
+  const activeReviewThreshold =
+    typeof storedThreshold === "number" && Number.isFinite(storedThreshold)
+      ? storedThreshold
+      : null;
+
+
 
   return (
     <section className="dashboard-panel">
@@ -220,6 +245,13 @@ export function ReviewQueueDashboard({
           <h3>Review Queue</h3>
           <span>{queues.data?.length ?? 0} historical queues</span>
         </div>
+        <button
+          type="button"
+          disabled={!quickReviewItems.length}
+          onClick={() => setQuickReviewItemId(quickReviewItems[0].id)}
+        >
+          Open quick-review popout
+        </button>
       </div>
 
       <div className="dashboard-layout">
@@ -376,7 +408,12 @@ export function ReviewQueueDashboard({
                   <p className="eyebrow">Selected queue</p>
                   <h4>{selectedQueue.formula_id}</h4>
                 </div>
-                <span>{selectedQueue.item_count} images</span>
+                <span>
+                  {selectedQueue.item_count} images
+                  {activeReviewThreshold !== null
+                    ? ` · review below ${Math.round(activeReviewThreshold * 100)}%`
+                    : ""}
+                </span>
               </div>
               <div className="version-preview-metrics">
                 <span>Status: {selectedQueue.status}</span>
@@ -498,8 +535,15 @@ export function ReviewQueueDashboard({
                     </div>
                   </div>
                   <div className="dashboard-actions">
-                    <button type="button" onClick={() => onOpenImage(item)}>
-                      Open image
+                    <button type="button" onClick={() => setQuickReviewItemId(item.id)}>
+                      Quick review
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => onOpenImage(item)}
+                    >
+                      Open full editor
                     </button>
                     {item.review_state === "pending" && (
                       <button
@@ -566,6 +610,32 @@ export function ReviewQueueDashboard({
           </div>
         </div>
       </div>
+      {quickReviewItem && (
+        <QuickConfidenceReviewDialog
+          key={quickReviewItem.image_id}
+          item={quickReviewItem}
+          reviewBelowConfidence={activeReviewThreshold}
+          position={quickReviewIndex + 1}
+          total={quickReviewItems.length}
+          onClose={() => setQuickReviewItemId(null)}
+          onPreviousImage={() =>
+            setQuickReviewItemId(quickReviewItems[quickReviewIndex - 1]?.id ?? null)
+          }
+          onNextImage={() =>
+            setQuickReviewItemId(quickReviewItems[quickReviewIndex + 1]?.id ?? null)
+          }
+          onOpenFullEditor={() => {
+            setQuickReviewItemId(null);
+            onOpenImage(quickReviewItem);
+          }}
+          onMarkComplete={() =>
+            completeItem.mutate(quickReviewItem.id, {
+              onSuccess: () => setQuickReviewItemId(null),
+            })
+          }
+          markingComplete={completeItem.isPending}
+        />
+      )}
     </section>
   );
 }
