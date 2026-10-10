@@ -85,6 +85,11 @@ import {
   type ReviewedPredictionGeometry,
 } from "./PredictionInspector";
 import { QuickConfidenceReviewDialog } from "../review-queues/QuickConfidenceReviewDialog";
+import {
+  executeAdvancedProvider,
+  getSam2Models,
+  installSam2Model,
+} from "../advanced-providers/advancedProvidersApi";
 
 interface AnnotationEditorProps {
   project: Project;
@@ -292,6 +297,15 @@ export function AnnotationEditor({
   const [deployConfidence, setDeployConfidence] = useState("0.25");
   const [quickReviewConfidence, setQuickReviewConfidence] = useState("50");
   const [quickReviewOpen, setQuickReviewOpen] = useState(false);
+  const [samPromptArmed, setSamPromptArmed] = useState(false);
+  const [samModelVariant, setSamModelVariant] = useState("small");
+  const [samPendingBox, setSamPendingBox] = useState<{
+    imageId: string;
+    variant: string;
+    box: [number, number, number, number];
+  } | null>(null);
+  const [samInstallJobId, setSamInstallJobId] = useState<string | null>(null);
+  const [shortcutMessage, setShortcutMessage] = useState<string | null>(null);
   const [deployDevice, setDeployDevice] = useState("auto");
   const [deployJobId, setDeployJobId] = useState<string | null>(null);
   const completedDeployJobRef = useRef<string | null>(null);
@@ -350,6 +364,23 @@ export function AnnotationEditor({
   const detectorModels = useQuery({
     queryKey: ["models", project.id, "detector"],
     queryFn: () => getModels(project.id, "detector"),
+  });
+  const samVariantsQuery = useQuery({
+    queryKey: ["sam2-models", project.id],
+    queryFn: ({ signal }) => getSam2Models(project.id, signal),
+    enabled: Boolean(sessionQuery.data),
+    refetchInterval: samInstallJobId ? 2000 : false,
+  });
+  const samInstallJobQuery = useQuery({
+    queryKey: ["job", samInstallJobId],
+    queryFn: ({ signal }) => getJob(samInstallJobId as string, signal),
+    enabled: samInstallJobId !== null,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status && ["succeeded", "failed", "cancelled"].includes(status)
+        ? false
+        : 1000;
+    },
   });
   const deployJobQuery = useQuery({
     queryKey: ["job", deployJobId],
@@ -933,6 +964,87 @@ export function AnnotationEditor({
       queryKey: ["predictions", currentImageId],
     });
   }, [currentImageId, deployJobQuery.data, queryClient]);
+
+  const samInstallMutation = useMutation({
+    mutationFn: (variant: string) => installSam2Model(project.id, variant),
+    onSuccess: (job) => {
+      setSamInstallJobId(job.id);
+      setShortcutMessage("SAM 2.1 is downloading. Your segmentation prompt is queued.");
+    },
+    onError: (error: Error) => setShortcutMessage(error.message),
+  });
+  const samAssistMutation = useMutation({
+    mutationFn: async (input: {
+      imageId: string;
+      variant: string;
+      box: [number, number, number, number];
+    }) => {
+      const installed = (await getSam2Models(project.id)).find(
+        (item) => item.variant === input.variant,
+      );
+      if (!installed?.ready) {
+        if (installed?.installed) {
+          throw new Error(installed.reason ?? "SAM runtime is not ready.");
+        }
+        setSamPendingBox(input);
+        if (!samInstallJobId && !samInstallMutation.isPending) {
+          samInstallMutation.mutate(input.variant);
+        }
+        return null;
+      }
+      return executeAdvancedProvider(project.id, "sam2", {
+        task: "assist_segmentation",
+        device: "auto",
+        allow_model_download: false,
+        prompt_fields: {
+          image_id: input.imageId,
+          sam2_variant: input.variant,
+          box: input.box,
+        },
+      });
+    },
+    onSuccess: async (result, input) => {
+      if (!result) return;
+      setSamPendingBox(null);
+      setSamInstallJobId(null);
+      setSamPromptArmed(false);
+      setShortcutMessage("SAM mask created as a pending proposal. Review and accept it.");
+      setShowPredictions(true);
+      await queryClient.invalidateQueries({
+        queryKey: ["predictions", input.imageId],
+      });
+      const proposalId = result.result.proposal_id;
+      if (typeof proposalId === "string") setSelectedPredictionIds([proposalId]);
+    },
+    onError: (error: Error) => {
+      setShortcutMessage(error.message);
+      setSamPendingBox(null);
+    },
+  });
+
+  useEffect(() => {
+    if (!samPendingBox || samInstallJobQuery.data?.status !== "succeeded") return;
+    if (samPendingBox.imageId !== currentImageId || samPendingBox.variant !== samModelVariant) {
+      setSamPendingBox(null);
+      setSamInstallJobId(null);
+      return;
+    }
+    void samVariantsQuery.refetch();
+    samAssistMutation.mutate(samPendingBox);
+  // Trigger only once per completed job, not on every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [samInstallJobQuery.data?.status]);
+
+  useEffect(() => {
+    if (samInstallJobQuery.data?.status === "failed" ||
+        samInstallJobQuery.data?.status === "cancelled") {
+      setShortcutMessage(
+        samInstallJobQuery.data.error_message ?? "SAM model download did not finish.",
+      );
+      setSamPendingBox(null);
+      setSamInstallJobId(null);
+    }
+  }, [samInstallJobQuery.data]);
 
   const deployModelMutation = useMutation({
     mutationFn: () => {
@@ -1522,7 +1634,9 @@ export function AnnotationEditor({
           currentInteraction.current,
           imageSize,
         );
-        if (activeClassId) {
+        if (samPromptArmed) {
+          runSamOnBox(box);
+        } else if (activeClassId) {
           const annotation: EditorAnnotation = {
             id: makeAnnotationId(),
             label_class_id: activeClassId,
@@ -1580,7 +1694,7 @@ export function AnnotationEditor({
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
     };
-  }, [activeClassId, commitDocument, imageSize, interaction]);
+  }, [activeClassId, commitDocument, imageSize, interaction, samPromptArmed, runSamOnBox]);
 
   const navigateToImage = useCallback(
     async (imageId: string | null) => {
@@ -1627,6 +1741,30 @@ export function AnnotationEditor({
     };
   }, [deleteAssistSessionQuietly]);
 
+  const runSamOnBox = useCallback(
+    (box: { x_min: number; y_min: number; x_max: number; y_max: number }) => {
+      if (samAssistMutation.isPending) {
+        setShortcutMessage("A SAM segmentation is already running.");
+        return;
+      }
+      const prompt: [number, number, number, number] = [
+        box.x_min, box.y_min, box.x_max, box.y_max,
+      ];
+      if (prompt[2] <= prompt[0] || prompt[3] <= prompt[1]) {
+        setShortcutMessage("Draw a non-empty box for SAM segmentation.");
+        return;
+      }
+      setSamPromptArmed(false);
+      setShortcutMessage("Running SAM 2.1 segmentation...");
+      samAssistMutation.mutate({
+        imageId: currentImageId,
+        variant: samModelVariant,
+        box: prompt,
+      });
+    },
+    [currentImageId, samModelVariant, samAssistMutation],
+  );
+
   const handleCanvasPointerDown = useCallback(
     (event: ReactPointerEvent<SVGSVGElement>) => {
       if (
@@ -1656,7 +1794,7 @@ export function AnnotationEditor({
         currentView,
       );
 
-      if (state.tool === "box" && activeClassId) {
+      if (samPromptArmed || (state.tool === "box" && activeClassId)) {
         setSelection([]);
         setMaskSelection([]);
         setInteraction({
@@ -1674,6 +1812,7 @@ export function AnnotationEditor({
       activeClassId,
       currentView,
       imageSize,
+      samPromptArmed,
       setMaskSelection,
       setSelection,
       state.tool,
