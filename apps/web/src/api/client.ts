@@ -2742,6 +2742,7 @@ export async function createReviewQueue(
   payload: {
     source_quality_control_run_id?: string | null;
     signal_weights: ReviewScoreWeights;
+    review_below_confidence?: number;
     created_by?: string;
   },
 ): Promise<ReviewQueueRecord> {
@@ -2756,6 +2757,7 @@ export async function createDatasetVersionReviewQueue(
   payload: {
     source_quality_control_run_id?: string | null;
     signal_weights: ReviewScoreWeights;
+    review_below_confidence?: number;
     created_by?: string;
   },
 ): Promise<ReviewQueueRecord> {
