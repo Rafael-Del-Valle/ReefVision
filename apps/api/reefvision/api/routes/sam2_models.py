@@ -6,7 +6,7 @@ from threading import Thread
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
- from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
@@ -24,7 +24,7 @@ router = APIRouter(tags=["sam2-models"])
 DbSession = Annotated[Session, Depends(get_db_session)]
 
 
- def _launch_sam2_thread(
+def _launch_sam2_thread(
     settings: Settings, factory: sessionmaker[Session], job_id: str
 ) -> None:
     Thread(
@@ -49,11 +49,11 @@ def sam2_models(
 def install_sam2_model(
     project_id: str,
     variant: str,
-     request: Request,
+    request: Request,
     background_tasks: BackgroundTasks,
     session: DbSession,
 ) -> JobResponse:
-     job = queue_sam2_install(session, project_id, variant)
+    job = queue_sam2_install(session, project_id, variant)
     response = JobResponse.model_validate(job)
     settings: Settings = request.app.state.settings
     if settings.background_worker_enabled:
