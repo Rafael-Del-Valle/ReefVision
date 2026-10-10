@@ -85,6 +85,15 @@ class PredictionService:
                 raise ValidationError("Cannot accept a prediction into an archived class")
             return class_id
 
+        model = self.models.get(proposal.model_id)
+        if model is None or model.purpose != "detector" or (
+            isinstance(model.metadata_json, dict)
+            and model.metadata_json.get("managed_catalog_proxy")
+        ):
+            raise ValidationError(
+                "Select a biologically meaningful project class before accepting "
+                "unmapped segmentation or external-provider predictions."
+            )
         predicted_label = proposal.predicted_label.strip()
         if not predicted_label or len(predicted_label) > 200:
             raise ValidationError("Prediction label must have 1-200 characters")
