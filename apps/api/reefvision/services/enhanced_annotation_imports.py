@@ -575,13 +575,9 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                 continue
             base_uploads.append((filename, BytesIO(data)))
 
-        if class_mapping:
-            base_uploads.append(
-                (
-                    ".reefvision-external-class-mapping.json",
-                    BytesIO(json.dumps(class_mapping).encode("utf-8")),
-                )
-            )
+        # Converted external annotations include their resolved class labels.
+        # A synthetic mapping file would double-count class mappings supplied
+        # by a user and is not needed to preserve COCO/YOLO label identities.
         report = super().import_streams(project_id, base_uploads)
 
         # Transfer class catalogs even when some classes have zero annotations.
