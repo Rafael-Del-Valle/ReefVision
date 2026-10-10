@@ -115,7 +115,6 @@ def queue_sam2_install(session: Session, project_id: str, variant: str) -> Job:
         raise NotFoundError("Project not found")
     pending = session.scalar(
         select(Job).where(
-            Job.project_id == project_id,
             Job.job_type == "sam2_install",
             Job.status.in_(("queued", "running", "cancel_requested")),
         )
@@ -180,10 +179,7 @@ def process_sam2_install(
         filenames = sorted(ALLOWED_FILES.intersection(siblings))
         if "config.json" not in filenames or "model.safetensors" not in filenames:
             raise ValidationError("The upstream SAM 2.1 checkpoint is missing required files")
-        total = sum(
-            int(getattr(getattr(siblings[name], "size", None), "__int__", lambda: 0)())
-            for name in filenames
-        )
+        total = sum(int(siblings[name].size or 0) for name in filenames)
         stage.mkdir(parents=True, exist_ok=False)
         with factory() as session:
             job = session.get(Job, job_id)
