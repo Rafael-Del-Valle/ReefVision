@@ -1,4 +1,30 @@
 import { getApiBaseUrl } from "../../runtime";
+import type { JobRecord } from "../../api/client";
+
+export interface Sam2InstalledVariant {
+  variant: string;
+  repo_id: string;
+  license_summary: string;
+  ready: boolean;
+  revision: string | null;
+  weight_sha256: string | null;
+  path: string | null;
+  reason: string | null;
+}
+
+export function getSam2Models(projectId: string, signal?: AbortSignal) {
+  return request<Sam2InstalledVariant[]>(
+    `/projects/${encodeURIComponent(projectId)}/sam2-models`,
+    { signal },
+  );
+}
+
+export function installSam2Model(projectId: string, variant: string) {
+  return request<JobRecord>(
+    `/projects/${encodeURIComponent(projectId)}/sam2-models/${encodeURIComponent(variant)}/install`,
+    { method: "POST", body: JSON.stringify({ confirmed: true }) },
+  );
+}
 
 export interface AdvancedProviderManifest {
   provider_id: string;
