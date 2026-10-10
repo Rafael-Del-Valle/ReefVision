@@ -82,8 +82,8 @@ def convert_coco(
             continue
         record: dict[str, Any] = {
             "id": f"coco:{source_file}:{raw.get('id', index)}",
-            "label_short_code": label,
-            "label_long_code": label,
+            "label_short_code": annotation_label,
+            "label_long_code": annotation_label,
             "label_id": f"coco:{source_file}:{raw['category_id']}",
             "verified": False,
             "data": {"external_format": "coco", "external_category_id": raw["category_id"]},
