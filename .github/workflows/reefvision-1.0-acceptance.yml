@@ -128,6 +128,9 @@ jobs:
       - name: Bootstrap desktop build environment
         shell: pwsh
         run: .\scripts\bootstrap.ps1
+      - name: Stage pinned Video Depth Anything source
+        shell: pwsh
+        run: ./.venv/Scripts/python.exe scripts/install-video-depth-anything-source.py
       - name: Build and verify ReefVision MSI
         shell: pwsh
         run: .\scripts\build-desktop.ps1 -TargetTriple x86_64-pc-windows-msvc
