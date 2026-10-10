@@ -161,10 +161,13 @@ try {
     )
 }
 catch {
-    if ($TargetTriple -ne "x86_64-pc-windows-msvc") {
+    if ($TargetTriple -ne "x86_64-pc-windows-msvc" -or
+        -not (Test-Path -LiteralPath (Join-Path $GeneratedWixDirectory "main.wxs") -PathType Leaf)) {
+        # A missing WiX source means Tauri failed BEFORE MSI linking.
+        # Retain that actual failure rather than inventing a cabinet-overflow diagnosis.
         throw
     }
-    Write-Warning "Tauri's single embedded cabinet could not hold the release payload; retrying with split external cabinets."
+    Write-Warning "Tauri MSI creation failed after generating WiX source; attempting split external cabinets."
     Build-ReefVisionSplitCabinetMsi -TargetTriple $TargetTriple
 }
 
