@@ -1,0 +1,121 @@
+.rv-quick-review-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: grid;
+  place-items: center;
+  background: rgba(4, 14, 24, 0.74);
+  padding: 1.25rem;
+}
+
+.rv-quick-review-dialog {
+  width: min(1100px, 96vw);
+  max-height: min(850px, 94vh);
+  overflow: auto;
+  border: 1px solid var(--border-color, #596775);
+  border-radius: 14px;
+  background: var(--surface-color, #152631);
+  color: var(--text-color, #f2f5f8);
+  box-shadow: 0 15px 70px rgba(0, 0, 0, 0.5);
+}
+
+.rv-quick-review-header,
+.rv-quick-review-footer {
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.rv-quick-review-header {
+  border-bottom: 1px solid var(--border-color, #596775);
+}
+
+.rv-quick-review-header h3,
+.rv-quick-review-decision-column h4 {
+  margin: 0.2rem 0;
+}
+
+.rv-quick-review-header p {
+  margin: 0.15rem 0;
+}
+
+.rv-quick-review-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr);
+  gap: 1.25rem;
+  padding: 1.25rem;
+}
+
+.rv-quick-review-image-column,
+.rv-quick-review-decision-column {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.rv-quick-review-image-stage {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #08141c;
+}
+
+.rv-quick-review-image-stage img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.rv-quick-review-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.rv-quick-review-metadata {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.8fr) minmax(0, 1.4fr);
+  gap: 0.55rem 0.7rem;
+  overflow-wrap: anywhere;
+}
+
+.rv-quick-review-metadata dt {
+  opacity: 0.8;
+}
+
+.rv-quick-review-metadata dd {
+  margin: 0;
+}
+
+.rv-quick-review-proposal-nav,
+.rv-quick-review-decision-actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.rv-quick-review-footer {
+  border-top: 1px solid var(--border-color, #596775);
+}
+
+.rv-quick-review-empty {
+  margin: 1rem 0;
+}
+
+@media (max-width: 760px) {
+  .rv-quick-review-content {
+    grid-template-columns: 1fr;
+  }
+  .rv-quick-review-header,
+  .rv-quick-review-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
