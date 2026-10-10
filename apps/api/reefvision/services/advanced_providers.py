@@ -11,6 +11,7 @@ from reefvision.config import Settings
 from reefvision.db.models import ModelRegistration, Project
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.ml.provider_hub import list_model_providers
+from reefvision.services.sam2_install import sam2_status, variant_repo
 from reefvision.schemas.advanced_providers import (
     AdvancedProviderManifestResponse,
     AdvancedProviderPreflightRequest,
@@ -350,7 +351,9 @@ class AdvancedProviderService:
         descriptor = descriptors.get(provider_id)
         optional_provider = provider_id in {"grounding_dino", "sam2", "smolvlm", "nnunet"}
         runtime = (
-            optional_provider_runtime_status(self.settings, provider_id)
+            sam2_status(self.settings, str(request.prompt_fields.get("sam2_variant", "small")))
+            if provider_id == "sam2"
+            else optional_provider_runtime_status(self.settings, provider_id)
             if optional_provider
             else None
         )
@@ -370,9 +373,9 @@ class AdvancedProviderService:
         if optional_provider:
             if provider_id == "nnunet" and runtime and not runtime.get("ready"):
                 blockers.append(str(runtime.get("reason") or "nnU-Net runtime is not ready"))
-            elif runtime and not runtime.get("ready") and not request.allow_model_download:
+            elif runtime and not runtime.get("ready"):
                 blockers.append(
-                    "Optional model is not cached. Enable explicit model download for this action."
+                    str(runtime.get("reason") or "Optional model is not installed.")
                 )
         elif descriptor is None:
             blockers.append("The provider is not registered in the main provider hub")
