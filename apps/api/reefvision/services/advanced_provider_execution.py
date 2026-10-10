@@ -333,8 +333,8 @@ class AdvancedProviderExecutionService:
         return AdvancedProviderExecutionResponse(
             provider_id="sam2",
             task=request.task,
-            model_id=spec.repo_id,
-            model_revision=spec.revision,
+            model_id=variant_repo(variant),
+            model_revision=str(installed["revision"]),
             result={
                 "image_id": image_id,
                 "proposal_id": proposal_id,
