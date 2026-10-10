@@ -581,8 +581,12 @@ class EnhancedAnnotationImportService(AnnotationImportService):
         report = super().import_streams(project_id, base_uploads)
 
         # Transfer class catalogs even when some classes have zero annotations.
-        project = self._project(project_id)
-        project_classes = list(project.label_classes)
+        # The SQLAlchemy Project.label_classes relationship can remain cached
+        # after the base importer created labels through this same session.
+        # Query current rows directly to avoid duplicate class-name inserts.
+        project_classes = list(
+            self.session.scalars(select(LabelClass).where(LabelClass.project_id == project_id))
+        )
         precreated_class_ids: set[str] = set()
         catalog_matched: set[str] = set()
         for label in sorted(external_class_names):
@@ -613,8 +617,9 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                 }
             )
 
-        project = self._project(project_id)
-        project_classes = list(project.label_classes)
+        project_classes = list(
+            self.session.scalars(select(LabelClass).where(LabelClass.project_id == project_id))
+        )
         by_basename, by_import_source = self._images_by_reference(project_id)
         matched_class_ids: set[str] = set()
         created_class_ids: set[str] = set()
