@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import tempfile
@@ -68,12 +69,33 @@ def install(destination: Path) -> Path:
             shutil.rmtree(destination)
         shutil.copytree(source, destination)
 
+    # Upstream imports EasyDict just to construct a mapping unpacked via **.
+    # Replace that optional dependency with the equivalent built-in dict.
+    # Keep this compatibility patch reproducible and refuse unexpected sources.
+    temporal = destination / "video_depth_anything" / "dpt_temporal.py"
+    source_text = temporal.read_text(encoding="utf-8")
+    import_line = "from easydict import EasyDict\n"
+    old_constructor = "motion_module_kwargs = EasyDict("
+    if source_text.count(import_line) != 1 or source_text.count(old_constructor) != 1:
+        raise RuntimeError("Pinned Video Depth Anything source changed unexpectedly")
+    patched = source_text.replace(import_line, "").replace(
+        old_constructor, "motion_module_kwargs = dict("
+    )
+    temporal.write_text(patched, encoding="utf-8")
+    patched_sha256 = hashlib.sha256(temporal.read_bytes()).hexdigest()
+
     manifest = {
         "provider": "video_depth_anything",
         "repository": UPSTREAM_REPOSITORY,
         "commit": UPSTREAM_COMMIT,
         "source_url": ARCHIVE_URL,
         "license": "Apache-2.0",
+        "reefvision_compatibility_patch": {
+            "file": "video_depth_anything/dpt_temporal.py",
+            "description": "Replace EasyDict mapping with builtin dict; keep **kwargs behavior",
+            "upstream_behavior_preserved": True,
+            "patched_file_sha256": patched_sha256,
+        },
         "installed_at_utc": datetime.now(UTC).isoformat(),
     }
     (parent / "source-manifest.json").write_text(
