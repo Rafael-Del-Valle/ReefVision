@@ -1301,6 +1301,57 @@ describe("AnnotationEditor", () => {
     });
   });
 
+  it("arms a SAM draw-box prompt with Shift+1 even when the pan tool is active", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (url.endsWith(`/images/${session.image.id}/annotations`) &&
+          (!init?.method || init.method === "GET")) return jsonResponse(session);
+      if (url.includes(`/projects/${project.id}/sam2-models`) &&
+          (!init?.method || init.method === "GET")) {
+        return jsonResponse([{
+          variant: "small", ready: true, installed: true,
+          revision: "a".repeat(40), weight_sha256: "f".repeat(64),
+        }]);
+      }
+      if (url.includes("/advanced-providers/sam2/execute") &&
+          init?.method === "POST") {
+        return jsonResponse({
+          provider_id: "sam2", task: "assist_segmentation",
+          status: "succeeded", model_id: "sam2-small",
+          model_revision: "a".repeat(40),
+          result: { proposal_id: "sam-drawn-1" },
+          warnings: [],
+        });
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderEditor();
+    await screen.findByRole("heading", { name: session.image.original_filename });
+    stubCanvasRect();
+    await userEvent.click(screen.getByRole("button", { name: "Pan tool" }));
+    fireEvent.keyDown(window, { key: "!", code: "Digit1", shiftKey: true });
+    expect(screen.getByText(/SAM prompt ready: drag a bounding box/)).toBeInTheDocument();
+    const canvas = screen.getByTestId("annotation-canvas");
+    fireEvent.pointerDown(canvas, { button: 0, clientX: 150, clientY: 150 });
+    fireEvent.pointerMove(window, { clientX: 250, clientY: 240 });
+    fireEvent.pointerUp(window);
+    await waitFor(() => {
+      const request = requests.find((item) =>
+        item.url.includes("/advanced-providers/sam2/execute"),
+      );
+      expect(request).toBeDefined();
+      const body = JSON.parse(String(request?.init?.body));
+      expect(body.prompt_fields.sam2_variant).toBe("small");
+      expect(body.prompt_fields.box[2]).toBeGreaterThan(body.prompt_fields.box[0]);
+      expect(body.prompt_fields.box[3]).toBeGreaterThan(body.prompt_fields.box[1]);
+    });
+  });
+
   it("runs the selected detector on the current image with Shift+2", async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
