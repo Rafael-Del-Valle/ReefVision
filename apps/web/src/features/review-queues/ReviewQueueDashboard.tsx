@@ -68,6 +68,7 @@ export function ReviewQueueDashboard({
   const [reviewState, setReviewState] = useState("");
   const [modelId, setModelId] = useState("");
   const [weights, setWeights] = useState<ReviewScoreWeights>(defaultWeights);
+  const [reviewBelowConfidence, setReviewBelowConfidence] = useState("");
 
   const versions = useQuery({
     queryKey: ["dataset_versions", project.id],
@@ -144,6 +145,8 @@ export function ReviewQueueDashboard({
       const payload = {
         source_quality_control_run_id: selectedRunId || undefined,
         signal_weights: weights,
+        review_below_confidence: reviewBelowConfidence === ""
+          ? undefined : Number(reviewBelowConfidence),
       };
       return scopeType === "dataset_version" && datasetVersionId
         ? createDatasetVersionReviewQueue(datasetVersionId, payload)
@@ -272,6 +275,23 @@ export function ReviewQueueDashboard({
                 ))}
               </select>
             </label>
+            <label>
+              Review only if model confidence is below (0–1, optional)
+              <input
+                type="number"
+                min="0"
+                max="1"
+                step="0.05"
+                placeholder="0.50"
+                value={reviewBelowConfidence}
+                onChange={(event) => setReviewBelowConfidence(event.target.value)}
+              />
+            </label>
+            <p className="annotation-helper">
+              Enter 0.50 to queue images with pending proposals below 50%
+              confidence. Other model proposals remain unverified; this
+              threshold never auto-accepts predictions.
+            </p>
             <div className="dashboard-grid compact-grid">
               {Object.entries(weights).map(([key, value]) => (
                 <label key={key}>
