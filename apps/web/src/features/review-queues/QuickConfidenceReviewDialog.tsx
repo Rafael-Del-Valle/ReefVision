@@ -123,12 +123,20 @@ export function QuickConfidenceReviewDialog({
     ? (classOverrides[selectedProposal.id] ?? selectedProposal.label_class_id ?? "")
     : "";
   const chosenClass = classes.find((item) => item.id === chosenClassId);
+  const canCreateMissingClass =
+    selectedProposal?.label_class_id == null &&
+    chosenClassId === "" &&
+    Boolean(selectedProposal?.predicted_label.trim()) &&
+    (selectedProposal?.predicted_label.length ?? 0) <= 200;
   const image = imageQuery.data?.image;
 
   const review = useMutation({
     mutationFn: async (action: "accept" | "reject") => {
       if (!selectedProposal) throw new Error("Select a pending prediction");
       if (action === "reject") return rejectPrediction(selectedProposal.id);
+      if (canCreateMissingClass) {
+        return acceptPrediction(selectedProposal.id, {});
+      }
       if (!chosenClass || !chosenClass.is_active) {
         throw new Error("Select an active project class before accepting this prediction.");
       }
@@ -300,13 +308,23 @@ export function QuickConfidenceReviewDialog({
                     ))}
                   </select>
                 </label>
+                {canCreateMissingClass && (
+                  <p className="annotation-helper">
+                    Accepting will create the missing project class “
+                    {selectedProposal.predicted_label}” from the model label.
+                  </p>
+                )}
                 <div className="rv-quick-review-decision-actions">
                   <button
                     type="button"
-                    disabled={!chosenClass || !chosenClass.is_active || review.isPending}
+                    disabled={
+                      (!canCreateMissingClass &&
+                        (!chosenClass || !chosenClass.is_active)) ||
+                      review.isPending
+                    }
                     onClick={() => review.mutate("accept")}
                   >
-                    Accept prediction
+                    {canCreateMissingClass ? "Accept and create class" : "Accept prediction"}
                   </button>
                   <button
                     type="button"
