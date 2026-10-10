@@ -140,6 +140,9 @@ try {
     }
 
     if (-not $SkipInstaller) {
+        Invoke-Required "Install pinned Video Depth Anything provider source" {
+            & $Python scripts/install-video-depth-anything-source.py
+        }
         Invoke-Required "Build and verify Windows 1.0.1 MSI/CAB installer" {
             & (Join-Path $Root "scripts\build-desktop.ps1") -TargetTriple "x86_64-pc-windows-msvc"
         }
