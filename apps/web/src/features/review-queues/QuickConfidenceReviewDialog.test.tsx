@@ -103,8 +103,8 @@ describe("QuickConfidenceReviewDialog", () => {
       next_image_id: null,
     } as Awaited<ReturnType<typeof getAnnotationSession>>);
     vi.mocked(getPredictions).mockResolvedValue({
-      items: [proposal("low", 0.4), proposal("high", 0.9)],
-      counts: { pending: 2 },
+      items: [proposal("low", 0.4), proposal("equal", 0.5), proposal("high", 0.9)],
+      counts: { pending: 3 },
     });
     vi.mocked(acceptPrediction).mockResolvedValue({} as Awaited<ReturnType<typeof acceptPrediction>>);
     vi.mocked(rejectPrediction).mockResolvedValue({} as Awaited<ReturnType<typeof rejectPrediction>>);
@@ -119,7 +119,9 @@ describe("QuickConfidenceReviewDialog", () => {
     const dialog = await screen.findByRole("dialog", { name: "Confidence-based review" });
     expect(await within(dialog).findByText("40.0%")).toBeTruthy();
     expect(within(dialog).queryByText("90.0%")).toBeNull();
-    expect(within(dialog).getByText(/review below 50%/)).toBeTruthy();
+    expect(within(dialog).getByText(/review at or below 50%/)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Next prediction" }));
+    expect(await within(dialog).findByText("50.0%")).toBeTruthy();
   });
 
   it("explicit acceptance preserves the selected project class", async () => {
