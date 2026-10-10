@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { getJob, getProjectModelCatalog, type Project } from "../../api/client";
 import {
@@ -68,6 +68,7 @@ export function AdvancedProviderWorkspace({
   const [promptFields, setPromptFields] = useState<Record<string, unknown>>({});
   const [rawJson, setRawJson] = useState("{}");
   const [sam2Variant, setSam2Variant] = useState("small");
+  const autoInstallAttempted = useRef(new Set<string>());
   const [sam2InstallJobId, setSam2InstallJobId] = useState<string | null>(null);
   const sam2Models = useQuery({
     queryKey: ["sam2-models", project.id],
@@ -90,6 +91,14 @@ export function AdvancedProviderWorkspace({
   });
   const selectedSam2Model = sam2Models.data?.find((item) => item.variant === sam2Variant);
   const sam2Ready = Boolean(selectedSam2Model?.ready);
+
+  useEffect(() => {
+    if (providerId !== "sam2" || !selectedSam2Model ||
+        selectedSam2Model.installed || sam2Install.isPending ||
+        autoInstallAttempted.current.has(sam2Variant)) return;
+    autoInstallAttempted.current.add(sam2Variant);
+    sam2Install.mutate();
+  }, [providerId, sam2Variant, selectedSam2Model, sam2Install.isPending, sam2Install.mutate]);
 
   const manifestsQuery = useQuery({
     queryKey: ["advanced-provider-manifests"],
@@ -266,23 +275,22 @@ export function AdvancedProviderWorkspace({
               </label>
               <p>
                 {selectedSam2Model?.ready ? "Installed and verified" :
+                  selectedSam2Model?.installed ? "Checkpoint cached; runtime unavailable" :
                   selectedSam2Model?.reason ?? "Checking installation..."}
               </p>
               <p className="annotation-helper">
-                Apache-2.0 Meta checkpoint from Hugging Face. Downloads occur
-                only after approval. A source commit and SHA-256 are retained.
+                SAM 2.1 model weights are automatically downloaded and cached
+                when you select a size. No approval dialog is required.
+                Meta's Apache-2.0 source, revision, and SHA-256 are recorded.
+                Large models can require substantial disk space and bandwidth.
               </p>
               <button
                 type="button"
-                disabled={sam2Ready || sam2Install.isPending ||
+                disabled={Boolean(selectedSam2Model?.installed) || sam2Install.isPending ||
                   ["queued", "running"].includes(sam2InstallJob.data?.status ?? "")}
-                onClick={() => {
-                  if (window.confirm(
-                    `Download SAM 2.1 ${sam2Variant} from Meta on Hugging Face? This can use significant disk space and bandwidth.`,
-                  )) sam2Install.mutate();
-                }}
+                onClick={() => sam2Install.mutate()}
               >
-                {sam2Ready ? "SAM 2.1 ready" : "Download and install SAM 2.1"}
+                {sam2Ready ? "SAM 2.1 ready" : "Retry SAM 2.1 download"}
               </button>
               {sam2InstallJob.data && (
                 <p role="status">
