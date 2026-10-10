@@ -1,4 +1,4 @@
-"""Explicit user-approved SAM 2.1 checkpoint deployment endpoints."""
+"""Selected SAM 2.1 checkpoint installation and status endpoints."""
 
 from __future__ import annotations
 
@@ -6,13 +6,12 @@ from threading import Thread
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
-from pydantic import BaseModel
-from sqlalchemy.orm import Session, sessionmaker
+ from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
 from reefvision.db.models import Project
-from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.domain.errors import NotFoundError
 from reefvision.schemas.jobs import JobResponse
 from reefvision.services.sam2_install import (
     SAM2_REPOSITORIES,
@@ -25,11 +24,7 @@ router = APIRouter(tags=["sam2-models"])
 DbSession = Annotated[Session, Depends(get_db_session)]
 
 
-class Sam2InstallRequest(BaseModel):
-    confirmed: bool = False
-
-
-def _launch_sam2_thread(
+ def _launch_sam2_thread(
     settings: Settings, factory: sessionmaker[Session], job_id: str
 ) -> None:
     Thread(
@@ -54,14 +49,11 @@ def sam2_models(
 def install_sam2_model(
     project_id: str,
     variant: str,
-    payload: Sam2InstallRequest,
-    request: Request,
+     request: Request,
     background_tasks: BackgroundTasks,
     session: DbSession,
 ) -> JobResponse:
-    if payload.confirmed is not True:
-        raise ValidationError("Approve the SAM 2.1 model download explicitly before installation")
-    job = queue_sam2_install(session, project_id, variant)
+     job = queue_sam2_install(session, project_id, variant)
     response = JobResponse.model_validate(job)
     settings: Settings = request.app.state.settings
     if settings.background_worker_enabled:
