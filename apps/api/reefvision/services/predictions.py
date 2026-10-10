@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import (
@@ -65,6 +66,70 @@ class PredictionService:
             if label_class.id == label_class_id:
                 return label_class
         raise ValidationError("Annotation class does not belong to this image's project")
+
+    def _resolve_accept_class(
+        self,
+        image: ImageAsset,
+        proposal: PredictionProposal,
+        payload: PredictionAcceptRequest | None,
+    ) -> str:
+        """Resolve the class at explicit acceptance, including legacy .pt mappings.
+
+        No annotation is automatically accepted. Only an explicit acceptance
+        may create a missing class for an unmapped legacy model prediction.
+        """
+        class_id = payload.label_class_id if payload and payload.label_class_id else proposal.label_class_id
+        if class_id is not None:
+            label_class = self._label_class(image, class_id)
+            if not label_class.is_active:
+                raise ValidationError("Cannot accept a prediction into an archived class")
+            return class_id
+
+        predicted_label = proposal.predicted_label.strip()
+        if not predicted_label or len(predicted_label) > 200:
+            raise ValidationError("Prediction label must have 1-200 characters")
+        project = self.projects.get(image.project_id)
+        if project is None:
+            raise NotFoundError("Project not found")
+        classes = list(
+            self.session.scalars(
+                select(LabelClass).where(LabelClass.project_id == project.id)
+            )
+        )
+        match = next(
+            (item for item in classes if item.name.strip().casefold() == predicted_label.casefold()),
+            None,
+        )
+        if match is not None and not match.is_active:
+            raise ValidationError("A matching class is archived; choose an active class")
+        if match is None:
+            next_index = max((item.class_index for item in classes), default=-1) + 1
+            next_order = max((item.display_order for item in classes), default=-1) + 1
+            colors = ("#3B82F6", "#10B981", "#F59E0B", "#8B5CF6", "#EC4899", "#06B6D4")
+            match = LabelClass(
+                id=str(uuid4()),
+                project_id=image.project_id,
+                name=predicted_label,
+                class_index=next_index,
+                display_order=next_order,
+                display_color=colors[next_index % len(colors)],
+                description="Created on explicit acceptance of a model prediction.",
+            )
+            self.session.add(match)
+            self.session.flush()
+        proposal.label_class_id = match.id
+        model = self.models.get(proposal.model_id)
+        if model is not None:
+            class_map = dict(model.class_map_json or {})
+            mapping = dict(class_map.get("mapping") or {})
+            mapping[predicted_label] = match.id
+            class_map["mapping"] = mapping
+            labels = list(class_map.get("labels") or [])
+            if predicted_label not in labels:
+                labels.append(predicted_label)
+            class_map["labels"] = labels
+            model.class_map_json = class_map
+        return match.id
 
     def _response(self, proposal: PredictionProposal) -> PredictionProposalResponse:
         model = self.models.get(proposal.model_id)
@@ -138,14 +203,7 @@ class PredictionService:
         image = self._image(proposal.image_id)
         if proposal.review_status != "pending":
             raise ConflictError("Only pending prediction proposals can be reviewed")
-        label_class_id = (
-            payload.label_class_id
-            if payload and payload.label_class_id
-            else proposal.label_class_id
-        )
-        if label_class_id is None:
-            raise ValidationError("Choose a project class before accepting this prediction")
-        self._label_class(image, label_class_id)
+        label_class_id = self._resolve_accept_class(image, proposal, payload)
         x_min = payload.x_min if payload and payload.x_min is not None else proposal.x_min
         y_min = payload.y_min if payload and payload.y_min is not None else proposal.y_min
         x_max = payload.x_max if payload and payload.x_max is not None else proposal.x_max
