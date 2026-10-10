@@ -1463,6 +1463,30 @@ export function AnnotationEditor({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, []);
 
+  const runSamOnBox = useCallback(
+    (box: { x_min: number; y_min: number; x_max: number; y_max: number }) => {
+      if (samAssistMutation.isPending) {
+        setShortcutMessage("A SAM segmentation is already running.");
+        return;
+      }
+      const prompt: [number, number, number, number] = [
+        box.x_min, box.y_min, box.x_max, box.y_max,
+      ];
+      if (prompt[2] <= prompt[0] || prompt[3] <= prompt[1]) {
+        setShortcutMessage("Draw a non-empty box for SAM segmentation.");
+        return;
+      }
+      setSamPromptArmed(false);
+      setShortcutMessage("Running SAM 2.1 segmentation...");
+      samAssistMutation.mutate({
+        imageId: currentImageId,
+        variant: samModelVariant,
+        box: prompt,
+      });
+    },
+    [currentImageId, samModelVariant, samAssistMutation],
+  );
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isEditableTarget(event.target)) {
@@ -1789,30 +1813,6 @@ export function AnnotationEditor({
       }
     };
   }, [deleteAssistSessionQuietly]);
-
-  const runSamOnBox = useCallback(
-    (box: { x_min: number; y_min: number; x_max: number; y_max: number }) => {
-      if (samAssistMutation.isPending) {
-        setShortcutMessage("A SAM segmentation is already running.");
-        return;
-      }
-      const prompt: [number, number, number, number] = [
-        box.x_min, box.y_min, box.x_max, box.y_max,
-      ];
-      if (prompt[2] <= prompt[0] || prompt[3] <= prompt[1]) {
-        setShortcutMessage("Draw a non-empty box for SAM segmentation.");
-        return;
-      }
-      setSamPromptArmed(false);
-      setShortcutMessage("Running SAM 2.1 segmentation...");
-      samAssistMutation.mutate({
-        imageId: currentImageId,
-        variant: samModelVariant,
-        box: prompt,
-      });
-    },
-    [currentImageId, samModelVariant, samAssistMutation],
-  );
 
   const handleCanvasPointerDown = useCallback(
     (event: ReactPointerEvent<SVGSVGElement>) => {
