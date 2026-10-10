@@ -127,6 +127,8 @@ export function QuickConfidenceReviewDialog({
     selectedProposal?.label_class_id == null &&
     chosenClassId === "" &&
     Boolean(selectedProposal?.predicted_label.trim()) &&
+    selectedProposal?.predicted_label !== "SAM 2 mask" &&
+    !selectedProposal?.model_display_name.startsWith("ReefVision managed") &&
     (selectedProposal?.predicted_label.length ?? 0) <= 200;
   const image = imageQuery.data?.image;
 
