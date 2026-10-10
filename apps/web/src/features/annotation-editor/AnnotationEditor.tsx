@@ -365,12 +365,6 @@ export function AnnotationEditor({
     queryKey: ["models", project.id, "detector"],
     queryFn: () => getModels(project.id, "detector"),
   });
-  const samVariantsQuery = useQuery({
-    queryKey: ["sam2-models", project.id],
-    queryFn: ({ signal }) => getSam2Models(project.id, signal),
-    enabled: Boolean(sessionQuery.data),
-    refetchInterval: samInstallJobId ? 2000 : false,
-  });
   const samInstallJobQuery = useQuery({
     queryKey: ["job", samInstallJobId],
     queryFn: ({ signal }) => getJob(samInstallJobId as string, signal),
@@ -1029,9 +1023,8 @@ export function AnnotationEditor({
       setSamInstallJobId(null);
       return;
     }
-    void samVariantsQuery.refetch();
     samAssistMutation.mutate(samPendingBox);
-  // Trigger only once per completed job, not on every render.
+  // Job state changes only after the single background install completes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [samInstallJobQuery.data?.status]);
 
