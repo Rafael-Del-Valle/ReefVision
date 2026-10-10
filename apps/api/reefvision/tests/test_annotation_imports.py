@@ -278,7 +278,8 @@ def test_import_can_create_missing_class_without_reindexing_existing_classes(
     )
 
     assert response.status_code == 200, response.text
-    assert response.json()["classes_created"] == 1
+    # All six names are retained, including classes without annotations.
+    assert response.json()["classes_created"] == 6
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
         created = (
@@ -288,6 +289,14 @@ def test_import_can_create_missing_class_without_reindexing_existing_classes(
         )
         assert created.class_index == 5
         assert created.display_color == "#885B00"
+        imported_names = {
+            item.name
+            for item in session.query(LabelClass).filter_by(project_id=project["id"]).all()
+        }
+        assert imported_names == {
+            "Muricea Closed", "Muricea Open", "Thesea Closed", "Thesea Open",
+            "Swiftia Closed", "Swiftia Open",
+        }
         assert session.query(Annotation).filter_by(image_id=image_id).count() == 1
 
 
