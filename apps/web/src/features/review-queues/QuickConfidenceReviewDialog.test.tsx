@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ComponentProps } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -56,7 +57,7 @@ function proposal(id: string, confidence: number): PredictionProposal {
 }
 
 function renderDialog(
-  options: Partial<React.ComponentProps<typeof QuickConfidenceReviewDialog>> = {},
+  options: Partial<ComponentProps<typeof QuickConfidenceReviewDialog>> = {},
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
