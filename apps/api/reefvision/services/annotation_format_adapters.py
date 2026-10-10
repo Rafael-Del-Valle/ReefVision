@@ -90,7 +90,7 @@ def convert_coco(
         }
         segmentation = raw.get("segmentation")
         if isinstance(segmentation, dict):
-            coco_masks.append((image_name, label, dict(raw)))
+            coco_masks.append((image_name, annotation_label, dict(raw)))
             continue
         if isinstance(segmentation, list) and segmentation:
             polygons: list[dict[str, Any]] = []
