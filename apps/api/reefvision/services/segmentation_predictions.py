@@ -94,14 +94,7 @@ class SegmentationPredictionService(PredictionService):
         image = self._image(proposal.image_id)
         if proposal.review_status != "pending":
             raise ConflictError("Only pending prediction proposals can be reviewed")
-        label_class_id = (
-            payload.label_class_id
-            if payload and payload.label_class_id
-            else proposal.label_class_id
-        )
-        if label_class_id is None:
-            raise ValidationError("Choose a project class before accepting this prediction")
-        self._label_class(image, label_class_id)
+        label_class_id = self._resolve_accept_class(image, proposal, payload)
         polygon, x_min, y_min, x_max, y_max, area_pixels = self._validated_polygon(
             proposal, payload
         )
