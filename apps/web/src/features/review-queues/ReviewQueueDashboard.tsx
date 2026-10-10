@@ -155,7 +155,7 @@ export function ReviewQueueDashboard({
         source_quality_control_run_id: selectedRunId || undefined,
         signal_weights: weights,
         review_below_confidence: reviewBelowConfidence === ""
-          ? undefined : Number(reviewBelowConfidence),
+          ? undefined : Number(reviewBelowConfidence) / 100,
       };
       return scopeType === "dataset_version" && datasetVersionId
         ? createDatasetVersionReviewQueue(datasetVersionId, payload)
@@ -308,21 +308,21 @@ export function ReviewQueueDashboard({
               </select>
             </label>
             <label>
-              Review only if model confidence is below (0–1, optional)
+              Review predictions at or below confidence (%) — optional
               <input
                 type="number"
                 min="0"
-                max="1"
-                step="0.05"
-                placeholder="0.50"
+                max="100"
+                step="1"
+                placeholder="50"
                 value={reviewBelowConfidence}
                 onChange={(event) => setReviewBelowConfidence(event.target.value)}
               />
             </label>
             <p className="annotation-helper">
-              Enter 0.50 to queue images with pending proposals below 50%
-              confidence. Other model proposals remain unverified; this
-              threshold never auto-accepts predictions.
+              Enter 50 to review predictions with confidence 50% or lower.
+              Predictions above 50% are ignored by this queue, not
+              automatically accepted or human-verified.
             </p>
             <div className="dashboard-grid compact-grid">
               {Object.entries(weights).map(([key, value]) => (
@@ -411,7 +411,7 @@ export function ReviewQueueDashboard({
                 <span>
                   {selectedQueue.item_count} images
                   {activeReviewThreshold !== null
-                    ? ` · review below ${Math.round(activeReviewThreshold * 100)}%`
+                    ? ` · review at or below ${Math.round(activeReviewThreshold * 100)}%`
                     : ""}
                 </span>
               </div>
