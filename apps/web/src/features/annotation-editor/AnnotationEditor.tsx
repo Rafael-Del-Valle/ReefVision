@@ -84,6 +84,7 @@ import {
   PredictionInspector,
   type ReviewedPredictionGeometry,
 } from "./PredictionInspector";
+import { QuickConfidenceReviewDialog } from "../review-queues/QuickConfidenceReviewDialog";
 
 interface AnnotationEditorProps {
   project: Project;
@@ -289,6 +290,8 @@ export function AnnotationEditor({
   );
   const [deployModelId, setDeployModelId] = useState("");
   const [deployConfidence, setDeployConfidence] = useState("0.25");
+  const [quickReviewConfidence, setQuickReviewConfidence] = useState("0.50");
+  const [quickReviewOpen, setQuickReviewOpen] = useState(false);
   const [deployDevice, setDeployDevice] = useState("auto");
   const [deployJobId, setDeployJobId] = useState<string | null>(null);
   const completedDeployJobRef = useRef<string | null>(null);
@@ -2108,6 +2111,34 @@ export function AnnotationEditor({
             {deployJobQuery.data?.error_message && (
               <p className="form-error">{deployJobQuery.data.error_message}</p>
             )}
+            <label>
+              Quick-review confidence cutoff (0–1)
+              <input
+                type="number"
+                min="0"
+                max="1"
+                step="0.05"
+                value={quickReviewConfidence}
+                onChange={(event) => setQuickReviewConfidence(event.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="secondary"
+              disabled={
+                quickReviewConfidence.trim() === "" ||
+                !Number.isFinite(Number(quickReviewConfidence)) ||
+                Number(quickReviewConfidence) < 0 ||
+                Number(quickReviewConfidence) > 1
+              }
+              onClick={() => setQuickReviewOpen(true)}
+            >
+              Quick-review predictions in popout
+            </button>
+            <p className="annotation-helper">
+              Check predictions below the cutoff without scrolling to the
+              prediction list. All others remain pending and unverified.
+            </p>
           </section>
 
           <section className="annotation-sidebar-section">
@@ -3197,6 +3228,28 @@ export function AnnotationEditor({
           </div>
         </section>
       </div>
+      {quickReviewOpen && (
+        <QuickConfidenceReviewDialog
+          item={{
+            image_id: currentImageId,
+            project_id: project.id,
+            review_queue_id: "",
+            review_state: "pending",
+          }}
+          reviewBelowConfidence={Number(quickReviewConfidence)}
+          position={1}
+          total={1}
+          onClose={() => setQuickReviewOpen(false)}
+          onPreviousImage={() => undefined}
+          onNextImage={() => undefined}
+          onReviewSaved={() => {
+            void Promise.all([
+              sessionQuery.refetch(),
+              predictionQuery.refetch(),
+            ]);
+          }}
+        />
+      )}
     </div>
   );
 }
