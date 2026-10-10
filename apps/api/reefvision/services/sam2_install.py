@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import Job, Project
-from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
+from reefvision.domain.errors import NotFoundError, ValidationError
 
 SAM2_REPOSITORIES = {
     "tiny": "facebook/sam2.1-hiera-tiny",
@@ -128,8 +128,14 @@ def queue_sam2_install(session: Session, project_id: str, variant: str) -> Job:
             Job.status.in_(("queued", "running", "cancel_requested")),
         )
     ))
-    if any(dict(job.request_json or {}).get("variant") == variant for job in pending):
-        raise ConflictError(f"SAM 2.1 {variant} is already downloading")
+    existing = next(
+        (job for job in pending if dict(job.request_json or {}).get("variant") == variant),
+        None,
+    )
+    if existing is not None:
+        # Model downloads are shared by the local ReefVision installation.
+        # Both the editor hotkey and Provider Lab can follow the same job.
+        return existing
     job = Job(
         id=str(uuid4()),
         project_id=project_id,
