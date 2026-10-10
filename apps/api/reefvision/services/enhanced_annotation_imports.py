@@ -484,9 +484,15 @@ class EnhancedAnnotationImportService(AnnotationImportService):
                         detail="YOLO TXT requires a companion data.yaml with class names",
                     ))
                     continue
-                converted, warnings = convert_yolo(
-                    filename, data.decode("utf-8-sig"), names_by_index, known_images
-                )
+                try:
+                    converted, warnings = convert_yolo(
+                        filename, data.decode("utf-8-sig"), names_by_index, known_images
+                    )
+                except UnicodeDecodeError as exc:
+                    import_warnings.append(AnnotationImportIssue(
+                        source_file=filename, detail=f"Invalid YOLO UTF-8 text: {exc}"
+                    ))
+                    continue
                 import_warnings.extend(
                     AnnotationImportIssue(source_file=filename, detail=warning)
                     for warning in warnings
@@ -507,7 +513,13 @@ class EnhancedAnnotationImportService(AnnotationImportService):
             except (UnicodeDecodeError, json.JSONDecodeError):
                 payload = None
             if payload is not None and is_coco(payload):
-                converted, mapping, warnings, rle_masks = convert_coco(payload, filename)
+                try:
+                    converted, mapping, warnings, rle_masks = convert_coco(payload, filename)
+                except (ValidationError, ValueError, KeyError, TypeError) as exc:
+                    import_warnings.append(AnnotationImportIssue(
+                        source_file=filename, detail=f"Invalid COCO JSON: {exc}"
+                    ))
+                    continue
                 class_mapping.update(mapping)
                 external_class_names.update(mapping)
                 coco_rle_annotations.extend(
@@ -527,6 +539,10 @@ class EnhancedAnnotationImportService(AnnotationImportService):
             if payload is not None and self._looks_like_class_mapping(payload):
                 class_mapping.update(
                     {str(key): value for key, value in payload.items() if isinstance(value, dict)}
+                )
+                external_class_names.update(
+                    str(value.get("long_label_code") or value.get("short_label_code") or key)
+                    for key, value in payload.items() if isinstance(value, dict)
                 )
                 base_uploads.append((filename, BytesIO(data)))
                 continue
