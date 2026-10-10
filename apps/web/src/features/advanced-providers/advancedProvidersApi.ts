@@ -6,6 +6,7 @@ export interface Sam2InstalledVariant {
   repo_id: string;
   license_summary: string;
   ready: boolean;
+  installed: boolean;
   revision: string | null;
   weight_sha256: string | null;
   path: string | null;
@@ -22,7 +23,7 @@ export function getSam2Models(projectId: string, signal?: AbortSignal) {
 export function installSam2Model(projectId: string, variant: string) {
   return request<JobRecord>(
     `/projects/${encodeURIComponent(projectId)}/sam2-models/${encodeURIComponent(variant)}/install`,
-    { method: "POST", body: JSON.stringify({ confirmed: true }) },
+    { method: "POST" },
   );
 }
 
