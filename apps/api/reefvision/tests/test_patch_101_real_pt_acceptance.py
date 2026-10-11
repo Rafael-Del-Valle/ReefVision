@@ -28,9 +28,7 @@ def test_actual_ultralytics_pt_metadata_and_inference_job(
     import ultralytics
     from ultralytics import YOLO
 
-    base_config_path = (
-        Path(ultralytics.__file__).resolve().parent / "cfg/models/11/yolo11.yaml"
-    )
+    base_config_path = Path(ultralytics.__file__).resolve().parent / "cfg/models/11/yolo11.yaml"
     assert base_config_path.is_file(), "Installed Ultralytics has no YOLO11 YAML"
     config = yaml.safe_load(base_config_path.read_text(encoding="utf-8"))
     config["nc"] = 2
@@ -57,9 +55,7 @@ def test_actual_ultralytics_pt_metadata_and_inference_job(
     )
     assert created.status_code == 201, created.text
     project_id = created.json()["id"]
-    image_id = import_one(client, project_id, filename="coral-pt.png")["successful"][0][
-        "image_id"
-    ]
+    image_id = import_one(client, project_id, filename="coral-pt.png")["successful"][0]["image_id"]
 
     registered = client.post(
         f"/api/v1/projects/{project_id}/models/register",
@@ -87,8 +83,7 @@ def test_actual_ultralytics_pt_metadata_and_inference_job(
     project_response = client.get(f"/api/v1/projects/{project_id}")
     assert project_response.status_code == 200, project_response.text
     project_classes = {
-        item["name"]: item["id"]
-        for item in project_response.json()["label_classes"]
+        item["name"]: item["id"] for item in project_response.json()["label_classes"]
     }
     assert project_classes == mapping
 
@@ -102,9 +97,7 @@ def test_actual_ultralytics_pt_metadata_and_inference_job(
     assert process_inference_job(app.state.settings, app.state.session_factory, job_id)
     completed = client.get(f"/api/v1/jobs/{job_id}")
     assert completed.status_code == 200, completed.text
-    assert completed.json()["status"] == "succeeded", completed.json().get(
-        "error_message"
-    )
+    assert completed.json()["status"] == "succeeded", completed.json().get("error_message")
 
     proposals = client.get(f"/api/v1/images/{image_id}/prediction-proposals")
     assert proposals.status_code == 200, proposals.text
