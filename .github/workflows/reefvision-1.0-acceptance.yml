@@ -168,11 +168,12 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install CPU PyTorch and pinned SAM provider dependencies
+      - name: Install SAM runtime dependencies matching proven live acceptance
         run: |
           python -m pip install --upgrade pip
-          python -m pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install -e ".[dev,advanced]" -r requirements/advanced-providers-windows-py312.txt
+          python -m pip install -e ".[dev,advanced]"
+          python -m pip freeze | grep -E '^(torch|torchvision|transformers|huggingface.hub|hf.xet)='
+
       - name: Execute real SAM model acquisition, CPU inference, and pending review evidence
         run: >-
           python -m pytest
