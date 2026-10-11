@@ -191,7 +191,7 @@ jobs:
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
             -AcceptanceRoot 'C:\reefvision-1-0-1-disposable-acceptance' `
-            -SkipUpgrade -DisposableTest -KeepArtifacts
+            -SkipUpgrade -DisposableTest -KeepArtifacts -LiveSam2Acceptance
 
       - name: Upload isolated Windows acceptance report and MSI logs
         if: always()
