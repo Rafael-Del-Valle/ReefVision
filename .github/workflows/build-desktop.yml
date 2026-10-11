@@ -24,6 +24,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Fast safety checks run before bootstrap / the multi-GB MSI build.
+      - name: Validate Windows clean-install harness safeguards
+        shell: pwsh
+        run: ./scripts/test-windows-clean-install-harness.ps1
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
