@@ -76,7 +76,7 @@ def _materialize_staged_download(downloaded: Path, stage: Path, filename: str) -
     immutable-revision download while ensuring that the final model tree has
     no external links that would break when the partial directory is renamed.
     """
-    if filename not in ALLOWED_FILES or downloaded.name != filename:
+    if filename not in ALLOWED_FILES:
         raise ValidationError("Unexpected SAM 2.1 checkpoint filename")
     if not downloaded.is_file():
         raise ValidationError("SAM 2.1 checkpoint download produced no file")
