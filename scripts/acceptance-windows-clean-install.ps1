@@ -362,10 +362,20 @@ try {
         } while ($samJob.status -in @('queued','running') -and [DateTime]::UtcNow -lt $samDeadline)
         if ($samJob.status -ne 'succeeded') { throw "Packaged SAM 2.1 install failed: $($samJob.status); $($samJob.error_message)" }
 
-        $samModels = @(Invoke-RestMethod "$api/projects/$projectId/sam2-models")
-        $samReady = @($samModels | Where-Object variant -eq 'tiny')
+        # Invoke-RestMethod deliberately emits JSON arrays as a single output
+        # object in PowerShell. Avoid @(...Invoke-RestMethod...) double-wrapping
+        # the array; enumerate the assigned response explicitly before filtering.
+        $samModelsResponse = Invoke-RestMethod "$api/projects/$projectId/sam2-models"
+        $samReady = @(
+            foreach ($status in $samModelsResponse) {
+                if ($null -ne $status -and $status.PSObject.Properties['variant'] -and $status.variant -eq 'tiny') {
+                    $status
+                }
+            }
+        )
         if ($samReady.Count -ne 1 -or -not $samReady[0].ready -or -not $samReady[0].revision -or -not $samReady[0].weight_sha256) {
-            throw 'Packaged SAM 2.1 Tiny did not report a verified ready checkpoint.'
+            $summary = ConvertTo-Json -InputObject $samModelsResponse -Depth 6 -Compress
+            throw "Packaged SAM 2.1 Tiny did not report a verified ready checkpoint. Model statuses: $summary"
         }
         $samRequest = @{
             task = 'assist_segmentation'
