@@ -328,7 +328,8 @@ class AdvancedProviderExecutionService:
                 "SAM2 stage=numpy_import_complete elapsed=%.2fs",
                 time.perf_counter() - started,
             )
-            # Acceptance-only experiment: initialize SciPy BLAS before Torch.\n            # This distinguishes a native import-order conflict from missing DLLs.
+            # Acceptance-only experiment: initialize SciPy BLAS before Torch.
+            # This distinguishes a native import-order conflict from missing DLLs.
             if (
                 getattr(sys, "frozen", False)
                 and os.environ.get("REEFVISION_WINDOWS_ACCEPTANCE") == "1"
