@@ -288,10 +288,35 @@ else {
 if ((git rev-parse HEAD) -ne $BuildCommit -or -not (Test-ReefVisionSourceTreeClean)) {
     throw 'Source tree changed while packaging; do not release these artifacts.'
 }
-$BuildArtifactRecords = @(Get-ChildItem -LiteralPath $InstallerDirectory -File |
-    Where-Object { $_.Extension -in @('.msi', '.cab') } | ForEach-Object {
-        [ordered]@{ name = $_.Name; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
-    })
+# Hash installer payloads with the framework SHA256 implementation.
+# Some Windows PowerShell build agents do not expose Get-FileHash inside
+# the pipeline scriptblock at this stage of the packaging process.
+function Get-ReefVisionArtifactSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $Stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $Sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            return ([System.BitConverter]::ToString($Sha256.ComputeHash($Stream))).Replace('-', '').ToLowerInvariant()
+        }
+        finally {
+            $Sha256.Dispose()
+        }
+    }
+    finally {
+        $Stream.Dispose()
+    }
+}
+$BuildArtifactRecords = @(
+    Get-ChildItem -LiteralPath $InstallerDirectory -File |
+        Where-Object { $_.Extension -in @('.msi', '.cab') } |
+        ForEach-Object {
+            [ordered]@{
+                name = $_.Name
+                sha256 = Get-ReefVisionArtifactSha256 -Path $_.FullName
+            }
+        }
+)
 [ordered]@{
     version = $TauriConfig.version
     source_commit = $BuildCommit
