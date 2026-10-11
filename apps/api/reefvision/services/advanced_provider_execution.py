@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import base64
 import io
+import logging
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +35,8 @@ from reefvision.services.advanced_provider_proposals import (
 )
 from reefvision.services.sam2_install import sam2_status, variant_repo
 from reefvision.storage.projects import resolve_managed_project_path
+
+SAM2_RUNTIME_LOG = logging.getLogger("reefvision.advanced.sam2")
 
 PROVIDER_LAB_EXECUTION_IDS: frozenset[str] = frozenset(
     {
@@ -252,10 +256,17 @@ class AdvancedProviderExecutionService:
     ) -> AdvancedProviderExecutionResponse:
         if request.task != "assist_segmentation":
             raise ValidationError("This SAM 2 adapter currently executes image assist segmentation")
+        started = time.perf_counter()
+        variant = str(request.prompt_fields.get("sam2_variant", "small"))
+        SAM2_RUNTIME_LOG.info("SAM2 stage=start variant=%s device=%s", variant, request.device)
         _, image = _image(
             self.session, self.settings, project_id, request.prompt_fields.get("image_id")
         )
-        variant = str(request.prompt_fields.get("sam2_variant", "small"))
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=image_ready elapsed=%.2fs variant=%s",
+            time.perf_counter() - started,
+            variant,
+        )
         variant_repo(variant)
         installed = sam2_status(self.settings, variant)
         if not installed["ready"]:
@@ -267,10 +278,28 @@ class AdvancedProviderExecutionService:
             from transformers import Sam2Model, Sam2Processor
         except Exception as exc:
             raise ValidationError(f"SAM 2 runtime is unavailable: {exc}") from exc
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=runtime_imported elapsed=%.2fs torch_threads=%d",
+            time.perf_counter() - started,
+            torch.get_num_threads(),
+        )
         device = resolve_torch_device(request.device)
         processor = Sam2Processor.from_pretrained(model_path, local_files_only=True)
-        model = Sam2Model.from_pretrained(model_path, local_files_only=True).to(device)
-        model.eval()
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=processor_loaded elapsed=%.2fs",
+            time.perf_counter() - started,
+        )
+        model = Sam2Model.from_pretrained(model_path, local_files_only=True)
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=weights_loaded elapsed=%.2fs",
+            time.perf_counter() - started,
+        )
+        model = model.to(device).eval()
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=model_ready elapsed=%.2fs device=%s",
+            time.perf_counter() - started,
+            device,
+        )
 
         kwargs: dict[str, Any] = {"images": image, "return_tensors": "pt"}
         raw_box = request.prompt_fields.get("box")
@@ -297,8 +326,17 @@ class AdvancedProviderExecutionService:
             raise ValidationError("SAM 2 requires either a box or point prompts")
 
         inputs = processor(**kwargs).to(device)
-        with torch.no_grad():
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=inputs_ready elapsed=%.2fs pixels=%s",
+            time.perf_counter() - started,
+            tuple(inputs["pixel_values"].shape),
+        )
+        with torch.inference_mode():
             outputs = model(**inputs, multimask_output=False)
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=forward_complete elapsed=%.2fs",
+            time.perf_counter() - started,
+        )
         masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]  # type: ignore[no-untyped-call]
         mask_tensor = masks[0, 0] if masks.ndim == 4 else masks[0]
         mask = np.asarray(mask_tensor, dtype=bool)
@@ -314,6 +352,11 @@ class AdvancedProviderExecutionService:
             "x_max": mask_box.x_max,
             "y_max": mask_box.y_max,
         }
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=mask_ready elapsed=%.2fs area=%d",
+            time.perf_counter() - started,
+            int(mask.sum()),
+        )
         proposal_id = persist_sam2_proposal(
             self.session,
             self.settings,
@@ -329,6 +372,10 @@ class AdvancedProviderExecutionService:
             source_revision=str(installed["revision"]),
             source_checksum=str(installed["weight_sha256"]),
             source_variant=variant,
+        )
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=proposal_persisted elapsed=%.2fs",
+            time.perf_counter() - started,
         )
         return AdvancedProviderExecutionResponse(
             provider_id="sam2",
