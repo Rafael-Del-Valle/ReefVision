@@ -157,7 +157,7 @@ jobs:
     timeout-minutes: 60
     env:
       REEFVISION_LIVE_SAM2_ACCEPTANCE: "1"
-      REEFVISION_ACCEPTANCE_REPORT_DIR: ${{ runner.temp }}/sam2-live-evidence
+      REEFVISION_ACCEPTANCE_REPORT_DIR: ${{ github.workspace }}/sam2-live-evidence
       HF_HUB_OFFLINE: "0"
       TRANSFORMERS_OFFLINE: "0"
       HF_HUB_DISABLE_TELEMETRY: "1"
@@ -183,7 +183,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: reefvision-1.0.1-sam2-live-evidence
-          path: ${{ runner.temp }}/sam2-live-evidence/*.json
+          path: sam2-live-evidence/*.json
           if-no-files-found: warn
           retention-days: 14
 
