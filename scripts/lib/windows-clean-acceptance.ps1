@@ -56,6 +56,11 @@ function Assert-ReefVisionSafeAcceptanceRoot {
         [Parameter(Mandatory = $true)][string]$DefaultDataRoot
     )
     $resolved = Resolve-ReefVisionAcceptancePath $Path
+    # A drive root itself is never a safe acceptance directory. Its ordinary
+    # descendants, however, can be safe when they do not overlap any of the
+    # narrower protected paths below (Windows, Program Files, user data, repo).
+    # Rejecting all descendants of C:\ prevented every disposable C:\ test.
+    $volumeRoot = Resolve-ReefVisionAcceptancePath ([System.IO.Path]::GetPathRoot($resolved))
     $forbidden = @(
         (Resolve-ReefVisionAcceptancePath $RepositoryRoot),
         (Resolve-ReefVisionAcceptancePath $DefaultDataRoot),
@@ -66,6 +71,11 @@ function Assert-ReefVisionSafeAcceptanceRoot {
         (Resolve-ReefVisionAcceptancePath ([System.IO.Path]::GetPathRoot($resolved)))
     ) | Select-Object -Unique
     foreach ($item in $forbidden) {
+        if ($item -ieq $volumeRoot -and $resolved -ine $volumeRoot) {
+            # C:\acceptance is allowed by the volume boundary, but still
+            # must pass all other protected-directory exclusions.
+            continue
+        }
         if ($resolved -ieq $item -or (Test-ReefVisionPathWithin -Path $resolved -Parent $item)) {
             if ($item -ieq (Resolve-ReefVisionAcceptancePath $env:USERPROFILE) -and $resolved -ine $item) {
                 continue
