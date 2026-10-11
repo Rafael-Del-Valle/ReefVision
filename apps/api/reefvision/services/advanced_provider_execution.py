@@ -338,6 +338,20 @@ class AdvancedProviderExecutionService:
                 "SAM2 stage=torch_import_complete elapsed=%.2fs",
                 time.perf_counter() - started,
             )
+            # Diagnose frozen Windows native BLAS initialization separately.
+            if getattr(sys, "frozen", False) and os.environ.get("REEFVISION_WINDOWS_ACCEPTANCE") == "1":
+                SAM2_RUNTIME_LOG.info(
+                    "SAM2 stage=scipy_blas_import_start elapsed=%.2fs",
+                    time.perf_counter() - started,
+                )
+                with _sam2_import_watchdog():
+                    from scipy.linalg import blas as _scipy_blas
+
+                SAM2_RUNTIME_LOG.info(
+                    "SAM2 stage=scipy_blas_import_complete elapsed=%.2fs module=%s",
+                    time.perf_counter() - started,
+                    _scipy_blas.__name__,
+                )
             SAM2_RUNTIME_LOG.info(
                 "SAM2 stage=transformers_import_start elapsed=%.2fs",
                 time.perf_counter() - started,
