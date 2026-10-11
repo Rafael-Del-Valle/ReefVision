@@ -220,13 +220,13 @@ def start_shutdown_monitor(
     return thread
 
 
-def preload_frozen_windows_scipy_blas() -> None:
-    """Initialize native BLAS before a thread blocks reading the shutdown pipe.
+def preload_frozen_windows_scipy_native() -> None:
+    """Initialize native SciPy BLAS and ARPACK before starting the API server.
 
-    On Windows, a lazy first SciPy BLAS import from a request worker can stall
-    native DLL initialization while the desktop shutdown monitor is reading
-    piped stdin. The main thread must load the extension before that monitor
-    starts. Non-frozen and non-Windows Python runtimes remain unchanged.
+    Frozen Windows SAM2 imports have stalled while loading native extensions
+    lazily from a request worker. Preload both observed problematic modules
+    on the desktop main thread, before the shutdown-pipe reader starts.
+    Non-frozen and non-Windows Python runtimes remain unchanged.
     """
     if sys.platform != "win32" or not is_frozen_bundle():
         return
@@ -235,6 +235,10 @@ def preload_frozen_windows_scipy_blas() -> None:
     from scipy.linalg import blas as scipy_blas  # type: ignore[import-untyped]
 
     LOGGER.info("SciPy BLAS preloaded: %s", scipy_blas.__name__)
+    LOGGER.info("Preloading SciPy sparse.linalg ARPACK on Windows")
+    from scipy.sparse.linalg import eigsh  # type: ignore[import-untyped]
+
+    LOGGER.info("SciPy ARPACK preloaded: %s", eigsh.__name__)
 
 
 def run_pending_migrations(settings: Settings) -> None:
@@ -564,7 +568,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 settings,
                 options.annotated_video_export_job,
             )
-        preload_frozen_windows_scipy_blas()
+        preload_frozen_windows_scipy_native()
         configure_windows_event_loop_policy()
         LOGGER.info("Loading FastAPI application factory")
         return asyncio.run(run_api_server(settings, options))
