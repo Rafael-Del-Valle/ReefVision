@@ -18,19 +18,42 @@ function Invoke-ReefVisionIsolatedEnvironment {
         YOLO_AUTOINSTALL = 'false'
     }
     foreach ($Key in $AdditionalEnvironment.Keys) { $Isolated[$Key] = $AdditionalEnvironment[$Key] }
-    $Names = @(@(Get-ChildItem Env: | Where-Object { $_.Name -like 'REEFVISION_*' } | ForEach-Object { $_.Name }) +
-        @($Isolated.Keys) + @('PYTHONPATH', 'PYTHONHOME', 'TRANSFORMERS_CACHE')) | Select-Object -Unique
+
+    # Build a flat, case-insensitive name set. Do not concatenate arrays
+    # through a pipeline: a nested collection can cause environment names
+    # (notably REEFVISION_CONFIG_DIR) to escape isolation.
+    $Names = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($Item in (Get-ChildItem Env:)) {
+        if ($Item.Name.StartsWith('REEFVISION_', [System.StringComparison]::OrdinalIgnoreCase)) {
+            [void]$Names.Add($Item.Name)
+        }
+    }
+    foreach ($Name in $Isolated.Keys) { [void]$Names.Add([string]$Name) }
+    foreach ($Name in @('PYTHONPATH', 'PYTHONHOME', 'TRANSFORMERS_CACHE')) {
+        [void]$Names.Add($Name)
+    }
+
+    # Change variables through the PowerShell Env: provider, the same view
+    # used by the acceptance tests and spawned PowerShell commands.
     $Previous = @{}
     foreach ($Name in $Names) {
         $Previous[$Name] = [Environment]::GetEnvironmentVariable($Name, 'Process')
-        [Environment]::SetEnvironmentVariable($Name, $null, 'Process')
+        Remove-Item -LiteralPath ("Env:{0}" -f $Name) -ErrorAction SilentlyContinue
     }
     try {
-        foreach ($Name in $Isolated.Keys) { [Environment]::SetEnvironmentVariable($Name, $Isolated[$Name], 'Process') }
+        foreach ($Name in $Isolated.Keys) {
+            Set-Item -LiteralPath ("Env:{0}" -f $Name) -Value ([string]$Isolated[$Name])
+        }
         & $Action
     }
     finally {
-        foreach ($Name in $Names) { [Environment]::SetEnvironmentVariable($Name, $Previous[$Name], 'Process') }
+        foreach ($Name in $Names) {
+            if ($null -eq $Previous[$Name]) {
+                Remove-Item -LiteralPath ("Env:{0}" -f $Name) -ErrorAction SilentlyContinue
+            } else {
+                Set-Item -LiteralPath ("Env:{0}" -f $Name) -Value ([string]$Previous[$Name])
+            }
+        }
     }
 }
 
