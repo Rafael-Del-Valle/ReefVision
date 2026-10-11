@@ -7,7 +7,8 @@ param(
     [switch]$PlanOnly,
     [switch]$KeepArtifacts,
     [switch]$SkipUpgrade,
-    [switch]$SkipUninstall
+    [switch]$SkipUninstall,
+    [switch]$LiveSam2Acceptance
 )
 
 $ErrorActionPreference = 'Stop'
@@ -59,6 +60,7 @@ $report = [ordered]@{
     first_launch = New-ReefVisionEvidenceResult
     frontend_backend_connectivity = New-ReefVisionEvidenceResult
     model_policy = New-ReefVisionEvidenceResult
+    sam2_live = if ($LiveSam2Acceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real SAM 2.1 packaged runtime acceptance not requested' }
     project_persistence = New-ReefVisionEvidenceResult
     restart = New-ReefVisionEvidenceResult
     project_exchange = New-ReefVisionEvidenceResult
@@ -120,21 +122,46 @@ function Stop-AcceptanceDesktop($Process) {
     $Process.WaitForExit(15000) | Out-Null
     if (-not $Process.HasExited) { throw 'ReefVision did not close cleanly within 15 seconds.' }
 }
-function Import-AcceptanceImage([string]$Url) {
+function Import-AcceptanceImage(
+    [string]$Url,
+    [byte[]]$ImageBytes = $null,
+    [string]$Filename = 'acceptance.png',
+    [string]$RelativePath = 'synthetic/acceptance.png'
+) {
     Add-Type -AssemblyName System.Net.Http
-    $png = [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=')
+    $png = if ($null -ne $ImageBytes) { $ImageBytes } else { [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=') }
     $client = New-Object System.Net.Http.HttpClient
     $form = New-Object System.Net.Http.MultipartFormDataContent
     try {
         $file = New-Object System.Net.Http.ByteArrayContent -ArgumentList (,$png)
         $file.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse('image/png')
-        $form.Add($file, 'files', 'acceptance.png')
-        $form.Add((New-Object System.Net.Http.StringContent('synthetic/acceptance.png')), 'relative_paths')
+        $form.Add($file, 'files', $Filename)
+        $form.Add((New-Object System.Net.Http.StringContent($RelativePath)), 'relative_paths')
         $response = $client.PostAsync($Url, $form).GetAwaiter().GetResult()
         $payload = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
         if (-not $response.IsSuccessStatusCode) { throw "Image import failed with HTTP $([int]$response.StatusCode): $payload" }
         return $payload | ConvertFrom-Json
     } finally { $form.Dispose(); $client.Dispose() }
+}
+
+function New-AcceptanceSam2Image {
+    # Simple 256x256 contrast image using Windows GDI+ (no system Python).
+    Add-Type -AssemblyName System.Drawing
+    $bitmap = [System.Drawing.Bitmap]::new(256, 256)
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    $brush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(210,155,92))
+    $stream = [System.IO.MemoryStream]::new()
+    try {
+        $graphics.Clear([System.Drawing.Color]::FromArgb(36,49,62))
+        $graphics.FillEllipse($brush, 42, 42, 174, 174)
+        $bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
+        return ,$stream.ToArray()
+    } finally {
+        $stream.Dispose()
+        $brush.Dispose()
+        $graphics.Dispose()
+        $bitmap.Dispose()
+    }
 }
 
 New-Item -ItemType Directory -Path $EvidenceRoot -Force | Out-Null
@@ -216,6 +243,56 @@ try {
     } | ConvertTo-Json -Depth 6
     $saved = Invoke-RestMethod "$api/images/$imageId/annotations" -Method Put -ContentType 'application/json' -Body $annotationBody
     if ($saved.annotations[0].id -ne $annotationId) { throw 'Durable acceptance annotation was not returned after save.' }
+
+    # Real online acquisition uses only the installed backend, not a developer
+    # Python process. The default offline installer smoke test is unchanged.
+    $samAcceptedMaskId = $null
+    if ($LiveSam2Acceptance) {
+        $samImage = New-AcceptanceSam2Image
+        $samImport = Import-AcceptanceImage -Url "$api/projects/$projectId/imports/images" -ImageBytes $samImage -Filename 'sam2-live.png' -RelativePath 'synthetic/sam2-live.png'
+        if (@($samImport.successful).Count -ne 1) { throw 'Live SAM image was not imported.' }
+        $samImageId = $samImport.successful[0].image_id
+
+        $samInstall = Invoke-RestMethod "$api/projects/$projectId/sam2-models/tiny/install" -Method Post
+        if (-not $samInstall.id) { throw 'Packaged backend did not queue SAM 2.1 Tiny install.' }
+        $samDeadline = [DateTime]::UtcNow.AddMinutes(15)
+        do {
+            Start-Sleep -Seconds 2
+            $samJob = Invoke-RestMethod "$api/jobs/$($samInstall.id)"
+        } while ($samJob.status -in @('queued','running') -and [DateTime]::UtcNow -lt $samDeadline)
+        if ($samJob.status -ne 'succeeded') { throw "Packaged SAM 2.1 install failed: $($samJob.status); $($samJob.error_message)" }
+
+        $samModels = @(Invoke-RestMethod "$api/projects/$projectId/sam2-models")
+        $samReady = @($samModels | Where-Object variant -eq 'tiny')
+        if ($samReady.Count -ne 1 -or -not $samReady[0].ready -or -not $samReady[0].revision -or -not $samReady[0].weight_sha256) {
+            throw 'Packaged SAM 2.1 Tiny did not report a verified ready checkpoint.'
+        }
+        $samRequest = @{
+            task = 'assist_segmentation'
+            device = 'cpu'
+            allow_model_download = $false
+            prompt_fields = @{ image_id=$samImageId;sam2_variant='tiny';box=@(35,35,225,225);label_class_id=$testClass.id }
+        } | ConvertTo-Json -Depth 8
+        $samInference = Invoke-RestMethod "$api/projects/$projectId/advanced-providers/sam2/execute" -Method Post -ContentType 'application/json' -Body $samRequest -TimeoutSec 300
+        if ($samInference.result.review_status -ne 'pending' -or $samInference.result.proposal_count -ne 1 -or $samInference.result.area_pixels -le 0) {
+            throw 'Installed SAM 2.1 did not produce a nonempty pending mask proposal.'
+        }
+        $samProposalId = $samInference.result.proposal_id
+        $samPredictions = Invoke-RestMethod "$api/images/$samImageId/prediction-proposals"
+        $samProposal = @($samPredictions.items | Where-Object id -eq $samProposalId)
+        if ($samProposal.Count -ne 1 -or $samProposal[0].review_status -ne 'pending' -or $samProposal[0].accepted_mask_annotation_id) {
+            throw 'SAM 2.1 inference was not persisted as an unaccepted prediction.'
+        }
+        if ($samProposal[0].model_checksum -ne $samReady[0].weight_sha256 -or -not $samProposal[0].provenance_json.requires_researcher_review) {
+            throw 'SAM 2.1 prediction checksum/provenance is missing or invalid.'
+        }
+        $samAcceptance = Invoke-RestMethod "$api/prediction-proposals/$samProposalId/accept" -Method Post -ContentType 'application/json' -Body (@{ label_class_id=$testClass.id } | ConvertTo-Json)
+        if ($samAcceptance.proposal.review_status -notin @('accepted','edited_and_accepted') -or $samAcceptance.mask_annotation.status -ne 'verified') {
+            throw 'Explicitly accepting SAM 2.1 proposal did not create a verified raster mask.'
+        }
+        $samAcceptedMaskId = $samAcceptance.mask_annotation.id
+        $report.sam2_live = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed app's backend downloaded SAM 2.1 Tiny, verified revision $($samReady[0].revision) and SHA256 $($samReady[0].weight_sha256), inferred image $samImageId (area $($samInference.result.area_pixels)), persisted pending proposal $samProposalId and accepted verified mask $samAcceptedMaskId; GUI hotkeys not exercised."
+    }
     Stop-AcceptanceDesktop $desktop
     $projectChecksum = (Get-FileHash -LiteralPath (Join-Path $DataRoot 'reefvision.db') -Algorithm SHA256).Hash
 
@@ -231,6 +308,9 @@ try {
     if ($persisted.id -ne $projectId) { throw 'Project ID changed across restart.' }
     $persistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
     if (-not ($persistedAnnotations.annotations | Where-Object id -eq $annotationId)) { throw 'Acceptance annotation did not persist across restart.' }
+    if ($LiveSam2Acceptance -and -not ($persistedAnnotations.mask_annotations | Where-Object id -eq $samAcceptedMaskId)) {
+        throw 'Accepted SAM 2.1 mask did not persist across packaged Windows desktop restart.'
+    }
     $report.restart = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Desktop and backend restarted cleanly.'
     $report.project_persistence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Project $projectId, image $imageId, and annotation $annotationId persisted; pre-restart database SHA-256 $projectChecksum"
 
