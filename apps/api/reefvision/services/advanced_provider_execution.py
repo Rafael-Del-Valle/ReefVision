@@ -8,7 +8,12 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
+import threading
 import time
+import traceback
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +42,45 @@ from reefvision.services.sam2_install import sam2_status, variant_repo
 from reefvision.storage.projects import resolve_managed_project_path
 
 SAM2_RUNTIME_LOG = logging.getLogger("reefvision.advanced.sam2")
+
+
+@contextmanager
+def _sam2_import_watchdog() -> Iterator[None]:
+    """Log compact Python stacks if a frozen acceptance import is unresponsive."""
+    if os.environ.get("REEFVISION_WINDOWS_ACCEPTANCE") != "1" or not getattr(
+        sys, "frozen", False
+    ):
+        yield
+        return
+
+    done = threading.Event()
+    thread_id = threading.get_ident()
+
+    def report_wait() -> None:
+        if done.wait(30):
+            return
+        while not done.is_set():
+            frame = sys._current_frames().get(thread_id)
+            if frame is not None:
+                frames = traceback.extract_stack(frame, limit=30)
+                stack = " -> ".join(
+                    f"{Path(item.filename).name}:{item.name}:{item.lineno}"
+                    for item in frames[-18:]
+                )
+                SAM2_RUNTIME_LOG.warning(
+                    "SAM2 stage=transformers_import_stalled stack=%s", stack
+                )
+            if done.wait(60):
+                return
+
+    threading.Thread(
+        target=report_wait, name="sam2-frozen-import-watchdog", daemon=True
+    ).start()
+    try:
+        yield
+    finally:
+        done.set()
+
 
 PROVIDER_LAB_EXECUTION_IDS: frozenset[str] = frozenset(
     {
@@ -286,6 +330,7 @@ class AdvancedProviderExecutionService:
                 time.perf_counter() - started,
             )
             import numpy as np
+
             SAM2_RUNTIME_LOG.info(
                 "SAM2 stage=numpy_import_complete elapsed=%.2fs",
                 time.perf_counter() - started,
@@ -295,6 +340,7 @@ class AdvancedProviderExecutionService:
                 time.perf_counter() - started,
             )
             import torch
+
             SAM2_RUNTIME_LOG.info(
                 "SAM2 stage=torch_import_complete elapsed=%.2fs",
                 time.perf_counter() - started,
@@ -303,7 +349,21 @@ class AdvancedProviderExecutionService:
                 "SAM2 stage=transformers_import_start elapsed=%.2fs",
                 time.perf_counter() - started,
             )
-            from transformers import Sam2Model, Sam2Processor
+            with _sam2_import_watchdog():
+                import transformers
+
+                SAM2_RUNTIME_LOG.info(
+                    "SAM2 stage=transformers_package_ready elapsed=%.2fs",
+                    time.perf_counter() - started,
+                )
+                from transformers import Sam2Model
+
+                SAM2_RUNTIME_LOG.info(
+                    "SAM2 stage=sam2_model_imported elapsed=%.2fs",
+                    time.perf_counter() - started,
+                )
+                from transformers import Sam2Processor
+
             SAM2_RUNTIME_LOG.info(
                 "SAM2 stage=transformers_import_complete elapsed=%.2fs",
                 time.perf_counter() - started,
