@@ -66,9 +66,7 @@ def test_actual_ultralytics_pt_metadata_and_inference_job(
             return SimpleNamespace(ready=True)
         return original_preflight(provider_name, settings, check_level=check_level)
 
-    monkeypatch.setattr(
-        provider_dependencies, "provider_preflight", portable_test_preflight
-    )
+    monkeypatch.setattr(provider_dependencies, "provider_preflight", portable_test_preflight)
 
     created = client.post(
         "/api/v1/projects",
