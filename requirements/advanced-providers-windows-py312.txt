@@ -3,6 +3,9 @@
 # Installing these packages never downloads model weights.
 transformers==4.57.2
 huggingface-hub==0.36.0
+# Hub 0.36 uses the legacy hf_xet.download_files() API removed in hf-xet 1.5+.
+# Pin the compatible Xet adapter so actual user-approved checkpoint downloads work.
+hf-xet==1.4.3
 tokenizers==0.22.1
 safetensors==0.7.0
 sentencepiece==0.2.1
