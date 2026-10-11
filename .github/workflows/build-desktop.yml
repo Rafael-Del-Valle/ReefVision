@@ -104,13 +104,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Retrieve exact MSI and all six external CABs
+      - name: Retrieve exact MSI and its external CABs
         uses: actions/download-artifact@v4
         with:
           name: ReefVision-Windows-Installer
           path: ${{ runner.temp }}/reefvision-1-0-1-installer
 
-      - name: Verify installer payload before any install
+      - name: Verify MSI-declared cabinet payload before any install
         shell: pwsh
         run: |
           $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-1-installer'
@@ -119,7 +119,81 @@ jobs:
           if ($msi.Count -ne 1 -or $msi[0].Name -ne 'ReefVision_1.0.1_x64_en-US.msi') {
             throw 'Expected exactly the ReefVision 1.0.1 MSI.'
           }
-          if ($cabs.Count -ne 6) { throw "Expected six external CABs; got $($cabs.Count)." }
+
+          # Read the actual MSI Media table. Cabinet splitting is driven by
+          # payload size and can produce five, six, or another number of CABs.
+          # A leading # denotes an internal (embedded) cabinet, not an
+          # external file. Only external CABs should appear beside the MSI.
+          $installer = New-Object -ComObject WindowsInstaller.Installer
+          $database = $installer.OpenDatabase($msi[0].FullName, 0)
+          $versionView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')
+          $versionView.Execute()
+          $versionRecord = $versionView.Fetch()
+          if ($null -eq $versionRecord -or $versionRecord.StringData(1) -ne '1.0.1') {
+            throw 'MSI ProductVersion must be 1.0.1.'
+          }
+          $versionView.Close()
+
+          $mediaView = $database.OpenView('SELECT `Cabinet` FROM `Media`')
+          $mediaView.Execute()
+          $requiredCabs = @()
+          while ($record = $mediaView.Fetch()) {
+            $cabinetName = [string]$record.StringData(1)
+            if (-not $cabinetName -or $cabinetName.StartsWith('#')) { continue }
+            if ($cabinetName -notmatch '^[^\\/:]+\.cab
+      - name: Test isolated MSI installation without developer runtimes on PATH
+        shell: pwsh
+        run: |
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-1-installer'
+          $msi = Join-Path $folder 'ReefVision_1.0.1_x64_en-US.msi'
+          # The runner may contain development tools, but the installed desktop
+          # must function without any Python, Node.js, or Rust executable on PATH.
+          $env:PATH = @(
+            (Join-Path $env:SystemRoot 'System32'),
+            $env:SystemRoot,
+            (Join-Path $env:SystemRoot 'System32\Wbem'),
+            (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0'),
+            (Join-Path $env:ProgramFiles 'PowerShell\7')
+          ) -join ';'
+          foreach ($cmd in @('python', 'python3', 'node', 'npm', 'rustc', 'cargo')) {
+            if (Get-Command $cmd -ErrorAction SilentlyContinue) {
+              throw "Unexpected developer runtime on isolated PATH: $cmd"
+            }
+          }
+          & ./scripts/acceptance-windows-clean-install.ps1 `
+            -InstallerPath $msi `
+            -AcceptanceRoot 'C:\reefvision-1-0-1-disposable-acceptance' `
+            -SkipUpgrade -DisposableTest -KeepArtifacts
+
+      - name: Upload isolated Windows acceptance report and MSI logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReefVision-1.0.1-Windows-Clean-Install-Evidence
+          path: |
+            .artifacts/windows-clean-acceptance-*/report.json
+            .artifacts/windows-clean-acceptance-*/*.log
+          if-no-files-found: warn
+          retention-days: 14
+) {
+              throw "Unsafe or unsupported MSI external cabinet name: $cabinetName"
+            }
+            $requiredCabs += $cabinetName
+          }
+          $mediaView.Close()
+          $requiredCabs = @($requiredCabs | Sort-Object -Unique)
+          if ($requiredCabs.Count -eq 0) {
+            throw 'MSI Media table does not declare any external CAB files.'
+          }
+
+          $actualCabs = @($cabs | ForEach-Object { $_.Name })
+          $missing = @($requiredCabs | Where-Object { $_ -notin $actualCabs })
+          $unexpected = @($actualCabs | Where-Object { $_ -notin $requiredCabs })
+          if ($missing.Count -gt 0 -or $unexpected.Count -gt 0 -or $actualCabs.Count -ne $requiredCabs.Count) {
+            throw "MSI/CAB mismatch. MSI expects: $($requiredCabs -join ', '); artifact contains: $($actualCabs -join ', '); missing: $($missing -join ', '); unexpected: $($unexpected -join ', ')."
+          }
+          Write-Host "MSI references $($requiredCabs.Count) external CAB files, all present."
+
           foreach ($item in @($msi) + $cabs) {
             if ($item.Length -le 0) { throw "Empty installer file: $($item.Name)" }
             $hash = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash
