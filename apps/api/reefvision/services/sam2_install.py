@@ -68,6 +68,34 @@ def _sha256(path: Path) -> str:
     return _hashed_file(str(path.resolve()), stat.st_size, stat.st_mtime_ns)
 
 
+def _materialize_staged_download(downloaded: Path, stage: Path, filename: str) -> Path:
+    """Store a pinned Hugging Face download as a regular file inside stage.
+
+    Some Windows Hub/cache configurations return a file backed by a link or a
+    cache path outside local_dir. Keep the trusted, allowlisted filename and
+    immutable-revision download while ensuring that the final model tree has
+    no external links that would break when the partial directory is renamed.
+    """
+    if filename not in ALLOWED_FILES or downloaded.name != filename:
+        raise ValidationError("Unexpected SAM 2.1 checkpoint filename")
+    if not downloaded.is_file():
+        raise ValidationError("SAM 2.1 checkpoint download produced no file")
+
+    expected = stage / filename
+    if downloaded.resolve().parent != stage.resolve() or downloaded.is_symlink():
+        temporary = stage / f".{filename}.materializing"
+        with downloaded.open("rb") as source, temporary.open("xb") as destination:
+            shutil.copyfileobj(source, destination, length=1024 * 1024)
+        os.replace(temporary, expected)
+    if (
+        not expected.is_file()
+        or expected.is_symlink()
+        or expected.resolve().parent != stage.resolve()
+    ):
+        raise ValidationError("SAM 2.1 checkpoint was not safely staged")
+    return expected
+
+
 def sam2_status(settings: Settings, variant: str) -> dict[str, Any]:
     repo_id = variant_repo(variant)
     target = model_directory(settings, variant)
@@ -237,10 +265,11 @@ def process_sam2_install(settings: Settings, factory: sessionmaker[Session], job
                     local_dir=stage,
                 )
             )
-            if local.resolve().parent != stage.resolve():
-                raise ValidationError("Unexpected checkpoint path")
-            files[filename] = _sha256(local)
-            completed += local.stat().st_size if total > 0 else 1
+            # Local Hub storage on Windows may resolve to a shared cache.
+            # Materialize it into our private stage before hashing/publishing.
+            staged_file = _materialize_staged_download(local, stage, filename)
+            files[filename] = _sha256(staged_file)
+            completed += staged_file.stat().st_size if total > 0 else 1
             with factory() as session:
                 job = session.get(Job, job_id)
                 if job is None:
