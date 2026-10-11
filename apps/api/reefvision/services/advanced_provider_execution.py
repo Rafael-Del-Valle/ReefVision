@@ -353,8 +353,9 @@ class AdvancedProviderExecutionService:
                 import transformers
 
                 SAM2_RUNTIME_LOG.info(
-                    "SAM2 stage=transformers_package_ready elapsed=%.2fs",
+                    "SAM2 stage=transformers_package_ready elapsed=%.2fs version=%s",
                     time.perf_counter() - started,
+                    transformers.__version__,
                 )
                 from transformers import Sam2Model
 
