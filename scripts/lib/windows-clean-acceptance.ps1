@@ -36,7 +36,12 @@ function Invoke-ReefVisionIsolatedEnvironment {
 
 function Resolve-ReefVisionAcceptancePath {
     param([Parameter(Mandatory = $true)][string]$Path)
-    return [System.IO.Path]::GetFullPath($Path).TrimEnd('\')
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    $volumeRoot = [System.IO.Path]::GetPathRoot($fullPath)
+    # Preserve C:\ or a UNC share root. Trimming to C: would turn an
+    # absolute drive root into a drive-relative path on Windows.
+    if ($fullPath -ieq $volumeRoot) { return $fullPath }
+    return $fullPath.TrimEnd('\')
 }
 
 function Test-ReefVisionPathWithin {
@@ -44,8 +49,8 @@ function Test-ReefVisionPathWithin {
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][string]$Parent
     )
-    $candidate = (Resolve-ReefVisionAcceptancePath $Path) + '\'
-    $boundary = (Resolve-ReefVisionAcceptancePath $Parent) + '\'
+    $candidate = (Resolve-ReefVisionAcceptancePath $Path).TrimEnd('\') + '\'
+    $boundary = (Resolve-ReefVisionAcceptancePath $Parent).TrimEnd('\') + '\'
     return $candidate.StartsWith($boundary, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
