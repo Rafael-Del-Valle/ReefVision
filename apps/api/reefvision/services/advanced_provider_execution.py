@@ -268,15 +268,48 @@ class AdvancedProviderExecutionService:
             variant,
         )
         variant_repo(variant)
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=status_start elapsed=%.2fs", time.perf_counter() - started
+        )
         installed = sam2_status(self.settings, variant)
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=status_complete elapsed=%.2fs ready=%s",
+            time.perf_counter() - started,
+            installed["ready"],
+        )
         if not installed["ready"]:
             raise ValidationError(str(installed["reason"]))
         model_path = Path(str(installed["path"]))
         try:
+            SAM2_RUNTIME_LOG.info(
+                "SAM2 stage=numpy_import_start elapsed=%.2fs",
+                time.perf_counter() - started,
+            )
             import numpy as np
+            SAM2_RUNTIME_LOG.info(
+                "SAM2 stage=numpy_import_complete elapsed=%.2fs",
+                time.perf_counter() - started,
+            )
+            SAM2_RUNTIME_LOG.info(
+                "SAM2 stage=torch_import_start elapsed=%.2fs",
+                time.perf_counter() - started,
+            )
             import torch
+            SAM2_RUNTIME_LOG.info(
+                "SAM2 stage=torch_import_complete elapsed=%.2fs",
+                time.perf_counter() - started,
+            )
+            SAM2_RUNTIME_LOG.info(
+                "SAM2 stage=transformers_import_start elapsed=%.2fs",
+                time.perf_counter() - started,
+            )
             from transformers import Sam2Model, Sam2Processor
+            SAM2_RUNTIME_LOG.info(
+                "SAM2 stage=transformers_import_complete elapsed=%.2fs",
+                time.perf_counter() - started,
+            )
         except Exception as exc:
+            SAM2_RUNTIME_LOG.exception("SAM2 stage=runtime_import_failed")
             raise ValidationError(f"SAM 2 runtime is unavailable: {exc}") from exc
         SAM2_RUNTIME_LOG.info(
             "SAM2 stage=runtime_imported elapsed=%.2fs torch_threads=%d",
