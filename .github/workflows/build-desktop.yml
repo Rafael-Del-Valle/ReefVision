@@ -94,3 +94,69 @@ jobs:
             apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/build-provenance.json
           if-no-files-found: error
           retention-days: 14
+
+  # Separate, disposable Windows runner: do not validate an MSI only on its build machine.
+  windows-clean-install-acceptance:
+    name: Install, launch, persist and uninstall 1.0.1 on fresh Windows
+    runs-on: windows-latest
+    needs: build-windows-installer
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Retrieve exact MSI and all six external CABs
+        uses: actions/download-artifact@v4
+        with:
+          name: ReefVision-Windows-Installer
+          path: ${{ runner.temp }}/reefvision-1-0-1-installer
+
+      - name: Verify installer payload before any install
+        shell: pwsh
+        run: |
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-1-installer'
+          $msi = @(Get-ChildItem -LiteralPath $folder -Filter '*.msi' -File)
+          $cabs = @(Get-ChildItem -LiteralPath $folder -Filter '*.cab' -File)
+          if ($msi.Count -ne 1 -or $msi[0].Name -ne 'ReefVision_1.0.1_x64_en-US.msi') {
+            throw 'Expected exactly the ReefVision 1.0.1 MSI.'
+          }
+          if ($cabs.Count -ne 6) { throw "Expected six external CABs; got $($cabs.Count)." }
+          foreach ($item in @($msi) + $cabs) {
+            if ($item.Length -le 0) { throw "Empty installer file: $($item.Name)" }
+            $hash = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash
+            Write-Host "$($item.Name) SHA256=$hash"
+          }
+
+      - name: Test isolated MSI installation without developer runtimes on PATH
+        shell: pwsh
+        run: |
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-1-installer'
+          $msi = Join-Path $folder 'ReefVision_1.0.1_x64_en-US.msi'
+          # The runner may contain development tools, but the installed desktop
+          # must function without any Python, Node.js, or Rust executable on PATH.
+          $env:PATH = @(
+            (Join-Path $env:SystemRoot 'System32'),
+            $env:SystemRoot,
+            (Join-Path $env:SystemRoot 'System32\Wbem'),
+            (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0'),
+            (Join-Path $env:ProgramFiles 'PowerShell\7')
+          ) -join ';'
+          foreach ($cmd in @('python', 'python3', 'node', 'npm', 'rustc', 'cargo')) {
+            if (Get-Command $cmd -ErrorAction SilentlyContinue) {
+              throw "Unexpected developer runtime on isolated PATH: $cmd"
+            }
+          }
+          & ./scripts/acceptance-windows-clean-install.ps1 `
+            -InstallerPath $msi `
+            -AcceptanceRoot 'C:\reefvision-1-0-1-disposable-acceptance' `
+            -SkipUpgrade -DisposableTest -KeepArtifacts
+
+      - name: Upload isolated Windows acceptance report and MSI logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReefVision-1.0.1-Windows-Clean-Install-Evidence
+          path: |
+            .artifacts/windows-clean-acceptance-*/report.json
+            .artifacts/windows-clean-acceptance-*/*.log
+          if-no-files-found: warn
+          retention-days: 14
