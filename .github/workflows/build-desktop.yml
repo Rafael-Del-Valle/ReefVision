@@ -120,10 +120,8 @@ jobs:
             throw 'Expected exactly the ReefVision 1.0.1 MSI.'
           }
 
-          # Read the actual MSI Media table. Cabinet splitting is driven by
-          # payload size and can produce five, six, or another number of CABs.
-          # A leading # denotes an internal (embedded) cabinet, not an
-          # external file. Only external CABs should appear beside the MSI.
+          # Windows Installer Media is authoritative; cabinet count depends on
+          # actual payload. '#name.cab' means embedded, not an external file.
           $installer = New-Object -ComObject WindowsInstaller.Installer
           $database = $installer.OpenDatabase($msi[0].FullName, 0)
           $versionView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')
@@ -140,42 +138,7 @@ jobs:
           while ($record = $mediaView.Fetch()) {
             $cabinetName = [string]$record.StringData(1)
             if (-not $cabinetName -or $cabinetName.StartsWith('#')) { continue }
-            if ($cabinetName -notmatch '^[^\\/:]+\.cab
-      - name: Test isolated MSI installation without developer runtimes on PATH
-        shell: pwsh
-        run: |
-          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-1-installer'
-          $msi = Join-Path $folder 'ReefVision_1.0.1_x64_en-US.msi'
-          # The runner may contain development tools, but the installed desktop
-          # must function without any Python, Node.js, or Rust executable on PATH.
-          $env:PATH = @(
-            (Join-Path $env:SystemRoot 'System32'),
-            $env:SystemRoot,
-            (Join-Path $env:SystemRoot 'System32\Wbem'),
-            (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0'),
-            (Join-Path $env:ProgramFiles 'PowerShell\7')
-          ) -join ';'
-          foreach ($cmd in @('python', 'python3', 'node', 'npm', 'rustc', 'cargo')) {
-            if (Get-Command $cmd -ErrorAction SilentlyContinue) {
-              throw "Unexpected developer runtime on isolated PATH: $cmd"
-            }
-          }
-          & ./scripts/acceptance-windows-clean-install.ps1 `
-            -InstallerPath $msi `
-            -AcceptanceRoot 'C:\reefvision-1-0-1-disposable-acceptance' `
-            -SkipUpgrade -DisposableTest -KeepArtifacts
-
-      - name: Upload isolated Windows acceptance report and MSI logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ReefVision-1.0.1-Windows-Clean-Install-Evidence
-          path: |
-            .artifacts/windows-clean-acceptance-*/report.json
-            .artifacts/windows-clean-acceptance-*/*.log
-          if-no-files-found: warn
-          retention-days: 14
-) {
+            if ($cabinetName -notmatch '^[^\\/:]+\.cab$') {
               throw "Unsafe or unsupported MSI external cabinet name: $cabinetName"
             }
             $requiredCabs += $cabinetName
