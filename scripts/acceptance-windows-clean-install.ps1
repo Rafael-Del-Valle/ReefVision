@@ -308,8 +308,11 @@ try {
     if ($persisted.id -ne $projectId) { throw 'Project ID changed across restart.' }
     $persistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
     if (-not ($persistedAnnotations.annotations | Where-Object id -eq $annotationId)) { throw 'Acceptance annotation did not persist across restart.' }
-    if ($LiveSam2Acceptance -and -not ($persistedAnnotations.mask_annotations | Where-Object id -eq $samAcceptedMaskId)) {
-        throw 'Accepted SAM 2.1 mask did not persist across packaged Windows desktop restart.'
+    if ($LiveSam2Acceptance) {
+        $persistedSamSession = Invoke-RestMethod "$api/images/$samImageId/annotations"
+        if (-not ($persistedSamSession.mask_annotations | Where-Object id -eq $samAcceptedMaskId)) {
+            throw 'Accepted SAM 2.1 mask did not persist across packaged Windows desktop restart.'
+        }
     }
     $report.restart = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Desktop and backend restarted cleanly.'
     $report.project_persistence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Project $projectId, image $imageId, and annotation $annotationId persisted; pre-restart database SHA-256 $projectChecksum"
