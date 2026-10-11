@@ -47,9 +47,7 @@ SAM2_RUNTIME_LOG = logging.getLogger("reefvision.advanced.sam2")
 @contextmanager
 def _sam2_import_watchdog() -> Iterator[None]:
     """Log compact Python stacks if a frozen acceptance import is unresponsive."""
-    if os.environ.get("REEFVISION_WINDOWS_ACCEPTANCE") != "1" or not getattr(
-        sys, "frozen", False
-    ):
+    if os.environ.get("REEFVISION_WINDOWS_ACCEPTANCE") != "1" or not getattr(sys, "frozen", False):
         yield
         return
 
@@ -64,18 +62,13 @@ def _sam2_import_watchdog() -> Iterator[None]:
             if frame is not None:
                 frames = traceback.extract_stack(frame, limit=30)
                 stack = " -> ".join(
-                    f"{Path(item.filename).name}:{item.name}:{item.lineno}"
-                    for item in frames[-18:]
+                    f"{Path(item.filename).name}:{item.name}:{item.lineno}" for item in frames[-18:]
                 )
-                SAM2_RUNTIME_LOG.warning(
-                    "SAM2 stage=transformers_import_stalled stack=%s", stack
-                )
+                SAM2_RUNTIME_LOG.warning("SAM2 stage=transformers_import_stalled stack=%s", stack)
             if done.wait(60):
                 return
 
-    threading.Thread(
-        target=report_wait, name="sam2-frozen-import-watchdog", daemon=True
-    ).start()
+    threading.Thread(target=report_wait, name="sam2-frozen-import-watchdog", daemon=True).start()
     try:
         yield
     finally:
