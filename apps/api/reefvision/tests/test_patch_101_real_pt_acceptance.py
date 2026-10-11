@@ -35,7 +35,8 @@ def test_actual_ultralytics_pt_metadata_and_inference_job(
     config = yaml.safe_load(base_config_path.read_text(encoding="utf-8"))
     config["nc"] = 2
     config["scale"] = "n"
-    local_yaml = tmp_path / "reefvision-two-class.yaml"
+    # Ultralytics infers the nano scale from the YAML filename.
+    local_yaml = tmp_path / "yolo11n.yaml"
     local_yaml.write_text(yaml.safe_dump(config), encoding="utf-8")
 
     # This builds and serializes random architecture weights locally: no
