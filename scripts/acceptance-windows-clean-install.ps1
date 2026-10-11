@@ -124,7 +124,10 @@ function Start-AcceptanceDesktop {
         # BLAS and PyTorch oversubscription during real 1024px SAM2 inference.
         $isolatedOverrides['OMP_NUM_THREADS'] = '2'
         $isolatedOverrides['MKL_NUM_THREADS'] = '2'
-        $isolatedOverrides['OPENBLAS_NUM_THREADS'] = '2'
+        # Diagnose the frozen SciPy BLAS extension import without parallel
+        # OpenBLAS initialization on resource-constrained Windows CI VMs.
+        # This applies only to the disposable live-SAM acceptance process.
+        $isolatedOverrides['OPENBLAS_NUM_THREADS'] = '1'
         $isolatedOverrides['TOKENIZERS_PARALLELISM'] = 'false'
     }
     return Invoke-ReefVisionIsolatedEnvironment -DataRoot $DataRoot -AdditionalEnvironment $isolatedOverrides -Action {
