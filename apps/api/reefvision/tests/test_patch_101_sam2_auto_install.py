@@ -16,6 +16,7 @@ from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
 from reefvision.services.sam2_install import (
     SAM2_REPOSITORIES,
+    _materialize_staged_download,
     model_directory,
     sam2_status,
     variant_repo,
@@ -81,3 +82,38 @@ def test_sam2_install_endpoint_creates_background_job_without_confirmation(
     assert job["job_type"] == "sam2_install"
     assert job["request_json"]["variant"] == "large"
     assert job["request_json"]["auto_install_on_model_selection"] is True
+
+
+def test_hub_cache_blob_is_materialized_into_private_stage(tmp_path) -> None:
+    cache_blob = tmp_path / "hub-cache" / "content-addressed-hash"
+    cache_blob.parent.mkdir()
+    cache_blob.write_bytes(b"pinned checkpoint bytes")
+    stage = tmp_path / ".tiny-test.partial"
+    stage.mkdir()
+
+    staged = _materialize_staged_download(cache_blob, stage, "model.safetensors")
+    assert staged == stage / "model.safetensors"
+    assert staged.read_bytes() == cache_blob.read_bytes()
+    assert not staged.is_symlink()
+    assert staged.resolve().parent == stage.resolve()
+    assert cache_blob.is_file()
+
+
+def test_hub_direct_stage_file_is_accepted_without_copy(tmp_path) -> None:
+    stage = tmp_path / ".small-test.partial"
+    stage.mkdir()
+    original = stage / "config.json"
+    original.write_text('{"model_type":"sam2"}', encoding="utf-8")
+    staged = _materialize_staged_download(original, stage, "config.json")
+    assert staged == original
+    assert staged.read_text(encoding="utf-8") == '{"model_type":"sam2"}'
+
+
+def test_hub_checkpoint_stage_rejects_unapproved_filenames(tmp_path) -> None:
+    stage = tmp_path / ".large-test.partial"
+    stage.mkdir()
+    blob = tmp_path / "downloaded-file"
+    blob.write_bytes(b"test")
+    with pytest.raises(ValidationError, match="filename"):
+        _materialize_staged_download(blob, stage, "../outside.safetensors")
+    assert not (tmp_path / "outside.safetensors").exists()
