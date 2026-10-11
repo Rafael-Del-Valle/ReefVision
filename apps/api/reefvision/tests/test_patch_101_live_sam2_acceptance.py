@@ -66,14 +66,10 @@ def test_real_sam2_tiny_download_inference_and_review_provenance(
 
     # Exercise the production install endpoint, queue and real download worker,
     # without substituting a synthetic model or mocking Hugging Face.
-    install_response = client.post(
-        f"/api/v1/projects/{project_id}/sam2-models/tiny/install"
-    )
+    install_response = client.post(f"/api/v1/projects/{project_id}/sam2-models/tiny/install")
     assert install_response.status_code == 200, install_response.text
     job_id = install_response.json()["id"]
-    assert process_sam2_install(
-        test_settings, client.app.state.session_factory, job_id
-    )
+    assert process_sam2_install(test_settings, client.app.state.session_factory, job_id)
     job_response = client.get(f"/api/v1/jobs/{job_id}")
     assert job_response.status_code == 200, job_response.text
     job = job_response.json()
@@ -81,9 +77,7 @@ def test_real_sam2_tiny_download_inference_and_review_provenance(
 
     status_response = client.get(f"/api/v1/projects/{project_id}/sam2-models")
     assert status_response.status_code == 200, status_response.text
-    status = next(
-        item for item in status_response.json() if item["variant"] == "tiny"
-    )
+    status = next(item for item in status_response.json() if item["variant"] == "tiny")
     assert status["ready"] is True, status.get("reason")
     assert status["repo_id"] == variant_repo("tiny")
     assert sam2_status(test_settings, "tiny")["ready"] is True
@@ -121,14 +115,10 @@ def test_real_sam2_tiny_download_inference_and_review_provenance(
         assert source.size == (256, 256)
         assert source.getbbox() is not None
 
-    proposals_response = client.get(
-        f"/api/v1/images/{image_id}/prediction-proposals"
-    )
+    proposals_response = client.get(f"/api/v1/images/{image_id}/prediction-proposals")
     assert proposals_response.status_code == 200, proposals_response.text
     matching = [
-        p
-        for p in proposals_response.json()["items"]
-        if p["id"] == result["result"]["proposal_id"]
+        p for p in proposals_response.json()["items"] if p["id"] == result["result"]["proposal_id"]
     ]
     assert len(matching) == 1
     proposal = matching[0]
