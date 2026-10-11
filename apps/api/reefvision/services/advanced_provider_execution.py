@@ -328,17 +328,7 @@ class AdvancedProviderExecutionService:
                 "SAM2 stage=numpy_import_complete elapsed=%.2fs",
                 time.perf_counter() - started,
             )
-            SAM2_RUNTIME_LOG.info(
-                "SAM2 stage=torch_import_start elapsed=%.2fs",
-                time.perf_counter() - started,
-            )
-            import torch
-
-            SAM2_RUNTIME_LOG.info(
-                "SAM2 stage=torch_import_complete elapsed=%.2fs",
-                time.perf_counter() - started,
-            )
-            # Diagnose frozen Windows native BLAS initialization separately.
+            # Acceptance-only experiment: initialize SciPy BLAS before Torch.\n            # This distinguishes a native import-order conflict from missing DLLs.
             if (
                 getattr(sys, "frozen", False)
                 and os.environ.get("REEFVISION_WINDOWS_ACCEPTANCE") == "1"
@@ -355,6 +345,16 @@ class AdvancedProviderExecutionService:
                     time.perf_counter() - started,
                     _scipy_blas.__name__,
                 )
+            SAM2_RUNTIME_LOG.info(
+                "SAM2 stage=torch_import_start elapsed=%.2fs",
+                time.perf_counter() - started,
+            )
+            import torch
+
+            SAM2_RUNTIME_LOG.info(
+                "SAM2 stage=torch_import_complete elapsed=%.2fs",
+                time.perf_counter() - started,
+            )
             SAM2_RUNTIME_LOG.info(
                 "SAM2 stage=transformers_import_start elapsed=%.2fs",
                 time.perf_counter() - started,
