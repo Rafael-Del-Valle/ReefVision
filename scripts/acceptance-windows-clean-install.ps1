@@ -491,13 +491,19 @@ try {
     # On failure the disposable Windows runner is destroyed. Preserve the
     # packaged sidecar's logs for model-loading/CPU/deadlock diagnostics.
     # Never copy project images, user data or checkpoint weights into CI.
-    $backendLogPath = Join-Path $DataRoot 'logs\backend.log'
-    if (Test-Path -LiteralPath $backendLogPath -PathType Leaf) {
-        try {
-            Get-Content -LiteralPath $backendLogPath -Tail 500 -ErrorAction Stop |
-                Set-Content -LiteralPath (Join-Path $EvidenceRoot 'backend-tail.log') -Encoding utf8 -ErrorAction Stop
-        } catch {
-            Write-Warning "Could not archive backend log tail: $($_.Exception.Message)"
+    # The sidecar initially writes backend.log, but FastAPI create_app()
+    # switches the rotating logger to api.log. Capture both logs and rotated
+    # files: SAM2 stage timings and inference exceptions land in api.log.
+    foreach ($logName in @('backend.log', 'api.log', 'api.log.1', 'api.log.2')) {
+        $sourceLog = Join-Path (Join-Path $DataRoot 'logs') $logName
+        if (Test-Path -LiteralPath $sourceLog -PathType Leaf) {
+            try {
+                $evidenceName = "$logName.tail.log"
+                Get-Content -LiteralPath $sourceLog -Tail 500 -ErrorAction Stop |
+                    Set-Content -LiteralPath (Join-Path $EvidenceRoot $evidenceName) -Encoding utf8 -ErrorAction Stop
+            } catch {
+                Write-Warning "Could not archive $logName tail: $($_.Exception.Message)"
+            }
         }
     }
     $report.completed_at_utc = [DateTime]::UtcNow.ToString('o')
