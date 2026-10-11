@@ -86,6 +86,7 @@ def test_real_sam2_tiny_download_inference_and_review_provenance(
     )
     assert status["ready"] is True, status.get("reason")
     assert status["repo_id"] == variant_repo("tiny")
+    assert sam2_status(test_settings, "tiny")["ready"] is True
     assert len(status["revision"]) == 40
     assert len(status["weight_sha256"]) == 64
 
