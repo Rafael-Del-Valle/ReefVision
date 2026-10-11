@@ -61,6 +61,7 @@ $report = [ordered]@{
     frontend_backend_connectivity = New-ReefVisionEvidenceResult
     model_policy = New-ReefVisionEvidenceResult
     sam2_live = if ($LiveSam2Acceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real SAM 2.1 packaged runtime acceptance not requested' }
+    external_annotation_imports = New-ReefVisionEvidenceResult
     project_persistence = New-ReefVisionEvidenceResult
     restart = New-ReefVisionEvidenceResult
     project_exchange = New-ReefVisionEvidenceResult
@@ -151,6 +152,29 @@ function Import-AcceptanceImage(
         if (-not $response.IsSuccessStatusCode) { throw "Image import failed with HTTP $([int]$response.StatusCode): $payload" }
         return $payload | ConvertFrom-Json
     } finally { $form.Dispose(); $client.Dispose() }
+}
+
+function Import-AcceptanceAnnotations([string]$Url, [object[]]$Uploads) {
+    Add-Type -AssemblyName System.Net.Http
+    $http = [System.Net.Http.HttpClient]::new()
+    $form = [System.Net.Http.MultipartFormDataContent]::new()
+    try {
+        foreach ($upload in $Uploads) {
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes([string]$upload.Content)
+            $part = [System.Net.Http.ByteArrayContent]::new([byte[]]$bytes)
+            $part.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse([string]$upload.Mime)
+            $form.Add($part, 'files', [string]$upload.Name)
+        }
+        $response = $http.PostAsync($Url, $form).GetAwaiter().GetResult()
+        $payload = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+        if (-not $response.IsSuccessStatusCode) {
+            throw "Annotation import failed with HTTP $([int]$response.StatusCode): $payload"
+        }
+        return $payload | ConvertFrom-Json
+    } finally {
+        $form.Dispose()
+        $http.Dispose()
+    }
 }
 
 function New-AcceptanceSam2Image {
@@ -252,6 +276,58 @@ try {
     } | ConvertTo-Json -Depth 6
     $saved = Invoke-RestMethod "$api/images/$imageId/annotations" -Method Put -ContentType 'application/json' -Body $annotationBody
     if ($saved.annotations[0].id -ne $annotationId) { throw 'Durable acceptance annotation was not returned after save.' }
+
+    # Exercise the installed backend's real COCO and YOLO import parsers, not
+    # test mocks or source-only fixtures. Imported classes are added to a
+    # separate blank project to verify class preservation and idempotence.
+    $interopProject = Invoke-RestMethod "$api/projects" -Method Post -ContentType 'application/json' -Body (@{name="Import QA $Token";template='blank'} | ConvertTo-Json)
+    $interopId = $interopProject.id
+    $interopImage = New-AcceptanceSam2Image
+    $cocoImage = Import-AcceptanceImage -Url "$api/projects/$interopId/imports/images" -ImageBytes $interopImage -Filename 'coco-acceptance.png' -RelativePath 'imports/coco-acceptance.png'
+    $cocoImageId = $cocoImage.successful[0].image_id
+    $cocoFixture = @{
+        images = @(@{id=23;file_name='coco-acceptance.png';width=256;height=256})
+        categories = @(@{id=42;name='Swiftia exserta'},@{id=99;name='Muricea pendula'})
+        annotations = @(
+            @{id=1;image_id=23;category_id=42;bbox=@(32,32,64,64)},
+            @{id=2;image_id=23;category_id=42;segmentation=@(,@(112,112,136,112,136,136,112,136))}
+        )
+    } | ConvertTo-Json -Depth 10 -Compress
+    $cocoFiles = @(@{Name='acceptance_coco.json';Content=$cocoFixture;Mime='application/json'})
+    $cocoResult = Import-AcceptanceAnnotations -Url "$api/projects/$interopId/imports/annotations" -Uploads $cocoFiles
+    if ($cocoResult.boxes_imported -ne 1 -or $cocoResult.masks_imported -ne 1) {
+        throw "Packaged COCO import expected one box/one polygon; got $($cocoResult.boxes_imported)/$($cocoResult.masks_imported)."
+    }
+    $cocoClasses = @( (Invoke-RestMethod "$api/projects/$interopId").label_classes | ForEach-Object { $_.name })
+    if ('Swiftia exserta' -notin $cocoClasses -or 'Muricea pendula' -notin $cocoClasses) {
+        throw 'COCO import did not preserve an annotated class and an unused class.'
+    }
+    $cocoSession = Invoke-RestMethod "$api/images/$cocoImageId/annotations"
+    if (@($cocoSession.annotations).Count -ne 1 -or @($cocoSession.mask_annotations).Count -ne 1) {
+        throw 'COCO import did not persist the box and mask in the annotation session.'
+    }
+    $repeatCoco = Import-AcceptanceAnnotations -Url "$api/projects/$interopId/imports/annotations" -Uploads $cocoFiles
+    if ($repeatCoco.boxes_imported -ne 0 -or $repeatCoco.masks_imported -ne 0) {
+        throw 'COCO import is not idempotent on the installed backend.'
+    }
+
+    $yoloImage = Import-AcceptanceImage -Url "$api/projects/$interopId/imports/images" -ImageBytes $interopImage -Filename 'yolo-acceptance.png' -RelativePath 'imports/yolo-acceptance.png'
+    $yoloImageId = $yoloImage.successful[0].image_id
+    $yoloFiles = @(
+        @{Name='yolo-acceptance.txt';Content="0 0.5 0.5 0.25 0.5`n";Mime='text/plain'},
+        @{Name='data.yaml';Content="names:`n  0: Jellyfish`n  1: Octocoral`n";Mime='text/yaml'}
+    )
+    $yoloResult = Import-AcceptanceAnnotations -Url "$api/projects/$interopId/imports/annotations" -Uploads $yoloFiles
+    if ($yoloResult.boxes_imported -ne 1) { throw "Packaged YOLO import created $($yoloResult.boxes_imported) boxes instead of one." }
+    $yoloClasses = @((Invoke-RestMethod "$api/projects/$interopId").label_classes | ForEach-Object { $_.name })
+    if ('Jellyfish' -notin $yoloClasses -or 'Octocoral' -notin $yoloClasses) {
+        throw 'YOLO data.yaml class names were not preserved.'
+    }
+    $yoloSession = Invoke-RestMethod "$api/images/$yoloImageId/annotations"
+    if (@($yoloSession.annotations).Count -ne 1) {
+        throw 'YOLO import did not create a native image annotation.'
+    }
+    $report.external_annotation_imports = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed backend COCO box/mask, unused class, idempotence; YOLO boxes and all data.yaml class names; project $interopId."
 
     # Real online acquisition uses only the installed backend, not a developer
     # Python process. The default offline installer smoke test is unchanged.
