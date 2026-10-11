@@ -348,7 +348,7 @@ class AdvancedProviderExecutionService:
                     time.perf_counter() - started,
                 )
                 with _sam2_import_watchdog():
-                    from scipy.linalg import blas as _scipy_blas
+                    from scipy.linalg import blas as _scipy_blas  # type: ignore[import-untyped]
 
                 SAM2_RUNTIME_LOG.info(
                     "SAM2 stage=scipy_blas_import_complete elapsed=%.2fs module=%s",
