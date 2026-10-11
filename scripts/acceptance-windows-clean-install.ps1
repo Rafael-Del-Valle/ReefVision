@@ -120,6 +120,12 @@ function Start-AcceptanceDesktop {
         $isolatedOverrides['HF_HUB_OFFLINE'] = '0'
         $isolatedOverrides['TRANSFORMERS_OFFLINE'] = '0'
         $isolatedOverrides['HF_HUB_DISABLE_TELEMETRY'] = '1'
+        # Shared CI runners have only a few CPU cores. Avoid nested OpenMP,
+        # BLAS and PyTorch oversubscription during real 1024px SAM2 inference.
+        $isolatedOverrides['OMP_NUM_THREADS'] = '2'
+        $isolatedOverrides['MKL_NUM_THREADS'] = '2'
+        $isolatedOverrides['OPENBLAS_NUM_THREADS'] = '2'
+        $isolatedOverrides['TOKENIZERS_PARALLELISM'] = 'false'
     }
     return Invoke-ReefVisionIsolatedEnvironment -DataRoot $DataRoot -AdditionalEnvironment $isolatedOverrides -Action {
         Start-Process -FilePath (Join-Path $InstallRoot 'ReefVision.exe') -WorkingDirectory $InstallRoot -PassThru -WindowStyle Hidden
@@ -383,7 +389,19 @@ try {
             allow_model_download = $false
             prompt_fields = @{ image_id=$samImageId;sam2_variant='tiny';box=@(35,35,225,225);label_class_id=$testClass.id }
         } | ConvertTo-Json -Depth 8
-        $samInference = Invoke-RestMethod "$api/projects/$projectId/advanced-providers/sam2/execute" -Method Post -ContentType 'application/json' -Body $samRequest -TimeoutSec 300
+        # Actual SAM2 Tiny still runs a full-resolution image encoder even
+        # on this 256px synthetic fixture. On GitHub's small Windows CPU VMs
+        # that can exceed five minutes; retain a finite 15-minute upper bound.
+        $samStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+        Write-Host "Starting real packaged SAM 2.1 Tiny CPU inference at $([DateTime]::UtcNow.ToString('o'))"
+        try {
+            $samInference = Invoke-RestMethod "$api/projects/$projectId/advanced-providers/sam2/execute" -Method Post -ContentType 'application/json' -Body $samRequest -TimeoutSec 900
+        } catch {
+            throw "Packaged SAM 2.1 CPU inference failed or exceeded 900 seconds after $([math]::Round($samStopwatch.Elapsed.TotalSeconds, 1)) seconds: $($_.Exception.Message)"
+        } finally {
+            $samStopwatch.Stop()
+            Write-Host "Packaged SAM 2.1 CPU inference elapsed seconds: $([math]::Round($samStopwatch.Elapsed.TotalSeconds, 1))"
+        }
         if ($samInference.result.review_status -ne 'pending' -or $samInference.result.proposal_count -ne 1 -or $samInference.result.area_pixels -le 0) {
             throw 'Installed SAM 2.1 did not produce a nonempty pending mask proposal.'
         }
@@ -470,6 +488,18 @@ try {
     Save-Report
     throw
 } finally {
+    # On failure the disposable Windows runner is destroyed. Preserve the
+    # packaged sidecar's logs for model-loading/CPU/deadlock diagnostics.
+    # Never copy project images, user data or checkpoint weights into CI.
+    $backendLogPath = Join-Path $DataRoot 'logs\backend.log'
+    if (Test-Path -LiteralPath $backendLogPath -PathType Leaf) {
+        try {
+            Get-Content -LiteralPath $backendLogPath -Tail 500 -ErrorAction Stop |
+                Set-Content -LiteralPath (Join-Path $EvidenceRoot 'backend-tail.log') -Encoding utf8 -ErrorAction Stop
+        } catch {
+            Write-Warning "Could not archive backend log tail: $($_.Exception.Message)"
+        }
+    }
     $report.completed_at_utc = [DateTime]::UtcNow.ToString('o')
     Save-Report
     if (-not $KeepArtifacts -and (Test-Path (Join-Path $RunRoot '.reefvision-acceptance-run')) -and $report.uninstall.status -eq 'PASS') {
