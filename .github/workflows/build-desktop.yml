@@ -87,6 +87,7 @@ jobs:
           name: ReefVision-Windows-Build-Log
           path: .desktop/windows-installer-build.log
           if-no-files-found: warn
+          include-hidden-files: true
           retention-days: 7
 
       - name: Upload complete Windows installer (MSI and external CABs)
@@ -201,4 +202,5 @@ jobs:
             .artifacts/windows-clean-acceptance-*/report.json
             .artifacts/windows-clean-acceptance-*/*.log
           if-no-files-found: warn
+          include-hidden-files: true
           retention-days: 14
