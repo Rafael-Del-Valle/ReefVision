@@ -62,6 +62,7 @@ $report = [ordered]@{
     model_policy = New-ReefVisionEvidenceResult
     sam2_live = if ($LiveSam2Acceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real SAM 2.1 packaged runtime acceptance not requested' }
     external_annotation_imports = New-ReefVisionEvidenceResult
+    confidence_review = if ($LiveSam2Acceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real pending prediction review not requested' }
     project_persistence = New-ReefVisionEvidenceResult
     restart = New-ReefVisionEvidenceResult
     project_exchange = New-ReefVisionEvidenceResult
@@ -371,11 +372,23 @@ try {
         if ($samProposal[0].model_checksum -ne $samReady[0].weight_sha256 -or -not $samProposal[0].provenance_json.requires_researcher_review) {
             throw 'SAM 2.1 prediction checksum/provenance is missing or invalid.'
         }
+        # Confidence review must select pending predictions without
+        # silently treating model output as researcher-verified annotations.
+        $reviewQueue = Invoke-RestMethod "$api/projects/$projectId/review-queues" -Method Post -ContentType 'application/json' -Body (@{review_below_confidence=1.0} | ConvertTo-Json)
+        $reviewItems = Invoke-RestMethod "$api/review-queues/$($reviewQueue.id)/items"
+        if ($reviewQueue.item_count -ne 1 -or @($reviewItems.items | Where-Object image_id -eq $samImageId).Count -ne 1) {
+            throw 'Low-confidence review queue did not include the pending SAM prediction.'
+        }
         $samAcceptance = Invoke-RestMethod "$api/prediction-proposals/$samProposalId/accept" -Method Post -ContentType 'application/json' -Body (@{ label_class_id=$testClass.id } | ConvertTo-Json)
         if ($samAcceptance.proposal.review_status -notin @('accepted','edited_and_accepted') -or $samAcceptance.mask_annotation.status -ne 'verified') {
             throw 'Explicitly accepting SAM 2.1 proposal did not create a verified raster mask.'
         }
         $samAcceptedMaskId = $samAcceptance.mask_annotation.id
+        $reviewAfterAccept = Invoke-RestMethod "$api/review-queues/$($reviewQueue.id)/regenerate" -Method Post
+        if ($reviewAfterAccept.item_count -ne 0) {
+            throw 'Confidence review incorrectly includes a researcher-accepted prediction.'
+        }
+        $report.confidence_review = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Packaged API included pending SAM prediction at confidence cutoff 1.0, excluded it after explicit acceptance; queue $($reviewQueue.id)."
         $report.sam2_live = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed app's backend downloaded SAM 2.1 Tiny, verified revision $($samReady[0].revision) and SHA256 $($samReady[0].weight_sha256), inferred image $samImageId (area $($samInference.result.area_pixels)), persisted pending proposal $samProposalId and accepted verified mask $samAcceptedMaskId; GUI hotkeys not exercised."
     }
     Stop-AcceptanceDesktop $desktop
