@@ -24,6 +24,27 @@ All notable changes to ReefVision will be documented here.
 
 ## [1.0.1] - Release candidate
 
+### October 2026 — assisted annotation and clean Windows install
+
+- Add user-selected automatic SAM 2.1 Hiera Tiny, Small, Base+, and Large
+  checkpoint acquisition with local caching, provenance, integrity checks,
+  retry handling, and no pretrained weights bundled in the installer.
+- Assign **Shift+1** to box-prompted SAM segmentation and **Shift+2** to
+  running selected locally registered detector predictions over an image.
+- Create project classes from detector metadata, retain imported class names,
+  and persist explicitly accepted model proposals as verified annotations.
+- Support COCO JSON boxes, polygons and RLE masks, YOLO detection and
+  segmentation files with data.yaml class names, and associated provenance.
+- Provide the floating confidence review dialog; the default review cutoff
+  includes predictions at or below 50% and excludes those above 50%.
+- Repair frozen Windows scientific-library initialization by preloading SciPy
+  BLAS and ARPACK before the desktop shutdown reader begins.
+- Validate the 1.0.1 MSI on an isolated Windows machine with successful
+  SAM inference, verified mask review, project persistence, restart, project
+  exchange, uninstall, and preserved user data. See
+  docs/RELEASE_1.0.1.md for exact acceptance evidence and remaining manual QA.
+
+
 ### Fixed
 
 - Recover interrupted detection training as completed when the full configured

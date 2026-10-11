@@ -11,6 +11,9 @@ on:
       - "scripts/**"
       - "pyproject.toml"
       - "package.json"
+      - "README.md"
+      - "CHANGELOG.md"
+      - "docs/RELEASE_1.0.1.md"
       - ".github/workflows/build-desktop.yml"
 
 concurrency:

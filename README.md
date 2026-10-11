@@ -51,7 +51,7 @@ The application uses a React/Tauri desktop interface with a FastAPI/SQLAlchemy b
 
 - `setup.bat` installs the pinned Windows provider stack from `requirements/providers-windows-cu121-py312.txt`.
 - The tested Ultralytics combination is Python `3.12.x`, CUDA `12.1`, `torch 2.5.1+cu121`, `torchvision 0.20.1+cu121`, and `ultralytics 8.3.228`.
-- ReefVision does not download pretrained checkpoints automatically. Register local `.pt` or `.pth` files explicitly.
+- The general model catalog does not automatically download pretrained checkpoints; register your own local `.pt` or `.pth` files for training and inference. **Exception:** selecting an optional SAM 2.1 assisted-annotation variant starts its explicit on-demand checkpoint acquisition and caching without another confirmation dialog. No SAM weights are bundled in the MSI.
 
 ## Windows setup
 
