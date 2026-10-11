@@ -107,10 +107,19 @@ function Wait-BackendPort(
 function Start-AcceptanceDesktop {
     $BackendPortPath = Join-Path $DataRoot 'runtime\backend-port.txt'
     Remove-Item -LiteralPath $BackendPortPath -Force -ErrorAction SilentlyContinue
-    return Invoke-ReefVisionIsolatedEnvironment -DataRoot $DataRoot -AdditionalEnvironment @{
+    $isolatedOverrides = @{
         REEFVISION_WINDOWS_ACCEPTANCE = '1'
         REEFVISION_ACCEPTANCE_DATA_DIR = $DataRoot
-    } -Action {
+    }
+    if ($LiveSam2Acceptance) {
+        # The default clean-install acceptance deliberately forbids network
+        # model downloads. This opt-in, marker-gated test instead exercises
+        # a real checkpoint download using the same isolated data/cache roots.
+        $isolatedOverrides['HF_HUB_OFFLINE'] = '0'
+        $isolatedOverrides['TRANSFORMERS_OFFLINE'] = '0'
+        $isolatedOverrides['HF_HUB_DISABLE_TELEMETRY'] = '1'
+    }
+    return Invoke-ReefVisionIsolatedEnvironment -DataRoot $DataRoot -AdditionalEnvironment $isolatedOverrides -Action {
         Start-Process -FilePath (Join-Path $InstallRoot 'ReefVision.exe') -WorkingDirectory $InstallRoot -PassThru -WindowStyle Hidden
     }
 }
