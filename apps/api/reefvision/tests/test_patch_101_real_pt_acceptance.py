@@ -40,6 +40,10 @@ def test_actual_ultralytics_pt_metadata_and_inference_job(
     # pretrained model, network checkpoint or proprietary dataset is acquired.
     detector = YOLO(str(local_yaml))
     detector.model.names = {0: "Swiftia exserta", 1: "Thesea nivea"}
+    # Ultralytics initializes .ckpt to None for models created from YAML.
+    # Its save() method expands that mapping, so seed an empty checkpoint
+    # rather than downloading pretrained weights solely to serialize a fixture.
+    detector.ckpt = {}
     checkpoint = tmp_path / "reefvision-two-class.pt"
     detector.save(str(checkpoint))
     assert checkpoint.is_file() and checkpoint.stat().st_size > 0
