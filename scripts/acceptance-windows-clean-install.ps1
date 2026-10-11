@@ -179,14 +179,21 @@ function Import-AcceptanceAnnotations([string]$Url, [object[]]$Uploads) {
 }
 
 function New-AcceptanceSam2Image {
-    # Simple 256x256 contrast image using Windows GDI+ (no system Python).
+    param([switch]$YoloFixture)
+    # Different imported images need different pixels: the import layer
+    # deduplicates by image content even when filenames differ.
     Add-Type -AssemblyName System.Drawing
     $bitmap = [System.Drawing.Bitmap]::new(256, 256)
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     $brush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(210,155,92))
     $stream = [System.IO.MemoryStream]::new()
     try {
-        $graphics.Clear([System.Drawing.Color]::FromArgb(36,49,62))
+        $background = if ($YoloFixture) {
+            [System.Drawing.Color]::FromArgb(62,49,36)
+        } else {
+            [System.Drawing.Color]::FromArgb(36,49,62)
+        }
+        $graphics.Clear($background)
         $graphics.FillEllipse($brush, 42, 42, 174, 174)
         $bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
         return ,$stream.ToArray()
@@ -285,6 +292,9 @@ try {
     $interopId = $interopProject.id
     $interopImage = New-AcceptanceSam2Image
     $cocoImage = Import-AcceptanceImage -Url "$api/projects/$interopId/imports/images" -ImageBytes $interopImage -Filename 'coco-acceptance.png' -RelativePath 'imports/coco-acceptance.png'
+    if (@($cocoImage.successful).Count -ne 1) {
+        throw "COCO fixture image must import exactly once: $($cocoImage | ConvertTo-Json -Depth 5 -Compress)"
+    }
     $cocoImageId = $cocoImage.successful[0].image_id
     $cocoFixture = @{
         images = @(@{id=23;file_name='coco-acceptance.png';width=256;height=256})
@@ -312,8 +322,12 @@ try {
         throw 'COCO import is not idempotent on the installed backend.'
     }
 
-    $yoloImage = Import-AcceptanceImage -Url "$api/projects/$interopId/imports/images" -ImageBytes $interopImage -Filename 'yolo-acceptance.png' -RelativePath 'imports/yolo-acceptance.png'
+    $yoloImage = Import-AcceptanceImage -Url "$api/projects/$interopId/imports/images" -ImageBytes (New-AcceptanceSam2Image -YoloFixture) -Filename 'yolo-acceptance.png' -RelativePath 'imports/yolo-acceptance.png'
+    if (@($yoloImage.successful).Count -ne 1) {
+        throw "Distinct YOLO fixture image must import exactly once: $($yoloImage | ConvertTo-Json -Depth 5 -Compress)"
+    }
     $yoloImageId = $yoloImage.successful[0].image_id
+    if ($yoloImageId -eq $cocoImageId) { throw 'COCO and YOLO fixture images unexpectedly deduplicated.' }
     $yoloFiles = @(
         @{Name='yolo-acceptance.txt';Content="0 0.5 0.5 0.25 0.5`n";Mime='text/plain'},
         @{Name='data.yaml';Content="names:`n  0: Jellyfish`n  1: Octocoral`n";Mime='text/yaml'}
