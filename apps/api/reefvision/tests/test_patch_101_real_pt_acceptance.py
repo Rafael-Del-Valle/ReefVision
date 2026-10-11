@@ -70,7 +70,10 @@ def test_actual_ultralytics_pt_metadata_and_inference_job(
                 "application/octet-stream",
             )
         },
-        data={"purpose": "detector", "display_name": "Locally generated two-class model"},
+        data={
+            "purpose": "detector",
+            "display_name": "Locally generated two-class model",
+        },
     )
     assert registered.status_code == 200, registered.text
     model = cast(dict[str, Any], registered.json())
