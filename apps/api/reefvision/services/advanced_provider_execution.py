@@ -339,7 +339,10 @@ class AdvancedProviderExecutionService:
                 time.perf_counter() - started,
             )
             # Diagnose frozen Windows native BLAS initialization separately.
-            if getattr(sys, "frozen", False) and os.environ.get("REEFVISION_WINDOWS_ACCEPTANCE") == "1":
+            if (
+                getattr(sys, "frozen", False)
+                and os.environ.get("REEFVISION_WINDOWS_ACCEPTANCE") == "1"
+            ):
                 SAM2_RUNTIME_LOG.info(
                     "SAM2 stage=scipy_blas_import_start elapsed=%.2fs",
                     time.perf_counter() - started,
