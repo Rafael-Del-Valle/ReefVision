@@ -178,10 +178,17 @@ try {
     $report.first_launch = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and packaged backend started; database initialized; API version $($versionPayload.application_version)"
     $report.frontend_backend_connectivity = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop-published loopback API responded; migration status: $($migrationPayload.schema_status)"
 
-    $project = Invoke-RestMethod "$api/projects" -Method Post -ContentType 'application/json' -Body (@{name="Clean install $Token";template='octocoral'} | ConvertTo-Json)
+    # Project templates were intentionally reduced to 'blank' in 1.0.
+    # The acceptance fixture must explicitly create its class instead of
+    # relying on the removed octocoral starter template.
+    $project = Invoke-RestMethod "$api/projects" -Method Post -ContentType 'application/json' -Body (@{name="Clean install $Token";template='blank'} | ConvertTo-Json)
     $projectId = $project.id
+    $testClass = Invoke-RestMethod "$api/projects/$projectId/classes" -Method Post -ContentType 'application/json' -Body (@{class_index=0;name='Acceptance coral';display_color='#7A8C9D'} | ConvertTo-Json)
+    if (-not $testClass.id) { throw 'Acceptance label class could not be created.' }
     $Catalog = Invoke-RestMethod "$api/projects/$projectId/model-catalog"
-    $Architectures = @($Catalog.models | Where-Object { $_.selection_kind -eq 'architecture' })
+    # Architecture entries use selection_kind=builtin_architecture;
+    # category=architecture is a separate display grouping.
+    $Architectures = @($Catalog.models | Where-Object { $_.selection_kind -eq 'builtin_architecture' })
     if ($Architectures.Count -lt 15) { throw 'Fresh profile does not expose the supported YOLO11 architecture families.' }
     $UnexpectedModels = @($Catalog.models | Where-Object {
         $_.selection_kind -eq 'managed_catalog_model' -or $_.installation_state -eq 'Ready' -or @($_.expected_files).Count -gt 0
@@ -201,7 +208,7 @@ try {
         annotation_status = 'in_progress'
         annotations = @(@{
             id = $annotationId
-            label_class_id = $session.label_classes[0].id
+            label_class_id = $testClass.id
             x_min = 0.1; y_min = 0.1; x_max = 0.9; y_max = 0.9
         })
         mask_annotations = @()
