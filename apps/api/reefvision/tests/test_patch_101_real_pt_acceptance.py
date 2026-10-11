@@ -9,6 +9,7 @@ be represented as a scientifically validated detector.
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -16,6 +17,7 @@ import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import reefvision.ml.dependencies as provider_dependencies
 import reefvision.ml.providers as providers_module
 from reefvision.jobs.inference import process_inference_job
 from reefvision.tests.test_annotations import import_one
@@ -52,6 +54,21 @@ def test_actual_ultralytics_pt_metadata_and_inference_job(
     # The actual Ultralytics model inspection and inference are not mocked.
     monkeypatch.setattr(providers_module, "configure_provider_runtime", lambda: None)
     monkeypatch.setattr(providers_module, "require_provider_ready", lambda _: None)
+    # Providers imported at other boundaries may retain a reference to
+    # require_provider_ready(). Bypass only its full pinned-Windows platform
+    # preflight here; leave actual checkpoint inspection/inference untouched.
+    original_preflight = provider_dependencies.provider_preflight
+
+    def portable_test_preflight(
+        provider_name: str, settings: Any = None, *, check_level: str = "full"
+    ) -> Any:
+        if provider_name == "ultralytics" and check_level == "full":
+            return SimpleNamespace(ready=True)
+        return original_preflight(provider_name, settings, check_level=check_level)
+
+    monkeypatch.setattr(
+        provider_dependencies, "provider_preflight", portable_test_preflight
+    )
 
     created = client.post(
         "/api/v1/projects",
