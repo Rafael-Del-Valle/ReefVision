@@ -412,9 +412,7 @@ test("stores source-image coordinates correctly after zooming and reloads saved 
   });
   await page.keyboard.press("Control+c");
   await page.keyboard.press("Control+v");
-  await expect(
-    canvas.locator("[data-testid^='annotation-']"),
-  ).toHaveCount(2);
+  await expect(canvas.locator("[data-testid^='annotation-']")).toHaveCount(2);
   await expect(page.getByLabel("Annotation status")).toHaveValue("in_progress");
   await page.getByRole("button", { name: "Save now" }).click();
   await expect(page.getByTestId("annotation-save-state")).toHaveText("Saved");
