@@ -406,11 +406,11 @@ export function MaskAnnotationWorkspace({
       const result = pasteAnnotations(
         clipboard,
         {
-        id: image.id,
-        projectId: project.id,
-        width: image.width_px,
-        height: image.height_px,
-      },
+          id: image.id,
+          projectId: project.id,
+          width: image.width_px,
+          height: image.height_px,
+        },
         () => globalThis.crypto.randomUUID(),
       );
       if (!result.ok) {
