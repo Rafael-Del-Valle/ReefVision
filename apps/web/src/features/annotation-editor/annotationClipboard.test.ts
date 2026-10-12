@@ -64,7 +64,12 @@ describe("annotationClipboard", () => {
       document,
       ["box-1"],
       ["polygon-1", "raster-1"],
-      { id: "image-1", projectId: "project-1", width: 100, height: 100 },
+      {
+        id: "image-1",
+        projectId: "project-1",
+        width: 100,
+        height: 100,
+      }
     );
 
     expect(clipboard.items.map((item) => item.kind)).toEqual([
@@ -80,13 +85,19 @@ describe("annotationClipboard", () => {
   it("pastes source-pixel geometry without rescaling and clamps one shared translation", () => {
     const clipboard = copyAnnotations(document, ["box-1"], ["polygon-1"], {
       id: "image-1",
+      projectId: "project-1",
       width: 100,
       height: 100,
     });
     const ids = ["new-box", "new-polygon"];
     const result = pasteAnnotations(
       clipboard,
-      { id: "image-1", projectId: "project-1", width: 100, height: 100 },
+      {
+        id: "image-1",
+        projectId: "project-1",
+        width: 100,
+        height: 100,
+      }
       () => ids.shift() as string,
     );
 
@@ -123,6 +134,7 @@ describe("annotationClipboard", () => {
   it("rejects a cross-image paste when source dimensions differ", () => {
     const clipboard = copyAnnotations(document, ["box-1"], [], {
       id: "image-1",
+      projectId: "project-1",
       width: 100,
       height: 100,
     });
@@ -162,7 +174,12 @@ describe("annotationClipboard", () => {
 
   it("rejects empty and malformed clipboard content", () => {
     const empty: AnnotationClipboard = {
-      sourceImage: { id: "image-1", projectId: "project-1", width: 100, height: 100 },
+      sourceImage: {
+        id: "image-1",
+        projectId: "project-1",
+        width: 100,
+        height: 100,
+      }
       items: [],
       rasterMaskIds: [],
       pasteCount: 0,
