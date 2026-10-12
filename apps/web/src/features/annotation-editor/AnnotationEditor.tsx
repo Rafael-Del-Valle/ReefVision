@@ -271,10 +271,11 @@ export function annotationImageSource(
   imageId: string,
   thumbnailPath: string | null,
   fullImageLoaded: boolean,
+  retry = 0,
 ): string {
   return thumbnailPath && !fullImageLoaded
     ? imageThumbnailUrl(imageId)
-    : imageDisplayUrl(imageId);
+    : `${imageDisplayUrl(imageId)}?retry=${retry}`;
 }
 
 export function AnnotationEditor({
@@ -578,7 +579,12 @@ export function AnnotationEditor({
         setFullImageFailed(true);
       }
     };
-    preloader.src = `${imageDisplayUrl(sessionQuery.data.image.id)}?retry=${fullImageRetry}`;
+    preloader.src = annotationImageSource(
+      sessionQuery.data.image.id,
+      null,
+      true,
+      fullImageRetry,
+    );
     return () => {
       cancelled = true;
       preloader.onload = null;
@@ -2428,6 +2434,7 @@ export function AnnotationEditor({
     image.id,
     image.thumbnail_path,
     fullImageLoaded,
+    fullImageRetry,
   );
   const assistAcceptLabelClassId =
     (assistSourcePrediction
