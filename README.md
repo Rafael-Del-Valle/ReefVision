@@ -8,14 +8,15 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Rafael-Del-Valle/ReefVision/releases/download/v1.0.0/ReefVision_Windows_Downloader.exe"><strong>Download for Windows (v1.0.0)</strong></a>
+  <a href="https://github.com/Rafael-Del-Valle/ReefVision/releases/download/v1.0.1-rc.1/ReefVision_Windows_Downloader.exe"><strong>Download for Windows — 1.0.1 RC (test build)</strong></a>
+  · <a href="https://github.com/Rafael-Del-Valle/ReefVision/releases/tag/v1.0.0">Stable v1.0.0</a>
   · <a href="#installation">Installation</a>
   · <a href="#documentation">Documentation</a>
   · <a href="https://github.com/Rafael-Del-Valle/ReefVision/issues">Report an issue</a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Rafael-Del-Valle/ReefVision/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/Rafael-Del-Valle/ReefVision?label=release"></a>
+  <a href="https://github.com/Rafael-Del-Valle/ReefVision/releases"><img alt="Latest stable release" src="https://img.shields.io/github/v/release/Rafael-Del-Valle/ReefVision?label=stable"></a>
   <img alt="Windows x64" src="https://img.shields.io/badge/platform-Windows%20x64-235b76">
   <a href="https://github.com/Rafael-Del-Valle/ReefVision/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/Rafael-Del-Valle/ReefVision"></a>
 </p>
@@ -55,15 +56,15 @@ The panels below mark where screenshots from the desktop application will go. Th
 
 ## Installation
 
-The published desktop release is for **Windows x64**. You do not need to install Python, Node.js, or .NET to run the packaged application or the downloader.
+ReefVision currently has a **1.0.1 release candidate for external-PC testing** and a **1.0.0 stable release**. Both are for Windows x64; the packaged desktop application does not need Python or Node.js.
 
-1. [Download the ReefVision Windows downloader](https://github.com/Rafael-Del-Valle/ReefVision/releases/download/v1.0.0/ReefVision_Windows_Downloader.exe).
-2. Open `ReefVision_Windows_Downloader.exe`. It downloads the MSI and all six required CAB files to `Downloads\\ReefVision-1.0.0`, then checks their SHA-256 hashes against the published release's build provenance.
-3. After the files are verified, press Enter to open the Windows installer and follow its instructions.
+1. [Download the Windows downloader for ReefVision 1.0.1 RC](https://github.com/Rafael-Del-Valle/ReefVision/releases/download/v1.0.1-rc.1/ReefVision_Windows_Downloader.exe).
+2. Open `ReefVision_Windows_Downloader.exe`. It checks GitHub for the newest complete Windows release (including release candidates). It currently selects `v1.0.1-rc.1`, then downloads the MSI and **all five required CAB files** to `Downloads\\ReefVision-1.0.1-rc.1`.
+3. The downloader checks each file's SHA-256 against the release provenance. After verification, press Enter to start the Windows installer.
 
-The downloader is an unsigned executable. Windows may warn about an unknown publisher; check that it came from the [official ReefVision v1.0.0 release](https://github.com/Rafael-Del-Valle/ReefVision/releases/tag/v1.0.0). If a download is interrupted, run the downloader again; verified files will be reused.
+The downloader is unsigned, so Windows may warn about an unknown publisher. Download it only from the [official release](https://github.com/Rafael-Del-Valle/ReefVision/releases/tag/v1.0.1-rc.1). If a download fails, run it again to reuse already verified files.
 
-**Manual option:** Download the `.msi` and **all six `rv*.cab` files** from the [release page](https://github.com/Rafael-Del-Valle/ReefVision/releases/tag/v1.0.0), put them in the same folder, and run the MSI. The MSI alone is not sufficient.
+**Prefer a stable build?** The [v1.0.0 release](https://github.com/Rafael-Del-Valle/ReefVision/releases/tag/v1.0.0) has a separate MSI and six CAB files. Alternatively, run the downloader with `--stable` from a terminal to download only a stable release.
 
 **Working from source?** See the [developer setup guide](docs/DEVELOPMENT.md) instead.
 
