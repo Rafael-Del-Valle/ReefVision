@@ -29,6 +29,7 @@ import {
   getProjectModelCatalog,
   imageDisplayUrl,
   imageThumbnailUrl,
+  predictionMaskUrl,
   rejectPrediction,
   saveAnnotations,
   saveClassVisibilityPreference,
@@ -305,6 +306,8 @@ export function AnnotationEditor({
     box: [number, number, number, number];
   } | null>(null);
   const [samInstallJobId, setSamInstallJobId] = useState<string | null>(null);
+  const [samReviewProposalId, setSamReviewProposalId] = useState<string | null>(null);
+  const [isolateSamReview, setIsolateSamReview] = useState(true);
   const [shortcutMessage, setShortcutMessage] = useState<string | null>(null);
   const [deployDevice, setDeployDevice] = useState("auto");
   const [deployJobId, setDeployJobId] = useState<string | null>(null);
@@ -445,6 +448,7 @@ export function AnnotationEditor({
     }
     dispatch({ type: "loadSession", session });
     loadedImageIdRef.current = session.image.id;
+    setSamReviewProposalId(null);
     setHideAnnotations(false);
     setSelectedPredictionIds([]);
     setPredictionGeometryOverrides({});
@@ -782,6 +786,9 @@ export function AnnotationEditor({
           (proposal) => proposal.id === selectedPredictionIds[0],
         ) ?? null)
       : null;
+  const samReviewProposal = samReviewProposalId
+    ? (allPredictions.find((proposal) => proposal.id === samReviewProposalId) ?? null)
+    : null;
   const selectedPredictionPosition = selectedPrediction
     ? visiblePredictions.findIndex(
         (proposal) => proposal.id === selectedPrediction.id,
@@ -1008,12 +1015,19 @@ export function AnnotationEditor({
         "SAM mask created as a pending proposal. Review and accept it.",
       );
       setShowPredictions(true);
+      setPredictionModelFilter("");
+      setPredictionClassFilter("");
+      setPredictionConfidenceFilter("0");
+      setPredictionStatusFilter("pending");
+      const proposalId = result.result.proposal_id;
+      if (typeof proposalId === "string") {
+        setSamReviewProposalId(proposalId);
+        setIsolateSamReview(true);
+        setSelectedPredictionIds([proposalId]);
+      }
       await queryClient.invalidateQueries({
         queryKey: ["predictions", input.imageId],
       });
-      const proposalId = result.result.proposal_id;
-      if (typeof proposalId === "string")
-        setSelectedPredictionIds([proposalId]);
     },
     onError: (error: Error) => {
       setShortcutMessage(error.message);
@@ -1103,6 +1117,7 @@ export function AnnotationEditor({
         }),
       }),
     onSuccess: async (_, proposal) => {
+      if (samReviewProposalId === proposal.id) setSamReviewProposalId(null);
       const oldIndex = visiblePredictions.findIndex(
         (item) => item.id === proposal.id,
       );
@@ -1190,6 +1205,7 @@ export function AnnotationEditor({
   const rejectPredictionMutation = useMutation({
     mutationFn: (proposalId: string) => rejectPrediction(proposalId),
     onSuccess: async (_, proposalId) => {
+      if (samReviewProposalId === proposalId) setSamReviewProposalId(null);
       const oldIndex = visiblePredictions.findIndex(
         (item) => item.id === proposalId,
       );
@@ -2362,6 +2378,19 @@ export function AnnotationEditor({
               on this image. Grounding DINO and other prompted, open-vocabulary
               tools remain separate assist workflows.
             </p>
+            {!detectorModels.isPending && detectorModels.data?.length === 0 && (
+              <p className="annotation-helper" role="status">
+                No trained detector is registered for this project. Register a
+                local detector in Model Hub to run image-wide class-aware
+                inference. SAM prompt masks are available separately; they do
+                not train a detector from your edits automatically.
+              </p>
+            )}
+            {detectorModels.isError && (
+              <p className="form-error" role="alert">
+                Could not load registered detectors: {detectorModels.error.message}
+              </p>
+            )}
             <button
               type="button"
               disabled={
@@ -3270,6 +3299,116 @@ export function AnnotationEditor({
           </div>
 
           <div className="annotation-canvas-frame" ref={viewportRef}>
+          {samReviewProposalId && (
+            <section
+              className="sam-review-banner"
+              role="region"
+              aria-label="SAM mask proposal review"
+              data-testid="sam-proposal-review"
+            >
+              <strong>SAM mask is a proposal — not saved yet</strong>
+              <p>
+                Review this outline before adding it to your annotations.
+                Existing masks are unchanged until you accept.
+              </p>
+              {samReviewProposal ? (
+                <>
+                  <label>
+                    Accept as class
+                    <select
+                      aria-label="Class for SAM mask"
+                      value={
+                        predictionClassOverrides[samReviewProposal.id] ??
+                        samReviewProposal.label_class_id ??
+                        activeClassId ??
+                        ""
+                      }
+                      onChange={(event) =>
+                        setPredictionClassOverrides((current) => ({
+                          ...current,
+                          [samReviewProposal.id]: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Choose a class</option>
+                      {labelClasses
+                        .filter((labelClass) => labelClass.is_active !== false)
+                        .map((labelClass) => (
+                          <option key={labelClass.id} value={labelClass.id}>
+                            {labelClass.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label className="sam-review-toggle">
+                    <input
+                      type="checkbox"
+                      checked={isolateSamReview}
+                      onChange={(event) =>
+                        setIsolateSamReview(event.target.checked)
+                      }
+                    />
+                    Hide existing masks while reviewing
+                  </label>
+                  <div className="annotation-editor-inline-actions">
+                    <button
+                      type="button"
+                      disabled={
+                        acceptPredictionMutation.isPending ||
+                        rejectPredictionMutation.isPending ||
+                        !(
+                          predictionClassOverrides[samReviewProposal.id] ||
+                          samReviewProposal.label_class_id ||
+                          activeClassId
+                        )
+                      }
+                      onClick={() =>
+                        acceptPredictionMutation.mutate(samReviewProposal)
+                      }
+                    >
+                      Accept SAM mask
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={
+                        acceptPredictionMutation.isPending ||
+                        rejectPredictionMutation.isPending
+                      }
+                      onClick={() =>
+                        rejectPredictionMutation.mutate(samReviewProposal.id)
+                      }
+                    >
+                      Reject SAM mask
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() =>
+                        document
+                          .querySelector("[data-testid='prediction-inspector-slot']")
+                          ?.scrollIntoView({ behavior: "smooth", block: "nearest" })
+                      }
+                    >
+                      Edit in inspector
+                    </button>
+                  </div>
+                  {acceptPredictionMutation.error && (
+                    <p className="form-error" role="alert">
+                      {acceptPredictionMutation.error.message}
+                    </p>
+                  )}
+                  {rejectPredictionMutation.error && (
+                    <p className="form-error" role="alert">
+                      {rejectPredictionMutation.error.message}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p role="status">Loading SAM mask proposal for review...</p>
+              )}
+            </section>
+          )}
             {samPromptArmed && (
               <p className="annotation-helper" role="status">
                 SAM prompt ready: drag a bounding box around the object. Shift+1
@@ -3304,6 +3443,7 @@ export function AnnotationEditor({
                   fill="transparent"
                 />
                 {state.tool === "select" &&
+                  !(samReviewProposal && isolateSamReview) &&
                   state.document.maskAnnotations.map((mask) => {
                     const labelClass = mask.label_class_id
                       ? labelClassesById.get(mask.label_class_id)
@@ -3399,6 +3539,19 @@ export function AnnotationEditor({
                     );
                     return (
                       <g key={`prediction-${proposal.id}`}>
+                        {proposal.geometry_kind === "raster_mask" && (
+                          <image
+                            href={predictionMaskUrl(proposal.id)}
+                            x={0}
+                            y={0}
+                            width={image.width_px}
+                            height={image.height_px}
+                            opacity={selected ? 0.48 : 0.25}
+                            preserveAspectRatio="none"
+                            pointerEvents="none"
+                            data-testid={`proposal-mask-${proposal.id}`}
+                          />
+                        )}
                         <rect
                           x={proposal.x_min}
                           y={proposal.y_min}
