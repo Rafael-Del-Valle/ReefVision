@@ -2914,6 +2914,7 @@ export async function rejectPrediction(proposalId: string): Promise<{
 }
 
 export async function bulkReviewPredictions(payload: {
+  label_class_id?: string;
   action: "accept" | "reject";
   proposal_ids: string[];
 }): Promise<{

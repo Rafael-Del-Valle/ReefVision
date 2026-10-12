@@ -321,6 +321,7 @@ function stubCanvasRect(): void {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  localStorage.clear();
 });
 
 describe("AnnotationEditor", () => {
@@ -1315,7 +1316,10 @@ describe("AnnotationEditor", () => {
       clientX: 145,
       clientY: 185,
     });
-    fireEvent.keyDown(window, { key: "!", code: "Digit1", shiftKey: true });
+    fireEvent.pointerUp(window);
+    await userEvent.click(
+      screen.getByRole("button", { name: "SAM box prompt" }),
+    );
 
     const review = await screen.findByTestId("sam-proposal-review");
     expect(
@@ -1346,7 +1350,7 @@ describe("AnnotationEditor", () => {
     ).toBe("POST");
   });
 
-  it("runs SAM on a selected image box with Shift+1 and preserves plain class shortcuts", async () => {
+  it("runs the separately labeled SAM box action on a selected image box", async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
@@ -1402,7 +1406,10 @@ describe("AnnotationEditor", () => {
       clientX: 145,
       clientY: 185,
     });
-    fireEvent.keyDown(window, { key: "!", code: "Digit1", shiftKey: true });
+    fireEvent.pointerUp(window);
+    await userEvent.click(
+      screen.getByRole("button", { name: "SAM box prompt" }),
+    );
     await waitFor(() => {
       const request = requests.find((entry) =>
         entry.url.includes("/advanced-providers/sam2/execute"),
@@ -1417,7 +1424,7 @@ describe("AnnotationEditor", () => {
     });
   });
 
-  it("arms a SAM draw-box prompt with Shift+1 even when the pan tool is active", async () => {
+  it("arms the separately labeled SAM draw-box action even when the pan tool is active", async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
@@ -1466,7 +1473,10 @@ describe("AnnotationEditor", () => {
     });
     stubCanvasRect();
     await userEvent.click(screen.getByRole("button", { name: "Pan tool" }));
-    fireEvent.keyDown(window, { key: "!", code: "Digit1", shiftKey: true });
+    fireEvent.pointerUp(window);
+    await userEvent.click(
+      screen.getByRole("button", { name: "SAM box prompt" }),
+    );
     expect(
       screen.getByText(/SAM prompt ready: drag a bounding box/),
     ).toBeInTheDocument();
@@ -1490,7 +1500,7 @@ describe("AnnotationEditor", () => {
     });
   });
 
-  it("runs the selected detector on the current image with Shift+2", async () => {
+  it("runs the selected detector across the image with Shift+1", async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
@@ -1517,7 +1527,7 @@ describe("AnnotationEditor", () => {
             provider_version: "8.3",
             class_map_json: {},
             input_size_json: null,
-            metadata_json: {},
+            metadata_json: { active_for_predictions: true },
             notes: null,
             created_at: "2026-10-10T00:00:00Z",
             updated_at: "2026-10-10T00:00:00Z",
@@ -1562,10 +1572,12 @@ describe("AnnotationEditor", () => {
     });
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "Predict image (Shift+2)" }),
+        screen.getByRole("button", {
+          name: "Predict objects in image (Shift+1)",
+        }),
       ).not.toBeDisabled(),
     );
-    fireEvent.keyDown(window, { key: "@", code: "Digit2", shiftKey: true });
+    fireEvent.keyDown(window, { key: "!", code: "Digit1", shiftKey: true });
     await waitFor(() => {
       const request = requests.find(
         (entry) =>
@@ -1578,5 +1590,229 @@ describe("AnnotationEditor", () => {
         image_ids: [session.image.id],
       });
     });
+  });
+  it("starts bounded full-image SAM proposals without a registered detector", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (url.endsWith(`/images/${session.image.id}/annotations`))
+        return jsonResponse(session);
+      if (url.includes(`/projects/${project.id}/models?purpose=detector`)) {
+        return jsonResponse([
+          {
+            id: "unpromoted-detector",
+            project_id: project.id,
+            purpose: "detector",
+            display_name: "Unvalidated detector",
+            source_filename: "candidate.pt",
+            managed_path: "models/candidate.pt",
+            sha256: "d".repeat(64),
+            file_size_bytes: 2048,
+            framework: "ultralytics",
+            task: "detect",
+            provider_name: "ultralytics",
+            provider_version: "8.3",
+            class_map_json: {},
+            input_size_json: null,
+            metadata_json: {},
+            notes: null,
+            created_at: "2026-10-10T00:00:00Z",
+            updated_at: "2026-10-10T00:00:00Z",
+          },
+        ]);
+      }
+      if (url.includes("/sam-image-proposals") && init?.method === "POST") {
+        return jsonResponse({
+          id: "sam-grid-job",
+          status: "queued",
+          progress_current: 0,
+          progress_total: 16,
+          result_json: {},
+        });
+      }
+      if (url.includes("/jobs/sam-grid-job"))
+        return jsonResponse({
+          id: "sam-grid-job",
+          status: "running",
+          progress_current: 3,
+          progress_total: 16,
+          result_json: { stage: "sampling" },
+        });
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    fireEvent.keyDown(window, { key: "!", code: "Digit1", shiftKey: true });
+    await waitFor(() => {
+      const request = requests.find(
+        (item) =>
+          item.url.endsWith("/sam-image-proposals") &&
+          item.init?.method === "POST",
+      );
+      expect(request).toBeDefined();
+      expect(JSON.parse(String(request?.init?.body))).toMatchObject({
+        image_id: session.image.id,
+        variant: "small",
+      });
+      expect(JSON.parse(String(request?.init?.body))).not.toHaveProperty("box");
+    });
+    expect(
+      await screen.findByRole("button", { name: "Cancel image predictions" }),
+    ).toBeEnabled();
+    expect(
+      requests.some((item) =>
+        item.url.includes("/advanced-providers/sam2/execute"),
+      ),
+    ).toBe(false);
+    expect(requests.some((item) => item.url.endsWith("/accept"))).toBe(false);
+    expect(requests.some((item) => item.url.endsWith("/inference-jobs"))).toBe(
+      false,
+    );
+  });
+
+  it("explains Shift+2 needs one saved mask without invoking a detector", async () => {
+    const requests: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      requests.push(url);
+      if (url.endsWith(`/images/${session.image.id}/annotations`))
+        return jsonResponse(session);
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${url}`);
+    });
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    fireEvent.keyDown(window, { key: "@", code: "Digit2", shiftKey: true });
+    expect(
+      await screen.findByText(
+        /Select exactly one saved polygon or raster mask/,
+      ),
+    ).toBeInTheDocument();
+    expect(requests.some((url) => url.includes("/inference-jobs"))).toBe(false);
+  });
+
+  it("previews a selected mask with Shift+2 and replaces its identity only after acceptance", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    let accepted = false;
+    const mask = {
+      id: "refine-mask",
+      image_id: session.image.id,
+      label_class_id: "class-1",
+      geometry_kind: "polygon",
+      mask_path: null,
+      polygon_json: [
+        [20, 20],
+        [60, 20],
+        [60, 60],
+        [20, 60],
+      ],
+      x_min: 20,
+      y_min: 20,
+      x_max: 60,
+      y_max: 60,
+      area_pixels: 1600,
+      source_type: "human",
+      provenance_json: null,
+      status: "verified",
+      created_by: "local_user",
+      created_at: session.image.created_at,
+      updated_at: session.image.updated_at,
+      deleted_at: null,
+      revision: 3,
+    };
+    const candidate = {
+      candidate_id: "refine-1",
+      mask_annotation_id: mask.id,
+      image_id: session.image.id,
+      expected_revision: 3,
+      status: "pending",
+      mask_url: "/mask-refinements/refine-1/content",
+      old_area_pixels: 1600,
+      proposed_area_pixels: 1500,
+      iou: 0.91,
+      edge_change_percent: 9,
+      warnings: [],
+      requires_confirmation: false,
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (url.endsWith(`/images/${session.image.id}/annotations`))
+        return jsonResponse({
+          ...session,
+          image: { ...session.image, annotation_revision: accepted ? 3 : 2 },
+          mask_annotations: [{ ...mask, revision: accepted ? 4 : 3 }],
+        });
+      if (url.endsWith(`/mask-annotations/${mask.id}/refinements`))
+        return jsonResponse(candidate);
+      if (url.endsWith("/mask-refinements/refine-1/accept")) {
+        accepted = true;
+        return jsonResponse({
+          image: session.image,
+          mask_annotation: { ...mask, revision: 4 },
+        });
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request ${url}`);
+    });
+    renderEditor();
+    const original = await screen.findByTestId("mask-annotation-refine-mask");
+    fireEvent.pointerDown(original, { button: 0 });
+    fireEvent.pointerUp(window);
+    fireEvent.keyDown(window, { key: "@", code: "Digit2", shiftKey: true });
+    const review = await screen.findByRole("region", {
+      name: "Mask refinement review",
+    });
+    expect(
+      screen.getByTestId("mask-annotation-refine-mask"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("refinement-proposal-overlay"),
+    ).toBeInTheDocument();
+    expect(accepted).toBe(false);
+    expect(
+      JSON.parse(
+        String(
+          requests.find((item) => item.url.endsWith("/refinements"))?.init
+            ?.body,
+        ),
+      ),
+    ).toMatchObject({ expected_revision: 3, variant: "small" });
+    await userEvent.click(
+      within(review).getByRole("button", { name: "Edit proposed mask" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Undo brush stroke" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Redo brush stroke" }),
+    ).toBeDisabled();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Cancel mask edits" }),
+    );
+    await userEvent.click(
+      within(review).getByRole("button", { name: "Accept & Replace" }),
+    );
+    await screen.findByRole("button", { name: "Undo refinement" });
+    expect(accepted).toBe(true);
+    expect(screen.getAllByTestId("mask-annotation-refine-mask")).toHaveLength(
+      1,
+    );
+    expect(
+      requests.some(
+        (item) =>
+          item.url.includes("/prediction-proposals/") &&
+          item.init?.method === "POST",
+      ),
+    ).toBe(false);
   });
 });
