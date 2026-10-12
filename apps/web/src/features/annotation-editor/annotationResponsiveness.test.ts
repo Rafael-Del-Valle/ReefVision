@@ -71,13 +71,13 @@ describe("representative annotation responsiveness scenarios", () => {
     const polygonInteractionMs = measure(() => {
       const result = pasteAnnotations(
         {
-          sourceImage: { id: "large-image", width: 8_192, height: 6_144 },
+          sourceImage: { id: "large-image", projectId: "project-large", width: 8_192, height: 6_144 },
           items: polygonItems,
           rasterMaskIds: [],
           pasteCount: 0,
           skippedRasterCount: 0,
         },
-        { id: "large-image", width: 8_192, height: 6_144 },
+        { id: "large-image", projectId: "project-large", width: 8_192, height: 6_144 },
         () => `copy-${pastedCount++}`,
       );
       expect(result.ok).toBe(true);
