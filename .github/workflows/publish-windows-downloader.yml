@@ -1,0 +1,50 @@
+name: Publish Windows downloader
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/publish-windows-downloader.yml'
+      - 'tools/windows-downloader/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build single-file Windows downloader
+        shell: pwsh
+        run: |
+          dotnet publish tools/windows-downloader/ReefVision.Downloader.csproj -c Release -r win-x64 --self-contained true -o downloader-dist
+          if ($LASTEXITCODE -ne 0) { throw 'Downloader build failed' }
+          if (!(Test-Path downloader-dist/ReefVision_Windows_Downloader.exe)) { throw 'Downloader executable missing' }
+      - name: Check release manifest without downloading installer payloads
+        shell: pwsh
+        run: |
+          & ./downloader-dist/ReefVision_Windows_Downloader.exe --check-release
+          if ($LASTEXITCODE -ne 0) { throw 'Release manifest check failed' }
+      - name: Upload downloader to existing v1.0.0 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release view v1.0.0 --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw 'Release v1.0.0 not found' }
+          $asset = gh release view v1.0.0 --repo $env:GITHUB_REPOSITORY --json assets --jq '.assets[].name'
+          if ($asset -contains 'ReefVision_Windows_Downloader.exe') {
+            Write-Host 'Downloader asset already published. Leaving it unchanged.'
+          } else {
+            gh release upload v1.0.0 downloader-dist/ReefVision_Windows_Downloader.exe --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { throw 'Could not upload downloader asset' }
+          }
