@@ -431,6 +431,11 @@ describe("AnnotationEditor", () => {
     });
     stubCanvasRect();
 
+    // Editing an already reviewed image must invalidate its prior review.
+    await userEvent.selectOptions(
+      screen.getByLabelText("Annotation status"),
+      "reviewed",
+    );
     fireEvent.pointerDown(screen.getByTestId("annotation-annotation-1"), {
       button: 0,
     });
@@ -440,6 +445,9 @@ describe("AnnotationEditor", () => {
     const objectList = screen.getByRole("listbox", { name: "Objects" });
     expect(within(objectList).getAllByRole("option")).toHaveLength(2);
     expect(screen.getByText(/Pasted 1 annotation/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Annotation status")).toHaveValue(
+      "in_progress",
+    );
     fireEvent.keyDown(document.body, { key: "d", ctrlKey: true });
     expect(within(objectList).getAllByRole("option")).toHaveLength(3);
 
