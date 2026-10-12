@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import io
 from hashlib import sha256
-from typing import Any, cast
+from typing import Any
 
 from PIL import Image, ImageDraw
 
@@ -18,7 +18,8 @@ from reefvision.storage.projects import resolve_managed_project_path
 def read_source(settings: Settings, managed_path: str) -> Image.Image:
     with Image.open(resolve_managed_project_path(settings, managed_path)) as source:
         source.load()
-        return cast(Image.Image, source.convert("RGB"))
+        converted: Image.Image = source.convert("RGB")
+        return converted
 
 
 def read_reference_mask(

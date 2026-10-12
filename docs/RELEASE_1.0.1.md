@@ -1,14 +1,26 @@
 # ReefVision 1.0.1 — Pre-release acceptance and handoff
 
-**Status:** Acceptance evidence recorded; release is NOT published. Keep PR #44 in
-draft and do not merge, tag, or publish without explicit maintainer approval.
+**Status:** Release HOLD. The earlier installer candidate passed the recorded
+acceptance below, but PR #44 now contains additional annotation-intelligence
+changes that require fresh exact-head CI and installed-desktop validation. Keep
+the PR in draft and do not merge, tag, or publish without explicit maintainer
+approval.
 
 ## 1.0.1 patch highlights
 
 - SAM 2.1 Tiny, Small, Base+, and Large optional checkpoint download when a
   user selects that variant; provenance, checksum verification and retry.
-- Shift+1: SAM prompt segmentation. Shift+2: image-wide proposals using a
-  selected registered detector; ordinary number-key class selection preserved.
+- Shift+1: image-wide proposals using the explicitly promoted detector when one
+  is active, otherwise bounded full-image SAM generation. Shift+2: non-destructive
+  refinement of exactly one selected saved mask. SAM box prompting remains a
+  separate action; ordinary number-key class selection is preserved.
+- Pending proposal masks support paint/erase correction, undo/redo, class
+  assignment and explicit acceptance or rejection. They are excluded from
+  verified counts and training data until accepted.
+- Verified-annotation learning creates immutable, group-safe dataset snapshots,
+  queues local training, evaluates detector candidates on held-out groups, and
+  requires explicit promotion. Promotion and rollback are audited; evaluation
+  outputs cannot be accepted as annotations.
 - Class discovery from local .pt metadata; acceptance persists native project
   annotations with model provenance.
 - COCO boxes/masks and YOLO detection/segmentation import with class names,
@@ -51,16 +63,34 @@ installed application's PATH. The model catalog exposed 25 architectures
 and zero bundled pretrained checkpoints. The optional SAM Tiny checkpoint
 was fetched into isolated user cache as part of the test.
 
+## PR #44 annotation-intelligence validation
+
+Source validation for the current PR work includes a real SAM 2.1 Tiny
+full-image proposal run, focused backend coverage for proposal generation,
+refinement, verified learning, held-out evaluation and model inference, the full
+frontend unit/E2E/build suite, and an Alembic upgrade/downgrade/upgrade cycle.
+The exact commands and counts are maintained in the PR description and issue
+#48 progress log so this document does not imply that the earlier MSI exercised
+the newly added keyboard and mask-editing workflows.
+
+Instance-segmentation annotations with holes remain blocked from the existing
+polygon-only training path rather than flattened. Candidate evaluation and
+guarded promotion in the Improve Predictions panel currently cover detector
+models. Automatic retraining remains opt-in; ReefVision does not silently train
+or activate a model from newly verified data.
+
 ## Remaining acceptance boundaries
 
-- [x] Core CI (Ruff, mypy, pytest, frontend formatting, TypeScript, Vitest,
-      Playwright, production build).
+- [ ] Fresh exact-head core CI for the annotation-intelligence changes (Ruff,
+      mypy, pytest, frontend formatting, TypeScript, Vitest, Playwright,
+      production build).
 - [x] Software/provider acceptance on pinned Windows Python.
 - [x] Separate clean-machine MSI lifecycle, including SAM and persistence.
 - [x] MSI version, six external CAB files and cryptographic artifact digests.
-- [ ] Direct **installed desktop GUI** operator smoke test of Shift+1,
-      Shift+2, model class creation/Accept Visible, and the floating review
-      dialog. The automated MSI test exercised the packaged API, not these
+- [ ] Direct **installed desktop GUI** operator smoke test of full-image Shift+1,
+      selected-mask Shift+2, proposal paint/erase and undo/redo, Accept Visible,
+      explicit candidate promotion/rollback, and the floating review dialog.
+      The earlier automated MSI test exercised the packaged API, not these new
       keyboard/mouse interactions.
 - [ ] Optional upgrade-in-place test from a compatible prior MSI; the clean
       install workflow passed `-SkipUpgrade`.
