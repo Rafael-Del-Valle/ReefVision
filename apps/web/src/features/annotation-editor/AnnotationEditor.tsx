@@ -1551,7 +1551,7 @@ export function AnnotationEditor({
       snapshot.document,
       snapshot.selectedIds,
       snapshot.selectedMaskIds,
-      { id: image.id, width: image.width_px, height: image.height_px },
+      { id: image.id, projectId: project.id, width: image.width_px, height: image.height_px },
     );
     annotationClipboardRef.current = clipboard;
     writeInternalAnnotationClipboard(clipboard);
@@ -1562,7 +1562,7 @@ export function AnnotationEditor({
         : `Copied ${count} annotation${count === 1 ? "" : "s"} to ReefVision's internal clipboard.`,
     );
     return clipboard;
-  }, [sessionQuery.data?.image]);
+  }, [project.id, sessionQuery.data?.image]);
 
   const pasteClipboard = useCallback(
     (
@@ -1576,7 +1576,7 @@ export function AnnotationEditor({
       }
       const result = pasteAnnotations(
         clipboard,
-        { id: image.id, width: image.width_px, height: image.height_px },
+        { id: image.id, projectId: project.id, width: image.width_px, height: image.height_px },
         makeAnnotationId,
       );
       if (!result.ok) {
@@ -1589,6 +1589,11 @@ export function AnnotationEditor({
       commitDocument(
         {
           ...snapshot.document,
+          // New copies must be reviewed before this image is eligible for verified learning.
+          annotation_status:
+            snapshot.document.annotation_status === "reviewed"
+              ? "in_progress"
+              : snapshot.document.annotation_status,
           annotations: [
             ...snapshot.document.annotations,
             ...result.annotations,
@@ -1608,7 +1613,7 @@ export function AnnotationEditor({
         `Pasted ${count} annotation${count === 1 ? "" : "s"} in source-image coordinates. New polygon copies require review.`,
       );
     },
-    [commitDocument, sessionQuery.data?.image],
+    [commitDocument, project.id, sessionQuery.data?.image],
   );
 
   const duplicateSelection = useCallback(() => {
