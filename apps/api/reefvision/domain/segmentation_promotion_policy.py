@@ -49,9 +49,10 @@ def candidate_meets_segmentation_guardrails(
     requires the absolute quality floor. Deployment must independently check
     model digest, task, project, lineage, and audit requirements.
     """
-    if not all(isfinite(v) for v in (
-        minimum_mask_map50, minimum_gain, maximum_count_error_increase
-    )):
+    if not all(
+        isfinite(v)
+        for v in (minimum_mask_map50, minimum_gain, maximum_count_error_increase)
+    ):
         raise ValueError("Nonfinite promotion threshold")
     if (
         not 0 <= minimum_mask_map50 <= 1
