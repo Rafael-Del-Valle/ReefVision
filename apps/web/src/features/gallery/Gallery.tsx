@@ -200,11 +200,7 @@ function ImportSummary({ report }: { report: ImageImportReport }) {
 }
 
 type PreviewLoadPhase =
-  | "loading"
-  | "loaded"
-  | "thumbnail-loading"
-  | "thumbnail-loaded"
-  | "error";
+  "loading" | "loaded" | "thumbnail-loading" | "thumbnail-loaded" | "error";
 
 /**
  * Keep each image's media request lifecycle inside a keyed component.

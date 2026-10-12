@@ -16,7 +16,7 @@ import type {
   ClassVisibilityLayerType,
   Project,
 } from "../../api/client";
-import { AnnotationEditor } from "./AnnotationEditor";
+import { AnnotationEditor, annotationImageSource } from "./AnnotationEditor";
 
 const project: Project = {
   id: "project-1",
@@ -341,6 +341,19 @@ afterEach(() => {
 });
 
 describe("AnnotationEditor", () => {
+  it("preserves the thumbnail when the full-resolution preload fails", () => {
+    expect(annotationImageSource("image-1", "managed/thumb.png", false)).toContain(
+      "/images/image-1/thumbnail",
+    );
+    expect(annotationImageSource("image-1", "managed/thumb.png", true)).toContain(
+      "/images/image-1/display",
+    );
+    expect(annotationImageSource("image-1", null, false)).toContain(
+      "/images/image-1/display",
+    );
+  });
+
+
   it("reports the controlled active image identity", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
