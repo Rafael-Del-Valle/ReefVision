@@ -1,0 +1,24 @@
+name: Diagnostic Prettier diff for 1.0.2 gallery
+on:
+  push:
+    branches: [diagnostics/reefvision-pr58-prettier-diff-20261012]
+permissions:
+  contents: read
+jobs:
+  prettier-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: apps/web
+      - name: Print exact formatter diff without committing
+        run: |
+          npx prettier --write src/features/gallery/Gallery.tsx
+          git diff -- src/features/gallery/Gallery.tsx
+        working-directory: apps/web
