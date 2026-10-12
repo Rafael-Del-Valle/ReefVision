@@ -1,3 +1,4 @@
+# Release branch only: publish a pre-release from previously validated artifacts.
 name: Publish ReefVision 1.0.1 External-PC Test Prerelease
 
 on:
