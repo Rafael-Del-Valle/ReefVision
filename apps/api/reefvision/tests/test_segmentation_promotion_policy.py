@@ -27,7 +27,7 @@ def test_improved_mask_ap_without_count_degradation_is_eligible() -> None:
 
 def test_worse_count_error_blocks_even_if_mask_ap_improves() -> None:
     assert not candidate_meets_segmentation_guardrails(
-        score("candidate", 0.95, 1.1), score("incumbent", 0.75, 1.0),
+        score("candidate", 0.95, 1.1),\n        score("incumbent", 0.75, 1.0),
         minimum_mask_map50=0.7,
     )
 
