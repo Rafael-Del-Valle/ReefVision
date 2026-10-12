@@ -107,8 +107,11 @@ internal static class Program
             HttpCompletionOption.ResponseHeadersRead,
             cancellation);
         response.EnsureSuccessStatusCode();
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellation);
-        using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cancellation);
+        // Windows PowerShell may emit a UTF-8 BOM when writing build-provenance.json.
+        var contents = (ReadOnlyMemory<byte>)await response.Content.ReadAsByteArrayAsync(cancellation);
+        if (contents.Span.StartsWith(new byte[] { 0xEF, 0xBB, 0xBF }))
+            contents = contents[3..];
+        using var json = JsonDocument.Parse(contents);
         var root = json.RootElement;
 
         if (root.GetProperty("version").GetString() != Version
