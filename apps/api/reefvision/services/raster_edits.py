@@ -101,7 +101,8 @@ class RasterMaskEditService:
                 )
             )
             image.annotation_revision += 1
-            if image.annotation_status == "unannotated":
+            if image.annotation_status in {"unannotated", "reviewed"}:
+                # A new draft copy invalidates image-level review completion.
                 image.annotation_status = "in_progress"
             self.session.commit()
         except Exception:
