@@ -64,7 +64,7 @@ describe("annotationClipboard", () => {
       document,
       ["box-1"],
       ["polygon-1", "raster-1"],
-      { id: "image-1", width: 100, height: 100 },
+      { id: "image-1", projectId: "project-1", width: 100, height: 100 },
     );
 
     expect(clipboard.items.map((item) => item.kind)).toEqual([
@@ -86,7 +86,7 @@ describe("annotationClipboard", () => {
     const ids = ["new-box", "new-polygon"];
     const result = pasteAnnotations(
       clipboard,
-      { id: "image-1", width: 100, height: 100 },
+      { id: "image-1", projectId: "project-1", width: 100, height: 100 },
       () => ids.shift() as string,
     );
 
@@ -130,7 +130,7 @@ describe("annotationClipboard", () => {
     expect(
       pasteAnnotations(
         clipboard,
-        { id: "image-2", width: 200, height: 100 },
+        { id: "image-2", projectId: "project-1", width: 200, height: 100 },
         () => "new-id",
       ),
     ).toEqual({
@@ -140,9 +140,29 @@ describe("annotationClipboard", () => {
     });
   });
 
+  it("blocks cross-project annotation pastes even when image dimensions match", () => {
+    const clipboard = copyAnnotations(document, ["box-1"], ["polygon-1"], {
+      id: "image-1",
+      projectId: "project-a",
+      width: 100,
+      height: 100,
+    });
+    expect(
+      pasteAnnotations(
+        clipboard,
+        { id: "image-2", projectId: "project-b", width: 100, height: 100 },
+        () => "never-create-an-id",
+      ),
+    ).toEqual({
+      ok: false,
+      reason:
+        "Clipboard annotations belong to a different project. ReefVision will not transfer class IDs or scientific provenance between projects.",
+    });
+  });
+
   it("rejects empty and malformed clipboard content", () => {
     const empty: AnnotationClipboard = {
-      sourceImage: { id: "image-1", width: 100, height: 100 },
+      sourceImage: { id: "image-1", projectId: "project-1", width: 100, height: 100 },
       items: [],
       rasterMaskIds: [],
       pasteCount: 0,
