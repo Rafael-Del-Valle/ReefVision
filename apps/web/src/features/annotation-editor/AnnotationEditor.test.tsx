@@ -344,17 +344,16 @@ afterEach(() => {
 
 describe("AnnotationEditor", () => {
   it("preserves the thumbnail when the full-resolution preload fails", () => {
-    expect(annotationImageSource("image-1", "managed/thumb.png", false)).toContain(
-      "/images/image-1/thumbnail",
-    );
-    expect(annotationImageSource("image-1", "managed/thumb.png", true)).toContain(
-      "/images/image-1/display",
-    );
+    expect(
+      annotationImageSource("image-1", "managed/thumb.png", false),
+    ).toContain("/images/image-1/thumbnail");
+    expect(
+      annotationImageSource("image-1", "managed/thumb.png", true),
+    ).toContain("/images/image-1/display");
     expect(annotationImageSource("image-1", null, false)).toContain(
       "/images/image-1/display",
     );
   });
-
 
   it("keeps an annotation preview visible after a failed full-size preload and can retry", async () => {
     const preloaders: FakeImage[] = [];
@@ -385,7 +384,9 @@ describe("AnnotationEditor", () => {
       name: session.image.original_filename,
     });
     await waitFor(() => expect(preloaders.length).toBeGreaterThan(0));
-    const first = preloaders.find((image) => image.src.includes("/display?retry=0"));
+    const first = preloaders.find((image) =>
+      image.src.includes("/display?retry=0"),
+    );
     expect(first).toBeDefined();
     act(() => first?.onerror?.(new Event("error")));
     expect(
@@ -399,7 +400,9 @@ describe("AnnotationEditor", () => {
       screen.getByRole("button", { name: "Retry full-resolution image" }),
     );
     const second = await waitFor(() => {
-      const item = preloaders.find((image) => image.src.includes("/display?retry=1"));
+      const item = preloaders.find((image) =>
+        image.src.includes("/display?retry=1"),
+      );
       expect(item).toBeDefined();
       return item;
     });

@@ -3753,23 +3753,23 @@ export function AnnotationEditor({
               acceptance.
             </p>
           )}
-            {fullImageFailed && (
-              <div className="rv-media-load-error" role="alert">
-                <strong>Full-resolution image could not load</strong>
-                <p>
-                  {image.thumbnail_path
-                    ? "A thumbnail preview is shown. Do not verify new annotations against this preview."
-                    : "No thumbnail is available. The image cannot be reliably reviewed until the full-resolution file loads."}
-                </p>
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => setFullImageRetry((value) => value + 1)}
-                >
-                  Retry full-resolution image
-                </button>
-              </div>
-            )}
+          {fullImageFailed && (
+            <div className="rv-media-load-error" role="alert">
+              <strong>Full-resolution image could not load</strong>
+              <p>
+                {image.thumbnail_path
+                  ? "A thumbnail preview is shown. Do not verify new annotations against this preview."
+                  : "No thumbnail is available. The image cannot be reliably reviewed until the full-resolution file loads."}
+              </p>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setFullImageRetry((value) => value + 1)}
+              >
+                Retry full-resolution image
+              </button>
+            </div>
+          )}
           <div className="annotation-canvas-frame" ref={viewportRef}>
             {learningOpen && (
               <ImprovePredictionsPanel
