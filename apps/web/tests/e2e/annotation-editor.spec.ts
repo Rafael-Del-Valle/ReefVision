@@ -360,7 +360,7 @@ test("stores source-image coordinates correctly after zooming and reloads saved 
 
   // Acceptance coverage for Alt+drag panning: the viewport changes, while the
   // persisted source rectangle geometry remains identical.
-  const sourceGeometryBeforePan = await savedBox.locator("rect").first().evaluate(
+  const sourceGeometryBeforePan = await savedBox.evaluate(
     (element) => ({
       x: element.getAttribute("x"),
       y: element.getAttribute("y"),
@@ -387,7 +387,7 @@ test("stores source-image coordinates correctly after zooming and reloads saved 
     .poll(() => viewportGroup.getAttribute("transform"))
     .not.toBe(transformBeforePan);
   expect(
-    await savedBox.locator("rect").first().evaluate((element) => ({
+    await savedBox.evaluate((element) => ({
       x: element.getAttribute("x"),
       y: element.getAttribute("y"),
       width: element.getAttribute("width"),
