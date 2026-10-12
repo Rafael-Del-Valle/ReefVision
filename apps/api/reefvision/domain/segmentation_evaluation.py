@@ -155,7 +155,10 @@ def instance_mask_metrics(
         total_fp += fp
         total_fn += fn
         per_class[class_id] = ClassMaskMetrics(
-            len(actual), tp, fp, fn,
+            len(actual),
+            tp,
+            fp,
+            fn,
             tp / max(tp + fp, 1),
             tp / max(len(actual), 1),
             _average_precision(curve),
