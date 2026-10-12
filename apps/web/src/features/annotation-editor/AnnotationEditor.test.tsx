@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -337,6 +338,7 @@ function mockBasicEditorRequests(): void {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   localStorage.clear();
 });
 
@@ -353,6 +355,62 @@ describe("AnnotationEditor", () => {
     );
   });
 
+
+  it("keeps an annotation preview visible after a failed full-size preload and can retry", async () => {
+    const preloaders: FakeImage[] = [];
+    class FakeImage {
+      decoding = "";
+      onload: ((event: Event) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      src = "";
+      constructor() {
+        preloaders.push(this);
+      }
+    }
+    vi.stubGlobal("Image", FakeImage);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith(`/images/${session.image.id}/annotations`)) {
+        return jsonResponse({
+          ...session,
+          image: { ...session.image, thumbnail_path: "thumb.png" },
+        });
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${url}`);
+    });
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    await waitFor(() => expect(preloaders.length).toBeGreaterThan(0));
+    const first = preloaders.find((image) => image.src.includes("/display?retry=0"));
+    expect(first).toBeDefined();
+    act(() => first?.onerror?.(new Event("error")));
+    expect(
+      await screen.findByText("Full-resolution image could not load"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("annotation-canvas").querySelector("image"),
+    ).toHaveAttribute("href", expect.stringContaining("/thumbnail"));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry full-resolution image" }),
+    );
+    const second = await waitFor(() => {
+      const item = preloaders.find((image) => image.src.includes("/display?retry=1"));
+      expect(item).toBeDefined();
+      return item;
+    });
+    act(() => second?.onload?.(new Event("load")));
+    expect(
+      screen.queryByText("Full-resolution image could not load"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("annotation-canvas").querySelector("image"),
+    ).toHaveAttribute("href", expect.stringContaining("/display?retry=1"));
+  });
 
   it("reports the controlled active image identity", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
