@@ -354,7 +354,10 @@ export function annotationEditorReducer(
       };
     case "commitDocument": {
       const contentChanged =
-        !annotationsEqual(state.document.annotations, action.document.annotations) ||
+        !annotationsEqual(
+          state.document.annotations,
+          action.document.annotations,
+        ) ||
         !maskAnnotationsEqual(
           state.document.maskAnnotations,
           action.document.maskAnnotations,
