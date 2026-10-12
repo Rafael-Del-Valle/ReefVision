@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Rafael-Del-Valle/ReefVision/releases/latest"><strong>Download for Windows</strong></a>
+  <a href="https://github.com/Rafael-Del-Valle/ReefVision/releases/download/v1.0.0/ReefVision_Windows_Downloader.exe"><strong>Download for Windows (v1.0.0)</strong></a>
   · <a href="#installation">Installation</a>
   · <a href="#documentation">Documentation</a>
   · <a href="https://github.com/Rafael-Del-Valle/ReefVision/issues">Report an issue</a>
@@ -55,14 +55,15 @@ The panels below mark where screenshots from the desktop application will go. Th
 
 ## Installation
 
-The published desktop release is for **Windows x64**. You do not need to install Python or Node.js to run the packaged application.
+The published desktop release is for **Windows x64**. You do not need to install Python, Node.js, or .NET to run the packaged application or the downloader.
 
-1. Open the [latest release](https://github.com/Rafael-Del-Valle/ReefVision/releases/latest).
-2. Download the ReefVision `.msi` installer **and every accompanying `rv*.cab` file** from that release.
-3. Keep the MSI and CAB files in the same folder and run the MSI installer.
-4. Launch ReefVision from Windows after installation.
+1. [Download the ReefVision Windows downloader](https://github.com/Rafael-Del-Valle/ReefVision/releases/download/v1.0.0/ReefVision_Windows_Downloader.exe).
+2. Open `ReefVision_Windows_Downloader.exe`. It downloads the MSI and all six required CAB files to `Downloads\\ReefVision-1.0.0`, then checks their SHA-256 hashes against the published release's build provenance.
+3. After the files are verified, press Enter to open the Windows installer and follow its instructions.
 
-The CAB files are part of the installer. Downloading only the MSI is not enough for the current split-package release.
+The downloader is an unsigned executable. Windows may warn about an unknown publisher; check that it came from the [official ReefVision v1.0.0 release](https://github.com/Rafael-Del-Valle/ReefVision/releases/tag/v1.0.0). If a download is interrupted, run the downloader again; verified files will be reused.
+
+**Manual option:** Download the `.msi` and **all six `rv*.cab` files** from the [release page](https://github.com/Rafael-Del-Valle/ReefVision/releases/tag/v1.0.0), put them in the same folder, and run the MSI. The MSI alone is not sufficient.
 
 **Working from source?** See the [developer setup guide](docs/DEVELOPMENT.md) instead.
 
