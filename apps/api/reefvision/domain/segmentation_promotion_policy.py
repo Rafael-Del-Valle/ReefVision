@@ -20,8 +20,12 @@ class SegmentationCandidateScore:
     evaluated_images: int
 
     def __post_init__(self) -> None:
-        if not all(\n            (self.model_id, self.project_id, self.dataset_version_id, self.split_digest)\n        ):
-            raise ValueError("Segmentation evaluation identity and split digest are required")
+        if not all(
+            (self.model_id, self.project_id, self.dataset_version_id, self.split_digest)
+        ):
+            raise ValueError(
+                "Segmentation evaluation identity and split digest are required"
+            )
         if self.evaluated_images < 1:
             raise ValueError("Segmentation evaluation needs held-out images")
         if not isfinite(self.mask_map50) or not 0 <= self.mask_map50 <= 1:
@@ -49,7 +53,11 @@ def candidate_meets_segmentation_guardrails(
         minimum_mask_map50, minimum_gain, maximum_count_error_increase
     )):
         raise ValueError("Nonfinite promotion threshold")
-    if (\n        not 0 <= minimum_mask_map50 <= 1\n        or minimum_gain < 0\n        or maximum_count_error_increase < 0\n    ):
+    if (
+        not 0 <= minimum_mask_map50 <= 1
+        or minimum_gain < 0
+        or maximum_count_error_increase < 0
+    ):
         raise ValueError("Invalid promotion threshold")
     if candidate.mask_map50 < minimum_mask_map50:
         return False
