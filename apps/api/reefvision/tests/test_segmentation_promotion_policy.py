@@ -9,15 +9,15 @@ from reefvision.domain.segmentation_promotion_policy import (
 
 
 def score(model: str, ap: float, error: float, **changes: object) -> SegmentationCandidateScore:
-    fields = dict(
-        model_id=model,
-        project_id="p",
-        dataset_version_id="v",
-        split_digest="immutable-holdout",
-        mask_map50=ap,
-        mean_absolute_count_error=error,
-        evaluated_images=12,
-    )
+    fields = {
+        "model_id": model,
+        "project_id": "p",
+        "dataset_version_id": "v",
+        "split_digest": "immutable-holdout",
+        "mask_map50": ap,
+        "mean_absolute_count_error": error,
+        "evaluated_images": 12,
+    }
     fields.update(changes)
     return SegmentationCandidateScore(**fields)
 
