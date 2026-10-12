@@ -58,7 +58,7 @@ The panels below mark where screenshots from the desktop application will go. Th
 The published desktop release is for **Windows x64**. You do not need to install Python or Node.js to run the packaged application.
 
 1. Open the [latest release](https://github.com/Rafael-Del-Valle/ReefVision/releases/latest).
-2. Download the ReefVision \`.msi\` installer **and every accompanying \`rv*.cab\` file** from that release.
+2. Download the ReefVision `.msi` installer **and every accompanying `rv*.cab` file** from that release.
 3. Keep the MSI and CAB files in the same folder and run the MSI installer.
 4. Launch ReefVision from Windows after installation.
 
