@@ -1,182 +1,110 @@
-# ReefVision
+<p align="center">
+  <img src="assets/reefvision-banner.svg" alt="ReefVision — computer vision for marine research" width="100%">
+</p>
 
-ReefVision is a local-first scientific annotation, computer-vision, and marine-imagery analysis platform. The current `1.0.1` release line combines manual and model-assisted annotation, detection and segmentation workflows, coral measurements, classification, active learning, model/provider management, video tracking and scientific video analysis, reproducible datasets, review and quality-control workflows, project interoperability, executable workflow graphs, and Windows desktop packaging.
+<p align="center">
+  Desktop software for marine image and video analysis.<br>
+  Annotation, model training, tracking, measurements, and review in one local workspace.
+</p>
 
-The application uses a React/Tauri desktop interface with a FastAPI/SQLAlchemy backend and persisted background jobs. Research data, annotations, model outputs, provenance, immutable dataset versions, generated artifacts, and project-exchange records are managed locally rather than requiring a hosted ReefVision service.
+<p align="center">
+  <a href="https://github.com/Rafael-Del-Valle/ReefVision/releases/download/v1.0.1-rc.1/ReefVision_Windows_Downloader.exe"><strong>Download for Windows — 1.0.1 RC (test build)</strong></a>
+  · <a href="https://github.com/Rafael-Del-Valle/ReefVision/releases/tag/v1.0.0">Stable v1.0.0</a>
+  · <a href="#installation">Installation</a>
+  · <a href="#documentation">Documentation</a>
+  · <a href="https://github.com/Rafael-Del-Valle/ReefVision/issues">Report an issue</a>
+</p>
 
-## Available now
+<p align="center">
+  <a href="https://github.com/Rafael-Del-Valle/ReefVision/releases"><img alt="Latest stable release" src="https://img.shields.io/github/v/release/Rafael-Del-Valle/ReefVision?label=stable"></a>
+  <img alt="Windows x64" src="https://img.shields.io/badge/platform-Windows%20x64-235b76">
+  <a href="https://github.com/Rafael-Del-Valle/ReefVision/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/Rafael-Del-Valle/ReefVision"></a>
+</p>
 
-- Create blank projects or projects using the six-class octocoral template.
-- Add, rename, reorder, recolor, deactivate, and manage visibility for annotation classes.
-- Import JPEG, PNG, TIFF, and WebP images as protected managed copies, with SHA-256 duplicate detection and background thumbnail generation.
-- Browse project imagery with filename, annotation-status, and leakage-prevention group filters.
-- Annotate imagery with bounding boxes, rotated boxes, polygons, raster brush edits, deterministic Fill, and editable mask workflows.
-- Draw and retain coral centerlines and use scale/calibration assistants for scientific measurements.
-- Calculate mask- and calibration-aware coral measurements and measurement analytics.
-- Register trusted local detection, segmentation, classification, assist, depth, and other supported model checkpoints through the Model Hub.
-- Run detector inference and review model proposals separately from verified human annotations.
-- Run segmentation inference and edit resulting polygon or raster-mask annotations before saving them as research annotations.
-- Use Prompt Assist and supported advanced providers through guarded preflight and execution workflows, including provider families such as SAM2, Grounding DINO, Depth Anything, OCR, VLM, and other installed adapters where runtime support is available.
-- Create immutable dataset versions with frozen annotation state, leakage-aware splitting, parent-version reuse, comparisons, manifests, and dataset exports.
-- Train supported detection and segmentation models through reproducible persisted training runs with validation, tuning, recovery, results packages, and model registration.
-- Assign image-level classification labels, create versioned whole-image or crop-based classification datasets, train Ultralytics classifiers, run inference, and accept or reject ranked predictions.
-- Run explainable quality-control checks across projects or immutable dataset versions, compare historical runs, and acknowledge or dismiss findings.
-- Generate deterministic review queues with score breakdowns and direct navigation into annotation mode.
-- Create active-learning acquisition rounds using uncertainty, rare-class, quality-risk, or hybrid strategies and freeze reviewed feedback into subsequent dataset versions.
-- Import videos, run persisted ByteTrack or BoT-SORT tracking jobs, retain independent run histories, inspect tracking outputs, and exchange track data.
-- Export annotated tracking-review MP4s from persisted observations without rerunning the detector, with selectable boxes, track IDs, class labels, confidence, trails, timestamps, and counters.
-- Analyze video activity and occupancy and use scientific 3D/depth workflows with calibration validation, previews, visualization, and reporting.
-- Build typed workflow graphs visually, validate and plan execution, save revisions, run persisted workflows, pause at human-review gates, resume work, and inspect artifact lineage.
-- Export versioned, checksummed ReefVision project-exchange ZIPs, safely inspect packages before import, and import them as new managed projects with record-ID remapping. Original media, model weights, and generated artifacts remain explicit opt-ins.
-- Export and import supported video-track exchange formats independently of whole-project exchange packages.
-- Create managed backups, verify them, restore them into new managed recovery locations, and export redacted diagnostics bundles from the `System status` view.
-- Reopen the first-run onboarding guide from the top bar or `System status`.
-- Archive projects without deleting their records or managed files.
-- Build a Windows MSI desktop installer that bundles the React frontend and PyInstaller-frozen FastAPI sidecar.
+---
 
-## Repository layout
+ReefVision is built for researchers who work with large sets of underwater images and video. The idea is simple: keep the images, annotations, model results, and checks together, rather than moving between unrelated tools at every stage of a project.
 
-- `apps/api`: FastAPI, SQLAlchemy, Alembic, and pytest.
-- `apps/web`: React, TypeScript, Vite, Vitest, and the Tauri desktop shell.
-- `docs`: product, architecture, data-model, and milestone reports.
-- `scripts`: PowerShell workflows for Windows development and desktop packaging.
+It began with octocoral imagery, but the annotation and computer-vision workflows can also be used for other marine research datasets. ReefVision runs on your computer, and projects and research records are managed locally.
 
-## Prerequisites
+## What you can do
 
-- Python 3.11 or newer
-- Node.js 22 or newer (an active LTS release is recommended)
-- npm 10 or newer
+| Area | Tools |
+| --- | --- |
+| **Annotate images** | Bounding boxes, rotated boxes, polygons, brush masks, Fill, class management, and editable segmentation results. |
+| **Train and run models** | Detection, segmentation, and image classification workflows using supported local models. Review predictions before including them in verified annotations. |
+| **Work with video** | Object detection and tracking with ByteTrack or BoT-SORT, plus annotated video exports and tracking summaries. |
+| **Measure corals** | Centerlines, scale and calibration tools, and measurements derived from masks or annotated geometry. |
+| **Review datasets** | Quality-control checks, ranked review queues, versioned annotation snapshots, dataset exports, and active-learning workflows. |
+| **Build repeatable workflows** | Visual workflow graphs with saved revisions, execution history, review steps, and artifact records. |
 
-### Provider stack
+For a more detailed list, see the [feature reference](docs/FEATURE_REFERENCE.md). Some tools depend on a compatible model, GPU, or separately installed provider.
 
-- `setup.bat` installs the pinned Windows provider stack from `requirements/providers-windows-cu121-py312.txt`.
-- The tested Ultralytics combination is Python `3.12.x`, CUDA `12.1`, `torch 2.5.1+cu121`, `torchvision 0.20.1+cu121`, and `ultralytics 8.3.228`.
-- The general model catalog does not automatically download pretrained checkpoints; register your own local `.pt` or `.pth` files for training and inference. **Exception:** selecting an optional SAM 2.1 assisted-annotation variant starts its explicit on-demand checkpoint acquisition and caching without another confirmation dialog. No SAM weights are bundled in the MSI.
 
-## Windows setup
+## In development: 1.0.1 annotation assistance
 
-### Easiest setup
+The [1.0.1 development pull request](https://github.com/Rafael-Del-Valle/ReefVision/pull/44) adds source-pixel, full-image SAM proposals (Shift+1), selected-mask refinement (Shift+2), review-before-counting controls, and a verified-dataset training loop. These development changes are **not part of the stable 1.0.0 release**. The 1.0.1 release candidate is for testing; review the [release notes](docs/REEFVISION_1_0_1_RELEASE_NOTES.md) and current PR checks before relying on these features for research.
 
-1. Extract the ReefVision folder.
-2. Double-click `setup.bat`.
-3. When Node.js/npm are missing, approve the guided Node.js LTS installation.
-4. After setup succeeds, double-click `start-reefvision.bat` to launch the API, web app, and browser.
+## A look at ReefVision
 
-The setup checks Node.js, npm, and Python before installing ReefVision dependencies. On Windows, it can install Node.js LTS through Windows Package Manager (`winget`) and refresh the current process PATH automatically. It also prefers `npm.cmd`, avoiding PowerShell execution-policy failures caused by `npm.ps1`. The pinned provider stack currently requires Python `3.12.x`; setup stops early with a clear error when a different interpreter is selected.
+The panels below mark where screenshots from the desktop application will go. They are **placeholders, not screenshots**.
 
-### Terminal setup
+| Project workspace | Annotation editor |
+| :---: | :---: |
+| ![Placeholder for ReefVision project workspace screenshot](assets/screenshots/workspace-placeholder.svg) | ![Placeholder for ReefVision annotation editor screenshot](assets/screenshots/annotation-placeholder.svg) |
+| Browse projects and organize imagery. | Draw, edit, and review annotations. |
 
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-./scripts/bootstrap.ps1
-```
+| Video tracking | Workflow builder |
+| :---: | :---: |
+| ![Placeholder for ReefVision video tracking screenshot](assets/screenshots/tracking-placeholder.svg) | ![Placeholder for ReefVision workflow builder screenshot](assets/screenshots/workflow-placeholder.svg) |
+| Review tracks and export annotated video. | Connect analysis steps and review results. |
 
-Use `./scripts/check-prerequisites.ps1` or double-click `check-reefvision.bat` to verify Node.js, npm, and Python independently.
+## Installation
 
-Copy `.env.example` to `.env` when custom settings are needed. Defaults work without an `.env` file.
+ReefVision currently has a **1.0.1 release candidate for external-PC testing** and a **1.0.0 stable release**. Both are for Windows x64; the packaged desktop application does not need Python or Node.js.
 
-## Run locally
+1. [Download the Windows downloader for ReefVision 1.0.1 RC](https://github.com/Rafael-Del-Valle/ReefVision/releases/download/v1.0.1-rc.1/ReefVision_Windows_Downloader.exe).
+2. Open `ReefVision_Windows_Downloader.exe`. It checks GitHub for the newest complete Windows release (including release candidates). It currently selects `v1.0.1-rc.1`, then downloads the MSI and **all five required CAB files** to `Downloads\\ReefVision-1.0.1-rc.1`.
+3. The downloader checks each file's SHA-256 against the release provenance. After verification, press Enter to start the Windows installer.
 
-The easiest launch method is to double-click `start-reefvision.bat`.
+The downloader is unsigned, so Windows may warn about an unknown publisher. Download it only from the [official release](https://github.com/Rafael-Del-Valle/ReefVision/releases/tag/v1.0.1-rc.1). If a download fails, run it again to reuse already verified files.
 
-For terminal-based development, open two PowerShell terminals.
+**Prefer a stable build?** The [v1.0.0 release](https://github.com/Rafael-Del-Valle/ReefVision/releases/tag/v1.0.0) has a separate MSI and six CAB files. Alternatively, run the downloader with `--stable` from a terminal to download only a stable release.
 
-Terminal 1:
+**Working from source?** See the [developer setup guide](docs/DEVELOPMENT.md) instead.
 
-```powershell
-./scripts/dev-api.ps1
-```
+### Models and hardware
 
-Terminal 2:
+The v1.0.0 installer does not include pretrained model checkpoints. Register a compatible local checkpoint for model-based analysis, or use the supported training tools to build your own model. GPU acceleration is useful for training and larger inference jobs; availability depends on the provider and local environment.
 
-```powershell
-./scripts/dev-web.ps1
-```
+## A typical project
 
-Then open `http://localhost:5173`.
+1. Create a project and import images or video.
+2. Define classes and make a set of reference annotations.
+3. Train or register a model, then inspect its predictions.
+4. Review and correct results before treating them as verified data.
+5. Save a dataset version or export the annotations, tracks, and measurements needed for analysis.
 
-The API development script applies pending Alembic migrations before starting the server.
+The distinction between model predictions and reviewed annotations is intentional. ReefVision keeps those states separate so that a model suggestion is not automatically treated as a confirmed observation.
 
-To annotate an image, select a project, stay on the `Images` tab, import at least one image, and click `Annotate` on that image card.
+## Documentation
 
-To create a dataset version, switch to the `Versions` tab, choose the eligible image statuses and split method, preview the snapshot, and then create the immutable version. Exports run from the selected version card so later project edits do not alter the emitted dataset.
+- [Desktop installation and packaging](docs/DESKTOP_BUILD_AND_INSTALL.md)
+- [Developer setup and validation](docs/DEVELOPMENT.md)
+- [Feature reference](docs/FEATURE_REFERENCE.md)
+- [Quality-control guide](docs/QUALITY_CONTROL_GUIDE.md)
+- [Review queue guide](docs/REVIEW_QUEUE_GUIDE.md)
+- [Known issues](docs/KNOWN_ISSUES.md)
+- [Changelog](CHANGELOG.md)
 
-To run quality control, open a project, switch to the `Quality Control` tab, choose a project or dataset-version scope, adjust thresholds if needed, and start a run. Findings are historical diagnostic records only; they do not modify verified annotations.
+## Development
 
-To prioritize human review, switch to the `Review Queue` tab, optionally seed from a completed QC run, generate a queue, inspect the score breakdown, and open ranked images in the annotation editor. Returning from annotation mode keeps the user in the QC or queue workflow that launched the image.
+ReefVision uses a React and Tauri desktop interface with a FastAPI backend. The repository contains the application, test suites, database migrations, Windows build scripts, and supporting research documentation.
 
-To create a managed backup, verify one, restore into a new recovery folder, or export a redacted diagnostics bundle, open the `System status` workspace from the dashboard sidebar.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidance and the [developer setup guide](docs/DEVELOPMENT.md) for commands. Bug reports and reproducible examples are welcome in [GitHub Issues](https://github.com/Rafael-Del-Valle/ReefVision/issues).
 
-## Desktop packaging
+## Research use and licensing
 
-ReefVision uses a Tauri 2 desktop shell in `apps/web/src-tauri` that bundles the existing Vite frontend and launches the FastAPI backend as a PyInstaller sidecar executable. The Windows distribution target is an MSI installer with external cabinet payloads. The desktop shell uses a per-user application-data directory, surfaces a retryable startup error when the backend does not come up cleanly, prevents competing desktop instances, focuses the existing window on a second launch, and waits for a loopback-only backend health check before rendering the dashboard.
+For research using ReefVision, record the application version, model and checkpoint used, dataset version, and how model outputs were reviewed. A formal software citation has not yet been published.
 
-### Desktop development shell
-
-```powershell
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev-desktop.ps1
-```
-
-This launches the Vite development server in Tauri and starts the backend from `.venv` automatically, using the desktop runtime bootstrap instead of the browser-only `VITE_API_BASE_URL` default.
-
-### Desktop installer build
-
-```powershell
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-desktop.ps1
-```
-
-The desktop build script:
-
-- checks the public npm lockfile policy;
-- builds the backend sidecar with PyInstaller;
-- bundles the desktop app with Tauri; and
-- emits an MSI plus its required `rv*.cab` payload files under `apps/web/src-tauri/target/<target-triple>/release/bundle/msi/`.
-
-Close any running packaged ReefVision app, smoke-install copy, or sidecar executable before rebuilding the installer so staged binaries are not locked by a running process.
-
-Building the installer requires a local Rust toolchain plus the Visual Studio 2022 MSVC C++ toolchain (`Desktop development with C++`, `MSVC v143 - VS 2022 C++ x64/x86 build tools`, and a Windows SDK). End users of the finished installer do not need Python, Node.js, Rust, or a terminal.
-
-Desktop build, installer, and upgrade notes now live in [docs/DESKTOP_BUILD_AND_INSTALL.md](docs/DESKTOP_BUILD_AND_INSTALL.md).
-
-## Milestone 7 docs
-
-- [Quality Control Guide](docs/QUALITY_CONTROL_GUIDE.md)
-- [Quality Control Rule Reference](docs/QUALITY_CONTROL_RULE_REFERENCE.md)
-- [Quality Control Threshold Reference](docs/QUALITY_CONTROL_THRESHOLDS.md)
-- [Review Queue Guide](docs/REVIEW_QUEUE_GUIDE.md)
-- [Review Prioritization Formula](docs/REVIEW_PRIORITIZATION_FORMULA.md)
-- [Prioritization vs Calibrated Uncertainty](docs/PRIORITIZATION_VS_CALIBRATED_UNCERTAINTY.md)
-- [Desktop Build and Installation](docs/DESKTOP_BUILD_AND_INSTALL.md)
-
-## Backend checks
-
-```powershell
-.\.venv\Scripts\python.exe -m ruff check apps/api
-.\.venv\Scripts\python.exe -m ruff format --check apps/api
-.\.venv\Scripts\python.exe -m mypy apps/api/reefvision
-.\.venv\Scripts\python.exe -m pytest apps/api/reefvision/tests
-.\.venv\Scripts\alembic.exe -c apps/api/alembic.ini upgrade head
-.\.venv\Scripts\alembic.exe -c apps/api/alembic.ini downgrade base
-```
-
-## Frontend checks
-
-```powershell
-npm --prefix apps/web run format:check
-npm --prefix apps/web run typecheck
-npm --prefix apps/web run test
-npm --prefix apps/web run test:e2e
-npm --prefix apps/web run build
-```
-
-## Data safety
-
-- Project directories are managed beneath `REEFVISION_DATA_DIR`.
-- Model checkpoints are treated as trusted local files only; ReefVision does not silently download or execute adjacent code from a checkpoint directory.
-- The desktop build stores managed data in the OS application-data directory chosen by Tauri and passes that path into the packaged backend.
-- Stored project paths are relative and checked against path traversal.
-- Archiving does not delete files.
-- Tests always use temporary paths and never write to the configured user data directory.
-- Imported originals use UUID filenames and are never overwritten by thumbnails or metadata edits.
-- Exact duplicates are reported rather than silently copied.
-- Thumbnail failures remain retryable and do not invalidate originals.
+The repository is public, but it does not currently contain a software license. Please do not assume that public access grants permission to redistribute or reuse the code until a license is added.
