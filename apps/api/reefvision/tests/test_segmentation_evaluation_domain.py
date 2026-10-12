@@ -24,9 +24,7 @@ def mask(
 
 
 def test_perfect_instance_mask_has_perfect_mask_ap50_and_count() -> None:
-    result = instance_mask_metrics(
-        [mask()], [mask(confidence=0.9)], image_count=1
-    )
+    result = instance_mask_metrics([mask()], [mask(confidence=0.9)], image_count=1)
     assert result.mask_map50 == 1
     assert result.precision == 1
     assert result.recall == 1
@@ -36,9 +34,7 @@ def test_perfect_instance_mask_has_perfect_mask_ap50_and_count() -> None:
 
 
 def test_pixelwise_iou_excludes_holes_even_when_bounding_boxes_match() -> None:
-    hollow = mask(
-        ((1, 1, 5), (2, 1, 2), (2, 4, 5), (3, 1, 5))
-    )
+    hollow = mask(((1, 1, 5), (2, 1, 2), (2, 4, 5), (3, 1, 5)))
     filled = mask(((1, 1, 5), (2, 1, 5), (3, 1, 5)))
     assert mask_iou(hollow, filled) == pytest.approx(10 / 12)
     assert mask_iou(filled, hollow) == pytest.approx(10 / 12)
@@ -127,9 +123,7 @@ def test_inconsistent_source_geometry_or_count_fails_closed() -> None:
     with pytest.raises(ValueError, match="Inconsistent dimensions"):
         instance_mask_metrics([mask()], [mask(width=9)], image_count=1)
     with pytest.raises(ValueError, match="image IDs exceed"):
-        instance_mask_metrics(
-            [mask(image="a"), mask(image="b")], [], image_count=1
-        )
+        instance_mask_metrics([mask(image="a"), mask(image="b")], [], image_count=1)
 
 
 def test_invalid_threshold_and_nonfinite_confidence_fail_closed() -> None:
