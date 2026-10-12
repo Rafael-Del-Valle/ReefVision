@@ -360,14 +360,12 @@ test("stores source-image coordinates correctly after zooming and reloads saved 
 
   // Acceptance coverage for Alt+drag panning: the viewport changes, while the
   // persisted source rectangle geometry remains identical.
-  const sourceGeometryBeforePan = await savedBox.evaluate(
-    (element) => ({
-      x: element.getAttribute("x"),
-      y: element.getAttribute("y"),
-      width: element.getAttribute("width"),
-      height: element.getAttribute("height"),
-    }),
-  );
+  const sourceGeometryBeforePan = await savedBox.evaluate((element) => ({
+    x: element.getAttribute("x"),
+    y: element.getAttribute("y"),
+    width: element.getAttribute("width"),
+    height: element.getAttribute("height"),
+  }));
   const transformBeforePan = await viewportGroup.getAttribute("transform");
   const canvasBounds = await canvas.boundingBox();
   if (!canvasBounds) {
@@ -404,6 +402,13 @@ test("stores source-image coordinates correctly after zooming and reloads saved 
     buttons: 1,
     pointerId: 1,
     pointerType: "mouse",
+  });
+  // The status dropdown retains keyboard focus after selection, so blur it
+  // before sending editor shortcuts; form controls must not capture Ctrl+C/V.
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
   });
   await page.keyboard.press("Control+c");
   await page.keyboard.press("Control+v");
