@@ -222,7 +222,9 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
   }
 
   function handleError() {
-    setPhase(thumbnail || !image.thumbnail_path ? "error" : "thumbnail-loading");
+    setPhase(
+      thumbnail || !image.thumbnail_path ? "error" : "thumbnail-loading",
+    );
   }
 
   return (
