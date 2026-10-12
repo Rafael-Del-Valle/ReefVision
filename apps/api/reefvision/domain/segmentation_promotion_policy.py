@@ -20,9 +20,8 @@ class SegmentationCandidateScore:
     evaluated_images: int
 
     def __post_init__(self) -> None:
-        if not all(
-            (self.model_id, self.project_id, self.dataset_version_id, self.split_digest)
-        ):
+        identity = (self.model_id, self.project_id, self.dataset_version_id, self.split_digest)
+        if not all(identity):
             raise ValueError(
                 "Segmentation evaluation identity and split digest are required"
             )
@@ -49,10 +48,8 @@ def candidate_meets_segmentation_guardrails(
     requires the absolute quality floor. Deployment must independently check
     model digest, task, project, lineage, and audit requirements.
     """
-    if not all(
-        isfinite(v)
-        for v in (minimum_mask_map50, minimum_gain, maximum_count_error_increase)
-    ):
+    thresholds = (minimum_mask_map50, minimum_gain, maximum_count_error_increase)
+    if not all(isfinite(value) for value in thresholds):
         raise ValueError("Nonfinite promotion threshold")
     if (
         not 0 <= minimum_mask_map50 <= 1
