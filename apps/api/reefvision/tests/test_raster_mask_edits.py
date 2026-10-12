@@ -364,7 +364,12 @@ def test_raster_duplicate_marks_reviewed_image_in_progress(
         y=20,
     )
     source = cast(dict[str, object], created["mask_annotation"])
-    reviewed = update_image(client, image_id, annotation_status="reviewed")
+    reviewed = update_image(
+        client,
+        image_id,
+        group_key="review-invalidation",
+        annotation_status="reviewed",
+    )
     assert reviewed["annotation_status"] == "reviewed"
 
     response = client.post(
