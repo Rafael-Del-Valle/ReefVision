@@ -97,7 +97,7 @@ describe("annotationClipboard", () => {
         projectId: "project-1",
         width: 100,
         height: 100,
-      }
+      },
       () => ids.shift() as string,
     );
 
