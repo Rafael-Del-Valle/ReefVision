@@ -379,7 +379,7 @@ export function MaskAnnotationWorkspace({
       snapshot.document,
       [],
       snapshot.selectedMaskIds,
-      { id: image.id, width: image.width_px, height: image.height_px },
+      { id: image.id, projectId: project.id, width: image.width_px, height: image.height_px },
     );
     writeInternalAnnotationClipboard(clipboard);
     const count = clipboard.items.length;
@@ -389,7 +389,7 @@ export function MaskAnnotationWorkspace({
         : `Copied ${count} polygon${count === 1 ? "" : "s"} to ReefVision's internal clipboard.`,
     );
     return clipboard;
-  }, [sessionQuery.data?.image]);
+  }, [project.id, sessionQuery.data?.image]);
 
   const pasteClipboard = useCallback(
     (clipboard = readInternalAnnotationClipboard()) => {
@@ -400,7 +400,7 @@ export function MaskAnnotationWorkspace({
       }
       const result = pasteAnnotations(
         clipboard,
-        { id: image.id, width: image.width_px, height: image.height_px },
+        { id: image.id, projectId: project.id, width: image.width_px, height: image.height_px },
         () => globalThis.crypto.randomUUID(),
       );
       if (!result.ok) {
@@ -417,6 +417,11 @@ export function MaskAnnotationWorkspace({
       commitDocument(
         {
           ...snapshot.document,
+          // Cloned polygons remain draft and the image requires another review.
+          annotation_status:
+            snapshot.document.annotation_status === "reviewed"
+              ? "in_progress"
+              : snapshot.document.annotation_status,
           maskAnnotations: [
             ...snapshot.document.maskAnnotations,
             ...result.maskAnnotations,
@@ -429,7 +434,7 @@ export function MaskAnnotationWorkspace({
         `Pasted ${result.maskAnnotations.length} unverified polygon${result.maskAnnotations.length === 1 ? "" : "s"} in source-image coordinates.`,
       );
     },
-    [commitDocument, sessionQuery.data?.image],
+    [commitDocument, project.id, sessionQuery.data?.image],
   );
 
   const duplicateSelection = useCallback(() => {
