@@ -112,6 +112,7 @@ interface AnnotationEditorProps {
     highlightPredictionIds?: string[];
   };
   onClose: () => void;
+  onActiveImageChange?: (imageId: string) => void;
 }
 
 type EditorInteraction =
@@ -268,6 +269,7 @@ export function AnnotationEditor({
   initialImageId,
   launchContext,
   onClose,
+  onActiveImageChange,
 }: AnnotationEditorProps) {
   const queryClient = useQueryClient();
   const [currentImageId, setCurrentImageId] = useState(initialImageId);
@@ -355,6 +357,10 @@ export function AnnotationEditor({
   useEffect(() => {
     currentImageIdRef.current = currentImageId;
   }, [currentImageId]);
+
+  useEffect(() => {
+    onActiveImageChange?.(currentImageId);
+  }, [currentImageId, onActiveImageChange]);
 
   useEffect(() => {
     assistSessionRef.current = assistSession;
@@ -449,7 +455,7 @@ export function AnnotationEditor({
 
   useEffect(() => {
     const session = sessionQuery.data;
-    if (!session) {
+    if (!session || session.image.id !== currentImageId) {
       return;
     }
     const snapshot = stateRef.current;
@@ -474,7 +480,7 @@ export function AnnotationEditor({
     setPredictionGeometryOverrides({});
     setInteraction(null);
     setView(null);
-  }, [sessionQuery.data]);
+  }, [currentImageId, sessionQuery.data]);
 
   const readyAssistModels = useMemo(
     () =>

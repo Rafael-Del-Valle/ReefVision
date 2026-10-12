@@ -274,7 +274,7 @@ function handleDefaultEditorRequests(
   return undefined;
 }
 
-function renderEditor(onClose = vi.fn()) {
+function renderEditor(onClose = vi.fn(), onActiveImageChange = vi.fn()) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -284,10 +284,11 @@ function renderEditor(onClose = vi.fn()) {
         project={project}
         initialImageId={session.image.id}
         onClose={onClose}
+        onActiveImageChange={onActiveImageChange}
       />
     </QueryClientProvider>,
   );
-  return { onClose, queryClient };
+  return { onClose, onActiveImageChange, queryClient };
 }
 
 function selectionPanel(): HTMLElement {
@@ -325,6 +326,25 @@ afterEach(() => {
 });
 
 describe("AnnotationEditor", () => {
+  it("reports the controlled active image identity", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith(`/images/${session.image.id}/annotations`)) {
+        return jsonResponse(session);
+      }
+      const standard = handleDefaultEditorRequests(url, init);
+      if (standard) return standard;
+      throw new Error(`Unhandled request ${String(input)}`);
+    });
+    const onActiveImageChange = vi.fn();
+
+    renderEditor(vi.fn(), onActiveImageChange);
+
+    await waitFor(() =>
+      expect(onActiveImageChange).toHaveBeenLastCalledWith(session.image.id),
+    );
+  });
+
   it("shows and deletes polygon masks from Main Select", async () => {
     const sessionWithMask = {
       ...session,

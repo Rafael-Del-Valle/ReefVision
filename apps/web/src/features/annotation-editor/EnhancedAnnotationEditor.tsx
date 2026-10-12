@@ -1,8 +1,7 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
-import type { AnnotationSession, Project } from "../../api/client";
+import type { Project } from "../../api/client";
 import { AnnotationEditor } from "./AnnotationEditor";
 import "./annotationTypeVisibility.css";
 import { MaskAnnotationWorkspace } from "./MaskAnnotationWorkspace";
@@ -59,7 +58,6 @@ export function EnhancedAnnotationEditor({
   launchContext,
   onClose,
 }: EnhancedAnnotationEditorProps) {
-  const queryClient = useQueryClient();
   const [workspace, setWorkspace] = useState<EditorWorkspace>(
     launchContext?.initialWorkspace ?? "boxes",
   );
@@ -78,22 +76,6 @@ export function EnhancedAnnotationEditor({
     setWorkspace(launchContext?.initialWorkspace ?? "boxes");
     setMaskInitialTool(undefined);
   }, [initialImageId, launchContext?.initialWorkspace]);
-
-  useEffect(() => {
-    return queryClient.getQueryCache().subscribe((event) => {
-      const query = event.query;
-      if (query.queryKey[0] !== "annotation-session") {
-        return;
-      }
-      const data = query.state.data as AnnotationSession | undefined;
-      if (
-        query.state.status === "success" &&
-        data?.image.project_id === project.id
-      ) {
-        setActiveImageId(data.image.id);
-      }
-    });
-  }, [project.id, queryClient]);
 
   useEffect(() => {
     const findToolbarTarget = () => {
@@ -251,6 +233,7 @@ export function EnhancedAnnotationEditor({
         initialImageId={activeImageId}
         launchContext={launchContext}
         onClose={onClose}
+        onActiveImageChange={setActiveImageId}
       />
     );
   }, [
