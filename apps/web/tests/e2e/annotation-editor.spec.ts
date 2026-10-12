@@ -355,6 +355,67 @@ test("stores source-image coordinates correctly after zooming and reloads saved 
   );
 
   const savedId = String(savedAnnotation.id);
+  const savedBox = canvas.getByTestId(`annotation-${savedId}`);
+  await expect(savedBox).toBeVisible();
+
+  // Acceptance coverage for Alt+drag panning: the viewport changes, while the
+  // persisted source rectangle geometry remains identical.
+  const sourceGeometryBeforePan = await savedBox.locator("rect").first().evaluate(
+    (element) => ({
+      x: element.getAttribute("x"),
+      y: element.getAttribute("y"),
+      width: element.getAttribute("width"),
+      height: element.getAttribute("height"),
+    }),
+  );
+  const transformBeforePan = await viewportGroup.getAttribute("transform");
+  const canvasBounds = await canvas.boundingBox();
+  if (!canvasBounds) {
+    throw new Error("Annotation canvas bounds unavailable for Alt+drag");
+  }
+  const panStart = {
+    x: canvasBounds.x + canvasBounds.width * 0.25,
+    y: canvasBounds.y + canvasBounds.height * 0.25,
+  };
+  await page.mouse.move(panStart.x, panStart.y);
+  await page.keyboard.down("Alt");
+  await page.mouse.down();
+  await page.mouse.move(panStart.x + 32, panStart.y + 22, { steps: 5 });
+  await page.mouse.up();
+  await page.keyboard.up("Alt");
+  await expect
+    .poll(() => viewportGroup.getAttribute("transform"))
+    .not.toBe(transformBeforePan);
+  expect(
+    await savedBox.locator("rect").first().evaluate((element) => ({
+      x: element.getAttribute("x"),
+      y: element.getAttribute("y"),
+      width: element.getAttribute("width"),
+      height: element.getAttribute("height"),
+    })),
+  ).toEqual(sourceGeometryBeforePan);
+
+  // Acceptance coverage for clipboard/re-review on the real browser bundle.
+  await page.getByRole("button", { name: "Select tool" }).click();
+  await page.getByLabel("Annotation status").selectOption("reviewed");
+  await expect(page.getByLabel("Annotation status")).toHaveValue("reviewed");
+  await savedBox.dispatchEvent("pointerdown", {
+    button: 0,
+    buttons: 1,
+    pointerId: 1,
+    pointerType: "mouse",
+  });
+  await page.keyboard.press("Control+c");
+  await page.keyboard.press("Control+v");
+  await expect(
+    canvas.locator("[data-testid^='annotation-']"),
+  ).toHaveCount(2);
+  await expect(page.getByLabel("Annotation status")).toHaveValue("in_progress");
+  await page.getByRole("button", { name: "Save now" }).click();
+  await expect(page.getByTestId("annotation-save-state")).toHaveText("Saved");
+  expect(lastSavePayload?.annotation_status).toBe("in_progress");
+  expect(lastSavePayload?.annotations).toHaveLength(2);
+
   await page.getByRole("button", { name: "Back to gallery" }).click();
 
   await mountBuiltApp(page);
