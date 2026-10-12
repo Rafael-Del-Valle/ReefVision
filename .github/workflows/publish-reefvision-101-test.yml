@@ -1,0 +1,119 @@
+name: Publish ReefVision 1.0.1 External-PC Test Prerelease
+
+on:
+  push:
+    branches:
+      - release/reefvision-101-external-test-20261011
+    paths:
+      - .github/workflows/publish-reefvision-101-test.yml
+
+permissions:
+  actions: read
+  contents: write
+
+env:
+  GH_REPO: Rafael-Del-Valle/ReefVision
+  TESTED_SHA: ed3f7b58577fe640c006984bc99d1831dfb7e402
+  RELEASE_TAG: v1.0.1-rc.1
+  VALIDATED_RUN: "38184489604"
+  MSI_SHA256: A0DE7EF60F7177C5DACE24030589FD8B6B78F55E24E0CBCE9C0D0E50D9530411
+
+jobs:
+  publish-validated-prerelease:
+    name: Publish validated 1.0.1 test installer (no merge)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Confirm tested commit passed all mandatory gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for run in 38184489565 38184489604 38184489536 38184489468; do
+            status="$(gh run view "$run" --repo "$GH_REPO" --json headSha,conclusion --jq '.headSha + " " + .conclusion')"
+            if [ "$status" != "$TESTED_SHA success" ]; then
+              echo "::error::Required gate $run not successful on tested commit: $status"
+              exit 1
+            fi
+          done
+          if gh release view "$RELEASE_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo "::error::Prerelease $RELEASE_TAG already exists. Refusing to overwrite."
+            exit 1
+          fi
+
+      - name: Download only the exact previously accepted installer assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir installer
+          gh run download "$VALIDATED_RUN" --repo "$GH_REPO" --name ReefVision-Windows-Installer --dir installer
+
+      - name: Verify MSI SHA-256 and all external CAB media
+        run: |
+          set -euo pipefail
+          cd installer
+          test -s ReefVision_1.0.1_x64_en-US.msi
+          test -s build-provenance.json
+          printf '%s  %s\n' "$MSI_SHA256" ReefVision_1.0.1_x64_en-US.msi | sha256sum --check
+          test "$(find . -maxdepth 1 -type f -name 'rv*.cab' | wc -l)" -eq 5
+          for number in 1 2 3 4 5; do
+            test -s "rv$number.cab"
+          done
+          echo "Validated MSI and five accompanying external CAB files."
+
+      - name: Draft user-facing test release notes
+        run: |
+          cat > release-notes.md <<'NOTES'
+          ## ReefVision 1.0.1 — External PC Test Build
+
+          **Pre-release for testing on a separate Windows PC; not the final stable release.**
+          The stable v1.0.0 release remains unchanged. This build is from the fully
+          tested 1.0.1 source commit ed3f7b58577fe640c006984bc99d1831dfb7e402.
+
+          ### Changes
+          - On-demand SAM 2.1 Hiera checkpoint acquisition and assisted segmentation.
+          - Shift+1: SAM prompt segmentation; Shift+2: selected detector predictions.
+          - COCO/YOLO annotation imports; model-derived class creation and review.
+          - Floating confidence review with the inclusive 50% default cutoff.
+          - Corrected Windows packaged SciPy startup for successful SAM inference.
+
+          ### Windows install
+          1. Download **ReefVision_1.0.1_x64_en-US.msi** and all **five** CAB
+             files (rv1.cab through rv5.cab) from the Assets section.
+          2. Put the MSI and all CABs in the same folder.
+          3. Back up important ReefVision application data before upgrading.
+          4. Close ReefVision; then run the MSI installer.
+          5. Open ReefVision and test existing projects, model registration,
+             SAM-assisted annotation, class creation and confidence review.
+
+          The full clean-install acceptance passed on a separate Windows runner:
+          https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/38184489604
+
+          **MSI SHA-256:** A0DE7EF60F7177C5DACE24030589FD8B6B78F55E24E0CBCE9C0D0E50D9530411
+
+          **Limitations:** An installed-GUI manual hotkey/review smoke test and
+          upgrade-in-place validation from v1.0.0 have not been completed.
+          Please report issues before this is promoted to a stable release.
+          NOTES
+
+      - name: Stage draft GitHub prerelease and upload verified files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" --repo "$GH_REPO" \
+            --target "$TESTED_SHA" --title "ReefVision 1.0.1 — External PC Test" \
+            --notes-file release-notes.md --draft --prerelease
+          gh release upload "$RELEASE_TAG" --repo "$GH_REPO" \
+            installer/ReefVision_1.0.1_x64_en-US.msi \
+            installer/rv1.cab installer/rv2.cab installer/rv3.cab \
+            installer/rv4.cab installer/rv5.cab installer/build-provenance.json
+
+      - name: Publish prerelease only after uploads succeed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release edit "$RELEASE_TAG" --repo "$GH_REPO" --draft=false --prerelease
+          gh release view "$RELEASE_TAG" --repo "$GH_REPO" --json url,isDraft,isPrerelease --jq '.'
