@@ -353,7 +353,24 @@ export function annotationEditorReducer(
         hiddenClassIds: [],
       };
     case "commitDocument": {
-      const nextDocument = action.document;
+      const contentChanged =
+        !annotationsEqual(state.document.annotations, action.document.annotations) ||
+        !maskAnnotationsEqual(
+          state.document.maskAnnotations,
+          action.document.maskAnnotations,
+        ) ||
+        !arraysEqual(
+          state.document.deletedMaskAnnotationIds,
+          action.document.deletedMaskAnnotationIds,
+        );
+      // Changes to scientific content invalidate the previous image review.
+      // A status-only change still permits an explicit new review decision.
+      const nextDocument =
+        state.document.annotation_status === "reviewed" &&
+        action.document.annotation_status === "reviewed" &&
+        contentChanged
+          ? { ...action.document, annotation_status: "in_progress" as const }
+          : action.document;
       const nextSelection = validSelection(
         nextDocument,
         action.selection ?? state.selectedIds,
