@@ -47,7 +47,8 @@ def test_quality_floor_and_gain_both_apply() -> None:
         minimum_mask_map50=0.8,
     )
     assert not candidate_meets_segmentation_guardrails(
-        score("candidate", 0.75, 1.0), incumbent,
+        score("candidate", 0.75, 1.0),
+        incumbent,
         minimum_mask_map50=0.7,
         minimum_gain=0.1,
     )
