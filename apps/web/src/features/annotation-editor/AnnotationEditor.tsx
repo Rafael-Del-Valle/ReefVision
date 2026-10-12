@@ -306,7 +306,9 @@ export function AnnotationEditor({
     box: [number, number, number, number];
   } | null>(null);
   const [samInstallJobId, setSamInstallJobId] = useState<string | null>(null);
-  const [samReviewProposalId, setSamReviewProposalId] = useState<string | null>(null);
+  const [samReviewProposalId, setSamReviewProposalId] = useState<string | null>(
+    null,
+  );
   const [isolateSamReview, setIsolateSamReview] = useState(true);
   const [shortcutMessage, setShortcutMessage] = useState<string | null>(null);
   const [deployDevice, setDeployDevice] = useState("auto");
@@ -787,7 +789,8 @@ export function AnnotationEditor({
         ) ?? null)
       : null;
   const samReviewProposal = samReviewProposalId
-    ? (allPredictions.find((proposal) => proposal.id === samReviewProposalId) ?? null)
+    ? (allPredictions.find((proposal) => proposal.id === samReviewProposalId) ??
+      null)
     : null;
   const selectedPredictionPosition = selectedPrediction
     ? visiblePredictions.findIndex(
@@ -2388,7 +2391,8 @@ export function AnnotationEditor({
             )}
             {detectorModels.isError && (
               <p className="form-error" role="alert">
-                Could not load registered detectors: {detectorModels.error.message}
+                Could not load registered detectors:{" "}
+                {detectorModels.error.message}
               </p>
             )}
             <button
@@ -3299,116 +3303,123 @@ export function AnnotationEditor({
           </div>
 
           <div className="annotation-canvas-frame" ref={viewportRef}>
-          {samReviewProposalId && (
-            <section
-              className="sam-review-banner"
-              role="region"
-              aria-label="SAM mask proposal review"
-              data-testid="sam-proposal-review"
-            >
-              <strong>SAM mask is a proposal — not saved yet</strong>
-              <p>
-                Review this outline before adding it to your annotations.
-                Existing masks are unchanged until you accept.
-              </p>
-              {samReviewProposal ? (
-                <>
-                  <label>
-                    Accept as class
-                    <select
-                      aria-label="Class for SAM mask"
-                      value={
-                        predictionClassOverrides[samReviewProposal.id] ??
-                        samReviewProposal.label_class_id ??
-                        activeClassId ??
-                        ""
-                      }
-                      onChange={(event) =>
-                        setPredictionClassOverrides((current) => ({
-                          ...current,
-                          [samReviewProposal.id]: event.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">Choose a class</option>
-                      {labelClasses
-                        .filter((labelClass) => labelClass.is_active !== false)
-                        .map((labelClass) => (
-                          <option key={labelClass.id} value={labelClass.id}>
-                            {labelClass.name}
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                  <label className="sam-review-toggle">
-                    <input
-                      type="checkbox"
-                      checked={isolateSamReview}
-                      onChange={(event) =>
-                        setIsolateSamReview(event.target.checked)
-                      }
-                    />
-                    Hide existing masks while reviewing
-                  </label>
-                  <div className="annotation-editor-inline-actions">
-                    <button
-                      type="button"
-                      disabled={
-                        acceptPredictionMutation.isPending ||
-                        rejectPredictionMutation.isPending ||
-                        !(
-                          predictionClassOverrides[samReviewProposal.id] ||
-                          samReviewProposal.label_class_id ||
-                          activeClassId
-                        )
-                      }
-                      onClick={() =>
-                        acceptPredictionMutation.mutate(samReviewProposal)
-                      }
-                    >
-                      Accept SAM mask
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary"
-                      disabled={
-                        acceptPredictionMutation.isPending ||
-                        rejectPredictionMutation.isPending
-                      }
-                      onClick={() =>
-                        rejectPredictionMutation.mutate(samReviewProposal.id)
-                      }
-                    >
-                      Reject SAM mask
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() =>
-                        document
-                          .querySelector("[data-testid='prediction-inspector-slot']")
-                          ?.scrollIntoView({ behavior: "smooth", block: "nearest" })
-                      }
-                    >
-                      Edit in inspector
-                    </button>
-                  </div>
-                  {acceptPredictionMutation.error && (
-                    <p className="form-error" role="alert">
-                      {acceptPredictionMutation.error.message}
-                    </p>
-                  )}
-                  {rejectPredictionMutation.error && (
-                    <p className="form-error" role="alert">
-                      {rejectPredictionMutation.error.message}
-                    </p>
-                  )}
-                </>
-              ) : (
-                <p role="status">Loading SAM mask proposal for review...</p>
-              )}
-            </section>
-          )}
+            {samReviewProposalId && (
+              <section
+                className="sam-review-banner"
+                role="region"
+                aria-label="SAM mask proposal review"
+                data-testid="sam-proposal-review"
+              >
+                <strong>SAM mask is a proposal — not saved yet</strong>
+                <p>
+                  Review this outline before adding it to your annotations.
+                  Existing masks are unchanged until you accept.
+                </p>
+                {samReviewProposal ? (
+                  <>
+                    <label>
+                      Accept as class
+                      <select
+                        aria-label="Class for SAM mask"
+                        value={
+                          predictionClassOverrides[samReviewProposal.id] ??
+                          samReviewProposal.label_class_id ??
+                          activeClassId ??
+                          ""
+                        }
+                        onChange={(event) =>
+                          setPredictionClassOverrides((current) => ({
+                            ...current,
+                            [samReviewProposal.id]: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">Choose a class</option>
+                        {labelClasses
+                          .filter(
+                            (labelClass) => labelClass.is_active !== false,
+                          )
+                          .map((labelClass) => (
+                            <option key={labelClass.id} value={labelClass.id}>
+                              {labelClass.name}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <label className="sam-review-toggle">
+                      <input
+                        type="checkbox"
+                        checked={isolateSamReview}
+                        onChange={(event) =>
+                          setIsolateSamReview(event.target.checked)
+                        }
+                      />
+                      Hide existing masks while reviewing
+                    </label>
+                    <div className="annotation-editor-inline-actions">
+                      <button
+                        type="button"
+                        disabled={
+                          acceptPredictionMutation.isPending ||
+                          rejectPredictionMutation.isPending ||
+                          !(
+                            predictionClassOverrides[samReviewProposal.id] ||
+                            samReviewProposal.label_class_id ||
+                            activeClassId
+                          )
+                        }
+                        onClick={() =>
+                          acceptPredictionMutation.mutate(samReviewProposal)
+                        }
+                      >
+                        Accept SAM mask
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={
+                          acceptPredictionMutation.isPending ||
+                          rejectPredictionMutation.isPending
+                        }
+                        onClick={() =>
+                          rejectPredictionMutation.mutate(samReviewProposal.id)
+                        }
+                      >
+                        Reject SAM mask
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() =>
+                          document
+                            .querySelector(
+                              "[data-testid='prediction-inspector-slot']",
+                            )
+                            ?.scrollIntoView({
+                              behavior: "smooth",
+                              block: "nearest",
+                            })
+                        }
+                      >
+                        Edit in inspector
+                      </button>
+                    </div>
+                    {acceptPredictionMutation.error && (
+                      <p className="form-error" role="alert">
+                        {acceptPredictionMutation.error.message}
+                      </p>
+                    )}
+                    {rejectPredictionMutation.error && (
+                      <p className="form-error" role="alert">
+                        {rejectPredictionMutation.error.message}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p role="status">Loading SAM mask proposal for review...</p>
+                )}
+              </section>
+            )}
             {samPromptArmed && (
               <p className="annotation-helper" role="status">
                 SAM prompt ready: drag a bounding box around the object. Shift+1

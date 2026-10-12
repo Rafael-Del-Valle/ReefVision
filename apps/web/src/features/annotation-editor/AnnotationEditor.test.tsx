@@ -1321,7 +1321,9 @@ describe("AnnotationEditor", () => {
     expect(
       within(review).getByText(/SAM mask is a proposal — not saved yet/i),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("proposal-mask-sam-proposal-1")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("proposal-mask-sam-proposal-1"),
+    ).toBeInTheDocument();
     expect(
       within(review).getByRole("button", { name: "Accept SAM mask" }),
     ).toBeEnabled();
@@ -1334,7 +1336,9 @@ describe("AnnotationEditor", () => {
     );
     await waitFor(() => {
       expect(accepted).toBe(true);
-      expect(screen.queryByTestId("sam-proposal-review")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("sam-proposal-review"),
+      ).not.toBeInTheDocument();
     });
     expect(
       calls.find((request) => request.url.endsWith("/sam-proposal-1/accept"))
