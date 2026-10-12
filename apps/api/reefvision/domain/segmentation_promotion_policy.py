@@ -49,11 +49,7 @@ def candidate_meets_segmentation_guardrails(
     thresholds = (minimum_mask_map50, minimum_gain, maximum_count_error_increase)
     if not all(isfinite(value) for value in thresholds):
         raise ValueError("Nonfinite promotion threshold")
-    if (
-        not 0 <= minimum_mask_map50 <= 1
-        or minimum_gain < 0
-        or maximum_count_error_increase < 0
-    ):
+    if not 0 <= minimum_mask_map50 <= 1 or minimum_gain < 0 or maximum_count_error_increase < 0:
         raise ValueError("Invalid promotion threshold")
     if candidate.mask_map50 < minimum_mask_map50:
         return False
