@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  actualSizeTransform,
   createBoxFromPoints,
   fitTransform,
+  imageToScreen,
   resizeAnnotation,
+  screenToImage,
   translateAnnotations,
   zoomAtPoint,
 } from "./geometry";
@@ -103,5 +106,37 @@ describe("annotation editor geometry", () => {
 
     const zoomed = zoomAtPoint(fit, { x: 500, y: 350 }, fit.scale * 1.5);
     expect(zoomed.scale).toBeCloseTo(fit.scale * 1.5);
+    expect(screenToImage({ x: 500, y: 350 }, zoomed)).toEqual(
+      screenToImage({ x: 500, y: 350 }, fit),
+    );
+  });
+
+  it("round-trips source-image edge coordinates through arbitrary views", () => {
+    const sourcePoints = [
+      { x: 0, y: 0 },
+      { x: 8192, y: 0 },
+      { x: 0, y: 5464 },
+      { x: 8192, y: 5464 },
+      { x: 4096.25, y: 2732.75 },
+    ];
+    const transform = { scale: 7.25, offsetX: -9123.5, offsetY: 407.75 };
+
+    for (const source of sourcePoints) {
+      const restored = screenToImage(
+        imageToScreen(source, transform),
+        transform,
+      );
+      expect(restored.x).toBeCloseTo(source.x, 8);
+      expect(restored.y).toBeCloseTo(source.y, 8);
+    }
+  });
+
+  it("centers actual-size pixels without changing the one-to-one scale", () => {
+    expect(
+      actualSizeTransform(
+        { width: 1600, height: 1200 },
+        { width: 1200, height: 780 },
+      ),
+    ).toEqual({ scale: 1, offsetX: -200, offsetY: -210 });
   });
 });

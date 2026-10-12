@@ -10,6 +10,7 @@ import {
 import { RasterBrushLayer } from "./RasterBrushLayer";
 import { RasterFillLayer } from "./RasterFillLayer";
 import { SkeletonAnalysisPanel } from "./SkeletonAnalysisPanel";
+import { ImageViewport } from "./ImageViewport";
 import {
   SkeletonOverlayLayer,
   type SkeletonOverlayModel,
@@ -429,77 +430,65 @@ export function RasterMaskWorkspace({
                   : "Fill mode"}
             </span>
           </div>
-          <div
-            className="annotation-canvas-frame"
-            style={{
-              display: "grid",
-              placeItems: "center",
-              overflow: "auto",
-              padding: "1rem",
-            }}
+          <ImageViewport
+            width={image.width_px}
+            height={image.height_px}
+            label="Raster mask viewport"
           >
-            <div
-              style={{
-                position: "relative",
-                width: "min(100%, 1400px)",
-                aspectRatio: `${image.width_px} / ${image.height_px}`,
-              }}
-            >
-              <img
-                src={imageDisplayUrl(image.id)}
-                alt={image.original_filename}
-                draggable={false}
-                style={{ display: "block", width: "100%", height: "100%" }}
+            <img
+              src={imageDisplayUrl(image.id)}
+              alt={image.original_filename}
+              draggable={false}
+              style={{ display: "block", width: "100%", height: "100%" }}
+            />
+            {selectedMask && (
+              <div
+                data-testid="selected-raster-mask-overlay"
+                aria-label="Selected raster mask"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  opacity: 0.42,
+                  pointerEvents: "none",
+                  backgroundColor: selectedMaskColor,
+                  WebkitMaskImage: `url(${rasterMaskContentUrl(selectedMask)})`,
+                  maskImage: `url(${rasterMaskContentUrl(selectedMask)})`,
+                  WebkitMaskRepeat: "no-repeat",
+                  maskRepeat: "no-repeat",
+                  WebkitMaskPosition: "center",
+                  maskPosition: "center",
+                  WebkitMaskSize: "100% 100%",
+                  maskSize: "100% 100%",
+                }}
               />
-              {selectedMask && (
-                <div
-                  data-testid="selected-raster-mask-overlay"
-                  aria-label="Selected raster mask"
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    width: "100%",
-                    height: "100%",
-                    opacity: 0.42,
-                    pointerEvents: "none",
-                    backgroundColor: selectedMaskColor,
-                    WebkitMaskImage: `url(${rasterMaskContentUrl(selectedMask)})`,
-                    maskImage: `url(${rasterMaskContentUrl(selectedMask)})`,
-                    WebkitMaskRepeat: "no-repeat",
-                    maskRepeat: "no-repeat",
-                    WebkitMaskPosition: "center",
-                    maskPosition: "center",
-                    WebkitMaskSize: "100% 100%",
-                    maskSize: "100% 100%",
-                  }}
-                />
-              )}
-              {mode === "fill" ? (
-                <RasterFillLayer
-                  width={image.width_px}
-                  height={image.height_px}
-                  disabled={editMutation.isPending || activeClassId === null}
-                  onFill={(point) => editMutation.mutate([point])}
-                />
-              ) : (
-                <RasterBrushLayer
-                  width={image.width_px}
-                  height={image.height_px}
-                  mode={mode}
-                  brushRadius={brushRadius}
-                  disabled={editMutation.isPending || activeClassId === null}
-                  onStroke={(points) => editMutation.mutate(points)}
-                />
-              )}
-              {skeletonOverlay && (
-                <SkeletonOverlayLayer
-                  width={image.width_px}
-                  height={image.height_px}
-                  {...skeletonOverlay}
-                />
-              )}
-            </div>
-          </div>
+            )}
+            {mode === "fill" ? (
+              <RasterFillLayer
+                width={image.width_px}
+                height={image.height_px}
+                disabled={editMutation.isPending || activeClassId === null}
+                onFill={(point) => editMutation.mutate([point])}
+              />
+            ) : (
+              <RasterBrushLayer
+                width={image.width_px}
+                height={image.height_px}
+                mode={mode}
+                brushRadius={brushRadius}
+                disabled={editMutation.isPending || activeClassId === null}
+                onStroke={(points) => editMutation.mutate(points)}
+              />
+            )}
+            {skeletonOverlay && (
+              <SkeletonOverlayLayer
+                width={image.width_px}
+                height={image.height_px}
+                {...skeletonOverlay}
+              />
+            )}
+          </ImageViewport>
         </section>
       </div>
     </div>

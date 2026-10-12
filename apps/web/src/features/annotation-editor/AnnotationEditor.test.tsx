@@ -319,6 +319,21 @@ function stubCanvasRect(): void {
   });
 }
 
+function mockBasicEditorRequests(): void {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const url = String(input);
+    if (
+      url.endsWith(`/images/${session.image.id}/annotations`) &&
+      (!init?.method || init.method === "GET")
+    ) {
+      return jsonResponse(session);
+    }
+    const fallback = handleDefaultEditorRequests(url, init);
+    if (fallback) return fallback;
+    throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+  });
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -342,6 +357,69 @@ describe("AnnotationEditor", () => {
 
     await waitFor(() =>
       expect(onActiveImageChange).toHaveBeenLastCalledWith(session.image.id),
+    );
+  });
+
+  it("temporarily pans with Alt plus left drag and cancels on pointer loss", async () => {
+    mockBasicEditorRequests();
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    stubCanvasRect();
+    const canvas = screen.getByTestId("annotation-canvas");
+    const viewport = screen.getByTestId("viewport-transform");
+    const initialTransform = viewport.getAttribute("transform");
+
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      altKey: true,
+      clientX: 100,
+      clientY: 100,
+    });
+    fireEvent.pointerMove(window, { clientX: 145, clientY: 130 });
+    expect(viewport.getAttribute("transform")).not.toBe(initialTransform);
+    const pannedTransform = viewport.getAttribute("transform");
+
+    fireEvent.pointerCancel(window);
+    fireEvent.pointerMove(window, { clientX: 300, clientY: 300 });
+    expect(viewport.getAttribute("transform")).toBe(pannedTransform);
+
+    fireEvent.pointerDown(canvas, {
+      button: 1,
+      clientX: 145,
+      clientY: 130,
+    });
+    fireEvent.pointerMove(window, { clientX: 170, clientY: 155 });
+    expect(viewport.getAttribute("transform")).not.toBe(pannedTransform);
+    const middlePannedTransform = viewport.getAttribute("transform");
+    fireEvent.blur(window);
+    fireEvent.pointerMove(window, { clientX: 400, clientY: 400 });
+    expect(viewport.getAttribute("transform")).toBe(middlePannedTransform);
+  });
+
+  it("offers actual-size and reset-view commands without changing annotations", async () => {
+    mockBasicEditorRequests();
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    const viewport = screen.getByTestId("viewport-transform");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Actual Size (100%)" }),
+    );
+    expect(viewport.getAttribute("transform")).toContain("scale(1)");
+    expect(screen.getByTestId("annotation-annotation-1")).toHaveAttribute(
+      "x",
+      "100",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Reset View" }));
+    expect(viewport.getAttribute("transform")).not.toContain("scale(1)");
+    expect(screen.getByTestId("annotation-annotation-1")).toHaveAttribute(
+      "x",
+      "100",
     );
   });
 

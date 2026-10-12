@@ -56,6 +56,7 @@ import {
 import { deleteMaskAnnotations } from "./maskDocumentOperations";
 import { rasterMaskContentUrl } from "./rasterMaskApi";
 import {
+  actualSizeTransform,
   boxArea,
   clampScale,
   createBoxFromPoints,
@@ -619,11 +620,28 @@ export function AnnotationEditor({
   }, [currentView]);
 
   const fitToScreen = useCallback(() => {
-    if (!imageSize || containerSize.width <= 0 || containerSize.height <= 0) {
+    if (!imageSize) {
       return;
     }
-    setView(fitTransform(imageSize, containerSize));
+    setInteraction(null);
+    setView(
+      fitTransform(imageSize, {
+        width: containerSize.width || 1200,
+        height: containerSize.height || 780,
+      }),
+    );
   }, [containerSize, imageSize]);
+
+  const showActualSize = useCallback(() => {
+    if (!imageSize) return;
+    setInteraction(null);
+    setView(
+      actualSizeTransform(imageSize, {
+        width: containerSize.width || 1200,
+        height: containerSize.height || 780,
+      }),
+    );
+  }, [containerSize.height, containerSize.width, imageSize]);
 
   useEffect(() => {
     if (
@@ -1677,6 +1695,16 @@ export function AnnotationEditor({
         return;
       }
 
+      if (event.key === "Escape") {
+        if (interactionRef.current || samPromptArmed || editProposalId) {
+          event.preventDefault();
+          setInteraction(null);
+          setSamPromptArmed(false);
+          setEditProposalId(null);
+        }
+        return;
+      }
+
       // Shift+Digit1/2 are editor actions, while plain 1–9 still choose classes.
       if (
         event.shiftKey &&
@@ -1808,6 +1836,7 @@ export function AnnotationEditor({
     samModelVariant,
     state.document.annotations,
     state.selectedIds,
+    editProposalId,
     deleteSelection,
     fitToScreen,
     flushPendingSave,
@@ -1925,11 +1954,20 @@ export function AnnotationEditor({
       setInteraction(null);
     };
 
+    const handlePointerCancel = () => {
+      interactionRef.current = null;
+      setInteraction(null);
+    };
+
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerCancel);
+    window.addEventListener("blur", handlePointerCancel);
     return () => {
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
+      window.removeEventListener("blur", handlePointerCancel);
     };
   }, [
     activeClassId,
@@ -1987,20 +2025,19 @@ export function AnnotationEditor({
 
   const handleCanvasPointerDown = useCallback(
     (event: ReactPointerEvent<SVGSVGElement>) => {
+      if (!currentView || !imageSize) return;
       if (
-        !currentView ||
-        !imageSize ||
         event.button === 1 ||
         event.button === 2 ||
+        (event.button === 0 && event.altKey) ||
         (state.tool === "pan" && !samPromptArmed)
       ) {
-        if (currentView) {
-          setInteraction({
-            type: "panning",
-            origin: { x: event.clientX, y: event.clientY },
-            initialView: currentView,
-          });
-        }
+        event.preventDefault();
+        setInteraction({
+          type: "panning",
+          origin: { x: event.clientX, y: event.clientY },
+          initialView: currentView,
+        });
         return;
       }
       const svg = svgRef.current;
@@ -2068,7 +2105,12 @@ export function AnnotationEditor({
       if (!currentView || !imageSize) {
         return;
       }
-      if (event.button === 1 || event.button === 2) {
+      if (
+        event.button === 1 ||
+        event.button === 2 ||
+        (event.button === 0 && event.altKey)
+      ) {
+        event.preventDefault();
         setInteraction({
           type: "panning",
           origin: { x: event.clientX, y: event.clientY },
@@ -2077,6 +2119,7 @@ export function AnnotationEditor({
         return;
       }
       if (state.tool === "pan") {
+        event.preventDefault();
         setInteraction({
           type: "panning",
           origin: { x: event.clientX, y: event.clientY },
@@ -2142,6 +2185,19 @@ export function AnnotationEditor({
       if (!currentView) {
         return;
       }
+      if (
+        event.button === 1 ||
+        event.button === 2 ||
+        (event.button === 0 && event.altKey)
+      ) {
+        event.preventDefault();
+        setInteraction({
+          type: "panning",
+          origin: { x: event.clientX, y: event.clientY },
+          initialView: currentView,
+        });
+        return;
+      }
       const svg = svgRef.current;
       if (!svg) {
         return;
@@ -2167,6 +2223,21 @@ export function AnnotationEditor({
   const handleMaskPointerDown = useCallback(
     (event: ReactPointerEvent<SVGElement>, maskId: string) => {
       event.stopPropagation();
+      if (
+        currentView &&
+        (event.button === 1 ||
+          event.button === 2 ||
+          (event.button === 0 && event.altKey) ||
+          state.tool === "pan")
+      ) {
+        event.preventDefault();
+        setInteraction({
+          type: "panning",
+          origin: { x: event.clientX, y: event.clientY },
+          initialView: currentView,
+        });
+        return;
+      }
       if (state.tool !== "select") {
         return;
       }
@@ -2178,7 +2249,13 @@ export function AnnotationEditor({
       }
       setMaskSelection(selectionToggled(state.selectedMaskIds, maskId));
     },
-    [setMaskSelection, setSelection, state.selectedMaskIds, state.tool],
+    [
+      currentView,
+      setMaskSelection,
+      setSelection,
+      state.selectedMaskIds,
+      state.tool,
+    ],
   );
 
   function togglePredictionSelection(proposalId: string) {
@@ -2256,6 +2333,12 @@ export function AnnotationEditor({
         <div className="annotation-editor-actions">
           <button type="button" className="secondary" onClick={fitToScreen}>
             Fit (F)
+          </button>
+          <button type="button" className="secondary" onClick={showActualSize}>
+            Actual Size (100%)
+          </button>
+          <button type="button" className="secondary" onClick={fitToScreen}>
+            Reset View
           </button>
           <button
             type="button"
@@ -3189,9 +3272,10 @@ export function AnnotationEditor({
               </div>
             </div>
             <p className="annotation-helper">
-              Wheel to zoom. Right-drag to pan. Ctrl/Cmd-click to build a mixed
-              selection of boxes and masks. Polygon, Fill, Smart Close, and
-              Brush masks remain visible in Select mode.
+              Wheel to zoom. Alt+left-drag, middle-drag, or the Pan tool moves
+              the view. Ctrl/Cmd-click builds a mixed selection of boxes and
+              masks. Polygon, Fill, Smart Close, and Brush masks remain visible
+              in Select mode.
             </p>
             <button
               type="button"
@@ -3634,6 +3718,7 @@ export function AnnotationEditor({
               viewBox={`0 0 ${containerSize.width || 1} ${containerSize.height || 1}`}
             >
               <g
+                data-testid="viewport-transform"
                 transform={`translate(${resolvedView.offsetX} ${resolvedView.offsetY}) scale(${resolvedView.scale})`}
               >
                 <image

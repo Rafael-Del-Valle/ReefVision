@@ -1229,6 +1229,43 @@ textarea {
     #021117;
 }
 
+.annotation-image-viewport {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  gap: 0.55rem;
+}
+
+.annotation-viewport-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.annotation-viewport-controls span {
+  color: #a7c5bf;
+  font-size: 0.82rem;
+}
+
+.annotation-transform-viewport {
+  touch-action: none;
+  cursor: grab;
+}
+
+.annotation-transform-viewport:active {
+  cursor: grabbing;
+}
+
+.annotation-transform-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
 .sam-review-banner {
   position: absolute;
   z-index: 6;

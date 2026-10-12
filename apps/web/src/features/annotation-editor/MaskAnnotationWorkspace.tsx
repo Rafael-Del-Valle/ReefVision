@@ -31,6 +31,7 @@ import {
 } from "./maskDocumentOperations";
 import { MaskMeasurementPanel } from "./MaskMeasurementPanel";
 import { SkeletonAnalysisPanel } from "./SkeletonAnalysisPanel";
+import { ImageViewport } from "./ImageViewport";
 import {
   SkeletonOverlayLayer,
   type SkeletonOverlayModel,
@@ -806,73 +807,60 @@ export function MaskAnnotationWorkspace({
               {isDirty(state) ? "Autosave pending" : "All changes synced"}
             </span>
           </div>
-          <div
-            className="annotation-canvas-frame"
-            style={{
-              display: "grid",
-              placeItems: "center",
-              overflow: "auto",
-              padding: "1rem",
-            }}
+          <ImageViewport
+            width={image.width_px}
+            height={image.height_px}
+            label="Polygon mask viewport"
           >
-            <div
+            <img
+              src={imageDisplayUrl(image.id)}
+              alt={image.original_filename}
+              draggable={false}
               style={{
-                position: "relative",
-                width: "min(100%, 1400px)",
-                aspectRatio: `${image.width_px} / ${image.height_px}`,
-                flex: "0 0 auto",
+                display: "block",
+                width: "100%",
+                height: "100%",
+                userSelect: "none",
               }}
-            >
-              <img
-                src={imageDisplayUrl(image.id)}
-                alt={image.original_filename}
-                draggable={false}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  height: "100%",
-                  userSelect: "none",
-                }}
-              />
-              <PolygonMaskLayer
-                key={image.id}
+            />
+            <PolygonMaskLayer
+              key={image.id}
+              width={image.width_px}
+              height={image.height_px}
+              masks={state.document.maskAnnotations}
+              classColors={classColors}
+              activeClassId={state.activeClassId}
+              tool={state.tool}
+              selectedMaskIds={state.selectedMaskIds}
+              onCreate={createMask}
+              onUpdate={updateMask}
+              onSelectionChange={(selection) =>
+                dispatch({ type: "setMaskSelection", selection })
+              }
+              onDeleteMaskIds={deleteMasks}
+              onFill={(seed) =>
+                void (state.tool === "smart_close"
+                  ? smartClosePolygon(seed)
+                  : fillPolygon(seed))
+              }
+            />
+            <CenterlineMeasurementLayer
+              width={image.width_px}
+              height={image.height_px}
+              selectedMask={selectedMeasurementMask}
+              documentDirty={isDirty(state)}
+              editing={centerlineEditing}
+              onEditingChange={setCenterlineEditing}
+              onRevisionCommitted={refreshAfterMeasurementChange}
+            />
+            {skeletonOverlay && (
+              <SkeletonOverlayLayer
                 width={image.width_px}
                 height={image.height_px}
-                masks={state.document.maskAnnotations}
-                classColors={classColors}
-                activeClassId={state.activeClassId}
-                tool={state.tool}
-                selectedMaskIds={state.selectedMaskIds}
-                onCreate={createMask}
-                onUpdate={updateMask}
-                onSelectionChange={(selection) =>
-                  dispatch({ type: "setMaskSelection", selection })
-                }
-                onDeleteMaskIds={deleteMasks}
-                onFill={(seed) =>
-                  void (state.tool === "smart_close"
-                    ? smartClosePolygon(seed)
-                    : fillPolygon(seed))
-                }
+                {...skeletonOverlay}
               />
-              <CenterlineMeasurementLayer
-                width={image.width_px}
-                height={image.height_px}
-                selectedMask={selectedMeasurementMask}
-                documentDirty={isDirty(state)}
-                editing={centerlineEditing}
-                onEditingChange={setCenterlineEditing}
-                onRevisionCommitted={refreshAfterMeasurementChange}
-              />
-              {skeletonOverlay && (
-                <SkeletonOverlayLayer
-                  width={image.width_px}
-                  height={image.height_px}
-                  {...skeletonOverlay}
-                />
-              )}
-            </div>
-          </div>
+            )}
+          </ImageViewport>
         </section>
       </div>
     </div>
