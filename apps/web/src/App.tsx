@@ -879,6 +879,7 @@ function ReefVisionMainApp() {
           >
             {activeView === "gallery" && (
               <Gallery
+                key={selectedProject.id}
                 project={selectedProject}
                 onInferenceSelectionChange={handleInferenceSelectionChange}
                 onFocusedImageChange={handleFocusedGalleryImageChange}
