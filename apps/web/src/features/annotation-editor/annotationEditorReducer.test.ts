@@ -125,7 +125,7 @@ describe("annotationEditorReducer", () => {
     expect(state.document.annotations[0].x_min).toBe(20);
   });
 
-  it("invalidates reviewed status for all content changes, but allows explicit re-review", () => {
+  it("invalidates review after geometry edits and permits re-review", () => {
     let state = annotationEditorReducer(initialAnnotationEditorState, {
       type: "loadSession",
       session: {
@@ -148,7 +148,9 @@ describe("annotationEditorReducer", () => {
       },
     });
     expect(state.document.annotation_status).toBe("in_progress");
-    expect(toAnnotationSavePayload(state).annotation_status).toBe("in_progress");
+    expect(toAnnotationSavePayload(state).annotation_status).toBe(
+      "in_progress",
+    );
 
     state = annotationEditorReducer(state, { type: "undo" });
     expect(state.document.annotation_status).toBe("reviewed");
