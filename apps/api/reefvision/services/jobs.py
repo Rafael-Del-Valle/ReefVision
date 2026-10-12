@@ -15,6 +15,7 @@ from reefvision.repositories.quality_control import QualityControlRepository
 RUNNING_CANCELLABLE_JOB_TYPES = frozenset(
     {
         "inference",
+        "sam_image_proposals",
         "qc",
         "backup",
         "restore",
@@ -87,6 +88,7 @@ class JobService:
         if job.status != "failed" or job.job_type not in {
             "thumbnail",
             "inference",
+            "sam_image_proposals",
             "export",
             "backup",
             "restore",

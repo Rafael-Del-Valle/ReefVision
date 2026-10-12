@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw
 
 from reefvision.config import Settings
+from reefvision.jobs.sam_image_proposals import process_sam_image_proposals_job
 from reefvision.services.sam2_install import (
     model_directory,
     process_sam2_install,
@@ -88,7 +89,7 @@ def test_real_sam2_tiny_download_inference_and_review_provenance(
     assert weights.is_file()
     assert sha256(weights.read_bytes()).hexdigest() == status["weight_sha256"]
 
-    # Call the same API endpoint used by editor Shift+1. Inference must create
+    # Keep the separate single-object prompt path covered. Inference must create
     # an actual raster-mask proposal, not claim human validation.
     inference_response = client.post(
         f"/api/v1/projects/{project_id}/advanced-providers/sam2/execute",
@@ -128,6 +129,59 @@ def test_real_sam2_tiny_download_inference_and_review_provenance(
     assert proposal["provenance_json"]["requires_researcher_review"] is True
     assert proposal["accepted_mask_annotation_id"] is None
 
+    # Shift+1 now uses a real full-image point-grid job with no registered detector.
+    multiple = Image.new("RGB", (320, 192), (20, 30, 45))
+    draw = ImageDraw.Draw(multiple)
+    for cx, cy, color in [
+        (60, 48, (240, 160, 70)),
+        (220, 48, (80, 220, 180)),
+        (60, 144, (210, 90, 160)),
+        (220, 144, (170, 180, 230)),
+    ]:
+        draw.ellipse((cx - 36, cy - 36, cx + 36, cy + 36), fill=color)
+    buffer = io.BytesIO()
+    multiple.save(buffer, format="PNG")
+    imported = client.post(
+        f"/api/v1/projects/{project_id}/imports/images",
+        files=[("files", ("multiple-objects.png", buffer.getvalue(), "image/png"))],
+    )
+    assert imported.status_code == 200, imported.text
+    full_image_id = imported.json()["successful"][0]["image_id"]
+    full_request = client.post(
+        f"/api/v1/projects/{project_id}/sam-image-proposals",
+        json={
+            "image_id": full_image_id,
+            "variant": "tiny",
+            "device": "cpu",
+            "points_per_side": 4,
+            "confidence_threshold": 0.5,
+            "stability_threshold": 0.7,
+            "timeout_seconds": 600,
+        },
+    )
+    assert full_request.status_code == 202, full_request.text
+    full_job_id = full_request.json()["id"]
+    process_sam_image_proposals_job(test_settings, client.app.state.session_factory, full_job_id)
+    full_job = client.get(f"/api/v1/jobs/{full_job_id}").json()
+    assert full_job["status"] == "succeeded", full_job.get("error_message")
+    assert full_job["result_json"]["proposal_count"] >= 2
+    full_proposals = client.get(f"/api/v1/images/{full_image_id}/prediction-proposals").json()[
+        "items"
+    ]
+    assert len(full_proposals) == full_job["result_json"]["proposal_count"]
+    for candidate in full_proposals:
+        assert candidate["review_status"] == "pending"
+        assert candidate["label_class_id"] is None
+        assert candidate["accepted_mask_annotation_id"] is None
+        assert candidate["geometry_kind"] == "raster_mask"
+        assert candidate["provenance_json"]["class_agnostic"] is True
+        assert candidate["model_checksum"] == status["weight_sha256"]
+        mask_response = client.get(f"/api/v1/prediction-proposals/{candidate['id']}/mask")
+        assert mask_response.status_code == 200, mask_response.text
+        with Image.open(io.BytesIO(mask_response.content)) as mask:
+            assert mask.size == (320, 192)
+            assert mask.getbbox() is not None
+
     report_dir = os.environ.get("REEFVISION_ACCEPTANCE_REPORT_DIR")
     if report_dir:
         evidence = Path(report_dir)
@@ -144,6 +198,9 @@ def test_real_sam2_tiny_download_inference_and_review_provenance(
                     "mask_area_pixels": result["result"]["area_pixels"],
                     "review_status": proposal["review_status"],
                     "model_install_job_status": job["status"],
+                    "full_image_job_status": full_job["status"],
+                    "full_image_proposal_count": full_job["result_json"]["proposal_count"],
+                    "full_image_class_agnostic": True,
                     "note": "CPU source-runtime integration; not packaged Windows GUI acceptance",
                 },
                 indent=2,

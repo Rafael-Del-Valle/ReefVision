@@ -32,6 +32,7 @@ from reefvision.jobs.model_install import process_model_install_job
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
 from reefvision.jobs.quality_control import process_quality_control_job
 from reefvision.jobs.restores import process_restore_job
+from reefvision.jobs.sam_image_proposals import process_sam_image_proposals_job
 from reefvision.jobs.training import recover_training_run
 from reefvision.jobs.training_dispatch import process_task_aware_training_job
 from reefvision.jobs.video import process_video_extract_job
@@ -547,6 +548,8 @@ def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session
             return process_thumbnail_job(settings, factory, job_id)
         if job_type == "inference":
             return process_inference_job(settings, factory, job_id)
+        if job_type == "sam_image_proposals":
+            return process_sam_image_proposals_job(settings, factory, job_id)
         if job_type == "classification_inference":
             return process_classification_inference_job(settings, factory, job_id)
         if job_type == "classification_training":

@@ -27,6 +27,8 @@ from reefvision.api.routes.georeferenced_observations import (
 from reefvision.api.routes.health import router as health_router
 from reefvision.api.routes.images import router as images_router
 from reefvision.api.routes.jobs import router as jobs_router
+from reefvision.api.routes.learning_evaluation import router as learning_evaluation_router
+from reefvision.api.routes.mask_refinements import router as mask_refinements_router
 from reefvision.api.routes.measurements import router as measurements_router
 from reefvision.api.routes.model_catalog import router as model_catalog_router
 from reefvision.api.routes.models import router as models_router
@@ -36,11 +38,13 @@ from reefvision.api.routes.pose_training_datasets import (
 )
 from reefvision.api.routes.predictions import router as predictions_router
 from reefvision.api.routes.project_exchange import router as project_exchange_router
+from reefvision.api.routes.project_learning import router as project_learning_router
 from reefvision.api.routes.projects import router as projects_router
 from reefvision.api.routes.quality_control import router as quality_control_router
 from reefvision.api.routes.raster_edits import router as raster_edits_router
 from reefvision.api.routes.review_queues import router as review_queues_router
 from reefvision.api.routes.sam2_models import router as sam2_models_router
+from reefvision.api.routes.sam_image_proposals import router as sam_image_proposals_router
 from reefvision.api.routes.scale_label_ocr import router as scale_label_ocr_router
 from reefvision.api.routes.skeleton_records import router as skeleton_records_router
 from reefvision.api.routes.system import router as system_router
@@ -91,3 +95,10 @@ api_router.include_router(pose_training_datasets_router)
 api_router.include_router(advanced_providers_router)
 api_router.include_router(advanced_provider_execution_router)
 api_router.include_router(workflow_graphs_router)
+api_router.include_router(learning_evaluation_router)
+
+api_router.include_router(mask_refinements_router)
+
+api_router.include_router(sam_image_proposals_router)
+
+api_router.include_router(project_learning_router)
