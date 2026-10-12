@@ -214,6 +214,7 @@ export function RasterMaskWorkspace({
       [selectedMask.id],
       {
         id: session.image.id,
+        projectId: project.id,
         width: session.image.width_px,
         height: session.image.height_px,
       },
