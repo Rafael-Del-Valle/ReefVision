@@ -92,6 +92,7 @@ def test_raster_brush_revisions_preserve_frozen_semantic_exports(
         y=30,
         mask_id=mask_id,
     )
+    assert second["image"]["annotation_status"] == "in_progress"
     second_mask = cast(dict[str, object], second["mask_annotation"])
     second_path = test_settings.resolved_data_dir / Path(str(second_mask["mask_path"]))
     assert second_mask["revision"] == 2
@@ -256,18 +257,25 @@ def test_raster_mask_class_can_be_reassigned_without_repainting(
     mask_id = str(mask["id"])
     mask_path = test_settings.resolved_data_dir / Path(str(mask["mask_path"]))
     original_bytes = mask_path.read_bytes()
+    reviewed = update_image(
+        client,
+        image_id,
+        group_key="reclassify-review",
+        annotation_status="reviewed",
+    )
 
     response = client.patch(
         f"/api/v1/images/{image_id}/raster-mask-annotations/{mask_id}/class",
         json={
-            "base_revision": 1,
+            "base_revision": reviewed["annotation_revision"],
             "label_class_id": second_class_id,
         },
     )
 
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["image"]["annotation_revision"] == 2
+    assert payload["image"]["annotation_revision"] == reviewed["annotation_revision"] + 1
+    assert payload["image"]["annotation_status"] == "in_progress"
     assert payload["mask_annotation"]["label_class_id"] == second_class_id
     assert payload["mask_annotation"]["revision"] == 2
     assert Path(str(payload["mask_annotation"]["mask_path"])).name == mask_path.name
