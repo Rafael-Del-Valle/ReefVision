@@ -1211,6 +1211,7 @@ textarea {
 }
 
 .annotation-canvas-frame {
+  position: relative;
   min-width: 0;
   min-height: 0;
   border: 1px solid rgba(182, 238, 228, 0.16);
@@ -1226,6 +1227,43 @@ textarea {
       transparent 24px
     ),
     #021117;
+}
+
+
+.sam-review-banner {
+  position: absolute;
+  z-index: 6;
+  top: 0.8rem;
+  left: 0.8rem;
+  width: min(27rem, calc(100% - 1.6rem));
+  max-height: min(36rem, calc(100% - 1.6rem));
+  overflow-y: auto;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(255, 196, 0, 0.55);
+  border-radius: 0.75rem;
+  background: rgba(3, 27, 35, 0.97);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.35);
+}
+
+.sam-review-banner p {
+  margin: 0.4rem 0 0.75rem;
+}
+
+.sam-review-banner label {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.sam-review-banner .sam-review-toggle {
+  align-items: center;
+}
+
+.sam-review-banner .annotation-editor-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .annotation-canvas {
