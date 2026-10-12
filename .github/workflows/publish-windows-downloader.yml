@@ -39,19 +39,18 @@ jobs:
         shell: pwsh
         run: |
           & ./downloader-dist/ReefVision_Windows_Downloader.exe --check-release
-          if ($LASTEXITCODE -ne 0) { throw 'Release manifest check failed' }
-      - name: Upload downloader to existing v1.0.0 release
+          if ($LASTEXITCODE -ne 0) { throw 'Newest release manifest check failed' }
+          & ./downloader-dist/ReefVision_Windows_Downloader.exe --check-release --stable
+          if ($LASTEXITCODE -ne 0) { throw 'Stable release manifest check failed' }
+      - name: Publish updated downloader for stable and test downloads
         if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          gh release view v1.0.0 --repo $env:GITHUB_REPOSITORY
-          if ($LASTEXITCODE -ne 0) { throw 'Release v1.0.0 not found' }
-          $asset = gh release view v1.0.0 --repo $env:GITHUB_REPOSITORY --json assets --jq '.assets[].name'
-          if ($asset -contains 'ReefVision_Windows_Downloader.exe') {
-            Write-Host 'Downloader asset already published. Leaving it unchanged.'
-          } else {
-            gh release upload v1.0.0 downloader-dist/ReefVision_Windows_Downloader.exe --repo $env:GITHUB_REPOSITORY
-            if ($LASTEXITCODE -ne 0) { throw 'Could not upload downloader asset' }
+          foreach ($tag in @('v1.0.0', 'v1.0.1-rc.1')) {
+            gh release view $tag --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { throw "Release $tag not found" }
+            gh release upload $tag downloader-dist/ReefVision_Windows_Downloader.exe --clobber --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { throw "Could not upload downloader to $tag" }
           }
