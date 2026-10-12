@@ -7,6 +7,12 @@ on:
     paths:
       - '.github/workflows/publish-windows-downloader.yml'
       - 'tools/windows-downloader/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/publish-windows-downloader.yml'
+      - 'tools/windows-downloader/**'
   workflow_dispatch:
 
 permissions:
@@ -35,6 +41,7 @@ jobs:
           & ./downloader-dist/ReefVision_Windows_Downloader.exe --check-release
           if ($LASTEXITCODE -ne 0) { throw 'Release manifest check failed' }
       - name: Upload downloader to existing v1.0.0 release
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
