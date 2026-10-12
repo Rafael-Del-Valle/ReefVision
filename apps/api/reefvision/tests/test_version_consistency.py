@@ -7,7 +7,7 @@ from pathlib import Path
 
 from reefvision import __version__
 
-EXPECTED_VERSION = "1.0.1"
+EXPECTED_VERSION = "1.0.2"
 
 
 def test_authoritative_version_sources_match_release_line() -> None:

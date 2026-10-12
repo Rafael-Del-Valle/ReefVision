@@ -22,6 +22,18 @@ All notable changes to ReefVision will be documented here.
 
 - Final hosted CI, Windows MSI build, and clean-machine lifecycle acceptance must pass before this candidate is published as the downloadable 1.0.3 installer.
 
+## [1.0.2] - In development
+
+### Planned
+
+- Restore the most recently selected project image and reliably choose the first eligible image for new projects.
+- Add paginated Arrow, Home, and End navigation with an optional persisted wrap preference.
+- Add temporary Alt-drag and middle-button panning, cursor-centered zoom, Fit, Actual Size, and Reset View controls.
+- Add safe internal annotation copy, paste, duplicate, undo, and redo operations across compatible annotation workspaces.
+- Add an in-app shortcut reference and exact-head performance, scientific-integrity, and Windows package evidence.
+
+This section records development intent. Release publication remains gated on final exact-head validation and maintainer approval.
+
 ## [1.0.1] - Release candidate
 
 ### October 2026 — assisted annotation and clean Windows install
