@@ -1,3 +1,5 @@
+import { shouldIgnoreShortcutTarget } from "../../components/ui/keyboardShortcuts";
+
 export type GalleryNavigationAction = "previous" | "next" | "first" | "last";
 
 export interface GalleryPreference {
@@ -103,11 +105,5 @@ export function resolveGalleryNavigation({
 export function shouldIgnoreGalleryShortcut(
   target: EventTarget | null,
 ): boolean {
-  if (!(target instanceof HTMLElement)) return true;
-  if (target.isContentEditable) return true;
-  return Boolean(
-    target.closest(
-      'input, textarea, select, button, a, [contenteditable="true"], [role="dialog"], [role="menu"], [role="menuitem"]',
-    ),
-  );
+  return shouldIgnoreShortcutTarget(target);
 }

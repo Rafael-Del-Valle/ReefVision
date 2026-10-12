@@ -560,6 +560,8 @@ export function Gallery({
         <section
           className="rv-media-workbench"
           aria-label="Image workbench"
+          aria-keyshortcuts="ArrowLeft ArrowRight Home End"
+          title="Navigate images with Left/Right Arrow, Home, and End"
           tabIndex={0}
           onKeyDown={handleViewerKeyDown}
         >
@@ -723,6 +725,7 @@ export function Gallery({
               type="checkbox"
               checked={wrapNavigation}
               onChange={(event) => setWrapNavigation(event.target.checked)}
+              title="Persistently wrap from the first image to the last and from the last to the first"
             />
             Wrap image navigation
           </label>

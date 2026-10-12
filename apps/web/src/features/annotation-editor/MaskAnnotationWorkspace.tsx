@@ -29,6 +29,7 @@ import {
   writeInternalAnnotationClipboard,
 } from "./annotationClipboard";
 import { CenterlineMeasurementLayer } from "./CenterlineMeasurementLayer";
+import { shouldIgnoreShortcutTarget } from "../../components/ui/keyboardShortcuts";
 import {
   addMaskAnnotation,
   changeMaskAnnotationClass,
@@ -438,19 +439,7 @@ export function MaskAnnotationWorkspace({
 
   useEffect(() => {
     const handleDeleteShortcut = (event: globalThis.KeyboardEvent) => {
-      const target = event.target;
-      if (
-        target instanceof HTMLElement &&
-        (target.isContentEditable ||
-          target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.tagName === "SELECT" ||
-          Boolean(
-            target.closest("input, textarea, select, [contenteditable='true']"),
-          ))
-      ) {
-        return;
-      }
+      if (shouldIgnoreShortcutTarget(event.target)) return;
 
       const snapshot = stateRef.current;
       const command = event.ctrlKey || event.metaKey;
@@ -624,6 +613,7 @@ export function MaskAnnotationWorkspace({
           <button
             type="button"
             className={state.tool === "select" ? "active" : "secondary"}
+            aria-pressed={state.tool === "select" && !centerlineEditing}
             data-testid="activate-mask-select-tool"
             title="Select masks and edit polygon vertices"
             onClick={() => {
@@ -686,6 +676,7 @@ export function MaskAnnotationWorkspace({
           <button
             type="button"
             className={centerlineEditing ? "active" : "secondary"}
+            aria-pressed={centerlineEditing}
             data-testid="activate-centerline-tool"
             title="Draw total-linear-extension centerline points"
             disabled={!measurementEditingAvailable}
@@ -859,6 +850,8 @@ export function MaskAnnotationWorkspace({
                 <button
                   type="button"
                   className="secondary"
+                  title="Undo (Ctrl/Cmd+Z)"
+                  aria-keyshortcuts="Control+Z Meta+Z"
                   disabled={state.history.length === 0}
                   onClick={() => dispatch({ type: "undo" })}
                 >
@@ -867,6 +860,8 @@ export function MaskAnnotationWorkspace({
                 <button
                   type="button"
                   className="secondary"
+                  title="Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y)"
+                  aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y Meta+Y"
                   disabled={state.future.length === 0}
                   onClick={() => dispatch({ type: "redo" })}
                 >
@@ -875,6 +870,8 @@ export function MaskAnnotationWorkspace({
                 <button
                   type="button"
                   className="secondary"
+                  title="Copy to ReefVision's internal clipboard (Ctrl/Cmd+C)"
+                  aria-keyshortcuts="Control+C Meta+C"
                   disabled={selectedMasks.length === 0}
                   onClick={copySelection}
                 >
@@ -883,6 +880,8 @@ export function MaskAnnotationWorkspace({
                 <button
                   type="button"
                   className="secondary"
+                  title="Duplicate selection (Ctrl/Cmd+D)"
+                  aria-keyshortcuts="Control+D Meta+D"
                   disabled={selectedMasks.length === 0}
                   onClick={duplicateSelection}
                 >
@@ -891,6 +890,8 @@ export function MaskAnnotationWorkspace({
                 <button
                   type="button"
                   className="secondary"
+                  title="Paste from ReefVision's internal clipboard (Ctrl/Cmd+V)"
+                  aria-keyshortcuts="Control+V Meta+V"
                   disabled={!readInternalAnnotationClipboard()?.items.length}
                   onClick={() => pasteClipboard()}
                 >
@@ -906,6 +907,8 @@ export function MaskAnnotationWorkspace({
             <button
               type="button"
               className="danger-ghost"
+              title="Delete selected masks (Delete or Backspace)"
+              aria-keyshortcuts="Delete Backspace"
               disabled={selectedMasks.length === 0}
               onClick={() => deleteMasks(state.selectedMaskIds)}
             >

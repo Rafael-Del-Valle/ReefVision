@@ -8,6 +8,7 @@ import {
   type Project,
 } from "../../api/client";
 import { RasterBrushLayer } from "./RasterBrushLayer";
+import { shouldIgnoreShortcutTarget } from "../../components/ui/keyboardShortcuts";
 import { RasterFillLayer } from "./RasterFillLayer";
 import { SkeletonAnalysisPanel } from "./SkeletonAnalysisPanel";
 import { ImageViewport } from "./ImageViewport";
@@ -240,15 +241,7 @@ export function RasterMaskWorkspace({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target;
-      if (
-        target instanceof HTMLElement &&
-        (target.isContentEditable ||
-          Boolean(
-            target.closest("input, textarea, select, [contenteditable='true']"),
-          ))
-      )
-        return;
+      if (shouldIgnoreShortcutTarget(event.target)) return;
       if (!(event.ctrlKey || event.metaKey)) return;
       const key = event.key.toLowerCase();
       if (key === "c") {
@@ -342,6 +335,7 @@ export function RasterMaskWorkspace({
               <button
                 type="button"
                 className={mode === "paint" ? "active" : "secondary"}
+                aria-pressed={mode === "paint"}
                 disabled={editMutation.isPending}
                 onClick={() => setMode("paint")}
               >
@@ -350,6 +344,7 @@ export function RasterMaskWorkspace({
               <button
                 type="button"
                 className={mode === "erase" ? "active" : "secondary"}
+                aria-pressed={mode === "erase"}
                 disabled={!canErase || editMutation.isPending}
                 onClick={() => setMode("erase")}
               >
@@ -358,6 +353,7 @@ export function RasterMaskWorkspace({
               <button
                 type="button"
                 className={mode === "fill" ? "active" : "secondary"}
+                aria-pressed={mode === "fill"}
                 disabled={editMutation.isPending}
                 onClick={() => setMode("fill")}
               >
@@ -476,6 +472,8 @@ export function RasterMaskWorkspace({
               <button
                 type="button"
                 className="secondary"
+                title="Copy to ReefVision's internal clipboard (Ctrl/Cmd+C)"
+                aria-keyshortcuts="Control+C Meta+C"
                 disabled={!selectedMask || duplicateMutation.isPending}
                 onClick={copySelectedRaster}
               >
@@ -484,6 +482,8 @@ export function RasterMaskWorkspace({
               <button
                 type="button"
                 className="secondary"
+                title="Duplicate raster mask (Ctrl/Cmd+D)"
+                aria-keyshortcuts="Control+D Meta+D"
                 disabled={!selectedMask || duplicateMutation.isPending}
                 onClick={() =>
                   selectedMask && duplicateMutation.mutate(selectedMask.id)
@@ -494,6 +494,8 @@ export function RasterMaskWorkspace({
               <button
                 type="button"
                 className="secondary"
+                title="Paste compatible raster mask (Ctrl/Cmd+V)"
+                aria-keyshortcuts="Control+V Meta+V"
                 disabled={duplicateMutation.isPending}
                 onClick={pasteRaster}
               >

@@ -47,6 +47,7 @@ import {
   type Project,
 } from "../../api/client";
 import { ErrorState, LoadingState } from "../../components/ui/AsyncState";
+import { shouldIgnoreShortcutTarget } from "../../components/ui/keyboardShortcuts";
 import {
   annotationEditorReducer,
   initialAnnotationEditorState,
@@ -211,17 +212,7 @@ function saveStateLabel(
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-  const tagName = target.tagName;
-  return (
-    target.isContentEditable ||
-    tagName === "INPUT" ||
-    tagName === "TEXTAREA" ||
-    tagName === "SELECT" ||
-    Boolean(target.closest("input, textarea, select, [contenteditable='true']"))
-  );
+  return shouldIgnoreShortcutTarget(target);
 }
 
 function clientPointInSvg(
@@ -2439,7 +2430,13 @@ export function AnnotationEditor({
           )}
         </div>
         <div className="annotation-editor-actions">
-          <button type="button" className="secondary" onClick={fitToScreen}>
+          <button
+            type="button"
+            className="secondary"
+            title="Fit image to view (F)"
+            aria-keyshortcuts="F"
+            onClick={fitToScreen}
+          >
             Fit (F)
           </button>
           <button type="button" className="secondary" onClick={showActualSize}>
@@ -2496,6 +2493,8 @@ export function AnnotationEditor({
             type="button"
             className="secondary"
             disabled={imagePredictionBusy}
+            title="Generate full-image proposals (Shift+1)"
+            aria-keyshortcuts="Shift+1"
             onClick={predictImage}
           >
             Predict objects in image (Shift+1)
@@ -2504,6 +2503,7 @@ export function AnnotationEditor({
             type="button"
             className="secondary"
             disabled={refinement.busy || Boolean(refinement.reason)}
+            aria-keyshortcuts="Shift+2"
             title={
               refinement.reason ??
               "Compare a proposed boundary before replacing this mask"
@@ -2538,6 +2538,7 @@ export function AnnotationEditor({
             type="button"
             aria-label="Select tool"
             title="Select and edit objects (V)"
+            aria-keyshortcuts="V"
             aria-pressed={state.tool === "select"}
             className={state.tool === "select" ? "active" : "secondary"}
             onClick={() => dispatch({ type: "setTool", tool: "select" })}
@@ -2549,6 +2550,7 @@ export function AnnotationEditor({
             type="button"
             aria-label="Pan tool"
             title="Pan the image (P)"
+            aria-keyshortcuts="P"
             aria-pressed={state.tool === "pan"}
             className={state.tool === "pan" ? "active" : "secondary"}
             onClick={() => dispatch({ type: "setTool", tool: "pan" })}
@@ -2560,6 +2562,7 @@ export function AnnotationEditor({
             type="button"
             aria-label="Box tool"
             title="Draw bounding boxes (B)"
+            aria-keyshortcuts="B"
             aria-pressed={state.tool === "box"}
             className={state.tool === "box" ? "active" : "secondary"}
             disabled={!activeClassId}
@@ -3364,6 +3367,8 @@ export function AnnotationEditor({
                 <button
                   type="button"
                   className="secondary"
+                  title="Undo (Ctrl/Cmd+Z)"
+                  aria-keyshortcuts="Control+Z Meta+Z"
                   disabled={!canUndo}
                   onClick={() => dispatch({ type: "undo" })}
                 >
@@ -3372,6 +3377,8 @@ export function AnnotationEditor({
                 <button
                   type="button"
                   className="secondary"
+                  title="Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y)"
+                  aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y Meta+Y"
                   disabled={!canRedo}
                   onClick={() => dispatch({ type: "redo" })}
                 >
@@ -3380,6 +3387,8 @@ export function AnnotationEditor({
                 <button
                   type="button"
                   className="secondary"
+                  title="Copy to ReefVision's internal clipboard (Ctrl/Cmd+C)"
+                  aria-keyshortcuts="Control+C Meta+C"
                   disabled={selectedObjectCount === 0}
                   onClick={copySelection}
                 >
@@ -3388,6 +3397,8 @@ export function AnnotationEditor({
                 <button
                   type="button"
                   className="secondary"
+                  title="Duplicate selection (Ctrl/Cmd+D)"
+                  aria-keyshortcuts="Control+D Meta+D"
                   disabled={selectedObjectCount === 0}
                   onClick={duplicateSelection}
                 >
@@ -3396,6 +3407,8 @@ export function AnnotationEditor({
                 <button
                   type="button"
                   className="secondary"
+                  title="Paste from ReefVision's internal clipboard (Ctrl/Cmd+V)"
+                  aria-keyshortcuts="Control+V Meta+V"
                   disabled={!annotationClipboardRef.current?.items.length}
                   onClick={() => pasteClipboard()}
                 >
@@ -3412,6 +3425,8 @@ export function AnnotationEditor({
             <button
               type="button"
               className="danger-ghost"
+              title="Delete selection (Delete or Backspace)"
+              aria-keyshortcuts="Delete Backspace"
               disabled={selectedObjectCount === 0}
               onClick={deleteSelection}
             >

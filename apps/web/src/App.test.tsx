@@ -1122,6 +1122,28 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
+  it("opens the shared keyboard shortcut reference and restores focus", async () => {
+    mockApi({ projects: [] });
+    renderApp();
+    const trigger = await screen.findByRole("button", {
+      name: "Keyboard shortcuts",
+    });
+
+    await userEvent.click(trigger);
+    expect(
+      screen.getByRole("dialog", { name: "Keyboard shortcuts" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Full-image SAM proposals")).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Keyboard shortcuts" }),
+      ).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
   it("opens system status and displays the current release line", async () => {
     mockApi({ projects: [] });
     renderApp();

@@ -5,6 +5,26 @@ import { describe, expect, it, vi } from "vitest";
 import { ImageViewport } from "./ImageViewport";
 
 describe("ImageViewport", () => {
+  it("updates the viewport transform without rerendering unchanged scientific layers", () => {
+    const renders = vi.fn();
+    function HeavyScientificLayer() {
+      renders();
+      return <svg data-testid="heavy-scientific-layer" />;
+    }
+    render(
+      <ImageViewport width={8192} height={6144} label="Large image viewport">
+        <HeavyScientificLayer />
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", { name: "Large image viewport" });
+
+    fireEvent.wheel(frame, { deltaY: -100, clientX: 300, clientY: 250 });
+    fireEvent.wheel(frame, { deltaY: -100, clientX: 310, clientY: 260 });
+
+    expect(screen.getByTestId("heavy-scientific-layer")).toBeInTheDocument();
+    expect(renders).toHaveBeenCalledTimes(1);
+  });
+
   it("temporarily pans overlays without changing their source geometry", () => {
     render(
       <ImageViewport width={1600} height={1200} label="Mask viewport">

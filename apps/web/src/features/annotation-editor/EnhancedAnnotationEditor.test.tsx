@@ -197,6 +197,10 @@ describe("EnhancedAnnotationEditor", () => {
     expect(screen.getByTestId("open-smart-close-tool")).toBeInTheDocument();
     expect(screen.getByTestId("open-brush-tool")).toBeInTheDocument();
     expect(screen.getByTestId("mask-tool-group")).toBeInTheDocument();
+    expect(screen.getByTestId("open-polygon-tool")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Next image" }));
 
@@ -214,6 +218,14 @@ describe("EnhancedAnnotationEditor", () => {
     expect(editor).toHaveAttribute("data-raster-visible", "false");
     expect(screen.getByTestId("return-main-tools")).toBeInTheDocument();
     expect(screen.getByTestId("polygon-edit-tool-group")).toBeInTheDocument();
+    expect(screen.getByTestId("open-polygon-tool")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByTestId("move-polygon-nodes")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
 
     fireEvent.click(screen.getByTestId("open-brush-tool"));
     expect(screen.getByTestId("raster-workspace")).toHaveTextContent("image-2");
@@ -221,6 +233,10 @@ describe("EnhancedAnnotationEditor", () => {
     expect(editor).toHaveAttribute("data-boxes-visible", "false");
     expect(editor).toHaveAttribute("data-polygons-visible", "false");
     expect(editor).toHaveAttribute("data-raster-visible", "true");
+    expect(screen.getByTestId("open-brush-tool")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
 
     fireEvent.click(screen.getByTestId("return-main-tools"));
     expect(screen.getByTestId("box-workspace")).toHaveTextContent("image-2");

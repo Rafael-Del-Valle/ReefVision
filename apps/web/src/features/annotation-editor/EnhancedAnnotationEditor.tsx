@@ -355,6 +355,7 @@ export function EnhancedAnnotationEditor({
               ? "active"
               : "secondary"
           }
+          aria-pressed={workspace === "masks" && activeMaskTool === "polygon"}
           data-testid="open-polygon-tool"
           title="Draw editable polygon objects"
           onClick={activatePolygonTool}
@@ -369,6 +370,7 @@ export function EnhancedAnnotationEditor({
               ? "active"
               : "secondary"
           }
+          aria-pressed={workspace === "masks" && activeMaskTool === "fill"}
           data-testid="open-fill-object-tool"
           title="Click enclosed regions such as holes to create countable mask objects"
           onClick={activateFillObjectTool}
@@ -383,6 +385,9 @@ export function EnhancedAnnotationEditor({
               ? "active"
               : "secondary"
           }
+          aria-pressed={
+            workspace === "masks" && activeMaskTool === "smart_close"
+          }
           data-testid="open-smart-close-tool"
           title="Predict a closed polygon around a weak or broken opening boundary"
           onClick={activateSmartCloseTool}
@@ -393,6 +398,7 @@ export function EnhancedAnnotationEditor({
         <button
           type="button"
           className={workspace === "raster" ? "active" : "secondary"}
+          aria-pressed={workspace === "raster"}
           data-testid="open-brush-tool"
           title="Paint freehand mask objects"
           onClick={activateBrushTool}
@@ -411,6 +417,7 @@ export function EnhancedAnnotationEditor({
           <button
             type="button"
             className={vertexEditMode === "move" ? "active" : "secondary"}
+            aria-pressed={vertexEditMode === "move"}
             data-testid="move-polygon-nodes"
             title="Move polygon nodes"
             onClick={() => activateVertexEditMode("move")}
@@ -421,6 +428,7 @@ export function EnhancedAnnotationEditor({
           <button
             type="button"
             className={vertexEditMode === "insert" ? "active" : "secondary"}
+            aria-pressed={vertexEditMode === "insert"}
             data-testid="insert-polygon-node"
             title="Insert a polygon node"
             onClick={() => activateVertexEditMode("insert")}
@@ -431,6 +439,7 @@ export function EnhancedAnnotationEditor({
           <button
             type="button"
             className={vertexEditMode === "delete" ? "active" : "secondary"}
+            aria-pressed={vertexEditMode === "delete"}
             data-testid="delete-polygon-node"
             title="Delete a polygon node"
             onClick={() => activateVertexEditMode("delete")}
