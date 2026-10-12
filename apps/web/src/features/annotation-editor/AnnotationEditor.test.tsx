@@ -1230,6 +1230,118 @@ describe("AnnotationEditor", () => {
     });
   });
 
+  it("offers explicit in-canvas accept and reject for a new SAM raster mask", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    let created = false;
+    let accepted = false;
+    const samProposal = {
+      ...pendingProposal,
+      id: "sam-proposal-1",
+      geometry_kind: "raster_mask",
+      mask_path: "projects/project-1/prediction-masks/sam-proposal-1.png",
+      label_class_id: null,
+      predicted_label: "SAM 2 mask",
+      provenance_json: { provider_id: "sam2" },
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      calls.push({ url, init });
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse(session);
+      }
+      if (
+        url.includes(`/projects/${project.id}/sam2-models`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse([
+          {
+            variant: "small",
+            ready: true,
+            installed: true,
+            repo_id: "facebook/sam2.1-hiera-small",
+            revision: "a".repeat(40),
+            weight_sha256: "f".repeat(64),
+          },
+        ]);
+      }
+      if (
+        url.includes("/advanced-providers/sam2/execute") &&
+        init?.method === "POST"
+      ) {
+        created = true;
+        return jsonResponse({
+          provider_id: "sam2",
+          task: "assist_segmentation",
+          status: "succeeded",
+          model_id: "sam2-small",
+          model_revision: "a".repeat(40),
+          result: { proposal_id: samProposal.id, proposal_count: 1 },
+          warnings: [],
+        });
+      }
+      if (
+        url.endsWith(`/prediction-proposals/${samProposal.id}/accept`) &&
+        init?.method === "POST"
+      ) {
+        accepted = true;
+        return jsonResponse({
+          proposal: { ...samProposal, review_status: "accepted" },
+          mask_annotation: { id: "accepted-mask-1" },
+        });
+      }
+      if (
+        url.includes(`/images/${session.image.id}/prediction-proposals`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse({
+          items: created && !accepted ? [samProposal] : [],
+          counts: { pending: created && !accepted ? 1 : 0 },
+        });
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    fireEvent.pointerDown(screen.getByTestId("annotation-annotation-1"), {
+      button: 0,
+      clientX: 145,
+      clientY: 185,
+    });
+    fireEvent.keyDown(window, { key: "!", code: "Digit1", shiftKey: true });
+
+    const review = await screen.findByTestId("sam-proposal-review");
+    expect(
+      within(review).getByText(/SAM mask is a proposal — not saved yet/i),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("proposal-mask-sam-proposal-1")).toBeInTheDocument();
+    expect(
+      within(review).getByRole("button", { name: "Accept SAM mask" }),
+    ).toBeEnabled();
+    expect(
+      calls.some((request) => request.url.endsWith("/sam-proposal-1/accept")),
+    ).toBe(false);
+
+    await userEvent.click(
+      within(review).getByRole("button", { name: "Accept SAM mask" }),
+    );
+    await waitFor(() => {
+      expect(accepted).toBe(true);
+      expect(screen.queryByTestId("sam-proposal-review")).not.toBeInTheDocument();
+    });
+    expect(
+      calls.find((request) => request.url.endsWith("/sam-proposal-1/accept"))
+        ?.init?.method,
+    ).toBe("POST");
+  });
+
   it("runs SAM on a selected image box with Shift+1 and preserves plain class shortcuts", async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
