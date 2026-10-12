@@ -22,9 +22,7 @@ class SegmentationCandidateScore:
     def __post_init__(self) -> None:
         identity = (self.model_id, self.project_id, self.dataset_version_id, self.split_digest)
         if not all(identity):
-            raise ValueError(
-                "Segmentation evaluation identity and split digest are required"
-            )
+            raise ValueError("Segmentation evaluation identity and split digest are required")
         if self.evaluated_images < 1:
             raise ValueError("Segmentation evaluation needs held-out images")
         if not isfinite(self.mask_map50) or not 0 <= self.mask_map50 <= 1:
