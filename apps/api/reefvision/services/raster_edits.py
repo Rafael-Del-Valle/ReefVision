@@ -164,7 +164,7 @@ class RasterMaskEditService:
             )
         )
         image.annotation_revision += 1
-        if image.annotation_status == "unannotated":
+        if image.annotation_status in {"unannotated", "reviewed"}:
             image.annotation_status = "in_progress"
         self.session.commit()
         self.session.refresh(image)
@@ -247,7 +247,7 @@ class RasterMaskEditService:
                     )
                 )
                 image.annotation_revision += 1
-                if image.annotation_status == "unannotated":
+                if image.annotation_status in {"unannotated", "reviewed"}:
                     image.annotation_status = "in_progress"
                 self.session.commit()
                 self.session.refresh(image)
@@ -324,7 +324,7 @@ class RasterMaskEditService:
                 )
             )
             image.annotation_revision += 1
-            if image.annotation_status == "unannotated":
+            if image.annotation_status in {"unannotated", "reviewed"}:
                 image.annotation_status = "in_progress"
             self.session.commit()
         except Exception:
