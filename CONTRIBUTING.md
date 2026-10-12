@@ -27,4 +27,4 @@ Useful variants:
 ```
 
 Run `./scripts/bootstrap.ps1` first when `.venv`, Node.js dependencies or provider dependencies have not been installed.
-Backend-only commands are documented in `README.md`.
+Backend-only commands and development setup are documented in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
