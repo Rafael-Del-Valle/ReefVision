@@ -69,7 +69,7 @@ describe("annotationClipboard", () => {
         projectId: "project-1",
         width: 100,
         height: 100,
-      }
+      },
     );
 
     expect(clipboard.items.map((item) => item.kind)).toEqual([
@@ -179,7 +179,7 @@ describe("annotationClipboard", () => {
         projectId: "project-1",
         width: 100,
         height: 100,
-      }
+      },
       items: [],
       rasterMaskIds: [],
       pasteCount: 0,
