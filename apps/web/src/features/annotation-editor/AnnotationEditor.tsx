@@ -1551,7 +1551,12 @@ export function AnnotationEditor({
       snapshot.document,
       snapshot.selectedIds,
       snapshot.selectedMaskIds,
-      { id: image.id, projectId: project.id, width: image.width_px, height: image.height_px },
+      {
+        id: image.id,
+        projectId: project.id,
+        width: image.width_px,
+        height: image.height_px,
+      },
     );
     annotationClipboardRef.current = clipboard;
     writeInternalAnnotationClipboard(clipboard);
@@ -1576,7 +1581,12 @@ export function AnnotationEditor({
       }
       const result = pasteAnnotations(
         clipboard,
-        { id: image.id, projectId: project.id, width: image.width_px, height: image.height_px },
+        {
+        id: image.id,
+        projectId: project.id,
+        width: image.width_px,
+        height: image.height_px,
+      },
         makeAnnotationId,
       );
       if (!result.ok) {
