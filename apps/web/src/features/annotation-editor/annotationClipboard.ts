@@ -7,6 +7,7 @@ import type {
 
 interface ClipboardImage {
   id: string;
+  projectId: string;
   width: number;
   height: number;
 }
@@ -133,6 +134,13 @@ export function pasteAnnotations(
       reason: clipboard.rasterMaskIds.length
         ? "Open the brush workspace to paste copied raster masks."
         : "Copy an annotation before pasting.",
+    };
+  }
+  if (clipboard.sourceImage.projectId !== targetImage.projectId) {
+    return {
+      ok: false,
+      reason:
+        "Clipboard annotations belong to a different project. ReefVision will not transfer class IDs or scientific provenance between projects.",
     };
   }
   if (
