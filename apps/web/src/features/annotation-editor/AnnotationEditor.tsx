@@ -53,6 +53,13 @@ import {
   isDirty,
   toAnnotationSavePayload,
 } from "./annotationEditorReducer";
+import {
+  copyAnnotations,
+  pasteAnnotations,
+  readInternalAnnotationClipboard,
+  type AnnotationClipboard,
+  writeInternalAnnotationClipboard,
+} from "./annotationClipboard";
 import { deleteMaskAnnotations } from "./maskDocumentOperations";
 import { rasterMaskContentUrl } from "./rasterMaskApi";
 import {
@@ -346,6 +353,7 @@ export function AnnotationEditor({
   const loadedImageIdRef = useRef<string | null>(null);
   const savePromiseRef = useRef<Promise<boolean> | null>(null);
   const assistSessionRef = useRef<AssistSession | null>(assistSession);
+  const annotationClipboardRef = useRef<AnnotationClipboard | null>(null);
 
   useEffect(() => {
     stateRef.current = state;
@@ -1537,6 +1545,88 @@ export function AnnotationEditor({
     state.selectedMaskIds,
   ]);
 
+  const copySelection = useCallback((): AnnotationClipboard | null => {
+    const snapshot = stateRef.current;
+    const image = sessionQuery.data?.image;
+    if (
+      !image ||
+      (snapshot.selectedIds.length === 0 &&
+        snapshot.selectedMaskIds.length === 0)
+    ) {
+      setShortcutMessage("Select an annotation before copying.");
+      return null;
+    }
+    const clipboard = copyAnnotations(
+      snapshot.document,
+      snapshot.selectedIds,
+      snapshot.selectedMaskIds,
+      { id: image.id, width: image.width_px, height: image.height_px },
+    );
+    annotationClipboardRef.current = clipboard;
+    writeInternalAnnotationClipboard(clipboard);
+    const count = clipboard.items.length;
+    setShortcutMessage(
+      clipboard.skippedRasterCount > 0
+        ? `Copied ${count} editable annotation${count === 1 ? "" : "s"}. ${clipboard.skippedRasterCount} raster mask${clipboard.skippedRasterCount === 1 ? " was" : "s were"} skipped; raster pixels require the brush workspace.`
+        : `Copied ${count} annotation${count === 1 ? "" : "s"} to ReefVision's internal clipboard.`,
+    );
+    return clipboard;
+  }, [sessionQuery.data?.image]);
+
+  const pasteClipboard = useCallback(
+    (
+      clipboard = annotationClipboardRef.current ??
+        readInternalAnnotationClipboard(),
+    ) => {
+      const image = sessionQuery.data?.image;
+      if (!image || !clipboard) {
+        setShortcutMessage("Copy an annotation before pasting.");
+        return;
+      }
+      const result = pasteAnnotations(
+        clipboard,
+        { id: image.id, width: image.width_px, height: image.height_px },
+        makeAnnotationId,
+      );
+      if (!result.ok) {
+        setShortcutMessage(result.reason);
+        return;
+      }
+      const snapshot = stateRef.current;
+      const annotationIds = result.annotations.map((item) => item.id);
+      const maskIds = result.maskAnnotations.map((item) => item.id);
+      commitDocument(
+        {
+          ...snapshot.document,
+          annotations: [
+            ...snapshot.document.annotations,
+            ...result.annotations,
+          ],
+          maskAnnotations: [
+            ...snapshot.document.maskAnnotations,
+            ...result.maskAnnotations,
+          ],
+        },
+        annotationIds,
+        maskIds,
+      );
+      annotationClipboardRef.current = result.nextClipboard;
+      writeInternalAnnotationClipboard(result.nextClipboard);
+      const count = annotationIds.length + maskIds.length;
+      setShortcutMessage(
+        `Pasted ${count} annotation${count === 1 ? "" : "s"} in source-image coordinates. New polygon copies require review.`,
+      );
+    },
+    [commitDocument, sessionQuery.data?.image],
+  );
+
+  const duplicateSelection = useCallback(() => {
+    const clipboard = copySelection();
+    if (clipboard?.items.length) {
+      pasteClipboard(clipboard);
+    }
+  }, [copySelection, pasteClipboard]);
+
   const saveNow = useCallback((): Promise<boolean> => {
     if (savePromiseRef.current) {
       return savePromiseRef.current;
@@ -1754,6 +1844,21 @@ export function AnnotationEditor({
         dispatch({ type: "redo" });
         return;
       }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
+        event.preventDefault();
+        copySelection();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+        event.preventDefault();
+        pasteClipboard();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        duplicateSelection();
+        return;
+      }
 
       switch (event.key.toLowerCase()) {
         case "j":
@@ -1838,6 +1943,9 @@ export function AnnotationEditor({
     state.selectedIds,
     editProposalId,
     deleteSelection,
+    copySelection,
+    pasteClipboard,
+    duplicateSelection,
     fitToScreen,
     flushPendingSave,
     labelClasses,
@@ -3268,6 +3376,30 @@ export function AnnotationEditor({
                   onClick={() => dispatch({ type: "redo" })}
                 >
                   Redo
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={selectedObjectCount === 0}
+                  onClick={copySelection}
+                >
+                  Copy
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={selectedObjectCount === 0}
+                  onClick={duplicateSelection}
+                >
+                  Duplicate
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={!annotationClipboardRef.current?.items.length}
+                  onClick={() => pasteClipboard()}
+                >
+                  Paste
                 </button>
               </div>
             </div>

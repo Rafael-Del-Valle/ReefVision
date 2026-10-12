@@ -34,6 +34,10 @@ class RasterMaskClassUpdateRequest(BaseModel):
     label_class_id: str = Field(min_length=1, max_length=36)
 
 
+class RasterMaskDuplicateRequest(BaseModel):
+    base_revision: int = Field(ge=0)
+
+
 class RasterMaskEditResponse(BaseModel):
     image: ImageResponse
     mask_annotation: MaskAnnotationResponse

@@ -20,6 +20,7 @@ interface MaskAnnotationDraftPayload {
   label_class_id: string;
   geometry_kind: "polygon" | "rotated_box";
   points: Array<{ x: number; y: number }>;
+  status?: "draft";
 }
 
 export interface ExtendedAnnotationSavePayload extends AnnotationSavePayload {
@@ -260,6 +261,9 @@ export function toAnnotationSavePayload(
       label_class_id: annotation.label_class_id,
       geometry_kind: annotation.geometry_kind as "polygon" | "rotated_box",
       points: annotation.points.map((point) => ({ ...point })),
+      ...(annotation.verification_status
+        ? { status: annotation.verification_status }
+        : {}),
     }));
   }
   if (state.document.deletedMaskAnnotationIds.length > 0) {

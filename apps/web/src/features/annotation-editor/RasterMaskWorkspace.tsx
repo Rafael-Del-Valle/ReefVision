@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   getAnnotationSession,
@@ -17,10 +17,16 @@ import {
 } from "./SkeletonOverlayLayer";
 import {
   editRasterMask,
+  duplicateRasterMask,
   rasterMaskContentUrl,
   reclassifyRasterMask,
   type RasterEditMode,
 } from "./rasterMaskApi";
+import {
+  copyAnnotations,
+  readInternalAnnotationClipboard,
+  writeInternalAnnotationClipboard,
+} from "./annotationClipboard";
 import { resolveRasterMaskSelection } from "./rasterMaskSelection";
 import {
   toEditorMaskAnnotation,
@@ -57,6 +63,7 @@ export function RasterMaskWorkspace({
   const [fillTolerance, setFillTolerance] = useState(24);
   const [skeletonOverlay, setSkeletonOverlay] =
     useState<SkeletonOverlayModel | null>(null);
+  const [clipboardMessage, setClipboardMessage] = useState<string | null>(null);
 
   const sessionQuery = useQuery({
     queryKey: ["annotation-session", imageId],
@@ -169,6 +176,95 @@ export function RasterMaskWorkspace({
       });
     },
   });
+
+  const duplicateMutation = useMutation({
+    mutationFn: (maskId: string) => {
+      if (!session) throw new Error("The raster mask session is not loaded");
+      return duplicateRasterMask(imageId, maskId, {
+        base_revision: session.image.annotation_revision,
+      });
+    },
+    onSuccess: async (response) => {
+      await sessionQuery.refetch();
+      setSelectedMaskId(response.mask_annotation.id);
+      setCreateAnotherMaskRequested(false);
+      setClipboardMessage(
+        "Duplicated the raster pixels as a new unverified mask.",
+      );
+      await queryClient.invalidateQueries({
+        queryKey: ["project-images", project.id],
+      });
+    },
+  });
+
+  const copySelectedRaster = useCallback(() => {
+    if (!session || !selectedMask) {
+      setClipboardMessage("Select a raster mask before copying.");
+      return;
+    }
+    const clipboard = copyAnnotations(
+      {
+        annotation_status: session.image.annotation_status,
+        annotations: [],
+        maskAnnotations: [toEditorMaskAnnotation(selectedMask)],
+        deletedMaskAnnotationIds: [],
+      },
+      [],
+      [selectedMask.id],
+      {
+        id: session.image.id,
+        width: session.image.width_px,
+        height: session.image.height_px,
+      },
+    );
+    writeInternalAnnotationClipboard(clipboard);
+    setClipboardMessage(
+      "Copied 1 raster mask to ReefVision's internal clipboard.",
+    );
+  }, [selectedMask, session]);
+
+  const pasteRaster = useCallback(() => {
+    const clipboard = readInternalAnnotationClipboard();
+    if (!session || !clipboard || clipboard.rasterMaskIds.length !== 1) {
+      setClipboardMessage("Copy one raster mask before pasting.");
+      return;
+    }
+    if (clipboard.sourceImage.id !== session.image.id) {
+      setClipboardMessage(
+        "Raster masks can only be pasted on their source image; ReefVision will not remap pixels.",
+      );
+      return;
+    }
+    duplicateMutation.mutate(clipboard.rasterMaskIds[0]);
+  }, [duplicateMutation, session]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          Boolean(
+            target.closest("input, textarea, select, [contenteditable='true']"),
+          ))
+      )
+        return;
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const key = event.key.toLowerCase();
+      if (key === "c") {
+        event.preventDefault();
+        copySelectedRaster();
+      } else if (key === "v") {
+        event.preventDefault();
+        pasteRaster();
+      } else if (key === "d" && selectedMask) {
+        event.preventDefault();
+        duplicateMutation.mutate(selectedMask.id);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [copySelectedRaster, duplicateMutation, pasteRaster, selectedMask]);
 
   if (sessionQuery.isPending || !session) {
     return (
@@ -310,6 +406,10 @@ export function RasterMaskWorkspace({
             {classMutation.error && (
               <p className="form-error">{classMutation.error.message}</p>
             )}
+            {duplicateMutation.error && (
+              <p className="form-error">{duplicateMutation.error.message}</p>
+            )}
+            {clipboardMessage && <p role="status">{clipboardMessage}</p>}
           </section>
 
           <section className="annotation-sidebar-section">
@@ -370,6 +470,34 @@ export function RasterMaskWorkspace({
                 }}
               >
                 Create another mask
+              </button>
+            </div>
+            <div className="annotation-editor-inline-actions">
+              <button
+                type="button"
+                className="secondary"
+                disabled={!selectedMask || duplicateMutation.isPending}
+                onClick={copySelectedRaster}
+              >
+                Copy
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={!selectedMask || duplicateMutation.isPending}
+                onClick={() =>
+                  selectedMask && duplicateMutation.mutate(selectedMask.id)
+                }
+              >
+                Duplicate
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={duplicateMutation.isPending}
+                onClick={pasteRaster}
+              >
+                Paste
               </button>
             </div>
             <div className="annotation-selection-list">

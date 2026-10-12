@@ -256,6 +256,29 @@ it("fills in source coordinates as a normal polygon with selection, undo, redo, 
   expect(screen.getByText("0 masks")).toBeInTheDocument();
 });
 
+it("duplicates polygons as unverified drafts and keeps the edit reversible", async () => {
+  await mount();
+  fireEvent.click(screen.getByTestId("activate-polygon-fill-tool"));
+  seed();
+  await screen.findByText("1 masks");
+
+  fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+  expect(screen.getByText("2 masks")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+  expect(screen.getByText("1 masks")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+  expect(screen.getByText("2 masks")).toBeInTheDocument();
+
+  vi.mocked(saveAnnotations).mockRejectedValue(new Error("Save unavailable"));
+  fireEvent.click(screen.getByRole("button", { name: "Save now" }));
+  await screen.findByText("Save unavailable");
+  expect(vi.mocked(saveAnnotations).mock.calls[0][1]).toMatchObject({
+    mask_annotations: expect.arrayContaining([
+      expect.objectContaining({ status: "draft" }),
+    ]),
+  });
+});
+
 it("does not expose a separate rotated-box annotation tool", async () => {
   await mount();
   expect(

@@ -51,6 +51,7 @@ export interface EditorMaskAnnotation {
   y_max: number | null;
   area_pixels: number | null;
   source_type: string;
+  verification_status?: "draft";
   persisted: boolean;
   revision?: number;
 }
@@ -119,6 +120,9 @@ export function toEditorMaskAnnotation(
     y_max: annotation.y_max,
     area_pixels: annotation.area_pixels,
     source_type: annotation.source_type,
+    ...(annotation.status === "draft"
+      ? { verification_status: "draft" as const }
+      : {}),
     persisted: true,
     revision: annotation.revision,
   };

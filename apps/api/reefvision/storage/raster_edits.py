@@ -547,3 +547,36 @@ def write_raster_mask_revision(
         area_pixels,
         (float(left), float(top), float(right), float(bottom)),
     )
+
+
+def duplicate_raster_mask_revision(
+    settings: Settings,
+    *,
+    project_storage_root: str,
+    image_id: str,
+    source_relative_path: str,
+    mask_annotation_id: str,
+    expected_width: int,
+    expected_height: int,
+) -> tuple[str, Path]:
+    """Copy validated mask pixels into an independent immutable revision."""
+
+    mask = _load_source_mask(
+        settings,
+        source_relative_path=source_relative_path,
+        expected_size=(expected_width, expected_height),
+    )
+    binary = mask.point(lambda value: 255 if value > 0 else 0)
+    if binary.getbbox() is None:
+        raise ValidationError("Raster mask copies cannot be empty")
+    project_root = resolve_managed_project_path(settings, project_storage_root)
+    destination_directory = project_root / "masks" / image_id
+    destination_directory.mkdir(parents=True, exist_ok=True)
+    destination = destination_directory / f"{mask_annotation_id}-r1.png"
+    temporary = destination_directory / f".rv-{uuid4().hex[:8]}.tmp"
+    try:
+        binary.save(temporary, format="PNG", optimize=True)
+        _publish_revision_exclusively(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return destination.relative_to(settings.resolved_data_dir).as_posix(), destination

@@ -423,6 +423,47 @@ describe("AnnotationEditor", () => {
     );
   });
 
+  it("copies, pastes, duplicates, and reverses boxes through one document history", async () => {
+    mockBasicEditorRequests();
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    stubCanvasRect();
+
+    fireEvent.pointerDown(screen.getByTestId("annotation-annotation-1"), {
+      button: 0,
+    });
+    fireEvent.keyDown(document.body, { key: "c", ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: "v", ctrlKey: true });
+
+    const objectList = screen.getByRole("listbox", { name: "Objects" });
+    expect(within(objectList).getAllByRole("option")).toHaveLength(2);
+    expect(screen.getByText(/Pasted 1 annotation/)).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "d", ctrlKey: true });
+    expect(within(objectList).getAllByRole("option")).toHaveLength(3);
+
+    fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
+    expect(within(objectList).getAllByRole("option")).toHaveLength(2);
+    fireEvent.keyDown(document.body, { key: "y", ctrlKey: true });
+    expect(within(objectList).getAllByRole("option")).toHaveLength(3);
+  });
+
+  it("does not run clipboard shortcuts while typing", async () => {
+    mockBasicEditorRequests();
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    const filter = screen.getByPlaceholderText("Filter by class");
+    fireEvent.keyDown(filter, { key: "d", ctrlKey: true });
+    expect(
+      within(screen.getByRole("listbox", { name: "Objects" })).getAllByRole(
+        "option",
+      ),
+    ).toHaveLength(1);
+  });
+
   it("shows and deletes polygon masks from Main Select", async () => {
     const sessionWithMask = {
       ...session,

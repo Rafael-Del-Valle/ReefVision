@@ -278,3 +278,64 @@ def test_raster_mask_class_can_be_reassigned_without_repainting(
     saved_mask = reloaded.json()["mask_annotations"][0]
     assert saved_mask["label_class_id"] == second_class_id
     assert saved_mask["revision"] == 2
+
+
+def test_raster_mask_duplicate_copies_immutable_pixels_without_verification(
+    client: TestClient,
+    test_settings: Settings,
+) -> None:
+    project = create_project(client, "Raster clipboard duplicate")
+    report = import_image(
+        client,
+        project["id"],
+        filename="copy.png",
+        relative_path="raster/copy.png",
+        color=(25, 80, 135),
+    )
+    image_id = report["successful"][0]["image_id"]
+    class_id = project["label_classes"][0]["id"]
+    created = _brush(
+        client,
+        image_id=image_id,
+        class_id=class_id,
+        base_revision=0,
+        x=20,
+        y=20,
+    )
+    source = cast(dict[str, object], created["mask_annotation"])
+
+    response = client.post(
+        f"/api/v1/images/{image_id}/raster-mask-annotations/{source['id']}/duplicate",
+        json={"base_revision": 1},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    duplicate = payload["mask_annotation"]
+    assert payload["image"]["annotation_revision"] == 2
+    assert duplicate["id"] != source["id"]
+    assert duplicate["label_class_id"] == class_id
+    assert duplicate["status"] == "draft"
+    assert duplicate["source_type"] == "human_copy"
+    assert duplicate["provenance_json"] is None
+    assert duplicate["revision"] == 1
+    assert duplicate["mask_path"] != source["mask_path"]
+    source_path = test_settings.resolved_data_dir / Path(str(source["mask_path"]))
+    duplicate_path = test_settings.resolved_data_dir / Path(str(duplicate["mask_path"]))
+    assert duplicate_path.read_bytes() == source_path.read_bytes()
+    reloaded = client.get(f"/api/v1/images/{image_id}/annotations")
+    assert reloaded.status_code == 200, reloaded.text
+    saved_copy = next(
+        item for item in reloaded.json()["mask_annotations"] if item["id"] == duplicate["id"]
+    )
+    assert saved_copy["status"] == "draft"
+    assert saved_copy["provenance_json"] is None
+
+    update_image(
+        client,
+        image_id,
+        group_key="fragment-copy",
+        annotation_status="reviewed",
+    )
+    version = create_version(client, project["id"], name="Verified copy guard")
+    assert version["mask_annotation_count"] == 1

@@ -22,6 +22,12 @@ import {
   toAnnotationSavePayload,
   type ExtendedAnnotationSavePayload,
 } from "./annotationEditorReducer";
+import {
+  copyAnnotations,
+  pasteAnnotations,
+  readInternalAnnotationClipboard,
+  writeInternalAnnotationClipboard,
+} from "./annotationClipboard";
 import { CenterlineMeasurementLayer } from "./CenterlineMeasurementLayer";
 import {
   addMaskAnnotation,
@@ -79,6 +85,7 @@ export function MaskAnnotationWorkspace({
   const [smartCloseStrength, setSmartCloseStrength] = useState(0);
   const [fillPending, setFillPending] = useState(false);
   const [fillError, setFillError] = useState<string | null>(null);
+  const [clipboardMessage, setClipboardMessage] = useState<string | null>(null);
   const fillRequestRef = useRef<AbortController | null>(null);
   const [state, dispatch] = useReducer(
     annotationEditorReducer,
@@ -360,6 +367,75 @@ export function MaskAnnotationWorkspace({
     [commitDocument],
   );
 
+  const copySelection = useCallback(() => {
+    const snapshot = stateRef.current;
+    const image = sessionQuery.data?.image;
+    if (!image || snapshot.selectedMaskIds.length === 0) {
+      setClipboardMessage("Select a polygon before copying.");
+      return null;
+    }
+    const clipboard = copyAnnotations(
+      snapshot.document,
+      [],
+      snapshot.selectedMaskIds,
+      { id: image.id, width: image.width_px, height: image.height_px },
+    );
+    writeInternalAnnotationClipboard(clipboard);
+    const count = clipboard.items.length;
+    setClipboardMessage(
+      clipboard.skippedRasterCount
+        ? `Copied ${count} polygon${count === 1 ? "" : "s"}. Raster masks must be duplicated in the brush workspace.`
+        : `Copied ${count} polygon${count === 1 ? "" : "s"} to ReefVision's internal clipboard.`,
+    );
+    return clipboard;
+  }, [sessionQuery.data?.image]);
+
+  const pasteClipboard = useCallback(
+    (clipboard = readInternalAnnotationClipboard()) => {
+      const image = sessionQuery.data?.image;
+      if (!image || !clipboard) {
+        setClipboardMessage("Copy an annotation before pasting.");
+        return;
+      }
+      const result = pasteAnnotations(
+        clipboard,
+        { id: image.id, width: image.width_px, height: image.height_px },
+        () => globalThis.crypto.randomUUID(),
+      );
+      if (!result.ok) {
+        setClipboardMessage(result.reason);
+        return;
+      }
+      if (result.annotations.length > 0) {
+        setClipboardMessage(
+          "Box annotations can only be pasted in the main Select workspace.",
+        );
+        return;
+      }
+      const snapshot = stateRef.current;
+      commitDocument(
+        {
+          ...snapshot.document,
+          maskAnnotations: [
+            ...snapshot.document.maskAnnotations,
+            ...result.maskAnnotations,
+          ],
+        },
+        result.maskAnnotations.map((mask) => mask.id),
+      );
+      writeInternalAnnotationClipboard(result.nextClipboard);
+      setClipboardMessage(
+        `Pasted ${result.maskAnnotations.length} unverified polygon${result.maskAnnotations.length === 1 ? "" : "s"} in source-image coordinates.`,
+      );
+    },
+    [commitDocument, sessionQuery.data?.image],
+  );
+
+  const duplicateSelection = useCallback(() => {
+    const clipboard = copySelection();
+    if (clipboard?.items.length) pasteClipboard(clipboard);
+  }, [copySelection, pasteClipboard]);
+
   useEffect(() => {
     const handleDeleteShortcut = (event: globalThis.KeyboardEvent) => {
       const target = event.target;
@@ -377,6 +453,46 @@ export function MaskAnnotationWorkspace({
       }
 
       const snapshot = stateRef.current;
+      const command = event.ctrlKey || event.metaKey;
+      const key = event.key.toLowerCase();
+      if (command && key === "z") {
+        event.preventDefault();
+        event.stopPropagation();
+        dispatch({ type: event.shiftKey ? "redo" : "undo" });
+        return;
+      }
+      if (command && key === "y") {
+        event.preventDefault();
+        event.stopPropagation();
+        dispatch({ type: "redo" });
+        return;
+      }
+      if (command && key === "c") {
+        event.preventDefault();
+        event.stopPropagation();
+        copySelection();
+        return;
+      }
+      if (command && key === "v") {
+        event.preventDefault();
+        event.stopPropagation();
+        pasteClipboard();
+        return;
+      }
+      if (command && key === "d") {
+        event.preventDefault();
+        event.stopPropagation();
+        duplicateSelection();
+        return;
+      }
+      if (event.key === "Escape" && fillRequestRef.current) {
+        event.preventDefault();
+        fillRequestRef.current.abort();
+        fillRequestRef.current = null;
+        setFillPending(false);
+        setClipboardMessage("Canceled the in-progress mask operation.");
+        return;
+      }
       if (
         snapshot.tool !== "select" ||
         snapshot.selectedMaskIds.length === 0 ||
@@ -393,7 +509,7 @@ export function MaskAnnotationWorkspace({
     window.addEventListener("keydown", handleDeleteShortcut, true);
     return () =>
       window.removeEventListener("keydown", handleDeleteShortcut, true);
-  }, [deleteMasks]);
+  }, [copySelection, deleteMasks, duplicateSelection, pasteClipboard]);
 
   function applyClass(labelClassId: string) {
     if (state.selectedMaskIds.length > 0) {
@@ -756,12 +872,37 @@ export function MaskAnnotationWorkspace({
                 >
                   Redo
                 </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={selectedMasks.length === 0}
+                  onClick={copySelection}
+                >
+                  Copy
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={selectedMasks.length === 0}
+                  onClick={duplicateSelection}
+                >
+                  Duplicate
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={!readInternalAnnotationClipboard()?.items.length}
+                  onClick={() => pasteClipboard()}
+                >
+                  Paste
+                </button>
               </div>
             </div>
             <p className="annotation-helper">
               Polygon: add vertices and close the outline. Select an existing
               mask to move vertices, reassign its class, or delete it.
             </p>
+            {clipboardMessage && <p role="status">{clipboardMessage}</p>}
             <button
               type="button"
               className="danger-ghost"

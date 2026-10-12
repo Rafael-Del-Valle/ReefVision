@@ -83,6 +83,7 @@ class MaskAnnotationDraft(BaseModel):
     label_class_id: str = Field(min_length=1, max_length=36)
     geometry_kind: Literal["polygon", "rotated_box"] = "polygon"
     points: list[PolygonPoint] = Field(min_length=3, max_length=100_000)
+    status: Literal["draft"] | None = None
 
     @field_validator("points")
     @classmethod
