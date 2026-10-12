@@ -514,7 +514,7 @@ describe("Gallery", () => {
     ).toBeInTheDocument();
   });
 
-  it("displays image-load progress on the first entry and resets it when navigating", async () => {
+  it("resets the first-image loading state during navigation", async () => {
     const secondImage: ProjectImage = {
       ...image,
       id: "image-2",
@@ -533,9 +533,13 @@ describe("Gallery", () => {
     const first = await screen.findByAltText(
       "Focused project image: swiftia-01.png",
     );
-    expect(screen.getByText("Loading full-resolution image...")).toBeInTheDocument();
+    expect(
+      screen.getByText("Loading full-resolution image..."),
+    ).toBeInTheDocument();
     fireEvent.load(first);
-    expect(screen.queryByText("Loading full-resolution image...")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Loading full-resolution image..."),
+    ).not.toBeInTheDocument();
 
     const viewer = screen.getByRole("region", { name: "Image workbench" });
     viewer.focus();
@@ -543,12 +547,16 @@ describe("Gallery", () => {
     const next = await screen.findByAltText(
       "Focused project image: swiftia-02.png",
     );
-    expect(screen.getByText("Loading full-resolution image...")).toBeInTheDocument();
+    expect(
+      screen.getByText("Loading full-resolution image..."),
+    ).toBeInTheDocument();
     fireEvent.load(next);
-    expect(screen.queryByText("Loading full-resolution image...")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Loading full-resolution image..."),
+    ).not.toBeInTheDocument();
   });
 
-  it("falls back to an available thumbnail without treating it as the full source", async () => {
+  it("labels the thumbnail when the full-resolution source fails", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({
         items: [{ ...image, thumbnail_path: "managed/thumbnail.png" }],
@@ -563,11 +571,17 @@ describe("Gallery", () => {
       "Focused project image: swiftia-01.png",
     );
     fireEvent.error(original);
-    expect(screen.getByText("Loading thumbnail preview...")).toBeInTheDocument();
-    const fallback = screen.getByAltText("Focused project image: swiftia-01.png");
+    expect(
+      screen.getByText("Loading thumbnail preview..."),
+    ).toBeInTheDocument();
+    const fallback = screen.getByAltText(
+      "Focused project image: swiftia-01.png",
+    );
     expect(fallback.getAttribute("src")).toMatch(/thumbnail/);
     fireEvent.load(fallback);
-    expect(screen.getByText(/Full-resolution image unavailable/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Full-resolution image unavailable/),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
