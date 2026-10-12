@@ -341,7 +341,6 @@ def test_raster_mask_duplicate_copies_immutable_pixels_without_verification(
     assert version["mask_annotation_count"] == 1
 
 
-
 def test_raster_duplicate_marks_reviewed_image_in_progress(
     client: TestClient,
 ) -> None:
