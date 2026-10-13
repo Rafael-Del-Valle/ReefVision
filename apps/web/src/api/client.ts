@@ -370,7 +370,7 @@ export interface AnnotationSaveResponse {
 export interface ModelRegistration {
   id: string;
   project_id: string;
-  purpose: "detector" | "assist";
+  purpose: "detector" | "assist" | "segmenter";
   display_name: string;
   source_filename: string;
   managed_path: string;
