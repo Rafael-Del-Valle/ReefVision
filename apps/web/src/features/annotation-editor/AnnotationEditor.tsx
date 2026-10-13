@@ -348,9 +348,12 @@ export function AnnotationEditor({
     useState<Record<string, ReviewedPredictionGeometry>>({});
   const [objectFilter, setObjectFilter] = useState("");
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-  const [fullImageLoaded, setFullImageLoaded] = useState(false);
-  const [fullImageFailed, setFullImageFailed] = useState(false);
   const [fullImageRetry, setFullImageRetry] = useState(0);
+  const [imagePreload, setImagePreload] = useState<{
+    imageId: string;
+    retry: number;
+    phase: "loading" | "loaded" | "failed";
+  } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef(state);
@@ -561,30 +564,26 @@ export function AnnotationEditor({
   ]);
 
   useEffect(() => {
-    if (!sessionQuery.data) {
+    const imageId = sessionQuery.data?.image.id;
+    if (!imageId) {
       return;
     }
     const preloader = new window.Image();
     let cancelled = false;
-    setFullImageLoaded(false);
-    setFullImageFailed(false);
+    const retry = fullImageRetry;
+    setImagePreload({ imageId, retry, phase: "loading" });
     preloader.decoding = "async";
     preloader.onload = () => {
       if (!cancelled) {
-        setFullImageLoaded(true);
+        setImagePreload({ imageId, retry, phase: "loaded" });
       }
     };
     preloader.onerror = () => {
       if (!cancelled) {
-        setFullImageFailed(true);
+        setImagePreload({ imageId, retry, phase: "failed" });
       }
     };
-    preloader.src = annotationImageSource(
-      sessionQuery.data.image.id,
-      null,
-      true,
-      fullImageRetry,
-    );
+    preloader.src = annotationImageSource(imageId, null, true, retry);
     return () => {
       cancelled = true;
       preloader.onload = null;
@@ -2427,6 +2426,11 @@ export function AnnotationEditor({
       height: containerSize.height || 780,
     });
   const image = sessionQuery.data.image;
+  const preloadIsCurrent =
+    imagePreload?.imageId === image.id && imagePreload.retry === fullImageRetry;
+  const fullImageLoaded = preloadIsCurrent && imagePreload.phase === "loaded";
+  const fullImageFailed = preloadIsCurrent && imagePreload.phase === "failed";
+  const fullImageLoading = !preloadIsCurrent || imagePreload.phase === "loading";
   const currentLabelClasses = labelClasses;
   const strokeScale = 1 / resolvedView.scale;
   const handleRadius = Math.max(4 * strokeScale, 2);
@@ -3753,6 +3757,11 @@ export function AnnotationEditor({
               acceptance.
             </p>
           )}
+          {fullImageLoading && (
+            <p role="status" className="rv-media-load-status">
+              Loading full-resolution image...
+            </p>
+          )}
           {fullImageFailed && (
             <div className="rv-media-load-error" role="alert">
               <strong>Full-resolution image could not load</strong>
@@ -3924,6 +3933,7 @@ export function AnnotationEditor({
                 transform={`translate(${resolvedView.offsetX} ${resolvedView.offsetY}) scale(${resolvedView.scale})`}
               >
                 <image
+                  key={`${image.id}:${fullImageRetry}:${fullImageLoaded ? "full" : "preview"}`}
                   href={imageHref}
                   x={0}
                   y={0}
