@@ -36,6 +36,8 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
   const [datasetId, setDatasetId] = useState("");
   const [candidateId, setCandidateId] = useState("");
   const [split, setSplit] = useState<HoldoutSplit>("validation");
+  const [minimumImages, setMinimumImages] = useState(2);
+  const [minimumMasks, setMinimumMasks] = useState(2);
   const [minimumMap50, setMinimumMap50] = useState(0.5);
   const [minimumGain, setMinimumGain] = useState(0);
   const [evaluationId, setEvaluationId] = useState("");
@@ -102,8 +104,8 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
         candidate_model_id: candidateId,
         incumbent_model_id: activeId,
         split,
-        minimum_images: 2,
-        minimum_masks: 2,
+        minimum_images: minimumImages,
+        minimum_masks: minimumMasks,
         minimum_mask_map50: minimumMap50,
         minimum_gain: minimumGain,
       }),
@@ -179,6 +181,10 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
   const approvalReady =
     approvedBy.trim().length >= 2 && reason.trim().length >= 10;
   const validThresholds =
+    Number.isInteger(minimumImages) &&
+    minimumImages >= 2 &&
+    Number.isInteger(minimumMasks) &&
+    minimumMasks >= 2 &&
     Number.isFinite(minimumMap50) &&
     minimumMap50 >= 0 &&
     minimumMap50 <= 1 &&
@@ -248,6 +254,30 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
             <option value="test">Test</option>
           </select>
         </label>
+        <label>
+          Minimum held-out images
+          <input
+            type="number"
+            min={2}
+            step={1}
+            value={minimumImages}
+            onChange={(event) => setMinimumImages(event.target.valueAsNumber)}
+          />
+        </label>
+        <label>
+          Minimum verified instance masks
+          <input
+            type="number"
+            min={2}
+            step={1}
+            value={minimumMasks}
+            onChange={(event) => setMinimumMasks(event.target.valueAsNumber)}
+          />
+        </label>
+        <p className="system-subtle">
+          These are minimum dataset checks, not scientific sign-off. A
+          representative independent holdout and review remain required.
+        </p>
         <label>
           Minimum instance mask AP50
           <input
