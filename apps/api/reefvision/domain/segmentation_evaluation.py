@@ -110,7 +110,13 @@ def instance_mask_metrics(
     AP50 uses all confidence scores and mask IoU>=0.5 by default. This is NOT
     COCO mask mAP50:95 or an evaluation/promotion eligibility determination.
     """
-    if image_count < 1 or not 0 <= operating_confidence <= 1 or not 0 < iou_threshold <= 1:
+    if (
+        image_count < 1
+        or not isfinite(operating_confidence)
+        or not isfinite(iou_threshold)
+        or not 0 <= operating_confidence <= 1
+        or not 0 < iou_threshold <= 1
+    ):
         raise ValueError("Invalid held-out image count or metric threshold")
     dims: dict[str, tuple[int, int]] = {}
     for mask in [*truth, *predictions]:
