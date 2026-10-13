@@ -24,9 +24,7 @@ def queue_segmentation_evaluation(
     request: Request,
     session: DbSession,
 ) -> JobResponse:
-    record = SegmentationEvaluationQueueService(
-        session, request.app.state.settings
-    ).queue(
+    record = SegmentationEvaluationQueueService(session, request.app.state.settings).queue(
         project_id,
         payload.dataset_version_id,
         split=payload.split,
@@ -48,7 +46,7 @@ def finalize_segmentation_evaluation(
     project_id: str, evaluation_id: str, request: Request, session: DbSession
 ) -> JobResponse:
     """Finalize a waiting evaluation after its queued child inference jobs finish."""
-    record = SegmentationEvaluationQueueService(
-        session, request.app.state.settings
-    ).advance(project_id, evaluation_id)
+    record = SegmentationEvaluationQueueService(session, request.app.state.settings).advance(
+        project_id, evaluation_id
+    )
     return JobResponse.model_validate(record)

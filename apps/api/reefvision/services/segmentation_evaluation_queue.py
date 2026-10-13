@@ -171,11 +171,7 @@ class SegmentationEvaluationQueueService:
             raise ConflictError("Holdout child inference job no longer matches the queued split")
         completed = sum(child.status == "succeeded" for child in children if child is not None)
         record.progress_current = completed
-        if any(
-            child.status in {"failed", "cancelled"}
-            for child in children
-            if child is not None
-        ):
+        if any(child.status in {"failed", "cancelled"} for child in children if child is not None):
             record.status = "failed"
             record.error_message = "At least one isolated holdout inference job failed"
             record.result_json = {

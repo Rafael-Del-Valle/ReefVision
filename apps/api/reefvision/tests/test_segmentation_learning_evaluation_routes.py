@@ -30,6 +30,7 @@ def test_segmentation_api_never_exposes_implicit_deployment() -> None:
     assert "/projects/{project_id}/learning/segmentation/evaluations/{evaluation_id}" in paths
     assert not any("promote" in path or "rollback" in path for path in paths)
 
+
 def test_waiting_segmentation_evaluation_has_no_premature_metrics() -> None:
     from reefvision.api.routes.segmentation_learning_evaluation import _response
     from reefvision.db.models import Job

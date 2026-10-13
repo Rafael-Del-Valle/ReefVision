@@ -17,20 +17,14 @@ from reefvision.schemas.segmentation_evaluation_queue import SegmentationEvaluat
 from reefvision.services.segmentation_evaluation_queue import SegmentationEvaluationQueueService
 
 
-def setup_service(monkeypatch) -> tuple[
-    SegmentationEvaluationQueueService, Mock, dict[str, Job]
-]:
+def setup_service(monkeypatch) -> tuple[SegmentationEvaluationQueueService, Mock, dict[str, Job]]:
     from reefvision.services import segmentation_evaluation_queue as module
 
     session = Mock()
     jobs: dict[str, Job] = {}
     version = SimpleNamespace(id="dataset-1", manifest_sha256="a" * 64)
-    session.get.side_effect = lambda cls, key: (
-        version if cls is DatasetVersion else jobs.get(key)
-    )
-    holdout = SegmentationHoldout(
-        "validation", ("img-a", "img-b"), ("group-a", "group-b"), ()
-    )
+    session.get.side_effect = lambda cls, key: version if cls is DatasetVersion else jobs.get(key)
+    holdout = SegmentationHoldout("validation", ("img-a", "img-b"), ("group-a", "group-b"), ())
     monkeypatch.setattr(
         module.SegmentationHoldoutService,
         "prepare",
@@ -40,9 +34,7 @@ def setup_service(monkeypatch) -> tuple[
     monkeypatch.setattr(
         service.scoring,
         "_model",
-        lambda _project, model_id, *_args, **_kw: SimpleNamespace(
-            id=model_id, sha256="b" * 64
-        ),
+        lambda _project, model_id, *_args, **_kw: SimpleNamespace(id=model_id, sha256="b" * 64),
     )
     serial = 0
 
