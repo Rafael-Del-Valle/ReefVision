@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   getDatasetVersions,
@@ -9,6 +9,7 @@ import {
   type Project,
 } from "../../api/client";
 import {
+  listSegmentationEvaluations,
   promoteSegmentationCandidate,
   queueSegmentationEvaluation,
   rollbackSegmentationDeployment,
@@ -44,6 +45,10 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
   const versions = useQuery({
     queryKey: ["dataset_versions", project.id, "segmentation-evaluation"],
     queryFn: ({ signal }) => getDatasetVersions(project.id, signal),
+  });
+  const history = useQuery({
+    queryKey: ["segmentation-evaluation-history", project.id],
+    queryFn: ({ signal }) => listSegmentationEvaluations(project.id, signal),
   });
   const models = useQuery({
     queryKey: ["models", project.id, "segmentation-evaluation"],
@@ -90,6 +95,9 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
     onSuccess: (record) => {
       setEvaluationId(record.id);
       setAuditMessage("");
+      void queryClient.invalidateQueries({
+        queryKey: ["segmentation-evaluation-history", project.id],
+      });
     },
   });
   const promote = useMutation({
@@ -126,10 +134,24 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
   });
 
   const record = evaluation.data;
+
+  useEffect(() => {
+    setEvaluationId("");
+    setAuditMessage("");
+  }, [project.id]);
+
+  useEffect(() => {
+    if (record?.status === "completed" || record?.status === "failed") {
+      void queryClient.invalidateQueries({
+        queryKey: ["segmentation-evaluation-history", project.id],
+      });
+    }
+  }, [project.id, queryClient, record?.status]);
   const candidateMetrics = metricsFrom(record, "candidate_metrics");
   const incumbentMetrics = metricsFrom(record, "incumbent_metrics");
   const eligible =
-    record?.status === "completed" &&
+    record?.project_id === project.id &&
+    record.status === "completed" &&
     record.result_json?.promotion_eligible === true;
   const comparedAgainstCurrent =
     (record?.request_json.incumbent_model_id ?? null) === activeId;
@@ -244,6 +266,26 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
         {versions.error && <p role="alert">{versions.error.message}</p>}
         {models.error && <p role="alert">{models.error.message}</p>}
       </div>
+
+      <label>
+        Previous segmentation evaluations
+        <select
+          aria-label="Segmentation evaluation history"
+          value={evaluationId}
+          onChange={(event) => setEvaluationId(event.target.value)}
+        >
+          <option value="">Choose an evaluation to inspect</option>
+          {history.data?.map((job) => (
+            <option key={job.id} value={job.id}>
+              {job.status}: {String(job.request_json.candidate_model_id ?? job.id)}
+            </option>
+          ))}
+          {evaluationId && !history.data?.some((job) => job.id === evaluationId) && (
+            <option value={evaluationId}>Current evaluation: {evaluationId}</option>
+          )}
+        </select>
+      </label>
+      {history.error && <p role="alert">{history.error.message}</p>}
 
       {evaluationId && (
         <section aria-label="Held-out segmentation results">
