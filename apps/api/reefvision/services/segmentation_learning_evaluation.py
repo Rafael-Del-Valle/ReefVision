@@ -223,6 +223,13 @@ class SegmentationLearningEvaluationService:
         )
         version = self.session.get(DatasetVersion, dataset_version_id)
         assert version is not None
+        if existing_record is not None:
+            queued = existing_record.request_json
+            if (
+                queued.get("manifest_sha256") != version.manifest_sha256
+                or set(queued.get("heldout_image_ids") or []) != set(holdout.image_ids)
+            ):
+                raise ConflictError("Queued immutable segmentation holdout has changed")
         snapshot_items = list(
             self.session.scalars(
                 select(DatasetVersionItem).where(
