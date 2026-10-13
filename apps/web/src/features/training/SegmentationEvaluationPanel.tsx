@@ -395,8 +395,8 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
                 AP50:95 is not reported.
               </dd>
             </dl>
-            {candidateMetrics?.per_class &&
-              typeof candidateMetrics.per_class === "object" &&
+            {Boolean(candidateMetrics?.per_class) &&
+              typeof candidateMetrics?.per_class === "object" &&
               !Array.isArray(candidateMetrics.per_class) && (
                 <table>
                   <caption>Candidate per-class held-out mask support</caption>
