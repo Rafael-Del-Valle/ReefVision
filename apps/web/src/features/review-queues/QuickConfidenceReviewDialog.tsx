@@ -73,6 +73,7 @@ export function QuickConfidenceReviewDialog({
     "full" | "thumbnail" | "failed"
   >("full");
   const [previewRetry, setPreviewRetry] = useState(0);
+  const [previewLoaded, setPreviewLoaded] = useState(false);
   const [classOverrides, setClassOverrides] = useState<Record<string, string>>(
     {},
   );
@@ -82,6 +83,7 @@ export function QuickConfidenceReviewDialog({
     setClassOverrides({});
     setPreviewSource("full");
     setPreviewRetry(0);
+    setPreviewLoaded(false);
   }, [item.image_id]);
 
   useEffect(() => {
@@ -242,6 +244,7 @@ export function QuickConfidenceReviewDialog({
                     <button
                       type="button"
                       onClick={() => {
+                        setPreviewLoaded(false);
                         setPreviewRetry((attempt) => attempt + 1);
                         setPreviewSource("full");
                       }}
@@ -250,7 +253,11 @@ export function QuickConfidenceReviewDialog({
                     </button>
                   </div>
                 ) : (
-                  <img
+                  <>
+                    {!previewLoaded && (
+                      <p role="status">Loading image preview…</p>
+                    )}
+                    <img
                     key={`${item.image_id}-${previewSource}-${previewRetry}`}
                     src={
                       previewSource === "thumbnail"
@@ -260,16 +267,19 @@ export function QuickConfidenceReviewDialog({
                           }`
                     }
                     alt={image.original_filename}
-                    onError={() =>
+                    onLoad={() => setPreviewLoaded(true)}
+                    onError={() => {
+                      setPreviewLoaded(false);
                       setPreviewSource(
                         previewSource === "full" && image.thumbnail_path
                           ? "thumbnail"
                           : "failed",
-                      )
-                    }
+                      );
+                    }}
                   />
+                  </>
                 )}
-                {selectedProposal && (
+                {selectedProposal && previewLoaded && (
                   <svg
                     className="rv-quick-review-overlay"
                     viewBox={`0 0 ${image.width_px} ${image.height_px}`}
