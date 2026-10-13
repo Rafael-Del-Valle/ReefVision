@@ -10,6 +10,7 @@ import {
 } from "../../api/client";
 import { SegmentationEvaluationPanel } from "./SegmentationEvaluationPanel";
 import {
+  listSegmentationDeploymentAudit,
   listSegmentationEvaluations,
   promoteSegmentationCandidate,
   queueSegmentationEvaluation,
@@ -23,6 +24,7 @@ vi.mock("../../api/client", () => ({
 }));
 
 vi.mock("./segmentationEvaluationApi", () => ({
+  listSegmentationDeploymentAudit: vi.fn(),
   listSegmentationEvaluations: vi.fn(),
   queueSegmentationEvaluation: vi.fn(),
   promoteSegmentationCandidate: vi.fn(),
@@ -95,6 +97,7 @@ beforeEach(() => {
     },
   ] as unknown as Awaited<ReturnType<typeof getDatasetVersions>>);
   vi.mocked(listSegmentationEvaluations).mockResolvedValue([]);
+  vi.mocked(listSegmentationDeploymentAudit).mockResolvedValue([]);
   vi.mocked(getModels).mockResolvedValue([
     model("candidate"),
   ] as unknown as Awaited<ReturnType<typeof getModels>>);
@@ -123,6 +126,52 @@ beforeEach(() => {
 });
 
 describe("SegmentationEvaluationPanel", () => {
+  it("displays persisted read-only scientific deployment audit history", async () => {
+    vi.mocked(listSegmentationDeploymentAudit).mockResolvedValue([
+      {
+        id: "promotion-record-1",
+        project_id: project.id,
+        job_type: "segmentation_learning_deployment",
+        status: "succeeded",
+        request_json: {
+          task: "segment",
+          approved_by: "Scientist",
+          reason: "Passed held-out octocoral mask verification",
+        },
+        result_json: { active_model_id: "candidate" },
+      },
+      {
+        id: "rollback-record-1",
+        project_id: project.id,
+        job_type: "segmentation_learning_deployment_rollback",
+        status: "succeeded",
+        request_json: {
+          task: "segment",
+          approved_by: "Scientist",
+          reason: "Reverted following quality review",
+        },
+        result_json: { restored_model_id: null },
+      },
+    ] as unknown as Awaited<ReturnType<typeof listSegmentationDeploymentAudit>>);
+    renderPanel();
+    const history = await screen.findByRole("region", {
+      name: "Segmentation deployment audit history",
+    });
+    await waitFor(() => {
+      expect(history).toHaveTextContent("Passed held-out octocoral mask verification");
+      expect(history).toHaveTextContent("Reverted following quality review");
+    });
+    expect(history).toHaveTextContent("Promotion");
+    expect(history).toHaveTextContent("Rollback");
+    expect(history).toHaveTextContent("Scientist");
+    expect(listSegmentationDeploymentAudit).toHaveBeenCalledWith(
+      project.id,
+      expect.anything(),
+    );
+    expect(promoteSegmentationCandidate).not.toHaveBeenCalled();
+    expect(rollbackSegmentationDeployment).not.toHaveBeenCalled();
+  });
+
   it("loads prior project evaluation evidence without activating a model", async () => {
     vi.mocked(listSegmentationEvaluations).mockResolvedValue([
       completedEvaluation(true, null),
