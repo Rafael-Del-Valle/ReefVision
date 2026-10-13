@@ -69,7 +69,9 @@ export function QuickConfidenceReviewDialog({
   const [selectedProposalId, setSelectedProposalId] = useState<string | null>(
     null,
   );
-  const [previewSource, setPreviewSource] = useState<"full" | "thumbnail" | "failed">("full");
+  const [previewSource, setPreviewSource] = useState<
+    "full" | "thumbnail" | "failed"
+  >("full");
   const [previewRetry, setPreviewRetry] = useState(0);
   const [classOverrides, setClassOverrides] = useState<Record<string, string>>(
     {},
@@ -253,7 +255,9 @@ export function QuickConfidenceReviewDialog({
                     src={
                       previewSource === "thumbnail"
                         ? imageThumbnailUrl(item.image_id)
-                        : `${imageDisplayUrl(item.image_id)}${previewRetry ? `?review_retry=${previewRetry}` : ""}`
+                        : `${imageDisplayUrl(item.image_id)}${
+                            previewRetry ? `?review_retry=${previewRetry}` : ""
+                          }`
                     }
                     alt={image.original_filename}
                     onError={() =>
