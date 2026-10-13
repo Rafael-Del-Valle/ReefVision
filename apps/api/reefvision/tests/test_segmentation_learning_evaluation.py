@@ -163,3 +163,84 @@ def test_incumbent_model_and_job_cannot_be_supplied_separately() -> None:
             candidate_job_id="candidate-job",
             incumbent_model_id="incumbent",
         )
+
+
+@pytest.mark.parametrize("changed_checkpoint", [None, "candidate", "incumbent"])
+def test_queued_evaluation_preserves_both_checkpoint_identities(
+    monkeypatch: pytest.MonkeyPatch, changed_checkpoint: str | None
+) -> None:
+    from reefvision.services import segmentation_learning_evaluation as module
+
+    session = Mock()
+    version = SimpleNamespace(
+        id="v1", manifest_sha256="a" * 64, class_map_json=[{"id": "class-1"}]
+    )
+    session.get.side_effect = lambda cls, _key: version if cls is DatasetVersion else None
+    session.scalars.return_value = [SimpleNamespace(image_id="image-1")]
+    monkeypatch.setattr(
+        module.SegmentationHoldoutService,
+        "prepare",
+        lambda _self, *_args, **_kwargs: holdout(),
+    )
+    metrics = InstanceMaskMetrics(0.9, 1, 1, 0, 0, 1, {})
+    candidate = ScoredSegmentationHoldout(
+        "v1", "a" * 64, "test", "candidate-job", "candidate", "b" * 64, metrics
+    )
+    incumbent = ScoredSegmentationHoldout(
+        "v1", "a" * 64, "test", "incumbent-job", "incumbent", "c" * 64, metrics
+    )
+    service = SegmentationLearningEvaluationService(session, cast(Settings, Mock()))
+    monkeypatch.setattr(
+        service,
+        "_score_model",
+        lambda *_args, **_kwargs: candidate if _args[5] == "candidate" else incumbent,
+    )
+    request = {
+        "task": "segment",
+        "dataset_version_id": "v1",
+        "manifest_sha256": "a" * 64,
+        "split": "test",
+        "heldout_image_ids": ["image-1"],
+        "candidate_model_id": "candidate",
+        "candidate_job_id": "candidate-job",
+        "candidate_checksum": "b" * 64,
+        "incumbent_model_id": "incumbent",
+        "incumbent_job_id": "incumbent-job",
+        "incumbent_checksum": "c" * 64,
+        "minimum_images": 1,
+        "minimum_masks": 1,
+        "minimum_mask_map50": 0.5,
+        "minimum_gain": 0.0,
+    }
+    if changed_checkpoint is not None:
+        request[f"{changed_checkpoint}_checksum"] = "d" * 64
+    parent = Job(
+        project_id="p",
+        job_type="segmentation_learning_evaluation",
+        status="waiting",
+        request_json=request,
+        result_json={"promotion_eligible": False},
+    )
+    kwargs = {
+        "split": "test",
+        "candidate_model_id": "candidate",
+        "candidate_job_id": "candidate-job",
+        "incumbent_model_id": "incumbent",
+        "incumbent_job_id": "incumbent-job",
+        "existing_record": parent,
+    }
+
+    if changed_checkpoint is not None:
+        with pytest.raises(ConflictError, match="checkpoint identity"):
+            service.record_completed_evaluation("p", "v1", **kwargs)
+        assert parent.status == "waiting"
+        assert parent.result_json["promotion_eligible"] is False
+        session.commit.assert_not_called()
+        return
+
+    result = service.record_completed_evaluation("p", "v1", **kwargs)
+    assert result is parent
+    assert parent.status == "completed"
+    assert parent.request_json["candidate_checksum"] == "b" * 64
+    assert parent.request_json["incumbent_checksum"] == "c" * 64
+    session.commit.assert_called_once()
