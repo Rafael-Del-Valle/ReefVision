@@ -28,9 +28,6 @@ from reefvision.api.routes.health import router as health_router
 from reefvision.api.routes.images import router as images_router
 from reefvision.api.routes.jobs import router as jobs_router
 from reefvision.api.routes.learning_evaluation import router as learning_evaluation_router
-from reefvision.api.routes.segmentation_learning_evaluation import (
-    router as segmentation_learning_evaluation_router,
-)
 from reefvision.api.routes.mask_refinements import router as mask_refinements_router
 from reefvision.api.routes.measurements import router as measurements_router
 from reefvision.api.routes.model_catalog import router as model_catalog_router
@@ -49,6 +46,9 @@ from reefvision.api.routes.review_queues import router as review_queues_router
 from reefvision.api.routes.sam2_models import router as sam2_models_router
 from reefvision.api.routes.sam_image_proposals import router as sam_image_proposals_router
 from reefvision.api.routes.scale_label_ocr import router as scale_label_ocr_router
+from reefvision.api.routes.segmentation_learning_evaluation import (
+    router as segmentation_learning_evaluation_router,
+)
 from reefvision.api.routes.skeleton_records import router as skeleton_records_router
 from reefvision.api.routes.system import router as system_router
 from reefvision.api.routes.training import router as training_router
