@@ -172,10 +172,15 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
   }, [project.id, queryClient, record?.status]);
   const candidateMetrics = metricsFrom(record, "candidate_metrics");
   const incumbentMetrics = metricsFrom(record, "incumbent_metrics");
+  const evaluatedCandidateRegistered = registered.some(
+    (model) => model.id === record?.request_json.candidate_model_id,
+  );
   const eligible =
     record?.project_id === project.id &&
     record.status === "completed" &&
-    record.result_json?.promotion_eligible === true;
+    record.result_json?.promotion_eligible === true &&
+    evaluatedCandidateRegistered &&
+    !models.isFetching;
   const comparedAgainstCurrent =
     (record?.request_json.incumbent_model_id ?? null) === activeId;
   const approvalReady =
@@ -469,6 +474,14 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
               {eligible ? "Eligible, approval required" : "Not eligible"}
             </strong>
           </p>
+          {models.isSuccess &&
+            record?.result_json?.promotion_eligible === true &&
+            !evaluatedCandidateRegistered && (
+              <p role="alert">
+                The evaluated segmentation candidate is no longer registered
+                for this project. Promotion is blocked.
+              </p>
+            )}
           {Array.isArray(record?.result_json?.blockers) && (
             <ul>
               {record.result_json.blockers.map((blocker, index) => (
