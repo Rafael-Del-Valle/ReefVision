@@ -93,7 +93,7 @@ Use the guarded clean-install harness on that disposable machine:
 
 ```powershell
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\acceptance-windows-clean-install.ps1 `
-  -InstallerPath .\apps\web\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\msi\ReefVision_1.7.0_x64_en-US.msi `
+  -InstallerPath .\apps\web\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\msi\ReefVision_1.0.2_x64_en-US.msi `
   -AcceptanceRoot C:\reefvision-disposable-acceptance `
   -DisposableTest
 ```
