@@ -266,6 +266,18 @@ class SegmentationLearningEvaluationService:
             if incumbent_model_id is not None and incumbent_job_id is not None
             else None
         )
+        # Queue-time checkpoint identities are part of the immutable scientific
+        # evidence. A model registration changed during inference must not be
+        # silently reattributed to another checkpoint at final scoring.
+        if existing_record is not None:
+            queued = dict(existing_record.request_json or {})
+            if (
+                queued.get("candidate_checksum") != candidate.checkpoint_sha256
+                or queued.get("incumbent_checksum")
+                != (incumbent.checkpoint_sha256 if incumbent is not None else None)
+            ):
+                raise ConflictError("Queued segmentation checkpoint identity has changed")
+
         split_digest = f"{version.manifest_sha256}:{split}"
 
         def policy_score(result: ScoredSegmentationHoldout) -> SegmentationCandidateScore:
