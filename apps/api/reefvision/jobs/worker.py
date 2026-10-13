@@ -578,7 +578,9 @@ def process_next_waiting_segmentation_evaluation(
                         continue
                     ids.append(incumbent_id)
                 child_jobs = [session.get(Job, child_id) for child_id in ids]
-                statuses = [child.status if child is not None else "missing" for child in child_jobs]
+                statuses = [
+                    child.status if child is not None else "missing" for child in child_jobs
+                ]
                 if not (
                     any(status in {"failed", "cancelled", "missing"} for status in statuses)
                     or all(status == "succeeded" for status in statuses)
