@@ -2440,6 +2440,7 @@ export function AnnotationEditor({
     fullImageLoaded,
     fullImageRetry,
   );
+  const imageRenderKey = `${image.id}:${fullImageRetry}:${fullImageLoaded}`;
   const assistAcceptLabelClassId =
     (assistSourcePrediction
       ? (predictionClassOverrides[assistSourcePrediction.id] ??
@@ -3933,7 +3934,7 @@ export function AnnotationEditor({
                 transform={`translate(${resolvedView.offsetX} ${resolvedView.offsetY}) scale(${resolvedView.scale})`}
               >
                 <image
-                  key={`${image.id}:${fullImageRetry}:${fullImageLoaded ? "full" : "preview"}`}
+                  key={imageRenderKey}
                   href={imageHref}
                   x={0}
                   y={0}
