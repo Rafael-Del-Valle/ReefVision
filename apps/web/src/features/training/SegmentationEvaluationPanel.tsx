@@ -53,7 +53,8 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
   });
   const deploymentAudit = useQuery({
     queryKey: ["segmentation-deployment-audit", project.id],
-    queryFn: ({ signal }) => listSegmentationDeploymentAudit(project.id, signal),
+    queryFn: ({ signal }) =>
+      listSegmentationDeploymentAudit(project.id, signal),
   });
   const models = useQuery({
     queryKey: ["models", project.id, "segmentation-evaluation"],
@@ -434,11 +435,15 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
           Past model activations and rollbacks are read-only. Viewing these
           records never changes the active segmentation model.
         </p>
-        {deploymentAudit.isPending && <p role="status">Loading audit records…</p>}
+        {deploymentAudit.isPending && (
+          <p role="status">Loading audit records…</p>
+        )}
         {deploymentAudit.error && (
           <p role="alert">{deploymentAudit.error.message}</p>
         )}
-        {deploymentAudit.data?.length === 0 && <p>No deployment changes recorded.</p>}
+        {deploymentAudit.data?.length === 0 && (
+          <p>No deployment changes recorded.</p>
+        )}
         {deploymentAudit.data && deploymentAudit.data.length > 0 && (
           <ol>
             {deploymentAudit.data.slice(0, 10).map((entry) => {
@@ -454,8 +459,8 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
                 <li key={entry.id}>
                   <strong>{action}</strong> —{" "}
                   {String(modelId ?? "No active segmenter")} ·{" "}
-                  {String(entry.request_json.approved_by ?? "Unknown operator")} ·{" "}
-                  {String(entry.request_json.reason ?? "No reason recorded")}
+                  {String(entry.request_json.approved_by ?? "Unknown operator")}{" "}
+                  · {String(entry.request_json.reason ?? "No reason recorded")}
                 </li>
               );
             })}
