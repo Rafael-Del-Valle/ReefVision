@@ -516,6 +516,66 @@ describe("AnnotationEditor", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("navigates between images from quick review without discarding saved edits", async () => {
+    const firstSession: AnnotationSession = {
+      ...session,
+      next_image_id: "image-2",
+    };
+    const secondSession: AnnotationSession = {
+      ...session,
+      image: {
+        ...session.image,
+        id: "image-2",
+        original_filename: "swiftia-next.png",
+        annotation_revision: 0,
+        annotation_count: 0,
+      },
+      annotations: [],
+      counts_by_class: project.label_classes.map((label) => ({
+        label_class_id: label.id,
+        count: 0,
+      })),
+      previous_image_id: session.image.id,
+      next_image_id: null,
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/images/image-1/annotations")) {
+        return jsonResponse(firstSession);
+      }
+      if (url.endsWith("/images/image-2/annotations")) {
+        return jsonResponse(secondSession);
+      }
+      if (url.includes("/images/image-2/prediction-proposals")) {
+        return jsonResponse({ items: [], counts: { pending: 0 } });
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${url}`);
+    });
+    renderEditor();
+    await screen.findByRole("heading", { name: "swiftia-frame.png" });
+    await userEvent.click(
+      screen.getByRole("button", { name: /Quick review \(≤50%\)/ }),
+    );
+    let dialog = await screen.findByRole("dialog", {
+      name: "Confidence-based review",
+    });
+    const next = within(dialog).getByRole("button", { name: "Next image" });
+    expect(next).toBeEnabled();
+    await userEvent.click(next);
+    await screen.findByRole("heading", { name: "swiftia-next.png" });
+    dialog = screen.getByRole("dialog", {
+      name: "Confidence-based review",
+    });
+    expect(
+      within(dialog).getByRole("button", { name: "Previous image" }),
+    ).toBeEnabled();
+    expect(
+      within(dialog).getByRole("button", { name: "Next image" }),
+    ).toBeDisabled();
+  });
+
   it("reports the controlled active image identity", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
