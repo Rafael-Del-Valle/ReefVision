@@ -4,7 +4,7 @@
 
 **Candidate branch:** `feat/segmentation-evaluation-gui-20261013`
 
-**Candidate commit:** `004f6c284234c9a846a1fc537fc899f2399ca2e9`
+**Last fully tested source commit:** `004f6c284234c9a846a1fc537fc899f2399ca2e9`. The draft PR records the current exact head and its live checks.
 
 **Draft PR:** [#68](https://github.com/Rafael-Del-Valle/ReefVision/pull/68), based on the complete 1.0.1 annotation branch in [#44](https://github.com/Rafael-Del-Valle/ReefVision/pull/44)
 
