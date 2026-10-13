@@ -14,6 +14,8 @@ import {
 } from "../../api/client";
 import "./quickConfidenceReview.css";
 
+type PreviewSource = "full" | "thumbnail" | "failed";
+
 interface QuickConfidenceReviewDialogProps {
   item: Pick<
     ReviewQueueItem,
@@ -69,9 +71,7 @@ export function QuickConfidenceReviewDialog({
   const [selectedProposalId, setSelectedProposalId] = useState<string | null>(
     null,
   );
-  const [previewSource, setPreviewSource] = useState<
-    "full" | "thumbnail" | "failed"
-  >("full");
+  const [previewSource, setPreviewSource] = useState<PreviewSource>("full");
   const [previewRetry, setPreviewRetry] = useState(0);
   const [previewLoaded, setPreviewLoaded] = useState(false);
   const [classOverrides, setClassOverrides] = useState<Record<string, string>>(
@@ -159,6 +159,11 @@ export function QuickConfidenceReviewDialog({
     !selectedProposal?.model_display_name.startsWith("ReefVision managed") &&
     (selectedProposal?.predicted_label.length ?? 0) <= 200;
   const image = imageQuery.data?.image;
+  const previewUrl =
+    previewSource === "thumbnail"
+      ? imageThumbnailUrl(item.image_id)
+      : imageDisplayUrl(item.image_id) +
+        (previewRetry ? `?review_retry=${previewRetry}` : "");
 
   const review = useMutation({
     mutationFn: async (action: "accept" | "reject") => {
@@ -238,6 +243,9 @@ export function QuickConfidenceReviewDialog({
               <p role="alert">{imageQuery.error.message}</p>
             ) : image ? (
               <div className="rv-quick-review-image-stage">
+                {previewSource !== "failed" && !previewLoaded && (
+                  <p role="status">Loading image preview…</p>
+                )}
                 {previewSource === "failed" ? (
                   <div role="alert">
                     Image preview failed to load. Annotations are unchanged.
@@ -253,30 +261,20 @@ export function QuickConfidenceReviewDialog({
                     </button>
                   </div>
                 ) : (
-                  <>
-                    {!previewLoaded && (
-                      <p role="status">Loading image preview…</p>
-                    )}
-                    <img
-                      key={`${item.image_id}-${previewSource}-${previewRetry}`}
-                      src={
-                        previewSource === "thumbnail"
-                          ? imageThumbnailUrl(item.image_id)
-                          : imageDisplayUrl(item.image_id) +
-                            (previewRetry ? `?review_retry=${previewRetry}` : "")
-                      }
-                      alt={image.original_filename}
-                      onLoad={() => setPreviewLoaded(true)}
-                      onError={() => {
-                        setPreviewLoaded(false);
-                        setPreviewSource(
-                          previewSource === "full" && image.thumbnail_path
-                            ? "thumbnail"
-                            : "failed",
-                        );
-                      }}
-                    />
-                  </>
+                  <img
+                    key={`${item.image_id}-${previewSource}-${previewRetry}`}
+                    src={previewUrl}
+                    alt={image.original_filename}
+                    onLoad={() => setPreviewLoaded(true)}
+                    onError={() => {
+                      setPreviewLoaded(false);
+                      setPreviewSource(
+                        previewSource === "full" && image.thumbnail_path
+                          ? "thumbnail"
+                          : "failed",
+                      );
+                    }}
+                  />
                 )}
                 {selectedProposal && previewLoaded && (
                   <svg
