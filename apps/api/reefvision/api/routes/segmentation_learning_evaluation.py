@@ -79,9 +79,7 @@ def record_segmentation_evaluation(
     "/projects/{project_id}/learning/segmentation/evaluations",
     response_model=list[JobResponse],
 )
-def list_segmentation_evaluations(
-    project_id: str, session: DbSession
-) -> list[JobResponse]:
+def list_segmentation_evaluations(project_id: str, session: DbSession) -> list[JobResponse]:
     """Read immutable evaluation history, including queued and failed jobs."""
     records = session.scalars(
         select(Job)
