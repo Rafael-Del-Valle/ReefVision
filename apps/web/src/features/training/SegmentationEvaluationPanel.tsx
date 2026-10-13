@@ -428,14 +428,7 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
                           <td>{metric(values.recall)}</td>
                         </tr>
                       );
-                    })}                            </td>
-                            <td>{metric(values.ap50)}</td>
-                            <td>{metric(values.precision)}</td>
-                            <td>{metric(values.recall)}</td>
-                          </tr>
-                        );
-                      },
-                    )}
+                    })}
                   </tbody>
                 </table>
               )}
