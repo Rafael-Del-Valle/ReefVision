@@ -44,6 +44,20 @@ async function request<T>(path: string, body: object): Promise<T> {
   return (await response.json()) as T;
 }
 
+export async function listSegmentationEvaluations(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<JobRecord[]> {
+  const response = await fetch(
+    `${getApiBaseUrl()}/projects/${projectId}/learning/segmentation/evaluations`,
+    { signal, cache: "no-store" },
+  );
+  if (!response.ok) {
+    throw new Error(`Unable to load evaluation history (HTTP ${response.status})`);
+  }
+  return (await response.json()) as JobRecord[];
+}
+
 export function queueSegmentationEvaluation(
   projectId: string,
   payload: SegmentationEvaluationRequest,
