@@ -536,6 +536,30 @@ def process_thumbnail_job(settings: Settings, factory: sessionmaker[Session], jo
         return False
 
 
+def _fail_invalid_waiting_segmentation_evaluation(
+    session: Session, record: Job, reason: str
+) -> None:
+    """Leave an auditable terminal result instead of silently skipping bad parents."""
+    record.status = "failed"
+    record.completed_at = datetime.now(UTC)
+    record.error_message = reason
+    record.result_json = {
+        **dict(record.result_json or {}),
+        "promotion_eligible": False,
+        "blockers": [reason],
+    }
+    session.commit()
+    LOGGER.error(
+        "Invalid held-out segmentation evaluation metadata: %s",
+        reason,
+        extra={
+            "event_id": "segmentation_evaluation_invalid_parent",
+            "component": "worker",
+            "job_id": record.id,
+        },
+    )
+
+
 def process_next_waiting_segmentation_evaluation(
     settings: Settings, factory: sessionmaker[Session]
 ) -> bool:
@@ -567,15 +591,24 @@ def process_next_waiting_segmentation_evaluation(
             for record in waiting:
                 request = dict(record.request_json or {})
                 if request.get("task") != "segment":
-                    continue
+                    _fail_invalid_waiting_segmentation_evaluation(
+                        session, record, "Missing or invalid segmentation task identity"
+                    )
+                    return True
                 candidate_id = request.get("candidate_job_id")
                 if not isinstance(candidate_id, str) or not candidate_id:
-                    continue
+                    _fail_invalid_waiting_segmentation_evaluation(
+                        session, record, "Missing or invalid candidate inference job identity"
+                    )
+                    return True
                 ids = [candidate_id]
                 incumbent_id = request.get("incumbent_job_id")
                 if incumbent_id is not None:
                     if not isinstance(incumbent_id, str) or not incumbent_id:
-                        continue
+                        _fail_invalid_waiting_segmentation_evaluation(
+                            session, record, "Invalid incumbent inference job identity"
+                        )
+                        return True
                     ids.append(incumbent_id)
                 child_jobs = [session.get(Job, child_id) for child_id in ids]
                 statuses = [
@@ -589,7 +622,10 @@ def process_next_waiting_segmentation_evaluation(
                 record_id = record.id
                 project_id = record.project_id
                 if project_id is None:
-                    continue
+                    _fail_invalid_waiting_segmentation_evaluation(
+                        session, record, "Segmentation evaluation has no project identity"
+                    )
+                    return True
                 try:
                     SegmentationEvaluationQueueService(session, settings).advance(
                         str(project_id), record_id
