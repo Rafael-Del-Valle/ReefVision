@@ -262,9 +262,8 @@ export function QuickConfidenceReviewDialog({
                       src={
                         previewSource === "thumbnail"
                           ? imageThumbnailUrl(item.image_id)
-                          : `${imageDisplayUrl(item.image_id)}${ 
-                            previewRetry ? `?review_retry=${previewRetry}` : ""
-                          }`
+                          : imageDisplayUrl(item.image_id) +
+                            (previewRetry ? `?review_retry=${previewRetry}` : "")
                       }
                       alt={image.original_filename}
                       onLoad={() => setPreviewLoaded(true)}
