@@ -43,9 +43,10 @@ def test_raster_runs_preserve_holes_and_disconnected_regions() -> None:
 def test_polygon_uses_source_pixels_not_bounding_box() -> None:
     runs = polygon_to_runs([[1, 1], [3, 1], [3, 3], [1, 3]], width=5, height=5)
     assert runs == ((1, 1, 4), (2, 1, 4), (3, 1, 4))
-    assert make_scored_mask(
-        runs, image_id="a", class_id="polyp", score=0.9, width=5, height=5
-    ).runs == runs
+    assert (
+        make_scored_mask(runs, image_id="a", class_id="polyp", score=0.9, width=5, height=5).runs
+        == runs
+    )
 
 
 def test_binary_mask_uses_nonzero_pixel_convention() -> None:

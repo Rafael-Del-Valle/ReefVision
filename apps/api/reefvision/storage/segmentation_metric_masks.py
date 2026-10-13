@@ -58,9 +58,7 @@ def binary_mask_to_runs(
     return tuple(spans)
 
 
-def png_to_runs(
-    payload: bytes, *, width: int, height: int
-) -> tuple[tuple[int, int, int], ...]:
+def png_to_runs(payload: bytes, *, width: int, height: int) -> tuple[tuple[int, int, int], ...]:
     """Decode a complete source-sized PNG, rejecting corruption and size drift."""
     _dimensions(width, height)
     if not payload.startswith(PNG_SIGNATURE) or len(payload) > MAX_MASK_PNG_BYTES:
