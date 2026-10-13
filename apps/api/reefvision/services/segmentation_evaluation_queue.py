@@ -112,9 +112,7 @@ class SegmentationEvaluationQueueService:
 
         candidate_job = child(candidate.id, candidate.sha256)
         self.session.add(candidate_job)
-        incumbent_job = (
-            child(incumbent.id, incumbent.sha256) if incumbent is not None else None
-        )
+        incumbent_job = child(incumbent.id, incumbent.sha256) if incumbent is not None else None
         if incumbent_job is not None:
             self.session.add(incumbent_job)
         self.session.flush()
