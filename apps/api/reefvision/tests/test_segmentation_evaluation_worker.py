@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from typing import cast
 
 import pytest
@@ -139,3 +141,44 @@ def test_idle_worker_polls_waiting_scientific_evaluations(
     monkeypatch.setattr(worker, "process_next_waiting_segmentation_evaluation", fake_finalize)
     assert worker.process_next_thumbnail_job(app.state.settings, app.state.session_factory)
     assert calls == ["called"]
+
+
+def test_completed_evaluation_after_32_active_parents_is_not_starved(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = create_project(client, "Auto segmentation eval fair polling")
+    older_ids = [
+        _waiting(client, project["id"], child_status="running")[0] for _ in range(33)
+    ]
+    completed_id, _ = _waiting(client, project["id"], child_status="succeeded")
+    app = cast(FastAPI, client.app)
+
+    # Force deterministic page boundaries even on databases with coarse clocks.
+    with app.state.session_factory() as session:
+        for job_id in older_ids:
+            job = session.get(Job, job_id)
+            assert job is not None
+            job.created_at = datetime(2020, 1, 1, tzinfo=UTC)
+        completed = session.get(Job, completed_id)
+        assert completed is not None
+        completed.created_at = datetime(2021, 1, 1, tzinfo=UTC)
+        session.commit()
+
+    called: list[str] = []
+
+    def complete(self, project_id: str, record_id: str) -> Job:
+        called.append(record_id)
+        record = self.session.get(Job, record_id)
+        assert record is not None
+        record.status = "completed"
+        self.session.commit()
+        return record
+
+    monkeypatch.setattr(SegmentationEvaluationQueueService, "advance", complete)
+    assert worker.process_next_waiting_segmentation_evaluation(
+        app.state.settings, app.state.session_factory
+    )
+    assert called == [completed_id]
+    with app.state.session_factory() as session:
+        assert session.get(Job, completed_id).status == "completed"
+        assert all(session.get(Job, job_id).status == "waiting" for job_id in older_ids)
