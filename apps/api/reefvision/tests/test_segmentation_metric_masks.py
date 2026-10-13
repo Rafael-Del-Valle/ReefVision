@@ -34,13 +34,9 @@ def test_source_png_retains_holes_and_disconnected_components() -> None:
 
 
 def test_polygon_is_rasterized_in_source_pixels_not_as_its_box() -> None:
-    result = polygon_to_runs(
-        [[1, 1], [3, 1], [3, 3], [1, 3]], width=5, height=5
-    )
+    result = polygon_to_runs([[1, 1], [3, 1], [3, 3], [1, 3]], width=5, height=5)
     assert result == ((1, 1, 4), (2, 1, 4), (3, 1, 4))
-    scored = make_scored_mask(
-        result, image_id="a", class_id="polyp", score=0.9, width=5, height=5
-    )
+    scored = make_scored_mask(result, image_id="a", class_id="polyp", score=0.9, width=5, height=5)
     assert scored.runs == result
 
 
@@ -52,6 +48,11 @@ def test_true_binary_iou_differs_from_bbox_iou() -> None:
         make_scored_mask(filled, image_id="a", class_id="coral", score=0.8, width=6, height=5),
     )
     assert score == pytest.approx(7 / 9)
+
+
+def test_self_intersecting_polygon_cannot_enter_mask_metrics() -> None:
+    with pytest.raises(ValueError):
+        polygon_to_runs([[1, 1], [4, 4], [4, 1], [1, 4]], width=6, height=6)
 
 
 def test_one_nonzero_pixel_is_an_instance_mask() -> None:

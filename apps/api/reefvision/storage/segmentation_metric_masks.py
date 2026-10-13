@@ -12,6 +12,7 @@ from math import isfinite
 from PIL import Image, ImageDraw, UnidentifiedImageError
 
 from reefvision.domain.segmentation_evaluation import ScoredInstanceMask
+from reefvision.domain.segmentation_holdout import _validate_polygon
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 MAX_MASK_PIXELS = 100_000_000
@@ -58,9 +59,7 @@ def binary_mask_to_runs(
     return tuple(spans)
 
 
-def png_to_runs(
-    payload: bytes, *, width: int, height: int
-) -> tuple[tuple[int, int, int], ...]:
+def png_to_runs(payload: bytes, *, width: int, height: int) -> tuple[tuple[int, int, int], ...]:
     """Convert source-sized PNG; corrupt data and dimension drift fail closed."""
     _dimensions(width, height)
     if not payload.startswith(PNG_SIGNATURE) or len(payload) > MAX_MASK_PNG_BYTES:
@@ -104,7 +103,8 @@ def polygon_to_runs(
         points.pop()
     if len(set(points)) < 3:
         raise ValueError("Evaluation polygon is degenerate")
-    # Polygon self-intersection must be checked by the holdout validator.
+    # Even direct metric callers must not bypass the scientific geometry gate.
+    _validate_polygon(vertices, width=width, height=height)
     result = Image.new("L", (width, height), 0)
     ImageDraw.Draw(result).polygon(points, fill=255)
     return binary_mask_to_runs(result, width=width, height=height)
