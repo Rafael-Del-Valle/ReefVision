@@ -410,20 +410,25 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.entries(candidateMetrics.per_class as Record<string, unknown>).map(
-                      ([classId, value]) => {
-                        const values =
-                          value && typeof value === "object"
-                            ? (value as Record<string, unknown>)
-                            : {};
-                        return (
-                          <tr key={classId}>
-                            <th scope="row">{classId}</th>
-                            <td>
-                              {String(
-                                values.ground_truth_count ?? "Unavailable",
-                              )}
-                            </td>
+                    {Object.entries(
+                      candidateMetrics.per_class as Record<string, unknown>,
+                    ).map(([classId, value]) => {
+                      const values =
+                        value && typeof value === "object"
+                          ? (value as Record<string, unknown>)
+                          : {};
+                      return (
+                        <tr key={classId}>
+                          <th scope="row">{classId}</th>
+                          <td>
+                            {String(values.ground_truth_count ?? "Unavailable")}
+                          </td>
+                          <td>{metric(values.ap50)}</td>
+                          <td>{metric(values.precision)}</td>
+                          <td>{metric(values.recall)}</td>
+                        </tr>
+                      );
+                    })}                            </td>
                             <td>{metric(values.ap50)}</td>
                             <td>{metric(values.precision)}</td>
                             <td>{metric(values.recall)}</td>
