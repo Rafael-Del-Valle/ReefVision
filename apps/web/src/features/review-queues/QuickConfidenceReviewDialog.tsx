@@ -7,6 +7,7 @@ import {
   getAnnotationSession,
   getPredictions,
   imageDisplayUrl,
+  imageThumbnailUrl,
   rejectPrediction,
   type PredictionProposal,
   type ReviewQueueItem,
@@ -68,6 +69,8 @@ export function QuickConfidenceReviewDialog({
   const [selectedProposalId, setSelectedProposalId] = useState<string | null>(
     null,
   );
+  const [previewSource, setPreviewSource] = useState<"full" | "thumbnail" | "failed">("full");
+  const [previewRetry, setPreviewRetry] = useState(0);
   const [classOverrides, setClassOverrides] = useState<Record<string, string>>(
     {},
   );
@@ -75,6 +78,8 @@ export function QuickConfidenceReviewDialog({
   useEffect(() => {
     setSelectedProposalId(null);
     setClassOverrides({});
+    setPreviewSource("full");
+    setPreviewRetry(0);
   }, [item.image_id]);
 
   useEffect(() => {
@@ -229,10 +234,37 @@ export function QuickConfidenceReviewDialog({
               <p role="alert">{imageQuery.error.message}</p>
             ) : image ? (
               <div className="rv-quick-review-image-stage">
-                <img
-                  src={imageDisplayUrl(item.image_id)}
-                  alt={image.original_filename}
-                />
+                {previewSource === "failed" ? (
+                  <div role="alert">
+                    Image preview failed to load. Annotations are unchanged.
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewRetry((attempt) => attempt + 1);
+                        setPreviewSource("full");
+                      }}
+                    >
+                      Retry image preview
+                    </button>
+                  </div>
+                ) : (
+                  <img
+                    key={`${item.image_id}-${previewSource}-${previewRetry}`}
+                    src={
+                      previewSource === "thumbnail"
+                        ? imageThumbnailUrl(item.image_id)
+                        : `${imageDisplayUrl(item.image_id)}${previewRetry ? `?review_retry=${previewRetry}` : ""}`
+                    }
+                    alt={image.original_filename}
+                    onError={() =>
+                      setPreviewSource(
+                        previewSource === "full" && image.thumbnail_path
+                          ? "thumbnail"
+                          : "failed",
+                      )
+                    }
+                  />
+                )}
                 {selectedProposal && (
                   <svg
                     className="rv-quick-review-overlay"
