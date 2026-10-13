@@ -65,7 +65,10 @@ def _touches_or_crosses(
         return True
 
     def between(p: tuple[float, float], q: tuple[float, float], r: tuple[float, float]) -> bool:
-        return min(p[0], r[0]) <= q[0] <= max(p[0], r[0]) and min(p[1], r[1]) <= q[1] <= max(p[1], r[1])
+        return (
+            min(p[0], r[0]) <= q[0] <= max(p[0], r[0])
+            and min(p[1], r[1]) <= q[1] <= max(p[1], r[1])
+        )
 
     return any(
         value == 0 and between(p, q, r)
@@ -103,7 +106,7 @@ def _validate_polygon(vertices: object, *, width: int, height: int) -> None:
         raise ValueError("Polygon needs at least three unique source-pixel vertices")
     signed_double_area = sum(
         x0 * y1 - x1 * y0
-        for (x0, y0), (x1, y1) in zip(points, points[1:] + points[:1])
+        for (x0, y0), (x1, y1) in zip(points, points[1:] + points[:1], strict=True)
     )
     if abs(signed_double_area) <= 1e-8:
         raise ValueError("Polygon has zero source-pixel area")
@@ -186,10 +189,19 @@ def validate_segmentation_holdout(
             path: str | None = None
             digest: str | None = None
             if kind == "polygon":
-                _validate_polygon(mask.get("polygon_json"), width=item.width_px, height=item.height_px)
+                _validate_polygon(
+                    mask.get("polygon_json"),
+                    width=item.width_px,
+                    height=item.height_px,
+                )
             elif kind == "raster_mask":
                 path, digest = mask.get("mask_path"), mask.get("mask_content_sha256")
-                if not isinstance(path, str) or not path or not _digest(digest) or verify_raster is None:
+                if (
+                    not isinstance(path, str)
+                    or not path
+                    or not _digest(digest)
+                    or verify_raster is None
+                ):
                     raise ValueError("Raster mask requires verified immutable content")
                 verify_raster(path, digest)
             else:
@@ -199,4 +211,6 @@ def validate_segmentation_holdout(
 
     if len(selected_images) < minimum_images or len(refs) < minimum_masks:
         raise ValueError("Segmentation holdout has insufficient verified support")
-    return SegmentationHoldout(split, tuple(selected_images), tuple(sorted(selected_groups)), tuple(refs))
+    return SegmentationHoldout(
+        split, tuple(selected_images), tuple(sorted(selected_groups)), tuple(refs)
+    )
