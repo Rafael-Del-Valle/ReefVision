@@ -787,13 +787,30 @@ test("renders the first opened image after a deliberately delayed display respon
     gate.release = resolve;
   });
   let displayRequests = 0;
+  const firstOpenBox = {
+    id: "first-open-box",
+    image_id: baseImage.id,
+    label_class_id: "class-1",
+    x_min: 160,
+    y_min: 120,
+    x_max: 320,
+    y_max: 240,
+    source_type: "human",
+    source_model_id: null,
+    source_prediction_id: null,
+    created_by: "local_user",
+    created_at: "2026-07-08T00:00:00Z",
+    updated_at: "2026-07-08T00:00:00Z",
+    deleted_at: null,
+    revision: 1,
+  };
   const sessionState = {
-    image: { ...baseImage },
+    image: { ...baseImage, annotation_count: 1, annotation_status: "in_progress" },
     label_classes: project.label_classes,
-    annotations: [],
+    annotations: [firstOpenBox],
     counts_by_class: project.label_classes.map((labelClass) => ({
       label_class_id: labelClass.id,
-      count: 0,
+      count: labelClass.id === "class-1" ? 1 : 0,
     })),
     previous_image_id: null,
     next_image_id: null,
@@ -881,12 +898,19 @@ test("renders the first opened image after a deliberately delayed display respon
     await expect(
       page.getByText("Full-resolution image could not load"),
     ).toHaveCount(0);
-    // The original canvas remains open; no gallery exit/reentry is needed.
+    // Persisted annotation geometry must align on the first opened image,
+    // without needing to leave the gallery and reenter the editor.
     await expect(canvas).toBeVisible();
     await expect(canvas.locator("image").first()).toHaveAttribute(
       "href",
       /\/images\/image-1\/display/,
     );
+    const firstOpenOverlay = canvas.getByTestId("annotation-first-open-box");
+    await expect(firstOpenOverlay).toBeVisible();
+    await expect(firstOpenOverlay).toHaveAttribute("x", "160");
+    await expect(firstOpenOverlay).toHaveAttribute("y", "120");
+    await expect(firstOpenOverlay).toHaveAttribute("width", "160");
+    await expect(firstOpenOverlay).toHaveAttribute("height", "120");
   } finally {
     gate.release();
   }
