@@ -193,7 +193,10 @@ describe("SegmentationEvaluationPanel", () => {
 
   it("clears project-specific selections and operator approval when switching projects", async () => {
     const client = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
     const view = render(
       <QueryClientProvider client={client}>
@@ -238,9 +241,9 @@ describe("SegmentationEvaluationPanel", () => {
         0.5,
       );
       expect(screen.getByLabelText("Operator identity")).toHaveValue("");
-      expect(screen.getByLabelText("Reason (at least 10 characters)")).toHaveValue(
-        "",
-      );
+      expect(
+        screen.getByLabelText("Reason (at least 10 characters)"),
+      ).toHaveValue("");
       expect(
         screen.getByRole("button", { name: "Queue held-out evaluation" }),
       ).toBeDisabled();
