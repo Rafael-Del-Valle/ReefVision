@@ -113,9 +113,9 @@ beforeEach(() => {
   ] as unknown as Awaited<ReturnType<typeof getDatasetVersions>>);
   vi.mocked(listSegmentationEvaluations).mockResolvedValue([]);
   vi.mocked(listSegmentationDeploymentAudit).mockResolvedValue([]);
-  vi.mocked(getModels).mockResolvedValue([
-    model("candidate"),
-  ] as unknown as Awaited<ReturnType<typeof getModels>>);
+  vi.mocked(getModels).mockResolvedValue(
+    [model("candidate")] as unknown as Awaited<ReturnType<typeof getModels>>,
+  );
   vi.mocked(queueSegmentationEvaluation).mockResolvedValue({
     id: "evaluation-1",
     status: "waiting",
