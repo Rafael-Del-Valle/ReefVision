@@ -113,9 +113,9 @@ beforeEach(() => {
   ] as unknown as Awaited<ReturnType<typeof getDatasetVersions>>);
   vi.mocked(listSegmentationEvaluations).mockResolvedValue([]);
   vi.mocked(listSegmentationDeploymentAudit).mockResolvedValue([]);
-  vi.mocked(getModels).mockResolvedValue(
-    [model("candidate")] as unknown as Awaited<ReturnType<typeof getModels>>,
-  );
+  vi.mocked(getModels).mockResolvedValue([
+    model("candidate"),
+  ] as unknown as Awaited<ReturnType<typeof getModels>>);
   vi.mocked(queueSegmentationEvaluation).mockResolvedValue({
     id: "evaluation-1",
     status: "waiting",
@@ -227,7 +227,9 @@ describe("SegmentationEvaluationPanel", () => {
       "Scientific evaluation provenance and class support",
     );
     fireEvent.click(provenance);
-    expect(await screen.findByText("candidate-inference-1")).toBeInTheDocument();
+    expect(
+      await screen.findByText("candidate-inference-1"),
+    ).toBeInTheDocument();
     expect(screen.getByText("class-octocoral-open")).toBeInTheDocument();
     expect(screen.getByText("8")).toBeInTheDocument();
     expect(screen.getByText("0.830")).toBeInTheDocument();
