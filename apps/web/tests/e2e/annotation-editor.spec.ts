@@ -863,9 +863,10 @@ test("renders the first opened image after a deliberately delayed display respon
 
     const canvas = page.getByTestId("annotation-canvas");
     await expect(canvas).toBeVisible();
-    await expect(
-      page.getByTestId("annotation-editor").getByText("Loading full-resolution image..."),
-    ).toBeVisible();
+    const loading = page
+      .getByTestId("annotation-editor")
+      .getByText("Loading full-resolution image...");
+    await expect(loading).toBeVisible();
     await expect(canvas.locator("image").first()).toHaveAttribute(
       "href",
       /\/images\/image-1\/display/,
@@ -876,9 +877,7 @@ test("renders the first opened image after a deliberately delayed display respon
     expect(initialViewport?.height).toBeGreaterThan(0);
 
     gate.release();
-    await expect(
-      page.getByTestId("annotation-editor").getByText("Loading full-resolution image..."),
-    ).toBeHidden();
+    await expect(loading).toBeHidden();
     await expect(
       page.getByText("Full-resolution image could not load"),
     ).toHaveCount(0);
