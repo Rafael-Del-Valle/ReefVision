@@ -91,29 +91,29 @@ beforeEach(() => {
       version_number: 1,
       status: "complete",
     },
-  ] as Awaited<ReturnType<typeof getDatasetVersions>>);
+  ] as unknown as Awaited<ReturnType<typeof getDatasetVersions>>);
   vi.mocked(getModels).mockResolvedValue([
     model("candidate"),
-  ] as Awaited<ReturnType<typeof getModels>>);
+  ] as unknown as Awaited<ReturnType<typeof getModels>>);
   vi.mocked(queueSegmentationEvaluation).mockResolvedValue({
     id: "evaluation-1",
     status: "waiting",
-  } as Awaited<ReturnType<typeof queueSegmentationEvaluation>>);
+  } as unknown as Awaited<ReturnType<typeof queueSegmentationEvaluation>>);
   vi.mocked(getJob).mockResolvedValue(
-    completedEvaluation(true, null) as Awaited<ReturnType<typeof getJob>>,
+    completedEvaluation(true, null) as unknown as Awaited<ReturnType<typeof getJob>>,
   );
   vi.mocked(promoteSegmentationCandidate).mockResolvedValue({
     id: "deploy-1",
     status: "succeeded",
     action: "promote",
     active_model_id: "candidate",
-  } as Awaited<ReturnType<typeof promoteSegmentationCandidate>>);
+  } as unknown as Awaited<ReturnType<typeof promoteSegmentationCandidate>>);
   vi.mocked(rollbackSegmentationDeployment).mockResolvedValue({
     id: "rollback-1",
     status: "succeeded",
     action: "rollback",
     active_model_id: null,
-  } as Awaited<ReturnType<typeof rollbackSegmentationDeployment>>);
+  } as unknown as Awaited<ReturnType<typeof rollbackSegmentationDeployment>>);
   vi.spyOn(window, "confirm").mockReturnValue(true);
 });
 
@@ -149,7 +149,7 @@ describe("SegmentationEvaluationPanel", () => {
 
   it("blocks promotion for failed scientific quality criteria", async () => {
     vi.mocked(getJob).mockResolvedValue(
-      completedEvaluation(false, null) as Awaited<ReturnType<typeof getJob>>,
+      completedEvaluation(false, null) as unknown as Awaited<ReturnType<typeof getJob>>,
     );
     renderPanel();
     await screen.findByRole("option", {
@@ -216,7 +216,7 @@ describe("SegmentationEvaluationPanel", () => {
     vi.mocked(getModels).mockResolvedValue([
       model("candidate"),
       model("incumbent", true, "deployment-7"),
-    ] as Awaited<ReturnType<typeof getModels>>);
+    ] as unknown as Awaited<ReturnType<typeof getModels>>);
     renderPanel();
     await screen.findByText("incumbent");
     const rollback = screen.getByRole("button", {
