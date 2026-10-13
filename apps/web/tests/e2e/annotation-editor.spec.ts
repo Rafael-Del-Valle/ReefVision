@@ -782,6 +782,11 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
 test("renders the first opened image after a deliberately delayed display response", async ({
   page,
 }) => {
+  // A real 1600×1200 source image keeps raster and annotation geometry comparable.
+  const sourceSizedPngBytes = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAABkAAAASwAQAAAACLers6AAABAElEQVR42u3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/BuuXQABlqDdSgAAAABJRU5ErkJggg==",
+    "base64",
+  );
   const gate: { release: () => void } = { release: () => undefined };
   const imageGate = new Promise<void>((resolve) => {
     gate.release = resolve;
@@ -871,7 +876,7 @@ test("renders the first opened image after a deliberately delayed display respon
     if (url.pathname.endsWith(`/images/${baseImage.id}/display`)) {
       displayRequests += 1;
       await imageGate;
-      await route.fulfill({ body: pngBytes, contentType: "image/png" });
+      await route.fulfill({ body: sourceSizedPngBytes, contentType: "image/png" });
       return;
     }
     await route.abort();
@@ -915,6 +920,24 @@ test("renders the first opened image after a deliberately delayed display respon
     await expect(firstOpenOverlay).toHaveAttribute("y", "120");
     await expect(firstOpenOverlay).toHaveAttribute("width", "160");
     await expect(firstOpenOverlay).toHaveAttribute("height", "120");
+    const decodedDimensions = await page.evaluate(async () => {
+      const image = document.querySelector(
+        '[data-testid="annotation-canvas"] image',
+      );
+      const href = image?.getAttribute("href");
+      if (!href) {
+        throw new Error("The source image is not attached to the annotation canvas");
+      }
+      const response = await fetch(href);
+      if (!response.ok) {
+        throw new Error("The displayed source image could not be fetched");
+      }
+      const bitmap = await createImageBitmap(await response.blob());
+      const dimensions = { width: bitmap.width, height: bitmap.height };
+      bitmap.close();
+      return dimensions;
+    });
+    expect(decodedDimensions).toEqual({ width: 1600, height: 1200 });
   } finally {
     gate.release();
   }
