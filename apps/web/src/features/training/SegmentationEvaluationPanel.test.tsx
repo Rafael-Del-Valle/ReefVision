@@ -214,6 +214,28 @@ describe("SegmentationEvaluationPanel", () => {
     expect(promoteSegmentationCandidate).not.toHaveBeenCalled();
   });
 
+  it("blocks approval when the evaluated segmenter is no longer registered", async () => {
+    vi.mocked(getModels).mockResolvedValue([
+      model("unrelated-segmenter"),
+    ] as unknown as Awaited<ReturnType<typeof getModels>>);
+    vi.mocked(listSegmentationEvaluations).mockResolvedValue([
+      completedEvaluation(true, null),
+    ] as unknown as Awaited<ReturnType<typeof listSegmentationEvaluations>>);
+    renderPanel();
+    await screen.findByRole("option", { name: "completed: candidate" });
+    fireEvent.change(screen.getByLabelText("Segmentation evaluation history"), {
+      target: { value: "evaluation-1" },
+    });
+    expect(await screen.findByText("0.850")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/evaluated segmentation candidate is no longer registered/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Promote evaluated segmenter" }),
+    ).toBeDisabled();
+    expect(promoteSegmentationCandidate).not.toHaveBeenCalled();
+  });
+
   it("shows the immutable mask holdout digest and per-class sample support", async () => {
     vi.mocked(listSegmentationEvaluations).mockResolvedValue([
       completedEvaluation(true, null),
