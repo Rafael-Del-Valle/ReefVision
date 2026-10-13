@@ -158,6 +158,17 @@ class SegmentationEvaluationQueueService:
         children = [self.session.get(Job, child_id) for child_id in child_ids]
         if any(child is None or child.project_id != project_id for child in children):
             raise ConflictError("Holdout inference job has been removed or reassigned")
+        if any(
+            child.request_json.get("evaluation_only") is not True
+            or child.request_json.get("model_task") != "segment"
+            or child.request_json.get("segmentation_holdout_parent_job_id") != record.id
+            or child.request_json.get("segmentation_manifest_sha256")
+            != request.get("manifest_sha256")
+            or child.request_json.get("image_ids") != request.get("heldout_image_ids")
+            for child in children
+            if child is not None
+        ):
+            raise ConflictError("Holdout child inference job no longer matches the queued split")
         completed = sum(child.status == "succeeded" for child in children if child is not None)
         record.progress_current = completed
         if any(
