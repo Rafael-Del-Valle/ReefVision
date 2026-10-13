@@ -58,8 +58,15 @@ function completedEvaluation(eligible: boolean, incumbentId: string | null) {
     progress_total: incumbentId ? 2 : 1,
     request_json: {
       task: "segment",
+      dataset_version_id: "version-1",
+      manifest_sha256: "a".repeat(64),
+      split: "validation",
+      heldout_image_ids: ["image-1", "image-2"],
       candidate_model_id: "candidate",
+      candidate_job_id: "candidate-inference-1",
+      candidate_checksum: "b".repeat(64),
       incumbent_model_id: incumbentId,
+      incumbent_checksum: incumbentId ? "c".repeat(64) : null,
     },
     result_json: {
       promotion_eligible: eligible,
@@ -70,6 +77,14 @@ function completedEvaluation(eligible: boolean, incumbentId: string | null) {
         recall: 0.8,
         mean_absolute_count_error: 1.5,
         count_bias_per_image: 0.5,
+        per_class: {
+          "class-octocoral-open": {
+            ground_truth_count: 8,
+            precision: 0.9,
+            recall: 0.8,
+            ap50: 0.83,
+          },
+        },
       },
     },
   };
@@ -196,6 +211,28 @@ describe("SegmentationEvaluationPanel", () => {
     expect(
       screen.getByRole("button", { name: "Promote evaluated segmenter" }),
     ).toBeDisabled();
+    expect(promoteSegmentationCandidate).not.toHaveBeenCalled();
+  });
+
+  it("shows the immutable mask holdout digest and per-class sample support", async () => {
+    vi.mocked(listSegmentationEvaluations).mockResolvedValue([
+      completedEvaluation(true, null),
+    ] as unknown as Awaited<ReturnType<typeof listSegmentationEvaluations>>);
+    renderPanel();
+    await screen.findByRole("option", { name: "completed: candidate" });
+    fireEvent.change(screen.getByLabelText("Segmentation evaluation history"), {
+      target: { value: "evaluation-1" },
+    });
+    const provenance = await screen.findByText(
+      "Scientific evaluation provenance and class support",
+    );
+    fireEvent.click(provenance);
+    expect(screen.getByText("candidate-inference-1")).toBeInTheDocument();
+    expect(screen.getByText("class-octocoral-open")).toBeInTheDocument();
+    expect(screen.getByText("8")).toBeInTheDocument();
+    expect(screen.getByText("0.830")).toBeInTheDocument();
+    expect(screen.getByText("Held-out images")).toBeInTheDocument();
+    expect(screen.getByText("Candidate checkpoint SHA-256")).toBeInTheDocument();
     expect(promoteSegmentationCandidate).not.toHaveBeenCalled();
   });
 
