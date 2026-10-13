@@ -200,6 +200,22 @@ describe("QuickConfidenceReviewDialog", () => {
     expect(onNextImage).not.toHaveBeenCalled();
   });
 
+  it("keeps prediction bounds hidden until image pixels load", async () => {
+    renderDialog();
+    const preview = await screen.findByRole("img", { name: "swiftia.png" });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading image preview",
+    );
+    expect(
+      screen.queryByLabelText("Selected prediction bounds"),
+    ).not.toBeInTheDocument();
+    fireEvent.load(preview);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Selected prediction bounds"),
+    ).toBeInTheDocument();
+  });
+
   it("shows a retryable error instead of an invisible failed preview", async () => {
     renderDialog();
     const image = await screen.findByRole("img", { name: "swiftia.png" });
