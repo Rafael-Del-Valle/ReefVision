@@ -57,7 +57,8 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
   );
   const activeModel = active.length === 1 ? active[0] : null;
   const activeId = activeModel?.id ?? null;
-  const activeDeploymentId = activeModel?.metadata_json.active_segmentation_deployment_id;
+  const activeDeploymentId =
+    activeModel?.metadata_json.active_segmentation_deployment_id;
   const rollbackId =
     typeof activeDeploymentId === "string" ? activeDeploymentId : null;
   const candidates = registered.filter((model) => model.id !== activeId);
@@ -249,8 +250,10 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
         <section aria-label="Held-out segmentation results">
           <h5>Evaluation {evaluationId}</h5>
           <p role="status">
-            Status: {record?.status ?? (evaluation.isPending ? "Loading" : "Unknown")}
-            {record && ` · ${record.progress_current}/${record.progress_total} inference jobs`}
+            Status:{" "}
+            {record?.status ?? (evaluation.isPending ? "Loading" : "Unknown")}
+            {record &&
+              ` · ${record.progress_current}/${record.progress_total} inference jobs`}
           </p>
           {evaluation.error && <p role="alert">{evaluation.error.message}</p>}
           {record?.error_message && <p role="alert">{record.error_message}</p>}
@@ -279,7 +282,9 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
           )}
           <p>
             Promotion eligibility:{" "}
-            <strong>{eligible ? "Eligible, approval required" : "Not eligible"}</strong>
+            <strong>
+              {eligible ? "Eligible, approval required" : "Not eligible"}
+            </strong>
           </p>
           {Array.isArray(record?.result_json?.blockers) && (
             <ul>
@@ -349,7 +354,9 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
               }
             }}
           >
-            {rollback.isPending ? "Rolling back…" : "Rollback segmentation deployment"}
+            {rollback.isPending
+              ? "Rolling back…"
+              : "Rollback segmentation deployment"}
           </button>
           {promote.error && <p role="alert">{promote.error.message}</p>}
           {rollback.error && <p role="alert">{rollback.error.message}</p>}
