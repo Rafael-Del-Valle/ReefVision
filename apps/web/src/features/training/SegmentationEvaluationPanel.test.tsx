@@ -152,13 +152,17 @@ describe("SegmentationEvaluationPanel", () => {
         },
         result_json: { restored_model_id: null },
       },
-    ] as unknown as Awaited<ReturnType<typeof listSegmentationDeploymentAudit>>);
+    ] as unknown as Awaited<
+      ReturnType<typeof listSegmentationDeploymentAudit>
+    >);
     renderPanel();
     const history = await screen.findByRole("region", {
       name: "Segmentation deployment audit history",
     });
     await waitFor(() => {
-      expect(history).toHaveTextContent("Passed held-out octocoral mask verification");
+      expect(history).toHaveTextContent(
+        "Passed held-out octocoral mask verification",
+      );
       expect(history).toHaveTextContent("Reverted following quality review");
     });
     expect(history).toHaveTextContent("Promotion");
