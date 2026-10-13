@@ -137,7 +137,5 @@ def test_idle_worker_polls_waiting_scientific_evaluations(
         return True
 
     monkeypatch.setattr(worker, "process_next_waiting_segmentation_evaluation", fake_finalize)
-    assert worker.process_next_thumbnail_job(
-        app.state.settings, app.state.session_factory
-    )
+    assert worker.process_next_thumbnail_job(app.state.settings, app.state.session_factory)
     assert calls == ["called"]
