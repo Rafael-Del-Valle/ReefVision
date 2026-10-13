@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useReducer,
   useRef,
@@ -96,7 +97,7 @@ export function MaskAnnotationWorkspace({
   const savePromiseRef = useRef<Promise<boolean> | null>(null);
   const loadedImageIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     stateRef.current = state;
   }, [state]);
 
