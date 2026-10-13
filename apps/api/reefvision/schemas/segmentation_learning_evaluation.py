@@ -33,7 +33,7 @@ class SegmentationCompletedEvaluationResponse(BaseModel):
     incumbent_model_id: str | None = None
     incumbent_job_id: str | None = None
     incumbent_checksum: str | None = None
-    candidate_metrics: dict[str, Any]
+    candidate_metrics: dict[str, Any] | None = None
     incumbent_metrics: dict[str, Any] | None = None
     promotion_eligible: bool
     blockers: list[str] = Field(default_factory=list)
