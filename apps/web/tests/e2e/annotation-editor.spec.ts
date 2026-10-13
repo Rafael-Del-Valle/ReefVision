@@ -782,9 +782,21 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
 test("renders the first opened image after a deliberately delayed display response", async ({
   page,
 }) => {
-  // A real 1600×1200 source image keeps raster and annotation geometry comparable.
+  // Generate a real decodable image at source resolution inside Chromium.
+  // This avoids hand-copied PNG fixtures with invalid pixel data.
   const sourceSizedPngBytes = Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAABkAAAASwAQAAAACLers6AAABAElEQVR42u3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/BuuXQABlqDdSgAAAABJRU5ErkJggg==",
+    await page.evaluate(() => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1600;
+      canvas.height = 1200;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        throw new Error("Unable to create a source image for the first-open test");
+      }
+      context.fillStyle = "#dfdfdf";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/png").split(",")[1];
+    }),
     "base64",
   );
   const gate: { release: () => void } = { release: () => undefined };
