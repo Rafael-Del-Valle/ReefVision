@@ -189,10 +189,31 @@ class SegmentationLearningEvaluationService:
         minimum_masks: int = 1,
         minimum_mask_map50: float = 0.5,
         minimum_gain: float = 0.0,
+        existing_record: Job | None = None,
     ) -> Job:
         """Store a completed holdout comparison; never implicitly promote."""
         if bool(incumbent_model_id) != bool(incumbent_job_id):
             raise ValidationError("Incumbent segmentation model and job must be supplied together")
+        if existing_record is not None:
+            original = existing_record.request_json or {}
+            if (
+                existing_record.project_id != project_id
+                or existing_record.job_type != "segmentation_learning_evaluation"
+                or existing_record.status != "waiting"
+                or original.get("task") != "segment"
+                or original.get("dataset_version_id") != dataset_version_id
+                or original.get("split") != split
+                or original.get("candidate_model_id") != candidate_model_id
+                or original.get("candidate_job_id") != candidate_job_id
+                or original.get("incumbent_model_id") != incumbent_model_id
+                or original.get("incumbent_job_id") != incumbent_job_id
+                or original.get("minimum_images") != minimum_images
+                or original.get("minimum_masks") != minimum_masks
+                or original.get("minimum_mask_map50") != minimum_mask_map50
+                or original.get("minimum_gain") != minimum_gain
+            ):
+                raise ConflictError("Queued segmentation evaluation request has changed")
+
         holdout = SegmentationHoldoutService(self.session, self.settings).prepare(
             project_id,
             dataset_version_id,
@@ -202,6 +223,12 @@ class SegmentationLearningEvaluationService:
         )
         version = self.session.get(DatasetVersion, dataset_version_id)
         assert version is not None
+        if existing_record is not None:
+            queued = existing_record.request_json
+            if queued.get("manifest_sha256") != version.manifest_sha256 or set(
+                queued.get("heldout_image_ids") or []
+            ) != set(holdout.image_ids):
+                raise ConflictError("Queued immutable segmentation holdout has changed")
         snapshot_items = list(
             self.session.scalars(
                 select(DatasetVersionItem).where(
@@ -266,37 +293,39 @@ class SegmentationLearningEvaluationService:
         if not eligible:
             blockers.append("Candidate does not meet the held-out mask AP50 or count-error policy")
         now = datetime.now(UTC)
-        record = Job(
+        record = existing_record or Job(
             project_id=project_id,
             job_type="segmentation_learning_evaluation",
-            status="completed",
-            progress_current=1,
-            progress_total=1,
-            started_at=now,
-            completed_at=now,
-            request_json={
-                "task": "segment",
-                "dataset_version_id": dataset_version_id,
-                "manifest_sha256": version.manifest_sha256,
-                "split": split,
-                "heldout_image_ids": list(holdout.image_ids),
-                "candidate_model_id": candidate.model_id,
-                "candidate_job_id": candidate.job_id,
-                "candidate_checksum": candidate.checkpoint_sha256,
-                "incumbent_model_id": incumbent.model_id if incumbent else None,
-                "incumbent_job_id": incumbent.job_id if incumbent else None,
-                "incumbent_checksum": incumbent.checkpoint_sha256 if incumbent else None,
-                "minimum_mask_map50": minimum_mask_map50,
-                "minimum_gain": minimum_gain,
-            },
-            result_json={
-                "candidate_metrics": asdict(candidate.metrics),
-                "incumbent_metrics": asdict(incumbent.metrics) if incumbent else None,
-                "promotion_eligible": eligible,
-                "blockers": blockers,
-                "scientific_method": "source-pixel instance mask AP50, not detector box AP",
-            },
         )
+        record.status = "completed"
+        record.progress_current = 2 if incumbent is not None else 1
+        record.progress_total = record.progress_current
+        record.started_at = record.started_at or now
+        record.completed_at = now
+        record.request_json = {
+            "task": "segment",
+            "dataset_version_id": dataset_version_id,
+            "manifest_sha256": version.manifest_sha256,
+            "split": split,
+            "heldout_image_ids": list(holdout.image_ids),
+            "candidate_model_id": candidate.model_id,
+            "candidate_job_id": candidate.job_id,
+            "candidate_checksum": candidate.checkpoint_sha256,
+            "incumbent_model_id": incumbent.model_id if incumbent else None,
+            "incumbent_job_id": incumbent.job_id if incumbent else None,
+            "incumbent_checksum": incumbent.checkpoint_sha256 if incumbent else None,
+            "minimum_images": minimum_images,
+            "minimum_masks": minimum_masks,
+            "minimum_mask_map50": minimum_mask_map50,
+            "minimum_gain": minimum_gain,
+        }
+        record.result_json = {
+            "candidate_metrics": asdict(candidate.metrics),
+            "incumbent_metrics": asdict(incumbent.metrics) if incumbent else None,
+            "promotion_eligible": eligible,
+            "blockers": blockers,
+            "scientific_method": "source-pixel instance mask AP50, not detector box AP",
+        }
         self.session.add(record)
         self.session.commit()
         return record

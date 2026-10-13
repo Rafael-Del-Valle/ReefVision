@@ -38,9 +38,9 @@ def _response(record: Job) -> SegmentationCompletedEvaluationResponse:
         incumbent_model_id=request.get("incumbent_model_id"),
         incumbent_job_id=request.get("incumbent_job_id"),
         incumbent_checksum=request.get("incumbent_checksum"),
-        candidate_metrics=result["candidate_metrics"],
+        candidate_metrics=result.get("candidate_metrics"),
         incumbent_metrics=result.get("incumbent_metrics"),
-        promotion_eligible=bool(result["promotion_eligible"]),
+        promotion_eligible=bool(result.get("promotion_eligible", False)),
         blockers=list(result.get("blockers") or []),
     )
 
