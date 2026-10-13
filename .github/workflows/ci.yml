@@ -46,6 +46,11 @@ jobs:
         working-directory: apps/web
       - run: npm ci
         working-directory: apps/web
+      - name: Diagnostic Prettier patch (temporary)
+        working-directory: apps/web
+        run: |
+          npx prettier --write src/features/active-learning/ActiveLearningWorkspace.tsx src/features/active-learning/SegmentationEvaluationWorkspace.tsx src/features/active-learning/SegmentationEvaluationWorkspace.test.tsx
+          git diff -- src/features/active-learning/ActiveLearningWorkspace.tsx src/features/active-learning/SegmentationEvaluationWorkspace.tsx src/features/active-learning/SegmentationEvaluationWorkspace.test.tsx
       - run: npm run format:check
         working-directory: apps/web
       - run: npm run typecheck
