@@ -191,6 +191,58 @@ describe("SegmentationEvaluationPanel", () => {
     expect(rollbackSegmentationDeployment).not.toHaveBeenCalled();
   });
 
+  it("clears project-specific selections and operator approval when switching projects", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const view = render(
+      <QueryClientProvider client={client}>
+        <SegmentationEvaluationPanel project={project} />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole("option", {
+      name: "Verified octocoral masks (v1)",
+    });
+    fireEvent.change(screen.getByLabelText("Segmentation holdout dataset"), {
+      target: { value: "version-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Candidate segmenter"), {
+      target: { value: "candidate" },
+    });
+    fireEvent.change(screen.getByLabelText("Operator identity"), {
+      target: { value: "Researcher" },
+    });
+    fireEvent.change(screen.getByLabelText("Reason (at least 10 characters)"), {
+      target: { value: "Reviewed a different project holdout" },
+    });
+    expect(
+      screen.getByRole("button", { name: "Queue held-out evaluation" }),
+    ).toBeEnabled();
+
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <SegmentationEvaluationPanel
+          project={{ ...project, id: "different-project" }}
+        />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByLabelText("Segmentation holdout dataset")).toHaveValue(
+        "",
+      );
+      expect(screen.getByLabelText("Candidate segmenter")).toHaveValue("");
+      expect(screen.getByLabelText("Operator identity")).toHaveValue("");
+      expect(screen.getByLabelText("Reason (at least 10 characters)")).toHaveValue(
+        "",
+      );
+      expect(
+        screen.getByRole("button", { name: "Queue held-out evaluation" }),
+      ).toBeDisabled();
+    });
+    expect(queueSegmentationEvaluation).not.toHaveBeenCalled();
+    expect(promoteSegmentationCandidate).not.toHaveBeenCalled();
+  });
+
   it("does not display or promote another project's evaluation record", async () => {
     vi.mocked(listSegmentationEvaluations).mockResolvedValue([
       completedEvaluation(true, null),
