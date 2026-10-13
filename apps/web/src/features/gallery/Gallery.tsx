@@ -199,6 +199,91 @@ function ImportSummary({ report }: { report: ImageImportReport }) {
   );
 }
 
+type PreviewLoadPhase =
+  "loading" | "loaded" | "thumbnail-loading" | "thumbnail-loaded" | "error";
+
+function focusedImageUrl(
+  imageId: string,
+  useThumbnail: boolean,
+  retry: number,
+): string {
+  const original = useThumbnail
+    ? imageThumbnailUrl(imageId)
+    : imageDisplayUrl(imageId);
+  if (retry === 0) return original;
+  return `${original}${original.includes("?") ? "&" : "?"}rv_retry=${retry}`;
+}
+
+/**
+ * Keep each image's media request lifecycle inside a keyed component.
+ * Late events from a previous image cannot affect the newly focused image.
+ */
+function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
+  const [phase, setPhase] = useState<PreviewLoadPhase>("loading");
+  const [retry, setRetry] = useState(0);
+  const thumbnail =
+    phase === "thumbnail-loading" || phase === "thumbnail-loaded";
+  const waiting = phase === "loading" || phase === "thumbnail-loading";
+
+  function handleLoad() {
+    setPhase(thumbnail ? "thumbnail-loaded" : "loaded");
+  }
+
+  function handleError() {
+    setPhase(
+      thumbnail || !image.thumbnail_path ? "error" : "thumbnail-loading",
+    );
+  }
+
+  return (
+    <div className="rv-media-canvas">
+      {phase === "error" ? (
+        <div className="rv-media-load-error" role="alert">
+          <strong>Image could not be displayed</strong>
+          <span>
+            The full-resolution file and any available thumbnail could not be
+            loaded. Annotation data was not changed.
+          </span>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              setRetry((current) => current + 1);
+              setPhase("loading");
+            }}
+          >
+            Retry image
+          </button>
+        </div>
+      ) : (
+        <>
+          {waiting && (
+            <p role="status" className="rv-media-load-status">
+              {thumbnail
+                ? "Loading thumbnail preview..."
+                : "Loading full-resolution image..."}
+            </p>
+          )}
+          {phase === "thumbnail-loaded" && (
+            <p role="status" className="rv-media-load-warning">
+              Full-resolution image unavailable. Showing a thumbnail preview;
+              source annotations are unchanged.
+            </p>
+          )}
+          <img
+            key={`${retry}:${thumbnail ? "thumbnail" : "original"}`}
+            src={focusedImageUrl(image.id, thumbnail, retry)}
+            alt={`Focused project image: ${image.original_filename}`}
+            decoding="async"
+            onLoad={handleLoad}
+            onError={handleError}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
 export function Gallery({
   project,
   onOpenAnnotation,
@@ -243,8 +328,6 @@ export function Gallery({
   const [pendingNavigationEdge, setPendingNavigationEdge] = useState<
     "first" | "last" | null
   >(null);
-  const [failedImageId, setFailedImageId] = useState<string | null>(null);
-  const [imageRetry, setImageRetry] = useState(0);
   const [sortBy, setSortBy] = useState<
     "filename" | "newest" | "oldest" | "annotations"
   >("newest");
@@ -433,10 +516,6 @@ export function Gallery({
     }
   }, [focusedImageId, images.data, page, pendingNavigationEdge, visibleImages]);
 
-  useEffect(() => {
-    setFailedImageId(null);
-  }, [focusedImage?.id]);
-
   function navigate(action: GalleryNavigationAction) {
     if (!focusedImage || !images.data) return;
     const destination = resolveGalleryNavigation({
@@ -594,35 +673,10 @@ export function Gallery({
               </div>
             </div>
 
-            <div className="rv-media-canvas">
-              {failedImageId === focusedImage.id ? (
-                <div className="rv-media-load-error" role="alert">
-                  <strong>Image could not be displayed</strong>
-                  <span>
-                    The file may be missing or corrupt. Annotation data was not
-                    changed.
-                  </span>
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => {
-                      setFailedImageId(null);
-                      setImageRetry((current) => current + 1);
-                    }}
-                  >
-                    Retry image
-                  </button>
-                </div>
-              ) : (
-                <img
-                  key={`${focusedImage.id}-${imageRetry}`}
-                  src={imageDisplayUrl(focusedImage.id)}
-                  alt={`Focused project image: ${focusedImage.original_filename}`}
-                  decoding="async"
-                  onError={() => setFailedImageId(focusedImage.id)}
-                />
-              )}
-            </div>
+            <FocusedImagePreview
+              key={`${project.id}:${focusedImage.id}`}
+              image={focusedImage}
+            />
 
             <div className="rv-filmstrip-heading">
               <span>

@@ -7,11 +7,24 @@ import {
   getAnnotationSession,
   getPredictions,
   imageDisplayUrl,
+  imageThumbnailUrl,
   rejectPrediction,
   type PredictionProposal,
   type ReviewQueueItem,
 } from "../../api/client";
 import "./quickConfidenceReview.css";
+
+type PreviewSource = "full" | "thumbnail" | "failed";
+
+function previewImageUrl(
+  imageId: string,
+  source: PreviewSource,
+  retry: number,
+): string {
+  if (source === "thumbnail") return imageThumbnailUrl(imageId);
+  const displayUrl = imageDisplayUrl(imageId);
+  return retry ? `${displayUrl}?review_retry=${retry}` : displayUrl;
+}
 
 interface QuickConfidenceReviewDialogProps {
   item: Pick<
@@ -21,6 +34,9 @@ interface QuickConfidenceReviewDialogProps {
   reviewBelowConfidence: number | null;
   position: number;
   total: number;
+  showRankedPosition?: boolean;
+  hasPreviousImage?: boolean;
+  hasNextImage?: boolean;
   onClose: () => void;
   onPreviousImage: () => void;
   onNextImage: () => void;
@@ -46,6 +62,9 @@ export function QuickConfidenceReviewDialog({
   reviewBelowConfidence,
   position,
   total,
+  showRankedPosition = true,
+  hasPreviousImage,
+  hasNextImage,
   onClose,
   onPreviousImage,
   onNextImage,
@@ -62,6 +81,9 @@ export function QuickConfidenceReviewDialog({
   const [selectedProposalId, setSelectedProposalId] = useState<string | null>(
     null,
   );
+  const [previewSource, setPreviewSource] = useState<PreviewSource>("full");
+  const [previewRetry, setPreviewRetry] = useState(0);
+  const [loadedPreviewKey, setLoadedPreviewKey] = useState<string | null>(null);
   const [classOverrides, setClassOverrides] = useState<Record<string, string>>(
     {},
   );
@@ -69,6 +91,9 @@ export function QuickConfidenceReviewDialog({
   useEffect(() => {
     setSelectedProposalId(null);
     setClassOverrides({});
+    setPreviewSource("full");
+    setPreviewRetry(0);
+    setLoadedPreviewKey(null);
   }, [item.image_id]);
 
   useEffect(() => {
@@ -144,6 +169,14 @@ export function QuickConfidenceReviewDialog({
     !selectedProposal?.model_display_name.startsWith("ReefVision managed") &&
     (selectedProposal?.predicted_label.length ?? 0) <= 200;
   const image = imageQuery.data?.image;
+  const previewUrl = previewImageUrl(
+    item.image_id,
+    previewSource,
+    previewRetry,
+  );
+
+  const previewKey = `${item.image_id}-${previewSource}-${previewRetry}`;
+  const previewLoaded = loadedPreviewKey === previewKey;
 
   const review = useMutation({
     mutationFn: async (action: "accept" | "reject") => {
@@ -195,7 +228,10 @@ export function QuickConfidenceReviewDialog({
             <p className="eyebrow">ReefVision 1.0.1 · Quick checks</p>
             <h3 id="rv-quick-review-heading">Confidence-based review</h3>
             <p>
-              Ranked image {position} of {total} · {item.review_state}
+              {showRankedPosition
+                ? `Ranked image ${position} of ${total}`
+                : "Current image"}{" "}
+              · {item.review_state}
               {reviewBelowConfidence !== null
                 ? ` · review at or below ${Math.round(reviewBelowConfidence * 100)}%`
                 : " · all pending confidences"}
@@ -220,11 +256,40 @@ export function QuickConfidenceReviewDialog({
               <p role="alert">{imageQuery.error.message}</p>
             ) : image ? (
               <div className="rv-quick-review-image-stage">
-                <img
-                  src={imageDisplayUrl(item.image_id)}
-                  alt={image.original_filename}
-                />
-                {selectedProposal && (
+                {previewSource !== "failed" && !previewLoaded && (
+                  <p role="status">Loading image preview…</p>
+                )}
+                {previewSource === "failed" ? (
+                  <div role="alert">
+                    Image preview failed to load. Annotations are unchanged.
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLoadedPreviewKey(null);
+                        setPreviewRetry((attempt) => attempt + 1);
+                        setPreviewSource("full");
+                      }}
+                    >
+                      Retry image preview
+                    </button>
+                  </div>
+                ) : (
+                  <img
+                    key={previewKey}
+                    src={previewUrl}
+                    alt={image.original_filename}
+                    onLoad={() => setLoadedPreviewKey(previewKey)}
+                    onError={() => {
+                      setLoadedPreviewKey(null);
+                      setPreviewSource(
+                        previewSource === "full" && image.thumbnail_path
+                          ? "thumbnail"
+                          : "failed",
+                      );
+                    }}
+                  />
+                )}
+                {selectedProposal && previewLoaded && (
                   <svg
                     className="rv-quick-review-overlay"
                     viewBox={`0 0 ${image.width_px} ${image.height_px}`}
@@ -407,7 +472,7 @@ export function QuickConfidenceReviewDialog({
             <button
               type="button"
               className="secondary"
-              disabled={position <= 1 || review.isPending}
+              disabled={!(hasPreviousImage ?? position > 1) || review.isPending}
               onClick={onPreviousImage}
             >
               Previous image
@@ -415,7 +480,7 @@ export function QuickConfidenceReviewDialog({
             <button
               type="button"
               className="secondary"
-              disabled={position >= total || review.isPending}
+              disabled={!(hasNextImage ?? position < total) || review.isPending}
               onClick={onNextImage}
             >
               Next image

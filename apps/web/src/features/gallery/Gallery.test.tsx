@@ -503,15 +503,122 @@ describe("Gallery", () => {
     const focusedImage = await screen.findByAltText(
       "Focused project image: swiftia-01.png",
     );
+    const originalUrl = focusedImage.getAttribute("src");
     fireEvent.error(focusedImage);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Image could not be displayed",
     );
     await userEvent.click(screen.getByRole("button", { name: "Retry image" }));
+    const retryImage = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    expect(retryImage).toBeInTheDocument();
+    expect(retryImage.getAttribute("src")).not.toBe(originalUrl);
+    expect(retryImage.getAttribute("src")).toContain("rv_retry=1");
+  });
+
+  it("resets the first-image loading state during navigation", async () => {
+    const secondImage: ProjectImage = {
+      ...image,
+      id: "image-2",
+      original_filename: "swiftia-02.png",
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image, secondImage],
+        total: 2,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+    renderGallery();
+    const first = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
     expect(
-      await screen.findByAltText("Focused project image: swiftia-01.png"),
+      screen.getByText("Loading full-resolution image..."),
     ).toBeInTheDocument();
+    fireEvent.load(first);
+    expect(
+      screen.queryByText("Loading full-resolution image..."),
+    ).not.toBeInTheDocument();
+
+    const viewer = screen.getByRole("region", { name: "Image workbench" });
+    viewer.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    const next = await screen.findByAltText(
+      "Focused project image: swiftia-02.png",
+    );
+    expect(
+      screen.getByText("Loading full-resolution image..."),
+    ).toBeInTheDocument();
+    fireEvent.load(next);
+    expect(
+      screen.queryByText("Loading full-resolution image..."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("labels the thumbnail when the full-resolution source fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [{ ...image, thumbnail_path: "managed/thumbnail.png" }],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+    renderGallery();
+    const original = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    fireEvent.error(original);
+    expect(
+      screen.getByText("Loading thumbnail preview..."),
+    ).toBeInTheDocument();
+    const fallback = screen.getByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    expect(fallback.getAttribute("src")).toMatch(/thumbnail/);
+    fireEvent.load(fallback);
+    expect(
+      screen.getByText(/Full-resolution image unavailable/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("bypasses a failed thumbnail cache when retrying the focused image", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [{ ...image, thumbnail_path: "managed/thumbnail.png" }],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+    renderGallery();
+    const original = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    fireEvent.error(original);
+    const fallback = screen.getByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    expect(fallback.getAttribute("src")).toMatch(/renderer=2/);
+    fireEvent.error(fallback);
+    await userEvent.click(screen.getByRole("button", { name: "Retry image" }));
+    const retried = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    expect(retried.getAttribute("src")).toContain("rv_retry=1");
+    fireEvent.error(retried);
+    const nextFallback = screen.getByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    expect(nextFallback.getAttribute("src")).toMatch(/renderer=2&rv_retry=1/);
   });
 
   it("falls back to the first eligible image when the recent image was deleted", async () => {

@@ -25,6 +25,7 @@ vi.mock("../../api/client", () => ({
   getAnnotationSession: vi.fn(),
   getPredictions: vi.fn(),
   imageDisplayUrl: (id: string) => `/api/v1/images/${id}/display`,
+  imageThumbnailUrl: (id: string) => `/api/v1/images/${id}/thumbnail`,
 }));
 
 const item = {
@@ -88,7 +89,7 @@ function renderDialog(
       />
     </QueryClientProvider>,
   );
-  return { ...result, ...callbacks };
+  return { ...result, client, ...callbacks };
 }
 
 describe("QuickConfidenceReviewDialog", () => {
@@ -176,6 +177,147 @@ describe("QuickConfidenceReviewDialog", () => {
     await waitFor(() => {
       expect(acceptPrediction).toHaveBeenCalledWith("unmapped", {});
     });
+  });
+
+  it("navigates the editor images without inventing a ranked queue position", async () => {
+    const { onPreviousImage, onNextImage } = renderDialog({
+      showRankedPosition: false,
+      hasPreviousImage: true,
+      hasNextImage: false,
+      position: 1,
+      total: 1,
+    });
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/Current image/)).toBeTruthy();
+    const previous = within(dialog).getByRole("button", {
+      name: "Previous image",
+    });
+    const next = within(dialog).getByRole("button", { name: "Next image" });
+    expect(previous).toBeEnabled();
+    expect(next).toBeDisabled();
+    fireEvent.click(previous);
+    expect(onPreviousImage).toHaveBeenCalledTimes(1);
+    expect(onNextImage).not.toHaveBeenCalled();
+  });
+
+  it("keeps prediction bounds hidden until image pixels load", async () => {
+    renderDialog();
+    const preview = await screen.findByRole("img", { name: "swiftia.png" });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading image preview",
+    );
+    expect(
+      screen.queryByLabelText("Selected prediction bounds"),
+    ).not.toBeInTheDocument();
+    fireEvent.load(preview);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Selected prediction bounds"),
+    ).toBeInTheDocument();
+  });
+
+  it("ignores a previously loaded image when navigating to another image", async () => {
+    const { client, rerender, onClose, onPreviousImage, onNextImage } =
+      renderDialog();
+    fireEvent.load(await screen.findByRole("img", { name: "swiftia.png" }));
+    expect(
+      screen.getByLabelText("Selected prediction bounds"),
+    ).toBeInTheDocument();
+
+    const nextImage = { ...item, image_id: "image-2" };
+    client.setQueryDefaults(["annotations", "image-2", "quick-review"], {
+      staleTime: 60_000,
+    });
+    client.setQueryDefaults(["predictions", "image-2", "quick-review"], {
+      staleTime: 60_000,
+    });
+    client.setQueryData(["annotations", "image-2", "quick-review"], {
+      image: {
+        id: "image-2",
+        original_filename: "next-swiftia.png",
+        width_px: 80,
+        height_px: 60,
+      },
+      label_classes: [
+        { id: "class-1", name: "Swiftia exserta", is_active: true },
+      ],
+      annotations: [],
+      counts_by_class: [],
+    });
+    client.setQueryData(["predictions", "image-2", "quick-review"], {
+      items: [{ ...proposal("next", 0.4), image_id: "image-2" }],
+      counts: { pending: 1 },
+    });
+    rerender(
+      <QueryClientProvider client={client}>
+        <QuickConfidenceReviewDialog
+          item={nextImage}
+          reviewBelowConfidence={0.5}
+          position={2}
+          total={2}
+          onClose={onClose}
+          onPreviousImage={onPreviousImage}
+          onNextImage={onNextImage}
+        />
+      </QueryClientProvider>,
+    );
+    const second = await screen.findByRole("img", {
+      name: "next-swiftia.png",
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading image preview",
+    );
+    expect(
+      screen.queryByLabelText("Selected prediction bounds"),
+    ).not.toBeInTheDocument();
+    fireEvent.load(second);
+    expect(
+      screen.getByLabelText("Selected prediction bounds"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a retryable error instead of an invisible failed preview", async () => {
+    renderDialog();
+    const image = await screen.findByRole("img", { name: "swiftia.png" });
+    fireEvent.error(image);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Image preview failed to load",
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry image preview" }),
+    );
+    const retried = await screen.findByRole("img", { name: "swiftia.png" });
+    expect(retried).toHaveAttribute(
+      "src",
+      "/api/v1/images/image-1/display?review_retry=1",
+    );
+  });
+
+  it("falls back to a thumbnail before offering retry", async () => {
+    vi.mocked(getAnnotationSession).mockResolvedValue({
+      image: {
+        id: "image-1",
+        original_filename: "swiftia.png",
+        width_px: 80,
+        height_px: 60,
+        thumbnail_path: "thumbs/swiftia.png",
+      },
+      label_classes: [],
+      annotations: [],
+      counts_by_class: [],
+      previous_image_id: null,
+      next_image_id: null,
+    } as unknown as Awaited<ReturnType<typeof getAnnotationSession>>);
+    renderDialog();
+    fireEvent.error(await screen.findByRole("img", { name: "swiftia.png" }));
+    expect(screen.getByRole("img", { name: "swiftia.png" })).toHaveAttribute(
+      "src",
+      "/api/v1/images/image-1/thumbnail",
+    );
+    fireEvent.error(screen.getByRole("img", { name: "swiftia.png" }));
+    expect(
+      screen.getByRole("button", { name: "Retry image preview" }),
+    ).toBeEnabled();
   });
 
   it("has navigation and a close action without leaving the page", async () => {

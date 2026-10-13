@@ -263,6 +263,21 @@ function confirmDiscardUnsavedEdits(actionLabel: string): boolean {
   );
 }
 
+/**
+ * Preserve a thumbnail preview when a source-resolution preload fails.
+ * The preview is not a substitute for source imagery during scientific review.
+ */
+export function annotationImageSource(
+  imageId: string,
+  thumbnailPath: string | null,
+  fullImageLoaded: boolean,
+  retry = 0,
+): string {
+  return thumbnailPath && !fullImageLoaded
+    ? imageThumbnailUrl(imageId)
+    : `${imageDisplayUrl(imageId)}?retry=${retry}`;
+}
+
 export function AnnotationEditor({
   project,
   initialImageId,
@@ -333,8 +348,12 @@ export function AnnotationEditor({
     useState<Record<string, ReviewedPredictionGeometry>>({});
   const [objectFilter, setObjectFilter] = useState("");
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-  const [fullImageLoaded, setFullImageLoaded] = useState(false);
-  const [fullImageFailed, setFullImageFailed] = useState(false);
+  const [fullImageRetry, setFullImageRetry] = useState(0);
+  const [imagePreload, setImagePreload] = useState<{
+    imageId: string;
+    retry: number;
+    phase: "loading" | "loaded" | "failed";
+  } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef(state);
@@ -545,31 +564,47 @@ export function AnnotationEditor({
   ]);
 
   useEffect(() => {
-    if (!sessionQuery.data) {
+    const imageId = sessionQuery.data?.image.id;
+    if (!imageId) {
       return;
     }
     const preloader = new window.Image();
     let cancelled = false;
-    setFullImageLoaded(false);
-    setFullImageFailed(false);
+    const retry = fullImageRetry;
+    setImagePreload({ imageId, retry, phase: "loading" });
     preloader.decoding = "async";
     preloader.onload = () => {
-      if (!cancelled) {
-        setFullImageLoaded(true);
+      if (typeof preloader.decode !== "function") {
+        if (!cancelled) {
+          setImagePreload({ imageId, retry, phase: "loaded" });
+        }
+        return;
       }
+      void preloader.decode().then(
+        () => {
+          if (!cancelled) {
+            setImagePreload({ imageId, retry, phase: "loaded" });
+          }
+        },
+        () => {
+          if (!cancelled) {
+            setImagePreload({ imageId, retry, phase: "failed" });
+          }
+        },
+      );
     };
     preloader.onerror = () => {
       if (!cancelled) {
-        setFullImageFailed(true);
+        setImagePreload({ imageId, retry, phase: "failed" });
       }
     };
-    preloader.src = imageDisplayUrl(sessionQuery.data.image.id);
+    preloader.src = annotationImageSource(imageId, null, true, retry);
     return () => {
       cancelled = true;
       preloader.onload = null;
       preloader.onerror = null;
     };
-  }, [sessionQuery.data?.image.id]);
+  }, [fullImageRetry, sessionQuery.data?.image.id]);
 
   useEffect(() => {
     const element = viewportRef.current;
@@ -2406,13 +2441,23 @@ export function AnnotationEditor({
       height: containerSize.height || 780,
     });
   const image = sessionQuery.data.image;
+  const preloadIsCurrent =
+    imagePreload?.imageId === image.id &&
+    imagePreload?.retry === fullImageRetry;
+  const fullImageLoaded = preloadIsCurrent && imagePreload?.phase === "loaded";
+  const fullImageFailed = preloadIsCurrent && imagePreload?.phase === "failed";
+  const fullImageLoading =
+    !preloadIsCurrent || imagePreload?.phase === "loading";
   const currentLabelClasses = labelClasses;
   const strokeScale = 1 / resolvedView.scale;
   const handleRadius = Math.max(4 * strokeScale, 2);
-  const imageHref =
-    image.thumbnail_path && !fullImageLoaded && !fullImageFailed
-      ? imageThumbnailUrl(image.id)
-      : imageDisplayUrl(image.id);
+  const imageHref = annotationImageSource(
+    image.id,
+    image.thumbnail_path,
+    fullImageLoaded,
+    fullImageRetry,
+  );
+  const imageRenderKey = `${image.id}:${fullImageRetry}:${fullImageLoaded}`;
   const assistAcceptLabelClassId =
     (assistSourcePrediction
       ? (predictionClassOverrides[assistSourcePrediction.id] ??
@@ -3730,6 +3775,28 @@ export function AnnotationEditor({
               acceptance.
             </p>
           )}
+          {fullImageLoading && (
+            <p role="status" className="rv-media-load-status">
+              Loading full-resolution image...
+            </p>
+          )}
+          {fullImageFailed && (
+            <div className="rv-media-load-error" role="alert">
+              <strong>Full-resolution image could not load</strong>
+              <p>
+                {image.thumbnail_path
+                  ? "A thumbnail preview is shown. Do not verify new annotations against this preview."
+                  : "No thumbnail is available. The image cannot be reliably reviewed until the full-resolution file loads."}
+              </p>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setFullImageRetry((value) => value + 1)}
+              >
+                Retry full-resolution image
+              </button>
+            </div>
+          )}
           <div className="annotation-canvas-frame" ref={viewportRef}>
             {learningOpen && (
               <ImprovePredictionsPanel
@@ -3884,6 +3951,7 @@ export function AnnotationEditor({
                 transform={`translate(${resolvedView.offsetX} ${resolvedView.offsetY}) scale(${resolvedView.scale})`}
               >
                 <image
+                  key={imageRenderKey}
                   href={imageHref}
                   x={0}
                   y={0}
@@ -4174,9 +4242,16 @@ export function AnnotationEditor({
           reviewBelowConfidence={Number(quickReviewConfidence) / 100}
           position={1}
           total={1}
+          showRankedPosition={false}
+          hasPreviousImage={Boolean(sessionQuery.data.previous_image_id)}
+          hasNextImage={Boolean(sessionQuery.data.next_image_id)}
           onClose={() => setQuickReviewOpen(false)}
-          onPreviousImage={() => undefined}
-          onNextImage={() => undefined}
+          onPreviousImage={() => {
+            void navigateToImage(sessionQuery.data.previous_image_id);
+          }}
+          onNextImage={() => {
+            void navigateToImage(sessionQuery.data.next_image_id);
+          }}
           onReviewSaved={() => {
             void Promise.all([
               sessionQuery.refetch(),
