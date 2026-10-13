@@ -1,103 +1,60 @@
-# ReefVision 1.0.1 — Pre-release acceptance and handoff
+# ReefVision 1.0.1 pre-release acceptance and handoff
 
-**Status:** Release HOLD. The earlier installer candidate passed the recorded
-acceptance below, but PR #44 now contains additional annotation-intelligence
-changes that require fresh exact-head CI and installed-desktop validation. Keep
-the PR in draft and do not merge, tag, or publish without explicit maintainer
-approval.
+**Status: HOLD.** Automated software acceptance passed on the integrated scientific candidate. Installed interactive GUI acceptance, NVIDIA GPU acceptance, representative scientific validation, and explicit maintainer approval remain required.
 
-## 1.0.1 patch highlights
+**Candidate branch:** `feat/segmentation-evaluation-gui-20261013`
 
-- SAM 2.1 Tiny, Small, Base+, and Large optional checkpoint download when a
-  user selects that variant; provenance, checksum verification and retry.
-- Shift+1: image-wide proposals using the explicitly promoted detector when one
-  is active, otherwise bounded full-image SAM generation. Shift+2: non-destructive
-  refinement of exactly one selected saved mask. SAM box prompting remains a
-  separate action; ordinary number-key class selection is preserved.
-- Pending proposal masks support paint/erase correction, undo/redo, class
-  assignment and explicit acceptance or rejection. They are excluded from
-  verified counts and training data until accepted.
-- Verified-annotation learning creates immutable, group-safe dataset snapshots,
-  queues local training, evaluates detector candidates on held-out groups, and
-  requires explicit promotion. Promotion and rollback are audited; evaluation
-  outputs cannot be accepted as annotations.
-- Class discovery from local .pt metadata; acceptance persists native project
-  annotations with model provenance.
-- COCO boxes/masks and YOLO detection/segmentation import with class names,
-  including unused categories; retain external metadata.
-- Confidence-based review with a configurable default cutoff of 50%; only
-  predictions at or below the cutoff appear for review, and no proposal is
-  considered human-verified without an explicit acceptance.
+**Candidate commit:** `004f6c284234c9a846a1fc537fc899f2399ca2e9`
 
-## Automated acceptance evidence
+**Draft PR:** [#68](https://github.com/Rafael-Del-Valle/ReefVision/pull/68), based on the complete 1.0.1 annotation branch in [#44](https://github.com/Rafael-Del-Valle/ReefVision/pull/44)
 
-- Tested source commit: `d74b603c407ba8312fc270e90c81065d086749fd`
-- Successful installer build and **separate clean Windows runner**:
-  https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/38181922418
-- Successful backend/frontend CI:
-  https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/38181922403
-- Successful full scientific/software acceptance:
-  https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/38181922399
-- Successful standalone live SAM 2.1 acceptance:
-  https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/38181922294
-- Windows acceptance report artifact:
-  https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/38181922418/artifacts/11719011541
-- Installer artifact (MSI, six external CAB files, build provenance):
-  https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/38181922418/artifacts/11717564456
+**Publication policy:** Do not merge, tag, publish, replace release assets, or install on the maintainer's personal computer without explicit approval. Preserve `v1.0.1-rc.1` and its published assets.
 
-**Windows acceptance report:** PASS for MSI installation; shortcuts; first
-launch; frontend-to-backend connection; migration status; catalog policy;
-real SAM 2.1 Tiny checkpoint download, inference and human-accepted mask;
-COCO/YOLO imports; confidence review; saved annotations; desktop restart;
-project exchange; uninstall; and user-data retention. The packaged SAM
-inference completed in approximately 8.6 seconds on the acceptance runner.
+## Implemented behavior
 
-**MSI:** `ReefVision_1.0.1_x64_en-US.msi`
-**SHA-256:** `EB73C952D3C3FF16AABC64DBEDE7AFAAD218BE1EDAB5AD5E36F8F167FF9916FD`
-**External media:** `rv1.cab` through `rv6.cab`. Keep the CAB files
-alongside the MSI when distributing or installing; the MSI depends on them.
-The MSI ProductVersion and packaged API both reported `1.0.1`.
+- Optional SAM 2.1 Tiny, Small, Base+, and Large checkpoint acquisition is explicit, verified by revision and SHA-256, cancellable, and recoverable. ReefVision does not bundle unrelated pretrained detector weights.
+- Shift+1 creates image-wide proposals with the active local detector or bounded full-image SAM generation. Shift+2 refines exactly one selected saved mask without changing the original until acceptance. Box-prompt SAM and bare numeric class shortcuts remain separate.
+- Pending proposals support class assignment, edit, accept, reject, Accept Selected, and Accept Visible. Unapproved and evaluation-only outputs cannot become verified counts or training examples.
+- Local `.pt` registration retains task, label schema, checkpoint digest, and provenance. COCO and YOLO import preserve source association, stable identities, geometry, labels, and external metadata.
+- Verified-only learning snapshots are immutable and group safe. Segmentation evaluation uses source-pixel instance masks, class-aware one-to-one matching, mask AP50, precision, recall, count MAE, signed count bias, and per-class support.
+- Candidate and incumbent evaluation are bound to the same immutable holdout. Child jobs carry the expected model ID, checkpoint digest, dataset ID, split, manifest digest, parent job, and source-image list; finalization rejects tampering.
+- Segmentation promotion and rollback require explicit operator identity, reason, confirmation, current active-state checks, eligibility, matching project/task/schema/lineage, and a verified checkpoint digest. They do not change the active detector.
 
-The acceptance test ran with Python, Node.js and Rust absent from the
-installed application's PATH. The model catalog exposed 25 architectures
-and zero bundled pretrained checkpoints. The optional SAM Tiny checkpoint
-was fetched into isolated user cache as part of the test.
+## Exact-head automated evidence
 
-## PR #44 annotation-intelligence validation
+Commit `004f6c284234c9a846a1fc537fc899f2399ca2e9` completed **25/25 GitHub checks successfully** on October 13, 2026.
 
-Source validation for the current PR work includes a real SAM 2.1 Tiny
-full-image proposal run, focused backend coverage for proposal generation,
-refinement, verified learning, held-out evaluation and model inference, the full
-frontend unit/E2E/build suite, and an Alembic upgrade/downgrade/upgrade cycle.
-The exact commands and counts are maintained in the PR description and issue
-#48 progress log so this document does not imply that the earlier MSI exercised
-the newly added keyboard and mask-editing workflows.
+| Gate | Verified result | Evidence |
+| --- | --- | --- |
+| Backend | Ruff PASS; strict mypy PASS on 403 files; 1,158 passed, 32 skipped, 1 warning | [Full acceptance](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/38453678022) |
+| Scientific regression | 117 passed, 1 warning | Same full acceptance run |
+| Database | Canonical Alembic upgrade, downgrade to base, and upgrade through revision 0037 PASS | Same full acceptance run |
+| Frontend | Prettier and TypeScript PASS; 395 Vitest tests in 87 files PASS; production build PASS | Same full acceptance run |
+| Browser E2E | 11 passed, 1 configured skip | Same full acceptance run |
+| SAM providers | Live SAM 2.1 checkpoint/CPU inference, pinned Windows providers, and native Windows Python 3.12 PASS | Same full acceptance run |
+| Windows package | Independent MSI/CAB build PASS | [Artifact 11843879278](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/38453678022/artifacts/11843879278) |
+| Disposable Windows lifecycle | Install, launch, persistence, packaged SAM CPU inference, uninstall, and retained data PASS | [Build run](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/38453678359) and [evidence artifact 11843918504](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/38453678359/artifacts/11843918504) |
 
-Instance-segmentation annotations with holes remain blocked from the existing
-polygon-only training path rather than flattened. Candidate evaluation and
-guarded promotion in the Improve Predictions panel currently cover detector
-models. Automatic retraining remains opt-in; ReefVision does not silently train
-or activate a model from newly verified data.
+The lifecycle run tested `ReefVision_1.0.1_x64_en-US.msi` with SHA-256 `B42EF98864D5150AF0363F6E590E2079F22D1E27B453C8D4CA1B3E14CF6ADEAA`. Its MSI Media table required six external cabinets, `rv1.cab` through `rv6.cab`, and all six were present. Use only the MSI and cabinets from the same [installer artifact 11845095338](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/38453678359/artifacts/11845095338); the independent release-build artifact is a separate build.
 
-## Remaining acceptance boundaries
+Automated installation and browser E2E do not establish interactive mouse/keyboard acceptance, NVIDIA execution, or scientific validity on representative research data.
 
-- [ ] Fresh exact-head core CI for the annotation-intelligence changes (Ruff,
-      mypy, pytest, frontend formatting, TypeScript, Vitest, Playwright,
-      production build).
-- [x] Software/provider acceptance on pinned Windows Python.
-- [x] Separate clean-machine MSI lifecycle, including SAM and persistence.
-- [x] MSI version, six external CAB files and cryptographic artifact digests.
-- [ ] Direct **installed desktop GUI** operator smoke test of full-image Shift+1,
-      selected-mask Shift+2, proposal paint/erase and undo/redo, Accept Visible,
-      explicit candidate promotion/rollback, and the floating review dialog.
-      The earlier automated MSI test exercised the packaged API, not these new
-      keyboard/mouse interactions.
-- [ ] Optional upgrade-in-place test from a compatible prior MSI; the clean
-      install workflow passed `-SkipUpgrade`.
-- [ ] Explicit maintainer approval for any merge, tag or public release.
+## Scientific safeguards
 
-The successful acceptance URLs above refer to the tested source commit. Any
-subsequent source or release-documentation change needs fresh latest-commit
-validation before the final approval decision. Artifact URLs expire according
-to GitHub Actions retention (the installer and evidence were scheduled to
-expire around 2026-10-25).
+- Only explicitly verified masks enter learning or evaluation ground truth.
+- Related image groups remain in one split, and parent-training lineage is checked to prevent holdout leakage.
+- Missing, corrupt, empty, mismatched, or out-of-bounds masks fail closed.
+- Raster holes and disconnected components remain exact mask geometry rather than lossy polygon approximations.
+- Evaluation-only inference is isolated from annotation review and training.
+- Promotion and rollback preserve immutable evaluation history and deployment audit records; stale concurrent operations are rejected.
+- No candidate activates silently.
+
+## Remaining release gates
+
+- [ ] Execute the installed Windows GUI workflow for Shift+1, Shift+2, proposal editing, acceptance/rejection, model evaluation, promote/rollback, restart persistence, and uninstall with retained evidence.
+- [ ] Run real NVIDIA SAM, registered-model inference, and training/evaluation on authorized compatible hardware, or record an explicit maintainer disposition.
+- [ ] Evaluate a registered segmentation candidate and incumbent on a representative, authorized, scientist-verified holdout; review metrics and audit records; promote an eligible candidate; then roll back and confirm the restored selection.
+- [ ] Record scientist sign-off and any limitations of the representative dataset and thresholds.
+- [ ] Obtain explicit maintainer approval before merge, tag, publication, or personal-machine installation.
+
+Until those gates are completed, the verified status is: code integrated **PASS**, automated CI **PASS**, MSI/CAB **PASS**, installed interactive GUI **BLOCKED**, NVIDIA GPU **BLOCKED**, scientific acceptance **BLOCKED**, ready for approval **BLOCKED**.
