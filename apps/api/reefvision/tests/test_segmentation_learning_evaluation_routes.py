@@ -1,7 +1,7 @@
 """Schema and route contract: mask evaluation is not deployment."""
 
-from pydantic import ValidationError
 import pytest
+from pydantic import ValidationError
 
 from reefvision.api.routes.segmentation_learning_evaluation import router
 from reefvision.schemas.segmentation_learning_evaluation import (
