@@ -159,8 +159,7 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
         </p>
       )}
       <p>
-        Active segmenter:{" "}
-        <strong>{activeModel?.display_name ?? "None"}</strong>
+        Active segmenter: <strong>{activeModel?.display_name ?? "None"}</strong>
       </p>
       <div className="training-run-list">
         <label>
