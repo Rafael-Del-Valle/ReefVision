@@ -3,22 +3,27 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { DatasetVersionRecord, ModelRegistration, Project } from "../../api/client";
+import type {
+  DatasetVersionRecord,
+  ModelRegistration,
+  Project,
+} from "../../api/client";
 import * as clientApi from "../../api/client";
 import { SegmentationEvaluationWorkspace } from "./SegmentationEvaluationWorkspace";
 import * as evaluationApi from "./segmentationEvaluationApi";
 
 vi.mock("../../api/client", async () => {
-  const actual = await vi.importActual<typeof import("../../api/client")>(
-    "../../api/client",
-  );
+  const actual =
+    await vi.importActual<typeof import("../../api/client")>(
+      "../../api/client",
+    );
   return { ...actual, getDatasetVersions: vi.fn(), getModels: vi.fn() };
 });
 
 vi.mock("./segmentationEvaluationApi", async () => {
-  const actual = await vi.importActual<typeof import("./segmentationEvaluationApi")>(
-    "./segmentationEvaluationApi",
-  );
+  const actual = await vi.importActual<
+    typeof import("./segmentationEvaluationApi")
+  >("./segmentationEvaluationApi");
   return {
     ...actual,
     queueSegmentationEvaluation: vi.fn(),
@@ -112,7 +117,9 @@ describe("SegmentationEvaluationWorkspace", () => {
       progress_total: 1,
       error_message: null,
     });
-    vi.mocked(evaluationApi.getSegmentationEvaluation).mockResolvedValue(evaluation);
+    vi.mocked(evaluationApi.getSegmentationEvaluation).mockResolvedValue(
+      evaluation,
+    );
     vi.mocked(evaluationApi.promoteSegmentationCandidate).mockResolvedValue({
       id: "deployment-1",
       status: "succeeded",
@@ -147,7 +154,9 @@ describe("SegmentationEvaluationWorkspace", () => {
       screen.getByLabelText("Candidate segmentation model"),
       candidate.id,
     );
-    await user.click(screen.getByRole("button", { name: "Queue held-out evaluation" }));
+    await user.click(
+      screen.getByRole("button", { name: "Queue held-out evaluation" }),
+    );
     await waitFor(() => {
       expect(evaluationApi.queueSegmentationEvaluation).toHaveBeenCalledWith(
         project.id,
@@ -169,20 +178,31 @@ describe("SegmentationEvaluationWorkspace", () => {
     const user = userEvent.setup();
     renderWorkspace();
     await user.type(
-      screen.getByLabelText("Existing evaluation ID (restore after restarting)"),
+      screen.getByLabelText(
+        "Existing evaluation ID (restore after restarting)",
+      ),
       evaluation.id,
     );
     expect(await screen.findByText("0.830")).toBeInTheDocument();
-    const promote = screen.getByRole("button", { name: "Promote segmentation candidate" });
+    const promote = screen.getByRole("button", {
+      name: "Promote segmentation candidate",
+    });
     expect(promote).toBeDisabled();
 
-    await user.type(screen.getByLabelText("Operator/reviewer identity"), "Reviewer");
     await user.type(
-      screen.getByLabelText("Scientific reason for this action (at least 10 characters)"),
+      screen.getByLabelText("Operator/reviewer identity"),
+      "Reviewer",
+    );
+    await user.type(
+      screen.getByLabelText(
+        "Scientific reason for this action (at least 10 characters)",
+      ),
       "Verified mask evidence accepted",
     );
     await user.click(
-      screen.getByLabelText("Confirm that this project has no active segmenter"),
+      screen.getByLabelText(
+        "Confirm that this project has no active segmenter",
+      ),
     );
     expect(promote).toBeDisabled();
     await user.click(
@@ -236,17 +256,26 @@ describe("SegmentationEvaluationWorkspace", () => {
     const user = userEvent.setup();
     renderWorkspace();
     await user.type(
-      screen.getByLabelText("Existing evaluation ID (restore after restarting)"),
+      screen.getByLabelText(
+        "Existing evaluation ID (restore after restarting)",
+      ),
       evaluation.id,
     );
     await screen.findByText("Inference still running");
-    await user.type(screen.getByLabelText("Operator/reviewer identity"), "Reviewer");
     await user.type(
-      screen.getByLabelText("Scientific reason for this action (at least 10 characters)"),
+      screen.getByLabelText("Operator/reviewer identity"),
+      "Reviewer",
+    );
+    await user.type(
+      screen.getByLabelText(
+        "Scientific reason for this action (at least 10 characters)",
+      ),
       "Checkpoint not approved",
     );
     await user.click(
-      screen.getByLabelText("Confirm that this project has no active segmenter"),
+      screen.getByLabelText(
+        "Confirm that this project has no active segmenter",
+      ),
     );
     await user.click(
       screen.getByLabelText(
