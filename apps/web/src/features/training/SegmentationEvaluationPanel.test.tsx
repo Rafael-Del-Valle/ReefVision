@@ -227,7 +227,7 @@ describe("SegmentationEvaluationPanel", () => {
       "Scientific evaluation provenance and class support",
     );
     fireEvent.click(provenance);
-    expect(screen.getByText("candidate-inference-1")).toBeInTheDocument();
+    expect(await screen.findByText("candidate-inference-1")).toBeInTheDocument();
     expect(screen.getByText("class-octocoral-open")).toBeInTheDocument();
     expect(screen.getByText("8")).toBeInTheDocument();
     expect(screen.getByText("0.830")).toBeInTheDocument();
