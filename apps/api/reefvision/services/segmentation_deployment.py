@@ -229,9 +229,7 @@ class SegmentationDeploymentService:
             },
             result_json={
                 "active_model_id": candidate_id,
-                "evaluation_metrics_sha256": canonical_json_sha256(
-                    evaluation.result_json or {}
-                ),
+                "evaluation_metrics_sha256": canonical_json_sha256(evaluation.result_json or {}),
                 "promotion_eligible": True,
             },
             started_at=now,
@@ -318,9 +316,7 @@ class SegmentationDeploymentService:
         self.session.add(audit)
         for model in models:
             metadata = dict(model.metadata_json or {})
-            metadata["active_for_predictions"] = (
-                previous_id is not None and model.id == previous_id
-            )
+            metadata["active_for_predictions"] = previous_id is not None and model.id == previous_id
             if previous_id is not None and model.id == previous_id:
                 old_pointer = saved.get("previous_deployment_id")
                 if old_pointer:

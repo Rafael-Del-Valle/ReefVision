@@ -15,9 +15,9 @@ from reefvision.schemas.segmentation_deployment import SegmentationPromoteReques
 from reefvision.services.segmentation_deployment import SegmentationDeploymentService
 
 
-def fixture(monkeypatch) -> tuple[
-    SegmentationDeploymentService, Mock, SimpleNamespace, SimpleNamespace, Job
-]:
+def fixture(
+    monkeypatch,
+) -> tuple[SegmentationDeploymentService, Mock, SimpleNamespace, SimpleNamespace, Job]:
     from reefvision.services import segmentation_deployment as module
 
     session = Mock()
@@ -63,6 +63,7 @@ def fixture(monkeypatch) -> tuple[
     monkeypatch.setattr(service, "_models", lambda _p: [candidate])
     monkeypatch.setattr(module, "verify_learning_content", lambda *_: None)
     session.scalars.return_value = []
+
     def flush() -> None:
         for call in session.add.call_args_list:
             record = call.args[0]
@@ -97,7 +98,7 @@ def test_promotion_refuses_stale_expected_active_model(monkeypatch) -> None:
     with pytest.raises(ConflictError, match="changed"):
         service.promote(
             "p",
-        "evaluation-1",
+            "evaluation-1",
             expected_active_model_id=None,
             approved_by="lab_reviewer",
             reason="Holdout metrics reviewed and approved",
@@ -117,7 +118,7 @@ def test_promotion_refuses_repeat_evaluation(monkeypatch) -> None:
     with pytest.raises(ConflictError, match="already been deployed"):
         service.promote(
             "p",
-        "evaluation-1",
+            "evaluation-1",
             expected_active_model_id=None,
             approved_by="lab_reviewer",
             reason="Holdout metrics reviewed and approved",
@@ -139,7 +140,7 @@ def test_rollback_cannot_override_newer_deployment(monkeypatch) -> None:
     with pytest.raises(ConflictError, match="no longer current"):
         service.rollback(
             "p",
-        deployment.id,
+            deployment.id,
             expected_active_model_id=candidate.id,
             approved_by="lab_reviewer",
             reason="Restore preceding model after observed drift",
@@ -185,7 +186,7 @@ def test_approval_reason_cannot_be_empty(monkeypatch) -> None:
     with pytest.raises(ValidationError):
         service.promote(
             "p",
-        "evaluation-1",
+            "evaluation-1",
             expected_active_model_id=None,
             approved_by="",
             reason="short",
