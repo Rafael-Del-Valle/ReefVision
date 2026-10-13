@@ -290,4 +290,58 @@ describe("SegmentationEvaluationWorkspace", () => {
     ).toBeDisabled();
     expect(evaluationApi.promoteSegmentationCandidate).not.toHaveBeenCalled();
   });
+
+  it("requires comparison against the expected active incumbent", async () => {
+    vi.mocked(evaluationApi.getSegmentationEvaluation).mockResolvedValue({
+      ...evaluation,
+      incumbent_model_id: "incumbent-1",
+      incumbent_job_id: "incumbent-job",
+      incumbent_checksum: "c".repeat(64),
+      incumbent_metrics: evaluation.candidate_metrics,
+    });
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.type(
+      screen.getByLabelText(
+        "Existing evaluation ID (restore after restarting)",
+      ),
+      evaluation.id,
+    );
+    await screen.findByText(/A promotion requires the held-out comparison/);
+    await user.type(
+      screen.getByLabelText("Operator/reviewer identity"),
+      "Reviewer",
+    );
+    await user.type(
+      screen.getByLabelText(
+        "Scientific reason for this action (at least 10 characters)",
+      ),
+      "Incumbent masks checked",
+    );
+    await user.click(
+      screen.getByLabelText(
+        "Confirm that this project has no active segmenter",
+      ),
+    );
+    await user.click(
+      screen.getByLabelText(
+        "I reviewed the actual mask metrics and explicitly approve activating this candidate",
+      ),
+    );
+    const promote = screen.getByRole("button", {
+      name: "Promote segmentation candidate",
+    });
+    expect(promote).toBeDisabled();
+    await user.click(
+      screen.getByLabelText(
+        "Confirm that this project has no active segmenter",
+      ),
+    );
+    await user.type(
+      screen.getByLabelText("Expected currently active segmenter ID"),
+      "incumbent-1",
+    );
+    expect(promote).toBeEnabled();
+    expect(evaluationApi.promoteSegmentationCandidate).not.toHaveBeenCalled();
+  });
 });
