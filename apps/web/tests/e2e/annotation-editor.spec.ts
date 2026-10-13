@@ -871,7 +871,7 @@ test("renders the first opened image after a deliberately delayed content respon
       "href",
       /\/images\/image-1\/content/,
     );
-    expect(contentRequests).toBeGreaterThan(0);
+    await expect.poll(() => contentRequests).toBeGreaterThan(0);
     const initialViewport = await canvas.boundingBox();
     expect(initialViewport?.width).toBeGreaterThan(0);
     expect(initialViewport?.height).toBeGreaterThan(0);
