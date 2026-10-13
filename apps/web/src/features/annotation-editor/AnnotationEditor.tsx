@@ -2427,10 +2427,12 @@ export function AnnotationEditor({
     });
   const image = sessionQuery.data.image;
   const preloadIsCurrent =
-    imagePreload?.imageId === image.id && imagePreload?.retry === fullImageRetry;
+    imagePreload?.imageId === image.id &&
+    imagePreload?.retry === fullImageRetry;
   const fullImageLoaded = preloadIsCurrent && imagePreload?.phase === "loaded";
   const fullImageFailed = preloadIsCurrent && imagePreload?.phase === "failed";
-  const fullImageLoading = !preloadIsCurrent || imagePreload?.phase === "loading";
+  const fullImageLoading =
+    !preloadIsCurrent || imagePreload?.phase === "loading";
   const currentLabelClasses = labelClasses;
   const strokeScale = 1 / resolvedView.scale;
   const handleRadius = Math.max(4 * strokeScale, 2);
