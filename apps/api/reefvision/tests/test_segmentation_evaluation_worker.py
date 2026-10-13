@@ -179,3 +179,49 @@ def test_completed_evaluation_after_32_active_parents_is_not_starved(
     with app.state.session_factory() as session:
         assert session.get(Job, completed_id).status == "completed"
         assert all(session.get(Job, job_id).status == "waiting" for job_id in older_ids)
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        {"task": "detect"},
+        {"candidate_job_id": ""},
+        {"incumbent_job_id": ""},
+    ],
+)
+def test_invalid_waiting_evaluation_is_terminal_and_never_eligible(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    corruption: dict[str, str],
+) -> None:
+    project = create_project(client, "Auto segmentation eval invalid metadata")
+    evaluation_id, _ = _waiting(client, project["id"], child_status="running")
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        parent = session.get(Job, evaluation_id)
+        assert parent is not None
+        parent.request_json = {**dict(parent.request_json), **corruption}
+        session.commit()
+
+    called: list[str] = []
+
+    def unexpected(self, project_id: str, record_id: str) -> Job:
+        called.append(record_id)
+        raise AssertionError("Malformed evaluation must not reach scientific scoring")
+
+    monkeypatch.setattr(SegmentationEvaluationQueueService, "advance", unexpected)
+    assert worker.process_next_waiting_segmentation_evaluation(
+        app.state.settings, app.state.session_factory
+    )
+    assert called == []
+    with app.state.session_factory() as session:
+        parent = session.get(Job, evaluation_id)
+        assert parent is not None
+        assert parent.status == "failed"
+        assert parent.error_message
+        assert parent.completed_at is not None
+        assert parent.result_json["promotion_eligible"] is False
+        assert parent.result_json["blockers"] == [parent.error_message]
+    assert not worker.process_next_waiting_segmentation_evaluation(
+        app.state.settings, app.state.session_factory
+    )
