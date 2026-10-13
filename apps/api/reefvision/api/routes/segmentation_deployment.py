@@ -3,10 +3,12 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.db.models import Job
+from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.segmentation_deployment import (
     SegmentationDeploymentAuditResponse,
     SegmentationPromoteRequest,
@@ -42,6 +44,31 @@ def _response(record: Job, *, action: str) -> SegmentationDeploymentAuditRespons
         approved_by=req["approved_by"],
         reason=req["reason"],
     )
+
+
+@router.get(
+    "/projects/{project_id}/learning/segmentation/deployments/audit",
+    response_model=list[JobResponse],
+)
+def list_segmentation_deployment_audit(
+    project_id: str, session: DbSession
+) -> list[JobResponse]:
+    """Retrieve committed project-specific segmentation promotion and rollback events."""
+    records = session.scalars(
+        select(Job)
+        .where(
+            Job.project_id == project_id,
+            Job.job_type.in_(
+                (
+                    "segmentation_learning_deployment",
+                    "segmentation_learning_deployment_rollback",
+                )
+            ),
+        )
+        .order_by(Job.created_at.desc(), Job.id.desc())
+        .limit(100)
+    )
+    return [JobResponse.model_validate(record) for record in records]
 
 
 @router.post(
