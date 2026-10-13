@@ -46,10 +46,10 @@ from reefvision.api.routes.review_queues import router as review_queues_router
 from reefvision.api.routes.sam2_models import router as sam2_models_router
 from reefvision.api.routes.sam_image_proposals import router as sam_image_proposals_router
 from reefvision.api.routes.scale_label_ocr import router as scale_label_ocr_router
+from reefvision.api.routes.segmentation_deployment import router as segmentation_deployment_router
 from reefvision.api.routes.segmentation_evaluation_queue import (
     router as segmentation_evaluation_queue_router,
 )
-from reefvision.api.routes.segmentation_deployment import router as segmentation_deployment_router
 from reefvision.api.routes.segmentation_learning_evaluation import (
     router as segmentation_learning_evaluation_router,
 )
