@@ -159,10 +159,14 @@ export function SegmentationEvaluationWorkspace({
     completed &&
     record?.promotion_eligible === true &&
     Boolean(record?.candidate_metrics);
+  const expectedIncumbentId = noActiveModel ? null : expectedActiveId.trim();
+  const comparisonMatchesActive =
+    record?.incumbent_model_id === expectedIncumbentId;
   const reasonValid = reason.trim().length >= 10;
   const reviewerValid = reviewer.trim().length >= 2;
   const promotionValid =
     eligible &&
+    comparisonMatchesActive &&
     confirmPromotion &&
     reasonValid &&
     reviewerValid &&
@@ -385,6 +389,13 @@ export function SegmentationEvaluationWorkspace({
         />{" "}
         Confirm that this project has no active segmenter
       </label>
+      {record && !comparisonMatchesActive && (
+        <p className="annotation-helper" role="status">
+          A promotion requires the held-out comparison to use the segmenter
+          currently active in this project. Check the expected active ID against
+          the recorded incumbent, or confirm that no segmenter is active.
+        </p>
+      )}
       <label>
         <input
           type="checkbox"
