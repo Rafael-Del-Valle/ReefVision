@@ -159,7 +159,14 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
   const record = evaluation.data;
 
   useEffect(() => {
+    // A new project must not inherit another project's holdout, candidate,
+    // pending evaluation, or previously entered approval credentials.
+    setDatasetId("");
+    setCandidateId("");
+    setSplit("validation");
     setEvaluationId("");
+    setApprovedBy("");
+    setReason("");
     setAuditMessage("");
   }, [project.id]);
 
