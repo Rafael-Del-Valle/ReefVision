@@ -83,6 +83,9 @@ def test_queue_makes_evaluation_only_jobs_for_same_verified_holdout(monkeypatch)
         assert child.request_json["image_ids"] == ["img-a", "img-b"]
         assert child.request_json["segmentation_holdout_parent_job_id"] == record.id
         assert child.request_json["segmentation_manifest_sha256"] == "a" * 64
+        assert child.request_json["segmentation_dataset_version_id"] == "dataset-1"
+        assert child.request_json["segmentation_split"] == "validation"
+        assert child.request_json["segmentation_checkpoint_sha256"] == "b" * 64
     session.commit.assert_called_once()
 
 
@@ -138,14 +141,29 @@ def test_cancelled_child_fails_closed_with_no_promotion(monkeypatch) -> None:
     assert session.commit.call_count == 2
 
 
-def test_altered_child_provenance_rejected(monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("field", "tampered"),
+    [
+        ("evaluation_only", False),
+        ("model_id", "other-candidate"),
+        ("segmentation_checkpoint_sha256", "0" * 64),
+        ("segmentation_dataset_version_id", "different-dataset"),
+        ("segmentation_split", "test"),
+        ("segmentation_manifest_sha256", "c" * 64),
+        ("segmentation_holdout_parent_job_id", "different-parent"),
+        ("image_ids", ["img-a"]),
+    ],
+)
+def test_altered_child_provenance_rejected(monkeypatch, field: str, tampered: Any) -> None:
     service, _session, jobs = setup_service(monkeypatch)
     parent = queue(service)
     job = jobs[parent.request_json["candidate_job_id"]]
     job.status = "succeeded"
-    job.request_json = {**job.request_json, "evaluation_only": False}
+    job.request_json = {**job.request_json, field: tampered}
+    service.scoring.record_completed_evaluation = Mock()
     with pytest.raises(ConflictError, match="no longer matches"):
         service.advance("project-1", parent.id)
+    service.scoring.record_completed_evaluation.assert_not_called()
 
 
 def test_invalid_queue_split_and_support_rejected() -> None:
