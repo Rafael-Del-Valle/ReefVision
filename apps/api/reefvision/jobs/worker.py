@@ -41,6 +41,7 @@ from reefvision.jobs.video_metric_depth import process_video_metric_depth_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.repositories.jobs import JobRepository
+from reefvision.services.segmentation_evaluation_queue import SegmentationEvaluationQueueService
 from reefvision.services.sam2_install import process_sam2_install
 from reefvision.storage.images import create_thumbnail
 from reefvision.storage.projects import resolve_managed_project_path
@@ -535,13 +536,88 @@ def process_thumbnail_job(settings: Settings, factory: sessionmaker[Session], jo
         return False
 
 
+def process_next_waiting_segmentation_evaluation(
+    settings: Settings, factory: sessionmaker[Session]
+) -> bool:
+    """Finalize one terminal held-out evaluation without activating any model.
+
+    The normal worker checks this only when no queued job is available.
+    Incomplete child inference does not trigger repeated DB writes.
+    """
+    with factory() as session:
+        waiting = list(
+            session.scalars(
+                select(Job)
+                .where(
+                    Job.job_type == "segmentation_learning_evaluation",
+                    Job.status == "waiting",
+                )
+                .order_by(Job.created_at)
+                .limit(32)
+            )
+        )
+        for record in waiting:
+            request = dict(record.request_json or {})
+            if request.get("task") != "segment":
+                continue
+            candidate_id = request.get("candidate_job_id")
+            if not isinstance(candidate_id, str) or not candidate_id:
+                continue
+            ids = [candidate_id]
+            incumbent_id = request.get("incumbent_job_id")
+            if incumbent_id is not None:
+                if not isinstance(incumbent_id, str) or not incumbent_id:
+                    continue
+                ids.append(incumbent_id)
+            child_jobs = [session.get(Job, child_id) for child_id in ids]
+            statuses = [child.status if child is not None else "missing" for child in child_jobs]
+            if not (
+                any(status in {"failed", "cancelled", "missing"} for status in statuses)
+                or all(status == "succeeded" for status in statuses)
+            ):
+                continue
+            record_id = record.id
+            project_id = record.project_id
+            if project_id is None:
+                continue
+            try:
+                SegmentationEvaluationQueueService(session, settings).advance(
+                    str(project_id), record_id
+                )
+            except Exception:
+                session.rollback()
+                failed = session.get(Job, record_id)
+                if failed is not None and failed.status == "waiting":
+                    failed.status = "failed"
+                    failed.completed_at = datetime.now(UTC)
+                    failed.error_message = (
+                        "Held-out segmentation evaluation could not be finalized; "
+                        "inspect the local scientific audit logs"
+                    )
+                    failed.result_json = {
+                        "promotion_eligible": False,
+                        "blockers": [failed.error_message],
+                    }
+                    session.commit()
+                LOGGER.exception(
+                    "Held-out segmentation evaluation could not be finalized",
+                    extra={
+                        "event_id": "segmentation_evaluation_finalization_failed",
+                        "component": "worker",
+                        "job_id": record_id,
+                    },
+                )
+            return True
+    return False
+
+
 def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session]) -> bool:
     with factory() as session:
         job = JobRepository(session).next_queued()
         job_id = job.id if job is not None else None
         job_type = job.job_type if job is not None else None
     if job_id is None:
-        return False
+        return process_next_waiting_segmentation_evaluation(settings, factory)
 
     try:
         if job_type == "thumbnail":
