@@ -258,25 +258,25 @@ export function QuickConfidenceReviewDialog({
                       <p role="status">Loading image preview…</p>
                     )}
                     <img
-                    key={`${item.image_id}-${previewSource}-${previewRetry}`}
-                    src={
-                      previewSource === "thumbnail"
-                        ? imageThumbnailUrl(item.image_id)
-                        : `${imageDisplayUrl(item.image_id)}${
+                      key={`${item.image_id}-${previewSource}-${previewRetry}`}
+                      src={
+                        previewSource === "thumbnail"
+                          ? imageThumbnailUrl(item.image_id)
+                          : `${imageDisplayUrl(item.image_id)}${ 
                             previewRetry ? `?review_retry=${previewRetry}` : ""
                           }`
-                    }
-                    alt={image.original_filename}
-                    onLoad={() => setPreviewLoaded(true)}
-                    onError={() => {
-                      setPreviewLoaded(false);
-                      setPreviewSource(
-                        previewSource === "full" && image.thumbnail_path
-                          ? "thumbnail"
-                          : "failed",
-                      );
-                    }}
-                  />
+                      }
+                      alt={image.original_filename}
+                      onLoad={() => setPreviewLoaded(true)}
+                      onError={() => {
+                        setPreviewLoaded(false);
+                        setPreviewSource(
+                          previewSource === "full" && image.thumbnail_path
+                            ? "thumbnail"
+                            : "failed",
+                        );
+                      }}
+                    />
                   </>
                 )}
                 {selectedProposal && previewLoaded && (
