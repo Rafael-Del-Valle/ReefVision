@@ -21,6 +21,9 @@ interface QuickConfidenceReviewDialogProps {
   reviewBelowConfidence: number | null;
   position: number;
   total: number;
+  showRankedPosition?: boolean;
+  hasPreviousImage?: boolean;
+  hasNextImage?: boolean;
   onClose: () => void;
   onPreviousImage: () => void;
   onNextImage: () => void;
@@ -46,6 +49,9 @@ export function QuickConfidenceReviewDialog({
   reviewBelowConfidence,
   position,
   total,
+  showRankedPosition = true,
+  hasPreviousImage,
+  hasNextImage,
   onClose,
   onPreviousImage,
   onNextImage,
@@ -195,7 +201,10 @@ export function QuickConfidenceReviewDialog({
             <p className="eyebrow">ReefVision 1.0.1 · Quick checks</p>
             <h3 id="rv-quick-review-heading">Confidence-based review</h3>
             <p>
-              Ranked image {position} of {total} · {item.review_state}
+              {showRankedPosition
+                ? `Ranked image ${position} of ${total}`
+                : "Current image"}{" "}
+              · {item.review_state}
               {reviewBelowConfidence !== null
                 ? ` · review at or below ${Math.round(reviewBelowConfidence * 100)}%`
                 : " · all pending confidences"}
@@ -407,7 +416,9 @@ export function QuickConfidenceReviewDialog({
             <button
               type="button"
               className="secondary"
-              disabled={position <= 1 || review.isPending}
+              disabled={
+                !(hasPreviousImage ?? position > 1) || review.isPending
+              }
               onClick={onPreviousImage}
             >
               Previous image
@@ -415,7 +426,9 @@ export function QuickConfidenceReviewDialog({
             <button
               type="button"
               className="secondary"
-              disabled={position >= total || review.isPending}
+              disabled={
+                !(hasNextImage ?? position < total) || review.isPending
+              }
               onClick={onNextImage}
             >
               Next image
