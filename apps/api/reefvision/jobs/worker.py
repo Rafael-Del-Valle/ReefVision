@@ -41,8 +41,8 @@ from reefvision.jobs.video_metric_depth import process_video_metric_depth_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.repositories.jobs import JobRepository
-from reefvision.services.segmentation_evaluation_queue import SegmentationEvaluationQueueService
 from reefvision.services.sam2_install import process_sam2_install
+from reefvision.services.segmentation_evaluation_queue import SegmentationEvaluationQueueService
 from reefvision.storage.images import create_thumbnail
 from reefvision.storage.projects import resolve_managed_project_path
 
