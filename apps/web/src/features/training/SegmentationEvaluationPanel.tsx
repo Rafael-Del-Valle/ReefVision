@@ -74,8 +74,17 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
   const candidates = registered.filter((model) => model.id !== activeId);
 
   const evaluation = useQuery({
-    queryKey: ["segmentation-evaluation", evaluationId],
-    queryFn: ({ signal }) => getJob(evaluationId, signal),
+    queryKey: ["segmentation-evaluation", project.id, evaluationId],
+    queryFn: async ({ signal }) => {
+      const record = await getJob(evaluationId, signal);
+      if (
+        record.project_id !== project.id ||
+        record.job_type !== "segmentation_learning_evaluation"
+      ) {
+        throw new Error("Evaluation does not belong to this project");
+      }
+      return record;
+    },
     enabled: Boolean(evaluationId),
     refetchInterval: (query) => {
       const job = query.state.data as JobRecord | undefined;
