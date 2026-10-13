@@ -232,7 +232,9 @@ describe("SegmentationEvaluationPanel", () => {
     expect(screen.getByText("8")).toBeInTheDocument();
     expect(screen.getByText("0.830")).toBeInTheDocument();
     expect(screen.getByText("Held-out images")).toBeInTheDocument();
-    expect(screen.getByText("Candidate checkpoint SHA-256")).toBeInTheDocument();
+    expect(
+      screen.getByText("Candidate checkpoint SHA-256"),
+    ).toBeInTheDocument();
     expect(promoteSegmentationCandidate).not.toHaveBeenCalled();
   });
 
