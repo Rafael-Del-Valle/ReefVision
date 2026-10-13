@@ -791,7 +791,9 @@ test("renders the first opened image after a deliberately delayed display respon
       canvas.height = 1200;
       const context = canvas.getContext("2d");
       if (!context) {
-        throw new Error("Unable to create a source image for the first-open test");
+        throw new Error(
+          "Unable to create a source image for the first-open test",
+        );
       }
       context.fillStyle = "#dfdfdf";
       context.fillRect(0, 0, canvas.width, canvas.height);
