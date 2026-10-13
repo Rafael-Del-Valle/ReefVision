@@ -60,7 +60,8 @@ def _touches_or_crosses(
     c: tuple[float, float],
     d: tuple[float, float],
 ) -> bool:
-    ab_c, ab_d, cd_a, cd_b = _cross(a, b, c), _cross(a, b, d), _cross(c, d, a)
+    ab_c, ab_d = _cross(a, b, c), _cross(a, b, d)
+    cd_a, cd_b = _cross(c, d, a), _cross(c, d, b)
     if ab_c * ab_d < 0 and cd_a * cd_b < 0:
         return True
 
@@ -202,6 +203,7 @@ def validate_segmentation_holdout(
                     or verify_raster is None
                 ):
                     raise ValueError("Raster mask requires verified immutable content")
+                assert isinstance(digest, str)
                 verify_raster(path, digest)
             else:
                 raise ValueError("Unsupported verified segmentation mask geometry")
