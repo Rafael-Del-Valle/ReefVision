@@ -1,44 +1,37 @@
 # ReefVision 1.0.2 responsiveness evidence
 
-This document records measurements from *production interaction kernels*. They are **not** proof of desktop GUI responsiveness or interactive user latency. Full installed-app operator checks remain separate (see `REEFVISION_1_0_2_INSTALLED_GUI_ACCEPTANCE.md`).
+These measurements exercise production interaction kernels. They do not prove desktop GUI responsiveness or operator-perceived latency. Installed-app trials remain separate in `REEFVISION_1_0_2_INSTALLED_GUI_ACCEPTANCE.md`.
 
 ## Reproducible scenarios
 
 | Area | Workload | Command |
 | --- | --- | --- |
 | Image navigation | 100,000 paginated navigation resolutions across a 100,000-page collection | `npx vitest run src/features/annotation-editor/annotationResponsiveness.test.ts` from `apps/web` |
-| Zoom/pan transformations | 100,000 cursor-centered zoom/pan and coordinate round trips on an 8192×6144 source image | same Vitest command |
-| Polygon duplication | 500 three-point polygons with new IDs and draft status | same Vitest command |
-| Raster selection | Resolve one among 10,000 raster mask objects 100 times | same Vitest command |
-| Raster revision writing | Five immutable 4096×3072 PNG revisions with a 200-point brush stroke | `PYTHONPATH=apps/api python scripts/measure-raster-edit-responsiveness.py` (Bash) |
+| Zoom and pan | 100,000 cursor-centered transforms and coordinate round trips on an 8192x6144 source image | Same Vitest command |
+| Polygon duplication | 500 three-point polygons with new IDs and draft status | Same Vitest command |
+| Raster selection | Resolve one among 10,000 raster mask objects 100 times | Same Vitest command |
+| Raster revision writing | Five immutable 4096x3072 PNG revisions with a 200-point brush stroke | `PYTHONPATH=apps/api python scripts/measure-raster-edit-responsiveness.py` |
 
-The source geometry invariants and performance budgets are asserted in `annotationResponsiveness.test.ts`. The raster benchmark checks that each mask revision is valid and nonempty.
+The tests assert geometry invariants and scenario-specific budgets. The raster benchmark verifies that each immutable revision is a valid, nonempty PNG.
 
-## Baseline observed from GitHub Actions
+## Latest verified prerequisite baseline
 
-**Measured source commit:** `88ae9cf00ad0f96c9b6d0e7112f5005e737b139e`.
+**Measured source:** `02db7df215960d3cc1f37c9cb62af6b66e40283d`, the exact head of [PR #58](https://github.com/Rafael-Del-Valle/ReefVision/pull/58).
 
-**Source:** [ReefVision 1.0 Acceptance — Desktop frontend and E2E job](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/38259147180), Vitest `REEFVISION_RESPONSIVENESS` log line, on GitHub-hosted Ubuntu runner.
+**Run:** [ReefVision 1.0 Acceptance 38443527988](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/38443527988), GitHub-hosted Ubuntu.
 
 | Measurement | Observed runtime | Qualification |
 | --- | ---: | --- |
-| 100,000 gallery navigation resolutions | 5.922 ms | JS function runtime; not actual image decode/paint |
-| 100,000 zoom/pan coordinate round trips | 24.971 ms | math-only; not DOM paint or GPU |
-| Duplicate 500 polygon geometries | 2.693 ms | clipboard object transform, not database save |
-| Select among 10,000 raster objects 100 times | 15.700 ms | selection lookup only |
+| 100,000 gallery navigation resolutions | 4.840 ms | JavaScript function runtime; excludes image decoding and paint |
+| 100,000 zoom/pan coordinate round trips | 18.462 ms | Math and state transforms; excludes DOM paint and GPU |
+| Duplicate 500 polygon geometries | 2.169 ms | Clipboard transform; excludes API persistence |
+| Select among 10,000 raster objects 100 times | 11.590 ms | Selection lookup only |
+| Immutable 4096x3072 raster PNG write | median 118.840 ms; min 118.600; max 122.952 | Five Linux/Python 3.12.15 runs; excludes desktop UI |
 
-The tested suite completed with **421 Vitest tests passed across 92 files** and **11 Playwright passed, 1 configured skip**. Numbers above are from a single CI run, **not a stable benchmark distribution, not a before/after speedup claim, and not a guarantee for high-resolution desktop GUI performance**.
+The full source run also passed 436 Vitest tests in 92 files and 12 Playwright cases with one configured skip. Downloadable evidence is in [frontend artifact 11837481955](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/38443527988/artifacts/11837481955) and [raster artifact 11838210436](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/38443527988/artifacts/11838210436).
 
-**Raster PNG write benchmark:** Numeric results are outstanding until the new CI step completes. Do not substitute the 5-second packaged SAM inference result, which measures a different operation.
+The scientific integration does not intentionally alter these kernels, but the combined candidate must publish fresh exact-head benchmark artifacts before release review.
 
-## Continuous evidence collection
+## Installed performance gate
 
-The `reefvision-1.0-acceptance.yml` workflow now runs and uploads:
-- `reefvision-1.0.2-frontend-responsiveness` — focused Vitest log and metadata with the source head and runner.
-- `reefvision-1.0.2-raster-responsiveness` — Python JSON timings and metadata with source head and runner.
-
-Both are tied to the PR source SHA in `metadata.txt`. Because pull-request workflows may test a merge ref, record both source head and GitHub run ID; do not claim the results reflect a newer source commit than the artifact metadata states.
-
-## Remaining performance gate
-
-For release acceptance, use a disposable installed Windows environment and representative high-resolution imagery. Record machine specification, GPU and driver, app version, selected test image resolution, annotation/mask counts, image-open latency, frame responsiveness, mask editing and save latencies, and whether source-pixel annotations remain aligned after pan/zoom. Compare a matching baseline only when such measurements actually exist.
+Use a disposable installed Windows environment and representative high-resolution imagery. Record the candidate SHA, artifact ID, MSI hash, machine, GPU and driver, display scaling, image resolution, annotation counts, and at least three trials for first image display, navigation, zoom/pan, polygon editing, raster editing, and mask persistence. Report median and range. Confirm that source-pixel annotations stay aligned throughout. Compare with a baseline only when the machine and workload match.

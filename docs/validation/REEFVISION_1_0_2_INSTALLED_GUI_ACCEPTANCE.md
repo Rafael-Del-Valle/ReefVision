@@ -1,6 +1,6 @@
 # ReefVision 1.0.2 — Installed GUI operator acceptance
 
-**Status: NOT EXECUTED.** This is a repeatable sign-off checklist, not evidence of a passed test. The [automated Windows clean-install runner](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/38259147093) passed the MSI installation, application launch, persistence, uninstall, and packaged SAM CPU checks, but it did not exercise all new 1.0.2 interactive tools.
+**Status: NOT EXECUTED.** This is a repeatable sign-off checklist, not evidence of a passed test. The latest prerequisite [automated Windows clean-install runner](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/38443528254) passed MSI installation, application launch, persistence, uninstall, and packaged SAM CPU checks for PR #58. The combined scientific/usability candidate requires a new matched installer and this complete operator run.
 
 ## Setup and evidence
 
@@ -24,6 +24,7 @@
 | GUI-08 | Use Shift+1 full-image SAM proposals, edit/accept/reject; Shift+2 selected-mask refinement and discard | Predictions remain pending until accepted; refinement non-destructive until replacement; class number keys preserved | NOT RUN |
 | GUI-09 | Rapid navigation, lost mouse focus, pan cancellation, extreme zoom on high-resolution image | No stuck drag, crashes, stale selection, misregistered drawing, or lost unsaved edits | NOT RUN |
 | GUI-10 | Persist changes, close, reopen and uninstall from disposable Windows environment | Scratch scientific data persists appropriately and is retained according to uninstaller contract | NOT RUN |
+| GUI-11 | Create a verified holdout, evaluate candidate and incumbent segmenters, inspect mask metrics and provenance, promote an eligible candidate, then roll back | Candidate and incumbent use the same immutable split; ineligible actions fail closed; promotion and rollback change only the active segmenter and preserve audit history | NOT RUN |
 
 **Never** mark a case PASS without observed GUI behavior and retained evidence. Automated Vitest/Playwright and a process-launch smoke are separate coverage.
 
