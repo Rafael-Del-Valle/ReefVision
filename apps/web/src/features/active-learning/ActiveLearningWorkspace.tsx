@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { getDatasetVersions, getModels, type Project } from "../../api/client";
 import { InteroperabilityWorkspace } from "../interoperability/InteroperabilityWorkspace";
+import { SegmentationEvaluationWorkspace } from "./SegmentationEvaluationWorkspace";
 import {
   activeLearningSelectionItems,
   completeActiveLearningRound,
@@ -418,6 +419,13 @@ export function ActiveLearningWorkspace({
           )}
         </div>
       </div>
+
+      <details className="panel-card">
+        <summary>
+          <strong>Segmentation candidate evaluation and audited deployment</strong>
+        </summary>
+        <SegmentationEvaluationWorkspace project={project} />
+      </details>
 
       <details className="panel-card">
         <summary>
