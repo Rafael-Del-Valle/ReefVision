@@ -6,11 +6,13 @@ No endpoints for model promotion, rollback or deployment are provided here.
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.db.models import Job
 from reefvision.domain.errors import NotFoundError
+from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.segmentation_learning_evaluation import (
     SegmentationCompletedEvaluationRequest,
     SegmentationCompletedEvaluationResponse,
@@ -71,6 +73,26 @@ def record_segmentation_evaluation(
         minimum_gain=payload.minimum_gain,
     )
     return _response(record)
+
+
+@router.get(
+    "/projects/{project_id}/learning/segmentation/evaluations",
+    response_model=list[JobResponse],
+)
+def list_segmentation_evaluations(
+    project_id: str, session: DbSession
+) -> list[JobResponse]:
+    """Read immutable evaluation history, including queued and failed jobs."""
+    records = session.scalars(
+        select(Job)
+        .where(
+            Job.project_id == project_id,
+            Job.job_type == "segmentation_learning_evaluation",
+        )
+        .order_by(Job.created_at.desc(), Job.id.desc())
+        .limit(100)
+    )
+    return [JobResponse.model_validate(record) for record in records]
 
 
 @router.get(
