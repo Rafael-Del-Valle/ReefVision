@@ -178,6 +178,27 @@ describe("QuickConfidenceReviewDialog", () => {
     });
   });
 
+  it("navigates the editor images without inventing a ranked queue position", async () => {
+    const { onPreviousImage, onNextImage } = renderDialog({
+      showRankedPosition: false,
+      hasPreviousImage: true,
+      hasNextImage: false,
+      position: 1,
+      total: 1,
+    });
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/Current image/)).toBeTruthy();
+    const previous = within(dialog).getByRole("button", {
+      name: "Previous image",
+    });
+    const next = within(dialog).getByRole("button", { name: "Next image" });
+    expect(previous).toBeEnabled();
+    expect(next).toBeDisabled();
+    fireEvent.click(previous);
+    expect(onPreviousImage).toHaveBeenCalledTimes(1);
+    expect(onNextImage).not.toHaveBeenCalled();
+  });
+
   it("has navigation and a close action without leaving the page", async () => {
     const { onClose, onNextImage } = renderDialog();
     await screen.findByRole("dialog");
