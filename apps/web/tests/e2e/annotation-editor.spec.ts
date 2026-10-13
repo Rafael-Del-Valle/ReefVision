@@ -783,7 +783,7 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
 test("renders the first opened image after a deliberately delayed content response", async ({
   page,
 }) => {
-  const gate = { release: () => undefined };
+  const gate: { release: () => void } = { release: () => undefined };
   const imageGate = new Promise<void>((resolve) => {
     gate.release = resolve;
   });
