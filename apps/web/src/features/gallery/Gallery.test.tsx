@@ -503,15 +503,19 @@ describe("Gallery", () => {
     const focusedImage = await screen.findByAltText(
       "Focused project image: swiftia-01.png",
     );
+    const originalUrl = focusedImage.getAttribute("src");
     fireEvent.error(focusedImage);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Image could not be displayed",
     );
     await userEvent.click(screen.getByRole("button", { name: "Retry image" }));
-    expect(
-      await screen.findByAltText("Focused project image: swiftia-01.png"),
-    ).toBeInTheDocument();
+    const retryImage = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    expect(retryImage).toBeInTheDocument();
+    expect(retryImage.getAttribute("src")).not.toBe(originalUrl);
+    expect(retryImage.getAttribute("src")).toContain("rv_retry=1");
   });
 
   it("resets the first-image loading state during navigation", async () => {
@@ -583,6 +587,38 @@ describe("Gallery", () => {
       screen.getByText(/Full-resolution image unavailable/),
     ).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("bypasses a failed thumbnail cache when retrying the focused image", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [{ ...image, thumbnail_path: "managed/thumbnail.png" }],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+    renderGallery();
+    const original = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    fireEvent.error(original);
+    const fallback = screen.getByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    expect(fallback.getAttribute("src")).toMatch(/renderer=2/);
+    fireEvent.error(fallback);
+    await userEvent.click(screen.getByRole("button", { name: "Retry image" }));
+    const retried = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    expect(retried.getAttribute("src")).toContain("rv_retry=1");
+    fireEvent.error(retried);
+    const nextFallback = screen.getByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    expect(nextFallback.getAttribute("src")).toMatch(/renderer=2&rv_retry=1/);
   });
 
   it("falls back to the first eligible image when the recent image was deleted", async () => {
