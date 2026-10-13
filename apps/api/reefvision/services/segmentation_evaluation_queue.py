@@ -87,7 +87,7 @@ class SegmentationEvaluationQueueService:
         self.session.add(record)
         self.session.flush()
 
-        def child(model_id: str) -> Job:
+        def child(model_id: str, checkpoint_sha256: str) -> Job:
             return Job(
                 project_id=project_id,
                 job_type="inference",
@@ -104,14 +104,17 @@ class SegmentationEvaluationQueueService:
                     "evaluation_only": True,
                     "segmentation_holdout_parent_job_id": record.id,
                     "segmentation_dataset_version_id": dataset_version_id,
+                    "segmentation_checkpoint_sha256": checkpoint_sha256,
                     "segmentation_manifest_sha256": version.manifest_sha256,
                     "segmentation_split": split,
                 },
             )
 
-        candidate_job = child(candidate.id)
+        candidate_job = child(candidate.id, candidate.sha256)
         self.session.add(candidate_job)
-        incumbent_job = child(incumbent.id) if incumbent is not None else None
+        incumbent_job = (
+            child(incumbent.id, incumbent.sha256) if incumbent is not None else None
+        )
         if incumbent_job is not None:
             self.session.add(incumbent_job)
         self.session.flush()
@@ -152,20 +155,37 @@ class SegmentationEvaluationQueueService:
         request = dict(record.request_json or {})
         if request.get("task") != "segment":
             raise ConflictError("Evaluation queue is missing segmentation task identity")
-        child_ids = [request["candidate_job_id"]]
+        child_specs = [
+            (
+                request["candidate_job_id"],
+                request["candidate_model_id"],
+                request["candidate_checksum"],
+            )
+        ]
         if request.get("incumbent_job_id") is not None:
-            child_ids.append(request["incumbent_job_id"])
-        children = [self.session.get(Job, child_id) for child_id in child_ids]
+            child_specs.append(
+                (
+                    request["incumbent_job_id"],
+                    request["incumbent_model_id"],
+                    request["incumbent_checksum"],
+                )
+            )
+        children = [self.session.get(Job, child_id) for child_id, _, _ in child_specs]
         if any(child is None or child.project_id != project_id for child in children):
             raise ConflictError("Holdout inference job has been removed or reassigned")
         if any(
             child.request_json.get("evaluation_only") is not True
             or child.request_json.get("model_task") != "segment"
+            or child.request_json.get("model_id") != model_id
+            or child.request_json.get("segmentation_checkpoint_sha256") != checksum
             or child.request_json.get("segmentation_holdout_parent_job_id") != record.id
+            or child.request_json.get("segmentation_dataset_version_id")
+            != request.get("dataset_version_id")
+            or child.request_json.get("segmentation_split") != request.get("split")
             or child.request_json.get("segmentation_manifest_sha256")
             != request.get("manifest_sha256")
             or child.request_json.get("image_ids") != request.get("heldout_image_ids")
-            for child in children
+            for child, (_, model_id, checksum) in zip(children, child_specs, strict=True)
             if child is not None
         ):
             raise ConflictError("Holdout child inference job no longer matches the queued split")
