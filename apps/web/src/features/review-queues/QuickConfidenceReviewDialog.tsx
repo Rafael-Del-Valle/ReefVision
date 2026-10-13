@@ -16,6 +16,16 @@ import "./quickConfidenceReview.css";
 
 type PreviewSource = "full" | "thumbnail" | "failed";
 
+function previewImageUrl(
+  imageId: string,
+  source: PreviewSource,
+  retry: number,
+): string {
+  if (source === "thumbnail") return imageThumbnailUrl(imageId);
+  const displayUrl = imageDisplayUrl(imageId);
+  return retry ? `${displayUrl}?review_retry=${retry}` : displayUrl;
+}
+
 interface QuickConfidenceReviewDialogProps {
   item: Pick<
     ReviewQueueItem,
@@ -159,11 +169,7 @@ export function QuickConfidenceReviewDialog({
     !selectedProposal?.model_display_name.startsWith("ReefVision managed") &&
     (selectedProposal?.predicted_label.length ?? 0) <= 200;
   const image = imageQuery.data?.image;
-  const previewUrl =
-    previewSource === "thumbnail"
-      ? imageThumbnailUrl(item.image_id)
-      : imageDisplayUrl(item.image_id) +
-        (previewRetry ? `?review_retry=${previewRetry}` : "");
+  const previewUrl = previewImageUrl(item.image_id, previewSource, previewRetry);
 
   const review = useMutation({
     mutationFn: async (action: "accept" | "reject") => {
