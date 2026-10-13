@@ -164,6 +164,10 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
     setDatasetId("");
     setCandidateId("");
     setSplit("validation");
+    setMinimumImages(2);
+    setMinimumMasks(2);
+    setMinimumMap50(0.5);
+    setMinimumGain(0);
     setEvaluationId("");
     setApprovedBy("");
     setReason("");
