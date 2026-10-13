@@ -83,7 +83,7 @@ export function QuickConfidenceReviewDialog({
   );
   const [previewSource, setPreviewSource] = useState<PreviewSource>("full");
   const [previewRetry, setPreviewRetry] = useState(0);
-  const [previewLoaded, setPreviewLoaded] = useState(false);
+  const [loadedPreviewKey, setLoadedPreviewKey] = useState<string | null>(null);
   const [classOverrides, setClassOverrides] = useState<Record<string, string>>(
     {},
   );
@@ -93,7 +93,7 @@ export function QuickConfidenceReviewDialog({
     setClassOverrides({});
     setPreviewSource("full");
     setPreviewRetry(0);
-    setPreviewLoaded(false);
+    setLoadedPreviewKey(null);
   }, [item.image_id]);
 
   useEffect(() => {
@@ -174,6 +174,9 @@ export function QuickConfidenceReviewDialog({
     previewSource,
     previewRetry,
   );
+
+  const previewKey = `${item.image_id}-${previewSource}-${previewRetry}`;
+  const previewLoaded = loadedPreviewKey === previewKey;
 
   const review = useMutation({
     mutationFn: async (action: "accept" | "reject") => {
@@ -262,7 +265,7 @@ export function QuickConfidenceReviewDialog({
                     <button
                       type="button"
                       onClick={() => {
-                        setPreviewLoaded(false);
+                        setLoadedPreviewKey(null);
                         setPreviewRetry((attempt) => attempt + 1);
                         setPreviewSource("full");
                       }}
@@ -272,12 +275,12 @@ export function QuickConfidenceReviewDialog({
                   </div>
                 ) : (
                   <img
-                    key={`${item.image_id}-${previewSource}-${previewRetry}`}
+                    key={previewKey}
                     src={previewUrl}
                     alt={image.original_filename}
-                    onLoad={() => setPreviewLoaded(true)}
+                    onLoad={() => setLoadedPreviewKey(previewKey)}
                     onError={() => {
-                      setPreviewLoaded(false);
+                      setLoadedPreviewKey(null);
                       setPreviewSource(
                         previewSource === "full" && image.thumbnail_path
                           ? "thumbnail"
