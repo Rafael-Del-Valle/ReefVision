@@ -157,7 +157,11 @@ def test_raster_bytes_checked_before_scoring_and_holes_preserved() -> None:
         "test",
         ("image-1",),
         ("colony-1",),
-        (VerifiedMaskReference("image-1", "mask-1", "class-1", "raster_mask", "masks/a.png", checksum),),
+        (
+            VerifiedMaskReference(
+                "image-1", "mask-1", "class-1", "raster_mask", "masks/a.png", checksum
+            ),
+        ),
     )
     proposal = proposals[0]
     proposal.geometry_kind = "raster_mask"

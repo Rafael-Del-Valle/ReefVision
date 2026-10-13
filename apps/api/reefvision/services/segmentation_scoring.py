@@ -121,7 +121,9 @@ def score_segmentation_holdout(
         or len(set(holdout.image_ids)) != len(holdout.image_ids)
     ):
         raise ValueError("Segmentation evaluation needs completed, identified, immutable inputs")
-    if len(manifest_sha256) != 64 or any(c not in "0123456789abcdefABCDEF" for c in manifest_sha256):
+    if len(manifest_sha256) != 64 or any(
+        c not in "0123456789abcdefABCDEF" for c in manifest_sha256
+    ):
         raise ValueError("Invalid immutable segmentation manifest digest")
     items_by_id = {item.image_id: item for item in snapshot_items}
     if len(items_by_id) != len(snapshot_items) or set(items_by_id) != set(holdout.image_ids):
