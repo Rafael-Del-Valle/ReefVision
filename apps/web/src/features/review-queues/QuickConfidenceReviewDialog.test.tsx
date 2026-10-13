@@ -207,7 +207,9 @@ describe("QuickConfidenceReviewDialog", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Image preview failed to load",
     );
-    fireEvent.click(screen.getByRole("button", { name: "Retry image preview" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry image preview" }),
+    );
     const retried = await screen.findByRole("img", { name: "swiftia.png" });
     expect(retried).toHaveAttribute(
       "src",
@@ -237,7 +239,9 @@ describe("QuickConfidenceReviewDialog", () => {
       "/api/v1/images/image-1/thumbnail",
     );
     fireEvent.error(screen.getByRole("img", { name: "swiftia.png" }));
-    expect(screen.getByRole("button", { name: "Retry image preview" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Retry image preview" }),
+    ).toBeEnabled();
   });
 
   it("has navigation and a close action without leaving the page", async () => {
