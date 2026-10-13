@@ -89,7 +89,7 @@ function renderDialog(
       />
     </QueryClientProvider>,
   );
-  return { ...result, ...callbacks };
+  return { ...result, client, ...callbacks };
 }
 
 describe("QuickConfidenceReviewDialog", () => {
@@ -211,6 +211,66 @@ describe("QuickConfidenceReviewDialog", () => {
     ).not.toBeInTheDocument();
     fireEvent.load(preview);
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Selected prediction bounds"),
+    ).toBeInTheDocument();
+  });
+
+  it("ignores a previously loaded image when navigating to another image", async () => {
+    const { client, rerender, onClose, onPreviousImage, onNextImage } =
+      renderDialog();
+    fireEvent.load(await screen.findByRole("img", { name: "swiftia.png" }));
+    expect(
+      screen.getByLabelText("Selected prediction bounds"),
+    ).toBeInTheDocument();
+
+    const nextImage = { ...item, image_id: "image-2" };
+    client.setQueryDefaults(["annotations", "image-2", "quick-review"], {
+      staleTime: 60_000,
+    });
+    client.setQueryDefaults(["predictions", "image-2", "quick-review"], {
+      staleTime: 60_000,
+    });
+    client.setQueryData(["annotations", "image-2", "quick-review"], {
+      image: {
+        id: "image-2",
+        original_filename: "next-swiftia.png",
+        width_px: 80,
+        height_px: 60,
+      },
+      label_classes: [
+        { id: "class-1", name: "Swiftia exserta", is_active: true },
+      ],
+      annotations: [],
+      counts_by_class: [],
+    });
+    client.setQueryData(["predictions", "image-2", "quick-review"], {
+      items: [{ ...proposal("next", 0.4), image_id: "image-2" }],
+      counts: { pending: 1 },
+    });
+    rerender(
+      <QueryClientProvider client={client}>
+        <QuickConfidenceReviewDialog
+          item={nextImage}
+          reviewBelowConfidence={0.5}
+          position={2}
+          total={2}
+          onClose={onClose}
+          onPreviousImage={onPreviousImage}
+          onNextImage={onNextImage}
+        />
+      </QueryClientProvider>,
+    );
+    const second = await screen.findByRole("img", {
+      name: "next-swiftia.png",
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading image preview",
+    );
+    expect(
+      screen.queryByLabelText("Selected prediction bounds"),
+    ).not.toBeInTheDocument();
+    fireEvent.load(second);
     expect(
       screen.getByLabelText("Selected prediction bounds"),
     ).toBeInTheDocument();
