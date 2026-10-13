@@ -59,7 +59,11 @@ function MaskMetrics({
  * Explicit scientist-in-the-loop evaluation. No model is deployed on queue,
  * scoring, polling or render: promotion and rollback require separate clicks.
  */
-export function SegmentationEvaluationWorkspace({ project }: { project: Project }) {
+export function SegmentationEvaluationWorkspace({
+  project,
+}: {
+  project: Project;
+}) {
   const [datasetVersionId, setDatasetVersionId] = useState("");
   const [candidateId, setCandidateId] = useState("");
   const [incumbentId, setIncumbentId] = useState("");
@@ -126,7 +130,9 @@ export function SegmentationEvaluationWorkspace({ project }: { project: Project 
   const promote = useMutation({
     mutationFn: () =>
       promoteSegmentationCandidate(project.id, evaluationId, {
-        expected_active_model_id: noActiveModel ? null : expectedActiveId.trim(),
+        expected_active_model_id: noActiveModel
+          ? null
+          : expectedActiveId.trim(),
         approved_by: reviewer.trim(),
         reason: reason.trim(),
       }),
@@ -150,7 +156,9 @@ export function SegmentationEvaluationWorkspace({ project }: { project: Project 
   const record = evaluation.data;
   const completed = record?.status === "completed";
   const eligible =
-    completed && record?.promotion_eligible === true && Boolean(record?.candidate_metrics);
+    completed &&
+    record?.promotion_eligible === true &&
+    Boolean(record?.candidate_metrics);
   const reasonValid = reason.trim().length >= 10;
   const reviewerValid = reviewer.trim().length >= 2;
   const promotionValid =
@@ -178,9 +186,10 @@ export function SegmentationEvaluationWorkspace({ project }: { project: Project 
     >
       <h4>Evaluate segmentation candidate</h4>
       <p className="annotation-helper">
-        Queue real candidate and optional incumbent inference against an immutable
-        human-verified mask holdout. This computes <strong>instance mask AP50</strong>,
-        not detector box AP; queueing never activates a model or verifies proposals.
+        Queue real candidate and optional incumbent inference against an
+        immutable human-verified mask holdout. This computes{" "}
+        <strong>instance mask AP50</strong>, not detector box AP; queueing never
+        activates a model or verifies proposals.
       </p>
 
       <form
@@ -257,7 +266,9 @@ export function SegmentationEvaluationWorkspace({ project }: { project: Project 
             max={1}
             step={0.01}
             value={minimumMaskMap50}
-            onChange={(event) => setMinimumMaskMap50(Number(event.target.value))}
+            onChange={(event) =>
+              setMinimumMaskMap50(Number(event.target.value))
+            }
           />
         </label>
         <button
@@ -272,7 +283,9 @@ export function SegmentationEvaluationWorkspace({ project }: { project: Project 
             minimumMaskMap50 > 1
           }
         >
-          {queue.isPending ? "Queueing evaluation..." : "Queue held-out evaluation"}
+          {queue.isPending
+            ? "Queueing evaluation..."
+            : "Queue held-out evaluation"}
         </button>
         {segmenters.length === 0 && (
           <p className="annotation-helper">
@@ -294,7 +307,9 @@ export function SegmentationEvaluationWorkspace({ project }: { project: Project 
           placeholder="Paste an evaluation job ID"
         />
       </label>
-      {evaluation.isFetching && !record && <p role="status">Loading evaluation...</p>}
+      {evaluation.isFetching && !record && (
+        <p role="status">Loading evaluation...</p>
+      )}
       {evaluation.error && <p role="alert">{evaluation.error.message}</p>}
       {record && (
         <div data-testid="segmentation-evaluation-evidence">
@@ -304,9 +319,14 @@ export function SegmentationEvaluationWorkspace({ project }: { project: Project 
             {record.split} split
           </p>
           <p>
-            Candidate checkpoint <code>{record.candidate_checksum.slice(0, 12)}</code>
+            Candidate checkpoint{" "}
+            <code>{record.candidate_checksum.slice(0, 12)}</code>
             {record.incumbent_checksum && (
-              <> · Incumbent <code>{record.incumbent_checksum.slice(0, 12)}</code></>
+              <>
+                {" "}
+                · Incumbent{" "}
+                <code>{record.incumbent_checksum.slice(0, 12)}</code>
+              </>
             )}
           </p>
           <MaskMetrics label="Candidate" metrics={record.candidate_metrics} />
@@ -315,7 +335,9 @@ export function SegmentationEvaluationWorkspace({ project }: { project: Project 
           )}
           <p>
             Promotion eligibility:{" "}
-            <strong>{eligible ? "Eligible for manual review" : "Not eligible"}</strong>
+            <strong>
+              {eligible ? "Eligible for manual review" : "Not eligible"}
+            </strong>
           </p>
           {record.blockers.map((blocker) => (
             <p className="form-error" key={blocker}>
@@ -334,11 +356,17 @@ export function SegmentationEvaluationWorkspace({ project }: { project: Project 
       </p>
       <label>
         Operator/reviewer identity
-        <input value={reviewer} onChange={(event) => setReviewer(event.target.value)} />
+        <input
+          value={reviewer}
+          onChange={(event) => setReviewer(event.target.value)}
+        />
       </label>
       <label>
         Scientific reason for this action (at least 10 characters)
-        <textarea value={reason} onChange={(event) => setReason(event.target.value)} />
+        <textarea
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+        />
       </label>
       <label>
         Expected currently active segmenter ID
@@ -363,8 +391,8 @@ export function SegmentationEvaluationWorkspace({ project }: { project: Project 
           checked={confirmPromotion}
           onChange={(event) => setConfirmPromotion(event.target.checked)}
         />{" "}
-        I reviewed the actual mask metrics and explicitly approve activating this
-        candidate
+        I reviewed the actual mask metrics and explicitly approve activating
+        this candidate
       </label>
       <button
         type="button"
@@ -415,7 +443,9 @@ export function SegmentationEvaluationWorkspace({ project }: { project: Project 
         disabled={!rollbackValid}
         onClick={() => rollback.mutate()}
       >
-        {rollback.isPending ? "Recording rollback..." : "Rollback segmentation deployment"}
+        {rollback.isPending
+          ? "Recording rollback..."
+          : "Rollback segmentation deployment"}
       </button>
       {rollback.error && <p role="alert">{rollback.error.message}</p>}
       {rollback.data && (
