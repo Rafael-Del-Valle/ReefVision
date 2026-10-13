@@ -422,7 +422,9 @@ export function ActiveLearningWorkspace({
 
       <details className="panel-card">
         <summary>
-          <strong>Segmentation candidate evaluation and audited deployment</strong>
+          <strong>
+            Segmentation candidate evaluation and audited deployment
+          </strong>
         </summary>
         <SegmentationEvaluationWorkspace project={project} />
       </details>
