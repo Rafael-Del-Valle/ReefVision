@@ -141,9 +141,7 @@ def test_segmentation_deployment_audit_is_project_scoped_and_read_only(
         allowed = {promotion.id, rollback.id}
         foreign_id = foreign.id
 
-    response = client.get(
-        f"/api/v1/projects/{first['id']}/learning/segmentation/deployments/audit"
-    )
+    response = client.get(f"/api/v1/projects/{first['id']}/learning/segmentation/deployments/audit")
     assert response.status_code == 200, response.text
     result = response.json()
     assert {item["id"] for item in result} == allowed
