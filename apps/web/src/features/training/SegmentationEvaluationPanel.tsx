@@ -346,6 +346,73 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
               <dd>{metric(incumbentMetrics.mean_absolute_count_error)}</dd>
             </dl>
           )}
+          <details>
+            <summary>Scientific evaluation provenance and class support</summary>
+            <dl>
+              <dt>Immutable dataset version</dt>
+              <dd>{String(record?.request_json.dataset_version_id ?? "Not recorded")}</dd>
+              <dt>Dataset manifest SHA-256</dt>
+              <dd>{String(record?.request_json.manifest_sha256 ?? "Not recorded")}</dd>
+              <dt>Holdout split</dt>
+              <dd>{String(record?.request_json.split ?? "Not recorded")}</dd>
+              <dt>Held-out images</dt>
+              <dd>
+                {Array.isArray(record?.request_json.heldout_image_ids)
+                  ? record.request_json.heldout_image_ids.length
+                  : "Not recorded"}
+              </dd>
+              <dt>Candidate checkpoint SHA-256</dt>
+              <dd>{String(record?.request_json.candidate_checksum ?? "Not recorded")}</dd>
+              <dt>Incumbent checkpoint SHA-256</dt>
+              <dd>{String(record?.request_json.incumbent_checksum ?? "None")}</dd>
+              <dt>Evaluation-only candidate inference job</dt>
+              <dd>{String(record?.request_json.candidate_job_id ?? "Not recorded")}</dd>
+              <dt>Evaluation method</dt>
+              <dd>
+                {String(
+                  record?.result_json?.scientific_method ??
+                    "Source-pixel instance mask AP50",
+                )}
+                ; mask IoU threshold 0.50; count metrics at confidence 0.25.
+                AP50:95 is not reported.
+              </dd>
+            </dl>
+            {candidateMetrics?.per_class &&
+              typeof candidateMetrics.per_class === "object" &&
+              !Array.isArray(candidateMetrics.per_class) && (
+                <table>
+                  <caption>Candidate per-class held-out mask support</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Class ID</th>
+                      <th scope="col">Verified masks</th>
+                      <th scope="col">Mask AP50</th>
+                      <th scope="col">Precision</th>
+                      <th scope="col">Recall</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(candidateMetrics.per_class).map(
+                      ([classId, value]) => {
+                        const values =
+                          value && typeof value === "object"
+                            ? (value as Record<string, unknown>)
+                            : {};
+                        return (
+                          <tr key={classId}>
+                            <th scope="row">{classId}</th>
+                            <td>{String(values.ground_truth_count ?? "Unavailable")}</td>
+                            <td>{metric(values.ap50)}</td>
+                            <td>{metric(values.precision)}</td>
+                            <td>{metric(values.recall)}</td>
+                          </tr>
+                        );
+                      },
+                    )}
+                  </tbody>
+                </table>
+              )}
+          </details>
           <p>
             Promotion eligibility:{" "}
             <strong>
