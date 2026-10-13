@@ -277,12 +277,16 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
           <option value="">Choose an evaluation to inspect</option>
           {history.data?.map((job) => (
             <option key={job.id} value={job.id}>
-              {job.status}: {String(job.request_json.candidate_model_id ?? job.id)}
+              {job.status}:{" "}
+              {String(job.request_json.candidate_model_id ?? job.id)}
             </option>
           ))}
-          {evaluationId && !history.data?.some((job) => job.id === evaluationId) && (
-            <option value={evaluationId}>Current evaluation: {evaluationId}</option>
-          )}
+          {evaluationId &&
+            !history.data?.some((job) => job.id === evaluationId) && (
+              <option value={evaluationId}>
+                Current evaluation: {evaluationId}
+              </option>
+            )}
         </select>
       </label>
       {history.error && <p role="alert">{history.error.message}</p>}
