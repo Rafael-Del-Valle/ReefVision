@@ -4227,9 +4227,16 @@ export function AnnotationEditor({
           reviewBelowConfidence={Number(quickReviewConfidence) / 100}
           position={1}
           total={1}
+          showRankedPosition={false}
+          hasPreviousImage={Boolean(sessionQuery.data.previous_image_id)}
+          hasNextImage={Boolean(sessionQuery.data.next_image_id)}
           onClose={() => setQuickReviewOpen(false)}
-          onPreviousImage={() => undefined}
-          onNextImage={() => undefined}
+          onPreviousImage={() => {
+            void navigateToImage(sessionQuery.data.previous_image_id);
+          }}
+          onNextImage={() => {
+            void navigateToImage(sessionQuery.data.next_image_id);
+          }}
           onReviewSaved={() => {
             void Promise.all([
               sessionQuery.refetch(),
