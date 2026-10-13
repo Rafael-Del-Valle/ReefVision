@@ -779,14 +779,14 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "1 selected" })).toBeVisible();
 });
 
-test("renders the first opened image after a deliberately delayed content response", async ({
+test("renders the first opened image after a deliberately delayed display response", async ({
   page,
 }) => {
   const gate: { release: () => void } = { release: () => undefined };
   const imageGate = new Promise<void>((resolve) => {
     gate.release = resolve;
   });
-  let contentRequests = 0;
+  let displayRequests = 0;
   const sessionState = {
     image: { ...baseImage },
     label_classes: project.label_classes,
@@ -847,8 +847,8 @@ test("renders the first opened image after a deliberately delayed content respon
       await route.fulfill({ json: sessionState });
       return;
     }
-    if (url.pathname.endsWith(`/images/${baseImage.id}/content`)) {
-      contentRequests += 1;
+    if (url.pathname.endsWith(`/images/${baseImage.id}/display`)) {
+      displayRequests += 1;
       await imageGate;
       await route.fulfill({ body: pngBytes, contentType: "image/png" });
       return;
@@ -868,9 +868,9 @@ test("renders the first opened image after a deliberately delayed content respon
     ).toBeVisible();
     await expect(canvas.locator("image").first()).toHaveAttribute(
       "href",
-      /\/images\/image-1\/content/,
+      /\/images\/image-1\/display/,
     );
-    await expect.poll(() => contentRequests).toBeGreaterThan(0);
+    await expect.poll(() => displayRequests).toBeGreaterThan(0);
     const initialViewport = await canvas.boundingBox();
     expect(initialViewport?.width).toBeGreaterThan(0);
     expect(initialViewport?.height).toBeGreaterThan(0);
@@ -886,7 +886,7 @@ test("renders the first opened image after a deliberately delayed content respon
     await expect(canvas).toBeVisible();
     await expect(canvas.locator("image").first()).toHaveAttribute(
       "href",
-      /\/images\/image-1\/content/,
+      /\/images\/image-1\/display/,
     );
   } finally {
     gate.release();
