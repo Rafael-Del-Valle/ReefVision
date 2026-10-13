@@ -255,6 +255,40 @@ describe("SegmentationEvaluationPanel", () => {
     expect(promoteSegmentationCandidate).not.toHaveBeenCalled();
   });
 
+  it("requires valid sample sizes and passes chosen limits to scoring", async () => {
+    renderPanel();
+    await screen.findByRole("option", {
+      name: "Verified octocoral masks (v1)",
+    });
+    fireEvent.change(screen.getByLabelText("Segmentation holdout dataset"), {
+      target: { value: "version-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Candidate segmenter"), {
+      target: { value: "candidate" },
+    });
+    const queue = screen.getByRole("button", {
+      name: "Queue held-out evaluation",
+    });
+    const images = screen.getByLabelText("Minimum held-out images");
+    const masks = screen.getByLabelText("Minimum verified instance masks");
+    fireEvent.change(images, { target: { value: "1" } });
+    expect(queue).toBeDisabled();
+    fireEvent.change(images, { target: { value: "12" } });
+    fireEvent.change(masks, { target: { value: "40" } });
+    expect(queue).toBeEnabled();
+    fireEvent.click(queue);
+    await waitFor(() => {
+      expect(queueSegmentationEvaluation).toHaveBeenCalledWith(
+        project.id,
+        expect.objectContaining({
+          minimum_images: 12,
+          minimum_masks: 40,
+        }),
+      );
+    });
+    expect(promoteSegmentationCandidate).not.toHaveBeenCalled();
+  });
+
   it("queues isolated holdout evaluation without activating a model", async () => {
     renderPanel();
     await screen.findByRole("option", {
