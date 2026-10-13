@@ -44,9 +44,7 @@ class SegmentationHoldoutService:
         if not isinstance(manifest_items, list):
             raise ValidationError("Segmentation manifest is missing snapshot items")
         manifest_index = {
-            item.get("image_id"): item
-            for item in manifest_items
-            if isinstance(item, dict)
+            item.get("image_id"): item for item in manifest_items if isinstance(item, dict)
         }
         if len(manifest_index) != len(manifest_items):
             raise ValidationError("Segmentation manifest has duplicate or malformed images")
@@ -64,9 +62,7 @@ class SegmentationHoldoutService:
             if not isinstance(snapshot, dict):
                 raise ValidationError("Segmentation snapshot is absent from manifest")
             snapshot_content = {
-                key: value
-                for key, value in snapshot.items()
-                if key != "snapshot_sha256"
+                key: value for key, value in snapshot.items() if key != "snapshot_sha256"
             }
             if (
                 snapshot.get("snapshot_sha256") != item.snapshot_sha256

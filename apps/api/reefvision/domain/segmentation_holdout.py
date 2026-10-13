@@ -65,9 +65,8 @@ def _touches_or_crosses(
         return True
 
     def between(p: tuple[float, float], q: tuple[float, float], r: tuple[float, float]) -> bool:
-        return (
-            min(p[0], r[0]) <= q[0] <= max(p[0], r[0])
-            and min(p[1], r[1]) <= q[1] <= max(p[1], r[1])
+        return min(p[0], r[0]) <= q[0] <= max(p[0], r[0]) and min(p[1], r[1]) <= q[1] <= max(
+            p[1], r[1]
         )
 
     return any(

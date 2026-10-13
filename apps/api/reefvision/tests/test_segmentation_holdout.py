@@ -136,9 +136,7 @@ def test_verifies_raster_checksum_using_required_content_resolver() -> None:
     with pytest.raises(ValueError, match="immutable content"):
         check([item])
     checks: list[tuple[str, str]] = []
-    result = check(
-        [item], verify_raster=lambda path, digest: checks.append((path, digest))
-    )
+    result = check([item], verify_raster=lambda path, digest: checks.append((path, digest)))
     assert checks == [("project/masks/instance.png", "b" * 64)]
     assert result.masks[0].content_sha256 == "b" * 64
 
