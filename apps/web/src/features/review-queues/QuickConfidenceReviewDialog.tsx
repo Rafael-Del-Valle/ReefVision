@@ -169,7 +169,11 @@ export function QuickConfidenceReviewDialog({
     !selectedProposal?.model_display_name.startsWith("ReefVision managed") &&
     (selectedProposal?.predicted_label.length ?? 0) <= 200;
   const image = imageQuery.data?.image;
-  const previewUrl = previewImageUrl(item.image_id, previewSource, previewRetry);
+  const previewUrl = previewImageUrl(
+    item.image_id,
+    previewSource,
+    previewRetry,
+  );
 
   const review = useMutation({
     mutationFn: async (action: "accept" | "reject") => {
@@ -465,9 +469,7 @@ export function QuickConfidenceReviewDialog({
             <button
               type="button"
               className="secondary"
-              disabled={
-                !(hasPreviousImage ?? position > 1) || review.isPending
-              }
+              disabled={!(hasPreviousImage ?? position > 1) || review.isPending}
               onClick={onPreviousImage}
             >
               Previous image
@@ -475,9 +477,7 @@ export function QuickConfidenceReviewDialog({
             <button
               type="button"
               className="secondary"
-              disabled={
-                !(hasNextImage ?? position < total) || review.isPending
-              }
+              disabled={!(hasNextImage ?? position < total) || review.isPending}
               onClick={onNextImage}
             >
               Next image
