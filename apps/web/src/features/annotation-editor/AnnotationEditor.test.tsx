@@ -415,6 +415,75 @@ describe("AnnotationEditor", () => {
     ).toHaveAttribute("href", expect.stringContaining("/display?retry=1"));
   });
 
+  it("keeps thumbnail preview until the full image has decoded", async () => {
+    const decodeGate: { release: () => void } = {
+      release: () => undefined,
+    };
+    const decodePromise = new Promise<void>((resolve) => {
+      decodeGate.release = resolve;
+    });
+    const preloaders: FakeImage[] = [];
+    class FakeImage {
+      decoding = "";
+      onload: ((event: Event) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      src = "";
+      decode = vi.fn(() => decodePromise);
+      constructor() {
+        preloaders.push(this);
+      }
+    }
+    vi.stubGlobal("Image", FakeImage);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith(`/images/${session.image.id}/annotations`)) {
+        return jsonResponse({
+          ...session,
+          image: { ...session.image, thumbnail_path: "thumb.png" },
+        });
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    const preloader = await waitFor(() => {
+      const item = preloaders.find((candidate) =>
+        candidate.src.includes("/display?retry=0"),
+      );
+      expect(item).toBeDefined();
+      return item;
+    });
+    const source = () =>
+      screen.getByTestId("annotation-canvas").querySelector("image");
+
+    act(() => preloader?.onload?.(new Event("load")));
+    expect(preloader?.decode).toHaveBeenCalledOnce();
+    expect(source()).toHaveAttribute(
+      "href",
+      expect.stringContaining("/thumbnail"),
+    );
+    expect(
+      screen.getByText("Loading full-resolution image..."),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      decodeGate.release();
+      await decodePromise;
+    });
+    expect(source()).toHaveAttribute(
+      "href",
+      expect.stringContaining("/display?retry=0"),
+    );
+    expect(
+      screen.queryByText("Loading full-resolution image..."),
+    ).not.toBeInTheDocument();
+  });
+
   it("does not apply a previous image preload to a newly opened image", async () => {
     const preloaders: FakeImage[] = [];
     class FakeImage {
