@@ -60,11 +60,14 @@ class SegmentationDeploymentService:
     @staticmethod
     def _active(models: list[ModelRegistration]) -> ModelRegistration | None:
         active = [
-            model for model in models
+            model
+            for model in models
             if (model.metadata_json or {}).get("active_for_predictions") is True
         ]
         if len(active) > 1:
-            raise ConflictError("Multiple active segmenters detected; repair state before deployment")
+            raise ConflictError(
+                "Multiple active segmenters detected; repair state before deployment"
+            )
         return active[0] if active else None
 
     def _evaluation(self, project_id: str, evaluation_id: str) -> Job:
@@ -278,13 +281,17 @@ class SegmentationDeploymentService:
             or (active.metadata_json or {}).get("active_segmentation_deployment_id")
             != deployment_id
         ):
-            raise ConflictError("Deployment is no longer current; rollback would overwrite newer work")
+            raise ConflictError(
+                "Deployment is no longer current; rollback would overwrite newer work"
+            )
         verify_learning_content(self.settings, active.managed_path, active.sha256)
         previous_id = saved.get("previous_model_id")
         previous = next((model for model in models if model.id == previous_id), None)
         if previous_id is not None:
             if previous is None or previous.sha256 != saved.get("previous_checksum"):
-                raise ConflictError("Previous segmenter checkpoint no longer matches rollback record")
+                raise ConflictError(
+                    "Previous segmenter checkpoint no longer matches rollback record"
+                )
             verify_learning_content(self.settings, previous.managed_path, previous.sha256)
         now = datetime.now(UTC)
         audit = Job(

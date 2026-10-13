@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import cast
 from unittest.mock import Mock
 
 import pytest
@@ -68,6 +68,7 @@ def fixture(monkeypatch) -> tuple[
             record = call.args[0]
             if record.id is None:
                 record.id = "deployment-1"
+
     session.flush.side_effect = flush
     return service, session, candidate, detector, evaluation
 
@@ -75,7 +76,8 @@ def fixture(monkeypatch) -> tuple[
 def test_manual_promotion_is_audited_and_detector_metadata_unchanged(monkeypatch) -> None:
     service, session, candidate, detector, _evaluation = fixture(monkeypatch)
     result = service.promote(
-        "p", "evaluation-1",
+        "p",
+        "evaluation-1",
         expected_active_model_id=None,
         approved_by="lab_reviewer",
         reason="Candidate passed held-out mask AP50 tests",
@@ -94,7 +96,8 @@ def test_promotion_refuses_stale_expected_active_model(monkeypatch) -> None:
     candidate.metadata_json = {"active_for_predictions": True}
     with pytest.raises(ConflictError, match="changed"):
         service.promote(
-            "p", "evaluation-1",
+            "p",
+        "evaluation-1",
             expected_active_model_id=None,
             approved_by="lab_reviewer",
             reason="Holdout metrics reviewed and approved",
@@ -113,7 +116,8 @@ def test_promotion_refuses_repeat_evaluation(monkeypatch) -> None:
     ]
     with pytest.raises(ConflictError, match="already been deployed"):
         service.promote(
-            "p", "evaluation-1",
+            "p",
+        "evaluation-1",
             expected_active_model_id=None,
             approved_by="lab_reviewer",
             reason="Holdout metrics reviewed and approved",
@@ -124,7 +128,8 @@ def test_promotion_refuses_repeat_evaluation(monkeypatch) -> None:
 def test_rollback_cannot_override_newer_deployment(monkeypatch) -> None:
     service, session, candidate, _detector, _evaluation = fixture(monkeypatch)
     deployment = service.promote(
-        "p", "evaluation-1",
+        "p",
+        "evaluation-1",
         expected_active_model_id=None,
         approved_by="lab_reviewer",
         reason="Holdout metrics reviewed and approved",
@@ -133,7 +138,8 @@ def test_rollback_cannot_override_newer_deployment(monkeypatch) -> None:
     candidate.metadata_json["active_segmentation_deployment_id"] = "newer-deployment"
     with pytest.raises(ConflictError, match="no longer current"):
         service.rollback(
-            "p", deployment.id,
+            "p",
+        deployment.id,
             expected_active_model_id=candidate.id,
             approved_by="lab_reviewer",
             reason="Restore preceding model after observed drift",
@@ -143,7 +149,8 @@ def test_rollback_cannot_override_newer_deployment(monkeypatch) -> None:
 def test_rollback_restores_no_active_model_with_audit(monkeypatch) -> None:
     service, session, candidate, _detector, _evaluation = fixture(monkeypatch)
     deployment = service.promote(
-        "p", "evaluation-1",
+        "p",
+        "evaluation-1",
         expected_active_model_id=None,
         approved_by="lab_reviewer",
         reason="Holdout metrics reviewed and approved",
@@ -151,7 +158,8 @@ def test_rollback_restores_no_active_model_with_audit(monkeypatch) -> None:
     session.get.return_value = deployment
     session.add.reset_mock()
     result = service.rollback(
-        "p", deployment.id,
+        "p",
+        deployment.id,
         expected_active_model_id=candidate.id,
         approved_by="lab_reviewer",
         reason="Rollback after deployment inspection",
@@ -176,7 +184,8 @@ def test_approval_reason_cannot_be_empty(monkeypatch) -> None:
     service, _session, _candidate, _detector, _evaluation = fixture(monkeypatch)
     with pytest.raises(ValidationError):
         service.promote(
-            "p", "evaluation-1",
+            "p",
+        "evaluation-1",
             expected_active_model_id=None,
             approved_by="",
             reason="short",

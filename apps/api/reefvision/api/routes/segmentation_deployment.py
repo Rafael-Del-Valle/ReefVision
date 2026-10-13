@@ -55,9 +55,7 @@ def promote_segmenter(
     request: Request,
     session: DbSession,
 ) -> SegmentationDeploymentAuditResponse:
-    audit = SegmentationDeploymentService(
-        session, request.app.state.settings
-    ).promote(
+    audit = SegmentationDeploymentService(session, request.app.state.settings).promote(
         project_id,
         evaluation_id,
         expected_active_model_id=payload.expected_active_model_id,
@@ -78,9 +76,7 @@ def rollback_segmenter(
     request: Request,
     session: DbSession,
 ) -> SegmentationDeploymentAuditResponse:
-    audit = SegmentationDeploymentService(
-        session, request.app.state.settings
-    ).rollback(
+    audit = SegmentationDeploymentService(session, request.app.state.settings).rollback(
         project_id,
         deployment_id,
         expected_active_model_id=payload.expected_active_model_id,
