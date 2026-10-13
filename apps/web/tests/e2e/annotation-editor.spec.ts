@@ -805,7 +805,11 @@ test("renders the first opened image after a deliberately delayed display respon
     revision: 1,
   };
   const sessionState = {
-    image: { ...baseImage, annotation_count: 1, annotation_status: "in_progress" },
+    image: {
+      ...baseImage,
+      annotation_count: 1,
+      annotation_status: "in_progress",
+    },
     label_classes: project.label_classes,
     annotations: [firstOpenBox],
     counts_by_class: project.label_classes.map((labelClass) => ({
