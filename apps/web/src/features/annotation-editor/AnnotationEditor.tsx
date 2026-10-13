@@ -574,9 +574,24 @@ export function AnnotationEditor({
     setImagePreload({ imageId, retry, phase: "loading" });
     preloader.decoding = "async";
     preloader.onload = () => {
-      if (!cancelled) {
-        setImagePreload({ imageId, retry, phase: "loaded" });
+      if (typeof preloader.decode !== "function") {
+        if (!cancelled) {
+          setImagePreload({ imageId, retry, phase: "loaded" });
+        }
+        return;
       }
+      void preloader.decode().then(
+        () => {
+          if (!cancelled) {
+            setImagePreload({ imageId, retry, phase: "loaded" });
+          }
+        },
+        () => {
+          if (!cancelled) {
+            setImagePreload({ imageId, retry, phase: "failed" });
+          }
+        },
+      );
     };
     preloader.onerror = () => {
       if (!cancelled) {
