@@ -778,3 +778,118 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
   });
   await expect(page.getByRole("heading", { name: "1 selected" })).toBeVisible();
 });
+
+
+test("renders the first opened image after a deliberately delayed content response", async ({
+  page,
+}) => {
+  let releaseImage: (() => void) | null = null;
+  const imageGate = new Promise<void>((resolve) => {
+    releaseImage = resolve;
+  });
+  let contentRequests = 0;
+  const sessionState = {
+    image: { ...baseImage },
+    label_classes: project.label_classes,
+    annotations: [],
+    counts_by_class: project.label_classes.map((labelClass) => ({
+      label_class_id: labelClass.id,
+      count: 0,
+    })),
+    previous_image_id: null,
+    next_image_id: null,
+  };
+
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("/health")) {
+      await route.fulfill({ json: { status: "ok", version: "1.0.2" } });
+      return;
+    }
+    if (
+      url.pathname.endsWith("/project-summaries") &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({
+        json: [
+          {
+            ...project,
+            label_class_count: project.label_classes.length,
+            active_label_class_count: project.label_classes.length,
+          },
+        ],
+      });
+      return;
+    }
+    if (
+      url.pathname.endsWith(`/projects/${project.id}`) &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({ json: project });
+      return;
+    }
+    if (url.pathname.endsWith(`/projects/${project.id}/images`)) {
+      await route.fulfill({
+        json: {
+          items: [sessionState.image],
+          total: 1,
+          page: 1,
+          page_size: 24,
+          pages: 1,
+        },
+      });
+      return;
+    }
+    if (
+      url.pathname.endsWith(`/images/${baseImage.id}/annotations`) &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({ json: sessionState });
+      return;
+    }
+    if (url.pathname.endsWith(`/images/${baseImage.id}/content`)) {
+      contentRequests += 1;
+      await imageGate;
+      await route.fulfill({ body: pngBytes, contentType: "image/png" });
+      return;
+    }
+    await route.abort();
+  });
+
+  try {
+    await mountBuiltApp(page);
+    await page.getByRole("button", { name: /CPT Coral Study/ }).click();
+    await page.getByRole("button", { name: "Annotate" }).click();
+
+    const canvas = page.getByTestId("annotation-canvas");
+    await expect(canvas).toBeVisible();
+    await expect(
+      page.getByText("Loading full-resolution image..."),
+    ).toBeVisible();
+    await expect(canvas.locator("image").first()).toHaveAttribute(
+      "href",
+      /\/images\/image-1\/content/,
+    );
+    expect(contentRequests).toBeGreaterThan(0);
+    const initialViewport = await canvas.boundingBox();
+    expect(initialViewport?.width).toBeGreaterThan(0);
+    expect(initialViewport?.height).toBeGreaterThan(0);
+
+    releaseImage?.();
+    await expect(
+      page.getByText("Loading full-resolution image..."),
+    ).toBeHidden();
+    await expect(
+      page.getByText("Full-resolution image could not load"),
+    ).toHaveCount(0);
+    // The original canvas remains open; no gallery exit/reentry is needed.
+    await expect(canvas).toBeVisible();
+    await expect(canvas.locator("image").first()).toHaveAttribute(
+      "href",
+      /\/images\/image-1\/content/,
+    );
+  } finally {
+    releaseImage?.();
+  }
+});
