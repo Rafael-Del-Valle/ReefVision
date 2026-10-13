@@ -228,7 +228,9 @@ describe("SegmentationEvaluationPanel", () => {
     });
     expect(await screen.findByText("0.850")).toBeInTheDocument();
     expect(
-      await screen.findByText(/evaluated segmentation candidate is no longer registered/i),
+      await screen.findByText(
+        /evaluated segmentation candidate is no longer registered/i,
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Promote evaluated segmenter" }),
