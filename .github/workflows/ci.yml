@@ -46,6 +46,11 @@ jobs:
         working-directory: apps/web
       - run: npm ci
         working-directory: apps/web
+      - name: Diagnostic Prettier patch (temporary)
+        working-directory: apps/web
+        run: |
+          npx prettier --write src/features/annotation-editor/AnnotationEditor.tsx
+          git diff -- src/features/annotation-editor/AnnotationEditor.tsx
       - run: npm run format:check
         working-directory: apps/web
       - run: npm run typecheck
