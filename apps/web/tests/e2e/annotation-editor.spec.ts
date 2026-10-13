@@ -783,9 +783,9 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
 test("renders the first opened image after a deliberately delayed content response", async ({
   page,
 }) => {
-  let releaseImage: (() => void) | null = null;
+  const gate = { release: () => undefined };
   const imageGate = new Promise<void>((resolve) => {
-    releaseImage = resolve;
+    gate.release = resolve;
   });
   let contentRequests = 0;
   const sessionState = {
@@ -876,7 +876,7 @@ test("renders the first opened image after a deliberately delayed content respon
     expect(initialViewport?.width).toBeGreaterThan(0);
     expect(initialViewport?.height).toBeGreaterThan(0);
 
-    releaseImage?.();
+    gate.release();
     await expect(
       page.getByText("Loading full-resolution image..."),
     ).toBeHidden();
@@ -890,6 +890,6 @@ test("renders the first opened image after a deliberately delayed content respon
       /\/images\/image-1\/content/,
     );
   } finally {
-    releaseImage?.();
+    gate.release();
   }
 });
