@@ -876,7 +876,10 @@ test("renders the first opened image after a deliberately delayed display respon
     if (url.pathname.endsWith(`/images/${baseImage.id}/display`)) {
       displayRequests += 1;
       await imageGate;
-      await route.fulfill({ body: sourceSizedPngBytes, contentType: "image/png" });
+      await route.fulfill({
+        body: sourceSizedPngBytes,
+        contentType: "image/png",
+      });
       return;
     }
     await route.abort();
@@ -926,7 +929,9 @@ test("renders the first opened image after a deliberately delayed display respon
       );
       const href = image?.getAttribute("href");
       if (!href) {
-        throw new Error("The source image is not attached to the annotation canvas");
+        throw new Error(
+          "The source image is not attached to the annotation canvas",
+        );
       }
       const response = await fetch(href);
       if (!response.ok) {
