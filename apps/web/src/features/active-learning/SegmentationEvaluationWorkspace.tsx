@@ -150,7 +150,7 @@ export function SegmentationEvaluationWorkspace({ project }: { project: Project 
   const record = evaluation.data;
   const completed = record?.status === "completed";
   const eligible =
-    completed && record.promotion_eligible && Boolean(record.candidate_metrics);
+    completed && record?.promotion_eligible === true && Boolean(record?.candidate_metrics);
   const reasonValid = reason.trim().length >= 10;
   const reviewerValid = reviewer.trim().length >= 2;
   const promotionValid =
