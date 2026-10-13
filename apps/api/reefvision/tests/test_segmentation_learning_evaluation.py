@@ -172,9 +172,7 @@ def test_queued_evaluation_preserves_both_checkpoint_identities(
     from reefvision.services import segmentation_learning_evaluation as module
 
     session = Mock()
-    version = SimpleNamespace(
-        id="v1", manifest_sha256="a" * 64, class_map_json=[{"id": "class-1"}]
-    )
+    version = SimpleNamespace(id="v1", manifest_sha256="a" * 64, class_map_json=[{"id": "class-1"}])
     session.get.side_effect = lambda cls, _key: version if cls is DatasetVersion else None
     session.scalars.return_value = [SimpleNamespace(image_id="image-1")]
     monkeypatch.setattr(
