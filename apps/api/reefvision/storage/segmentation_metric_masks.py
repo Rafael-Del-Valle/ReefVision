@@ -7,7 +7,6 @@ and disconnected components survive conversion; bounding boxes are never used.
 from __future__ import annotations
 
 from io import BytesIO
-from math import isfinite
 
 from PIL import Image, ImageDraw, UnidentifiedImageError
 
