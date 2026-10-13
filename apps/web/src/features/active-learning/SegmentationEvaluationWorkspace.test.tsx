@@ -145,7 +145,11 @@ describe("SegmentationEvaluationWorkspace", () => {
   it("queues a segmentation-only holdout without implicitly deploying a model", async () => {
     const user = userEvent.setup();
     renderWorkspace();
-    await screen.findByRole("option", { name: "Locally trained segmenter" });
+    await waitFor(() =>
+      expect(screen.getByLabelText("Candidate segmentation model")).toHaveTextContent(
+        "Locally trained segmenter",
+      ),
+    );
     await user.selectOptions(
       screen.getByLabelText("Verified immutable dataset version"),
       dataset.id,
