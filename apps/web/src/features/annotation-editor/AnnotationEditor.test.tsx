@@ -415,6 +415,107 @@ describe("AnnotationEditor", () => {
     ).toHaveAttribute("href", expect.stringContaining("/display?retry=1"));
   });
 
+  it("does not apply a previous image preload to a newly opened image", async () => {
+    const preloaders: FakeImage[] = [];
+    class FakeImage {
+      decoding = "";
+      onload: ((event: Event) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      src = "";
+      constructor() {
+        preloaders.push(this);
+      }
+    }
+    vi.stubGlobal("Image", FakeImage);
+    const firstSession: AnnotationSession = {
+      ...session,
+      image: { ...session.image, thumbnail_path: "first-thumb.png" },
+      next_image_id: "image-2",
+    };
+    const secondSession: AnnotationSession = {
+      ...session,
+      image: {
+        ...session.image,
+        id: "image-2",
+        original_filename: "swiftia-next.png",
+        thumbnail_path: "second-thumb.png",
+        annotation_revision: 0,
+        annotation_count: 0,
+      },
+      annotations: [],
+      counts_by_class: project.label_classes.map((label) => ({
+        label_class_id: label.id,
+        count: 0,
+      })),
+      previous_image_id: session.image.id,
+      next_image_id: null,
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/images/image-1/annotations")) {
+        return jsonResponse(firstSession);
+      }
+      if (url.endsWith("/images/image-2/annotations")) {
+        return jsonResponse(secondSession);
+      }
+      if (url.endsWith("/images/image-2/prediction-proposals")) {
+        return jsonResponse({ items: [], counts: { pending: 0 } });
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${url}`);
+    });
+    renderEditor();
+    await screen.findByRole("heading", { name: "swiftia-frame.png" });
+    const first = await waitFor(() => {
+      const image = preloaders.find((item) =>
+        item.src.includes("/images/image-1/display?retry=0"),
+      );
+      expect(image).toBeDefined();
+      return image;
+    });
+    const priorLoad = first?.onload;
+    act(() => first?.onload?.(new Event("load")));
+    expect(
+      screen.getByTestId("annotation-canvas").querySelector("image"),
+    ).toHaveAttribute("href", expect.stringContaining("image-1/display"));
+
+    await userEvent.keyboard("d");
+    await screen.findByRole("heading", { name: "swiftia-next.png" });
+    const second = await waitFor(() => {
+      const image = preloaders.find((item) =>
+        item.src.includes("/images/image-2/display?retry=0"),
+      );
+      expect(image).toBeDefined();
+      return image;
+    });
+
+    const canvasImage = () =>
+      screen.getByTestId("annotation-canvas").querySelector("image");
+    expect(canvasImage()).toHaveAttribute(
+      "href",
+      expect.stringContaining("image-2/thumbnail"),
+    );
+    expect(
+      screen.getByText("Loading full-resolution image..."),
+    ).toBeInTheDocument();
+
+    // A delayed event from the previous image must not paint the new canvas.
+    act(() => priorLoad?.(new Event("load")));
+    expect(canvasImage()).toHaveAttribute(
+      "href",
+      expect.stringContaining("image-2/thumbnail"),
+    );
+    act(() => second?.onload?.(new Event("load")));
+    expect(canvasImage()).toHaveAttribute(
+      "href",
+      expect.stringContaining("image-2/display"),
+    );
+    expect(
+      screen.queryByText("Loading full-resolution image..."),
+    ).not.toBeInTheDocument();
+  });
+
   it("reports the controlled active image identity", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
