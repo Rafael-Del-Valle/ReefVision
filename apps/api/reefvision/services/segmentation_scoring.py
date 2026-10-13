@@ -183,6 +183,7 @@ def score_segmentation_holdout(
             or not isinstance(proposal.provenance_json, dict)
             or proposal.provenance_json.get("evaluation_only") is not True
             or proposal.provenance_json.get("model_task") != "segment"
+            or not isinstance(proposal.label_class_id, str)
             or proposal.label_class_id not in known_class_ids
         ):
             raise ValueError("Inference output is not an isolated segmentation evaluation proposal")
