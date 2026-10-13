@@ -1,0 +1,244 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  getDatasetVersions,
+  getJob,
+  getModels,
+  type Project,
+} from "../../api/client";
+import { SegmentationEvaluationPanel } from "./SegmentationEvaluationPanel";
+import {
+  promoteSegmentationCandidate,
+  queueSegmentationEvaluation,
+  rollbackSegmentationDeployment,
+} from "./segmentationEvaluationApi";
+
+vi.mock("../../api/client", () => ({
+  getDatasetVersions: vi.fn(),
+  getModels: vi.fn(),
+  getJob: vi.fn(),
+}));
+
+vi.mock("./segmentationEvaluationApi", () => ({
+  queueSegmentationEvaluation: vi.fn(),
+  promoteSegmentationCandidate: vi.fn(),
+  rollbackSegmentationDeployment: vi.fn(),
+}));
+
+const project = { id: "project-1" } as Project;
+
+function model(id: string, active = false, deploymentId?: string) {
+  return {
+    id,
+    purpose: "segmenter",
+    task: "segment",
+    display_name: id,
+    metadata_json: {
+      active_for_predictions: active,
+      ...(deploymentId
+        ? { active_segmentation_deployment_id: deploymentId }
+        : {}),
+    },
+  };
+}
+
+function completedEvaluation(eligible: boolean, incumbentId: string | null) {
+  return {
+    id: "evaluation-1",
+    project_id: project.id,
+    job_type: "segmentation_learning_evaluation",
+    status: "completed",
+    progress_current: incumbentId ? 2 : 1,
+    progress_total: incumbentId ? 2 : 1,
+    request_json: {
+      task: "segment",
+      candidate_model_id: "candidate",
+      incumbent_model_id: incumbentId,
+    },
+    result_json: {
+      promotion_eligible: eligible,
+      blockers: eligible ? [] : ["Candidate below mask AP50 floor"],
+      candidate_metrics: {
+        mask_map50: eligible ? 0.85 : 0.3,
+        precision: 0.9,
+        recall: 0.8,
+        mean_absolute_count_error: 1.5,
+        count_bias_per_image: 0.5,
+      },
+    },
+  };
+}
+
+function renderPanel() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <SegmentationEvaluationPanel project={project} />
+    </QueryClientProvider>,
+  );
+}
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.mocked(getDatasetVersions).mockResolvedValue([
+    {
+      id: "version-1",
+      name: "Verified octocoral masks",
+      version_number: 1,
+      status: "complete",
+    },
+  ] as Awaited<ReturnType<typeof getDatasetVersions>>);
+  vi.mocked(getModels).mockResolvedValue([
+    model("candidate"),
+  ] as Awaited<ReturnType<typeof getModels>>);
+  vi.mocked(queueSegmentationEvaluation).mockResolvedValue({
+    id: "evaluation-1",
+    status: "waiting",
+  } as Awaited<ReturnType<typeof queueSegmentationEvaluation>>);
+  vi.mocked(getJob).mockResolvedValue(
+    completedEvaluation(true, null) as Awaited<ReturnType<typeof getJob>>,
+  );
+  vi.mocked(promoteSegmentationCandidate).mockResolvedValue({
+    id: "deploy-1",
+    status: "succeeded",
+    action: "promote",
+    active_model_id: "candidate",
+  } as Awaited<ReturnType<typeof promoteSegmentationCandidate>>);
+  vi.mocked(rollbackSegmentationDeployment).mockResolvedValue({
+    id: "rollback-1",
+    status: "succeeded",
+    action: "rollback",
+    active_model_id: null,
+  } as Awaited<ReturnType<typeof rollbackSegmentationDeployment>>);
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+});
+
+describe("SegmentationEvaluationPanel", () => {
+  it("queues isolated holdout evaluation without activating a model", async () => {
+    renderPanel();
+    await screen.findByRole("option", {
+      name: "Verified octocoral masks (v1)",
+    });
+    fireEvent.change(screen.getByLabelText("Segmentation holdout dataset"), {
+      target: { value: "version-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Candidate segmenter"), {
+      target: { value: "candidate" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Queue held-out evaluation" }),
+    );
+    await waitFor(() => {
+      expect(queueSegmentationEvaluation).toHaveBeenCalledWith(
+        project.id,
+        expect.objectContaining({
+          dataset_version_id: "version-1",
+          candidate_model_id: "candidate",
+          incumbent_model_id: null,
+          split: "validation",
+        }),
+      );
+    });
+    expect(promoteSegmentationCandidate).not.toHaveBeenCalled();
+    expect(rollbackSegmentationDeployment).not.toHaveBeenCalled();
+  });
+
+  it("blocks promotion for failed scientific quality criteria", async () => {
+    vi.mocked(getJob).mockResolvedValue(
+      completedEvaluation(false, null) as Awaited<ReturnType<typeof getJob>>,
+    );
+    renderPanel();
+    await screen.findByRole("option", {
+      name: "Verified octocoral masks (v1)",
+    });
+    fireEvent.change(screen.getByLabelText("Segmentation holdout dataset"), {
+      target: { value: "version-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Candidate segmenter"), {
+      target: { value: "candidate" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Queue held-out evaluation" }),
+    );
+    await screen.findByText("Candidate below mask AP50 floor");
+    expect(
+      screen.getByRole("button", { name: "Promote evaluated segmenter" }),
+    ).toBeDisabled();
+    expect(promoteSegmentationCandidate).not.toHaveBeenCalled();
+  });
+
+  it("requires identity, reason and explicit confirmation for promotion", async () => {
+    renderPanel();
+    await screen.findByRole("option", {
+      name: "Verified octocoral masks (v1)",
+    });
+    fireEvent.change(screen.getByLabelText("Segmentation holdout dataset"), {
+      target: { value: "version-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Candidate segmenter"), {
+      target: { value: "candidate" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Queue held-out evaluation" }),
+    );
+    expect(await screen.findByText("0.850")).toBeInTheDocument();
+    const promote = screen.getByRole("button", {
+      name: "Promote evaluated segmenter",
+    });
+    expect(promote).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Operator identity"), {
+      target: { value: "Researcher" },
+    });
+    fireEvent.change(screen.getByLabelText("Reason (at least 10 characters)"), {
+      target: { value: "Reviewed immutable mask holdout and approved" },
+    });
+    expect(promote).toBeEnabled();
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    fireEvent.click(promote);
+    expect(promoteSegmentationCandidate).not.toHaveBeenCalled();
+    fireEvent.click(promote);
+    await waitFor(() => {
+      expect(promoteSegmentationCandidate).toHaveBeenCalledWith(
+        project.id,
+        "evaluation-1",
+        null,
+        "Researcher",
+        "Reviewed immutable mask holdout and approved",
+      );
+    });
+  });
+
+  it("uses the active deployment identity for an explicitly approved rollback", async () => {
+    vi.mocked(getModels).mockResolvedValue([
+      model("candidate"),
+      model("incumbent", true, "deployment-7"),
+    ] as Awaited<ReturnType<typeof getModels>>);
+    renderPanel();
+    await screen.findByText("incumbent");
+    const rollback = screen.getByRole("button", {
+      name: "Rollback segmentation deployment",
+    });
+    expect(rollback).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Operator identity"), {
+      target: { value: "Researcher" },
+    });
+    fireEvent.change(screen.getByLabelText("Reason (at least 10 characters)"), {
+      target: { value: "Revert to prior verified segmentation deployment" },
+    });
+    fireEvent.click(rollback);
+    await waitFor(() => {
+      expect(rollbackSegmentationDeployment).toHaveBeenCalledWith(
+        project.id,
+        "deployment-7",
+        "incumbent",
+        "Researcher",
+        "Revert to prior verified segmentation deployment",
+      );
+    });
+    expect(promoteSegmentationCandidate).not.toHaveBeenCalled();
+  });
+});
