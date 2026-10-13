@@ -60,6 +60,22 @@ export async function listSegmentationEvaluations(
   return (await response.json()) as JobRecord[];
 }
 
+export async function listSegmentationDeploymentAudit(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<JobRecord[]> {
+  const response = await fetch(
+    `${getApiBaseUrl()}/projects/${projectId}/learning/segmentation/deployments/audit`,
+    { signal, cache: "no-store" },
+  );
+  if (!response.ok) {
+    throw new Error(
+      `Unable to load segmentation deployment audit (HTTP ${response.status})`,
+    );
+  }
+  return (await response.json()) as JobRecord[];
+}
+
 export function queueSegmentationEvaluation(
   projectId: string,
   payload: SegmentationEvaluationRequest,
