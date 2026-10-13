@@ -25,6 +25,7 @@ vi.mock("../../api/client", () => ({
   getAnnotationSession: vi.fn(),
   getPredictions: vi.fn(),
   imageDisplayUrl: (id: string) => `/api/v1/images/${id}/display`,
+  imageThumbnailUrl: (id: string) => `/api/v1/images/${id}/thumbnail`,
 }));
 
 const item = {
@@ -197,6 +198,46 @@ describe("QuickConfidenceReviewDialog", () => {
     fireEvent.click(previous);
     expect(onPreviousImage).toHaveBeenCalledTimes(1);
     expect(onNextImage).not.toHaveBeenCalled();
+  });
+
+  it("shows a retryable error instead of an invisible failed preview", async () => {
+    renderDialog();
+    const image = await screen.findByRole("img", { name: "swiftia.png" });
+    fireEvent.error(image);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Image preview failed to load",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Retry image preview" }));
+    const retried = await screen.findByRole("img", { name: "swiftia.png" });
+    expect(retried).toHaveAttribute(
+      "src",
+      "/api/v1/images/image-1/display?review_retry=1",
+    );
+  });
+
+  it("falls back to a thumbnail before offering retry", async () => {
+    vi.mocked(getAnnotationSession).mockResolvedValue({
+      image: {
+        id: "image-1",
+        original_filename: "swiftia.png",
+        width_px: 80,
+        height_px: 60,
+        thumbnail_path: "thumbs/swiftia.png",
+      },
+      label_classes: [],
+      annotations: [],
+      counts_by_class: [],
+      previous_image_id: null,
+      next_image_id: null,
+    } as unknown as Awaited<ReturnType<typeof getAnnotationSession>>);
+    renderDialog();
+    fireEvent.error(await screen.findByRole("img", { name: "swiftia.png" }));
+    expect(screen.getByRole("img", { name: "swiftia.png" })).toHaveAttribute(
+      "src",
+      "/api/v1/images/image-1/thumbnail",
+    );
+    fireEvent.error(screen.getByRole("img", { name: "swiftia.png" }));
+    expect(screen.getByRole("button", { name: "Retry image preview" })).toBeEnabled();
   });
 
   it("has navigation and a close action without leaving the page", async () => {
