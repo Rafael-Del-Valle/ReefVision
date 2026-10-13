@@ -50,9 +50,7 @@ def _response(record: Job, *, action: str) -> SegmentationDeploymentAuditRespons
     "/projects/{project_id}/learning/segmentation/deployments/audit",
     response_model=list[JobResponse],
 )
-def list_segmentation_deployment_audit(
-    project_id: str, session: DbSession
-) -> list[JobResponse]:
+def list_segmentation_deployment_audit(project_id: str, session: DbSession) -> list[JobResponse]:
     """Retrieve committed project-specific segmentation promotion and rollback events."""
     records = session.scalars(
         select(Job)
