@@ -209,6 +209,9 @@ describe("SegmentationEvaluationPanel", () => {
     fireEvent.change(screen.getByLabelText("Candidate segmenter"), {
       target: { value: "candidate" },
     });
+    fireEvent.change(screen.getByLabelText("Minimum instance mask AP50"), {
+      target: { value: "0.91" },
+    });
     fireEvent.change(screen.getByLabelText("Operator identity"), {
       target: { value: "Researcher" },
     });
@@ -231,6 +234,9 @@ describe("SegmentationEvaluationPanel", () => {
         "",
       );
       expect(screen.getByLabelText("Candidate segmenter")).toHaveValue("");
+      expect(screen.getByLabelText("Minimum instance mask AP50")).toHaveValue(
+        0.5,
+      );
       expect(screen.getByLabelText("Operator identity")).toHaveValue("");
       expect(screen.getByLabelText("Reason (at least 10 characters)")).toHaveValue(
         "",
