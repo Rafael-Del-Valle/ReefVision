@@ -133,3 +133,7 @@ def test_invalid_threshold_and_nonfinite_confidence_fail_closed() -> None:
         instance_mask_metrics([], [], image_count=1, iou_threshold=0)
     with pytest.raises(ValueError, match="metric threshold"):
         instance_mask_metrics([], [], image_count=0)
+    with pytest.raises(ValueError, match="metric threshold"):
+        instance_mask_metrics([], [], image_count=1, operating_confidence=float("nan"))
+    with pytest.raises(ValueError, match="metric threshold"):
+        instance_mask_metrics([], [], image_count=1, iou_threshold=float("nan"))
