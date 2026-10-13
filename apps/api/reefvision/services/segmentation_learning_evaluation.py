@@ -153,9 +153,7 @@ class SegmentationLearningEvaluationService:
         job = self._job(project_id, model.id, inference_job_id, holdout)
         proposals = list(
             self.session.scalars(
-                select(PredictionProposal).where(
-                    PredictionProposal.inference_job_id == job.id
-                )
+                select(PredictionProposal).where(PredictionProposal.inference_job_id == job.id)
             )
         )
         if any(item.project_id != project_id for item in proposals):
