@@ -100,7 +100,9 @@ beforeEach(() => {
     status: "waiting",
   } as unknown as Awaited<ReturnType<typeof queueSegmentationEvaluation>>);
   vi.mocked(getJob).mockResolvedValue(
-    completedEvaluation(true, null) as unknown as Awaited<ReturnType<typeof getJob>>,
+    completedEvaluation(true, null) as unknown as Awaited<
+      ReturnType<typeof getJob>
+    >,
   );
   vi.mocked(promoteSegmentationCandidate).mockResolvedValue({
     id: "deploy-1",
@@ -149,7 +151,9 @@ describe("SegmentationEvaluationPanel", () => {
 
   it("blocks promotion for failed scientific quality criteria", async () => {
     vi.mocked(getJob).mockResolvedValue(
-      completedEvaluation(false, null) as unknown as Awaited<ReturnType<typeof getJob>>,
+      completedEvaluation(false, null) as unknown as Awaited<
+        ReturnType<typeof getJob>
+      >,
     );
     renderPanel();
     await screen.findByRole("option", {
