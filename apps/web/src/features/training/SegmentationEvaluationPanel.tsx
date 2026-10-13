@@ -478,8 +478,8 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
             record?.result_json?.promotion_eligible === true &&
             !evaluatedCandidateRegistered && (
               <p role="alert">
-                The evaluated segmentation candidate is no longer registered
-                for this project. Promotion is blocked.
+                The evaluated segmentation candidate is no longer registered for
+                this project. Promotion is blocked.
               </p>
             )}
           {Array.isArray(record?.result_json?.blockers) && (
