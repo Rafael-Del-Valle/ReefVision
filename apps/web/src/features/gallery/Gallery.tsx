@@ -202,6 +202,18 @@ function ImportSummary({ report }: { report: ImageImportReport }) {
 type PreviewLoadPhase =
   "loading" | "loaded" | "thumbnail-loading" | "thumbnail-loaded" | "error";
 
+function focusedImageUrl(
+  imageId: string,
+  useThumbnail: boolean,
+  retry: number,
+): string {
+  const original = useThumbnail
+    ? imageThumbnailUrl(imageId)
+    : imageDisplayUrl(imageId);
+  if (retry === 0) return original;
+  return `${original}${original.includes("?") ? "&" : "?"}rv_retry=${retry}`;
+}
+
 /**
  * Keep each image's media request lifecycle inside a keyed component.
  * Late events from a previous image cannot affect the newly focused image.
@@ -260,11 +272,7 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
           )}
           <img
             key={`${retry}:${thumbnail ? "thumbnail" : "original"}`}
-            src={
-              thumbnail
-                ? imageThumbnailUrl(image.id)
-                : imageDisplayUrl(image.id)
-            }
+            src={focusedImageUrl(image.id, thumbnail, retry)}
             alt={`Focused project image: ${image.original_filename}`}
             decoding="async"
             onLoad={handleLoad}
