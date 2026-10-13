@@ -69,9 +69,7 @@ def test_scientific_evaluation_history_survives_session_and_is_project_scoped(
         own_ids = {own_waiting.id, own_failed.id}
         foreign_id = foreign.id
 
-    response = client.get(
-        f"/api/v1/projects/{first['id']}/learning/segmentation/evaluations"
-    )
+    response = client.get(f"/api/v1/projects/{first['id']}/learning/segmentation/evaluations")
     assert response.status_code == 200, response.text
     records = response.json()
     assert {item["id"] for item in records} == own_ids
