@@ -410,7 +410,7 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.entries(candidateMetrics.per_class).map(
+                    {Object.entries(candidateMetrics.per_class as Record<string, unknown>).map(
                       ([classId, value]) => {
                         const values =
                           value && typeof value === "object"
