@@ -9,6 +9,7 @@ import {
   type Project,
 } from "../../api/client";
 import {
+  listSegmentationDeploymentAudit,
   listSegmentationEvaluations,
   promoteSegmentationCandidate,
   queueSegmentationEvaluation,
@@ -49,6 +50,10 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
   const history = useQuery({
     queryKey: ["segmentation-evaluation-history", project.id],
     queryFn: ({ signal }) => listSegmentationEvaluations(project.id, signal),
+  });
+  const deploymentAudit = useQuery({
+    queryKey: ["segmentation-deployment-audit", project.id],
+    queryFn: ({ signal }) => listSegmentationDeploymentAudit(project.id, signal),
   });
   const models = useQuery({
     queryKey: ["models", project.id, "segmentation-evaluation"],
@@ -112,7 +117,10 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
     onSuccess: async (audit) => {
       setAuditMessage(`Promotion audit recorded: ${audit.id}`);
       await queryClient.invalidateQueries({
-        queryKey: ["models", project.id, "segmentation-evaluation"],
+        queryKey: ["models", project.id],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["segmentation-deployment-audit", project.id],
       });
     },
   });
@@ -128,7 +136,10 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
     onSuccess: async (audit) => {
       setAuditMessage(`Rollback audit recorded: ${audit.id}`);
       await queryClient.invalidateQueries({
-        queryKey: ["models", project.id, "segmentation-evaluation"],
+        queryKey: ["models", project.id],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["segmentation-deployment-audit", project.id],
       });
     },
   });
@@ -408,6 +419,40 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
           {auditMessage && <p role="status">{auditMessage}</p>}
         </div>
       </fieldset>
+      <section aria-label="Segmentation deployment audit history">
+        <h5>Deployment audit history</h5>
+        <p className="system-subtle">
+          Past model activations and rollbacks are read-only. Viewing these
+          records never changes the active segmentation model.
+        </p>
+        {deploymentAudit.isPending && <p role="status">Loading audit records…</p>}
+        {deploymentAudit.error && (
+          <p role="alert">{deploymentAudit.error.message}</p>
+        )}
+        {deploymentAudit.data?.length === 0 && <p>No deployment changes recorded.</p>}
+        {deploymentAudit.data && deploymentAudit.data.length > 0 && (
+          <ol>
+            {deploymentAudit.data.slice(0, 10).map((entry) => {
+              const action =
+                entry.job_type === "segmentation_learning_deployment_rollback"
+                  ? "Rollback"
+                  : "Promotion";
+              const modelId =
+                entry.job_type === "segmentation_learning_deployment_rollback"
+                  ? entry.result_json?.restored_model_id
+                  : entry.result_json?.active_model_id;
+              return (
+                <li key={entry.id}>
+                  <strong>{action}</strong> —{" "}
+                  {String(modelId ?? "No active segmenter")} ·{" "}
+                  {String(entry.request_json.approved_by ?? "Unknown operator")} ·{" "}
+                  {String(entry.request_json.reason ?? "No reason recorded")}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </section>
     </article>
   );
 }
