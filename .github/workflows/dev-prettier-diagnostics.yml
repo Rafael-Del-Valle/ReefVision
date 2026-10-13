@@ -21,10 +21,10 @@ jobs:
         shell: bash
         run: |
           npm ci --ignore-scripts
-          for path in src/features/training/SegmentationEvaluationPanel.tsx src/features/training/SegmentationEvaluationPanel.test.tsx src/features/review-queues/QuickConfidenceReviewDialog.tsx; do
+          for path in src/features/training/SegmentationEvaluationPanel.tsx src/features/training/SegmentationEvaluationPanel.test.tsx src/features/training/segmentationEvaluationApi.ts src/features/review-queues/QuickConfidenceReviewDialog.tsx; do
             if [ -f "$path" ]; then
               npx prettier --write "$path"
             fi
           done
-          git diff -- src/features/training/SegmentationEvaluationPanel.tsx src/features/training/SegmentationEvaluationPanel.test.tsx src/features/review-queues/QuickConfidenceReviewDialog.tsx
+          git diff -- src/features/training/SegmentationEvaluationPanel.tsx src/features/training/SegmentationEvaluationPanel.test.tsx src/features/training/segmentationEvaluationApi.ts src/features/review-queues/QuickConfidenceReviewDialog.tsx
           # Diagnostics only: the normal format:check remains the release gate.
