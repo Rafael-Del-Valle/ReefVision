@@ -779,7 +779,6 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "1 selected" })).toBeVisible();
 });
 
-
 test("renders the first opened image after a deliberately delayed content response", async ({
   page,
 }) => {
