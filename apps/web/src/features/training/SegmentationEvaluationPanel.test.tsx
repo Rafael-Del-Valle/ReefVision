@@ -10,6 +10,7 @@ import {
 } from "../../api/client";
 import { SegmentationEvaluationPanel } from "./SegmentationEvaluationPanel";
 import {
+  listSegmentationEvaluations,
   promoteSegmentationCandidate,
   queueSegmentationEvaluation,
   rollbackSegmentationDeployment,
@@ -22,6 +23,7 @@ vi.mock("../../api/client", () => ({
 }));
 
 vi.mock("./segmentationEvaluationApi", () => ({
+  listSegmentationEvaluations: vi.fn(),
   queueSegmentationEvaluation: vi.fn(),
   promoteSegmentationCandidate: vi.fn(),
   rollbackSegmentationDeployment: vi.fn(),
@@ -92,6 +94,7 @@ beforeEach(() => {
       status: "complete",
     },
   ] as unknown as Awaited<ReturnType<typeof getDatasetVersions>>);
+  vi.mocked(listSegmentationEvaluations).mockResolvedValue([]);
   vi.mocked(getModels).mockResolvedValue([
     model("candidate"),
   ] as unknown as Awaited<ReturnType<typeof getModels>>);
@@ -120,6 +123,23 @@ beforeEach(() => {
 });
 
 describe("SegmentationEvaluationPanel", () => {
+  it("loads prior project evaluation evidence without activating a model", async () => {
+    vi.mocked(listSegmentationEvaluations).mockResolvedValue([
+      completedEvaluation(true, null),
+    ] as unknown as Awaited<ReturnType<typeof listSegmentationEvaluations>>);
+    renderPanel();
+    const history = screen.getByLabelText("Segmentation evaluation history");
+    await screen.findByRole("option", { name: "completed: candidate" });
+    fireEvent.change(history, { target: { value: "evaluation-1" } });
+    expect(await screen.findByText("0.850")).toBeInTheDocument();
+    expect(listSegmentationEvaluations).toHaveBeenCalledWith(
+      project.id,
+      expect.anything(),
+    );
+    expect(queueSegmentationEvaluation).not.toHaveBeenCalled();
+    expect(promoteSegmentationCandidate).not.toHaveBeenCalled();
+  });
+
   it("queues isolated holdout evaluation without activating a model", async () => {
     renderPanel();
     await screen.findByRole("option", {
