@@ -53,7 +53,9 @@ export async function listSegmentationEvaluations(
     { signal, cache: "no-store" },
   );
   if (!response.ok) {
-    throw new Error(`Unable to load evaluation history (HTTP ${response.status})`);
+    throw new Error(
+      `Unable to load evaluation history (HTTP ${response.status})`,
+    );
   }
   return (await response.json()) as JobRecord[];
 }
