@@ -347,12 +347,20 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
             </dl>
           )}
           <details>
-            <summary>Scientific evaluation provenance and class support</summary>
+            <summary>
+              Scientific evaluation provenance and class support
+            </summary>
             <dl>
               <dt>Immutable dataset version</dt>
-              <dd>{String(record?.request_json.dataset_version_id ?? "Not recorded")}</dd>
+              <dd>
+                {String(
+                  record?.request_json.dataset_version_id ?? "Not recorded",
+                )}
+              </dd>
               <dt>Dataset manifest SHA-256</dt>
-              <dd>{String(record?.request_json.manifest_sha256 ?? "Not recorded")}</dd>
+              <dd>
+                {String(record?.request_json.manifest_sha256 ?? "Not recorded")}
+              </dd>
               <dt>Holdout split</dt>
               <dd>{String(record?.request_json.split ?? "Not recorded")}</dd>
               <dt>Held-out images</dt>
@@ -362,11 +370,21 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
                   : "Not recorded"}
               </dd>
               <dt>Candidate checkpoint SHA-256</dt>
-              <dd>{String(record?.request_json.candidate_checksum ?? "Not recorded")}</dd>
+              <dd>
+                {String(
+                  record?.request_json.candidate_checksum ?? "Not recorded",
+                )}
+              </dd>
               <dt>Incumbent checkpoint SHA-256</dt>
-              <dd>{String(record?.request_json.incumbent_checksum ?? "None")}</dd>
+              <dd>
+                {String(record?.request_json.incumbent_checksum ?? "None")}
+              </dd>
               <dt>Evaluation-only candidate inference job</dt>
-              <dd>{String(record?.request_json.candidate_job_id ?? "Not recorded")}</dd>
+              <dd>
+                {String(
+                  record?.request_json.candidate_job_id ?? "Not recorded",
+                )}
+              </dd>
               <dt>Evaluation method</dt>
               <dd>
                 {String(
@@ -401,7 +419,11 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
                         return (
                           <tr key={classId}>
                             <th scope="row">{classId}</th>
-                            <td>{String(values.ground_truth_count ?? "Unavailable")}</td>
+                            <td>
+                              {String(
+                                values.ground_truth_count ?? "Unavailable",
+                              )}
+                            </td>
                             <td>{metric(values.ap50)}</td>
                             <td>{metric(values.precision)}</td>
                             <td>{metric(values.recall)}</td>
