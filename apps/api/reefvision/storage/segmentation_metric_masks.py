@@ -13,7 +13,7 @@ from PIL import Image, ImageDraw, UnidentifiedImageError
 
 from reefvision.domain.segmentation_evaluation import ScoredInstanceMask
 
-PNG_SIGNATURE = b"\\x89PNG\\r\\n\\x1a\\n"
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 MAX_MASK_PIXELS = 100_000_000
 MAX_MASK_PNG_BYTES = 256 * 1024 * 1024
 
