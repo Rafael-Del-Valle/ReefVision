@@ -146,9 +146,7 @@ def test_completed_evaluation_after_32_active_parents_is_not_starved(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project = create_project(client, "Auto segmentation eval fair polling")
-    older_ids = [
-        _waiting(client, project["id"], child_status="running")[0] for _ in range(33)
-    ]
+    older_ids = [_waiting(client, project["id"], child_status="running")[0] for _ in range(33)]
     completed_id, _ = _waiting(client, project["id"], child_status="succeeded")
     app = cast(FastAPI, client.app)
 
