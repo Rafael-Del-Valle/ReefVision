@@ -172,6 +172,29 @@ describe("SegmentationEvaluationPanel", () => {
     expect(rollbackSegmentationDeployment).not.toHaveBeenCalled();
   });
 
+  it("does not display or promote another project's evaluation record", async () => {
+    vi.mocked(listSegmentationEvaluations).mockResolvedValue([
+      completedEvaluation(true, null),
+    ] as unknown as Awaited<ReturnType<typeof listSegmentationEvaluations>>);
+    vi.mocked(getJob).mockResolvedValue({
+      ...completedEvaluation(true, null),
+      project_id: "other-project",
+    } as unknown as Awaited<ReturnType<typeof getJob>>);
+    renderPanel();
+    await screen.findByRole("option", { name: "completed: candidate" });
+    fireEvent.change(screen.getByLabelText("Segmentation evaluation history"), {
+      target: { value: "evaluation-1" },
+    });
+    expect(
+      await screen.findByText("Evaluation does not belong to this project"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("0.850")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Promote evaluated segmenter" }),
+    ).toBeDisabled();
+    expect(promoteSegmentationCandidate).not.toHaveBeenCalled();
+  });
+
   it("loads prior project evaluation evidence without activating a model", async () => {
     vi.mocked(listSegmentationEvaluations).mockResolvedValue([
       completedEvaluation(true, null),
