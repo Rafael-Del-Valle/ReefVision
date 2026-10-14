@@ -8,8 +8,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Rafael-Del-Valle/ReefVision/releases/download/v1.0.1-rc.1/ReefVision_Windows_Downloader.exe"><strong>Download for Windows — 1.0.1 RC (test build)</strong></a>
-  · <a href="https://github.com/Rafael-Del-Valle/ReefVision/releases/tag/v1.0.0">Stable v1.0.0</a>
+  <a href="https://github.com/Rafael-Del-Valle/ReefVision/releases/latest/download/ReefVision_Windows_Downloader.exe"><strong>Download for Windows — latest stable</strong></a>
+  · <a href="https://github.com/Rafael-Del-Valle/ReefVision/releases/latest">Latest release and checksums</a>
   · <a href="#installation">Installation</a>
   · <a href="#documentation">Documentation</a>
   · <a href="https://github.com/Rafael-Del-Valle/ReefVision/issues">Report an issue</a>
@@ -41,11 +41,13 @@ It began with octocoral imagery, but the annotation and computer-vision workflow
 For a more detailed list, see the [feature reference](docs/FEATURE_REFERENCE.md). Some tools depend on a compatible model, GPU, or separately installed provider.
 
 
-## In development: 1.0.1 and 1.0.2
+## Updates in 1.0.1 and 1.0.2
 
-The draft [1.0.1 annotation branch](https://github.com/Rafael-Del-Valle/ReefVision/pull/44) adds source-pixel full-image SAM proposals (Shift+1), selected-mask refinement (Shift+2), review-before-counting controls, and verified-dataset learning. The stacked [scientific candidate](https://github.com/Rafael-Del-Valle/ReefVision/pull/68) adds immutable held-out instance-segmentation evaluation, exact mask metrics, and audited promotion and rollback.
+**1.0.1** adds image-wide SAM 2.1 proposals, selected-mask refinement, review-before-counting controls, immutable verified learning datasets, scientific held-out instance-mask evaluation, and audited segmentation-model promotion and rollback.
 
-The draft [combined 1.0.2 candidate](https://github.com/Rafael-Del-Valle/ReefVision/pull/69) integrates that scientific baseline with first-image reliability, gallery navigation, pan and zoom, safe annotation duplication, and shortcut usability. These changes are **not part of the stable 1.0.0 release or the published 1.0.1 RC**. Both candidates remain on release hold pending their recorded Windows GUI, NVIDIA, scientific, and maintainer approvals. Review the [1.0.1 handoff](docs/RELEASE_1.0.1.md), [1.0.2 handoff](docs/RELEASE_1.0.2.md), and current PR checks before using development builds for research.
+**1.0.2** builds on 1.0.1 with more reliable first-image loading, improved gallery navigation, pan and zoom, safe annotation duplication, and protected keyboard shortcuts. See the [1.0.1 notes](docs/RELEASE_1.0.1.md) and [1.0.2 notes](docs/RELEASE_1.0.2.md).
+
+GitHub CI, Windows installer packaging, and automated clean-install checks passed for both version candidates. Owner-waived: testing on the maintainer's personal PC/GPU, and scientific performance validation with representative coral data. **Do not interpret these releases as independently validated for research accuracy.** Researchers should verify model outputs and metrics on their own datasets.
 
 ## A look at ReefVision
 
@@ -63,21 +65,19 @@ The panels below mark where screenshots from the desktop application will go. Th
 
 ## Installation
 
-ReefVision currently has a **1.0.1 release candidate for external-PC testing** and a **1.0.0 stable release**. Both are for Windows x64; the packaged desktop application does not need Python or Node.js.
+ReefVision is distributed for Windows x64. The packaged desktop application does not need Python or Node.js.
 
-1. [Download the Windows downloader for ReefVision 1.0.1 RC](https://github.com/Rafael-Del-Valle/ReefVision/releases/download/v1.0.1-rc.1/ReefVision_Windows_Downloader.exe).
-2. Open `ReefVision_Windows_Downloader.exe`. It checks GitHub for the newest complete Windows release (including release candidates). It currently selects `v1.0.1-rc.1`, then downloads the MSI and **all five required CAB files** to `Downloads\\ReefVision-1.0.1-rc.1`.
-3. The downloader checks each file's SHA-256 against the release provenance. After verification, press Enter to start the Windows installer.
+1. **[Download the Windows downloader](https://github.com/Rafael-Del-Valle/ReefVision/releases/latest/download/ReefVision_Windows_Downloader.exe)** from the latest stable GitHub release.
+2. Run `ReefVision_Windows_Downloader.exe`. It selects the newest complete ReefVision Windows release and downloads its MSI plus **every required external CAB file** into the same folder under Downloads.
+3. It verifies each file against the published SHA-256 provenance and then lets you launch the installer.
 
-The downloader is unsigned, so Windows may warn about an unknown publisher. Download it only from the [official release](https://github.com/Rafael-Del-Valle/ReefVision/releases/tag/v1.0.1-rc.1). If a download fails, run it again to reuse already verified files.
+The downloader is unsigned, so Windows may warn that its publisher is unknown. Only use downloads from this official repository. To restrict selection to stable releases, run the downloader with `--stable`. For direct installation, retrieve the MSI **and all accompanying CAB files** from the [release assets](https://github.com/Rafael-Del-Valle/ReefVision/releases/latest), then keep them together in one folder.
 
-**Prefer a stable build?** The [v1.0.0 release](https://github.com/Rafael-Del-Valle/ReefVision/releases/tag/v1.0.0) has a separate MSI and six CAB files. Alternatively, run the downloader with `--stable` from a terminal to download only a stable release.
-
-**Working from source?** See the [developer setup guide](docs/DEVELOPMENT.md) instead.
+**Working from source?** See the [developer setup guide](docs/DEVELOPMENT.md).
 
 ### Models and hardware
 
-The v1.0.0 installer does not include pretrained model checkpoints. Register a compatible local checkpoint for model-based analysis, or use the supported training tools to build your own model. GPU acceleration is useful for training and larger inference jobs; availability depends on the provider and local environment.
+The stable installers do not include pretrained model checkpoints. Register a compatible local checkpoint for model-based analysis, or use the supported training tools to build your own model. GPU acceleration is useful for training and larger inference jobs; availability depends on the provider and local environment.
 
 ## A typical project
 
@@ -97,8 +97,8 @@ The distinction between model predictions and reviewed annotations is intentiona
 - [Quality-control guide](docs/QUALITY_CONTROL_GUIDE.md)
 - [Review queue guide](docs/REVIEW_QUEUE_GUIDE.md)
 - [Known issues](docs/KNOWN_ISSUES.md)
-- [1.0.1 pre-release handoff](docs/RELEASE_1.0.1.md)
-- [1.0.2 pre-release handoff](docs/RELEASE_1.0.2.md)
+- [1.0.1 release notes](docs/RELEASE_1.0.1.md)
+- [1.0.2 release notes](docs/RELEASE_1.0.2.md)
 - [Changelog](CHANGELOG.md)
 
 ## Development
