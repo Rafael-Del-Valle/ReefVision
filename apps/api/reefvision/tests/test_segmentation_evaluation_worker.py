@@ -80,6 +80,77 @@ def test_successful_terminal_inference_finalizes_original_record(
     )
 
 
+def test_scientific_provenance_survives_database_roundtrip_and_worker_completion(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = create_project(client, "Persist segmentation evaluation provenance")
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        parent = Job(
+            project_id=project["id"],
+            job_type="segmentation_learning_evaluation",
+            status="waiting",
+            progress_current=0,
+            progress_total=1,
+            request_json={"task": "segment"},
+        )
+        session.add(parent)
+        session.flush()
+        provenance = {
+            "model_id": "registered-segmenter",
+            "model_task": "segment",
+            "evaluation_only": True,
+            "image_ids": ["image-1"],
+            "segmentation_dataset_version_id": "dataset-1",
+            "segmentation_manifest_sha256": "a" * 64,
+            "segmentation_split": "test",
+            "segmentation_checkpoint_sha256": "b" * 64,
+            "segmentation_holdout_parent_job_id": parent.id,
+        }
+        child = Job(
+            project_id=project["id"],
+            job_type="inference",
+            status="succeeded",
+            progress_current=1,
+            progress_total=1,
+            request_json=provenance,
+        )
+        session.add(child)
+        session.flush()
+        parent.request_json = {
+            "task": "segment",
+            "candidate_job_id": child.id,
+        }
+        session.commit()
+        parent_id = parent.id
+        child_id = child.id
+
+    with app.state.session_factory() as session:
+        stored_child = session.get(Job, child_id)
+        assert stored_child is not None
+        assert stored_child.request_json == provenance
+
+    def complete(self, project_id: str, record_id: str) -> Job:
+        assert (project_id, record_id) == (project["id"], parent_id)
+        stored_child = self.session.get(Job, child_id)
+        assert stored_child is not None
+        assert stored_child.request_json == provenance
+        record = self.session.get(Job, record_id)
+        assert record is not None
+        record.status = "completed"
+        self.session.commit()
+        return record
+
+    monkeypatch.setattr(SegmentationEvaluationQueueService, "advance", complete)
+    assert worker.process_next_waiting_segmentation_evaluation(
+        app.state.settings, app.state.session_factory
+    )
+    with app.state.session_factory() as session:
+        stored_child = session.get(Job, child_id)
+        assert stored_child is not None
+        assert stored_child.request_json == provenance
+
+
 def test_active_child_job_keeps_evaluation_waiting(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

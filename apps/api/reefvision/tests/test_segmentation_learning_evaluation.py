@@ -12,7 +12,7 @@ from reefvision.config import Settings
 from reefvision.db.models import DatasetVersion, Job
 from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.domain.segmentation_evaluation import InstanceMaskMetrics
-from reefvision.domain.segmentation_holdout import SegmentationHoldout
+from reefvision.domain.segmentation_holdout import SegmentationHoldout, VerifiedMaskReference
 from reefvision.services.segmentation_learning_evaluation import (
     SegmentationLearningEvaluationService,
 )
@@ -25,7 +25,19 @@ def service_with_job(job: Job) -> SegmentationLearningEvaluationService:
     return SegmentationLearningEvaluationService(session, cast(Settings, Mock()))
 
 
-def successful_job() -> Job:
+def successful_job(*, parent_job_id: str | None = None) -> Job:
+    request = {
+        "model_id": "m",
+        "model_task": "segment",
+        "evaluation_only": True,
+        "image_ids": ["image-1"],
+        "segmentation_dataset_version_id": "dataset-1",
+        "segmentation_manifest_sha256": "a" * 64,
+        "segmentation_split": "test",
+        "segmentation_checkpoint_sha256": "b" * 64,
+    }
+    if parent_job_id is not None:
+        request["segmentation_holdout_parent_job_id"] = parent_job_id
     return Job(
         id="job-1",
         project_id="p",
@@ -33,12 +45,7 @@ def successful_job() -> Job:
         status="succeeded",
         progress_current=1,
         progress_total=1,
-        request_json={
-            "model_id": "m",
-            "model_task": "segment",
-            "evaluation_only": True,
-            "image_ids": ["image-1"],
-        },
+        request_json=request,
     )
 
 
@@ -46,10 +53,91 @@ def holdout() -> SegmentationHoldout:
     return SegmentationHoldout("test", ("image-1",), ("colony-1",), ())
 
 
+def validate_job(
+    service: SegmentationLearningEvaluationService,
+    job: Job,
+    *,
+    expected_parent_job_id: str | None = None,
+) -> Job:
+    return service._job(
+        "p",
+        "m",
+        job.id,
+        holdout(),
+        dataset_version_id="dataset-1",
+        manifest_sha256="a" * 64,
+        checkpoint_sha256="b" * 64,
+        expected_parent_job_id=expected_parent_job_id,
+    )
+
+
 def test_completed_evaluation_only_job_passes_preflight() -> None:
     job = successful_job()
     service = service_with_job(job)
-    assert service._job("p", "m", "job-1", holdout()) is job
+    assert validate_job(service, job) is job
+
+
+def test_queued_evaluation_requires_exact_parent_identity() -> None:
+    job = successful_job(parent_job_id="evaluation-1")
+    service = service_with_job(job)
+    assert validate_job(service, job, expected_parent_job_id="evaluation-1") is job
+    with pytest.raises(ConflictError):
+        validate_job(service, job, expected_parent_job_id="other-evaluation")
+
+
+def test_direct_completed_evaluation_rejects_a_queued_child() -> None:
+    job = successful_job(parent_job_id="evaluation-1")
+    with pytest.raises(ConflictError):
+        validate_job(service_with_job(job), job)
+
+
+def test_completed_zero_prediction_inference_remains_scientifically_valid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job = successful_job()
+    session = Mock()
+    session.scalars.return_value = []
+    service = SegmentationLearningEvaluationService(session, cast(Settings, Mock()))
+    model = SimpleNamespace(id="m", sha256="b" * 64)
+    monkeypatch.setattr(service, "_model", lambda *_args, **_kwargs: model)
+    monkeypatch.setattr(service, "_job", lambda *_args, **_kwargs: job)
+    verified_holdout = SegmentationHoldout(
+        "test",
+        ("image-1",),
+        ("colony-1",),
+        (VerifiedMaskReference("image-1", "mask-1", "class-1", "polygon", None, None),),
+    )
+    snapshot = SimpleNamespace(
+        image_id="image-1",
+        width_px=8,
+        height_px=8,
+        mask_annotation_snapshot_json=[
+            {
+                "id": "mask-1",
+                "status": "verified",
+                "label_class_id": "class-1",
+                "geometry_kind": "polygon",
+                "polygon_json": [[1, 1], [3, 1], [3, 3], [1, 3]],
+                "mask_path": None,
+                "mask_content_sha256": None,
+            }
+        ],
+    )
+
+    result = service._score_model(
+        "p",
+        SimpleNamespace(id="dataset-1", manifest_sha256="a" * 64),
+        verified_holdout,
+        [snapshot],
+        {"class-1"},
+        "m",
+        "job-1",
+        require_same_dataset=True,
+        expected_parent_job_id=None,
+    )
+
+    assert result.metrics.recall == 0
+    assert result.metrics.mean_absolute_count_error == 1
 
 
 @pytest.mark.parametrize(
@@ -60,24 +148,31 @@ def test_completed_evaluation_only_job_passes_preflight() -> None:
         ("model_id", "m2"),
         ("image_ids", ["image-1", "outside"]),
         ("image_ids", ["image-1", "image-1"]),
+        ("segmentation_dataset_version_id", "other-version"),
+        ("segmentation_dataset_version_id", None),
+        ("segmentation_manifest_sha256", "f" * 64),
+        ("segmentation_split", "train"),
+        ("segmentation_checkpoint_sha256", "f" * 64),
+        ("segmentation_holdout_parent_job_id", ""),
+        ("segmentation_holdout_parent_job_id", "untrusted-parent"),
     ],
 )
 def test_untrusted_job_payload_fails_closed(field: str, value: Any) -> None:
     job = successful_job()
     job.request_json[field] = value
     with pytest.raises(ConflictError):
-        service_with_job(job)._job("p", "m", "job-1", holdout())
+        validate_job(service_with_job(job), job)
 
 
 def test_queued_or_incomplete_job_is_not_scored() -> None:
     job = successful_job()
     job.status = "running"
     with pytest.raises(ConflictError):
-        service_with_job(job)._job("p", "m", "job-1", holdout())
+        validate_job(service_with_job(job), job)
     job.status = "succeeded"
     job.progress_current = 0
     with pytest.raises(ConflictError):
-        service_with_job(job)._job("p", "m", "job-1", holdout())
+        validate_job(service_with_job(job), job)
 
 
 def test_recorded_segmentation_metrics_do_not_activate_model(monkeypatch) -> None:
