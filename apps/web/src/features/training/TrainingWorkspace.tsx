@@ -29,6 +29,7 @@ import {
   updateTrainingDraft,
 } from "../../api/client";
 import { TaskCapabilityMatrix } from "./TaskCapabilityMatrix";
+import { SegmentationEvaluationPanel } from "./SegmentationEvaluationPanel";
 import { TrainingRunDetail } from "./TrainingRunDetail";
 import { trainingRunsContainActive } from "./trainingRunState";
 
@@ -2176,6 +2177,7 @@ export function TrainingWorkspace({
 
               {activeSection === "models" && (
                 <div className="training-card-grid">
+                  <SegmentationEvaluationPanel project={project} />
                   <article className="system-card">
                     <h4>Run artifacts</h4>
                     <p className="system-subtle">
