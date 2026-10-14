@@ -77,6 +77,23 @@ jobs:
           PY
           python -m alembic -c apps/api/alembic.ini downgrade base
           python -m alembic -c apps/api/alembic.ini upgrade head
+      - name: Measure immutable raster edit responsiveness (1.0.2)
+        shell: bash
+        env:
+          REEFVISION_SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/1.0.2-responsiveness
+          printf 'source_head=%s\nrunner_os=%s\n' "$REEFVISION_SOURCE_HEAD" "$RUNNER_OS" > .artifacts/1.0.2-responsiveness/metadata.txt
+          PYTHONPATH=apps/api python scripts/measure-raster-edit-responsiveness.py | tee .artifacts/1.0.2-responsiveness/raster.json
+      - name: Upload raster responsiveness evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reefvision-1.0.2-raster-responsiveness
+          path: .artifacts/1.0.2-responsiveness/
+          if-no-files-found: warn
+          retention-days: 30
 
   frontend:
     name: Desktop frontend and E2E
@@ -98,6 +115,24 @@ jobs:
         working-directory: apps/web
       - run: npm run test
         working-directory: apps/web
+      - name: Record 1.0.2 annotation responsiveness metrics
+        shell: bash
+        working-directory: apps/web
+        env:
+          REEFVISION_SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/1.0.2-responsiveness
+          printf 'source_head=%s\nrunner_os=%s\nnode=%s\n' "$REEFVISION_SOURCE_HEAD" "$RUNNER_OS" "$(node --version)" > .artifacts/1.0.2-responsiveness/metadata.txt
+          npx vitest run src/features/annotation-editor/annotationResponsiveness.test.ts 2>&1 | tee .artifacts/1.0.2-responsiveness/frontend-test.log
+      - name: Upload frontend responsiveness evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reefvision-1.0.2-frontend-responsiveness
+          path: apps/web/.artifacts/1.0.2-responsiveness/
+          if-no-files-found: warn
+          retention-days: 30
       - run: npx playwright install --with-deps chromium
         working-directory: apps/web
       - run: npm run test:e2e

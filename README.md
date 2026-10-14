@@ -41,9 +41,11 @@ It began with octocoral imagery, but the annotation and computer-vision workflow
 For a more detailed list, see the [feature reference](docs/FEATURE_REFERENCE.md). Some tools depend on a compatible model, GPU, or separately installed provider.
 
 
-## In development: 1.0.1 annotation assistance
+## In development: 1.0.1 and 1.0.2
 
-The [1.0.1 development pull request](https://github.com/Rafael-Del-Valle/ReefVision/pull/44) adds source-pixel, full-image SAM proposals (Shift+1), selected-mask refinement (Shift+2), review-before-counting controls, and a verified-dataset training loop. These development changes are **not part of the stable 1.0.0 release**. The 1.0.1 release candidate is for testing; review the [release notes](docs/REEFVISION_1_0_1_RELEASE_NOTES.md) and current PR checks before relying on these features for research.
+The draft [1.0.1 annotation branch](https://github.com/Rafael-Del-Valle/ReefVision/pull/44) adds source-pixel full-image SAM proposals (Shift+1), selected-mask refinement (Shift+2), review-before-counting controls, and verified-dataset learning. The stacked [scientific candidate](https://github.com/Rafael-Del-Valle/ReefVision/pull/68) adds immutable held-out instance-segmentation evaluation, exact mask metrics, and audited promotion and rollback.
+
+The draft [combined 1.0.2 candidate](https://github.com/Rafael-Del-Valle/ReefVision/pull/69) integrates that scientific baseline with first-image reliability, gallery navigation, pan and zoom, safe annotation duplication, and shortcut usability. These changes are **not part of the stable 1.0.0 release or the published 1.0.1 RC**. Both candidates remain on release hold pending their recorded Windows GUI, NVIDIA, scientific, and maintainer approvals. Review the [1.0.1 handoff](docs/RELEASE_1.0.1.md), [1.0.2 handoff](docs/RELEASE_1.0.2.md), and current PR checks before using development builds for research.
 
 ## A look at ReefVision
 
@@ -95,6 +97,8 @@ The distinction between model predictions and reviewed annotations is intentiona
 - [Quality-control guide](docs/QUALITY_CONTROL_GUIDE.md)
 - [Review queue guide](docs/REVIEW_QUEUE_GUIDE.md)
 - [Known issues](docs/KNOWN_ISSUES.md)
+- [1.0.1 pre-release handoff](docs/RELEASE_1.0.1.md)
+- [1.0.2 pre-release handoff](docs/RELEASE_1.0.2.md)
 - [Changelog](CHANGELOG.md)
 
 ## Development

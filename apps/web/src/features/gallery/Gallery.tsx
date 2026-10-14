@@ -20,6 +20,13 @@ import {
 } from "../../components/ui/AsyncState";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { WorkspaceShell } from "../../components/ui/WorkspaceShell";
+import {
+  readGalleryPreference,
+  resolveGalleryNavigation,
+  shouldIgnoreGalleryShortcut,
+  writeGalleryPreference,
+  type GalleryNavigationAction,
+} from "./galleryNavigation";
 
 const statuses: { value: AnnotationStatus | ""; label: string }[] = [
   { value: "", label: "All statuses" },
@@ -192,6 +199,91 @@ function ImportSummary({ report }: { report: ImageImportReport }) {
   );
 }
 
+type PreviewLoadPhase =
+  "loading" | "loaded" | "thumbnail-loading" | "thumbnail-loaded" | "error";
+
+function focusedImageUrl(
+  imageId: string,
+  useThumbnail: boolean,
+  retry: number,
+): string {
+  const original = useThumbnail
+    ? imageThumbnailUrl(imageId)
+    : imageDisplayUrl(imageId);
+  if (retry === 0) return original;
+  return `${original}${original.includes("?") ? "&" : "?"}rv_retry=${retry}`;
+}
+
+/**
+ * Keep each image's media request lifecycle inside a keyed component.
+ * Late events from a previous image cannot affect the newly focused image.
+ */
+function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
+  const [phase, setPhase] = useState<PreviewLoadPhase>("loading");
+  const [retry, setRetry] = useState(0);
+  const thumbnail =
+    phase === "thumbnail-loading" || phase === "thumbnail-loaded";
+  const waiting = phase === "loading" || phase === "thumbnail-loading";
+
+  function handleLoad() {
+    setPhase(thumbnail ? "thumbnail-loaded" : "loaded");
+  }
+
+  function handleError() {
+    setPhase(
+      thumbnail || !image.thumbnail_path ? "error" : "thumbnail-loading",
+    );
+  }
+
+  return (
+    <div className="rv-media-canvas">
+      {phase === "error" ? (
+        <div className="rv-media-load-error" role="alert">
+          <strong>Image could not be displayed</strong>
+          <span>
+            The full-resolution file and any available thumbnail could not be
+            loaded. Annotation data was not changed.
+          </span>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              setRetry((current) => current + 1);
+              setPhase("loading");
+            }}
+          >
+            Retry image
+          </button>
+        </div>
+      ) : (
+        <>
+          {waiting && (
+            <p role="status" className="rv-media-load-status">
+              {thumbnail
+                ? "Loading thumbnail preview..."
+                : "Loading full-resolution image..."}
+            </p>
+          )}
+          {phase === "thumbnail-loaded" && (
+            <p role="status" className="rv-media-load-warning">
+              Full-resolution image unavailable. Showing a thumbnail preview;
+              source annotations are unchanged.
+            </p>
+          )}
+          <img
+            key={`${retry}:${thumbnail ? "thumbnail" : "original"}`}
+            src={focusedImageUrl(image.id, thumbnail, retry)}
+            alt={`Focused project image: ${image.original_filename}`}
+            decoding="async"
+            onLoad={handleLoad}
+            onError={handleError}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
 export function Gallery({
   project,
   onOpenAnnotation,
@@ -205,8 +297,14 @@ export function Gallery({
 }) {
   const queryClient = useQueryClient();
   const folderInput = useRef<HTMLInputElement | null>(null);
-  const [page, setPage] = useState(1);
-  const [pageDraft, setPageDraft] = useState("1");
+  const initialPreference = useRef(
+    readGalleryPreference(window.localStorage, project.id),
+  );
+  const activeThumbnail = useRef<HTMLButtonElement | null>(null);
+  const [page, setPage] = useState(initialPreference.current.page);
+  const [pageDraft, setPageDraft] = useState(
+    String(initialPreference.current.page),
+  );
   const [filenameDraft, setFilenameDraft] = useState("");
   const [statusDraft, setStatusDraft] = useState("");
   const [groupDraft, setGroupDraft] = useState("");
@@ -221,7 +319,15 @@ export function Gallery({
     total: number;
   } | null>(null);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
-  const [focusedImageId, setFocusedImageId] = useState<string | null>(null);
+  const [focusedImageId, setFocusedImageId] = useState<string | null>(
+    initialPreference.current.imageId,
+  );
+  const [wrapNavigation, setWrapNavigation] = useState(
+    initialPreference.current.wrap,
+  );
+  const [pendingNavigationEdge, setPendingNavigationEdge] = useState<
+    "first" | "last" | null
+  >(null);
   const [sortBy, setSortBy] = useState<
     "filename" | "newest" | "oldest" | "annotations"
   >("newest");
@@ -357,6 +463,24 @@ export function Gallery({
     onFocusedImageChange?.(focusedImage?.id ?? null);
   }, [focusedImage?.id, onFocusedImageChange]);
 
+  useEffect(() => {
+    if (!focusedImage) return;
+    writeGalleryPreference(window.localStorage, project.id, {
+      imageId: focusedImage.id,
+      page,
+      wrap: wrapNavigation,
+    });
+  }, [focusedImage, page, project.id, wrapNavigation]);
+
+  useEffect(() => {
+    if (typeof activeThumbnail.current?.scrollIntoView === "function") {
+      activeThumbnail.current.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      });
+    }
+  }, [focusedImage?.id]);
+
   useEffect(
     () => () => {
       onFocusedImageChange?.(null);
@@ -365,8 +489,23 @@ export function Gallery({
   );
 
   useEffect(() => {
+    if (!images.data) return;
+    if (images.data.total > 0 && page > Math.max(1, images.data.pages)) {
+      setPendingNavigationEdge("first");
+      setPage(Math.max(1, images.data.pages));
+      return;
+    }
     if (visibleImages.length === 0) {
       setFocusedImageId(null);
+      return;
+    }
+    if (pendingNavigationEdge) {
+      setFocusedImageId(
+        pendingNavigationEdge === "last"
+          ? visibleImages[visibleImages.length - 1].id
+          : visibleImages[0].id,
+      );
+      setPendingNavigationEdge(null);
       return;
     }
     if (
@@ -375,7 +514,54 @@ export function Gallery({
     ) {
       setFocusedImageId(visibleImages[0].id);
     }
-  }, [focusedImageId, visibleImages]);
+  }, [focusedImageId, images.data, page, pendingNavigationEdge, visibleImages]);
+
+  function navigate(action: GalleryNavigationAction) {
+    if (!focusedImage || !images.data) return;
+    const destination = resolveGalleryNavigation({
+      action,
+      index: visibleImages.findIndex((item) => item.id === focusedImage.id),
+      itemCount: visibleImages.length,
+      page,
+      pages: images.data.pages,
+      wrap: wrapNavigation,
+    });
+    if (!destination) return;
+    if (destination.page === page && destination.edge === "index") {
+      setFocusedImageId(
+        visibleImages[destination.index]?.id ?? focusedImage.id,
+      );
+      return;
+    }
+    if (destination.page === page) {
+      setFocusedImageId(
+        destination.edge === "last"
+          ? (visibleImages[visibleImages.length - 1]?.id ?? focusedImage.id)
+          : (visibleImages[0]?.id ?? focusedImage.id),
+      );
+      return;
+    }
+    setPendingNavigationEdge(destination.edge === "last" ? "last" : "first");
+    setPage(destination.page);
+  }
+
+  function handleViewerKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (shouldIgnoreGalleryShortcut(event.target)) return;
+    const action: GalleryNavigationAction | null =
+      event.key === "ArrowLeft"
+        ? "previous"
+        : event.key === "ArrowRight"
+          ? "next"
+          : event.key === "Home"
+            ? "first"
+            : event.key === "End"
+              ? "last"
+              : null;
+    if (!action) return;
+    event.preventDefault();
+    event.stopPropagation();
+    navigate(action);
+  }
 
   function jumpToPage(event: FormEvent) {
     event.preventDefault();
@@ -450,7 +636,14 @@ export function Gallery({
       {report && <ImportSummary report={report} />}
 
       {focusedImage && (
-        <section className="rv-media-workbench" aria-label="Image workbench">
+        <section
+          className="rv-media-workbench"
+          aria-label="Image workbench"
+          aria-keyshortcuts="ArrowLeft ArrowRight Home End"
+          title="Navigate images with Left/Right Arrow, Home, and End"
+          tabIndex={0}
+          onKeyDown={handleViewerKeyDown}
+        >
           <div className="rv-media-viewer">
             <div className="rv-media-viewer-toolbar">
               <div>
@@ -480,13 +673,10 @@ export function Gallery({
               </div>
             </div>
 
-            <div className="rv-media-canvas">
-              <img
-                src={imageDisplayUrl(focusedImage.id)}
-                alt={`Focused project image: ${focusedImage.original_filename}`}
-                decoding="async"
-              />
-            </div>
+            <FocusedImagePreview
+              key={`${project.id}:${focusedImage.id}`}
+              image={focusedImage}
+            />
 
             <div className="rv-filmstrip-heading">
               <span>
@@ -507,6 +697,7 @@ export function Gallery({
               {visibleImages.map((image) => (
                 <button
                   key={image.id}
+                  ref={image.id === focusedImage.id ? activeThumbnail : null}
                   type="button"
                   role="listitem"
                   className={
@@ -583,6 +774,15 @@ export function Gallery({
               calibration, and verified annotation changes.
             </p>
           </aside>
+          <label className="rv-gallery-wrap-toggle">
+            <input
+              type="checkbox"
+              checked={wrapNavigation}
+              onChange={(event) => setWrapNavigation(event.target.checked)}
+              title="Persistently wrap from the first image to the last and from the last to the first"
+            />
+            Wrap image navigation
+          </label>
         </section>
       )}
 

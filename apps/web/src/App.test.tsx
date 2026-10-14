@@ -1094,7 +1094,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  window.localStorage.setItem("reefvision.onboarding.dismissed.1.0.1", "true");
+  window.localStorage.setItem("reefvision.onboarding.dismissed.1.0.2", "true");
 });
 
 function renderApp() {
@@ -1120,6 +1120,28 @@ describe("App", () => {
     expect(
       await screen.findByRole("heading", { name: "No projects yet" }),
     ).toBeInTheDocument();
+  });
+
+  it("opens the shared keyboard shortcut reference and restores focus", async () => {
+    mockApi({ projects: [] });
+    renderApp();
+    const trigger = await screen.findByRole("button", {
+      name: "Keyboard shortcuts",
+    });
+
+    await userEvent.click(trigger);
+    expect(
+      screen.getByRole("dialog", { name: "Keyboard shortcuts" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Full-image SAM proposals")).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Keyboard shortcuts" }),
+      ).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   it("opens system status and displays the current release line", async () => {
@@ -1181,7 +1203,7 @@ describe("App", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: /Welcome to ReefVision 1.0.1/,
+        name: /Welcome to ReefVision 1.0.2/,
       }),
     ).toBeInTheDocument();
 
@@ -1191,7 +1213,7 @@ describe("App", () => {
 
     await waitFor(() =>
       expect(
-        screen.queryByRole("heading", { name: /Welcome to ReefVision 1.0.1/ }),
+        screen.queryByRole("heading", { name: /Welcome to ReefVision 1.0.2/ }),
       ).not.toBeInTheDocument(),
     );
   });

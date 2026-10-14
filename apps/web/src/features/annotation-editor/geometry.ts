@@ -73,6 +73,27 @@ export function screenToImage(
   };
 }
 
+export function imageToScreen(
+  point: Point,
+  transform: ViewportTransform,
+): Point {
+  return {
+    x: point.x * transform.scale + transform.offsetX,
+    y: point.y * transform.scale + transform.offsetY,
+  };
+}
+
+export function actualSizeTransform(
+  imageSize: ImageSize,
+  containerSize: { width: number; height: number },
+): ViewportTransform {
+  return {
+    scale: 1,
+    offsetX: (containerSize.width - imageSize.width) / 2,
+    offsetY: (containerSize.height - imageSize.height) / 2,
+  };
+}
+
 export function zoomAtPoint(
   transform: ViewportTransform,
   focusPoint: Point,

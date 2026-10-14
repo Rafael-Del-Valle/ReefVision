@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -16,7 +17,7 @@ import type {
   ClassVisibilityLayerType,
   Project,
 } from "../../api/client";
-import { AnnotationEditor } from "./AnnotationEditor";
+import { AnnotationEditor, annotationImageSource } from "./AnnotationEditor";
 
 const project: Project = {
   id: "project-1",
@@ -274,7 +275,7 @@ function handleDefaultEditorRequests(
   return undefined;
 }
 
-function renderEditor(onClose = vi.fn()) {
+function renderEditor(onClose = vi.fn(), onActiveImageChange = vi.fn()) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -284,10 +285,11 @@ function renderEditor(onClose = vi.fn()) {
         project={project}
         initialImageId={session.image.id}
         onClose={onClose}
+        onActiveImageChange={onActiveImageChange}
       />
     </QueryClientProvider>,
   );
-  return { onClose, queryClient };
+  return { onClose, onActiveImageChange, queryClient };
 }
 
 function selectionPanel(): HTMLElement {
@@ -318,13 +320,462 @@ function stubCanvasRect(): void {
   });
 }
 
+function mockBasicEditorRequests(): void {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const url = String(input);
+    if (
+      url.endsWith(`/images/${session.image.id}/annotations`) &&
+      (!init?.method || init.method === "GET")
+    ) {
+      return jsonResponse(session);
+    }
+    const fallback = handleDefaultEditorRequests(url, init);
+    if (fallback) return fallback;
+    throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+  });
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   localStorage.clear();
 });
 
 describe("AnnotationEditor", () => {
+  it("preserves the thumbnail when the full-resolution preload fails", () => {
+    expect(
+      annotationImageSource("image-1", "managed/thumb.png", false),
+    ).toContain("/images/image-1/thumbnail");
+    expect(
+      annotationImageSource("image-1", "managed/thumb.png", true),
+    ).toContain("/images/image-1/display");
+    expect(annotationImageSource("image-1", null, false)).toContain(
+      "/images/image-1/display",
+    );
+  });
+
+  it("keeps an annotation preview visible after a failed full-size preload and can retry", async () => {
+    const preloaders: FakeImage[] = [];
+    class FakeImage {
+      decoding = "";
+      onload: ((event: Event) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      src = "";
+      constructor() {
+        preloaders.push(this);
+      }
+    }
+    vi.stubGlobal("Image", FakeImage);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith(`/images/${session.image.id}/annotations`)) {
+        return jsonResponse({
+          ...session,
+          image: { ...session.image, thumbnail_path: "thumb.png" },
+        });
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${url}`);
+    });
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    await waitFor(() => expect(preloaders.length).toBeGreaterThan(0));
+    const first = preloaders.find((image) =>
+      image.src.includes("/display?retry=0"),
+    );
+    expect(first).toBeDefined();
+    act(() => first?.onerror?.(new Event("error")));
+    expect(
+      await screen.findByText("Full-resolution image could not load"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("annotation-canvas").querySelector("image"),
+    ).toHaveAttribute("href", expect.stringContaining("/thumbnail"));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry full-resolution image" }),
+    );
+    const second = await waitFor(() => {
+      const item = preloaders.find((image) =>
+        image.src.includes("/display?retry=1"),
+      );
+      expect(item).toBeDefined();
+      return item;
+    });
+    act(() => second?.onload?.(new Event("load")));
+    expect(
+      screen.queryByText("Full-resolution image could not load"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("annotation-canvas").querySelector("image"),
+    ).toHaveAttribute("href", expect.stringContaining("/display?retry=1"));
+  });
+
+  it("keeps thumbnail preview until the full image has decoded", async () => {
+    const decodeGate: { release: () => void } = {
+      release: () => undefined,
+    };
+    const decodePromise = new Promise<void>((resolve) => {
+      decodeGate.release = resolve;
+    });
+    const preloaders: FakeImage[] = [];
+    class FakeImage {
+      decoding = "";
+      onload: ((event: Event) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      src = "";
+      decode = vi.fn(() => decodePromise);
+      constructor() {
+        preloaders.push(this);
+      }
+    }
+    vi.stubGlobal("Image", FakeImage);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith(`/images/${session.image.id}/annotations`)) {
+        return jsonResponse({
+          ...session,
+          image: { ...session.image, thumbnail_path: "thumb.png" },
+        });
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    const preloader = await waitFor(() => {
+      const item = preloaders.find((candidate) =>
+        candidate.src.includes("/display?retry=0"),
+      );
+      expect(item).toBeDefined();
+      return item;
+    });
+    const source = () =>
+      screen.getByTestId("annotation-canvas").querySelector("image");
+
+    act(() => preloader?.onload?.(new Event("load")));
+    expect(preloader?.decode).toHaveBeenCalledOnce();
+    expect(source()).toHaveAttribute(
+      "href",
+      expect.stringContaining("/thumbnail"),
+    );
+    expect(
+      screen.getByText("Loading full-resolution image..."),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      decodeGate.release();
+      await decodePromise;
+    });
+    expect(source()).toHaveAttribute(
+      "href",
+      expect.stringContaining("/display?retry=0"),
+    );
+    expect(
+      screen.queryByText("Loading full-resolution image..."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not apply a previous image preload to a newly opened image", async () => {
+    const preloaders: FakeImage[] = [];
+    class FakeImage {
+      decoding = "";
+      onload: ((event: Event) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      src = "";
+      constructor() {
+        preloaders.push(this);
+      }
+    }
+    vi.stubGlobal("Image", FakeImage);
+    const firstSession: AnnotationSession = {
+      ...session,
+      image: { ...session.image, thumbnail_path: "first-thumb.png" },
+      next_image_id: "image-2",
+    };
+    const secondSession: AnnotationSession = {
+      ...session,
+      image: {
+        ...session.image,
+        id: "image-2",
+        original_filename: "swiftia-next.png",
+        thumbnail_path: "second-thumb.png",
+        annotation_revision: 0,
+        annotation_count: 0,
+      },
+      annotations: [],
+      counts_by_class: project.label_classes.map((label) => ({
+        label_class_id: label.id,
+        count: 0,
+      })),
+      previous_image_id: session.image.id,
+      next_image_id: null,
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/images/image-1/annotations")) {
+        return jsonResponse(firstSession);
+      }
+      if (url.endsWith("/images/image-2/annotations")) {
+        return jsonResponse(secondSession);
+      }
+      if (url.endsWith("/images/image-2/prediction-proposals")) {
+        return jsonResponse({ items: [], counts: { pending: 0 } });
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${url}`);
+    });
+    renderEditor();
+    await screen.findByRole("heading", { name: "swiftia-frame.png" });
+    const first = await waitFor(() => {
+      const image = preloaders.find((item) =>
+        item.src.includes("/images/image-1/display?retry=0"),
+      );
+      expect(image).toBeDefined();
+      return image;
+    });
+    const priorLoad = first?.onload;
+    act(() => first?.onload?.(new Event("load")));
+    expect(
+      screen.getByTestId("annotation-canvas").querySelector("image"),
+    ).toHaveAttribute("href", expect.stringContaining("image-1/display"));
+
+    await userEvent.keyboard("d");
+    await screen.findByRole("heading", { name: "swiftia-next.png" });
+    const second = await waitFor(() => {
+      const image = preloaders.find((item) =>
+        item.src.includes("/images/image-2/display?retry=0"),
+      );
+      expect(image).toBeDefined();
+      return image;
+    });
+
+    const canvasImage = () =>
+      screen.getByTestId("annotation-canvas").querySelector("image");
+    expect(canvasImage()).toHaveAttribute(
+      "href",
+      expect.stringContaining("image-2/thumbnail"),
+    );
+    expect(
+      screen.getByText("Loading full-resolution image..."),
+    ).toBeInTheDocument();
+
+    // A delayed event from the previous image must not paint the new canvas.
+    act(() => priorLoad?.(new Event("load")));
+    expect(canvasImage()).toHaveAttribute(
+      "href",
+      expect.stringContaining("image-2/thumbnail"),
+    );
+    act(() => second?.onload?.(new Event("load")));
+    expect(canvasImage()).toHaveAttribute(
+      "href",
+      expect.stringContaining("image-2/display"),
+    );
+    expect(
+      screen.queryByText("Loading full-resolution image..."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("navigates between images from quick review without discarding saved edits", async () => {
+    const firstSession: AnnotationSession = {
+      ...session,
+      next_image_id: "image-2",
+    };
+    const secondSession: AnnotationSession = {
+      ...session,
+      image: {
+        ...session.image,
+        id: "image-2",
+        original_filename: "swiftia-next.png",
+        annotation_revision: 0,
+        annotation_count: 0,
+      },
+      annotations: [],
+      counts_by_class: project.label_classes.map((label) => ({
+        label_class_id: label.id,
+        count: 0,
+      })),
+      previous_image_id: session.image.id,
+      next_image_id: null,
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/images/image-1/annotations")) {
+        return jsonResponse(firstSession);
+      }
+      if (url.endsWith("/images/image-2/annotations")) {
+        return jsonResponse(secondSession);
+      }
+      if (url.includes("/images/image-2/prediction-proposals")) {
+        return jsonResponse({ items: [], counts: { pending: 0 } });
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${url}`);
+    });
+    renderEditor();
+    await screen.findByRole("heading", { name: "swiftia-frame.png" });
+    await userEvent.click(
+      screen.getByRole("button", { name: /Quick review \(≤50%\)/ }),
+    );
+    let dialog = await screen.findByRole("dialog", {
+      name: "Confidence-based review",
+    });
+    const next = within(dialog).getByRole("button", { name: "Next image" });
+    expect(next).toBeEnabled();
+    await userEvent.click(next);
+    await screen.findByRole("heading", { name: "swiftia-next.png" });
+    dialog = screen.getByRole("dialog", {
+      name: "Confidence-based review",
+    });
+    expect(
+      within(dialog).getByRole("button", { name: "Previous image" }),
+    ).toBeEnabled();
+    expect(
+      within(dialog).getByRole("button", { name: "Next image" }),
+    ).toBeDisabled();
+  });
+
+  it("reports the controlled active image identity", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith(`/images/${session.image.id}/annotations`)) {
+        return jsonResponse(session);
+      }
+      const standard = handleDefaultEditorRequests(url, init);
+      if (standard) return standard;
+      throw new Error(`Unhandled request ${String(input)}`);
+    });
+    const onActiveImageChange = vi.fn();
+
+    renderEditor(vi.fn(), onActiveImageChange);
+
+    await waitFor(() =>
+      expect(onActiveImageChange).toHaveBeenLastCalledWith(session.image.id),
+    );
+  });
+
+  it("temporarily pans with Alt plus left drag and cancels on pointer loss", async () => {
+    mockBasicEditorRequests();
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    stubCanvasRect();
+    const canvas = screen.getByTestId("annotation-canvas");
+    const viewport = screen.getByTestId("viewport-transform");
+    const initialTransform = viewport.getAttribute("transform");
+
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      altKey: true,
+      clientX: 100,
+      clientY: 100,
+    });
+    fireEvent.pointerMove(window, { clientX: 145, clientY: 130 });
+    expect(viewport.getAttribute("transform")).not.toBe(initialTransform);
+    const pannedTransform = viewport.getAttribute("transform");
+
+    fireEvent.pointerCancel(window);
+    fireEvent.pointerMove(window, { clientX: 300, clientY: 300 });
+    expect(viewport.getAttribute("transform")).toBe(pannedTransform);
+
+    fireEvent.pointerDown(canvas, {
+      button: 1,
+      clientX: 145,
+      clientY: 130,
+    });
+    fireEvent.pointerMove(window, { clientX: 170, clientY: 155 });
+    expect(viewport.getAttribute("transform")).not.toBe(pannedTransform);
+    const middlePannedTransform = viewport.getAttribute("transform");
+    fireEvent.blur(window);
+    fireEvent.pointerMove(window, { clientX: 400, clientY: 400 });
+    expect(viewport.getAttribute("transform")).toBe(middlePannedTransform);
+  });
+
+  it("offers actual-size and reset-view commands without changing annotations", async () => {
+    mockBasicEditorRequests();
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    const viewport = screen.getByTestId("viewport-transform");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Actual Size (100%)" }),
+    );
+    expect(viewport.getAttribute("transform")).toContain("scale(1)");
+    expect(screen.getByTestId("annotation-annotation-1")).toHaveAttribute(
+      "x",
+      "100",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Reset View" }));
+    expect(viewport.getAttribute("transform")).not.toContain("scale(1)");
+    expect(screen.getByTestId("annotation-annotation-1")).toHaveAttribute(
+      "x",
+      "100",
+    );
+  });
+
+  it("copies, pastes, duplicates, and reverses boxes through one document history", async () => {
+    mockBasicEditorRequests();
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    stubCanvasRect();
+
+    // Editing an already reviewed image must invalidate its prior review.
+    await userEvent.selectOptions(
+      screen.getByLabelText("Annotation status"),
+      "reviewed",
+    );
+    fireEvent.pointerDown(screen.getByTestId("annotation-annotation-1"), {
+      button: 0,
+    });
+    fireEvent.keyDown(document.body, { key: "c", ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: "v", ctrlKey: true });
+
+    const objectList = screen.getByRole("listbox", { name: "Objects" });
+    expect(within(objectList).getAllByRole("option")).toHaveLength(2);
+    expect(screen.getByText(/Pasted 1 annotation/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Annotation status")).toHaveValue(
+      "in_progress",
+    );
+    fireEvent.keyDown(document.body, { key: "d", ctrlKey: true });
+    expect(within(objectList).getAllByRole("option")).toHaveLength(3);
+
+    fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
+    expect(within(objectList).getAllByRole("option")).toHaveLength(2);
+    fireEvent.keyDown(document.body, { key: "y", ctrlKey: true });
+    expect(within(objectList).getAllByRole("option")).toHaveLength(3);
+  });
+
+  it("does not run clipboard shortcuts while typing", async () => {
+    mockBasicEditorRequests();
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    const filter = screen.getByPlaceholderText("Filter by class");
+    fireEvent.keyDown(filter, { key: "d", ctrlKey: true });
+    expect(
+      within(screen.getByRole("listbox", { name: "Objects" })).getAllByRole(
+        "option",
+      ),
+    ).toHaveLength(1);
+  });
+
   it("shows and deletes polygon masks from Main Select", async () => {
     const sessionWithMask = {
       ...session,

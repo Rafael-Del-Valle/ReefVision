@@ -14,6 +14,7 @@ from reefvision.schemas.polygon_fill import (
 )
 from reefvision.schemas.raster_edits import (
     RasterMaskClassUpdateRequest,
+    RasterMaskDuplicateRequest,
     RasterMaskEditRequest,
     RasterMaskEditResponse,
 )
@@ -76,6 +77,25 @@ def reclassify_raster_mask(
 ) -> RasterMaskEditResponse:
     settings: Settings = request.app.state.settings
     return RasterMaskEditService(session, settings).reclassify(
+        image_id,
+        mask_annotation_id,
+        payload,
+    )
+
+
+@router.post(
+    "/images/{image_id}/raster-mask-annotations/{mask_annotation_id}/duplicate",
+    response_model=RasterMaskEditResponse,
+)
+def duplicate_raster_mask(
+    image_id: str,
+    mask_annotation_id: str,
+    payload: RasterMaskDuplicateRequest,
+    request: Request,
+    session: DbSession,
+) -> RasterMaskEditResponse:
+    settings: Settings = request.app.state.settings
+    return RasterMaskEditService(session, settings).duplicate(
         image_id,
         mask_annotation_id,
         payload,

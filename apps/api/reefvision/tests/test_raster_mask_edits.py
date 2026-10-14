@@ -92,6 +92,7 @@ def test_raster_brush_revisions_preserve_frozen_semantic_exports(
         y=30,
         mask_id=mask_id,
     )
+    assert second["image"]["annotation_status"] == "in_progress"
     second_mask = cast(dict[str, object], second["mask_annotation"])
     second_path = test_settings.resolved_data_dir / Path(str(second_mask["mask_path"]))
     assert second_mask["revision"] == 2
@@ -256,18 +257,25 @@ def test_raster_mask_class_can_be_reassigned_without_repainting(
     mask_id = str(mask["id"])
     mask_path = test_settings.resolved_data_dir / Path(str(mask["mask_path"]))
     original_bytes = mask_path.read_bytes()
+    reviewed = update_image(
+        client,
+        image_id,
+        group_key="reclassify-review",
+        annotation_status="reviewed",
+    )
 
     response = client.patch(
         f"/api/v1/images/{image_id}/raster-mask-annotations/{mask_id}/class",
         json={
-            "base_revision": 1,
+            "base_revision": reviewed["annotation_revision"],
             "label_class_id": second_class_id,
         },
     )
 
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["image"]["annotation_revision"] == 2
+    assert payload["image"]["annotation_revision"] == reviewed["annotation_revision"] + 1
+    assert payload["image"]["annotation_status"] == "in_progress"
     assert payload["mask_annotation"]["label_class_id"] == second_class_id
     assert payload["mask_annotation"]["revision"] == 2
     assert Path(str(payload["mask_annotation"]["mask_path"])).name == mask_path.name
@@ -278,3 +286,114 @@ def test_raster_mask_class_can_be_reassigned_without_repainting(
     saved_mask = reloaded.json()["mask_annotations"][0]
     assert saved_mask["label_class_id"] == second_class_id
     assert saved_mask["revision"] == 2
+
+
+def test_raster_mask_duplicate_copies_immutable_pixels_without_verification(
+    client: TestClient,
+    test_settings: Settings,
+) -> None:
+    project = create_project(client, "Raster clipboard duplicate")
+    report = import_image(
+        client,
+        project["id"],
+        filename="copy.png",
+        relative_path="raster/copy.png",
+        color=(25, 80, 135),
+    )
+    image_id = report["successful"][0]["image_id"]
+    class_id = project["label_classes"][0]["id"]
+    created = _brush(
+        client,
+        image_id=image_id,
+        class_id=class_id,
+        base_revision=0,
+        x=20,
+        y=20,
+    )
+    source = cast(dict[str, object], created["mask_annotation"])
+
+    response = client.post(
+        f"/api/v1/images/{image_id}/raster-mask-annotations/{source['id']}/duplicate",
+        json={"base_revision": 1},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    duplicate = payload["mask_annotation"]
+    assert payload["image"]["annotation_revision"] == 2
+    assert duplicate["id"] != source["id"]
+    assert duplicate["label_class_id"] == class_id
+    assert duplicate["status"] == "draft"
+    assert duplicate["source_type"] == "human_copy"
+    assert duplicate["provenance_json"] is None
+    assert duplicate["revision"] == 1
+    assert duplicate["mask_path"] != source["mask_path"]
+    source_path = test_settings.resolved_data_dir / Path(str(source["mask_path"]))
+    duplicate_path = test_settings.resolved_data_dir / Path(str(duplicate["mask_path"]))
+    assert duplicate_path.read_bytes() == source_path.read_bytes()
+    reloaded = client.get(f"/api/v1/images/{image_id}/annotations")
+    assert reloaded.status_code == 200, reloaded.text
+    saved_copy = next(
+        item for item in reloaded.json()["mask_annotations"] if item["id"] == duplicate["id"]
+    )
+    assert saved_copy["status"] == "draft"
+    assert saved_copy["provenance_json"] is None
+
+    update_image(
+        client,
+        image_id,
+        group_key="fragment-copy",
+        annotation_status="reviewed",
+    )
+    version = create_version(client, project["id"], name="Verified copy guard")
+    assert version["mask_annotation_count"] == 1
+
+
+def test_raster_duplicate_marks_reviewed_image_in_progress(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Raster review invalidation")
+    report = import_image(
+        client,
+        project["id"],
+        filename="reviewed-source.png",
+        relative_path="raster/reviewed-source.png",
+        color=(25, 80, 135),
+    )
+    image_id = report["successful"][0]["image_id"]
+    class_id = project["label_classes"][0]["id"]
+    created = _brush(
+        client,
+        image_id=image_id,
+        class_id=class_id,
+        base_revision=0,
+        x=20,
+        y=20,
+    )
+    source = cast(dict[str, object], created["mask_annotation"])
+    reviewed = update_image(
+        client,
+        image_id,
+        group_key="review-invalidation",
+        annotation_status="reviewed",
+    )
+    assert reviewed["annotation_status"] == "reviewed"
+
+    response = client.post(
+        f"/api/v1/images/{image_id}/raster-mask-annotations/{source['id']}/duplicate",
+        json={"base_revision": reviewed["annotation_revision"]},
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["image"]["annotation_status"] == "in_progress"
+    assert result["mask_annotation"]["status"] == "draft"
+    assert result["mask_annotation"]["source_type"] == "human_copy"
+
+    current = client.get(f"/api/v1/images/{image_id}/annotations")
+    assert current.status_code == 200, current.text
+    assert current.json()["image"]["annotation_status"] == "in_progress"
+    copied_id = result["mask_annotation"]["id"]
+    assert any(
+        item["id"] == copied_id and item["status"] == "draft"
+        for item in current.json()["mask_annotations"]
+    )

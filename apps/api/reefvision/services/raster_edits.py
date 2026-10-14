@@ -18,11 +18,15 @@ from reefvision.schemas.annotations import MaskAnnotationResponse
 from reefvision.schemas.images import ImageResponse
 from reefvision.schemas.raster_edits import (
     RasterMaskClassUpdateRequest,
+    RasterMaskDuplicateRequest,
     RasterMaskEditRequest,
     RasterMaskEditResponse,
 )
 from reefvision.services.annotations import mask_annotation_snapshot
-from reefvision.storage.raster_edits import write_raster_mask_revision
+from reefvision.storage.raster_edits import (
+    duplicate_raster_mask_revision,
+    write_raster_mask_revision,
+)
 
 
 class RasterMaskEditService:
@@ -32,6 +36,87 @@ class RasterMaskEditService:
         self.images = ImageRepository(session)
         self.projects = ProjectRepository(session)
         self.masks = MaskAnnotationRepository(session)
+
+    def duplicate(
+        self,
+        image_id: str,
+        mask_annotation_id: str,
+        payload: RasterMaskDuplicateRequest,
+    ) -> RasterMaskEditResponse:
+        image = self.images.get(image_id)
+        if image is None:
+            raise NotFoundError("Image not found")
+        if image.annotation_revision != payload.base_revision:
+            raise ConflictError("Annotation revision conflict")
+        project = self.projects.get(image.project_id)
+        if project is None:
+            raise NotFoundError("Project not found")
+        source = self.masks.get(mask_annotation_id)
+        if source is None or source.deleted_at is not None:
+            raise NotFoundError("Mask annotation not found")
+        if source.image_id != image.id:
+            raise ValidationError("Raster masks may only be copied on their source image")
+        if source.geometry_kind != "raster_mask" or source.mask_path is None:
+            raise ValidationError("Only persisted raster masks can be copied")
+
+        duplicate_id = str(uuid4())
+        destination_path: Path | None = None
+        try:
+            relative_path, destination_path = duplicate_raster_mask_revision(
+                self.settings,
+                project_storage_root=project.storage_root,
+                image_id=image.id,
+                source_relative_path=source.mask_path,
+                mask_annotation_id=duplicate_id,
+                expected_width=image.width_px,
+                expected_height=image.height_px,
+            )
+            duplicate = MaskAnnotation(
+                id=duplicate_id,
+                image_id=image.id,
+                label_class_id=source.label_class_id,
+                geometry_kind="raster_mask",
+                mask_path=relative_path,
+                polygon_json=None,
+                x_min=source.x_min,
+                y_min=source.y_min,
+                x_max=source.x_max,
+                y_max=source.y_max,
+                area_pixels=source.area_pixels,
+                source_type="human_copy",
+                provenance_json=None,
+                status="draft",
+                created_by="local_user",
+                revision=1,
+            )
+            self.masks.add(duplicate)
+            self.masks.add_event(
+                MaskAnnotationEvent(
+                    mask_annotation_id=duplicate.id,
+                    image_id=image.id,
+                    event_type="created",
+                    before_json=None,
+                    after_json=mask_annotation_snapshot(duplicate),
+                    actor="local_user",
+                )
+            )
+            image.annotation_revision += 1
+            if image.annotation_status in {"unannotated", "reviewed"}:
+                # A new draft copy invalidates image-level review completion.
+                image.annotation_status = "in_progress"
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            if destination_path is not None:
+                destination_path.unlink(missing_ok=True)
+            raise
+
+        self.session.refresh(image)
+        self.session.refresh(duplicate)
+        return RasterMaskEditResponse(
+            image=ImageResponse.model_validate(image),
+            mask_annotation=MaskAnnotationResponse.model_validate(duplicate),
+        )
 
     def reclassify(
         self,
@@ -79,7 +164,7 @@ class RasterMaskEditService:
             )
         )
         image.annotation_revision += 1
-        if image.annotation_status == "unannotated":
+        if image.annotation_status in {"unannotated", "reviewed"}:
             image.annotation_status = "in_progress"
         self.session.commit()
         self.session.refresh(image)
@@ -162,7 +247,7 @@ class RasterMaskEditService:
                     )
                 )
                 image.annotation_revision += 1
-                if image.annotation_status == "unannotated":
+                if image.annotation_status in {"unannotated", "reviewed"}:
                     image.annotation_status = "in_progress"
                 self.session.commit()
                 self.session.refresh(image)
@@ -239,7 +324,7 @@ class RasterMaskEditService:
                 )
             )
             image.annotation_revision += 1
-            if image.annotation_status == "unannotated":
+            if image.annotation_status in {"unannotated", "reviewed"}:
                 image.annotation_status = "in_progress"
             self.session.commit()
         except Exception:

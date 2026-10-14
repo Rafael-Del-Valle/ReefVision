@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useReducer,
   useRef,
@@ -22,7 +23,14 @@ import {
   toAnnotationSavePayload,
   type ExtendedAnnotationSavePayload,
 } from "./annotationEditorReducer";
+import {
+  copyAnnotations,
+  pasteAnnotations,
+  readInternalAnnotationClipboard,
+  writeInternalAnnotationClipboard,
+} from "./annotationClipboard";
 import { CenterlineMeasurementLayer } from "./CenterlineMeasurementLayer";
+import { shouldIgnoreShortcutTarget } from "../../components/ui/keyboardShortcuts";
 import {
   addMaskAnnotation,
   changeMaskAnnotationClass,
@@ -31,6 +39,7 @@ import {
 } from "./maskDocumentOperations";
 import { MaskMeasurementPanel } from "./MaskMeasurementPanel";
 import { SkeletonAnalysisPanel } from "./SkeletonAnalysisPanel";
+import { ImageViewport } from "./ImageViewport";
 import {
   SkeletonOverlayLayer,
   type SkeletonOverlayModel,
@@ -78,6 +87,7 @@ export function MaskAnnotationWorkspace({
   const [smartCloseStrength, setSmartCloseStrength] = useState(0);
   const [fillPending, setFillPending] = useState(false);
   const [fillError, setFillError] = useState<string | null>(null);
+  const [clipboardMessage, setClipboardMessage] = useState<string | null>(null);
   const fillRequestRef = useRef<AbortController | null>(null);
   const [state, dispatch] = useReducer(
     annotationEditorReducer,
@@ -87,7 +97,7 @@ export function MaskAnnotationWorkspace({
   const savePromiseRef = useRef<Promise<boolean> | null>(null);
   const loadedImageIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     stateRef.current = state;
   }, [state]);
 
@@ -359,23 +369,135 @@ export function MaskAnnotationWorkspace({
     [commitDocument],
   );
 
-  useEffect(() => {
-    const handleDeleteShortcut = (event: globalThis.KeyboardEvent) => {
-      const target = event.target;
-      if (
-        target instanceof HTMLElement &&
-        (target.isContentEditable ||
-          target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.tagName === "SELECT" ||
-          Boolean(
-            target.closest("input, textarea, select, [contenteditable='true']"),
-          ))
-      ) {
+  const copySelection = useCallback(() => {
+    const snapshot = stateRef.current;
+    const image = sessionQuery.data?.image;
+    if (!image || snapshot.selectedMaskIds.length === 0) {
+      setClipboardMessage("Select a polygon before copying.");
+      return null;
+    }
+    const clipboard = copyAnnotations(
+      snapshot.document,
+      [],
+      snapshot.selectedMaskIds,
+      {
+        id: image.id,
+        projectId: project.id,
+        width: image.width_px,
+        height: image.height_px,
+      },
+    );
+    writeInternalAnnotationClipboard(clipboard);
+    const count = clipboard.items.length;
+    setClipboardMessage(
+      clipboard.skippedRasterCount
+        ? `Copied ${count} polygon${count === 1 ? "" : "s"}. Raster masks must be duplicated in the brush workspace.`
+        : `Copied ${count} polygon${count === 1 ? "" : "s"} to ReefVision's internal clipboard.`,
+    );
+    return clipboard;
+  }, [project.id, sessionQuery.data?.image]);
+
+  const pasteClipboard = useCallback(
+    (clipboard = readInternalAnnotationClipboard()) => {
+      const image = sessionQuery.data?.image;
+      if (!image || !clipboard) {
+        setClipboardMessage("Copy an annotation before pasting.");
         return;
       }
+      const result = pasteAnnotations(
+        clipboard,
+        {
+          id: image.id,
+          projectId: project.id,
+          width: image.width_px,
+          height: image.height_px,
+        },
+        () => globalThis.crypto.randomUUID(),
+      );
+      if (!result.ok) {
+        setClipboardMessage(result.reason);
+        return;
+      }
+      if (result.annotations.length > 0) {
+        setClipboardMessage(
+          "Box annotations can only be pasted in the main Select workspace.",
+        );
+        return;
+      }
+      const snapshot = stateRef.current;
+      commitDocument(
+        {
+          ...snapshot.document,
+          // Cloned polygons remain draft and the image requires another review.
+          annotation_status:
+            snapshot.document.annotation_status === "reviewed"
+              ? "in_progress"
+              : snapshot.document.annotation_status,
+          maskAnnotations: [
+            ...snapshot.document.maskAnnotations,
+            ...result.maskAnnotations,
+          ],
+        },
+        result.maskAnnotations.map((mask) => mask.id),
+      );
+      writeInternalAnnotationClipboard(result.nextClipboard);
+      setClipboardMessage(
+        `Pasted ${result.maskAnnotations.length} unverified polygon${result.maskAnnotations.length === 1 ? "" : "s"} in source-image coordinates.`,
+      );
+    },
+    [commitDocument, project.id, sessionQuery.data?.image],
+  );
+
+  const duplicateSelection = useCallback(() => {
+    const clipboard = copySelection();
+    if (clipboard?.items.length) pasteClipboard(clipboard);
+  }, [copySelection, pasteClipboard]);
+
+  useEffect(() => {
+    const handleDeleteShortcut = (event: globalThis.KeyboardEvent) => {
+      if (shouldIgnoreShortcutTarget(event.target)) return;
 
       const snapshot = stateRef.current;
+      const command = event.ctrlKey || event.metaKey;
+      const key = event.key.toLowerCase();
+      if (command && key === "z") {
+        event.preventDefault();
+        event.stopPropagation();
+        dispatch({ type: event.shiftKey ? "redo" : "undo" });
+        return;
+      }
+      if (command && key === "y") {
+        event.preventDefault();
+        event.stopPropagation();
+        dispatch({ type: "redo" });
+        return;
+      }
+      if (command && key === "c") {
+        event.preventDefault();
+        event.stopPropagation();
+        copySelection();
+        return;
+      }
+      if (command && key === "v") {
+        event.preventDefault();
+        event.stopPropagation();
+        pasteClipboard();
+        return;
+      }
+      if (command && key === "d") {
+        event.preventDefault();
+        event.stopPropagation();
+        duplicateSelection();
+        return;
+      }
+      if (event.key === "Escape" && fillRequestRef.current) {
+        event.preventDefault();
+        fillRequestRef.current.abort();
+        fillRequestRef.current = null;
+        setFillPending(false);
+        setClipboardMessage("Canceled the in-progress mask operation.");
+        return;
+      }
       if (
         snapshot.tool !== "select" ||
         snapshot.selectedMaskIds.length === 0 ||
@@ -392,7 +514,7 @@ export function MaskAnnotationWorkspace({
     window.addEventListener("keydown", handleDeleteShortcut, true);
     return () =>
       window.removeEventListener("keydown", handleDeleteShortcut, true);
-  }, [deleteMasks]);
+  }, [copySelection, deleteMasks, duplicateSelection, pasteClipboard]);
 
   function applyClass(labelClassId: string) {
     if (state.selectedMaskIds.length > 0) {
@@ -507,6 +629,7 @@ export function MaskAnnotationWorkspace({
           <button
             type="button"
             className={state.tool === "select" ? "active" : "secondary"}
+            aria-pressed={state.tool === "select" && !centerlineEditing}
             data-testid="activate-mask-select-tool"
             title="Select masks and edit polygon vertices"
             onClick={() => {
@@ -569,6 +692,7 @@ export function MaskAnnotationWorkspace({
           <button
             type="button"
             className={centerlineEditing ? "active" : "secondary"}
+            aria-pressed={centerlineEditing}
             data-testid="activate-centerline-tool"
             title="Draw total-linear-extension centerline points"
             disabled={!measurementEditingAvailable}
@@ -742,6 +866,8 @@ export function MaskAnnotationWorkspace({
                 <button
                   type="button"
                   className="secondary"
+                  title="Undo (Ctrl/Cmd+Z)"
+                  aria-keyshortcuts="Control+Z Meta+Z"
                   disabled={state.history.length === 0}
                   onClick={() => dispatch({ type: "undo" })}
                 >
@@ -750,10 +876,42 @@ export function MaskAnnotationWorkspace({
                 <button
                   type="button"
                   className="secondary"
+                  title="Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y)"
+                  aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y Meta+Y"
                   disabled={state.future.length === 0}
                   onClick={() => dispatch({ type: "redo" })}
                 >
                   Redo
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  title="Copy to ReefVision's internal clipboard (Ctrl/Cmd+C)"
+                  aria-keyshortcuts="Control+C Meta+C"
+                  disabled={selectedMasks.length === 0}
+                  onClick={copySelection}
+                >
+                  Copy
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  title="Duplicate selection (Ctrl/Cmd+D)"
+                  aria-keyshortcuts="Control+D Meta+D"
+                  disabled={selectedMasks.length === 0}
+                  onClick={duplicateSelection}
+                >
+                  Duplicate
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  title="Paste from ReefVision's internal clipboard (Ctrl/Cmd+V)"
+                  aria-keyshortcuts="Control+V Meta+V"
+                  disabled={!readInternalAnnotationClipboard()?.items.length}
+                  onClick={() => pasteClipboard()}
+                >
+                  Paste
                 </button>
               </div>
             </div>
@@ -761,9 +919,12 @@ export function MaskAnnotationWorkspace({
               Polygon: add vertices and close the outline. Select an existing
               mask to move vertices, reassign its class, or delete it.
             </p>
+            {clipboardMessage && <p role="status">{clipboardMessage}</p>}
             <button
               type="button"
               className="danger-ghost"
+              title="Delete selected masks (Delete or Backspace)"
+              aria-keyshortcuts="Delete Backspace"
               disabled={selectedMasks.length === 0}
               onClick={() => deleteMasks(state.selectedMaskIds)}
             >
@@ -806,73 +967,60 @@ export function MaskAnnotationWorkspace({
               {isDirty(state) ? "Autosave pending" : "All changes synced"}
             </span>
           </div>
-          <div
-            className="annotation-canvas-frame"
-            style={{
-              display: "grid",
-              placeItems: "center",
-              overflow: "auto",
-              padding: "1rem",
-            }}
+          <ImageViewport
+            width={image.width_px}
+            height={image.height_px}
+            label="Polygon mask viewport"
           >
-            <div
+            <img
+              src={imageDisplayUrl(image.id)}
+              alt={image.original_filename}
+              draggable={false}
               style={{
-                position: "relative",
-                width: "min(100%, 1400px)",
-                aspectRatio: `${image.width_px} / ${image.height_px}`,
-                flex: "0 0 auto",
+                display: "block",
+                width: "100%",
+                height: "100%",
+                userSelect: "none",
               }}
-            >
-              <img
-                src={imageDisplayUrl(image.id)}
-                alt={image.original_filename}
-                draggable={false}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  height: "100%",
-                  userSelect: "none",
-                }}
-              />
-              <PolygonMaskLayer
-                key={image.id}
+            />
+            <PolygonMaskLayer
+              key={image.id}
+              width={image.width_px}
+              height={image.height_px}
+              masks={state.document.maskAnnotations}
+              classColors={classColors}
+              activeClassId={state.activeClassId}
+              tool={state.tool}
+              selectedMaskIds={state.selectedMaskIds}
+              onCreate={createMask}
+              onUpdate={updateMask}
+              onSelectionChange={(selection) =>
+                dispatch({ type: "setMaskSelection", selection })
+              }
+              onDeleteMaskIds={deleteMasks}
+              onFill={(seed) =>
+                void (state.tool === "smart_close"
+                  ? smartClosePolygon(seed)
+                  : fillPolygon(seed))
+              }
+            />
+            <CenterlineMeasurementLayer
+              width={image.width_px}
+              height={image.height_px}
+              selectedMask={selectedMeasurementMask}
+              documentDirty={isDirty(state)}
+              editing={centerlineEditing}
+              onEditingChange={setCenterlineEditing}
+              onRevisionCommitted={refreshAfterMeasurementChange}
+            />
+            {skeletonOverlay && (
+              <SkeletonOverlayLayer
                 width={image.width_px}
                 height={image.height_px}
-                masks={state.document.maskAnnotations}
-                classColors={classColors}
-                activeClassId={state.activeClassId}
-                tool={state.tool}
-                selectedMaskIds={state.selectedMaskIds}
-                onCreate={createMask}
-                onUpdate={updateMask}
-                onSelectionChange={(selection) =>
-                  dispatch({ type: "setMaskSelection", selection })
-                }
-                onDeleteMaskIds={deleteMasks}
-                onFill={(seed) =>
-                  void (state.tool === "smart_close"
-                    ? smartClosePolygon(seed)
-                    : fillPolygon(seed))
-                }
+                {...skeletonOverlay}
               />
-              <CenterlineMeasurementLayer
-                width={image.width_px}
-                height={image.height_px}
-                selectedMask={selectedMeasurementMask}
-                documentDirty={isDirty(state)}
-                editing={centerlineEditing}
-                onEditingChange={setCenterlineEditing}
-                onRevisionCommitted={refreshAfterMeasurementChange}
-              />
-              {skeletonOverlay && (
-                <SkeletonOverlayLayer
-                  width={image.width_px}
-                  height={image.height_px}
-                  {...skeletonOverlay}
-                />
-              )}
-            </div>
-          </div>
+            )}
+          </ImageViewport>
         </section>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   getAnnotationSession,
@@ -8,18 +8,26 @@ import {
   type Project,
 } from "../../api/client";
 import { RasterBrushLayer } from "./RasterBrushLayer";
+import { shouldIgnoreShortcutTarget } from "../../components/ui/keyboardShortcuts";
 import { RasterFillLayer } from "./RasterFillLayer";
 import { SkeletonAnalysisPanel } from "./SkeletonAnalysisPanel";
+import { ImageViewport } from "./ImageViewport";
 import {
   SkeletonOverlayLayer,
   type SkeletonOverlayModel,
 } from "./SkeletonOverlayLayer";
 import {
   editRasterMask,
+  duplicateRasterMask,
   rasterMaskContentUrl,
   reclassifyRasterMask,
   type RasterEditMode,
 } from "./rasterMaskApi";
+import {
+  copyAnnotations,
+  readInternalAnnotationClipboard,
+  writeInternalAnnotationClipboard,
+} from "./annotationClipboard";
 import { resolveRasterMaskSelection } from "./rasterMaskSelection";
 import {
   toEditorMaskAnnotation,
@@ -56,6 +64,7 @@ export function RasterMaskWorkspace({
   const [fillTolerance, setFillTolerance] = useState(24);
   const [skeletonOverlay, setSkeletonOverlay] =
     useState<SkeletonOverlayModel | null>(null);
+  const [clipboardMessage, setClipboardMessage] = useState<string | null>(null);
 
   const sessionQuery = useQuery({
     queryKey: ["annotation-session", imageId],
@@ -169,6 +178,88 @@ export function RasterMaskWorkspace({
     },
   });
 
+  const duplicateMutation = useMutation({
+    mutationFn: (maskId: string) => {
+      if (!session) throw new Error("The raster mask session is not loaded");
+      return duplicateRasterMask(imageId, maskId, {
+        base_revision: session.image.annotation_revision,
+      });
+    },
+    onSuccess: async (response) => {
+      await sessionQuery.refetch();
+      setSelectedMaskId(response.mask_annotation.id);
+      setCreateAnotherMaskRequested(false);
+      setClipboardMessage(
+        "Duplicated the raster pixels as a new unverified mask.",
+      );
+      await queryClient.invalidateQueries({
+        queryKey: ["project-images", project.id],
+      });
+    },
+  });
+
+  const copySelectedRaster = useCallback(() => {
+    if (!session || !selectedMask) {
+      setClipboardMessage("Select a raster mask before copying.");
+      return;
+    }
+    const clipboard = copyAnnotations(
+      {
+        annotation_status: session.image.annotation_status,
+        annotations: [],
+        maskAnnotations: [toEditorMaskAnnotation(selectedMask)],
+        deletedMaskAnnotationIds: [],
+      },
+      [],
+      [selectedMask.id],
+      {
+        id: session.image.id,
+        projectId: project.id,
+        width: session.image.width_px,
+        height: session.image.height_px,
+      },
+    );
+    writeInternalAnnotationClipboard(clipboard);
+    setClipboardMessage(
+      "Copied 1 raster mask to ReefVision's internal clipboard.",
+    );
+  }, [selectedMask, session]);
+
+  const pasteRaster = useCallback(() => {
+    const clipboard = readInternalAnnotationClipboard();
+    if (!session || !clipboard || clipboard.rasterMaskIds.length !== 1) {
+      setClipboardMessage("Copy one raster mask before pasting.");
+      return;
+    }
+    if (clipboard.sourceImage.id !== session.image.id) {
+      setClipboardMessage(
+        "Raster masks can only be pasted on their source image; ReefVision will not remap pixels.",
+      );
+      return;
+    }
+    duplicateMutation.mutate(clipboard.rasterMaskIds[0]);
+  }, [duplicateMutation, session]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (shouldIgnoreShortcutTarget(event.target)) return;
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const key = event.key.toLowerCase();
+      if (key === "c") {
+        event.preventDefault();
+        copySelectedRaster();
+      } else if (key === "v") {
+        event.preventDefault();
+        pasteRaster();
+      } else if (key === "d" && selectedMask) {
+        event.preventDefault();
+        duplicateMutation.mutate(selectedMask.id);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [copySelectedRaster, duplicateMutation, pasteRaster, selectedMask]);
+
   if (sessionQuery.isPending || !session) {
     return (
       <div className="annotation-editor-shell">
@@ -245,6 +336,7 @@ export function RasterMaskWorkspace({
               <button
                 type="button"
                 className={mode === "paint" ? "active" : "secondary"}
+                aria-pressed={mode === "paint"}
                 disabled={editMutation.isPending}
                 onClick={() => setMode("paint")}
               >
@@ -253,6 +345,7 @@ export function RasterMaskWorkspace({
               <button
                 type="button"
                 className={mode === "erase" ? "active" : "secondary"}
+                aria-pressed={mode === "erase"}
                 disabled={!canErase || editMutation.isPending}
                 onClick={() => setMode("erase")}
               >
@@ -261,6 +354,7 @@ export function RasterMaskWorkspace({
               <button
                 type="button"
                 className={mode === "fill" ? "active" : "secondary"}
+                aria-pressed={mode === "fill"}
                 disabled={editMutation.isPending}
                 onClick={() => setMode("fill")}
               >
@@ -309,6 +403,10 @@ export function RasterMaskWorkspace({
             {classMutation.error && (
               <p className="form-error">{classMutation.error.message}</p>
             )}
+            {duplicateMutation.error && (
+              <p className="form-error">{duplicateMutation.error.message}</p>
+            )}
+            {clipboardMessage && <p role="status">{clipboardMessage}</p>}
           </section>
 
           <section className="annotation-sidebar-section">
@@ -371,6 +469,40 @@ export function RasterMaskWorkspace({
                 Create another mask
               </button>
             </div>
+            <div className="annotation-editor-inline-actions">
+              <button
+                type="button"
+                className="secondary"
+                title="Copy to ReefVision's internal clipboard (Ctrl/Cmd+C)"
+                aria-keyshortcuts="Control+C Meta+C"
+                disabled={!selectedMask || duplicateMutation.isPending}
+                onClick={copySelectedRaster}
+              >
+                Copy
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                title="Duplicate raster mask (Ctrl/Cmd+D)"
+                aria-keyshortcuts="Control+D Meta+D"
+                disabled={!selectedMask || duplicateMutation.isPending}
+                onClick={() =>
+                  selectedMask && duplicateMutation.mutate(selectedMask.id)
+                }
+              >
+                Duplicate
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                title="Paste compatible raster mask (Ctrl/Cmd+V)"
+                aria-keyshortcuts="Control+V Meta+V"
+                disabled={duplicateMutation.isPending}
+                onClick={pasteRaster}
+              >
+                Paste
+              </button>
+            </div>
             <div className="annotation-selection-list">
               {rasterMasks.length === 0 && (
                 <p>
@@ -429,77 +561,65 @@ export function RasterMaskWorkspace({
                   : "Fill mode"}
             </span>
           </div>
-          <div
-            className="annotation-canvas-frame"
-            style={{
-              display: "grid",
-              placeItems: "center",
-              overflow: "auto",
-              padding: "1rem",
-            }}
+          <ImageViewport
+            width={image.width_px}
+            height={image.height_px}
+            label="Raster mask viewport"
           >
-            <div
-              style={{
-                position: "relative",
-                width: "min(100%, 1400px)",
-                aspectRatio: `${image.width_px} / ${image.height_px}`,
-              }}
-            >
-              <img
-                src={imageDisplayUrl(image.id)}
-                alt={image.original_filename}
-                draggable={false}
-                style={{ display: "block", width: "100%", height: "100%" }}
+            <img
+              src={imageDisplayUrl(image.id)}
+              alt={image.original_filename}
+              draggable={false}
+              style={{ display: "block", width: "100%", height: "100%" }}
+            />
+            {selectedMask && (
+              <div
+                data-testid="selected-raster-mask-overlay"
+                aria-label="Selected raster mask"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  opacity: 0.42,
+                  pointerEvents: "none",
+                  backgroundColor: selectedMaskColor,
+                  WebkitMaskImage: `url(${rasterMaskContentUrl(selectedMask)})`,
+                  maskImage: `url(${rasterMaskContentUrl(selectedMask)})`,
+                  WebkitMaskRepeat: "no-repeat",
+                  maskRepeat: "no-repeat",
+                  WebkitMaskPosition: "center",
+                  maskPosition: "center",
+                  WebkitMaskSize: "100% 100%",
+                  maskSize: "100% 100%",
+                }}
               />
-              {selectedMask && (
-                <div
-                  data-testid="selected-raster-mask-overlay"
-                  aria-label="Selected raster mask"
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    width: "100%",
-                    height: "100%",
-                    opacity: 0.42,
-                    pointerEvents: "none",
-                    backgroundColor: selectedMaskColor,
-                    WebkitMaskImage: `url(${rasterMaskContentUrl(selectedMask)})`,
-                    maskImage: `url(${rasterMaskContentUrl(selectedMask)})`,
-                    WebkitMaskRepeat: "no-repeat",
-                    maskRepeat: "no-repeat",
-                    WebkitMaskPosition: "center",
-                    maskPosition: "center",
-                    WebkitMaskSize: "100% 100%",
-                    maskSize: "100% 100%",
-                  }}
-                />
-              )}
-              {mode === "fill" ? (
-                <RasterFillLayer
-                  width={image.width_px}
-                  height={image.height_px}
-                  disabled={editMutation.isPending || activeClassId === null}
-                  onFill={(point) => editMutation.mutate([point])}
-                />
-              ) : (
-                <RasterBrushLayer
-                  width={image.width_px}
-                  height={image.height_px}
-                  mode={mode}
-                  brushRadius={brushRadius}
-                  disabled={editMutation.isPending || activeClassId === null}
-                  onStroke={(points) => editMutation.mutate(points)}
-                />
-              )}
-              {skeletonOverlay && (
-                <SkeletonOverlayLayer
-                  width={image.width_px}
-                  height={image.height_px}
-                  {...skeletonOverlay}
-                />
-              )}
-            </div>
-          </div>
+            )}
+            {mode === "fill" ? (
+              <RasterFillLayer
+                width={image.width_px}
+                height={image.height_px}
+                disabled={editMutation.isPending || activeClassId === null}
+                onFill={(point) => editMutation.mutate([point])}
+              />
+            ) : (
+              <RasterBrushLayer
+                width={image.width_px}
+                height={image.height_px}
+                mode={mode}
+                brushRadius={brushRadius}
+                disabled={editMutation.isPending || activeClassId === null}
+                onStroke={(points) => editMutation.mutate(points)}
+              />
+            )}
+            {skeletonOverlay && (
+              <SkeletonOverlayLayer
+                width={image.width_px}
+                height={image.height_px}
+                {...skeletonOverlay}
+              />
+            )}
+          </ImageViewport>
         </section>
       </div>
     </div>

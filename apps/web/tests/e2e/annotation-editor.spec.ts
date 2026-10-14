@@ -355,6 +355,70 @@ test("stores source-image coordinates correctly after zooming and reloads saved 
   );
 
   const savedId = String(savedAnnotation.id);
+  const savedBox = canvas.getByTestId(`annotation-${savedId}`);
+  await expect(savedBox).toBeVisible();
+
+  // Acceptance coverage for Alt+drag panning: the viewport changes, while the
+  // persisted source rectangle geometry remains identical.
+  const sourceGeometryBeforePan = await savedBox.evaluate((element) => ({
+    x: element.getAttribute("x"),
+    y: element.getAttribute("y"),
+    width: element.getAttribute("width"),
+    height: element.getAttribute("height"),
+  }));
+  const transformBeforePan = await viewportGroup.getAttribute("transform");
+  const canvasBounds = await canvas.boundingBox();
+  if (!canvasBounds) {
+    throw new Error("Annotation canvas bounds unavailable for Alt+drag");
+  }
+  const panStart = {
+    x: canvasBounds.x + canvasBounds.width * 0.25,
+    y: canvasBounds.y + canvasBounds.height * 0.25,
+  };
+  await page.mouse.move(panStart.x, panStart.y);
+  await page.keyboard.down("Alt");
+  await page.mouse.down();
+  await page.mouse.move(panStart.x + 32, panStart.y + 22, { steps: 5 });
+  await page.mouse.up();
+  await page.keyboard.up("Alt");
+  await expect
+    .poll(() => viewportGroup.getAttribute("transform"))
+    .not.toBe(transformBeforePan);
+  expect(
+    await savedBox.evaluate((element) => ({
+      x: element.getAttribute("x"),
+      y: element.getAttribute("y"),
+      width: element.getAttribute("width"),
+      height: element.getAttribute("height"),
+    })),
+  ).toEqual(sourceGeometryBeforePan);
+
+  // Acceptance coverage for clipboard/re-review on the real browser bundle.
+  await page.getByRole("button", { name: "Select tool" }).click();
+  await page.getByLabel("Annotation status").selectOption("reviewed");
+  await expect(page.getByLabel("Annotation status")).toHaveValue("reviewed");
+  await savedBox.dispatchEvent("pointerdown", {
+    button: 0,
+    buttons: 1,
+    pointerId: 1,
+    pointerType: "mouse",
+  });
+  // The status dropdown retains keyboard focus after selection, so blur it
+  // before sending editor shortcuts; form controls must not capture Ctrl+C/V.
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+  });
+  await page.keyboard.press("Control+c");
+  await page.keyboard.press("Control+v");
+  await expect(canvas.locator("[data-testid^='annotation-']")).toHaveCount(2);
+  await expect(page.getByLabel("Annotation status")).toHaveValue("in_progress");
+  await page.getByRole("button", { name: "Save now" }).click();
+  await expect(page.getByTestId("annotation-save-state")).toHaveText("Saved");
+  expect(lastSavePayload?.annotation_status).toBe("in_progress");
+  expect(lastSavePayload?.annotations).toHaveLength(2);
+
   await page.getByRole("button", { name: "Back to gallery" }).click();
 
   await mountBuiltApp(page);
@@ -713,4 +777,187 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
     pointerType: "mouse",
   });
   await expect(page.getByRole("heading", { name: "1 selected" })).toBeVisible();
+});
+
+test("renders the first opened image after a deliberately delayed display response", async ({
+  page,
+}) => {
+  // Generate a real decodable image at source resolution inside Chromium.
+  // This avoids hand-copied PNG fixtures with invalid pixel data.
+  const sourceSizedPngBytes = Buffer.from(
+    await page.evaluate(() => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1600;
+      canvas.height = 1200;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        throw new Error(
+          "Unable to create a source image for the first-open test",
+        );
+      }
+      context.fillStyle = "#dfdfdf";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/png").split(",")[1];
+    }),
+    "base64",
+  );
+  const gate: { release: () => void } = { release: () => undefined };
+  const imageGate = new Promise<void>((resolve) => {
+    gate.release = resolve;
+  });
+  let displayRequests = 0;
+  const firstOpenBox = {
+    id: "first-open-box",
+    image_id: baseImage.id,
+    label_class_id: "class-1",
+    x_min: 160,
+    y_min: 120,
+    x_max: 320,
+    y_max: 240,
+    source_type: "human",
+    source_model_id: null,
+    source_prediction_id: null,
+    created_by: "local_user",
+    created_at: "2026-07-08T00:00:00Z",
+    updated_at: "2026-07-08T00:00:00Z",
+    deleted_at: null,
+    revision: 1,
+  };
+  const sessionState = {
+    image: {
+      ...baseImage,
+      annotation_count: 1,
+      annotation_status: "in_progress",
+    },
+    label_classes: project.label_classes,
+    annotations: [firstOpenBox],
+    counts_by_class: project.label_classes.map((labelClass) => ({
+      label_class_id: labelClass.id,
+      count: labelClass.id === "class-1" ? 1 : 0,
+    })),
+    previous_image_id: null,
+    next_image_id: null,
+  };
+
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("/health")) {
+      await route.fulfill({ json: { status: "ok", version: "1.0.2" } });
+      return;
+    }
+    if (
+      url.pathname.endsWith("/project-summaries") &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({
+        json: [
+          {
+            ...project,
+            label_class_count: project.label_classes.length,
+            active_label_class_count: project.label_classes.length,
+          },
+        ],
+      });
+      return;
+    }
+    if (
+      url.pathname.endsWith(`/projects/${project.id}`) &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({ json: project });
+      return;
+    }
+    if (url.pathname.endsWith(`/projects/${project.id}/images`)) {
+      await route.fulfill({
+        json: {
+          items: [sessionState.image],
+          total: 1,
+          page: 1,
+          page_size: 24,
+          pages: 1,
+        },
+      });
+      return;
+    }
+    if (
+      url.pathname.endsWith(`/images/${baseImage.id}/annotations`) &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({ json: sessionState });
+      return;
+    }
+    if (url.pathname.endsWith(`/images/${baseImage.id}/display`)) {
+      displayRequests += 1;
+      await imageGate;
+      await route.fulfill({
+        body: sourceSizedPngBytes,
+        contentType: "image/png",
+      });
+      return;
+    }
+    await route.abort();
+  });
+
+  try {
+    await mountBuiltApp(page);
+    await page.getByRole("button", { name: /CPT Coral Study/ }).click();
+    await page.getByRole("button", { name: "Annotate" }).click();
+
+    const canvas = page.getByTestId("annotation-canvas");
+    await expect(canvas).toBeVisible();
+    const loading = page
+      .getByTestId("annotation-editor")
+      .getByText("Loading full-resolution image...");
+    await expect(loading).toBeVisible();
+    await expect(canvas.locator("image").first()).toHaveAttribute(
+      "href",
+      /\/images\/image-1\/display/,
+    );
+    await expect.poll(() => displayRequests).toBeGreaterThan(0);
+    const initialViewport = await canvas.boundingBox();
+    expect(initialViewport?.width).toBeGreaterThan(0);
+    expect(initialViewport?.height).toBeGreaterThan(0);
+
+    gate.release();
+    await expect(loading).toBeHidden();
+    await expect(
+      page.getByText("Full-resolution image could not load"),
+    ).toHaveCount(0);
+    // Persisted annotation geometry must align on the first opened image,
+    // without needing to leave the gallery and reenter the editor.
+    await expect(canvas).toBeVisible();
+    await expect(canvas.locator("image").first()).toHaveAttribute(
+      "href",
+      /\/images\/image-1\/display/,
+    );
+    const firstOpenOverlay = canvas.getByTestId("annotation-first-open-box");
+    await expect(firstOpenOverlay).toBeVisible();
+    await expect(firstOpenOverlay).toHaveAttribute("x", "160");
+    await expect(firstOpenOverlay).toHaveAttribute("y", "120");
+    await expect(firstOpenOverlay).toHaveAttribute("width", "160");
+    await expect(firstOpenOverlay).toHaveAttribute("height", "120");
+    const decodedDimensions = await page.evaluate(async () => {
+      const image = document.querySelector(
+        '[data-testid="annotation-canvas"] image',
+      );
+      const href = image?.getAttribute("href");
+      if (!href) {
+        throw new Error(
+          "The source image is not attached to the annotation canvas",
+        );
+      }
+      const response = await fetch(href);
+      if (!response.ok) {
+        throw new Error("The displayed source image could not be fetched");
+      }
+      const bitmap = await createImageBitmap(await response.blob());
+      const dimensions = { width: bitmap.width, height: bitmap.height };
+      bitmap.close();
+      return dimensions;
+    });
+    expect(decodedDimensions).toEqual({ width: 1600, height: 1200 });
+  } finally {
+    gate.release();
+  }
 });

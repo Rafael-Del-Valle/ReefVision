@@ -155,4 +155,32 @@ describe("annotation editor mask state", () => {
     ]);
     expect(state.document.deletedMaskAnnotationIds).toEqual(["mask-polygon"]);
   });
+
+  it("serializes duplicated polygon masks as draft without audit provenance", () => {
+    let state = annotationEditorReducer(initialAnnotationEditorState, {
+      type: "loadSession",
+      session,
+    });
+    state = annotationEditorReducer(state, {
+      type: "commitDocument",
+      document: {
+        ...state.document,
+        maskAnnotations: [
+          ...state.document.maskAnnotations,
+          {
+            ...state.document.maskAnnotations[0],
+            id: "mask-copy",
+            source_type: "human",
+            verification_status: "draft",
+            persisted: false,
+            revision: undefined,
+          },
+        ],
+      },
+    });
+
+    expect(toAnnotationSavePayload(state).mask_annotations).toContainEqual(
+      expect.objectContaining({ id: "mask-copy", status: "draft" }),
+    );
+  });
 });

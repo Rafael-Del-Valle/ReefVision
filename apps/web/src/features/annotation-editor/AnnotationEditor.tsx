@@ -47,15 +47,24 @@ import {
   type Project,
 } from "../../api/client";
 import { ErrorState, LoadingState } from "../../components/ui/AsyncState";
+import { shouldIgnoreShortcutTarget } from "../../components/ui/keyboardShortcuts";
 import {
   annotationEditorReducer,
   initialAnnotationEditorState,
   isDirty,
   toAnnotationSavePayload,
 } from "./annotationEditorReducer";
+import {
+  copyAnnotations,
+  pasteAnnotations,
+  readInternalAnnotationClipboard,
+  type AnnotationClipboard,
+  writeInternalAnnotationClipboard,
+} from "./annotationClipboard";
 import { deleteMaskAnnotations } from "./maskDocumentOperations";
 import { rasterMaskContentUrl } from "./rasterMaskApi";
 import {
+  actualSizeTransform,
   boxArea,
   clampScale,
   createBoxFromPoints,
@@ -112,6 +121,7 @@ interface AnnotationEditorProps {
     highlightPredictionIds?: string[];
   };
   onClose: () => void;
+  onActiveImageChange?: (imageId: string) => void;
 }
 
 type EditorInteraction =
@@ -202,17 +212,7 @@ function saveStateLabel(
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-  const tagName = target.tagName;
-  return (
-    target.isContentEditable ||
-    tagName === "INPUT" ||
-    tagName === "TEXTAREA" ||
-    tagName === "SELECT" ||
-    Boolean(target.closest("input, textarea, select, [contenteditable='true']"))
-  );
+  return shouldIgnoreShortcutTarget(target);
 }
 
 function clientPointInSvg(
@@ -263,11 +263,27 @@ function confirmDiscardUnsavedEdits(actionLabel: string): boolean {
   );
 }
 
+/**
+ * Preserve a thumbnail preview when a source-resolution preload fails.
+ * The preview is not a substitute for source imagery during scientific review.
+ */
+export function annotationImageSource(
+  imageId: string,
+  thumbnailPath: string | null,
+  fullImageLoaded: boolean,
+  retry = 0,
+): string {
+  return thumbnailPath && !fullImageLoaded
+    ? imageThumbnailUrl(imageId)
+    : `${imageDisplayUrl(imageId)}?retry=${retry}`;
+}
+
 export function AnnotationEditor({
   project,
   initialImageId,
   launchContext,
   onClose,
+  onActiveImageChange,
 }: AnnotationEditorProps) {
   const queryClient = useQueryClient();
   const [currentImageId, setCurrentImageId] = useState(initialImageId);
@@ -332,8 +348,12 @@ export function AnnotationEditor({
     useState<Record<string, ReviewedPredictionGeometry>>({});
   const [objectFilter, setObjectFilter] = useState("");
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-  const [fullImageLoaded, setFullImageLoaded] = useState(false);
-  const [fullImageFailed, setFullImageFailed] = useState(false);
+  const [fullImageRetry, setFullImageRetry] = useState(0);
+  const [imagePreload, setImagePreload] = useState<{
+    imageId: string;
+    retry: number;
+    phase: "loading" | "loaded" | "failed";
+  } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef(state);
@@ -343,6 +363,7 @@ export function AnnotationEditor({
   const loadedImageIdRef = useRef<string | null>(null);
   const savePromiseRef = useRef<Promise<boolean> | null>(null);
   const assistSessionRef = useRef<AssistSession | null>(assistSession);
+  const annotationClipboardRef = useRef<AnnotationClipboard | null>(null);
 
   useEffect(() => {
     stateRef.current = state;
@@ -355,6 +376,10 @@ export function AnnotationEditor({
   useEffect(() => {
     currentImageIdRef.current = currentImageId;
   }, [currentImageId]);
+
+  useEffect(() => {
+    onActiveImageChange?.(currentImageId);
+  }, [currentImageId, onActiveImageChange]);
 
   useEffect(() => {
     assistSessionRef.current = assistSession;
@@ -449,7 +474,7 @@ export function AnnotationEditor({
 
   useEffect(() => {
     const session = sessionQuery.data;
-    if (!session) {
+    if (!session || session.image.id !== currentImageId) {
       return;
     }
     const snapshot = stateRef.current;
@@ -474,7 +499,7 @@ export function AnnotationEditor({
     setPredictionGeometryOverrides({});
     setInteraction(null);
     setView(null);
-  }, [sessionQuery.data]);
+  }, [currentImageId, sessionQuery.data]);
 
   const readyAssistModels = useMemo(
     () =>
@@ -539,31 +564,47 @@ export function AnnotationEditor({
   ]);
 
   useEffect(() => {
-    if (!sessionQuery.data) {
+    const imageId = sessionQuery.data?.image.id;
+    if (!imageId) {
       return;
     }
     const preloader = new window.Image();
     let cancelled = false;
-    setFullImageLoaded(false);
-    setFullImageFailed(false);
+    const retry = fullImageRetry;
+    setImagePreload({ imageId, retry, phase: "loading" });
     preloader.decoding = "async";
     preloader.onload = () => {
-      if (!cancelled) {
-        setFullImageLoaded(true);
+      if (typeof preloader.decode !== "function") {
+        if (!cancelled) {
+          setImagePreload({ imageId, retry, phase: "loaded" });
+        }
+        return;
       }
+      void preloader.decode().then(
+        () => {
+          if (!cancelled) {
+            setImagePreload({ imageId, retry, phase: "loaded" });
+          }
+        },
+        () => {
+          if (!cancelled) {
+            setImagePreload({ imageId, retry, phase: "failed" });
+          }
+        },
+      );
     };
     preloader.onerror = () => {
       if (!cancelled) {
-        setFullImageFailed(true);
+        setImagePreload({ imageId, retry, phase: "failed" });
       }
     };
-    preloader.src = imageDisplayUrl(sessionQuery.data.image.id);
+    preloader.src = annotationImageSource(imageId, null, true, retry);
     return () => {
       cancelled = true;
       preloader.onload = null;
       preloader.onerror = null;
     };
-  }, [sessionQuery.data?.image.id]);
+  }, [fullImageRetry, sessionQuery.data?.image.id]);
 
   useEffect(() => {
     const element = viewportRef.current;
@@ -613,11 +654,28 @@ export function AnnotationEditor({
   }, [currentView]);
 
   const fitToScreen = useCallback(() => {
-    if (!imageSize || containerSize.width <= 0 || containerSize.height <= 0) {
+    if (!imageSize) {
       return;
     }
-    setView(fitTransform(imageSize, containerSize));
+    setInteraction(null);
+    setView(
+      fitTransform(imageSize, {
+        width: containerSize.width || 1200,
+        height: containerSize.height || 780,
+      }),
+    );
   }, [containerSize, imageSize]);
+
+  const showActualSize = useCallback(() => {
+    if (!imageSize) return;
+    setInteraction(null);
+    setView(
+      actualSizeTransform(imageSize, {
+        width: containerSize.width || 1200,
+        height: containerSize.height || 780,
+      }),
+    );
+  }, [containerSize.height, containerSize.width, imageSize]);
 
   useEffect(() => {
     if (
@@ -1513,6 +1571,103 @@ export function AnnotationEditor({
     state.selectedMaskIds,
   ]);
 
+  const copySelection = useCallback((): AnnotationClipboard | null => {
+    const snapshot = stateRef.current;
+    const image = sessionQuery.data?.image;
+    if (
+      !image ||
+      (snapshot.selectedIds.length === 0 &&
+        snapshot.selectedMaskIds.length === 0)
+    ) {
+      setShortcutMessage("Select an annotation before copying.");
+      return null;
+    }
+    const clipboard = copyAnnotations(
+      snapshot.document,
+      snapshot.selectedIds,
+      snapshot.selectedMaskIds,
+      {
+        id: image.id,
+        projectId: project.id,
+        width: image.width_px,
+        height: image.height_px,
+      },
+    );
+    annotationClipboardRef.current = clipboard;
+    writeInternalAnnotationClipboard(clipboard);
+    const count = clipboard.items.length;
+    setShortcutMessage(
+      clipboard.skippedRasterCount > 0
+        ? `Copied ${count} editable annotation${count === 1 ? "" : "s"}. ${clipboard.skippedRasterCount} raster mask${clipboard.skippedRasterCount === 1 ? " was" : "s were"} skipped; raster pixels require the brush workspace.`
+        : `Copied ${count} annotation${count === 1 ? "" : "s"} to ReefVision's internal clipboard.`,
+    );
+    return clipboard;
+  }, [project.id, sessionQuery.data?.image]);
+
+  const pasteClipboard = useCallback(
+    (
+      clipboard = annotationClipboardRef.current ??
+        readInternalAnnotationClipboard(),
+    ) => {
+      const image = sessionQuery.data?.image;
+      if (!image || !clipboard) {
+        setShortcutMessage("Copy an annotation before pasting.");
+        return;
+      }
+      const result = pasteAnnotations(
+        clipboard,
+        {
+          id: image.id,
+          projectId: project.id,
+          width: image.width_px,
+          height: image.height_px,
+        },
+        makeAnnotationId,
+      );
+      if (!result.ok) {
+        setShortcutMessage(result.reason);
+        return;
+      }
+      const snapshot = stateRef.current;
+      const annotationIds = result.annotations.map((item) => item.id);
+      const maskIds = result.maskAnnotations.map((item) => item.id);
+      commitDocument(
+        {
+          ...snapshot.document,
+          // New copies must be reviewed before this image is eligible for verified learning.
+          annotation_status:
+            snapshot.document.annotation_status === "reviewed"
+              ? "in_progress"
+              : snapshot.document.annotation_status,
+          annotations: [
+            ...snapshot.document.annotations,
+            ...result.annotations,
+          ],
+          maskAnnotations: [
+            ...snapshot.document.maskAnnotations,
+            ...result.maskAnnotations,
+          ],
+        },
+        annotationIds,
+        maskIds,
+      );
+      annotationClipboardRef.current = result.nextClipboard;
+      writeInternalAnnotationClipboard(result.nextClipboard);
+      const count = annotationIds.length + maskIds.length;
+      setShortcutMessage(
+        `Pasted ${count} annotation${count === 1 ? "" : "s"} in source-image coordinates. New polygon copies require review.`,
+      );
+    },
+    [commitDocument, project.id, sessionQuery.data?.image],
+  );
+
+  const duplicateSelection = useCallback(() => {
+    const clipboard = copySelection();
+    if (clipboard?.items.length) {
+      pasteClipboard(clipboard);
+    }
+  }, [copySelection, pasteClipboard]);
+
   const saveNow = useCallback((): Promise<boolean> => {
     if (savePromiseRef.current) {
       return savePromiseRef.current;
@@ -1671,6 +1826,16 @@ export function AnnotationEditor({
         return;
       }
 
+      if (event.key === "Escape") {
+        if (interactionRef.current || samPromptArmed || editProposalId) {
+          event.preventDefault();
+          setInteraction(null);
+          setSamPromptArmed(false);
+          setEditProposalId(null);
+        }
+        return;
+      }
+
       // Shift+Digit1/2 are editor actions, while plain 1–9 still choose classes.
       if (
         event.shiftKey &&
@@ -1718,6 +1883,21 @@ export function AnnotationEditor({
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
         event.preventDefault();
         dispatch({ type: "redo" });
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
+        event.preventDefault();
+        copySelection();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+        event.preventDefault();
+        pasteClipboard();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        duplicateSelection();
         return;
       }
 
@@ -1802,7 +1982,11 @@ export function AnnotationEditor({
     samModelVariant,
     state.document.annotations,
     state.selectedIds,
+    editProposalId,
     deleteSelection,
+    copySelection,
+    pasteClipboard,
+    duplicateSelection,
     fitToScreen,
     flushPendingSave,
     labelClasses,
@@ -1919,11 +2103,20 @@ export function AnnotationEditor({
       setInteraction(null);
     };
 
+    const handlePointerCancel = () => {
+      interactionRef.current = null;
+      setInteraction(null);
+    };
+
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerCancel);
+    window.addEventListener("blur", handlePointerCancel);
     return () => {
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
+      window.removeEventListener("blur", handlePointerCancel);
     };
   }, [
     activeClassId,
@@ -1981,20 +2174,19 @@ export function AnnotationEditor({
 
   const handleCanvasPointerDown = useCallback(
     (event: ReactPointerEvent<SVGSVGElement>) => {
+      if (!currentView || !imageSize) return;
       if (
-        !currentView ||
-        !imageSize ||
         event.button === 1 ||
         event.button === 2 ||
+        (event.button === 0 && event.altKey) ||
         (state.tool === "pan" && !samPromptArmed)
       ) {
-        if (currentView) {
-          setInteraction({
-            type: "panning",
-            origin: { x: event.clientX, y: event.clientY },
-            initialView: currentView,
-          });
-        }
+        event.preventDefault();
+        setInteraction({
+          type: "panning",
+          origin: { x: event.clientX, y: event.clientY },
+          initialView: currentView,
+        });
         return;
       }
       const svg = svgRef.current;
@@ -2062,7 +2254,12 @@ export function AnnotationEditor({
       if (!currentView || !imageSize) {
         return;
       }
-      if (event.button === 1 || event.button === 2) {
+      if (
+        event.button === 1 ||
+        event.button === 2 ||
+        (event.button === 0 && event.altKey)
+      ) {
+        event.preventDefault();
         setInteraction({
           type: "panning",
           origin: { x: event.clientX, y: event.clientY },
@@ -2071,6 +2268,7 @@ export function AnnotationEditor({
         return;
       }
       if (state.tool === "pan") {
+        event.preventDefault();
         setInteraction({
           type: "panning",
           origin: { x: event.clientX, y: event.clientY },
@@ -2136,6 +2334,19 @@ export function AnnotationEditor({
       if (!currentView) {
         return;
       }
+      if (
+        event.button === 1 ||
+        event.button === 2 ||
+        (event.button === 0 && event.altKey)
+      ) {
+        event.preventDefault();
+        setInteraction({
+          type: "panning",
+          origin: { x: event.clientX, y: event.clientY },
+          initialView: currentView,
+        });
+        return;
+      }
       const svg = svgRef.current;
       if (!svg) {
         return;
@@ -2161,6 +2372,21 @@ export function AnnotationEditor({
   const handleMaskPointerDown = useCallback(
     (event: ReactPointerEvent<SVGElement>, maskId: string) => {
       event.stopPropagation();
+      if (
+        currentView &&
+        (event.button === 1 ||
+          event.button === 2 ||
+          (event.button === 0 && event.altKey) ||
+          state.tool === "pan")
+      ) {
+        event.preventDefault();
+        setInteraction({
+          type: "panning",
+          origin: { x: event.clientX, y: event.clientY },
+          initialView: currentView,
+        });
+        return;
+      }
       if (state.tool !== "select") {
         return;
       }
@@ -2172,7 +2398,13 @@ export function AnnotationEditor({
       }
       setMaskSelection(selectionToggled(state.selectedMaskIds, maskId));
     },
-    [setMaskSelection, setSelection, state.selectedMaskIds, state.tool],
+    [
+      currentView,
+      setMaskSelection,
+      setSelection,
+      state.selectedMaskIds,
+      state.tool,
+    ],
   );
 
   function togglePredictionSelection(proposalId: string) {
@@ -2209,13 +2441,23 @@ export function AnnotationEditor({
       height: containerSize.height || 780,
     });
   const image = sessionQuery.data.image;
+  const preloadIsCurrent =
+    imagePreload?.imageId === image.id &&
+    imagePreload?.retry === fullImageRetry;
+  const fullImageLoaded = preloadIsCurrent && imagePreload?.phase === "loaded";
+  const fullImageFailed = preloadIsCurrent && imagePreload?.phase === "failed";
+  const fullImageLoading =
+    !preloadIsCurrent || imagePreload?.phase === "loading";
   const currentLabelClasses = labelClasses;
   const strokeScale = 1 / resolvedView.scale;
   const handleRadius = Math.max(4 * strokeScale, 2);
-  const imageHref =
-    image.thumbnail_path && !fullImageLoaded && !fullImageFailed
-      ? imageThumbnailUrl(image.id)
-      : imageDisplayUrl(image.id);
+  const imageHref = annotationImageSource(
+    image.id,
+    image.thumbnail_path,
+    fullImageLoaded,
+    fullImageRetry,
+  );
+  const imageRenderKey = `${image.id}:${fullImageRetry}:${fullImageLoaded}`;
   const assistAcceptLabelClassId =
     (assistSourcePrediction
       ? (predictionClassOverrides[assistSourcePrediction.id] ??
@@ -2248,8 +2490,20 @@ export function AnnotationEditor({
           )}
         </div>
         <div className="annotation-editor-actions">
-          <button type="button" className="secondary" onClick={fitToScreen}>
+          <button
+            type="button"
+            className="secondary"
+            title="Fit image to view (F)"
+            aria-keyshortcuts="F"
+            onClick={fitToScreen}
+          >
             Fit (F)
+          </button>
+          <button type="button" className="secondary" onClick={showActualSize}>
+            Actual Size (100%)
+          </button>
+          <button type="button" className="secondary" onClick={fitToScreen}>
+            Reset View
           </button>
           <button
             type="button"
@@ -2299,6 +2553,8 @@ export function AnnotationEditor({
             type="button"
             className="secondary"
             disabled={imagePredictionBusy}
+            title="Generate full-image proposals (Shift+1)"
+            aria-keyshortcuts="Shift+1"
             onClick={predictImage}
           >
             Predict objects in image (Shift+1)
@@ -2307,6 +2563,7 @@ export function AnnotationEditor({
             type="button"
             className="secondary"
             disabled={refinement.busy || Boolean(refinement.reason)}
+            aria-keyshortcuts="Shift+2"
             title={
               refinement.reason ??
               "Compare a proposed boundary before replacing this mask"
@@ -2341,6 +2598,7 @@ export function AnnotationEditor({
             type="button"
             aria-label="Select tool"
             title="Select and edit objects (V)"
+            aria-keyshortcuts="V"
             aria-pressed={state.tool === "select"}
             className={state.tool === "select" ? "active" : "secondary"}
             onClick={() => dispatch({ type: "setTool", tool: "select" })}
@@ -2352,6 +2610,7 @@ export function AnnotationEditor({
             type="button"
             aria-label="Pan tool"
             title="Pan the image (P)"
+            aria-keyshortcuts="P"
             aria-pressed={state.tool === "pan"}
             className={state.tool === "pan" ? "active" : "secondary"}
             onClick={() => dispatch({ type: "setTool", tool: "pan" })}
@@ -2363,6 +2622,7 @@ export function AnnotationEditor({
             type="button"
             aria-label="Box tool"
             title="Draw bounding boxes (B)"
+            aria-keyshortcuts="B"
             aria-pressed={state.tool === "box"}
             className={state.tool === "box" ? "active" : "secondary"}
             disabled={!activeClassId}
@@ -3167,6 +3427,8 @@ export function AnnotationEditor({
                 <button
                   type="button"
                   className="secondary"
+                  title="Undo (Ctrl/Cmd+Z)"
+                  aria-keyshortcuts="Control+Z Meta+Z"
                   disabled={!canUndo}
                   onClick={() => dispatch({ type: "undo" })}
                 >
@@ -3175,21 +3437,56 @@ export function AnnotationEditor({
                 <button
                   type="button"
                   className="secondary"
+                  title="Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y)"
+                  aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y Meta+Y"
                   disabled={!canRedo}
                   onClick={() => dispatch({ type: "redo" })}
                 >
                   Redo
                 </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  title="Copy to ReefVision's internal clipboard (Ctrl/Cmd+C)"
+                  aria-keyshortcuts="Control+C Meta+C"
+                  disabled={selectedObjectCount === 0}
+                  onClick={copySelection}
+                >
+                  Copy
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  title="Duplicate selection (Ctrl/Cmd+D)"
+                  aria-keyshortcuts="Control+D Meta+D"
+                  disabled={selectedObjectCount === 0}
+                  onClick={duplicateSelection}
+                >
+                  Duplicate
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  title="Paste from ReefVision's internal clipboard (Ctrl/Cmd+V)"
+                  aria-keyshortcuts="Control+V Meta+V"
+                  disabled={!annotationClipboardRef.current?.items.length}
+                  onClick={() => pasteClipboard()}
+                >
+                  Paste
+                </button>
               </div>
             </div>
             <p className="annotation-helper">
-              Wheel to zoom. Right-drag to pan. Ctrl/Cmd-click to build a mixed
-              selection of boxes and masks. Polygon, Fill, Smart Close, and
-              Brush masks remain visible in Select mode.
+              Wheel to zoom. Alt+left-drag, middle-drag, or the Pan tool moves
+              the view. Ctrl/Cmd-click builds a mixed selection of boxes and
+              masks. Polygon, Fill, Smart Close, and Brush masks remain visible
+              in Select mode.
             </p>
             <button
               type="button"
               className="danger-ghost"
+              title="Delete selection (Delete or Backspace)"
+              aria-keyshortcuts="Delete Backspace"
               disabled={selectedObjectCount === 0}
               onClick={deleteSelection}
             >
@@ -3478,6 +3775,28 @@ export function AnnotationEditor({
               acceptance.
             </p>
           )}
+          {fullImageLoading && (
+            <p role="status" className="rv-media-load-status">
+              Loading full-resolution image...
+            </p>
+          )}
+          {fullImageFailed && (
+            <div className="rv-media-load-error" role="alert">
+              <strong>Full-resolution image could not load</strong>
+              <p>
+                {image.thumbnail_path
+                  ? "A thumbnail preview is shown. Do not verify new annotations against this preview."
+                  : "No thumbnail is available. The image cannot be reliably reviewed until the full-resolution file loads."}
+              </p>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setFullImageRetry((value) => value + 1)}
+              >
+                Retry full-resolution image
+              </button>
+            </div>
+          )}
           <div className="annotation-canvas-frame" ref={viewportRef}>
             {learningOpen && (
               <ImprovePredictionsPanel
@@ -3628,9 +3947,11 @@ export function AnnotationEditor({
               viewBox={`0 0 ${containerSize.width || 1} ${containerSize.height || 1}`}
             >
               <g
+                data-testid="viewport-transform"
                 transform={`translate(${resolvedView.offsetX} ${resolvedView.offsetY}) scale(${resolvedView.scale})`}
               >
                 <image
+                  key={imageRenderKey}
                   href={imageHref}
                   x={0}
                   y={0}
@@ -3921,9 +4242,16 @@ export function AnnotationEditor({
           reviewBelowConfidence={Number(quickReviewConfidence) / 100}
           position={1}
           total={1}
+          showRankedPosition={false}
+          hasPreviousImage={Boolean(sessionQuery.data.previous_image_id)}
+          hasNextImage={Boolean(sessionQuery.data.next_image_id)}
           onClose={() => setQuickReviewOpen(false)}
-          onPreviousImage={() => undefined}
-          onNextImage={() => undefined}
+          onPreviousImage={() => {
+            void navigateToImage(sessionQuery.data.previous_image_id);
+          }}
+          onNextImage={() => {
+            void navigateToImage(sessionQuery.data.next_image_id);
+          }}
           onReviewSaved={() => {
             void Promise.all([
               sessionQuery.refetch(),
