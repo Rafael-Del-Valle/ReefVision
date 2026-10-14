@@ -106,6 +106,34 @@ export async function reclassifyRasterMask(
   return (await response.json()) as RasterMaskEditResponse;
 }
 
+export async function duplicateRasterMask(
+  imageId: string,
+  maskAnnotationId: string,
+  payload: { base_revision: number },
+): Promise<RasterMaskEditResponse> {
+  const response = await fetch(
+    `${getApiBaseUrl()}/images/${encodeURIComponent(
+      imageId,
+    )}/raster-mask-annotations/${encodeURIComponent(maskAnnotationId)}/duplicate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) {
+    let message = `Raster mask duplicate failed with HTTP ${response.status}`;
+    try {
+      const body = (await response.json()) as { detail?: string };
+      if (body.detail) message = body.detail;
+    } catch {
+      /* Preserve the HTTP fallback for non-JSON failures. */
+    }
+    throw new Error(message);
+  }
+  return (await response.json()) as RasterMaskEditResponse;
+}
+
 export async function editRasterMask(
   imageId: string,
   payload: RasterMaskEditPayload,

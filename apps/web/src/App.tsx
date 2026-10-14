@@ -50,6 +50,7 @@ import {
   LoadingState,
 } from "./components/ui/AsyncState";
 import { StatusBadge } from "./components/ui/StatusBadge";
+import { KeyboardShortcutsDialog } from "./components/ui/KeyboardShortcutsDialog";
 import { ProjectLauncher } from "./components/layout/ProjectLauncher";
 import { ProjectImportDialog } from "./components/layout/ProjectImportDialog";
 import { ScientistWorkspaceInspector } from "./components/layout/ScientistWorkspaceInspector";
@@ -96,7 +97,7 @@ type ProjectView =
   | "workflows"
   | "system";
 
-const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.0.1";
+const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.0.2";
 
 type ProjectTab = Exclude<ProjectView, "system">;
 
@@ -233,6 +234,8 @@ function ReefVisionMainApp() {
   const [projectName, setProjectName] = useState("");
   const [description, setDescription] = useState("");
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
+  const keyboardShortcutsButtonRef = useRef<HTMLButtonElement | null>(null);
   const [workspacePresetId, setWorkspacePresetId] =
     useState<WorkspacePresetId>("annotation");
   const [inferenceSelectedImageIds, setInferenceSelectedImageIds] = useState<
@@ -643,6 +646,14 @@ function ReefVisionMainApp() {
             Help
           </button>
           <button
+            ref={keyboardShortcutsButtonRef}
+            type="button"
+            className="secondary"
+            onClick={() => setShowKeyboardShortcuts(true)}
+          >
+            Keyboard shortcuts
+          </button>
+          <button
             type="button"
             className="secondary"
             onClick={() => {
@@ -879,6 +890,7 @@ function ReefVisionMainApp() {
           >
             {activeView === "gallery" && (
               <Gallery
+                key={selectedProject.id}
                 project={selectedProject}
                 onInferenceSelectionChange={handleInferenceSelectionChange}
                 onFocusedImageChange={handleFocusedGalleryImageChange}
@@ -1069,6 +1081,16 @@ function ReefVisionMainApp() {
           version={health.data?.version ?? applicationVersion}
           onClose={() => setShowOnboarding(false)}
           onDismissPermanently={dismissOnboardingPermanently}
+        />
+      )}
+      {showKeyboardShortcuts && (
+        <KeyboardShortcutsDialog
+          onClose={() => {
+            setShowKeyboardShortcuts(false);
+            window.requestAnimationFrame(() =>
+              keyboardShortcutsButtonRef.current?.focus(),
+            );
+          }}
         />
       )}
       {selectedProject && editorLaunch && (

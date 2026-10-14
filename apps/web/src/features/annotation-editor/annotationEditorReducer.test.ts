@@ -125,6 +125,61 @@ describe("annotationEditorReducer", () => {
     expect(state.document.annotations[0].x_min).toBe(20);
   });
 
+  it("invalidates review after geometry edits and permits re-review", () => {
+    let state = annotationEditorReducer(initialAnnotationEditorState, {
+      type: "loadSession",
+      session: {
+        ...session,
+        image: { ...session.image, annotation_status: "reviewed" },
+      },
+    });
+
+    const newBox = {
+      ...state.document.annotations[0],
+      id: "draft-box-2",
+      x_min: 40,
+      x_max: 50,
+    };
+    state = annotationEditorReducer(state, {
+      type: "commitDocument",
+      document: {
+        ...state.document,
+        annotations: [...state.document.annotations, newBox],
+      },
+    });
+    expect(state.document.annotation_status).toBe("in_progress");
+    expect(toAnnotationSavePayload(state).annotation_status).toBe(
+      "in_progress",
+    );
+
+    state = annotationEditorReducer(state, { type: "undo" });
+    expect(state.document.annotation_status).toBe("reviewed");
+    expect(state.document.annotations).toHaveLength(1);
+    state = annotationEditorReducer(state, { type: "redo" });
+    expect(state.document.annotation_status).toBe("in_progress");
+
+    // Reviewer explicitly completes review after evaluating the changed content.
+    state = annotationEditorReducer(state, {
+      type: "commitDocument",
+      document: { ...state.document, annotation_status: "reviewed" },
+    });
+    expect(state.document.annotation_status).toBe("reviewed");
+
+    // Edits to existing geometry also invalidate the re-review.
+    state = annotationEditorReducer(state, {
+      type: "commitDocument",
+      document: {
+        ...state.document,
+        annotations: state.document.annotations.map((annotation) =>
+          annotation.id === newBox.id
+            ? { ...annotation, label_class_id: "class-2" }
+            : annotation,
+        ),
+      },
+    });
+    expect(state.document.annotation_status).toBe("in_progress");
+  });
+
   it("keeps newer local edits dirty after an older save succeeds", () => {
     let state = annotationEditorReducer(initialAnnotationEditorState, {
       type: "loadSession",

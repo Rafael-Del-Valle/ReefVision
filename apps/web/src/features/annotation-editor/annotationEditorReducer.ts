@@ -20,6 +20,7 @@ interface MaskAnnotationDraftPayload {
   label_class_id: string;
   geometry_kind: "polygon" | "rotated_box";
   points: Array<{ x: number; y: number }>;
+  status?: "draft";
 }
 
 export interface ExtendedAnnotationSavePayload extends AnnotationSavePayload {
@@ -260,6 +261,9 @@ export function toAnnotationSavePayload(
       label_class_id: annotation.label_class_id,
       geometry_kind: annotation.geometry_kind as "polygon" | "rotated_box",
       points: annotation.points.map((point) => ({ ...point })),
+      ...(annotation.verification_status
+        ? { status: annotation.verification_status }
+        : {}),
     }));
   }
   if (state.document.deletedMaskAnnotationIds.length > 0) {
@@ -349,7 +353,27 @@ export function annotationEditorReducer(
         hiddenClassIds: [],
       };
     case "commitDocument": {
-      const nextDocument = action.document;
+      const contentChanged =
+        !annotationsEqual(
+          state.document.annotations,
+          action.document.annotations,
+        ) ||
+        !maskAnnotationsEqual(
+          state.document.maskAnnotations,
+          action.document.maskAnnotations,
+        ) ||
+        !arraysEqual(
+          state.document.deletedMaskAnnotationIds,
+          action.document.deletedMaskAnnotationIds,
+        );
+      // Changes to scientific content invalidate the previous image review.
+      // A status-only change still permits an explicit new review decision.
+      const nextDocument =
+        state.document.annotation_status === "reviewed" &&
+        action.document.annotation_status === "reviewed" &&
+        contentChanged
+          ? { ...action.document, annotation_status: "in_progress" as const }
+          : action.document;
       const nextSelection = validSelection(
         nextDocument,
         action.selection ?? state.selectedIds,

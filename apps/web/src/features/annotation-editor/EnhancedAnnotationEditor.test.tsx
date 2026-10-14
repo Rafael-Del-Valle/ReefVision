@@ -18,10 +18,19 @@ const { polygonKeyHandler, polygonInsertHandler, vertexPointerHandler } =
   }));
 
 vi.mock("./AnnotationEditor", () => ({
-  AnnotationEditor: ({ initialImageId }: { initialImageId: string }) => (
+  AnnotationEditor: ({
+    initialImageId,
+    onActiveImageChange,
+  }: {
+    initialImageId: string;
+    onActiveImageChange?: (imageId: string) => void;
+  }) => (
     <div data-testid="box-workspace">
       <aside className="annotation-tool-rail" aria-label="Annotation tools" />
       {initialImageId}
+      <button onClick={() => onActiveImageChange?.("image-2")}>
+        Next image
+      </button>
     </div>
   ),
 }));
@@ -175,7 +184,7 @@ describe("EnhancedAnnotationEditor", () => {
   });
 
   it("uses the left tool rail to switch annotation workspaces", async () => {
-    const { queryClient, project } = renderEditor();
+    renderEditor();
     const editor = screen.getByTestId("enhanced-annotation-editor");
 
     expect(screen.getByTestId("box-workspace")).toHaveTextContent("image-1");
@@ -188,12 +197,12 @@ describe("EnhancedAnnotationEditor", () => {
     expect(screen.getByTestId("open-smart-close-tool")).toBeInTheDocument();
     expect(screen.getByTestId("open-brush-tool")).toBeInTheDocument();
     expect(screen.getByTestId("mask-tool-group")).toBeInTheDocument();
+    expect(screen.getByTestId("open-polygon-tool")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
 
-    act(() => {
-      queryClient.setQueryData(["annotation-session", "image-2"], {
-        image: { id: "image-2", project_id: project.id },
-      });
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Next image" }));
 
     await waitFor(() => {
       expect(screen.getByTestId("box-workspace")).toHaveTextContent("image-2");
@@ -209,6 +218,14 @@ describe("EnhancedAnnotationEditor", () => {
     expect(editor).toHaveAttribute("data-raster-visible", "false");
     expect(screen.getByTestId("return-main-tools")).toBeInTheDocument();
     expect(screen.getByTestId("polygon-edit-tool-group")).toBeInTheDocument();
+    expect(screen.getByTestId("open-polygon-tool")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByTestId("move-polygon-nodes")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
 
     fireEvent.click(screen.getByTestId("open-brush-tool"));
     expect(screen.getByTestId("raster-workspace")).toHaveTextContent("image-2");
@@ -216,10 +233,29 @@ describe("EnhancedAnnotationEditor", () => {
     expect(editor).toHaveAttribute("data-boxes-visible", "false");
     expect(editor).toHaveAttribute("data-polygons-visible", "false");
     expect(editor).toHaveAttribute("data-raster-visible", "true");
+    expect(screen.getByTestId("open-brush-tool")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
 
     fireEvent.click(screen.getByTestId("return-main-tools"));
     expect(screen.getByTestId("box-workspace")).toHaveTextContent("image-2");
     expect(editor).toHaveAttribute("data-active-annotation-type", "boxes");
+  });
+
+  it("ignores unrelated annotation-session cache updates", () => {
+    const { queryClient, project } = renderEditor();
+
+    act(() => {
+      queryClient.setQueryData(["annotation-session", "stale-image"], {
+        image: { id: "stale-image", project_id: project.id },
+      });
+    });
+
+    expect(screen.getByTestId("box-workspace")).toHaveTextContent("image-1");
+    expect(screen.getByTestId("box-workspace")).not.toHaveTextContent(
+      "stale-image",
+    );
   });
 
   it("requires clicking the first polygon node instead of pressing Enter", () => {

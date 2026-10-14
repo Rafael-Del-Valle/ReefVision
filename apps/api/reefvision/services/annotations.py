@@ -441,7 +441,7 @@ class AnnotationService:
                     y_max=y_max,
                     area_pixels=area_pixels,
                     source_type="human",
-                    status="verified",
+                    status=mask_draft.status or "verified",
                     created_by="local_user",
                     revision=1,
                 )

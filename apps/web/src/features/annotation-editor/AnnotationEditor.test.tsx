@@ -274,7 +274,7 @@ function handleDefaultEditorRequests(
   return undefined;
 }
 
-function renderEditor(onClose = vi.fn()) {
+function renderEditor(onClose = vi.fn(), onActiveImageChange = vi.fn()) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -284,10 +284,11 @@ function renderEditor(onClose = vi.fn()) {
         project={project}
         initialImageId={session.image.id}
         onClose={onClose}
+        onActiveImageChange={onActiveImageChange}
       />
     </QueryClientProvider>,
   );
-  return { onClose, queryClient };
+  return { onClose, onActiveImageChange, queryClient };
 }
 
 function selectionPanel(): HTMLElement {
@@ -318,6 +319,21 @@ function stubCanvasRect(): void {
   });
 }
 
+function mockBasicEditorRequests(): void {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const url = String(input);
+    if (
+      url.endsWith(`/images/${session.image.id}/annotations`) &&
+      (!init?.method || init.method === "GET")
+    ) {
+      return jsonResponse(session);
+    }
+    const fallback = handleDefaultEditorRequests(url, init);
+    if (fallback) return fallback;
+    throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+  });
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -325,6 +341,137 @@ afterEach(() => {
 });
 
 describe("AnnotationEditor", () => {
+  it("reports the controlled active image identity", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith(`/images/${session.image.id}/annotations`)) {
+        return jsonResponse(session);
+      }
+      const standard = handleDefaultEditorRequests(url, init);
+      if (standard) return standard;
+      throw new Error(`Unhandled request ${String(input)}`);
+    });
+    const onActiveImageChange = vi.fn();
+
+    renderEditor(vi.fn(), onActiveImageChange);
+
+    await waitFor(() =>
+      expect(onActiveImageChange).toHaveBeenLastCalledWith(session.image.id),
+    );
+  });
+
+  it("temporarily pans with Alt plus left drag and cancels on pointer loss", async () => {
+    mockBasicEditorRequests();
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    stubCanvasRect();
+    const canvas = screen.getByTestId("annotation-canvas");
+    const viewport = screen.getByTestId("viewport-transform");
+    const initialTransform = viewport.getAttribute("transform");
+
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      altKey: true,
+      clientX: 100,
+      clientY: 100,
+    });
+    fireEvent.pointerMove(window, { clientX: 145, clientY: 130 });
+    expect(viewport.getAttribute("transform")).not.toBe(initialTransform);
+    const pannedTransform = viewport.getAttribute("transform");
+
+    fireEvent.pointerCancel(window);
+    fireEvent.pointerMove(window, { clientX: 300, clientY: 300 });
+    expect(viewport.getAttribute("transform")).toBe(pannedTransform);
+
+    fireEvent.pointerDown(canvas, {
+      button: 1,
+      clientX: 145,
+      clientY: 130,
+    });
+    fireEvent.pointerMove(window, { clientX: 170, clientY: 155 });
+    expect(viewport.getAttribute("transform")).not.toBe(pannedTransform);
+    const middlePannedTransform = viewport.getAttribute("transform");
+    fireEvent.blur(window);
+    fireEvent.pointerMove(window, { clientX: 400, clientY: 400 });
+    expect(viewport.getAttribute("transform")).toBe(middlePannedTransform);
+  });
+
+  it("offers actual-size and reset-view commands without changing annotations", async () => {
+    mockBasicEditorRequests();
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    const viewport = screen.getByTestId("viewport-transform");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Actual Size (100%)" }),
+    );
+    expect(viewport.getAttribute("transform")).toContain("scale(1)");
+    expect(screen.getByTestId("annotation-annotation-1")).toHaveAttribute(
+      "x",
+      "100",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Reset View" }));
+    expect(viewport.getAttribute("transform")).not.toContain("scale(1)");
+    expect(screen.getByTestId("annotation-annotation-1")).toHaveAttribute(
+      "x",
+      "100",
+    );
+  });
+
+  it("copies, pastes, duplicates, and reverses boxes through one document history", async () => {
+    mockBasicEditorRequests();
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    stubCanvasRect();
+
+    // Editing an already reviewed image must invalidate its prior review.
+    await userEvent.selectOptions(
+      screen.getByLabelText("Annotation status"),
+      "reviewed",
+    );
+    fireEvent.pointerDown(screen.getByTestId("annotation-annotation-1"), {
+      button: 0,
+    });
+    fireEvent.keyDown(document.body, { key: "c", ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: "v", ctrlKey: true });
+
+    const objectList = screen.getByRole("listbox", { name: "Objects" });
+    expect(within(objectList).getAllByRole("option")).toHaveLength(2);
+    expect(screen.getByText(/Pasted 1 annotation/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Annotation status")).toHaveValue(
+      "in_progress",
+    );
+    fireEvent.keyDown(document.body, { key: "d", ctrlKey: true });
+    expect(within(objectList).getAllByRole("option")).toHaveLength(3);
+
+    fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
+    expect(within(objectList).getAllByRole("option")).toHaveLength(2);
+    fireEvent.keyDown(document.body, { key: "y", ctrlKey: true });
+    expect(within(objectList).getAllByRole("option")).toHaveLength(3);
+  });
+
+  it("does not run clipboard shortcuts while typing", async () => {
+    mockBasicEditorRequests();
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    const filter = screen.getByPlaceholderText("Filter by class");
+    fireEvent.keyDown(filter, { key: "d", ctrlKey: true });
+    expect(
+      within(screen.getByRole("listbox", { name: "Objects" })).getAllByRole(
+        "option",
+      ),
+    ).toHaveLength(1);
+  });
+
   it("shows and deletes polygon masks from Main Select", async () => {
     const sessionWithMask = {
       ...session,

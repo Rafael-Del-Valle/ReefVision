@@ -839,6 +839,22 @@
   box-shadow: 0 1.2rem 3rem rgba(0, 0, 0, 0.36);
 }
 
+.rv-media-load-error {
+  display: grid;
+  justify-items: center;
+  gap: 0.65rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.rv-gallery-wrap-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  grid-column: 1 / -1;
+  padding: 0.25rem 0.1rem;
+}
+
 .rv-filmstrip-heading {
   display: flex;
   align-items: center;

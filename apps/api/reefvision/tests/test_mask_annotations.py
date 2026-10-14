@@ -101,6 +101,37 @@ def test_polygon_mask_create_update_delete_and_audit(client: TestClient) -> None
         ]
 
 
+def test_duplicated_polygon_may_be_created_as_unverified_draft(client: TestClient) -> None:
+    project = create_project(client, "Mask clipboard draft")
+    report = import_one(client, project["id"])
+    image_id = report["successful"][0]["image_id"]
+    payload = _mask_payload(
+        "06ea8d6a-66b2-4fc8-8c6c-8650ad39446d",
+        project["label_classes"][0]["id"],
+        [(5, 5), (25, 5), (25, 20), (5, 20)],
+    )
+    payload["status"] = "draft"
+
+    response = client.put(
+        f"/api/v1/images/{image_id}/annotations",
+        json={
+            "base_revision": 0,
+            "annotation_status": "in_progress",
+            "annotations": [],
+            "mask_annotations": [payload],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    copied = response.json()["mask_annotations"][0]
+    assert copied["status"] == "draft"
+    assert copied["source_type"] == "human"
+    assert copied["provenance_json"] is None
+    reloaded = client.get(f"/api/v1/images/{image_id}/annotations")
+    assert reloaded.status_code == 200, reloaded.text
+    assert reloaded.json()["mask_annotations"][0]["status"] == "draft"
+
+
 def test_polygon_mask_validation_is_transactional(client: TestClient) -> None:
     project = create_project(client, "Mask validation")
     report = import_one(client, project["id"])

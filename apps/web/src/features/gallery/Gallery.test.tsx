@@ -1,5 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -73,6 +80,7 @@ function renderGallery(
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  window.localStorage.clear();
 });
 
 describe("Gallery", () => {
@@ -367,5 +375,235 @@ describe("Gallery", () => {
     await waitFor(() =>
       expect(onFocusedImageChange).toHaveBeenLastCalledWith("image-1"),
     );
+  });
+
+  it("restores the project's recent image and navigates with viewer keys", async () => {
+    const secondImage: ProjectImage = {
+      ...image,
+      id: "image-2",
+      original_filename: "swiftia-02.png",
+    };
+    window.localStorage.setItem(
+      `reefvision.gallery.${project.id}.v1`,
+      JSON.stringify({ imageId: secondImage.id, page: 1, wrap: false }),
+    );
+    const onFocusedImageChange = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image, secondImage],
+        total: 2,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+
+    renderGallery(undefined, undefined, onFocusedImageChange);
+
+    const viewer = await screen.findByRole("region", {
+      name: "Image workbench",
+    });
+    await waitFor(() =>
+      expect(onFocusedImageChange).toHaveBeenLastCalledWith("image-2"),
+    );
+    viewer.focus();
+    await userEvent.keyboard("{ArrowLeft}");
+    await waitFor(() =>
+      expect(onFocusedImageChange).toHaveBeenLastCalledWith("image-1"),
+    );
+    await userEvent.keyboard("{End}");
+    await waitFor(() =>
+      expect(onFocusedImageChange).toHaveBeenLastCalledWith("image-2"),
+    );
+  });
+
+  it("loads only the adjacent page when keyboard navigation crosses a boundary", async () => {
+    const requestedPages: number[] = [];
+    const secondPageImage: ProjectImage = {
+      ...image,
+      id: "image-25",
+      original_filename: "swiftia-25.png",
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input), "http://localhost");
+      const requestedPage = Number(url.searchParams.get("page") ?? "1");
+      requestedPages.push(requestedPage);
+      return jsonResponse({
+        items: requestedPage === 1 ? [image] : [secondPageImage],
+        total: 25,
+        page: requestedPage,
+        page_size: 24,
+        pages: 2,
+      });
+    });
+
+    renderGallery();
+    const viewer = await screen.findByRole("region", {
+      name: "Image workbench",
+    });
+    viewer.focus();
+    await userEvent.keyboard("{ArrowRight}");
+
+    await screen.findByRole("heading", { name: "swiftia-25.png", level: 3 });
+    expect(requestedPages).toContain(2);
+  });
+
+  it("does not navigate from editor controls and persists optional wrapping", async () => {
+    const secondImage: ProjectImage = {
+      ...image,
+      id: "image-2",
+      original_filename: "swiftia-02.png",
+    };
+    const onFocusedImageChange = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image, secondImage],
+        total: 2,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+
+    renderGallery(vi.fn(), undefined, onFocusedImageChange);
+    const editorButton = await screen.findByRole("button", {
+      name: "Open annotation editor",
+    });
+    editorButton.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(onFocusedImageChange).toHaveBeenLastCalledWith("image-1");
+
+    await userEvent.click(screen.getByLabelText("Wrap image navigation"));
+    const viewer = screen.getByRole("region", { name: "Image workbench" });
+    viewer.focus();
+    await userEvent.keyboard("{ArrowLeft}");
+    await waitFor(() =>
+      expect(onFocusedImageChange).toHaveBeenLastCalledWith("image-2"),
+    );
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(`reefvision.gallery.${project.id}.v1`) ??
+          "{}",
+      ),
+    ).toMatchObject({ imageId: "image-2", wrap: true });
+  });
+
+  it("shows a recoverable error when the focused image cannot load", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+
+    renderGallery();
+    const focusedImage = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    fireEvent.error(focusedImage);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Image could not be displayed",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Retry image" }));
+    expect(
+      await screen.findByAltText("Focused project image: swiftia-01.png"),
+    ).toBeInTheDocument();
+  });
+
+  it("falls back to the first eligible image when the recent image was deleted", async () => {
+    window.localStorage.setItem(
+      `reefvision.gallery.${project.id}.v1`,
+      JSON.stringify({ imageId: "deleted-image", page: 1, wrap: false }),
+    );
+    const onFocusedImageChange = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+
+    renderGallery(undefined, undefined, onFocusedImageChange);
+
+    await waitFor(() =>
+      expect(onFocusedImageChange).toHaveBeenLastCalledWith("image-1"),
+    );
+  });
+
+  it("does not let a slower previous-project request replace the active project", async () => {
+    const nextProject: Project = {
+      ...project,
+      id: "project-2",
+      name: "Second study",
+      slug: "second-study",
+    };
+    const nextImage: ProjectImage = {
+      ...image,
+      id: "next-image",
+      project_id: nextProject.id,
+      original_filename: "active-project.png",
+    };
+    let resolvePrevious: ((response: Response) => void) | undefined;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes(`/projects/${project.id}/images`)) {
+        return await new Promise<Response>((resolve) => {
+          resolvePrevious = resolve;
+        });
+      }
+      if (url.includes(`/projects/${nextProject.id}/images`)) {
+        return jsonResponse({
+          items: [nextImage],
+          total: 1,
+          page: 1,
+          page_size: 24,
+          pages: 1,
+        });
+      }
+      throw new Error(`Unhandled request GET ${url}`);
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <Gallery key={project.id} project={project} />
+      </QueryClientProvider>,
+    );
+
+    view.rerender(
+      <QueryClientProvider client={queryClient}>
+        <Gallery key={nextProject.id} project={nextProject} />
+      </QueryClientProvider>,
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "active-project.png",
+        level: 3,
+      }),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      resolvePrevious?.(
+        jsonResponse({
+          items: [image],
+          total: 1,
+          page: 1,
+          page_size: 24,
+          pages: 1,
+        }),
+      );
+    });
+    expect(screen.queryByText("swiftia-01.png")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "active-project.png", level: 3 }),
+    ).toBeInTheDocument();
   });
 });
