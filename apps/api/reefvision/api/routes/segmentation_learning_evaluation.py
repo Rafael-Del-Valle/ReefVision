@@ -57,6 +57,7 @@ def record_segmentation_evaluation(
     request: Request,
     session: DbSession,
 ) -> SegmentationCompletedEvaluationResponse:
+    """Score a trusted parentless completed job with exact immutable provenance."""
     record = SegmentationLearningEvaluationService(
         session, request.app.state.settings
     ).record_completed_evaluation(

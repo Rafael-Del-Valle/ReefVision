@@ -106,12 +106,22 @@ class SegmentationLearningEvaluationService:
         dataset_version_id: str,
         manifest_sha256: str,
         checkpoint_sha256: str,
+        expected_parent_job_id: str | None,
     ) -> Job:
         job = self.session.get(Job, inference_job_id)
         if job is None or job.project_id != project_id or job.job_type != "inference":
             raise NotFoundError("Project segmentation inference job not found")
         request = job.request_json or {}
         images = request.get("image_ids")
+        parent_job_id = request.get("segmentation_holdout_parent_job_id")
+        # Queue finalization binds each child to the exact persisted parent.
+        # The separate direct API remains compatible with trusted, preexisting
+        # parentless jobs, but it cannot reuse or detach a queued child.
+        parent_matches = (
+            parent_job_id == expected_parent_job_id
+            if expected_parent_job_id is not None
+            else parent_job_id is None
+        )
         if (
             job.status != "succeeded"
             or request.get("model_id") != model_id
@@ -121,8 +131,7 @@ class SegmentationLearningEvaluationService:
             or request.get("segmentation_manifest_sha256") != manifest_sha256
             or request.get("segmentation_split") != holdout.split
             or request.get("segmentation_checkpoint_sha256") != checkpoint_sha256
-            or not isinstance(request.get("segmentation_holdout_parent_job_id"), str)
-            or not request["segmentation_holdout_parent_job_id"]
+            or not parent_matches
             or not isinstance(images, list)
             or len(images) != len(holdout.image_ids)
             or set(images) != set(holdout.image_ids)
@@ -152,6 +161,7 @@ class SegmentationLearningEvaluationService:
         inference_job_id: str,
         *,
         require_same_dataset: bool,
+        expected_parent_job_id: str | None,
     ) -> ScoredSegmentationHoldout:
         model = self._model(
             project_id,
@@ -168,6 +178,7 @@ class SegmentationLearningEvaluationService:
             dataset_version_id=dataset_version.id,
             manifest_sha256=dataset_version.manifest_sha256,
             checkpoint_sha256=model.sha256,
+            expected_parent_job_id=expected_parent_job_id,
         )
         proposals = list(
             self.session.scalars(
@@ -209,7 +220,13 @@ class SegmentationLearningEvaluationService:
         minimum_gain: float = 0.0,
         existing_record: Job | None = None,
     ) -> Job:
-        """Store a completed holdout comparison; never implicitly promote."""
+        """Store a completed holdout comparison; never implicitly promote.
+
+        Queued finalization requires the exact parent evaluation ID on every
+        child. Direct scoring accepts only parentless inference jobs carrying
+        the same immutable dataset, manifest, split, checkpoint, image, task,
+        project, completion, and evaluation-only provenance.
+        """
         if bool(incumbent_model_id) != bool(incumbent_job_id):
             raise ValidationError("Incumbent segmentation model and job must be supplied together")
         if existing_record is not None:
@@ -269,6 +286,7 @@ class SegmentationLearningEvaluationService:
             candidate_model_id,
             candidate_job_id,
             require_same_dataset=True,
+            expected_parent_job_id=existing_record.id if existing_record is not None else None,
         )
         incumbent = (
             self._score_model(
@@ -280,6 +298,7 @@ class SegmentationLearningEvaluationService:
                 incumbent_model_id,
                 incumbent_job_id,
                 require_same_dataset=False,
+                expected_parent_job_id=existing_record.id if existing_record is not None else None,
             )
             if incumbent_model_id is not None and incumbent_job_id is not None
             else None
