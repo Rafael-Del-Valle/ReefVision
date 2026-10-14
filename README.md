@@ -8,7 +8,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Rafael-Del-Valle/ReefVision/releases/latest/download/ReefVision_Windows_Downloader.exe"><strong>Download for Windows — latest stable</strong></a>
+  <a href="https://github.com/Rafael-Del-Valle/ReefVision/releases/latest/download/ReefVision_Windows_Downloader.exe">
+    <img alt="Download ReefVision 1.0.2 for Windows" src="https://img.shields.io/badge/Download-ReefVision_1.0.2_for_Windows-2165ac?style=for-the-badge&logo=windows11&logoColor=white">
+  </a>
+</p>
+
+<p align="center">
+  <strong><a href="https://github.com/Rafael-Del-Valle/ReefVision/releases/latest/download/ReefVision_Windows_Downloader.exe">Download Windows installer</a></strong>
   · <a href="https://github.com/Rafael-Del-Valle/ReefVision/releases/latest">Latest release and checksums</a>
   · <a href="#installation">Installation</a>
   · <a href="#documentation">Documentation</a>
