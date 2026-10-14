@@ -102,6 +102,10 @@ class SegmentationLearningEvaluationService:
         model_id: str,
         inference_job_id: str,
         holdout: SegmentationHoldout,
+        *,
+        dataset_version_id: str,
+        manifest_sha256: str,
+        checkpoint_sha256: str,
     ) -> Job:
         job = self.session.get(Job, inference_job_id)
         if job is None or job.project_id != project_id or job.job_type != "inference":
@@ -113,6 +117,12 @@ class SegmentationLearningEvaluationService:
             or request.get("model_id") != model_id
             or request.get("model_task") != "segment"
             or request.get("evaluation_only") is not True
+            or request.get("segmentation_dataset_version_id") != dataset_version_id
+            or request.get("segmentation_manifest_sha256") != manifest_sha256
+            or request.get("segmentation_split") != holdout.split
+            or request.get("segmentation_checkpoint_sha256") != checkpoint_sha256
+            or not isinstance(request.get("segmentation_holdout_parent_job_id"), str)
+            or not request["segmentation_holdout_parent_job_id"]
             or not isinstance(images, list)
             or len(images) != len(holdout.image_ids)
             or set(images) != set(holdout.image_ids)
@@ -150,7 +160,15 @@ class SegmentationLearningEvaluationService:
             holdout,
             same_dataset_required=require_same_dataset,
         )
-        job = self._job(project_id, model.id, inference_job_id, holdout)
+        job = self._job(
+            project_id,
+            model.id,
+            inference_job_id,
+            holdout,
+            dataset_version_id=dataset_version.id,
+            manifest_sha256=dataset_version.manifest_sha256,
+            checkpoint_sha256=model.sha256,
+        )
         proposals = list(
             self.session.scalars(
                 select(PredictionProposal).where(PredictionProposal.inference_job_id == job.id)
