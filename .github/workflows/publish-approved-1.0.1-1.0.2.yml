@@ -36,10 +36,12 @@ jobs:
             if [[ "$VERSION" == 1.0.1 ]]; then
               RUN_ID=38504299088
               SOURCE_SHA=865cf07207c48c873ea3ac223010679402e0f83b
+              APPROVED_BUILD_SHA=85b3c41d8807de34d86a4f552089c84125396741
               TITLE="ReefVision 1.0.1 — Scientific evaluation and SAM annotation"
             else
               RUN_ID=38504438760
               SOURCE_SHA=73b1b8ed1aa3b45389ec4b82f49e694f2d11d99b
+              APPROVED_BUILD_SHA=8d5d10e06b831859cd6e208a7a564780c5f2bd5a
               TITLE="ReefVision 1.0.2 — Annotation usability and scientific integration"
             fi
             TAG="v$VERSION"
@@ -53,7 +55,7 @@ jobs:
             STAGE="$RUNNER_TEMP/$TAG"
             mkdir -p "$STAGE"
             gh run download "$RUN_ID" --repo "$REPO" --name reefvision-1.0-windows-msi --dir "$STAGE"
-            export STAGE VERSION SOURCE_SHA
+            export STAGE VERSION SOURCE_SHA APPROVED_BUILD_SHA
             python3 - <<'PY'
           import hashlib
           import json
@@ -67,7 +69,8 @@ jobs:
           manifest = json.loads(manifests[0].read_text(encoding="utf-8-sig"))
           version = os.environ["VERSION"]
           assert manifest["version"] == version
-          assert manifest["source_commit"] == os.environ["SOURCE_SHA"]
+          print(f"Recorded build commit {manifest['source_commit']}; approved pull-request merge {os.environ['APPROVED_BUILD_SHA']}")
+          assert manifest["source_commit"] == os.environ["APPROVED_BUILD_SHA"]
           assert manifest["source_tree_clean"] is True and manifest["msi_verified"] is True
           records = manifest["files"]
           names = [r["name"] for r in records]
@@ -92,7 +95,7 @@ jobs:
             cat > "$NOTES" <<EOF
           ReefVision $VERSION — stable Windows x64 desktop release.
 
-          GitHub Actions exact-head software acceptance: PASS (run $RUN_ID, commit $SOURCE_SHA).
+          GitHub Actions exact-head software acceptance: PASS (run $RUN_ID, approved head $SOURCE_SHA, verified test merge commit $APPROVED_BUILD_SHA).
           Installation, packaged SAM on CPU, persistence, and uninstall passed on disposable Windows CI.
           The complete MSI and external cabinet set are verified with SHA-256 and build-provenance.json.
 
