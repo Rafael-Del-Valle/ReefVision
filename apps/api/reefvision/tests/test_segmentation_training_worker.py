@@ -85,6 +85,9 @@ def test_segment_worker_exports_polygons_and_preserves_mask_metrics(
     captured: dict[str, Any] = {}
     monkeypatch.setattr(worker_module, "require_provider_ready", lambda *args: None)
     monkeypatch.setattr(worker_module, "configure_provider_runtime", lambda settings: None)
+    # The test uses a deliberately minimal FakeYOLO, not the real Ultralytics
+    # package. Keep the real package's offline-safety hooks in production.
+    monkeypatch.setattr(worker_module, "configure_local_training_runtime", lambda settings: None)
     monkeypatch.setattr(worker_module, "resolve_torch_device", lambda device: "cpu")
     monkeypatch.setattr(
         worker_module,
@@ -132,11 +135,17 @@ def test_segment_worker_exports_polygons_and_preserves_mask_metrics(
     module.YOLO = FakeYOLO
     monkeypatch.setitem(sys.modules, "ultralytics", module)
     app = cast(FastAPI, client.app)
-    assert process_segmentation_training_job(
+    result = process_segmentation_training_job(
         app.state.settings,
         app.state.session_factory,
         job_id,
     )
+    with app.state.session_factory() as debug_session:
+        debug_job = debug_session.get(Job, job_id)
+        assert result, (
+            f"Segmentation training worker failed: "
+            f"{debug_job.error_message if debug_job else 'job missing'}"
+        )
     assert captured["name"] == "segment"
     assert Path(captured["data"]).name == "data.yaml"
 

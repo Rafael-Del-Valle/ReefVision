@@ -8,6 +8,7 @@ from hashlib import sha256
 from pathlib import Path
 from uuid import uuid4
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
@@ -28,6 +29,7 @@ from reefvision.schemas.predictions import (
 )
 from reefvision.services.annotations import mask_annotation_snapshot
 from reefvision.services.segmentation_predictions import SegmentationPredictionService
+from reefvision.storage.mask_refinements import load_prior, save_candidate_png
 from reefvision.storage.masks import write_mask_png
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -73,23 +75,37 @@ class SemanticPredictionService(SegmentationPredictionService):
         proposal: PredictionProposal,
         payload: PredictionAcceptRequest | None,
     ) -> MaskAnnotation:
+        # Sessions disable autoflush; earlier members of a bulk transaction must
+        # participate in duplicate matching and image-revision arithmetic.
+        self.session.flush()
         image = self._image(proposal.image_id)
         project = self.projects.get(image.project_id)
         if project is None:
             raise NotFoundError("Project not found")
         if proposal.review_status != "pending":
             raise ConflictError("Only pending prediction proposals can be reviewed")
-        label_class_id = (
-            payload.label_class_id
-            if payload and payload.label_class_id
-            else proposal.label_class_id
-        )
-        if label_class_id is None:
-            raise ValidationError("Choose a project class before accepting this prediction")
-        self._label_class(image, label_class_id)
+        label_class_id = self._resolve_accept_class(image, proposal, payload)
         if not proposal.mask_content_sha256:
             raise ValidationError("Semantic proposal mask metadata is missing")
         source_path = self.raster_mask_file(proposal.id)
+
+        # Claim before duplicate checking, so concurrent accepts serialize on SQLite.
+        result = self.session.execute(
+            update(PredictionProposal)
+            .where(
+                PredictionProposal.id == proposal.id,
+                PredictionProposal.review_status == "pending",
+            )
+            .values(review_status="accepting")
+        )
+        if result.rowcount != 1:  # type: ignore[attr-defined]
+            raise ConflictError("Only pending prediction proposals can be reviewed")
+        self.session.refresh(image)
+        try:
+            self._reject_duplicate(proposal)
+        except Exception:
+            self.session.rollback()
+            raise
 
         annotation_id = str(uuid4())
         relative_path, _destination, area, x_min, y_min, x_max, y_max = write_mask_png(
@@ -128,6 +144,10 @@ class SemanticPredictionService(SegmentationPredictionService):
                 "proposal_mask_path": proposal.mask_path,
                 "proposal_mask_sha256": proposal.mask_content_sha256,
                 "accepted_mask_path": relative_path,
+                "accepted_mask_sha256": _file_sha256(_destination),
+                "proposal_edit_history": (proposal.provenance_json or {}).get(
+                    "mask_edit_history", []
+                ),
                 "class_changed": class_changed,
                 "accepted_at": _utc_now().isoformat(),
             },
@@ -135,8 +155,8 @@ class SemanticPredictionService(SegmentationPredictionService):
             created_by="local_user",
             revision=1,
         )
-        proposal.review_status = "edited_and_accepted" if class_changed else "accepted"
-        proposal.was_edited = class_changed
+        proposal.was_edited = proposal.was_edited or class_changed
+        proposal.review_status = "edited_and_accepted" if proposal.was_edited else "accepted"
         proposal.reviewer_action_at = _utc_now()
         proposal.accepted_mask_annotation_id = annotation.id
         proposal.provenance_json = {
@@ -161,6 +181,84 @@ class SemanticPredictionService(SegmentationPredictionService):
         )
         return annotation
 
+    def _reject_duplicate(self, proposal: PredictionProposal) -> None:
+        import numpy as np
+
+        image = self._image(proposal.image_id)
+        source = load_prior(
+            self.settings,
+            {"geometry_kind": "raster_mask", "mask_path": proposal.mask_path},
+            image.width_px,
+            image.height_px,
+        )
+        for existing in self.mask_annotations.list_for_image(image.id):
+            if existing.geometry_kind not in {"polygon", "raster_mask"}:
+                continue
+            if (
+                (existing.x_max is not None and existing.x_max <= proposal.x_min)
+                or (existing.x_min is not None and existing.x_min >= proposal.x_max)
+                or (existing.y_max is not None and existing.y_max <= proposal.y_min)
+                or (existing.y_min is not None and existing.y_min >= proposal.y_max)
+            ):
+                continue
+            target = load_prior(
+                self.settings, mask_annotation_snapshot(existing), image.width_px, image.height_px
+            )
+            union = int(np.logical_or(source, target).sum())
+            if union and int(np.logical_and(source, target).sum()) / union >= 0.98:
+                raise ConflictError(
+                    "This proposal duplicates an existing mask (mask IoU >= 0.98). "
+                    "Use Refine selected mask to replace its boundary."
+                )
+
+    def edit_raster_mask(self, proposal_id: str, png: str) -> PredictionProposalResponse:
+        proposal = self._proposal(proposal_id)
+        if proposal.geometry_kind != "raster_mask":
+            raise ValidationError("Only raster proposals support mask pixel editing")
+        if proposal.review_status != "pending":
+            raise ConflictError("Only pending prediction proposals can be edited")
+        image = self._image(proposal.image_id)
+        project = self.projects.get(image.project_id)
+        if project is None:
+            raise NotFoundError("Project not found")
+        self.raster_mask_file(proposal.id)
+        geometry = save_candidate_png(
+            self.settings, project.storage_root, image.id, png, image.width_px, image.height_px
+        )
+        provenance = dict(proposal.provenance_json or {})
+        history = list(provenance.get("mask_edit_history", []))
+        history.append(
+            {
+                "mask_path": proposal.mask_path,
+                "mask_sha256": proposal.mask_content_sha256,
+                "actor": "local_user",
+                "edited_at": _utc_now().isoformat(),
+            }
+        )
+        updated = self.session.execute(
+            update(PredictionProposal)
+            .where(
+                PredictionProposal.id == proposal.id,
+                PredictionProposal.review_status == "pending",
+                PredictionProposal.mask_content_sha256 == proposal.mask_content_sha256,
+            )
+            .values(
+                mask_path=geometry["mask_path"],
+                mask_content_sha256=geometry["mask_sha256"],
+                x_min=geometry["x_min"],
+                y_min=geometry["y_min"],
+                x_max=geometry["x_max"],
+                y_max=geometry["y_max"],
+                was_edited=True,
+                provenance_json={**provenance, "mask_edit_history": history},
+            )
+        )
+        if updated.rowcount != 1:  # type: ignore[attr-defined]
+            raise ConflictError("Prediction changed during mask editing")
+        self.session.commit()
+        self.session.refresh(proposal)
+        return self._response(proposal)
+
     def accept(
         self,
         proposal_id: str,
@@ -184,7 +282,10 @@ class SemanticPredictionService(SegmentationPredictionService):
         payload: PredictionBulkReviewRequest,
     ) -> PredictionBulkReviewResponse:
         proposals = self.predictions.list_by_ids(payload.proposal_ids)
-        if not any(item.geometry_kind == "raster_mask" for item in proposals):
+        if (
+            not any(item.geometry_kind == "raster_mask" for item in proposals)
+            and payload.label_class_id is None
+        ):
             return super().bulk_review(payload)
         if len(proposals) != len(payload.proposal_ids):
             raise ValidationError("One or more prediction proposals do not exist")
@@ -198,12 +299,18 @@ class SemanticPredictionService(SegmentationPredictionService):
                 proposal.reviewer_action_at = _utc_now()
         else:
             for proposal in proposals:
+                # Fill class-agnostic candidates only; never relabel a detector batch.
+                accept_payload = (
+                    PredictionAcceptRequest(label_class_id=payload.label_class_id)
+                    if proposal.label_class_id is None
+                    else None
+                )
                 if proposal.geometry_kind == "raster_mask":
-                    masks.append(self._create_raster_mask_from_proposal(proposal, None))
+                    masks.append(self._create_raster_mask_from_proposal(proposal, accept_payload))
                 elif proposal.geometry_kind == "polygon_mask":
-                    masks.append(self._create_mask_from_proposal(proposal, None))
+                    masks.append(self._create_mask_from_proposal(proposal, accept_payload))
                 else:
-                    boxes.append(self._create_annotation_from_proposal(proposal, None))
+                    boxes.append(self._create_annotation_from_proposal(proposal, accept_payload))
         self.session.flush()
         created_boxes = [AnnotationResponse.model_validate(item) for item in boxes]
         created_masks = [MaskAnnotationResponse.model_validate(item) for item in masks]

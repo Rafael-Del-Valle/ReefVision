@@ -4,9 +4,16 @@ from __future__ import annotations
 
 import base64
 import io
+import logging
 import os
 import shutil
 import subprocess
+import sys
+import threading
+import time
+import traceback
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +38,42 @@ from reefvision.services.advanced_provider_proposals import (
     persist_grounding_dino_proposals,
     persist_sam2_proposal,
 )
+from reefvision.services.sam2_install import sam2_status, variant_repo
 from reefvision.storage.projects import resolve_managed_project_path
+
+SAM2_RUNTIME_LOG = logging.getLogger("reefvision.advanced.sam2")
+
+
+@contextmanager
+def _sam2_import_watchdog() -> Iterator[None]:
+    """Log compact Python stacks if a frozen acceptance import is unresponsive."""
+    if os.environ.get("REEFVISION_WINDOWS_ACCEPTANCE") != "1" or not getattr(sys, "frozen", False):
+        yield
+        return
+
+    done = threading.Event()
+    thread_id = threading.get_ident()
+
+    def report_wait() -> None:
+        if done.wait(30):
+            return
+        while not done.is_set():
+            frame = sys._current_frames().get(thread_id)
+            if frame is not None:
+                frames = traceback.extract_stack(frame, limit=30)
+                stack = " -> ".join(
+                    f"{Path(item.filename).name}:{item.name}:{item.lineno}" for item in frames[-18:]
+                )
+                SAM2_RUNTIME_LOG.warning("SAM2 stage=transformers_import_stalled stack=%s", stack)
+            if done.wait(60):
+                return
+
+    threading.Thread(target=report_wait, name="sam2-frozen-import-watchdog", daemon=True).start()
+    try:
+        yield
+    finally:
+        done.set()
+
 
 PROVIDER_LAB_EXECUTION_IDS: frozenset[str] = frozenset(
     {
@@ -251,24 +293,118 @@ class AdvancedProviderExecutionService:
     ) -> AdvancedProviderExecutionResponse:
         if request.task != "assist_segmentation":
             raise ValidationError("This SAM 2 adapter currently executes image assist segmentation")
+        started = time.perf_counter()
+        variant = str(request.prompt_fields.get("sam2_variant", "small"))
+        SAM2_RUNTIME_LOG.info("SAM2 stage=start variant=%s device=%s", variant, request.device)
         _, image = _image(
             self.session, self.settings, project_id, request.prompt_fields.get("image_id")
         )
-        model_path = ensure_optional_model(
-            self.settings,
-            "sam2",
-            allow_download=request.allow_model_download,
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=image_ready elapsed=%.2fs variant=%s",
+            time.perf_counter() - started,
+            variant,
         )
+        variant_repo(variant)
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=status_start elapsed=%.2fs", time.perf_counter() - started
+        )
+        installed = sam2_status(self.settings, variant)
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=status_complete elapsed=%.2fs ready=%s",
+            time.perf_counter() - started,
+            installed["ready"],
+        )
+        if not installed["ready"]:
+            raise ValidationError(str(installed["reason"]))
+        model_path = Path(str(installed["path"]))
         try:
+            SAM2_RUNTIME_LOG.info(
+                "SAM2 stage=numpy_import_start elapsed=%.2fs",
+                time.perf_counter() - started,
+            )
             import numpy as np
+
+            SAM2_RUNTIME_LOG.info(
+                "SAM2 stage=numpy_import_complete elapsed=%.2fs",
+                time.perf_counter() - started,
+            )
+            # Acceptance-only experiment: initialize SciPy BLAS before Torch.
+            # This distinguishes a native import-order conflict from missing DLLs.
+            if (
+                getattr(sys, "frozen", False)
+                and os.environ.get("REEFVISION_WINDOWS_ACCEPTANCE") == "1"
+            ):
+                SAM2_RUNTIME_LOG.info(
+                    "SAM2 stage=scipy_blas_import_start elapsed=%.2fs",
+                    time.perf_counter() - started,
+                )
+                with _sam2_import_watchdog():
+                    from scipy.linalg import blas as _scipy_blas  # type: ignore[import-untyped]
+
+                SAM2_RUNTIME_LOG.info(
+                    "SAM2 stage=scipy_blas_import_complete elapsed=%.2fs module=%s",
+                    time.perf_counter() - started,
+                    _scipy_blas.__name__,
+                )
+            SAM2_RUNTIME_LOG.info(
+                "SAM2 stage=torch_import_start elapsed=%.2fs",
+                time.perf_counter() - started,
+            )
             import torch
-            from transformers import Sam2Model, Sam2Processor
+
+            SAM2_RUNTIME_LOG.info(
+                "SAM2 stage=torch_import_complete elapsed=%.2fs",
+                time.perf_counter() - started,
+            )
+            SAM2_RUNTIME_LOG.info(
+                "SAM2 stage=transformers_import_start elapsed=%.2fs",
+                time.perf_counter() - started,
+            )
+            with _sam2_import_watchdog():
+                import transformers
+
+                SAM2_RUNTIME_LOG.info(
+                    "SAM2 stage=transformers_package_ready elapsed=%.2fs version=%s",
+                    time.perf_counter() - started,
+                    transformers.__version__,
+                )
+                from transformers import Sam2Model
+
+                SAM2_RUNTIME_LOG.info(
+                    "SAM2 stage=sam2_model_imported elapsed=%.2fs",
+                    time.perf_counter() - started,
+                )
+                from transformers import Sam2Processor
+
+            SAM2_RUNTIME_LOG.info(
+                "SAM2 stage=transformers_import_complete elapsed=%.2fs",
+                time.perf_counter() - started,
+            )
         except Exception as exc:
+            SAM2_RUNTIME_LOG.exception("SAM2 stage=runtime_import_failed")
             raise ValidationError(f"SAM 2 runtime is unavailable: {exc}") from exc
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=runtime_imported elapsed=%.2fs torch_threads=%d",
+            time.perf_counter() - started,
+            torch.get_num_threads(),
+        )
         device = resolve_torch_device(request.device)
         processor = Sam2Processor.from_pretrained(model_path, local_files_only=True)
-        model = Sam2Model.from_pretrained(model_path, local_files_only=True).to(device)
-        model.eval()
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=processor_loaded elapsed=%.2fs",
+            time.perf_counter() - started,
+        )
+        model = Sam2Model.from_pretrained(model_path, local_files_only=True)
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=weights_loaded elapsed=%.2fs",
+            time.perf_counter() - started,
+        )
+        model = model.to(device).eval()
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=model_ready elapsed=%.2fs device=%s",
+            time.perf_counter() - started,
+            device,
+        )
 
         kwargs: dict[str, Any] = {"images": image, "return_tensors": "pt"}
         raw_box = request.prompt_fields.get("box")
@@ -295,8 +431,17 @@ class AdvancedProviderExecutionService:
             raise ValidationError("SAM 2 requires either a box or point prompts")
 
         inputs = processor(**kwargs).to(device)
-        with torch.no_grad():
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=inputs_ready elapsed=%.2fs pixels=%s",
+            time.perf_counter() - started,
+            tuple(inputs["pixel_values"].shape),
+        )
+        with torch.inference_mode():
             outputs = model(**inputs, multimask_output=False)
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=forward_complete elapsed=%.2fs",
+            time.perf_counter() - started,
+        )
         masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]  # type: ignore[no-untyped-call]
         mask_tensor = masks[0, 0] if masks.ndim == 4 else masks[0]
         mask = np.asarray(mask_tensor, dtype=bool)
@@ -304,7 +449,6 @@ class AdvancedProviderExecutionService:
         score = 0.0
         if getattr(outputs, "iou_scores", None) is not None:
             score = float(outputs.iou_scores.detach().cpu().reshape(-1)[0].item())
-        spec = OPTIONAL_MODEL_SPECS["sam2"]
         image_id = str(request.prompt_fields.get("image_id") or "")
         mask_png_base64 = _mask_png_base64(mask)
         proposal_box = {
@@ -313,6 +457,11 @@ class AdvancedProviderExecutionService:
             "x_max": mask_box.x_max,
             "y_max": mask_box.y_max,
         }
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=mask_ready elapsed=%.2fs area=%d",
+            time.perf_counter() - started,
+            int(mask.sum()),
+        )
         proposal_id = persist_sam2_proposal(
             self.session,
             self.settings,
@@ -324,12 +473,20 @@ class AdvancedProviderExecutionService:
             score=score,
             box=proposal_box,
             prompt_fields=dict(request.prompt_fields),
+            source_repo_id=variant_repo(variant),
+            source_revision=str(installed["revision"]),
+            source_checksum=str(installed["weight_sha256"]),
+            source_variant=variant,
+        )
+        SAM2_RUNTIME_LOG.info(
+            "SAM2 stage=proposal_persisted elapsed=%.2fs",
+            time.perf_counter() - started,
         )
         return AdvancedProviderExecutionResponse(
             provider_id="sam2",
             task=request.task,
-            model_id=spec.repo_id,
-            model_revision=spec.revision,
+            model_id=variant_repo(variant),
+            model_revision=str(installed["revision"]),
             result={
                 "image_id": image_id,
                 "proposal_id": proposal_id,

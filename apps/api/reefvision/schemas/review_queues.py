@@ -29,6 +29,7 @@ class ReviewScoreWeights(BaseModel):
 class ReviewQueueCreateRequest(BaseModel):
     source_quality_control_run_id: str | None = None
     signal_weights: ReviewScoreWeights = Field(default_factory=ReviewScoreWeights)
+    review_below_confidence: float | None = Field(default=None, ge=0, le=1)
     created_by: str | None = Field(default=None, max_length=100)
 
 

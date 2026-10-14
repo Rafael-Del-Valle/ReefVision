@@ -6,6 +6,30 @@ refresh, editable polygon Fill, desktop sleep/resume recovery, isolated video
 tracking and annotated-video exports, project interoperability visibility, and
 background-job cancellation and recovery hardening.
 
+## Annotation intelligence and verified learning
+
+Shift+1 now proposes objects across the full source image. ReefVision uses an
+explicitly promoted detector when available and falls back to bounded SAM point
+grids with overlapping tiles when no active detector exists. Proposals retain
+source-pixel masks, provenance and review state, and are deduplicated against
+other proposals and verified objects. They remain outside scientific counts and
+training data until a researcher accepts them.
+
+Shift+2 refines exactly one selected saved mask from its original geometry. The
+preview preserves the original until Accept & Replace, retains the mask identity
+and revision history, and rejects stale or topology-losing replacements.
+Pending raster proposals can be painted or erased with undo/redo before atomic
+acceptance. SAM box prompting remains available separately.
+
+The Improve Predictions workflow reports verified-data readiness, creates
+immutable group-safe dataset snapshots, queues the existing local trainer, and
+registers completed checkpoints as candidates. Detector candidates are evaluated
+on held-out groups with class-aware AP50, precision, recall, count bias and mean
+absolute error. A candidate is never activated automatically: promotion and
+rollback are explicit audited actions, and evaluation-only outputs cannot enter
+the annotation review queue. Arbitrary raster holes remain an explicit blocker
+for the polygon-only instance-segmentation training path.
+
 ## Training recovery
 
 Interrupted Ultralytics detection runs are never automatically requeued. Pending

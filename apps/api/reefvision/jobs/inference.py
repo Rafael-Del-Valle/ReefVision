@@ -105,7 +105,7 @@ def _cleanup_pending_job_proposals(
             session.scalars(
                 select(PredictionProposal).where(
                     PredictionProposal.inference_job_id == job_id,
-                    PredictionProposal.review_status == "pending",
+                    PredictionProposal.review_status.in_(("pending", "evaluation_only")),
                 )
             )
         )
@@ -166,6 +166,7 @@ def _semantic_proposals(
     model_metadata: dict[str, Any],
     job_id: str,
     device: str,
+    evaluation_only: bool,
 ) -> list[PredictionProposal]:
     classes = model_metadata.get("classes")
     if not isinstance(classes, list):
@@ -233,7 +234,7 @@ def _semantic_proposals(
                 y_min=float(y_min),
                 x_max=float(x_max),
                 y_max=float(y_max),
-                review_status="pending",
+                review_status="evaluation_only" if evaluation_only else "pending",
                 inference_settings_json={
                     "device": device,
                     "task": SEMANTIC_SEGMENTATION_TASK,
@@ -246,6 +247,7 @@ def _semantic_proposals(
                     "proposal_geometry": "raster_mask",
                     "pixel_value": pixel_value,
                     "area_pixels": area_pixels,
+                    "evaluation_only": evaluation_only,
                 },
             )
         )
@@ -282,6 +284,7 @@ def process_inference_job(
         class_map = dict(model.class_map_json or {})
         model_metadata = dict(model.metadata_json or {})
         project_id = model.project_id
+        evaluation_only = request.get("evaluation_only") is True
         processed_images = int(job.progress_current or 0)
         if processed_images < 0 or processed_images > len(image_ids):
             job.status = "failed"
@@ -364,6 +367,7 @@ def process_inference_job(
                             model_metadata=model_metadata,
                             job_id=job_id,
                             device=inference_settings.device,
+                            evaluation_only=evaluation_only,
                         )
                     finally:
                         indexed_path.unlink(missing_ok=True)
@@ -403,7 +407,7 @@ def process_inference_job(
                                 y_min=prediction.box.y_min,
                                 x_max=prediction.box.x_max,
                                 y_max=prediction.box.y_max,
-                                review_status="pending",
+                                review_status=("evaluation_only" if evaluation_only else "pending"),
                                 inference_settings_json={
                                     "confidence_threshold": (
                                         inference_settings.confidence_threshold
@@ -417,6 +421,7 @@ def process_inference_job(
                                     "provider_version": provider_version,
                                     "model_task": model_task,
                                     "proposal_geometry": geometry_kind,
+                                    "evaluation_only": evaluation_only,
                                 },
                             )
                         )

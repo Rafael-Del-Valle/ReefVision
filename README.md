@@ -40,6 +40,11 @@ It began with octocoral imagery, but the annotation and computer-vision workflow
 
 For a more detailed list, see the [feature reference](docs/FEATURE_REFERENCE.md). Some tools depend on a compatible model, GPU, or separately installed provider.
 
+
+## In development: 1.0.1 annotation assistance
+
+The [1.0.1 development pull request](https://github.com/Rafael-Del-Valle/ReefVision/pull/44) adds source-pixel, full-image SAM proposals (Shift+1), selected-mask refinement (Shift+2), review-before-counting controls, and a verified-dataset training loop. These development changes are **not part of the stable 1.0.0 release**. The 1.0.1 release candidate is for testing; review the [release notes](docs/REEFVISION_1_0_1_RELEASE_NOTES.md) and current PR checks before relying on these features for research.
+
 ## A look at ReefVision
 
 The panels below mark where screenshots from the desktop application will go. They are **placeholders, not screenshots**.

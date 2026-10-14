@@ -5,9 +5,11 @@ from typing import Any, cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 import reefvision.jobs.inference as inference_module
 import reefvision.ml.assist_runtime as assist_runtime_module
+from reefvision.db.models import Job, PredictionProposal
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.worker import recover_interrupted_jobs
 from reefvision.ml.providers import (
@@ -227,6 +229,62 @@ def test_inference_job_creates_pending_proposal_and_acceptance_records_provenanc
         assert payload["proposal"]["provenance_json"][key] == value
     assert payload["proposal"]["confidence"] == pending[0]["confidence"]
     assert payload["proposal"]["predicted_label"] == pending[0]["predicted_label"]
+
+
+def test_evaluation_inference_outputs_are_not_review_candidates(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        ModelService,
+        "_provider_for_purpose",
+        lambda self, purpose: FakeDetectorRegistrationProvider(),
+    )
+    monkeypatch.setattr(
+        inference_module,
+        "detection_provider_for_name",
+        lambda provider_name: FakeDetectorWorkerProvider(),
+    )
+
+    project = create_project(client)
+    image_id = import_one(client, project["id"])["successful"][0]["image_id"]
+    model = register_model(
+        client,
+        project["id"],
+        purpose="detector",
+        filename="fixture-detector.pt",
+        display_name="Fixture Detector",
+    )
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        job = Job(
+            project_id=project["id"],
+            job_type="inference",
+            status="queued",
+            progress_total=1,
+            request_json={
+                "model_id": model["id"],
+                "image_ids": [image_id],
+                "device": "cpu",
+                "confidence_threshold": 0.001,
+                "iou_threshold": 0.5,
+                "evaluation_only": True,
+            },
+        )
+        session.add(job)
+        session.commit()
+        job_id = job.id
+
+    assert process_inference_job(app.state.settings, app.state.session_factory, job_id)
+    response = client.get(f"/api/v1/images/{image_id}/prediction-proposals?review_status=pending")
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+    with app.state.session_factory() as session:
+        stored = session.scalar(
+            select(PredictionProposal).where(PredictionProposal.inference_job_id == job_id)
+        )
+        assert stored is not None
+        assert stored.review_status == "evaluation_only"
+        assert stored.provenance_json["evaluation_only"] is True
 
 
 def test_rejecting_a_prediction_does_not_create_an_annotation(

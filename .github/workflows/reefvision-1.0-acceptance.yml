@@ -19,7 +19,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: python -m pip install --upgrade pip
-      - run: python -m pip install -e ".[dev]"
+      - run: python -m pip install -e ".[dev,interoperability]"
       - name: Ruff
         run: python -m ruff check apps/api
       - name: Ruff format
@@ -128,6 +128,9 @@ jobs:
       - name: Bootstrap desktop build environment
         shell: pwsh
         run: .\scripts\bootstrap.ps1
+      - name: Stage pinned Video Depth Anything source
+        shell: pwsh
+        run: ./.venv/Scripts/python.exe scripts/install-video-depth-anything-source.py
       - name: Build and verify ReefVision MSI
         shell: pwsh
         run: .\scripts\build-desktop.ps1 -TargetTriple x86_64-pc-windows-msvc
@@ -148,6 +151,124 @@ jobs:
           if-no-files-found: error
           path: apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/**
 
+  sam2-live-acceptance:
+    name: SAM 2.1 real online checkpoint and prompted inference
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      REEFVISION_LIVE_SAM2_ACCEPTANCE: "1"
+      REEFVISION_ACCEPTANCE_REPORT_DIR: ${{ github.workspace }}/sam2-live-evidence
+      HF_HUB_OFFLINE: "0"
+      TRANSFORMERS_OFFLINE: "0"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      TOKENIZERS_PARALLELISM: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install SAM runtime dependencies matching proven live acceptance
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,advanced]"
+          python -m pip freeze | grep -E '^(torch|torchvision|transformers|huggingface.hub|hf.xet)='
+
+      - name: Execute real SAM model acquisition, CPU inference, and pending review evidence
+        run: >-
+          python -m pytest
+          apps/api/reefvision/tests/test_patch_101_live_sam2_acceptance.py
+          -q -s
+      - name: Upload source-runtime SAM acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reefvision-1.0.1-sam2-live-evidence
+          path: sam2-live-evidence/*.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  sam2-pinned-provider-acceptance:
+    name: SAM 2.1 Windows-pinned provider versions on CPU
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      REEFVISION_LIVE_SAM2_ACCEPTANCE: "1"
+      REEFVISION_ACCEPTANCE_REPORT_DIR: ${{ github.workspace }}/sam2-pinned-evidence
+      HF_HUB_OFFLINE: "0"
+      TRANSFORMERS_OFFLINE: "0"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      TOKENIZERS_PARALLELISM: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install exact Windows-pinned Transformers Hub and Xet runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e ".[dev,advanced]" -r requirements/advanced-providers-windows-py312.txt
+          python -m pip check
+          python -c "import importlib.metadata as m; expected={'transformers':'4.57.2','huggingface-hub':'0.36.0','hf-xet':'1.4.3'}; actual={k:m.version(k) for k in expected}; assert actual == expected, (actual,expected)"
+      - name: Real SAM 2.1 Tiny download and inference with production pinned versions
+        run: >-
+          python -m pytest
+          apps/api/reefvision/tests/test_patch_101_live_sam2_acceptance.py
+          -q -s
+      - name: Upload pinned SAM release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reefvision-1.0.1-sam2-pinned-provider-evidence
+          path: sam2-pinned-evidence/*.json
+          if-no-files-found: error
+          retention-days: 14
+
+  sam2-windows-native-acceptance:
+    name: SAM 2.1 real inference on native Windows Python 3.12
+    runs-on: windows-latest
+    timeout-minutes: 70
+    env:
+      REEFVISION_LIVE_SAM2_ACCEPTANCE: "1"
+      REEFVISION_ACCEPTANCE_REPORT_DIR: ${{ github.workspace }}/sam2-windows-native-evidence
+      HF_HUB_OFFLINE: "0"
+      TRANSFORMERS_OFFLINE: "0"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      TOKENIZERS_PARALLELISM: "false"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install Windows-pinned provider packages and CPU PyTorch
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e ".[dev,advanced]" -r requirements/advanced-providers-windows-py312.txt
+          python -m pip check
+          python -c "import importlib.metadata as m; expected={'transformers':'4.57.2','huggingface-hub':'0.36.0','hf-xet':'1.4.3'}; actual={k:m.version(k) for k in expected}; assert actual == expected, (actual,expected)"
+      - name: Download actual SAM 2.1 Tiny and run prompted inference on Windows CPU
+        shell: pwsh
+        run: >-
+          python -m pytest
+          apps/api/reefvision/tests/test_patch_101_live_sam2_acceptance.py
+          -q -s
+      - name: Preserve native Windows SAM inference evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reefvision-1.0.1-sam2-windows-native-evidence
+          path: sam2-windows-native-evidence/*.json
+          if-no-files-found: warn
+          retention-days: 14
+
   release-gate:
     name: ReefVision 1.0 software gate
     runs-on: ubuntu-latest
@@ -155,6 +276,9 @@ jobs:
       - backend-and-science
       - frontend
       - windows-installer
+      - sam2-live-acceptance
+      - sam2-pinned-provider-acceptance
+      - sam2-windows-native-acceptance
     steps:
       - run: |
           echo "ReefVision 1.0 automated software acceptance passed."

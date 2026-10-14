@@ -215,7 +215,7 @@ class TrainingService:
         return self._draft_response(self._draft(draft_id))
 
     def create_draft(
-        self, project_id: str, payload: TrainingDraftWriteRequest
+        self, project_id: str, payload: TrainingDraftWriteRequest, *, commit: bool = True
     ) -> TrainingDraftResponse:
         project = self._project(project_id)
         draft = TrainingDraft(
@@ -251,7 +251,10 @@ class TrainingService:
             mode="json"
         )
         self.training.add_draft(draft)
-        self.session.commit()
+        if commit:
+            self.session.commit()
+        else:
+            self.session.flush()
         self.session.refresh(draft)
         return self._draft_response(draft)
 
@@ -517,7 +520,9 @@ class TrainingService:
             self._merged_tiling_config(payload.tiling_config),
         )
 
-    def create_run(self, project_id: str, payload: TrainingRunCreateRequest) -> TrainingRunResponse:
+    def create_run(
+        self, project_id: str, payload: TrainingRunCreateRequest, *, commit: bool = True
+    ) -> TrainingRunResponse:
         draft = self._draft(payload.draft_id)
         if draft.project_id != project_id:
             raise ValidationError("Training drafts must belong to the selected project")
@@ -583,7 +588,10 @@ class TrainingService:
         self.jobs.add(job)
         self.session.flush()
         run.job_id = job.id
-        self.session.commit()
+        if commit:
+            self.session.commit()
+        else:
+            self.session.flush()
         self.session.refresh(run)
         return self._run_response(run)
 

@@ -7,11 +7,13 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
+from reefvision.schemas.mask_refinements import MaskRefinementGeometryRequest
 from reefvision.schemas.predictions import (
     PredictionAcceptRequest,
     PredictionBulkReviewRequest,
     PredictionBulkReviewResponse,
     PredictionListResponse,
+    PredictionProposalResponse,
     PredictionReviewResponse,
 )
 from reefvision.services.semantic_predictions import SemanticPredictionService
@@ -54,6 +56,16 @@ def get_prediction_mask(
         media_type="image/png",
         filename=f"{proposal_id}.png",
     )
+
+
+@router.put("/prediction-proposals/{proposal_id}/mask", response_model=PredictionProposalResponse)
+def edit_prediction_mask(
+    proposal_id: str,
+    payload: MaskRefinementGeometryRequest,
+    request: Request,
+    session: DbSession,
+) -> PredictionProposalResponse:
+    return service(request, session).edit_raster_mask(proposal_id, payload.mask_png_base64)
 
 
 @router.post(

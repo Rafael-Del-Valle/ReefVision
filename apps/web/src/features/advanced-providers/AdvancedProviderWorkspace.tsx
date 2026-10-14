@@ -1,10 +1,12 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { getProjectModelCatalog, type Project } from "../../api/client";
+import { getJob, getProjectModelCatalog, type Project } from "../../api/client";
 import {
   executeAdvancedProvider,
   getAdvancedProviderManifests,
+  getSam2Models,
+  installSam2Model,
   listAdvancedProviderImages,
   preflightAdvancedProvider,
 } from "./advancedProvidersApi";
@@ -32,7 +34,7 @@ function defaultPromptFields(
     };
   }
   if (providerId === "sam2") {
-    return { image_id: "", box: [0, 0, 100, 100] };
+    return { image_id: "", box: [0, 0, 100, 100], sam2_variant: "small" };
   }
   if (providerId === "smolvlm") {
     return {
@@ -65,6 +67,53 @@ export function AdvancedProviderWorkspace({
   const [device, setDevice] = useState("auto");
   const [promptFields, setPromptFields] = useState<Record<string, unknown>>({});
   const [rawJson, setRawJson] = useState("{}");
+  const [sam2Variant, setSam2Variant] = useState("small");
+  const autoInstallAttempted = useRef(new Set<string>());
+  const [sam2InstallJobId, setSam2InstallJobId] = useState<string | null>(null);
+  const sam2Models = useQuery({
+    queryKey: ["sam2-models", project.id],
+    queryFn: ({ signal }) => getSam2Models(project.id, signal),
+    enabled: providerId === "sam2",
+    refetchInterval: sam2InstallJobId ? 2500 : false,
+  });
+  const sam2Install = useMutation({
+    mutationFn: () => installSam2Model(project.id, sam2Variant),
+    onSuccess: (job) => setSam2InstallJobId(job.id),
+  });
+  const sam2InstallJob = useQuery({
+    queryKey: ["sam2-install-job", sam2InstallJobId],
+    queryFn: () => getJob(sam2InstallJobId!),
+    enabled: Boolean(sam2InstallJobId),
+    refetchInterval: (query) =>
+      ["succeeded", "failed", "cancelled"].includes(
+        query.state.data?.status ?? "",
+      )
+        ? false
+        : 1250,
+  });
+  const selectedSam2Model = sam2Models.data?.find(
+    (item) => item.variant === sam2Variant,
+  );
+  const sam2Ready = Boolean(selectedSam2Model?.ready);
+
+  useEffect(() => {
+    if (
+      providerId !== "sam2" ||
+      !selectedSam2Model ||
+      selectedSam2Model.installed ||
+      sam2Install.isPending ||
+      autoInstallAttempted.current.has(sam2Variant)
+    )
+      return;
+    autoInstallAttempted.current.add(sam2Variant);
+    sam2Install.mutate();
+  }, [
+    providerId,
+    sam2Variant,
+    selectedSam2Model,
+    sam2Install.isPending,
+    sam2Install.mutate,
+  ]);
 
   const manifestsQuery = useQuery({
     queryKey: ["advanced-provider-manifests"],
@@ -99,7 +148,10 @@ export function AdvancedProviderWorkspace({
     [managedCatalogId, modelCatalogQuery.data?.models],
   );
   const managedModelReady =
-    managedCatalogId == null || managedModel?.installation_state === "Ready";
+    providerId === "sam2"
+      ? sam2Ready
+      : managedCatalogId == null ||
+        managedModel?.installation_state === "Ready";
 
   useEffect(() => {
     const preferred = manifestsQuery.data?.find(
@@ -117,12 +169,13 @@ export function AdvancedProviderWorkspace({
       : firstTask;
     if (nextTask !== task) setTask(nextTask);
     const nextFields = defaultPromptFields(providerId, nextTask);
+    if (providerId === "sam2") nextFields.sam2_variant = sam2Variant;
     const firstImage = imagesQuery.data?.[0];
     if ("image_id" in nextFields && firstImage)
       nextFields.image_id = firstImage.id;
     setPromptFields(nextFields);
     setRawJson(JSON.stringify(nextFields, null, 2));
-  }, [imagesQuery.data, providerId, selectedManifest, task]);
+  }, [imagesQuery.data, providerId, selectedManifest, task, sam2Variant]);
 
   function updateField(name: string, value: unknown) {
     setPromptFields((current) => {
@@ -164,8 +217,8 @@ export function AdvancedProviderWorkspace({
           <h3>Advanced Provider Lab</h3>
           <p>
             Run optional vision providers through a guided, fail-closed
-            workflow. Register a compatible local checkpoint before using a
-            provider. This workspace never downloads weights.
+            workflow. SAM 2.1 supports explicitly approved model installation;
+            other providers continue to require compatible local checkpoints.
           </p>
         </div>
       </div>
@@ -219,7 +272,72 @@ export function AdvancedProviderWorkspace({
                   : "This provider remains documented/preflight-only."}
             </p>
           )}
-          {managedCatalogId && (
+          {providerId === "sam2" && (
+            <div className="annotation-selection-list">
+              <label>
+                SAM 2.1 checkpoint size
+                <select
+                  aria-label="SAM 2.1 model size"
+                  value={sam2Variant}
+                  onChange={(event) => {
+                    setSam2Variant(event.target.value);
+                    setSam2InstallJobId(null);
+                  }}
+                >
+                  <option value="tiny">Hiera Tiny</option>
+                  <option value="small">Hiera Small</option>
+                  <option value="base-plus">Hiera Base+</option>
+                  <option value="large">
+                    Hiera Large (more VRAM required)
+                  </option>
+                </select>
+              </label>
+              <p>
+                {selectedSam2Model?.ready
+                  ? "Installed and verified"
+                  : selectedSam2Model?.installed
+                    ? "Checkpoint cached; runtime unavailable"
+                    : (selectedSam2Model?.reason ?? "Checking installation...")}
+              </p>
+              <p className="annotation-helper">
+                SAM 2.1 model weights are automatically downloaded and cached
+                when you select a size. No approval dialog is required. Meta's
+                Apache-2.0 source, revision, and SHA-256 are recorded. Large
+                models can require substantial disk space and bandwidth.
+              </p>
+              <button
+                type="button"
+                disabled={
+                  Boolean(selectedSam2Model?.installed) ||
+                  sam2Install.isPending ||
+                  ["queued", "running"].includes(
+                    sam2InstallJob.data?.status ?? "",
+                  )
+                }
+                onClick={() => sam2Install.mutate()}
+              >
+                {sam2Ready ? "SAM 2.1 ready" : "Retry SAM 2.1 download"}
+              </button>
+              {sam2InstallJob.data && (
+                <p role="status">
+                  Installation: {sam2InstallJob.data.status} ·
+                  {sam2InstallJob.data.progress_current.toLocaleString()} /
+                  {sam2InstallJob.data.progress_total.toLocaleString()}{" "}
+                  bytes/files
+                </p>
+              )}
+              {(sam2Install.error ||
+                sam2InstallJob.error ||
+                sam2InstallJob.data?.error_message) && (
+                <p className="form-error">
+                  {sam2Install.error?.message ||
+                    sam2InstallJob.error?.message ||
+                    sam2InstallJob.data?.error_message}
+                </p>
+              )}
+            </div>
+          )}
+          {managedCatalogId && providerId !== "sam2" && (
             <div className="annotation-selection-list">
               <div className="annotation-selection-row">
                 <strong>Model Hub checkpoint</strong>
@@ -245,6 +363,7 @@ export function AdvancedProviderWorkspace({
             </div>
           )}
           {managedCatalogId &&
+            providerId !== "sam2" &&
             !managedModelReady &&
             !modelCatalogQuery.isPending && (
               <p className="form-error" role="alert">
@@ -252,7 +371,7 @@ export function AdvancedProviderWorkspace({
                 feature. Automatic weight downloads are disabled.
               </p>
             )}
-          {managedCatalogId && managedModelReady && (
+          {managedCatalogId && providerId !== "sam2" && managedModelReady && (
             <p className="annotation-helper">
               Ready · using the verified Model Hub checkpoint.
             </p>

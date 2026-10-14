@@ -44,11 +44,11 @@ $BundledRuntimeLibraries = foreach ($library in $RequiredRuntimeLibraries) {
     }
 }
 
-$OutputRoot = Join-Path $Root ".desktop\release-1.0.0\pyinstaller\$TargetTriple"
+$OutputRoot = Join-Path $Root ".desktop\release-1.0.1\pyinstaller\$TargetTriple"
 $DistPath = Join-Path $OutputRoot "dist"
 $WorkPath = Join-Path $OutputRoot "work"
 $SpecPath = Join-Path $OutputRoot "spec"
-$BinariesPath = Join-Path $Root ".desktop\release-1.0.0\backend"
+$BinariesPath = Join-Path $Root ".desktop\release-1.0.1\backend"
 $PackagedBackendPath = Join-Path $BinariesPath "reefvision-api"
 $ProviderRuntimePath = Join-Path $Root ".desktop\provider-runtime"
 $VdaRuntimeRoot = Join-Path $ProviderRuntimePath "video-depth-anything"
@@ -160,6 +160,7 @@ $CollectedProviderPackages = @(
     "thop",
     "transformers",
     "huggingface_hub",
+    "hf_xet",
     "tokenizers",
     "safetensors",
     "sentencepiece",
@@ -187,6 +188,7 @@ $ProviderMetadataPackages = @(
     "segment-anything",
     "transformers",
     "huggingface-hub",
+    "hf-xet",
     "tokenizers",
     "safetensors",
     "sentencepiece",
@@ -431,7 +433,7 @@ try {
     }
 
     Write-ReefVisionStep "Checking optional AI provider dependencies before packaging"
-    & $VenvPython -c "import importlib.metadata as m; expected={'transformers':'4.57.2','huggingface-hub':'0.36.0','tokenizers':'0.22.1','safetensors':'0.7.0','sentencepiece':'0.2.1'}; actual={k:m.version(k) for k in expected}; bad={k:(expected[k],actual[k]) for k in expected if actual[k] != expected[k]}; assert not bad, f'advanced provider version mismatch: {bad}'; import transformers, huggingface_hub, tokenizers, safetensors, sentencepiece; print('Advanced provider packaging runtime OK:', actual)"
+    & $VenvPython -c "import importlib.metadata as m; expected={'transformers':'4.57.2','huggingface-hub':'0.36.0','hf-xet':'1.4.3','tokenizers':'0.22.1','safetensors':'0.7.0','sentencepiece':'0.2.1'}; actual={k:m.version(k) for k in expected}; bad={k:(expected[k],actual[k]) for k in expected if actual[k] != expected[k]}; assert not bad, f'advanced provider version mismatch: {bad}'; import transformers, huggingface_hub, tokenizers, safetensors, sentencepiece; print('Advanced provider packaging runtime OK:', actual)"
     if ($LASTEXITCODE -ne 0) {
         throw "Pinned advanced-provider runtime preflight failed. Rerun .\scripts\bootstrap.ps1."
     }
@@ -540,11 +542,11 @@ if (Test-Path $TorchLibPath -PathType Container) {
 
 if (Test-Path $PackagedBackendPath) {
     $ResolvedBackendPath = [System.IO.Path]::GetFullPath($PackagedBackendPath)
-    $ExpectedBackendPath = [System.IO.Path]::GetFullPath((Join-Path $Root ".desktop\release-1.0.0\backend\reefvision-api"))
+    $ExpectedBackendPath = [System.IO.Path]::GetFullPath((Join-Path $Root ".desktop\release-1.0.1\backend\reefvision-api"))
     if ($ResolvedBackendPath -ne $ExpectedBackendPath) { throw "Unsafe backend staging path: $ResolvedBackendPath" }
     # Preserve prior staged files rather than deleting a possible researcher model.
     # Keep preserved builds outside the Tauri resource directory.
-    $ArchiveRoot = Join-Path $Root ".desktop\release-1.0.0\previous-backends"
+    $ArchiveRoot = Join-Path $Root ".desktop\release-1.0.1\previous-backends"
     New-Item -ItemType Directory -Path $ArchiveRoot -Force | Out-Null
     $ArchiveDestination = Join-Path $ArchiveRoot ([Guid]::NewGuid().ToString('N'))
     $ResolvedArchive = [System.IO.Path]::GetFullPath($ArchiveDestination)

@@ -14,6 +14,7 @@ import {
 import {
   acceptAssistSession,
   acceptPrediction,
+  cancelJob,
   boxAssistSession,
   bulkReviewPredictions,
   createAssistSession,
@@ -29,6 +30,7 @@ import {
   getProjectModelCatalog,
   imageDisplayUrl,
   imageThumbnailUrl,
+  predictionMaskUrl,
   rejectPrediction,
   saveAnnotations,
   saveClassVisibilityPreference,
@@ -84,6 +86,20 @@ import {
   PredictionInspector,
   type ReviewedPredictionGeometry,
 } from "./PredictionInspector";
+import { QuickConfidenceReviewDialog } from "../review-queues/QuickConfidenceReviewDialog";
+import {
+  executeAdvancedProvider,
+  getSam2Models,
+  installSam2Model,
+} from "../advanced-providers/advancedProvidersApi";
+
+import {
+  createSamImageProposals,
+  intelligenceRequest,
+} from "./annotationIntelligenceApi";
+import { useMaskRefinement } from "./useMaskRefinement";
+import { PendingMaskEditor } from "./PendingMaskEditor";
+import { ImprovePredictionsPanel } from "./ImprovePredictionsPanel";
 
 interface AnnotationEditorProps {
   project: Project;
@@ -289,6 +305,23 @@ export function AnnotationEditor({
   );
   const [deployModelId, setDeployModelId] = useState("");
   const [deployConfidence, setDeployConfidence] = useState("0.25");
+  const [quickReviewConfidence, setQuickReviewConfidence] = useState("50");
+  const [quickReviewOpen, setQuickReviewOpen] = useState(false);
+  const [editProposalId, setEditProposalId] = useState<string | null>(null);
+  const [learningOpen, setLearningOpen] = useState(false);
+  const [samPromptArmed, setSamPromptArmed] = useState(false);
+  const [samModelVariant, setSamModelVariant] = useState("small");
+  const [samPendingBox, setSamPendingBox] = useState<{
+    imageId: string;
+    variant: string;
+    box: [number, number, number, number];
+  } | null>(null);
+  const [samInstallJobId, setSamInstallJobId] = useState<string | null>(null);
+  const [samReviewProposalId, setSamReviewProposalId] = useState<string | null>(
+    null,
+  );
+  const [isolateSamReview, setIsolateSamReview] = useState(true);
+  const [shortcutMessage, setShortcutMessage] = useState<string | null>(null);
   const [deployDevice, setDeployDevice] = useState("auto");
   const [deployJobId, setDeployJobId] = useState<string | null>(null);
   const completedDeployJobRef = useRef<string | null>(null);
@@ -348,6 +381,21 @@ export function AnnotationEditor({
     queryKey: ["models", project.id, "detector"],
     queryFn: () => getModels(project.id, "detector"),
   });
+  const activeDetectorModelId =
+    detectorModels.data?.find(
+      (model) => model.metadata_json.active_for_predictions === true,
+    )?.id ?? "";
+  const samInstallJobQuery = useQuery({
+    queryKey: ["job", samInstallJobId],
+    queryFn: ({ signal }) => getJob(samInstallJobId as string, signal),
+    enabled: samInstallJobId !== null,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status && ["succeeded", "failed", "cancelled"].includes(status)
+        ? false
+        : 1000;
+    },
+  });
   const deployJobQuery = useQuery({
     queryKey: ["job", deployJobId],
     queryFn: ({ signal }) => getJob(deployJobId as string, signal),
@@ -392,7 +440,10 @@ export function AnnotationEditor({
 
   useEffect(() => {
     if (!deployModelId && detectorModels.data?.[0]) {
-      setDeployModelId(detectorModels.data[0].id);
+      const active = detectorModels.data.find(
+        (model) => model.metadata_json.active_for_predictions === true,
+      );
+      setDeployModelId((active ?? detectorModels.data[0]).id);
     }
   }, [deployModelId, detectorModels.data]);
 
@@ -417,6 +468,7 @@ export function AnnotationEditor({
     }
     dispatch({ type: "loadSession", session });
     loadedImageIdRef.current = session.image.id;
+    setSamReviewProposalId(null);
     setHideAnnotations(false);
     setSelectedPredictionIds([]);
     setPredictionGeometryOverrides({});
@@ -754,6 +806,18 @@ export function AnnotationEditor({
           (proposal) => proposal.id === selectedPredictionIds[0],
         ) ?? null)
       : null;
+  const samReviewProposal = samReviewProposalId
+    ? (allPredictions.find((proposal) => proposal.id === samReviewProposalId) ??
+      null)
+    : null;
+  useEffect(() => {
+    if (
+      selectedPrediction?.geometry_kind === "raster_mask" &&
+      selectedPrediction.review_status === "pending"
+    ) {
+      setSamReviewProposalId(selectedPrediction.id);
+    } else if (selectedPrediction) setSamReviewProposalId(null);
+  }, [selectedPrediction?.id, selectedPrediction?.review_status]);
   const selectedPredictionPosition = selectedPrediction
     ? visiblePredictions.findIndex(
         (proposal) => proposal.id === selectedPrediction.id,
@@ -931,13 +995,153 @@ export function AnnotationEditor({
     });
   }, [currentImageId, deployJobQuery.data, queryClient]);
 
+  const fullImageMutation = useMutation({
+    mutationFn: () =>
+      createSamImageProposals(
+        project.id,
+        currentImageId,
+        samModelVariant,
+        deployDevice,
+      ),
+    onSuccess: (job) => {
+      completedDeployJobRef.current = null;
+      setDeployJobId(job.id);
+      localStorage.setItem(
+        `reefvision-image-predictions:${currentImageId}`,
+        job.id,
+      );
+      setShowPredictions(true);
+      setPredictionModelFilter("");
+      setPredictionClassFilter("");
+      setPredictionConfidenceFilter("0");
+      setPredictionStatusFilter("pending");
+      setShortcutMessage(
+        "Generating class-agnostic SAM proposals across the image. Proposals remain unverified until accepted.",
+      );
+    },
+    onError: (error: Error) => setShortcutMessage(error.message),
+  });
+  const cancelImageMutation = useMutation({
+    mutationFn: () => cancelJob(deployJobId!),
+    onSuccess: () => {
+      void deployJobQuery.refetch();
+    },
+  });
+  useEffect(() => {
+    setDeployJobId(
+      localStorage.getItem(`reefvision-image-predictions:${currentImageId}`),
+    );
+    setSamReviewProposalId(null);
+    setEditProposalId(null);
+  }, [currentImageId]);
+
+  const samInstallMutation = useMutation({
+    mutationFn: (variant: string) => installSam2Model(project.id, variant),
+    onSuccess: (job) => {
+      setSamInstallJobId(job.id);
+      setShortcutMessage(
+        "SAM 2.1 is downloading. Your segmentation prompt is queued.",
+      );
+    },
+    onError: (error: Error) => setShortcutMessage(error.message),
+  });
+  const samAssistMutation = useMutation({
+    mutationFn: async (input: {
+      imageId: string;
+      variant: string;
+      box: [number, number, number, number];
+    }) => {
+      const installed = (await getSam2Models(project.id)).find(
+        (item) => item.variant === input.variant,
+      );
+      if (!installed?.ready) {
+        if (installed?.installed) {
+          throw new Error(installed.reason ?? "SAM runtime is not ready.");
+        }
+        setSamPendingBox(input);
+        if (!samInstallJobId && !samInstallMutation.isPending) {
+          samInstallMutation.mutate(input.variant);
+        }
+        return null;
+      }
+      return executeAdvancedProvider(project.id, "sam2", {
+        task: "assist_segmentation",
+        device: "auto",
+        allow_model_download: false,
+        prompt_fields: {
+          image_id: input.imageId,
+          sam2_variant: input.variant,
+          box: input.box,
+        },
+      });
+    },
+    onSuccess: async (result, input) => {
+      if (!result) return;
+      if (currentImageIdRef.current !== input.imageId) return;
+      setSamPendingBox(null);
+      setSamInstallJobId(null);
+      setSamPromptArmed(false);
+      setShortcutMessage(
+        "SAM mask created as a pending proposal. Review and accept it.",
+      );
+      setShowPredictions(true);
+      setPredictionModelFilter("");
+      setPredictionClassFilter("");
+      setPredictionConfidenceFilter("0");
+      setPredictionStatusFilter("pending");
+      const proposalId = result.result.proposal_id;
+      if (typeof proposalId === "string") {
+        setSamReviewProposalId(proposalId);
+        setIsolateSamReview(true);
+        setSelectedPredictionIds([proposalId]);
+      }
+      await queryClient.invalidateQueries({
+        queryKey: ["predictions", input.imageId],
+      });
+    },
+    onError: (error: Error) => {
+      setShortcutMessage(error.message);
+      setSamPendingBox(null);
+    },
+  });
+
+  useEffect(() => {
+    if (!samPendingBox || samInstallJobQuery.data?.status !== "succeeded")
+      return;
+    if (
+      samPendingBox.imageId !== currentImageId ||
+      samPendingBox.variant !== samModelVariant
+    ) {
+      setSamPendingBox(null);
+      setSamInstallJobId(null);
+      return;
+    }
+    samAssistMutation.mutate(samPendingBox);
+    // Job state changes only after the single background install completes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [samInstallJobQuery.data?.status]);
+
+  useEffect(() => {
+    if (
+      samInstallJobQuery.data?.status === "failed" ||
+      samInstallJobQuery.data?.status === "cancelled"
+    ) {
+      setShortcutMessage(
+        samInstallJobQuery.data.error_message ??
+          "SAM model download did not finish.",
+      );
+      setSamPendingBox(null);
+      setSamInstallJobId(null);
+    }
+  }, [samInstallJobQuery.data]);
+
   const deployModelMutation = useMutation({
-    mutationFn: () => {
-      if (!deployModelId) {
+    mutationFn: (modelId: string) => {
+      if (!modelId) {
         throw new Error("Choose a trained or imported project model first");
       }
       return createInferenceJob(project.id, {
-        model_id: deployModelId,
+        model_id: modelId,
         image_ids: [currentImageId],
         confidence_threshold: Number(deployConfidence),
         device: deployDevice,
@@ -946,6 +1150,10 @@ export function AnnotationEditor({
     onSuccess: (job) => {
       completedDeployJobRef.current = null;
       setDeployJobId(job.id);
+      localStorage.setItem(
+        `reefvision-image-predictions:${currentImageId}`,
+        job.id,
+      );
     },
   });
 
@@ -969,8 +1177,12 @@ export function AnnotationEditor({
   );
 
   const acceptPredictionMutation = useMutation({
-    mutationFn: (proposal: PredictionProposal) =>
-      acceptPrediction(proposal.id, {
+    mutationFn: (proposal: PredictionProposal) => {
+      if (isDirty(stateRef.current))
+        throw new Error(
+          "Save your annotation edits before accepting predictions.",
+        );
+      return acceptPrediction(proposal.id, {
         label_class_id:
           predictionClassOverrides[proposal.id] ||
           proposal.label_class_id ||
@@ -981,8 +1193,10 @@ export function AnnotationEditor({
           x_max: proposal.x_max,
           y_max: proposal.y_max,
         }),
-      }),
+      });
+    },
     onSuccess: async (_, proposal) => {
+      if (samReviewProposalId === proposal.id) setSamReviewProposalId(null);
       const oldIndex = visiblePredictions.findIndex(
         (item) => item.id === proposal.id,
       );
@@ -1070,6 +1284,7 @@ export function AnnotationEditor({
   const rejectPredictionMutation = useMutation({
     mutationFn: (proposalId: string) => rejectPrediction(proposalId),
     onSuccess: async (_, proposalId) => {
+      if (samReviewProposalId === proposalId) setSamReviewProposalId(null);
       const oldIndex = visiblePredictions.findIndex(
         (item) => item.id === proposalId,
       );
@@ -1083,21 +1298,49 @@ export function AnnotationEditor({
     },
   });
   const bulkReviewMutation = useMutation({
-    mutationFn: (action: "accept" | "reject") =>
-      bulkReviewPredictions({
+    mutationFn: ({
+      action,
+      selected,
+    }: {
+      action: "accept" | "reject";
+      selected: boolean;
+    }) => {
+      if (action === "accept" && isDirty(stateRef.current))
+        throw new Error(
+          "Save your annotation edits before accepting predictions.",
+        );
+      const proposals = visiblePredictions.filter(
+        (proposal) => !selected || selectedPredictionIds.includes(proposal.id),
+      );
+      const unlabeled = proposals.some((proposal) => !proposal.label_class_id);
+      if (action === "accept" && unlabeled && !activeClassId)
+        throw new Error(
+          "Choose a class before accepting class-agnostic proposals.",
+        );
+      if (
+        action === "accept" &&
+        unlabeled &&
+        proposals.some((proposal) => proposal.label_class_id)
+      )
+        throw new Error(
+          "Review class-agnostic and class-aware proposals separately to preserve their classes.",
+        );
+      return bulkReviewPredictions({
         action,
-        proposal_ids:
-          selectedPredictionIds.length > 0
-            ? selectedPredictionIds
-            : visiblePredictions.map((proposal) => proposal.id),
-      }),
-    onSuccess: async (_, action) => {
+        proposal_ids: proposals.map((proposal) => proposal.id),
+        ...(action === "accept" && unlabeled
+          ? { label_class_id: activeClassId! }
+          : {}),
+      });
+    },
+    onSuccess: async (_, { action }) => {
       await Promise.all([
         predictionQuery.refetch(),
         action === "accept" ? sessionQuery.refetch() : Promise.resolve(),
         queryClient.invalidateQueries({ queryKey: ["images", project.id] }),
       ]);
       setSelectedPredictionIds([]);
+      setSamReviewProposalId(null);
     },
   });
 
@@ -1355,9 +1598,100 @@ export function AnnotationEditor({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, []);
 
+  const runSamOnBox = useCallback(
+    (box: { x_min: number; y_min: number; x_max: number; y_max: number }) => {
+      if (samAssistMutation.isPending) {
+        setShortcutMessage("A SAM segmentation is already running.");
+        return;
+      }
+      const prompt: [number, number, number, number] = [
+        box.x_min,
+        box.y_min,
+        box.x_max,
+        box.y_max,
+      ];
+      if (prompt[2] <= prompt[0] || prompt[3] <= prompt[1]) {
+        setShortcutMessage("Draw a non-empty box for SAM segmentation.");
+        return;
+      }
+      setSamPromptArmed(false);
+      setShortcutMessage("Running SAM 2.1 segmentation...");
+      samAssistMutation.mutate({
+        imageId: currentImageId,
+        variant: samModelVariant,
+        box: prompt,
+      });
+    },
+    [currentImageId, samModelVariant, samAssistMutation],
+  );
+
+  const refinement = useMaskRefinement({
+    imageId: currentImageId,
+    variant: samModelVariant,
+    device: deployDevice,
+    selectedMasks: state.document.maskAnnotations.filter((mask) =>
+      state.selectedMaskIds.includes(mask.id),
+    ),
+    boxSelectionCount: state.selectedIds.length,
+    dirty,
+    imageWidth: sessionQuery.data?.image.width_px ?? 1,
+    imageHeight: sessionQuery.data?.image.height_px ?? 1,
+    message: setShortcutMessage,
+    refresh: async () => {
+      await sessionQuery.refetch();
+      await queryClient.invalidateQueries({ queryKey: ["images", project.id] });
+    },
+  });
+  const imagePredictionBusy =
+    fullImageMutation.isPending ||
+    deployModelMutation.isPending ||
+    ["queued", "running", "cancel_requested"].includes(
+      deployJobQuery.data?.status ?? "",
+    );
+  const predictImage = () => {
+    if (imagePredictionBusy) {
+      setShortcutMessage("Image predictions are already running.");
+      return;
+    }
+    if (dirty) {
+      setShortcutMessage(
+        "Save your annotation edits before generating predictions.",
+      );
+      return;
+    }
+    setShowPredictions(true);
+    if (activeDetectorModelId)
+      deployModelMutation.mutate(activeDetectorModelId);
+    else fullImageMutation.mutate();
+  };
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isEditableTarget(event.target)) {
+        return;
+      }
+
+      // Shift+Digit1/2 are editor actions, while plain 1–9 still choose classes.
+      if (
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        event.code === "Digit1"
+      ) {
+        event.preventDefault();
+        predictImage();
+        return;
+      }
+      if (
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        event.code === "Digit2"
+      ) {
+        event.preventDefault();
+        refinement.start();
         return;
       }
 
@@ -1456,6 +1790,18 @@ export function AnnotationEditor({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     applyClassToSelection,
+    currentImageId,
+    activeDetectorModelId,
+    deployModelMutation,
+    predictImage,
+    refinement,
+    deployJobQuery.data?.status,
+    samAssistMutation,
+    samInstallMutation.isPending,
+    samPendingBox,
+    samModelVariant,
+    state.document.annotations,
+    state.selectedIds,
     deleteSelection,
     fitToScreen,
     flushPendingSave,
@@ -1519,7 +1865,9 @@ export function AnnotationEditor({
           currentInteraction.current,
           imageSize,
         );
-        if (activeClassId) {
+        if (samPromptArmed) {
+          runSamOnBox(box);
+        } else if (activeClassId) {
           const annotation: EditorAnnotation = {
             id: makeAnnotationId(),
             label_class_id: activeClassId,
@@ -1577,7 +1925,14 @@ export function AnnotationEditor({
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
     };
-  }, [activeClassId, commitDocument, imageSize, interaction]);
+  }, [
+    activeClassId,
+    commitDocument,
+    imageSize,
+    interaction,
+    samPromptArmed,
+    runSamOnBox,
+  ]);
 
   const navigateToImage = useCallback(
     async (imageId: string | null) => {
@@ -1631,7 +1986,7 @@ export function AnnotationEditor({
         !imageSize ||
         event.button === 1 ||
         event.button === 2 ||
-        state.tool === "pan"
+        (state.tool === "pan" && !samPromptArmed)
       ) {
         if (currentView) {
           setInteraction({
@@ -1653,7 +2008,7 @@ export function AnnotationEditor({
         currentView,
       );
 
-      if (state.tool === "box" && activeClassId) {
+      if (samPromptArmed || (state.tool === "box" && activeClassId)) {
         setSelection([]);
         setMaskSelection([]);
         setInteraction({
@@ -1671,6 +2026,7 @@ export function AnnotationEditor({
       activeClassId,
       currentView,
       imageSize,
+      samPromptArmed,
       setMaskSelection,
       setSelection,
       state.tool,
@@ -1912,6 +2268,63 @@ export function AnnotationEditor({
           <button
             type="button"
             className="secondary"
+            onClick={() => setQuickReviewOpen(true)}
+            title="Open a floating low-confidence prediction reviewer"
+          >
+            Quick review (≤{quickReviewConfidence}%)
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={
+              samAssistMutation.isPending || samInstallMutation.isPending
+            }
+            title="Segment one selected box, or draw a SAM prompt box"
+            onClick={() => {
+              const box = state.document.annotations.find((annotation) =>
+                state.selectedIds.includes(annotation.id),
+              );
+              if (box) runSamOnBox(box);
+              else {
+                setSamPromptArmed(true);
+                setShortcutMessage(
+                  "SAM prompt mode: draw a box around an object.",
+                );
+              }
+            }}
+          >
+            SAM box prompt
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={imagePredictionBusy}
+            onClick={predictImage}
+          >
+            Predict objects in image (Shift+1)
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={refinement.busy || Boolean(refinement.reason)}
+            title={
+              refinement.reason ??
+              "Compare a proposed boundary before replacing this mask"
+            }
+            onClick={refinement.start}
+          >
+            Refine selected mask (Shift+2)
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setLearningOpen((value) => !value)}
+          >
+            Improve Predictions
+          </button>
+          <button
+            type="button"
+            className="secondary"
             onClick={() => void saveNow()}
           >
             Save now
@@ -2081,6 +2494,21 @@ export function AnnotationEditor({
               on this image. Grounding DINO and other prompted, open-vocabulary
               tools remain separate assist workflows.
             </p>
+            {!detectorModels.isPending && detectorModels.data?.length === 0 && (
+              <p className="annotation-helper" role="status">
+                No trained detector is registered for this project. Register a
+                local detector in Model Hub to run image-wide class-aware
+                inference. Use Predict objects in image for class-agnostic SAM
+                proposals. SAM masks do not train a detector from your edits
+                automatically.
+              </p>
+            )}
+            {detectorModels.isError && (
+              <p className="form-error" role="alert">
+                Could not load registered detectors:{" "}
+                {detectorModels.error.message}
+              </p>
+            )}
             <button
               type="button"
               disabled={
@@ -2089,7 +2517,7 @@ export function AnnotationEditor({
                 deployJobQuery.data?.status === "queued" ||
                 deployJobQuery.data?.status === "running"
               }
-              onClick={() => deployModelMutation.mutate()}
+              onClick={() => deployModelMutation.mutate(deployModelId)}
             >
               {deployModelMutation.isPending
                 ? "Queueing model..."
@@ -2108,6 +2536,38 @@ export function AnnotationEditor({
             {deployJobQuery.data?.error_message && (
               <p className="form-error">{deployJobQuery.data.error_message}</p>
             )}
+            <label>
+              Review predictions at or below confidence (%)
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                value={quickReviewConfidence}
+                onChange={(event) =>
+                  setQuickReviewConfidence(event.target.value)
+                }
+              />
+            </label>
+            <button
+              type="button"
+              className="secondary"
+              disabled={
+                quickReviewConfidence.trim() === "" ||
+                !Number.isFinite(Number(quickReviewConfidence)) ||
+                Number(quickReviewConfidence) < 0 ||
+                Number(quickReviewConfidence) > 100
+              }
+              onClick={() => setQuickReviewOpen(true)}
+            >
+              Quick-review predictions in popout
+            </button>
+            <p className="annotation-helper">
+              Only review model predictions at or below this percentage.
+              Higher-confidence predictions are skipped, not automatically
+              human-verified. Set deployment confidence low enough to retain
+              detections that you want reviewed (for example 0.05).
+            </p>
           </section>
 
           <section className="annotation-sidebar-section">
@@ -2201,18 +2661,42 @@ export function AnnotationEditor({
                   bulkReviewMutation.isPending
                 }
                 onClick={() => {
-                  const count =
-                    selectedPredictionIds.length || visiblePredictions.length;
+                  const count = visiblePredictions.length;
                   if (
                     window.confirm(
-                      `Accept ${count} pending predictions? Original model provenance will be preserved.`,
+                      `Accept ${count} visible pending predictions? Class-agnostic masks use the currently selected class. Original model provenance will be preserved.`,
                     )
                   ) {
-                    bulkReviewMutation.mutate("accept");
+                    bulkReviewMutation.mutate({
+                      action: "accept",
+                      selected: false,
+                    });
                   }
                 }}
               >
                 Accept visible
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={
+                  !selectedPredictionIds.length ||
+                  predictionStatusFilter !== "pending" ||
+                  bulkReviewMutation.isPending
+                }
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Accept ${selectedPredictionIds.length} selected pending predictions? Class-agnostic masks use the currently selected class.`,
+                    )
+                  )
+                    bulkReviewMutation.mutate({
+                      action: "accept",
+                      selected: true,
+                    });
+                }}
+              >
+                Accept selected
               </button>
               <button
                 type="button"
@@ -2223,14 +2707,16 @@ export function AnnotationEditor({
                   bulkReviewMutation.isPending
                 }
                 onClick={() => {
-                  const count =
-                    selectedPredictionIds.length || visiblePredictions.length;
+                  const count = visiblePredictions.length;
                   if (
                     window.confirm(
                       `Reject ${count} pending predictions? The prediction records will be preserved.`,
                     )
                   ) {
-                    bulkReviewMutation.mutate("reject");
+                    bulkReviewMutation.mutate({
+                      action: "reject",
+                      selected: false,
+                    });
                   }
                 }}
               >
@@ -2930,9 +3416,208 @@ export function AnnotationEditor({
               Next image (D)
             </button>
             <span>{dirty ? "Autosave pending" : "All changes synced"}</span>
+            {shortcutMessage && <span role="status">{shortcutMessage}</span>}
+            {samAssistMutation.error && (
+              <span role="alert">{samAssistMutation.error.message}</span>
+            )}
+            {samInstallMutation.error && (
+              <span role="alert">{samInstallMutation.error.message}</span>
+            )}
+            <label>
+              SAM 2.1 model
+              <select
+                aria-label="SAM 2.1 model for editor shortcuts"
+                value={samModelVariant}
+                onChange={(event) => {
+                  setSamModelVariant(event.target.value);
+                  setSamPendingBox(null);
+                  setSamInstallJobId(null);
+                }}
+              >
+                <option value="tiny">Tiny</option>
+                <option value="small">Small</option>
+                <option value="base-plus">Base+</option>
+                <option value="large">Large</option>
+              </select>
+            </label>
           </div>
 
+          {deployJobQuery.data && (
+            <section aria-label="Image prediction progress" role="status">
+              <span>
+                Image predictions: {deployJobQuery.data.status} ·{" "}
+                {deployJobQuery.data.progress_current}/
+                {deployJobQuery.data.progress_total}
+              </span>
+              {imagePredictionBusy && (
+                <button
+                  type="button"
+                  disabled={cancelImageMutation.isPending}
+                  onClick={() => cancelImageMutation.mutate()}
+                >
+                  Cancel image predictions
+                </button>
+              )}
+              {deployJobQuery.data.error_message && (
+                <p role="alert">{deployJobQuery.data.error_message}</p>
+              )}
+              {cancelImageMutation.error && (
+                <p role="alert">{cancelImageMutation.error.message}</p>
+              )}
+            </section>
+          )}
+          {fullImageMutation.error && (
+            <p role="alert">
+              {fullImageMutation.error.message} Choose or download a SAM 2.1
+              variant in Model Hub, then retry.
+            </p>
+          )}
+          {refinement.busy && (
+            <p role="status">
+              Processing mask refinement… The original is unchanged until
+              acceptance.
+            </p>
+          )}
           <div className="annotation-canvas-frame" ref={viewportRef}>
+            {learningOpen && (
+              <ImprovePredictionsPanel
+                projectId={project.id}
+                onClose={() => setLearningOpen(false)}
+              />
+            )}
+            {refinement.panel}
+            {samReviewProposalId && (
+              <section
+                className="sam-review-banner"
+                role="region"
+                aria-label="SAM mask proposal review"
+                data-testid="sam-proposal-review"
+              >
+                <strong>SAM mask is a proposal — not saved yet</strong>
+                <p>
+                  Review this outline before adding it to your annotations.
+                  Existing masks are unchanged until you accept.
+                </p>
+                {samReviewProposal ? (
+                  <>
+                    <label>
+                      Accept as class
+                      <select
+                        aria-label="Class for SAM mask"
+                        value={
+                          predictionClassOverrides[samReviewProposal.id] ??
+                          samReviewProposal.label_class_id ??
+                          activeClassId ??
+                          ""
+                        }
+                        onChange={(event) =>
+                          setPredictionClassOverrides((current) => ({
+                            ...current,
+                            [samReviewProposal.id]: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">Choose a class</option>
+                        {labelClasses
+                          .filter(
+                            (labelClass) => labelClass.is_active !== false,
+                          )
+                          .map((labelClass) => (
+                            <option key={labelClass.id} value={labelClass.id}>
+                              {labelClass.name}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <label className="sam-review-toggle">
+                      <input
+                        type="checkbox"
+                        checked={isolateSamReview}
+                        onChange={(event) =>
+                          setIsolateSamReview(event.target.checked)
+                        }
+                      />
+                      Hide existing masks while reviewing
+                    </label>
+                    <div className="annotation-editor-inline-actions">
+                      <button
+                        type="button"
+                        disabled={
+                          acceptPredictionMutation.isPending ||
+                          rejectPredictionMutation.isPending ||
+                          !(
+                            predictionClassOverrides[samReviewProposal.id] ||
+                            samReviewProposal.label_class_id ||
+                            activeClassId
+                          )
+                        }
+                        onClick={() =>
+                          acceptPredictionMutation.mutate(samReviewProposal)
+                        }
+                      >
+                        Accept SAM mask
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={
+                          acceptPredictionMutation.isPending ||
+                          rejectPredictionMutation.isPending
+                        }
+                        onClick={() =>
+                          rejectPredictionMutation.mutate(samReviewProposal.id)
+                        }
+                      >
+                        Reject SAM mask
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => setEditProposalId(samReviewProposal.id)}
+                      >
+                        Edit mask
+                      </button>
+                    </div>
+                    {editProposalId === samReviewProposal.id && (
+                      <PendingMaskEditor
+                        imageId={currentImageId}
+                        maskUrl={predictionMaskUrl(samReviewProposal.id)}
+                        width={image.width_px}
+                        height={image.height_px}
+                        onCancel={() => setEditProposalId(null)}
+                        onSave={async (png) => {
+                          await intelligenceRequest(
+                            `/prediction-proposals/${encodeURIComponent(samReviewProposal.id)}/mask`,
+                            { mask_png_base64: png },
+                            "PUT",
+                          );
+                          setEditProposalId(null);
+                          await predictionQuery.refetch();
+                        }}
+                      />
+                    )}
+                    {acceptPredictionMutation.error && (
+                      <p className="form-error" role="alert">
+                        {acceptPredictionMutation.error.message}
+                      </p>
+                    )}
+                    {rejectPredictionMutation.error && (
+                      <p className="form-error" role="alert">
+                        {rejectPredictionMutation.error.message}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p role="status">Loading SAM mask proposal for review...</p>
+                )}
+              </section>
+            )}
+            {samPromptArmed && (
+              <p className="annotation-helper" role="status">
+                SAM prompt ready: drag a bounding box around the object. Use SAM
+                box prompt to segment an existing selected box.
+              </p>
+            )}
             <svg
               ref={svgRef}
               className={`annotation-canvas tool-${state.tool}`}
@@ -2961,6 +3646,11 @@ export function AnnotationEditor({
                   fill="transparent"
                 />
                 {state.tool === "select" &&
+                  !(
+                    samReviewProposal &&
+                    isolateSamReview &&
+                    !refinement.pending
+                  ) &&
                   state.document.maskAnnotations.map((mask) => {
                     const labelClass = mask.label_class_id
                       ? labelClassesById.get(mask.label_class_id)
@@ -3013,6 +3703,7 @@ export function AnnotationEditor({
                       />
                     );
                   })}
+                {refinement.overlay}
                 {assistMaskHref && (
                   <image
                     href={assistMaskHref}
@@ -3042,6 +3733,14 @@ export function AnnotationEditor({
                     vectorEffect="non-scaling-stroke"
                   />
                 )}
+                <defs>
+                  <filter id="prediction-cyan">
+                    <feColorMatrix
+                      type="matrix"
+                      values="0 0 0 0 0.2  0 0 0 0 0.9  0 0 0 0 1  1 0 0 0 0"
+                    />
+                  </filter>
+                </defs>
                 {showPredictions &&
                   visiblePredictions.map((proposal) => {
                     const labelClass =
@@ -3056,6 +3755,20 @@ export function AnnotationEditor({
                     );
                     return (
                       <g key={`prediction-${proposal.id}`}>
+                        {proposal.geometry_kind === "raster_mask" && (
+                          <image
+                            href={`${predictionMaskUrl(proposal.id)}?sha=${proposal.mask_content_sha256 ?? ""}`}
+                            filter="url(#prediction-cyan)"
+                            x={0}
+                            y={0}
+                            width={image.width_px}
+                            height={image.height_px}
+                            opacity={selected ? 0.48 : 0.25}
+                            preserveAspectRatio="none"
+                            pointerEvents="none"
+                            data-testid={`proposal-mask-${proposal.id}`}
+                          />
+                        )}
                         <rect
                           x={proposal.x_min}
                           y={proposal.y_min}
@@ -3197,6 +3910,28 @@ export function AnnotationEditor({
           </div>
         </section>
       </div>
+      {quickReviewOpen && (
+        <QuickConfidenceReviewDialog
+          item={{
+            image_id: currentImageId,
+            project_id: project.id,
+            review_queue_id: "",
+            review_state: "pending",
+          }}
+          reviewBelowConfidence={Number(quickReviewConfidence) / 100}
+          position={1}
+          total={1}
+          onClose={() => setQuickReviewOpen(false)}
+          onPreviousImage={() => undefined}
+          onNextImage={() => undefined}
+          onReviewSaved={() => {
+            void Promise.all([
+              sessionQuery.refetch(),
+              predictionQuery.refetch(),
+            ]);
+          }}
+        />
+      )}
     </div>
   );
 }

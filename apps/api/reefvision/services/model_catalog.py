@@ -279,6 +279,30 @@ class ModelCatalogService:
             "installed_path": None,
             "installed_checksum": None,
         }
+        if entry.provider_id == "sam2" and entry.category == "provider_requirement":
+            from reefvision.services.sam2_install import sam2_status
+
+            variant = {
+                "sam2/image/base": "small",
+                "sam2/image/tiny": "tiny",
+                "sam2/image/base-plus": "base-plus",
+                "sam2/image/large": "large",
+            }.get(entry.catalog_id)
+            if variant is not None:
+                local_status = sam2_status(self.settings, variant)
+                updates.update(
+                    installation_state="Ready" if local_status["ready"] else "Model Required",
+                    installation_reason=(
+                        "Cached SAM 2.1 checkpoint is ready for inference"
+                        if local_status["ready"]
+                        else str(local_status["reason"])
+                    ),
+                    installed_path=local_status["path"] if local_status["ready"] else None,
+                    installed_checksum=local_status["weight_sha256"]
+                    if local_status["ready"]
+                    else None,
+                )
+                return entry.model_copy(update=updates)
         if entry.availability == "unavailable":
             updates.update(installation_state="Unavailable")
         elif entry.selection_kind == "builtin_architecture":

@@ -321,6 +321,7 @@ function stubCanvasRect(): void {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  localStorage.clear();
 });
 
 describe("AnnotationEditor", () => {
@@ -1228,5 +1229,590 @@ describe("AnnotationEditor", () => {
       expect(cached?.image.annotation_revision).toBe(3);
       expect(cached?.annotations[0].label_class_id).toBe("class-2");
     });
+  });
+
+  it("offers explicit in-canvas accept and reject for a new SAM raster mask", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    let created = false;
+    let accepted = false;
+    const samProposal = {
+      ...pendingProposal,
+      id: "sam-proposal-1",
+      geometry_kind: "raster_mask",
+      mask_path: "projects/project-1/prediction-masks/sam-proposal-1.png",
+      label_class_id: null,
+      predicted_label: "SAM 2 mask",
+      provenance_json: { provider_id: "sam2" },
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      calls.push({ url, init });
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse(session);
+      }
+      if (
+        url.includes(`/projects/${project.id}/sam2-models`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse([
+          {
+            variant: "small",
+            ready: true,
+            installed: true,
+            repo_id: "facebook/sam2.1-hiera-small",
+            revision: "a".repeat(40),
+            weight_sha256: "f".repeat(64),
+          },
+        ]);
+      }
+      if (
+        url.includes("/advanced-providers/sam2/execute") &&
+        init?.method === "POST"
+      ) {
+        created = true;
+        return jsonResponse({
+          provider_id: "sam2",
+          task: "assist_segmentation",
+          status: "succeeded",
+          model_id: "sam2-small",
+          model_revision: "a".repeat(40),
+          result: { proposal_id: samProposal.id, proposal_count: 1 },
+          warnings: [],
+        });
+      }
+      if (
+        url.endsWith(`/prediction-proposals/${samProposal.id}/accept`) &&
+        init?.method === "POST"
+      ) {
+        accepted = true;
+        return jsonResponse({
+          proposal: { ...samProposal, review_status: "accepted" },
+          mask_annotation: { id: "accepted-mask-1" },
+        });
+      }
+      if (
+        url.includes(`/images/${session.image.id}/prediction-proposals`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse({
+          items: created && !accepted ? [samProposal] : [],
+          counts: { pending: created && !accepted ? 1 : 0 },
+        });
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    fireEvent.pointerDown(screen.getByTestId("annotation-annotation-1"), {
+      button: 0,
+      clientX: 145,
+      clientY: 185,
+    });
+    fireEvent.pointerUp(window);
+    await userEvent.click(
+      screen.getByRole("button", { name: "SAM box prompt" }),
+    );
+
+    const review = await screen.findByTestId("sam-proposal-review");
+    expect(
+      within(review).getByText(/SAM mask is a proposal — not saved yet/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("proposal-mask-sam-proposal-1"),
+    ).toBeInTheDocument();
+    expect(
+      within(review).getByRole("button", { name: "Accept SAM mask" }),
+    ).toBeEnabled();
+    expect(
+      calls.some((request) => request.url.endsWith("/sam-proposal-1/accept")),
+    ).toBe(false);
+
+    await userEvent.click(
+      within(review).getByRole("button", { name: "Accept SAM mask" }),
+    );
+    await waitFor(() => {
+      expect(accepted).toBe(true);
+      expect(
+        screen.queryByTestId("sam-proposal-review"),
+      ).not.toBeInTheDocument();
+    });
+    expect(
+      calls.find((request) => request.url.endsWith("/sam-proposal-1/accept"))
+        ?.init?.method,
+    ).toBe("POST");
+  });
+
+  it("runs the separately labeled SAM box action on a selected image box", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      )
+        return jsonResponse(session);
+      if (
+        url.includes(`/projects/${project.id}/sam2-models`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse([
+          {
+            variant: "small",
+            repo_id: "facebook/sam2.1-hiera-small",
+            ready: true,
+            installed: true,
+            revision: "a".repeat(40),
+            weight_sha256: "f".repeat(64),
+            path: "C:/models/sam2",
+            reason: null,
+            license_summary: "Apache-2.0",
+          },
+        ]);
+      }
+      if (
+        url.includes("/advanced-providers/sam2/execute") &&
+        init?.method === "POST"
+      ) {
+        return jsonResponse({
+          provider_id: "sam2",
+          task: "assist_segmentation",
+          status: "succeeded",
+          model_id: "facebook/sam2.1-hiera-small",
+          model_revision: "a".repeat(40),
+          result: { proposal_id: "sam-proposal-1", proposal_count: 1 },
+          warnings: [],
+        });
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    fireEvent.pointerDown(screen.getByTestId("annotation-annotation-1"), {
+      button: 0,
+      clientX: 145,
+      clientY: 185,
+    });
+    fireEvent.pointerUp(window);
+    await userEvent.click(
+      screen.getByRole("button", { name: "SAM box prompt" }),
+    );
+    await waitFor(() => {
+      const request = requests.find((entry) =>
+        entry.url.includes("/advanced-providers/sam2/execute"),
+      );
+      expect(request).toBeDefined();
+      const body = JSON.parse(String(request?.init?.body));
+      expect(body.prompt_fields).toMatchObject({
+        image_id: "image-1",
+        sam2_variant: "small",
+        box: [100, 120, 260, 300],
+      });
+    });
+  });
+
+  it("arms the separately labeled SAM draw-box action even when the pan tool is active", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      )
+        return jsonResponse(session);
+      if (
+        url.includes(`/projects/${project.id}/sam2-models`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse([
+          {
+            variant: "small",
+            ready: true,
+            installed: true,
+            revision: "a".repeat(40),
+            weight_sha256: "f".repeat(64),
+          },
+        ]);
+      }
+      if (
+        url.includes("/advanced-providers/sam2/execute") &&
+        init?.method === "POST"
+      ) {
+        return jsonResponse({
+          provider_id: "sam2",
+          task: "assist_segmentation",
+          status: "succeeded",
+          model_id: "sam2-small",
+          model_revision: "a".repeat(40),
+          result: { proposal_id: "sam-drawn-1" },
+          warnings: [],
+        });
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    stubCanvasRect();
+    await userEvent.click(screen.getByRole("button", { name: "Pan tool" }));
+    fireEvent.pointerUp(window);
+    await userEvent.click(
+      screen.getByRole("button", { name: "SAM box prompt" }),
+    );
+    expect(
+      screen.getByText(/SAM prompt ready: drag a bounding box/),
+    ).toBeInTheDocument();
+    const canvas = screen.getByTestId("annotation-canvas");
+    fireEvent.pointerDown(canvas, { button: 0, clientX: 150, clientY: 150 });
+    fireEvent.pointerMove(window, { clientX: 250, clientY: 240 });
+    fireEvent.pointerUp(window);
+    await waitFor(() => {
+      const request = requests.find((item) =>
+        item.url.includes("/advanced-providers/sam2/execute"),
+      );
+      expect(request).toBeDefined();
+      const body = JSON.parse(String(request?.init?.body));
+      expect(body.prompt_fields.sam2_variant).toBe("small");
+      expect(body.prompt_fields.box[2]).toBeGreaterThan(
+        body.prompt_fields.box[0],
+      );
+      expect(body.prompt_fields.box[3]).toBeGreaterThan(
+        body.prompt_fields.box[1],
+      );
+    });
+  });
+
+  it("runs the selected detector across the image with Shift+1", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      )
+        return jsonResponse(session);
+      if (url.includes(`/projects/${project.id}/models?purpose=detector`)) {
+        return jsonResponse([
+          {
+            id: "detector-best",
+            project_id: project.id,
+            purpose: "detector",
+            display_name: "Coral best.pt",
+            source_filename: "best.pt",
+            managed_path: "models/best.pt",
+            sha256: "d".repeat(64),
+            file_size_bytes: 2048,
+            framework: "ultralytics",
+            task: "detect",
+            provider_name: "ultralytics",
+            provider_version: "8.3",
+            class_map_json: {},
+            input_size_json: null,
+            metadata_json: { active_for_predictions: true },
+            notes: null,
+            created_at: "2026-10-10T00:00:00Z",
+            updated_at: "2026-10-10T00:00:00Z",
+          },
+        ]);
+      }
+      if (
+        url.endsWith(`/projects/${project.id}/inference-jobs`) &&
+        init?.method === "POST"
+      ) {
+        return jsonResponse({
+          id: "job-shortcut",
+          project_id: project.id,
+          job_type: "inference",
+          status: "queued",
+          progress_current: 0,
+          progress_total: 1,
+          result_json: {},
+          error_message: null,
+        });
+      }
+      if (url.includes("/jobs/job-shortcut")) {
+        return jsonResponse({
+          id: "job-shortcut",
+          project_id: project.id,
+          job_type: "inference",
+          status: "succeeded",
+          progress_current: 1,
+          progress_total: 1,
+          result_json: {},
+          error_message: null,
+        });
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", {
+          name: "Predict objects in image (Shift+1)",
+        }),
+      ).not.toBeDisabled(),
+    );
+    fireEvent.keyDown(window, { key: "!", code: "Digit1", shiftKey: true });
+    await waitFor(() => {
+      const request = requests.find(
+        (entry) =>
+          entry.url.endsWith(`/projects/${project.id}/inference-jobs`) &&
+          entry.init?.method === "POST",
+      );
+      expect(request).toBeDefined();
+      expect(JSON.parse(String(request?.init?.body))).toMatchObject({
+        model_id: "detector-best",
+        image_ids: [session.image.id],
+      });
+    });
+  });
+  it("starts bounded full-image SAM proposals without a registered detector", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (url.endsWith(`/images/${session.image.id}/annotations`))
+        return jsonResponse(session);
+      if (url.includes(`/projects/${project.id}/models?purpose=detector`)) {
+        return jsonResponse([
+          {
+            id: "unpromoted-detector",
+            project_id: project.id,
+            purpose: "detector",
+            display_name: "Unvalidated detector",
+            source_filename: "candidate.pt",
+            managed_path: "models/candidate.pt",
+            sha256: "d".repeat(64),
+            file_size_bytes: 2048,
+            framework: "ultralytics",
+            task: "detect",
+            provider_name: "ultralytics",
+            provider_version: "8.3",
+            class_map_json: {},
+            input_size_json: null,
+            metadata_json: {},
+            notes: null,
+            created_at: "2026-10-10T00:00:00Z",
+            updated_at: "2026-10-10T00:00:00Z",
+          },
+        ]);
+      }
+      if (url.includes("/sam-image-proposals") && init?.method === "POST") {
+        return jsonResponse({
+          id: "sam-grid-job",
+          status: "queued",
+          progress_current: 0,
+          progress_total: 16,
+          result_json: {},
+        });
+      }
+      if (url.includes("/jobs/sam-grid-job"))
+        return jsonResponse({
+          id: "sam-grid-job",
+          status: "running",
+          progress_current: 3,
+          progress_total: 16,
+          result_json: { stage: "sampling" },
+        });
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    fireEvent.keyDown(window, { key: "!", code: "Digit1", shiftKey: true });
+    await waitFor(() => {
+      const request = requests.find(
+        (item) =>
+          item.url.endsWith("/sam-image-proposals") &&
+          item.init?.method === "POST",
+      );
+      expect(request).toBeDefined();
+      expect(JSON.parse(String(request?.init?.body))).toMatchObject({
+        image_id: session.image.id,
+        variant: "small",
+      });
+      expect(JSON.parse(String(request?.init?.body))).not.toHaveProperty("box");
+    });
+    expect(
+      await screen.findByRole("button", { name: "Cancel image predictions" }),
+    ).toBeEnabled();
+    expect(
+      requests.some((item) =>
+        item.url.includes("/advanced-providers/sam2/execute"),
+      ),
+    ).toBe(false);
+    expect(requests.some((item) => item.url.endsWith("/accept"))).toBe(false);
+    expect(requests.some((item) => item.url.endsWith("/inference-jobs"))).toBe(
+      false,
+    );
+  });
+
+  it("explains Shift+2 needs one saved mask without invoking a detector", async () => {
+    const requests: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      requests.push(url);
+      if (url.endsWith(`/images/${session.image.id}/annotations`))
+        return jsonResponse(session);
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${url}`);
+    });
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    fireEvent.keyDown(window, { key: "@", code: "Digit2", shiftKey: true });
+    expect(
+      await screen.findByText(
+        /Select exactly one saved polygon or raster mask/,
+      ),
+    ).toBeInTheDocument();
+    expect(requests.some((url) => url.includes("/inference-jobs"))).toBe(false);
+  });
+
+  it("previews a selected mask with Shift+2 and replaces its identity only after acceptance", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    let accepted = false;
+    const mask = {
+      id: "refine-mask",
+      image_id: session.image.id,
+      label_class_id: "class-1",
+      geometry_kind: "polygon",
+      mask_path: null,
+      polygon_json: [
+        [20, 20],
+        [60, 20],
+        [60, 60],
+        [20, 60],
+      ],
+      x_min: 20,
+      y_min: 20,
+      x_max: 60,
+      y_max: 60,
+      area_pixels: 1600,
+      source_type: "human",
+      provenance_json: null,
+      status: "verified",
+      created_by: "local_user",
+      created_at: session.image.created_at,
+      updated_at: session.image.updated_at,
+      deleted_at: null,
+      revision: 3,
+    };
+    const candidate = {
+      candidate_id: "refine-1",
+      mask_annotation_id: mask.id,
+      image_id: session.image.id,
+      expected_revision: 3,
+      status: "pending",
+      mask_url: "/mask-refinements/refine-1/content",
+      old_area_pixels: 1600,
+      proposed_area_pixels: 1500,
+      iou: 0.91,
+      edge_change_percent: 9,
+      warnings: [],
+      requires_confirmation: false,
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (url.endsWith(`/images/${session.image.id}/annotations`))
+        return jsonResponse({
+          ...session,
+          image: { ...session.image, annotation_revision: accepted ? 3 : 2 },
+          mask_annotations: [{ ...mask, revision: accepted ? 4 : 3 }],
+        });
+      if (url.endsWith(`/mask-annotations/${mask.id}/refinements`))
+        return jsonResponse(candidate);
+      if (url.endsWith("/mask-refinements/refine-1/accept")) {
+        accepted = true;
+        return jsonResponse({
+          image: session.image,
+          mask_annotation: { ...mask, revision: 4 },
+        });
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request ${url}`);
+    });
+    renderEditor();
+    const original = await screen.findByTestId("mask-annotation-refine-mask");
+    fireEvent.pointerDown(original, { button: 0 });
+    fireEvent.pointerUp(window);
+    fireEvent.keyDown(window, { key: "@", code: "Digit2", shiftKey: true });
+    const review = await screen.findByRole("region", {
+      name: "Mask refinement review",
+    });
+    expect(
+      screen.getByTestId("mask-annotation-refine-mask"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("refinement-proposal-overlay"),
+    ).toBeInTheDocument();
+    expect(accepted).toBe(false);
+    expect(
+      JSON.parse(
+        String(
+          requests.find((item) => item.url.endsWith("/refinements"))?.init
+            ?.body,
+        ),
+      ),
+    ).toMatchObject({ expected_revision: 3, variant: "small" });
+    await userEvent.click(
+      within(review).getByRole("button", { name: "Edit proposed mask" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Undo brush stroke" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Redo brush stroke" }),
+    ).toBeDisabled();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Cancel mask edits" }),
+    );
+    await userEvent.click(
+      within(review).getByRole("button", { name: "Accept & Replace" }),
+    );
+    await screen.findByRole("button", { name: "Undo refinement" });
+    expect(accepted).toBe(true);
+    expect(screen.getAllByTestId("mask-annotation-refine-mask")).toHaveLength(
+      1,
+    );
+    expect(
+      requests.some(
+        (item) =>
+          item.url.includes("/prediction-proposals/") &&
+          item.init?.method === "POST",
+      ),
+    ).toBe(false);
   });
 });

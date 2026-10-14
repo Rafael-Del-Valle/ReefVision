@@ -370,7 +370,7 @@ export interface AnnotationSaveResponse {
 export interface ModelRegistration {
   id: string;
   project_id: string;
-  purpose: "detector" | "assist";
+  purpose: "detector" | "assist" | "segmenter";
   display_name: string;
   source_filename: string;
   managed_path: string;
@@ -2489,10 +2489,17 @@ export interface ProviderModelRegistration {
   project_id: string;
 }
 
-export async function registerProviderModel(projectId: string, providerId: string, file: File): Promise<ProviderModelRegistration> {
+export async function registerProviderModel(
+  projectId: string,
+  providerId: string,
+  file: File,
+): Promise<ProviderModelRegistration> {
   const formData = new FormData();
   formData.append("file", file, file.name);
-  return request<ProviderModelRegistration>(`/projects/${encodeURIComponent(projectId)}/provider-models/${encodeURIComponent(providerId)}/register`, {method: "POST", body: formData});
+  return request<ProviderModelRegistration>(
+    `/projects/${encodeURIComponent(projectId)}/provider-models/${encodeURIComponent(providerId)}/register`,
+    { method: "POST", body: formData },
+  );
 }
 
 export async function registerModel(
@@ -2742,6 +2749,7 @@ export async function createReviewQueue(
   payload: {
     source_quality_control_run_id?: string | null;
     signal_weights: ReviewScoreWeights;
+    review_below_confidence?: number;
     created_by?: string;
   },
 ): Promise<ReviewQueueRecord> {
@@ -2756,6 +2764,7 @@ export async function createDatasetVersionReviewQueue(
   payload: {
     source_quality_control_run_id?: string | null;
     signal_weights: ReviewScoreWeights;
+    review_below_confidence?: number;
     created_by?: string;
   },
 ): Promise<ReviewQueueRecord> {
@@ -2905,6 +2914,7 @@ export async function rejectPrediction(proposalId: string): Promise<{
 }
 
 export async function bulkReviewPredictions(payload: {
+  label_class_id?: string;
   action: "accept" | "reject";
   proposal_ids: string[];
 }): Promise<{

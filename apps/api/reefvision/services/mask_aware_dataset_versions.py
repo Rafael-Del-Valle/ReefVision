@@ -150,6 +150,8 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
         self,
         project_id: str,
         request: DatasetVersionCreateRequest,
+        *,
+        commit: bool = True,
     ) -> DatasetVersionResponse:
         project = self._project(project_id)
         self._parent_version(project.id, request.parent_version_id)
@@ -282,7 +284,10 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
         version.manifest_sha256 = canonical_json_sha256(manifest)
         version.status = "complete"
         version.completed_at = utc_now()
-        self.session.commit()
+        if commit:
+            self.session.commit()
+        else:
+            self.session.flush()
         self.session.refresh(version)
         return DatasetVersionResponse.model_validate(version)
 

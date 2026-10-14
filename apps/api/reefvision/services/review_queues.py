@@ -187,6 +187,7 @@ class ReviewQueueService:
             formula_version=FORMULA_VERSION,
             configuration_json={
                 "weights": request.signal_weights.model_dump(mode="json"),
+                "review_below_confidence": request.review_below_confidence,
                 "ruleset_version": CURRENT_QC_RULESET_VERSION,
                 "source_quality_control_run_id": source_run.id if source_run else None,
             },
@@ -209,7 +210,19 @@ class ReviewQueueService:
         for image in scoped_images:
             annotations = project_context.annotations_by_image.get(image.image_id, [])
             predictions = project_context.predictions_by_image.get(image.image_id, [])
-            pending_predictions = [item for item in predictions if item.review_status == "pending"]
+            pending_predictions = [
+                item
+                for item in predictions
+                if item.review_status == "pending"
+                and (
+                    request.review_below_confidence is None
+                    or item.confidence <= request.review_below_confidence
+                )
+            ]
+            # Explicit confidence gating is a review-selection rule, not a
+            # claim that excluded model predictions were researcher-verified.
+            if request.review_below_confidence is not None and not pending_predictions:
+                continue
             reviewed_predictions = [
                 item
                 for item in predictions
@@ -535,6 +548,7 @@ class ReviewQueueService:
                 queue.configuration_json.get("weights", {})
             ),
             created_by=queue.created_by,
+            review_below_confidence=queue.configuration_json.get("review_below_confidence"),
         )
         if queue.dataset_version_id is not None:
             dataset_version = self.quality_control._version(queue.dataset_version_id)

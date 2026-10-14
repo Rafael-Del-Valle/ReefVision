@@ -32,6 +32,7 @@ from reefvision.jobs.model_install import process_model_install_job
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
 from reefvision.jobs.quality_control import process_quality_control_job
 from reefvision.jobs.restores import process_restore_job
+from reefvision.jobs.sam_image_proposals import process_sam_image_proposals_job
 from reefvision.jobs.training import recover_training_run
 from reefvision.jobs.training_dispatch import process_task_aware_training_job
 from reefvision.jobs.video import process_video_extract_job
@@ -40,6 +41,8 @@ from reefvision.jobs.video_metric_depth import process_video_metric_depth_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.repositories.jobs import JobRepository
+from reefvision.services.sam2_install import process_sam2_install
+from reefvision.services.segmentation_evaluation_queue import SegmentationEvaluationQueueService
 from reefvision.storage.images import create_thumbnail
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -533,19 +536,143 @@ def process_thumbnail_job(settings: Settings, factory: sessionmaker[Session], jo
         return False
 
 
+def _fail_invalid_waiting_segmentation_evaluation(
+    session: Session, record: Job, reason: str
+) -> None:
+    """Leave an auditable terminal result instead of silently skipping bad parents."""
+    record.status = "failed"
+    record.completed_at = datetime.now(UTC)
+    record.error_message = reason
+    record.result_json = {
+        **dict(record.result_json or {}),
+        "promotion_eligible": False,
+        "blockers": [reason],
+    }
+    session.commit()
+    LOGGER.error(
+        "Invalid held-out segmentation evaluation metadata: %s",
+        reason,
+        extra={
+            "event_id": "segmentation_evaluation_invalid_parent",
+            "component": "worker",
+            "job_id": record.id,
+        },
+    )
+
+
+def process_next_waiting_segmentation_evaluation(
+    settings: Settings, factory: sessionmaker[Session]
+) -> bool:
+    """Finalize one terminal held-out evaluation without activating any model.
+
+    The normal worker checks this only when no queued job is available.
+    Incomplete child inference does not trigger repeated DB writes.
+    """
+    with factory() as session:
+        # A fixed first page can starve completed evaluations indefinitely when
+        # older inference children remain active. Scan successive stable pages
+        # until a terminal evaluation is found, without modifying active jobs.
+        offset = 0
+        while True:
+            waiting = list(
+                session.scalars(
+                    select(Job)
+                    .where(
+                        Job.job_type == "segmentation_learning_evaluation",
+                        Job.status == "waiting",
+                    )
+                    .order_by(Job.created_at, Job.id)
+                    .offset(offset)
+                    .limit(32)
+                )
+            )
+            if not waiting:
+                break
+            for record in waiting:
+                request = dict(record.request_json or {})
+                if request.get("task") != "segment":
+                    _fail_invalid_waiting_segmentation_evaluation(
+                        session, record, "Missing or invalid segmentation task identity"
+                    )
+                    return True
+                candidate_id = request.get("candidate_job_id")
+                if not isinstance(candidate_id, str) or not candidate_id:
+                    _fail_invalid_waiting_segmentation_evaluation(
+                        session, record, "Missing or invalid candidate inference job identity"
+                    )
+                    return True
+                ids = [candidate_id]
+                incumbent_id = request.get("incumbent_job_id")
+                if incumbent_id is not None:
+                    if not isinstance(incumbent_id, str) or not incumbent_id:
+                        _fail_invalid_waiting_segmentation_evaluation(
+                            session, record, "Invalid incumbent inference job identity"
+                        )
+                        return True
+                    ids.append(incumbent_id)
+                child_jobs = [session.get(Job, child_id) for child_id in ids]
+                statuses = [
+                    child.status if child is not None else "missing" for child in child_jobs
+                ]
+                if not (
+                    any(status in {"failed", "cancelled", "missing"} for status in statuses)
+                    or all(status == "succeeded" for status in statuses)
+                ):
+                    continue
+                record_id = record.id
+                project_id = record.project_id
+                if project_id is None:
+                    _fail_invalid_waiting_segmentation_evaluation(
+                        session, record, "Segmentation evaluation has no project identity"
+                    )
+                    return True
+                try:
+                    SegmentationEvaluationQueueService(session, settings).advance(
+                        str(project_id), record_id
+                    )
+                except Exception:
+                    session.rollback()
+                    failed = session.get(Job, record_id)
+                    if failed is not None and failed.status == "waiting":
+                        failed.status = "failed"
+                        failed.completed_at = datetime.now(UTC)
+                        failed.error_message = (
+                            "Held-out segmentation evaluation could not be finalized; "
+                            "inspect the local scientific audit logs"
+                        )
+                        failed.result_json = {
+                            "promotion_eligible": False,
+                            "blockers": [failed.error_message],
+                        }
+                        session.commit()
+                    LOGGER.exception(
+                        "Held-out segmentation evaluation could not be finalized",
+                        extra={
+                            "event_id": "segmentation_evaluation_finalization_failed",
+                            "component": "worker",
+                            "job_id": record_id,
+                        },
+                    )
+                return True
+            offset += len(waiting)
+    return False
+
+
 def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session]) -> bool:
     with factory() as session:
         job = JobRepository(session).next_queued()
         job_id = job.id if job is not None else None
         job_type = job.job_type if job is not None else None
     if job_id is None:
-        return False
+        return process_next_waiting_segmentation_evaluation(settings, factory)
 
     try:
         if job_type == "thumbnail":
             return process_thumbnail_job(settings, factory, job_id)
         if job_type == "inference":
             return process_inference_job(settings, factory, job_id)
+        if job_type == "sam_image_proposals":
+            return process_sam_image_proposals_job(settings, factory, job_id)
         if job_type == "classification_inference":
             return process_classification_inference_job(settings, factory, job_id)
         if job_type == "classification_training":
@@ -564,6 +691,8 @@ def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session
             return process_task_aware_training_job(settings, factory, job_id)
         if job_type == "model_install":
             return process_model_install_job(settings, factory, job_id)
+        if job_type == "sam2_install":
+            return process_sam2_install(settings, factory, job_id)
         if job_type == "video_extract":
             return process_video_extract_job(settings, factory, job_id)
         if job_type == "video_tracking":

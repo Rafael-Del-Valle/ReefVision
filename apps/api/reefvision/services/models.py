@@ -11,7 +11,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.db.models import ExperimentRecord, Job, ModelRegistration, Project, TrainingRun
+from reefvision.db.models import (
+    ExperimentRecord,
+    Job,
+    LabelClass,
+    ModelRegistration,
+    Project,
+    TrainingRun,
+)
 from reefvision.domain.enums import MODEL_PURPOSES
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.ml.depth_anything_v2_provider import (
@@ -116,17 +123,50 @@ class ModelService:
         project: Project,
         metadata: RegistrationMetadata,
     ) -> dict[str, object]:
+        """Create an explicit project-class mapping for trusted detector labels.
+
+        No prediction is accepted here. Creating a class only prepares a stable
+        project identity for future human-reviewed or bulk-accepted proposals.
+        All records are committed atomically with the model registration.
+        """
         if not isinstance(metadata, DetectionModelMetadata):
             return {}
-        classes_by_name = {
-            label_class.name.strip().casefold(): label_class.id
-            for label_class in project.label_classes
-            if label_class.is_active
-        }
-        mapping = {
-            label: classes_by_name.get(label.strip().casefold()) for label in metadata.class_labels
-        }
-        return {"labels": metadata.class_labels, "mapping": mapping}
+
+        project_classes = list(project.label_classes)
+        by_name = {item.name.strip().casefold(): item for item in project_classes}
+        next_index = max((item.class_index for item in project_classes), default=-1) + 1
+        next_order = max((item.display_order for item in project_classes), default=-1) + 1
+        colors = ("#3B82F6", "#10B981", "#F59E0B", "#8B5CF6", "#EC4899", "#06B6D4")
+        mapping: dict[str, str | None] = {}
+        labels: list[str] = []
+        for raw_label in metadata.class_labels:
+            label = str(raw_label).strip()
+            if not label or len(label) > 200:
+                raise ValidationError("Model class labels must have 1-200 characters")
+            labels.append(label)
+            key = label.casefold()
+            label_class = by_name.get(key)
+            if label_class is None:
+                label_class = LabelClass(
+                    id=str(uuid4()),
+                    project_id=project.id,
+                    class_index=next_index,
+                    display_order=next_order,
+                    name=label,
+                    description=(
+                        "Created from registered model class metadata; "
+                        "predictions still require explicit acceptance."
+                    ),
+                    display_color=colors[next_index % len(colors)],
+                    is_active=True,
+                )
+                self.session.add(label_class)
+                by_name[key] = label_class
+                next_index += 1
+                next_order += 1
+            # Archived classes are never reactivated silently.
+            mapping[label] = label_class.id if label_class.is_active else None
+        return {"labels": labels, "mapping": mapping}
 
     def list_models(
         self, project_id: str, *, purpose: str | None = None

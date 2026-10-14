@@ -18,25 +18,53 @@ function Invoke-ReefVisionIsolatedEnvironment {
         YOLO_AUTOINSTALL = 'false'
     }
     foreach ($Key in $AdditionalEnvironment.Keys) { $Isolated[$Key] = $AdditionalEnvironment[$Key] }
-    $Names = @(@(Get-ChildItem Env: | Where-Object { $_.Name -like 'REEFVISION_*' } | ForEach-Object { $_.Name }) +
-        @($Isolated.Keys) + @('PYTHONPATH', 'PYTHONHOME', 'TRANSFORMERS_CACHE')) | Select-Object -Unique
+
+    # Build a flat, case-insensitive name set. Do not concatenate arrays
+    # through a pipeline: a nested collection can cause environment names
+    # (notably REEFVISION_CONFIG_DIR) to escape isolation.
+    $Names = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($Item in (Get-ChildItem Env:)) {
+        if ($Item.Name.StartsWith('REEFVISION_', [System.StringComparison]::OrdinalIgnoreCase)) {
+            [void]$Names.Add($Item.Name)
+        }
+    }
+    foreach ($Name in $Isolated.Keys) { [void]$Names.Add([string]$Name) }
+    foreach ($Name in @('PYTHONPATH', 'PYTHONHOME', 'TRANSFORMERS_CACHE')) {
+        [void]$Names.Add($Name)
+    }
+
+    # Change variables through the PowerShell Env: provider, the same view
+    # used by the acceptance tests and spawned PowerShell commands.
     $Previous = @{}
     foreach ($Name in $Names) {
         $Previous[$Name] = [Environment]::GetEnvironmentVariable($Name, 'Process')
-        [Environment]::SetEnvironmentVariable($Name, $null, 'Process')
+        Remove-Item -LiteralPath ("Env:{0}" -f $Name) -ErrorAction SilentlyContinue
     }
     try {
-        foreach ($Name in $Isolated.Keys) { [Environment]::SetEnvironmentVariable($Name, $Isolated[$Name], 'Process') }
+        foreach ($Name in $Isolated.Keys) {
+            Set-Item -LiteralPath ("Env:{0}" -f $Name) -Value ([string]$Isolated[$Name])
+        }
         & $Action
     }
     finally {
-        foreach ($Name in $Names) { [Environment]::SetEnvironmentVariable($Name, $Previous[$Name], 'Process') }
+        foreach ($Name in $Names) {
+            if ($null -eq $Previous[$Name]) {
+                Remove-Item -LiteralPath ("Env:{0}" -f $Name) -ErrorAction SilentlyContinue
+            } else {
+                Set-Item -LiteralPath ("Env:{0}" -f $Name) -Value ([string]$Previous[$Name])
+            }
+        }
     }
 }
 
 function Resolve-ReefVisionAcceptancePath {
     param([Parameter(Mandatory = $true)][string]$Path)
-    return [System.IO.Path]::GetFullPath($Path).TrimEnd('\')
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    $volumeRoot = [System.IO.Path]::GetPathRoot($fullPath)
+    # Preserve C:\ or a UNC share root. Trimming to C: would turn an
+    # absolute drive root into a drive-relative path on Windows.
+    if ($fullPath -ieq $volumeRoot) { return $fullPath }
+    return $fullPath.TrimEnd('\')
 }
 
 function Test-ReefVisionPathWithin {
@@ -44,8 +72,8 @@ function Test-ReefVisionPathWithin {
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][string]$Parent
     )
-    $candidate = (Resolve-ReefVisionAcceptancePath $Path) + '\'
-    $boundary = (Resolve-ReefVisionAcceptancePath $Parent) + '\'
+    $candidate = (Resolve-ReefVisionAcceptancePath $Path).TrimEnd('\') + '\'
+    $boundary = (Resolve-ReefVisionAcceptancePath $Parent).TrimEnd('\') + '\'
     return $candidate.StartsWith($boundary, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
@@ -56,6 +84,11 @@ function Assert-ReefVisionSafeAcceptanceRoot {
         [Parameter(Mandatory = $true)][string]$DefaultDataRoot
     )
     $resolved = Resolve-ReefVisionAcceptancePath $Path
+    # A drive root itself is never a safe acceptance directory. Its ordinary
+    # descendants, however, can be safe when they do not overlap any of the
+    # narrower protected paths below (Windows, Program Files, user data, repo).
+    # Rejecting all descendants of C:\ prevented every disposable C:\ test.
+    $volumeRoot = Resolve-ReefVisionAcceptancePath ([System.IO.Path]::GetPathRoot($resolved))
     $forbidden = @(
         (Resolve-ReefVisionAcceptancePath $RepositoryRoot),
         (Resolve-ReefVisionAcceptancePath $DefaultDataRoot),
@@ -66,6 +99,11 @@ function Assert-ReefVisionSafeAcceptanceRoot {
         (Resolve-ReefVisionAcceptancePath ([System.IO.Path]::GetPathRoot($resolved)))
     ) | Select-Object -Unique
     foreach ($item in $forbidden) {
+        if ($item -ieq $volumeRoot -and $resolved -ine $volumeRoot) {
+            # C:\acceptance is allowed by the volume boundary, but still
+            # must pass all other protected-directory exclusions.
+            continue
+        }
         if ($resolved -ieq $item -or (Test-ReefVisionPathWithin -Path $resolved -Parent $item)) {
             if ($item -ieq (Resolve-ReefVisionAcceptancePath $env:USERPROFILE) -and $resolved -ine $item) {
                 continue
