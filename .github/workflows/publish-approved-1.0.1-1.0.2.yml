@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
-      GH_TOKEN: \${{ github.token }}
+      GH_TOKEN: ${{ github.token }}
       REPO: Rafael-Del-Valle/ReefVision
     steps:
       - name: Validate exact build artifacts and publish releases in order
