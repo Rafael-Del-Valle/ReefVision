@@ -38,6 +38,11 @@ def successful_job() -> Job:
             "model_task": "segment",
             "evaluation_only": True,
             "image_ids": ["image-1"],
+            "segmentation_dataset_version_id": "dataset-1",
+            "segmentation_manifest_sha256": "a" * 64,
+            "segmentation_split": "test",
+            "segmentation_checkpoint_sha256": "b" * 64,
+            "segmentation_holdout_parent_job_id": "evaluation-1",
         },
     )
 
@@ -46,10 +51,22 @@ def holdout() -> SegmentationHoldout:
     return SegmentationHoldout("test", ("image-1",), ("colony-1",), ())
 
 
+def validate_job(service: SegmentationLearningEvaluationService, job: Job) -> Job:
+    return service._job(
+        "p",
+        "m",
+        job.id,
+        holdout(),
+        dataset_version_id="dataset-1",
+        manifest_sha256="a" * 64,
+        checkpoint_sha256="b" * 64,
+    )
+
+
 def test_completed_evaluation_only_job_passes_preflight() -> None:
     job = successful_job()
     service = service_with_job(job)
-    assert service._job("p", "m", "job-1", holdout()) is job
+    assert validate_job(service, job) is job
 
 
 @pytest.mark.parametrize(
@@ -60,24 +77,30 @@ def test_completed_evaluation_only_job_passes_preflight() -> None:
         ("model_id", "m2"),
         ("image_ids", ["image-1", "outside"]),
         ("image_ids", ["image-1", "image-1"]),
+        ("segmentation_dataset_version_id", "other-version"),
+        ("segmentation_dataset_version_id", None),
+        ("segmentation_manifest_sha256", "f" * 64),
+        ("segmentation_split", "train"),
+        ("segmentation_checkpoint_sha256", "f" * 64),
+        ("segmentation_holdout_parent_job_id", ""),
     ],
 )
 def test_untrusted_job_payload_fails_closed(field: str, value: Any) -> None:
     job = successful_job()
     job.request_json[field] = value
     with pytest.raises(ConflictError):
-        service_with_job(job)._job("p", "m", "job-1", holdout())
+        validate_job(service_with_job(job), job)
 
 
 def test_queued_or_incomplete_job_is_not_scored() -> None:
     job = successful_job()
     job.status = "running"
     with pytest.raises(ConflictError):
-        service_with_job(job)._job("p", "m", "job-1", holdout())
+        validate_job(service_with_job(job), job)
     job.status = "succeeded"
     job.progress_current = 0
     with pytest.raises(ConflictError):
-        service_with_job(job)._job("p", "m", "job-1", holdout())
+        validate_job(service_with_job(job), job)
 
 
 def test_recorded_segmentation_metrics_do_not_activate_model(monkeypatch) -> None:
