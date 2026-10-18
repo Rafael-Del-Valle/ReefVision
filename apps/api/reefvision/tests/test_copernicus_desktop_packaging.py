@@ -9,15 +9,13 @@ def test_windows_installer_anchors_optional_copernicus_worker_to_source_root() -
     worker = root / "apps" / "api" / "reefvision" / "services" / "copernicus_worker.py"
     assert worker.is_file()
 
-    packaging_script = (root / "scripts" / "build-desktop-backend.ps1").read_text(
-        encoding="utf-8"
-    )
+    packaging_script = (root / "scripts" / "build-desktop-backend.ps1").read_text(encoding="utf-8")
     assert (
         '$CopernicusWorkerPath = Join-Path $ApiRoot "reefvision\\services\\copernicus_worker.py"'
         in packaging_script
     )
     assert (
-        'if (-not (Test-Path -LiteralPath $CopernicusWorkerPath -PathType Leaf))'
+        "if (-not (Test-Path -LiteralPath $CopernicusWorkerPath -PathType Leaf))"
         in packaging_script
     )
     assert '"${CopernicusWorkerPath};reefvision/services"' in packaging_script
