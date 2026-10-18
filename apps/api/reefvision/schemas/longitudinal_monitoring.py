@@ -6,7 +6,7 @@ import math
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class MonitoringObservation(BaseModel):
@@ -18,10 +18,21 @@ class MonitoringObservation(BaseModel):
     observed_at: datetime
     value: float = Field(ge=0)
     unit: str = Field(min_length=1, max_length=32)
+    experimental_unit_id: str | None = Field(default=None, max_length=150)
+    experimental_unit_type: str | None = Field(default=None, max_length=100)
 
-    @field_validator("organism_id", "metric_name", "source_record_id", "unit")
+    @field_validator(
+        "organism_id",
+        "metric_name",
+        "source_record_id",
+        "unit",
+        "experimental_unit_id",
+        "experimental_unit_type",
+    )
     @classmethod
-    def nonempty(cls, value: str) -> str:
+    def nonempty(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         stripped = value.strip()
         if not stripped:
             raise ValueError("Observation identifiers and units cannot be blank")
@@ -44,6 +55,33 @@ class MonitoringObservation(BaseModel):
 
 class LongitudinalAnalysisRequest(BaseModel):
     observations: list[MonitoringObservation] = Field(min_length=2, max_length=10000)
+    experimental_unit_type: str | None = Field(default=None, max_length=100)
+
+    @field_validator("experimental_unit_type")
+    @classmethod
+    def nonempty_unit_type(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Experimental unit type cannot be blank")
+        return stripped
+
+    @model_validator(mode="after")
+    def resolve_observation_unit_type(self) -> LongitudinalAnalysisRequest:
+        declared = {
+            item.experimental_unit_type
+            for item in self.observations
+            if item.experimental_unit_type is not None
+        }
+        if len(declared) > 1:
+            raise ValueError("Observations declare conflicting experimental unit types")
+        if declared:
+            only = next(iter(declared))
+            if self.experimental_unit_type is not None and self.experimental_unit_type != only:
+                raise ValueError("Request and observations disagree on experimental unit type")
+            self.experimental_unit_type = only
+        return self
 
 
 class LongitudinalChange(BaseModel):
@@ -63,6 +101,25 @@ class LongitudinalChange(BaseModel):
     observation_count: int
 
 
+class ExperimentalUnitSummary(BaseModel):
+    """Descriptive unit-level mean; never an organism-level replication count."""
+
+    experimental_unit_id: str
+    metric_name: str
+    unit: str
+    organism_count: int
+    baseline_at: datetime
+    final_at: datetime
+    mean_absolute_change: float
+    mean_change_per_day: float
+
+
+class ExcludedExperimentalUnit(BaseModel):
+    experimental_unit_id: str
+    metric_name: str
+    reason: Literal["missing_followup", "nonmatching_sampling_window"]
+
+
 class LongitudinalAnalysisResponse(BaseModel):
     analysis_level: Literal["organism"] = "organism"
     evidence_level: Literal["caller_supplied_unverified"] = "caller_supplied_unverified"
@@ -70,4 +127,8 @@ class LongitudinalAnalysisResponse(BaseModel):
     evaluated_series_count: int
     incomplete_series_count: int
     changes: list[LongitudinalChange]
+    experimental_unit_type: str | None = None
+    independent_unit_count: int | None = None
+    unit_summaries: list[ExperimentalUnitSummary] = Field(default_factory=list)
+    excluded_units: list[ExcludedExperimentalUnit] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)

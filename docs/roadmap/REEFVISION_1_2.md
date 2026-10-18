@@ -53,3 +53,19 @@ Continue development only on the dedicated branch and draft PR. Reuse 1.0.x
 measurement and dataset services and plan to integrate 1.1's scientific record
 framework once merged and accepted, rather than adding a duplicate store.
 Do not merge, tag, publish or deploy without explicit owner approval.
+
+## Descriptive experimental-unit safeguard (development increment)
+
+The exploratory API accepts `experimental_unit_type` on the request and
+`experimental_unit_id` on each observation. Saved Workflow Builder nodes can
+supply the shared `experimental_unit_type` on each observation, with the same
+unit ID on each repeated observation. If either is supplied, both must be consistently declared; one
+organism cannot silently change experimental units. For a given metric, mixed
+physical units are rejected. Only **within-unit** descriptive means of
+organism-level endpoint changes are calculated, never fragment-level
+inferential sample sizes. Units with any missing organism follow-up or
+mismatched sampling windows are excluded with explicit reasons. The output
+reports the number of distinct declared independent units and remains
+`caller_supplied_unverified`. It is not a treatment-effect test and does not
+establish that caller-designated units are genuinely independent. Future
+verified design records and tank/parent-colony assignment are still required.

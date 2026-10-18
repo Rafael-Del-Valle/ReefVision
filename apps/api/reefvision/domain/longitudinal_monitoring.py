@@ -4,14 +4,109 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
+from statistics import fmean
 
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.longitudinal_monitoring import (
+    ExcludedExperimentalUnit,
+    ExperimentalUnitSummary,
     LongitudinalAnalysisRequest,
     LongitudinalAnalysisResponse,
     LongitudinalChange,
     MonitoringObservation,
 )
+
+
+def _summarize_experimental_units(
+    request: LongitudinalAnalysisRequest,
+    grouped: dict[tuple[str, str], list[MonitoringObservation]],
+    changes: list[LongitudinalChange],
+) -> tuple[int | None, list[ExperimentalUnitSummary], list[ExcludedExperimentalUnit]]:
+    """Summarize organisms *within* declared units, never as independent units.
+
+    Exclude an entire unit/metric when a constituent organism is missing a
+    follow-up or when its first/last sampling window differs. No p-values,
+    treatment contrasts, or between-unit pooling are calculated here.
+    """
+    unit_type = request.experimental_unit_type
+    if unit_type is None:
+        if any(obs.experimental_unit_id is not None for obs in request.observations):
+            raise ValidationError(
+                "experimental_unit_type is required when experimental_unit_id is supplied"
+            )
+        return None, [], []
+
+    memberships: dict[str, str] = {}
+    for obs in request.observations:
+        if obs.experimental_unit_id is None:
+            raise ValidationError(
+                "Every observation needs experimental_unit_id for unit-level summaries"
+            )
+        previous = memberships.setdefault(obs.organism_id, obs.experimental_unit_id)
+        if previous != obs.experimental_unit_id:
+            raise ValidationError(
+                f"Organism {obs.organism_id!r} changes experimental units; "
+                "split identities or correct the study design"
+            )
+
+    # Never mix physical units across organisms for a metric, even when they
+    # belong to different experimental units.
+    units_by_metric: dict[str, set[str]] = defaultdict(set)
+    for obs in request.observations:
+        units_by_metric[obs.metric_name].add(obs.unit)
+    for metric, units in units_by_metric.items():
+        if len(units) > 1:
+            raise ValidationError(
+                f"Experimental-unit summary for {metric!r} mixes measurement units"
+            )
+
+    series_by_unit: dict[tuple[str, str], list[tuple[str, str]]] = defaultdict(list)
+    for organism_id, metric_name in grouped:
+        series_by_unit[(memberships[organism_id], metric_name)].append(
+            (organism_id, metric_name)
+        )
+    completed = {(item.organism_id, item.metric_name): item for item in changes}
+    summaries: list[ExperimentalUnitSummary] = []
+    excluded: list[ExcludedExperimentalUnit] = []
+    for (unit_id, metric), keys in sorted(series_by_unit.items()):
+        if any(key not in completed for key in keys):
+            excluded.append(
+                ExcludedExperimentalUnit(
+                    experimental_unit_id=unit_id,
+                    metric_name=metric,
+                    reason="missing_followup",
+                )
+            )
+            continue
+        series = [completed[key] for key in sorted(keys)]
+        windows = {(item.first_observed_at, item.last_observed_at) for item in series}
+        if len(windows) != 1:
+            excluded.append(
+                ExcludedExperimentalUnit(
+                    experimental_unit_id=unit_id,
+                    metric_name=metric,
+                    reason="nonmatching_sampling_window",
+                )
+            )
+            continue
+        baseline_at, final_at = next(iter(windows))
+        mean_change = fmean(item.absolute_change for item in series)
+        mean_rate = fmean(item.change_per_day for item in series)
+        if not all(math.isfinite(v) for v in (mean_change, mean_rate)):
+            raise ValidationError("Experimental-unit summary is not finite")
+        summaries.append(
+            ExperimentalUnitSummary(
+                experimental_unit_id=unit_id,
+                metric_name=metric,
+                unit=series[0].unit,
+                organism_count=len(series),
+                baseline_at=baseline_at,
+                final_at=final_at,
+                mean_absolute_change=mean_change,
+                mean_change_per_day=mean_rate,
+            )
+        )
+    return len(set(memberships.values())), summaries, excluded
 
 
 def analyze_longitudinal(
@@ -76,16 +171,26 @@ def analyze_longitudinal(
                 observation_count=len(ordered),
             )
         )
+    independent_unit_count, unit_summaries, excluded_units = _summarize_experimental_units(
+        request, grouped, changes
+    )
     return LongitudinalAnalysisResponse(
         observation_count=len(request.observations),
         evaluated_series_count=len(changes),
         incomplete_series_count=incomplete,
         changes=changes,
+        experimental_unit_type=request.experimental_unit_type,
+        independent_unit_count=independent_unit_count,
+        unit_summaries=unit_summaries,
+        excluded_units=excluded_units,
         limitations=[
             "Caller-supplied observations are not verified against project data or calibration.",
             "Changes compare the first and last sampling dates; "
             "no statistical significance is inferred.",
             "Organisms are the reporting unit; observations are not pooled "
             "as independent replicates.",
+            "Experimental-unit means are descriptive only, require an explicitly declared "
+            "sampling unit and matching organism-level sampling windows, and exclude "
+            "units with missing follow-up; they are not independent hypothesis tests.",
         ],
     )
