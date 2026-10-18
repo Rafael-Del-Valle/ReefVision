@@ -124,7 +124,6 @@ describe("ProjectTrainingMonitor", () => {
     await waitFor(() => expect(open).toHaveBeenCalledWith("run-active"));
   });
 
-
   it("shows active canonical training progress, metrics, and provenance", async () => {
     vi.mocked(api.getTrainingRuns).mockResolvedValue([activeRun]);
 
