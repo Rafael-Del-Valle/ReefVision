@@ -82,7 +82,9 @@ def measure_mesh_preview(
     boundary = sum(count == 1 for count in edges.values())
     nonmanifold = sum(count > 2 for count in edges.values())
     geometry_hash = hashlib.sha256(
-        json.dumps({"vertices": points, "faces": faces}, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        json.dumps(
+            {"vertices": points, "faces": faces}, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
     ).hexdigest()
     return {
         "schema_version": "mesh-preview-0001",

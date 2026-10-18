@@ -30,7 +30,9 @@ def extend_mesh_registry(
             node_type=NODE_TYPE,
             display_name="3D Mesh Surface Preview",
             category="Scientific analysis",
-            description="Measure caller-supplied 3D triangles with unverified scale evidence.",
+            description=(
+                "Measure caller-supplied 3D triangles with unverified scale evidence."
+            ),
             input_ports=[
                 WorkflowPortDefinition(
                     port_id="project",
@@ -81,7 +83,10 @@ def execute_mesh_preview(
 ) -> list[dict[str, Any]]:
     del session, settings
     artifacts = inputs.get("project", [])
-    if len(artifacts) != 1 or (artifacts[0].payload_json or {}).get("project_id") != project_id:
+    if (
+        len(artifacts) != 1
+        or (artifacts[0].payload_json or {}).get("project_id") != project_id
+    ):
         raise ValidationError("Mesh preview requires the current project reference")
     try:
         request = MeshPreviewRequest.model_validate(parameters)

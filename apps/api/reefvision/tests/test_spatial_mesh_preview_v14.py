@@ -42,27 +42,33 @@ def test_obj_parser_supports_negative_indices_and_texture_fields():
     assert preview(vertices=vertices, faces=faces)["surface_area_m2"] == pytest.approx(0.0003)
 
 
-@pytest.mark.parametrize("text", [
-    "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 4",
-    "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 0 1 2",
-    "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3 3",
-    "v nan 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3",
-])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 4",
+        "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 0 1 2",
+        "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3 3",
+        "v nan 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3",
+    ],
+)
 def test_obj_rejects_unsafe_or_ambiguous_geometry(text):
     with pytest.raises(ValueError):
         parse_obj_triangles(text)
 
 
-@pytest.mark.parametrize("changes", [
-    {"meters_per_unit": 0},
-    {"meters_per_unit": float("nan")},
-    {"calibration_evidence": ""},
-    {"relative_scale_uncertainty": -0.01},
-    {"faces": [[0, 0, 1]]},
-    {"faces": [[0, 1, 3]]},
-    {"faces": [[0, 1, 2], [2, 0, 1]]},
-    {"vertices": [[0, 0, 0], [1, float("inf"), 0], [0, 1, 0]]},
-])
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"meters_per_unit": 0},
+        {"meters_per_unit": float("nan")},
+        {"calibration_evidence": ""},
+        {"relative_scale_uncertainty": -0.01},
+        {"faces": [[0, 0, 1]]},
+        {"faces": [[0, 1, 3]]},
+        {"faces": [[0, 1, 2], [2, 0, 1]]},
+        {"vertices": [[0, 0, 0], [1, float("inf"), 0], [0, 1, 0]]},
+    ],
+)
 def test_invalid_measurement_inputs_rejected(changes):
     with pytest.raises(ValueError):
         preview(**changes)
