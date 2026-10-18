@@ -1,7 +1,7 @@
 {
   "name": "reefvision-workspace",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.0.3",
   "scripts": {
     "dev:web": "npm --prefix apps/web run dev",
     "dev:desktop": "npm --prefix apps/web run desktop:dev",
