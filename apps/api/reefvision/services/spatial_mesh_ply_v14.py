@@ -72,7 +72,9 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
                 or (name == "face" and "vertex" not in counts)
                 or (name == "vertex" and counts)
             ):
-                raise ValueError("PLY requires one vertex element before one face element")
+                raise ValueError(
+                    "PLY requires one vertex element before one face element"
+                )
             try:
                 count = int(parts[2])
             except ValueError as exc:
