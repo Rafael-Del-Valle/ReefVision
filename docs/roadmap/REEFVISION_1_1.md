@@ -203,6 +203,12 @@ binary; it does not prove packaged Windows FFmpeg acceptance. Final-head CI and
 browser execution evidence are tracked in
 [draft PR #71](https://github.com/Rafael-Del-Valle/ReefVision/pull/71).
 
+The first combined-head CI browser run executed the new workspace flow and
+failed on an ambiguous test selector: "Unknown depth" matched both the record
+value and inspector guidance. The assertion now matches the exact value;
+application behavior was unchanged. Browser CI must pass on this correction
+before its acceptance is claimed.
+
 Rulings made for this milestone: restrict explicit coordinates to source pixels
 and WGS84 until validated CRS transforms exist; keep canonical image calibration
 and snapshot it; refuse old exchange exports for enriched projects until the

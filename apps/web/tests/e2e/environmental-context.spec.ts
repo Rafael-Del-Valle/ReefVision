@@ -162,7 +162,7 @@ test("imports sensor JSON and displays offline NOAA provenance in Environmental 
   await expect(page.getByText("68 degF")).toBeVisible();
   await expect(page.getByText("20 degC")).toBeVisible();
   await expect(page.getByText("2026-10-17 12:30:00 UTC")).toBeVisible();
-  await expect(page.getByText("Unknown depth")).toBeVisible();
+  await expect(page.getByText("Unknown depth", { exact: true })).toBeVisible();
 
   await page.getByLabel("NOAA station ID").fill("8724580");
   await page.getByLabel("Observation day (UTC)").fill("2026-10-17");
@@ -175,5 +175,5 @@ test("imports sensor JSON and displays offline NOAA provenance in Environmental 
   await expect(
     result.getByRole("link", { name: "NOAA source" }),
   ).toHaveAttribute("href", /station=8724580/);
-  await expect(page.getByText("NOAA CO-OPS")).toBeVisible();
+  await expect(page.getByText("NOAA CO-OPS", { exact: true })).toBeVisible();
 });
