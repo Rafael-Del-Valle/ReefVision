@@ -253,7 +253,14 @@ class ImageService:
 
     def display_path_for_image(self, image: ImageAsset) -> tuple[Path, str]:
         source = self.content_path_for_image(image)
-        if image.media_type != "image/tiff":
+        # Browser/WebView rendering of TIFF, BMP, GIF and CMYK JPEG is not
+        # consistently supported. Keep original source and source-pixel geometry;
+        # a separate PNG rendition is used for the display only.
+        source_mode = str((image.metadata_json or {}).get("mode", ""))
+        needs_png = image.media_type in {"image/tiff", "image/bmp", "image/gif"} or (
+            image.media_type == "image/jpeg" and source_mode not in {"RGB", "L"}
+        )
+        if not needs_png:
             return source, image.media_type
 
         display_path = source.parent.parent / "display" / f"{image.id}.png"
