@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../../api/client";
+import * as runtime from "../../runtime";
 import { ProjectTrainingMonitor } from "./ProjectTrainingMonitor";
 
 vi.mock("../../api/client", async (importOriginal) => ({
@@ -104,6 +105,26 @@ afterEach(() => {
 });
 
 describe("ProjectTrainingMonitor", () => {
+  it("opens the active run in a desktop PowerShell monitor", async () => {
+    vi.spyOn(runtime, "getRuntimeContext").mockReturnValue({
+      apiBaseUrl: "http://127.0.0.1:8000/api/v1",
+      dataDir: "C:/ReefVision",
+      desktopMode: true,
+    });
+    const open = vi
+      .spyOn(runtime, "openDesktopTrainingConsole")
+      .mockResolvedValue(undefined);
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([activeRun]);
+
+    renderMonitor();
+    await screen.findByText("Swiftia detector");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open PowerShell monitor" }),
+    );
+    await waitFor(() => expect(open).toHaveBeenCalledWith("run-active"));
+  });
+
+
   it("shows active canonical training progress, metrics, and provenance", async () => {
     vi.mocked(api.getTrainingRuns).mockResolvedValue([activeRun]);
 
