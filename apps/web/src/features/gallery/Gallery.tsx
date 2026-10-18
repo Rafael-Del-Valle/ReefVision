@@ -597,7 +597,7 @@ export function Gallery({
             <input
               className="visually-hidden"
               type="file"
-              accept=".jpg,.jpeg,.png,.tif,.tiff,.webp"
+              accept=".jpg,.jpeg,.jpe,.jfif,.jfi,.jif,.png,.tif,.tiff,.webp,.bmp,.dib,.gif"
               multiple
               onChange={(event) => acceptFiles(event.target.files)}
             />
@@ -608,7 +608,7 @@ export function Gallery({
               ref={folderInput}
               className="visually-hidden"
               type="file"
-              accept=".jpg,.jpeg,.png,.tif,.tiff,.webp"
+              accept=".jpg,.jpeg,.jpe,.jfif,.jfi,.jif,.png,.tif,.tiff,.webp,.bmp,.dib,.gif"
               multiple
               onChange={(event) => acceptFiles(event.target.files)}
             />
