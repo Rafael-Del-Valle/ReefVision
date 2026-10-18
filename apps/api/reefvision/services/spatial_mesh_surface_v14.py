@@ -26,13 +26,17 @@ def measure_mesh_preview(
     relative_scale_uncertainty: float | None = None,
     source_label: str | None = None,
 ) -> dict[str, Any]:
-    """Measure input triangles only; do not infer a verified organism surface."""
     if not 3 <= len(vertices) <= MAX_VERTICES or not 1 <= len(faces) <= MAX_FACES:
         raise ValueError("Mesh preview vertex/face count is outside supported bounds")
     scale = float(meters_per_unit)
     if not isfinite(scale) or not 0 < scale <= 1_000_000:
         raise ValueError("meters_per_unit must be finite, positive, and within bounds")
-    if calibration_method not in {"ruler", "photogrammetry_control", "instrument", "other"}:
+    if calibration_method not in {
+        "ruler",
+        "photogrammetry_control",
+        "instrument",
+        "other",
+    }:
         raise ValueError("A supported calibration_method is required")
     if not isinstance(calibration_evidence, str) or not calibration_evidence.strip():
         raise ValueError("Calibration evidence must be provided")
@@ -48,7 +52,9 @@ def measure_mesh_preview(
             not isfinite(float(value)) or abs(float(value)) > 1_000_000_000
             for value in vertex
         ):
-            raise ValueError("Each vertex must contain three bounded finite coordinates")
+            raise ValueError(
+                "Each vertex must contain three bounded finite coordinates"
+            )
         points.append(tuple(float(value) for value in vertex))
     edges: Counter[tuple[int, int]] = Counter()
     seen_faces: set[tuple[int, int, int]] = set()
@@ -60,7 +66,9 @@ def measure_mesh_preview(
             or any(index < 0 or index >= len(points) for index in face)
             or len(set(face)) != 3
         ):
-            raise ValueError("Every face must reference three distinct existing vertices")
+            raise ValueError(
+                "Every face must reference three distinct existing vertices"
+            )
         key = tuple(sorted(face))
         if key in seen_faces:
             raise ValueError("Duplicate triangles would double-count surface area")
@@ -114,8 +122,6 @@ def measure_mesh_preview(
             "calibration_evidence": calibration_evidence.strip(),
             "calibration_verified": False,
             "relative_scale_uncertainty": relative_scale_uncertainty,
-            "axis_aligned_dimensions_rotation_invariant": False,
-            "surface_area_represents_input_triangles_only": True,
         },
     }
 
