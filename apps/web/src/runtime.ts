@@ -84,9 +84,13 @@ export async function initializeRuntime(): Promise<void> {
   }
 }
 
-export async function openDesktopTrainingConsole(runId: string): Promise<void> {
+export async function openDesktopTrainingConsole(
+  runId: string,
+): Promise<void> {
   if (!getRuntimeContext().desktopMode) {
-    throw new Error("The external training console requires the Windows desktop app.");
+    throw new Error(
+      "The external training console requires the Windows desktop app.",
+    );
   }
   await invoke<void>("open_training_console", { runId });
 }
