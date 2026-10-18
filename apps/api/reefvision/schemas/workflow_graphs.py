@@ -38,6 +38,7 @@ WorkflowDataType = Literal[
     "pose_training_package",
     "results_package",
     "project_exchange_package",
+    "review_queue_reference",
 ]
 
 

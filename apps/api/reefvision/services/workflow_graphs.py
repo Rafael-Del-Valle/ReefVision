@@ -126,6 +126,7 @@ _ACTIONS: dict[str, str] = {
         "Retrain an Ultralytics pose checkpoint from immutable scientist-verified pose truth."
     ),
     "project_exchange_export": "Build a Phase 9 checksummed project exchange export inline.",
+    "qc_review_queue": "Create a persistent, auditable queue requiring human review.",
 }
 
 
