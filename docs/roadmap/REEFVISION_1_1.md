@@ -15,7 +15,7 @@ by successful run 38545559271. Release validation remains separate from code CI.
 
 The application is React/TypeScript + TanStack Query + Leaflet, hosted in
 Tauri with a local FastAPI worker/backend. SQLAlchemy owns the SQLite model;
-Alembic currently ends at 0037. Public IDs are UUIDs, source coordinates are
+The baseline Alembic head was 0037; this branch adds 0038. Public IDs are UUIDs, source coordinates are
 pixels, and model predictions remain separate from verified annotations.
 
 Reusable implementations inspected:
@@ -34,13 +34,13 @@ Reusable implementations inspected:
 
 | Phase | Dependencies | Implemented | Tested | Release-validated | Acceptance remaining |
 | --- | --- | --- | --- | --- | --- |
-| 1 Scientific foundation | Validated baseline | In progress | Pending | No | Typed spatial/time/unit/provenance records, scoped IDs, additive migration, compatibility and integrity tests |
-| 2 Telemetry and geographic measurements | 1; existing georeferencing | Existing reusable infrastructure | Baseline tests being run | No | Heading/pairwise fixtures, uncertainty reporting, mask geometry, GeoPackage, real drone reference |
-| 3 Environmental context | 1 | Planned | No | No | Local import, NOAA, Copernicus, bounded lookup, daily cache, offline, credentials |
-| 4 Current visualizer | 2, 3 | Planned | No | No | Streamlines, time/depth, layers, trajectories, cache/provenance, desktop acceptance |
+| 1 Scientific foundation | Validated baseline | Core records, units, UTC, WGS84/pixels, calibration snapshots, provenance, QC and cache tables | API, integrity, serialization, migration round trip and legacy exchange tests pass | No | Additional CRS transforms, scientific project exchange, broader real-project migration acceptance |
+| 2 Telemetry and geographic measurements | 1; existing georeferencing | Existing telemetry/calibration reused; stale-coordinate exclusion and WGS84 segment bearings added | 71 focused backend tests pass, including datum-change/invalidation/recomputation; frontend regression tests pass | No | Propagated geographic uncertainty, pairwise geographic motion, mask geometry, GeoPackage, absolute UTC/VFR alignment, surveyed drone references |
+| 3 Environmental context | 1 | Local JSON import, NOAA station temperature, persistent 24-hour cache/offline, bounded lookup and project workspace | Provider/API/cache tests and live NOAA smoke test pass; UI unit tests/build pass | No | Copernicus current/temperature/salinity grids, credential settings, unattended daily refresh, detection/track lookup controls, browser/desktop acceptance |
+| 4 Current visualizer | 2, 3 | Not started | No | No | Streamlines, time/depth, layers, trajectories, cache/provenance, desktop acceptance |
 | 5 Scientific heatmaps | 1; existing pose/annotation records | Existing partial infrastructure | Not assessed for 1.1 | No | Independent reviewer/model layers and disagreement validation |
 | 6 Computed metrics | 1; calibration and verified annotations | Existing measurements only | Not assessed for 1.1 | No | Safe arithmetic/unit engine, matching run/frame identity, saved calculations/provenance |
-| 7 Event/environment analysis | 2, 3, 6 | Planned | No | No | Event windows, tides/lunar provenance and reproducible exports |
+| 7 Event/environment analysis | 2, 3, 6 | Not started | No | No | Event windows, tides/lunar provenance and reproducible exports |
 
 Optional advection is deferred until core acceptance. Existing 1.0.x GUI,
 GPU and scientific acceptance issues do not block additive foundation work,
@@ -117,3 +117,95 @@ Until its format is extended, enriched projects explicitly refuse exchange
 export rather than silently lose data; legacy project exchange remains
 available. Full database backups retain the new tables. No new model weights
 or dependencies have been added to the application.
+The existing `stage-bundled-models.py` and `build-desktop.ps1` enforce a
+weight-free manifest; some workflow step labels still say "bundled checkpoints"
+and are stale. This branch preserves the enforced registration-only policy.
+
+Geographic checkpoint: movement analytics now exclude stale or unknown-freshness
+coordinates and report an initial WGS84 bearing in degrees clockwise from true
+north. Stationary pairs have no bearing. Cardinal, dateline and persisted
+invalidation/recomputation fixtures passed; this does not validate drone camera
+attitude, height references or survey-grade position uncertainty.
+
+Environmental checkpoint: the first provider is NOAA CO-OPS station water
+temperature. Original provider payloads, station identity, flags and timestamps
+are preserved. Missing values are counted; malformed, mismatched and empty
+responses fail transactionally. Cache expiry is 24 hours and refresh occurs on
+request. Offline operation makes no provider request. Bounded lookup returns
+observations with distance/time/depth offsets without interpolation, excludes
+suspect/rejected measurements, and never treats unknown depth as surface depth.
+The project workspace supports local JSON and NOAA import, record pagination,
+source/variable filters, QC, units, UTC and provenance inspection.
+
+Live acceptance smoke: on 2026-10-18, the actual adapter acquired 240 NOAA
+Charleston station 8665530 temperature observations for 2026-10-16 into a
+disposable database. A new database session in offline mode returned the same
+240 record IDs. This validates the protocol/cache path, not sensor accuracy or
+representativeness at an organism's location.
+
+Validation checkpoint before final review:
+
+- New scientific/provider/migration focused suite: 27 passed.
+- Geographic movement/georeferencing focused suite: 71 passed.
+- Frontend: 464 tests passed in 94 files; TypeScript and production build pass.
+- Python Ruff and mypy (416 source files) pass.
+- A full backend run after installing declared development extras reached
+  1212 passed, 32 skipped and two failures. One was the environment's bundled
+  FFmpeg executable/path; one was a test typo corrected while the run was in
+  progress. A targeted rerun with `IMAGEIO_FFMPEG_EXE=/usr/bin/ffmpeg` passed
+  all 14 affected packaging/environment tests. Final complete rerun follows
+  review fixes; the earlier run is not represented as passing.
+- New browser acceptance test is committed. Local Playwright could not launch:
+  Chromium was absent and its installer received empty/invalid ZIP downloads.
+  Browser execution and visual inspection remain unverified locally.
+
+## Remaining acceptance gates and next milestones
+
+1. Complete independent branch review, address integrity findings with
+   regression tests, rerun gates and record final-head CI in draft PR #71.
+2. Extend project exchange to carry scientific records/cache and remap their
+   referenced IDs; validate actual researcher 1.0.x projects and installed-app restore.
+3. Bind provider lookup in image/video/track inspectors and expose record
+   revision selection, with explicit distance/time/depth limits.
+4. Add a credential-configurable Copernicus subset/grid adapter and cached
+   current, temperature and salinity fixtures before the current visualizer.
+5. Extend telemetry uncertainty and surveyed georeferencing acceptance, then
+   GeoPackage and pairwise movement exports. Keep approximate positions marked.
+6. Implement the unit-checked computed-metric engine against verified
+   annotations and matching run/frame outputs; keep the comprehensive visual
+   node editor reserved for 2.0.
+
+Windows installed-app/WebView, NVIDIA hardware, real drone/GCP reference data,
+authenticated Copernicus and researcher sensor/reference acceptance are still
+required. CI builds and synthetic fixtures cannot substitute for these gates.
+
+Independent review identified two important findings. Both were reproduced by
+failing tests before correction: same-project unrelated jobs were accepted as
+model provenance; environmental lookup could return a superseded observation
+after NOAA corrected its value, removed it or marked it suspect. Source job
+kind/media/object lineage is now validated. Provider records retain immutable
+history with a computed current-snapshot indicator, and normal lookup excludes
+superseded snapshots. The workspace labels historical provider records. No
+critical or deferred minor findings were reported by that review.
+After these fixes, the focused scientific/environmental/migration suite passed
+33 tests, including reopening a full backup snapshot and reusing the same
+provider records offline. The frontend suite passed 465 tests in 94 files;
+TypeScript, production build, Ruff and mypy passed again. The production build
+retains the existing large-chunk warning.
+
+Final local backend gate: `IMAGEIO_FFMPEG_EXE=/usr/bin/ffmpeg .venv/bin/python
+-m pytest apps/api/reefvision/tests -q --pose-interop-integration` passed
+**1248 tests, with 4 skipped**, in 393 seconds. The skips require the dedicated
+live SAM acceptance job or an external WhaleDrone MP4/SRT reference pair.
+There was one existing FastAPI/Starlette TestClient deprecation warning.
+The system-FFmpeg override resolves this environment's non-executable packaged
+binary; it does not prove packaged Windows FFmpeg acceptance. Final-head CI and
+browser execution evidence are tracked in
+[draft PR #71](https://github.com/Rafael-Del-Valle/ReefVision/pull/71).
+
+Rulings made for this milestone: restrict explicit coordinates to source pixels
+and WGS84 until validated CRS transforms exist; keep canonical image calibration
+and snapshot it; refuse old exchange exports for enriched projects until the
+format can preserve them; implement daily cache expiry on request before adding
+a scheduler. These choices avoid silent transformations or data loss, with the
+cost of limited CRS/export support and no unattended daily refresh yet.
