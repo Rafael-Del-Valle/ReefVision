@@ -14,6 +14,7 @@ from reefvision.services.spatial_mesh_obj_v14 import (
     MAX_VERTICES,
     parse_obj_triangles,
 )
+from reefvision.services.spatial_mesh_ply_v14 import parse_ply_triangles
 
 
 def measure_mesh_preview(
@@ -131,6 +132,9 @@ def preview_from_request(payload: Any) -> dict[str, Any]:
     if payload.obj_text is not None:
         vertices, faces = parse_obj_triangles(payload.obj_text)
         source_format = "obj"
+    elif payload.ply_text is not None:
+        vertices, faces = parse_ply_triangles(payload.ply_text)
+        source_format = "ply_ascii"
     else:
         vertices, faces = payload.vertices, payload.faces
         source_format = "indexed_triangles"
