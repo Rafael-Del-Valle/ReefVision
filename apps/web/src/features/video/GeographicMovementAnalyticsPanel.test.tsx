@@ -109,7 +109,7 @@ describe("GeographicMovementAnalyticsPanel", () => {
     ).toBeInTheDocument();
 
     expect(
-      screen.getByText("No persisted geographic observations for this track."),
+      screen.getByText("No fresh geographic observations for this track."),
     ).toBeInTheDocument();
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -201,6 +201,7 @@ describe("GeographicMovementAnalyticsPanel", () => {
           end_location: coordinate,
           distance_m: 5,
           speed_m_s: null,
+          initial_bearing_deg: null,
           cumulative_distance_m: 5,
           speed_valid: false,
           invalid_reason: "non_positive_elapsed_time",
@@ -266,6 +267,7 @@ describe("Task 16G panel synchronization", () => {
     end_location: coordinate,
     distance_m: 5,
     speed_m_s: 5,
+    initial_bearing_deg: 90,
     cumulative_distance_m: 5,
     speed_valid: true,
     invalid_reason: null,
@@ -313,6 +315,41 @@ describe("Task 16G panel synchronization", () => {
       container.querySelector('tr[data-active-segment="true"]'),
     ).toBeNull();
   });
+
+  it.each([
+    [0, "0.00°"],
+    [90.1234, "90.12°"],
+    [null, "Unavailable"],
+  ])(
+    "shows backend initial bearing %s with its convention",
+    (bearing, expected) => {
+      render(
+        <GeographicMovementAnalyticsPanel
+          state={successState({
+            ...data,
+            segments: [{ ...segment, initial_bearing_deg: bearing }],
+          })}
+          onReload={vi.fn()}
+        />,
+      );
+
+      const table = screen.getByRole("table", {
+        name: "Geographic trajectory segments",
+      });
+      const headings = within(table).getAllByRole("columnheader");
+      const bearingColumn = headings.findIndex(
+        (heading) => heading.textContent === "Initial bearing",
+      );
+      expect(bearingColumn).toBeGreaterThanOrEqual(0);
+      expect(
+        within(table).getAllByRole("cell")[bearingColumn],
+      ).toHaveTextContent(String(expected));
+      expect(
+        screen.getByText(/clockwise from true north/i),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/organism orientation/i)).toBeInTheDocument();
+    },
+  );
 
   it("seeks to the persisted endpoint without reloading analytics", () => {
     const onFrameSelect = vi.fn();

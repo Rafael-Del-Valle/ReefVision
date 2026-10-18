@@ -30,6 +30,7 @@ function segment(start: number, end: number): GeographicMovementSegment {
     },
     distance_m: 10,
     speed_m_s: 5,
+    initial_bearing_deg: 315,
     cumulative_distance_m: 10,
     speed_valid: true,
     invalid_reason: null,

@@ -136,6 +136,65 @@ def test_segment_preserves_identity_and_calculates_speed() -> None:
 
 
 @pytest.mark.parametrize(
+    ("start_lat", "start_lon", "end_lat", "end_lon", "expected_bearing"),
+    [
+        (0.0, 0.0, 1.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0, 1.0, 90.0),
+        (0.0, 0.0, 0.0, -1.0, 270.0),
+        (0.0, 179.9, 0.0, -179.9, 90.0),
+        (0.0, -179.9, 0.0, 179.9, 270.0),
+        (0.0, 0.0, 1.0, 1.0, 45.18804022935887),
+    ],
+    ids=["north", "east", "west", "dateline-east", "dateline-west", "wgs84-diagonal"],
+)
+def test_segment_initial_bearing_is_clockwise_from_true_north(
+    start_lat: float,
+    start_lon: float,
+    end_lat: float,
+    end_lon: float,
+    expected_bearing: float,
+) -> None:
+    start = observation(
+        "start",
+        frame_index=0,
+        frame_time_s=0.0,
+        latitude_deg=start_lat,
+        longitude_deg=start_lon,
+    )
+    end = observation(
+        "end",
+        frame_index=1,
+        frame_time_s=1.0,
+        latitude_deg=end_lat,
+        longitude_deg=end_lon,
+    )
+
+    segment = calculate_movement_segment(start, end)
+
+    assert segment.model_dump()["initial_bearing_deg"] == pytest.approx(
+        expected_bearing,
+        abs=1e-9,
+    )
+
+
+def test_stationary_segment_has_no_initial_bearing() -> None:
+    start = observation(
+        "start",
+        frame_index=0,
+        frame_time_s=0.0,
+        latitude_deg=32.75,
+        longitude_deg=-79.93,
+    )
+    end = start.model_copy(update={"observation_id": "end", "frame_index": 1, "frame_time_s": 1.0})
+
+    segment = calculate_movement_segment(start, end)
+
+    assert segment.distance_m == 0.0
+    assert segment.speed_m_s == 0.0
+    assert segment.model_dump()["initial_bearing_deg"] is None
+
+
+@pytest.mark.parametrize(
     ("end_time_s", "expected_elapsed_s"),
     [
         (1.0, 0.0),

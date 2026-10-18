@@ -43,6 +43,7 @@ def persisted_observation(
     latitude_deg: float,
     longitude_deg: float,
     crs: str = "EPSG:4326",
+    is_stale: bool = False,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         id=observation_id,
@@ -53,6 +54,7 @@ def persisted_observation(
         latitude_deg=latitude_deg,
         longitude_deg=longitude_deg,
         crs=crs,
+        is_stale=is_stale,
     )
 
 
@@ -202,6 +204,62 @@ def test_geographic_analytics_empty_observations(
     assert payload["mean_speed_m_s"] is None
     assert payload["max_segment_speed_m_s"] is None
     assert payload["segments"] == []
+
+
+@pytest.mark.parametrize("all_stale", [False, True], ids=["mixed-fresh", "all-stale"])
+def test_geographic_analytics_excludes_stale_observations(
+    track: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+    all_stale: bool,
+) -> None:
+    observations = [
+        persisted_observation(
+            "fresh-start",
+            frame_index=0,
+            frame_time_s=0.0,
+            latitude_deg=0.0,
+            longitude_deg=0.0,
+            is_stale=all_stale,
+        ),
+        persisted_observation(
+            "stale-outlier",
+            frame_index=10,
+            frame_time_s=1.0,
+            latitude_deg=20.0,
+            longitude_deg=20.0,
+            is_stale=True,
+        ),
+        persisted_observation(
+            "fresh-end",
+            frame_index=20,
+            frame_time_s=2.0,
+            latitude_deg=0.0,
+            longitude_deg=0.001,
+            is_stale=all_stale,
+        ),
+    ]
+    monkeypatch.setattr(
+        GeoReferencedObservationService,
+        "list_for_track",
+        lambda _self, _track_id: observations,
+    )
+
+    with TestClient(build_test_app(FakeSession(track=track))) as client:
+        response = client.get("/api/v1/video-tracks/track-1/geographic-analytics")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["observation_count"] == (0 if all_stale else 2)
+    if all_stale:
+        assert payload["segments"] == []
+        assert payload["mean_speed_m_s"] is None
+        assert payload["total_distance_m"] == 0.0
+    else:
+        assert payload["total_distance_m"] == pytest.approx(111.319490793, abs=1e-5)
+        assert payload["mean_speed_m_s"] == pytest.approx(55.6597453965, abs=1e-5)
+        assert payload["segments"][0]["start_observation_id"] == "fresh-start"
+        assert payload["segments"][0]["end_observation_id"] == "fresh-end"
+        assert payload["segments"][0]["initial_bearing_deg"] == pytest.approx(90.0)
 
 
 def test_geographic_analytics_missing_track_returns_404(

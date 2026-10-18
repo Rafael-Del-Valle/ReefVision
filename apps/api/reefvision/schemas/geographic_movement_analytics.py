@@ -50,6 +50,16 @@ class GeographicMovementSegment(_MovementAnalyticsModel):
 
     distance_m: float = Field(ge=0.0)
     speed_m_s: float | None = Field(default=None, ge=0.0)
+    initial_bearing_deg: float | None = Field(
+        default=None,
+        ge=0.0,
+        lt=360.0,
+        description=(
+            "Initial azimuth of the WGS84 geodesic from the start location to the end "
+            "location, in degrees clockwise from true north. Null for coincident locations. "
+            "This describes sampled geographic displacement, not organism body orientation."
+        ),
+    )
     cumulative_distance_m: float = Field(ge=0.0)
 
     speed_valid: bool
