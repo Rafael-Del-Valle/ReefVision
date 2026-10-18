@@ -8,8 +8,8 @@ from reefvision.services.workflow_execution import EXECUTABLE_NODE_TYPES
 from reefvision.services.workflow_graphs import _ACTIONS
 from reefvision.services.workflow_node_registry_v1 import workflow_node_registry
 from reefvision.services.workflow_runtime_adapters import (
-    RUNTIME_ADAPTER_NODE_TYPES,
     _ADAPTERS,
+    RUNTIME_ADAPTER_NODE_TYPES,
 )
 from reefvision.tests.test_annotations import create_project
 
