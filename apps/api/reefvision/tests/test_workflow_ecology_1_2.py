@@ -82,18 +82,19 @@ def test_saved_ecology_workflow_persists_unverified_artifact(client: TestClient)
     )
     assert queue.status_code == 202, queue.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings,
-        app.state.session_factory,
-        str(queue.json()["job_id"]),
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queue.json()["job_id"]),
+        )
+        is True
+    )
     detail = client.get(f"/api/v1/workflow-runs/{queue.json()['id']}")
     assert detail.status_code == 200, detail.text
     body = detail.json()
     assert body["run"]["status"] == "succeeded"
-    analyses = [
-        item for item in body["artifacts"] if item["data_type"] == "longitudinal_analysis"
-    ]
+    analyses = [item for item in body["artifacts"] if item["data_type"] == "longitudinal_analysis"]
     assert len(analyses) == 1
     payload = analyses[0]["payload_json"]
     assert payload["project_id"] == project_id
@@ -115,12 +116,7 @@ def test_unverified_ecology_cannot_enter_verified_dataset(client: TestClient) ->
             "target_port_id": "reviewed",
         }
     )
-    response = client.post(
-        f"/api/v1/projects/{project['id']}/workflow-graphs/validate", json=graph
-    )
+    response = client.post(f"/api/v1/projects/{project['id']}/workflow-graphs/validate", json=graph)
     assert response.status_code == 200, response.text
     assert response.json()["valid"] is False
-    assert any(
-        issue["code"] == "incompatible_port_types"
-        for issue in response.json()["issues"]
-    )
+    assert any(issue["code"] == "incompatible_port_types" for issue in response.json()["issues"])

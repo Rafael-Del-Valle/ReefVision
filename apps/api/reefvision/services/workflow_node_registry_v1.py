@@ -631,7 +631,6 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         ],
     )
 
-
     registry["ecology_longitudinal_analysis"] = WorkflowNodeDefinitionResponse(
         node_type="ecology_longitudinal_analysis",
         display_name="Exploratory Longitudinal Ecology",

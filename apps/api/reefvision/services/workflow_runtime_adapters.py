@@ -791,7 +791,6 @@ def _video_tracking(
     ]
 
 
-
 def _ecology_longitudinal_analysis(
     session: Session,
     settings: Settings,
