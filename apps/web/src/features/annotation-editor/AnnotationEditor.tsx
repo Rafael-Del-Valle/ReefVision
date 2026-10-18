@@ -625,7 +625,7 @@ export function AnnotationEditor({
     }
     globalThis.addEventListener("resize", updateSize);
     return () => globalThis.removeEventListener("resize", updateSize);
-  }, []);
+  }, [sessionQuery.data?.image.id]);
 
   const imageSize = useMemo(() => {
     if (!sessionQuery.data) {

@@ -343,6 +343,36 @@ afterEach(() => {
 });
 
 describe("AnnotationEditor", () => {
+  it("measures the canvas after an uncached first-open session finishes loading", async () => {
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(
+      function (this: HTMLElement) {
+        return this.classList.contains("annotation-canvas-frame") ? 1024 : 0;
+      },
+    );
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(
+      function (this: HTMLElement) {
+        return this.classList.contains("annotation-canvas-frame") ? 768 : 0;
+      },
+    );
+    mockBasicEditorRequests();
+
+    renderEditor();
+    expect(screen.getByText("Loading annotation editor")).toBeInTheDocument();
+
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("annotation-canvas")).toHaveAttribute(
+        "viewBox",
+        "0 0 1024 768",
+      );
+    });
+    expect(
+      screen.getByTestId("viewport-transform").getAttribute("transform"),
+    ).not.toContain("NaN");
+  });
+
   it("preserves the thumbnail when the full-resolution preload fails", () => {
     expect(
       annotationImageSource("image-1", "managed/thumb.png", false),
