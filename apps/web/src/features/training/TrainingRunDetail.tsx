@@ -350,7 +350,9 @@ export function TrainingRunDetail({
             disabled={consoleOpening}
             onClick={() => void handleOpenTrainingConsole()}
           >
-            {consoleOpening ? "Opening PowerShell…" : "Open live training in PowerShell"}
+            {consoleOpening
+              ? "Opening PowerShell…"
+              : "Open live training in PowerShell"}
           </button>
         )}
         {!active && (
@@ -378,7 +380,11 @@ export function TrainingRunDetail({
             </button>
           ))}
       </div>
-      {consoleError && <p className="form-error" role="alert">{consoleError}</p>}
+      {consoleError && (
+        <p className="form-error" role="alert">
+          {consoleError}
+        </p>
+      )}
       {exportOpen && (
         <ResultsPackageDialog run={run} onClose={() => setExportOpen(false)} />
       )}
