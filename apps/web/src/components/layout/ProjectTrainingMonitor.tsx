@@ -55,7 +55,6 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
     }
   }
 
-
   const runsQuery = useQuery({
     queryKey: ["training_runs", projectId],
     queryFn: ({ signal }) => getTrainingRuns(projectId, signal),
@@ -229,7 +228,9 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
                     disabled={openingRunId !== null}
                     onClick={() => void openConsole(run.id)}
                   >
-                    {openingRunId === run.id ? "Opening PowerShell…" : "Open PowerShell monitor"}
+                    {openingRunId === run.id
+                      ? "Opening PowerShell…"
+                      : "Open PowerShell monitor"}
                   </button>
                 )}
 
@@ -263,7 +264,11 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
         </div>
       )}
 
-      {terminalError && <p className="form-error" role="alert">{terminalError}</p>}
+      {terminalError && (
+        <p className="form-error" role="alert">
+          {terminalError}
+        </p>
+      )}
 
       {cancelMutation.error && (
         <p className="form-error" role="alert">
