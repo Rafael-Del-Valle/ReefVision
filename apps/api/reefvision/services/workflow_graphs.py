@@ -122,6 +122,9 @@ _ACTIONS: dict[str, str] = {
     "pose_training_export": (
         "Export the immutable pose dataset through the validated Phase 9 exporters."
     ),
+    "pose_training_dataset": (
+        "Resolve a frozen scientist-verified pose dataset with schema and manifest lineage."
+    ),
     "pose_model_training": (
         "Retrain an Ultralytics pose checkpoint from immutable scientist-verified pose truth."
     ),
