@@ -1,5 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import * as runtime from "../../runtime";
+
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+import { invoke } from "@tauri-apps/api/core";
 
 import type { TrainingRun } from "../../api/client";
 import { TrainingRunDetail } from "./TrainingRunDetail";
@@ -81,6 +86,30 @@ const run: TrainingRun = {
 };
 
 describe("TrainingRunDetail", () => {
+  it("opens the live PowerShell monitor only through the desktop command", async () => {
+    vi.spyOn(runtime, "getRuntimeContext").mockReturnValue({
+      apiBaseUrl: "http://127.0.0.1:8000/api/v1",
+      dataDir: "C:/ReefVision",
+      desktopMode: true,
+    });
+    vi.mocked(invoke).mockResolvedValue(undefined);
+    render(
+      <TrainingRunDetail
+        run={{ ...run, status: "training" }}
+        registering={false}
+        onCancel={vi.fn()}
+        onRegister={vi.fn()}
+      />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open live training in PowerShell" }),
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("open_training_console", { runId: "run-1" }),
+    );
+    vi.restoreAllMocks();
+  });
+
   it("shows the actual best epoch, task metrics, checkpoints, artifacts, and provenance", () => {
     render(
       <TrainingRunDetail
