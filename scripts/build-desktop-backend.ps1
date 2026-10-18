@@ -57,6 +57,10 @@ $VdaManifestPath = Join-Path $VdaRuntimeRoot "source-manifest.json"
 $ExpectedVdaCommit = "4f5ae23172ba60fd7bc11ef671cca678842c7072"
 $ApiRoot = Join-Path $Root "apps\api"
 $DesktopEntrypoint = Join-Path $ApiRoot "reefvision\desktop.py"
+$CopernicusWorkerPath = Join-Path $ApiRoot "reefvision\services\copernicus_worker.py"
+if (-not (Test-Path -LiteralPath $CopernicusWorkerPath -PathType Leaf)) {
+    throw "Required Copernicus worker source is missing: $CopernicusWorkerPath"
+}
 $AlembicIni = Join-Path $ApiRoot "alembic.ini"
 $MigrationsDir = Join-Path $ApiRoot "migrations"
 $ConfigRoot = Join-Path $Root "config"
@@ -387,7 +391,7 @@ $Arguments = @(
     "--add-data",
     "${Mavic3TCalibrationPath};reefvision/data/camera_calibrations",
     "--add-data",
-    "apps/api/reefvision/services/copernicus_worker.py;reefvision/services",
+    "${CopernicusWorkerPath};reefvision/services",
     $DesktopEntrypoint
 )
 
