@@ -4,6 +4,7 @@ export type WorkspaceInspectorView =
   | "gallery"
   | "versions"
   | "interoperability"
+  | "environmental_context"
   | "models"
   | "training"
   | "classification"
@@ -41,6 +42,7 @@ export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "gallery",
   "versions",
   "interoperability",
+  "environmental_context",
   "models",
   "training",
   "classification",
@@ -119,6 +121,26 @@ const WORKSPACE_INSPECTORS: Record<
         label: "Images & annotation",
         target: "gallery",
         description: "Return to managed project imagery and annotations.",
+      },
+    ],
+  },
+  environmental_context: {
+    title: "Environmental observations",
+    summary:
+      "Inspect project scientific records and import local sensor or NOAA station observations.",
+    boundary: "record",
+    recordPolicy:
+      "Original and normalized quantities retain observation time, depth, quality flags, and source provenance. Unknown depth remains unknown; source kinds distinguish observations from modeled and derived data.",
+    actions: [
+      {
+        label: "Images & annotation",
+        target: "gallery",
+        description: "Return to the imagery associated with project records.",
+      },
+      {
+        label: "Video & tracking",
+        target: "video",
+        description: "Inspect organism tracks and geographic observations.",
       },
     ],
   },
