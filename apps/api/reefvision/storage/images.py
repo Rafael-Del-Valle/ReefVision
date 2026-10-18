@@ -17,8 +17,19 @@ from reefvision.storage.projects import resolve_managed_project_path
 
 # File extensions are only a preflight filter; Pillow verifies the actual decoded format.
 SUPPORTED_EXTENSIONS = {
-    ".jpg", ".jpeg", ".jpe", ".jfif", ".jfi", ".jif",
-    ".png", ".tif", ".tiff", ".webp", ".bmp", ".dib", ".gif",
+    ".jpg",
+    ".jpeg",
+    ".jpe",
+    ".jfif",
+    ".jfi",
+    ".jif",
+    ".png",
+    ".tif",
+    ".tiff",
+    ".webp",
+    ".bmp",
+    ".dib",
+    ".gif",
 }
 FORMAT_DETAILS = {
     "JPEG": (".jpg", "image/jpeg"),

@@ -289,7 +289,6 @@ def test_supported_image_formats_import(client: TestClient) -> None:
         assert client.get(f"/api/v1/images/{image_id}").json()["media_type"] == media_type
 
 
-
 def test_cmyk_jpeg_import_has_browser_safe_display(client: TestClient) -> None:
     project = create_project(client, "CMYK JPEG")
     stream = BytesIO()
