@@ -15,12 +15,18 @@ from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
 from reefvision.storage.projects import resolve_managed_project_path
 
-SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp"}
+# File extensions are only a preflight filter; Pillow verifies the actual decoded format.
+SUPPORTED_EXTENSIONS = {
+    ".jpg", ".jpeg", ".jpe", ".jfif", ".jfi", ".jif",
+    ".png", ".tif", ".tiff", ".webp", ".bmp", ".dib", ".gif",
+}
 FORMAT_DETAILS = {
     "JPEG": (".jpg", "image/jpeg"),
     "PNG": (".png", "image/png"),
     "TIFF": (".tiff", "image/tiff"),
     "WEBP": (".webp", "image/webp"),
+    "BMP": (".bmp", "image/bmp"),
+    "GIF": (".gif", "image/gif"),
 }
 
 
@@ -64,7 +70,7 @@ def safe_original_name(filename: str | None) -> str:
 
 def ensure_supported_extension(filename: str) -> None:
     if Path(filename).suffix.lower() not in SUPPORTED_EXTENSIONS:
-        raise UnsupportedImageError("Supported image types are JPEG, PNG, TIFF, and WebP")
+        raise UnsupportedImageError("Supported image types are JPEG, PNG, TIFF, WebP, BMP, and GIF")
 
 
 def stream_to_staging(source: BinaryIO, destination: Path) -> tuple[str, int]:
@@ -120,6 +126,8 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
             width, height = image.size
             if width <= 0 or height <= 0:
                 raise InvalidImageError("Image dimensions must be greater than zero")
+            if decoded_format == "GIF" and getattr(image, "n_frames", 1) != 1:
+                raise UnsupportedImageError("Animated GIFs cannot be safely imported as a single scientific image")
             exif = dict(image.getexif())
             named_exif = {
                 ExifTags.TAGS.get(key, str(key)): _json_safe(value)
