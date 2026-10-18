@@ -127,7 +127,9 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
             if width <= 0 or height <= 0:
                 raise InvalidImageError("Image dimensions must be greater than zero")
             if decoded_format == "GIF" and getattr(image, "n_frames", 1) != 1:
-                raise UnsupportedImageError("Animated GIFs cannot be safely imported as a single scientific image")
+                raise UnsupportedImageError(
+                    "Animated GIFs cannot be safely imported as a single scientific image"
+                )
             exif = dict(image.getexif())
             named_exif = {
                 ExifTags.TAGS.get(key, str(key)): _json_safe(value)
