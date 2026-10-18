@@ -1057,7 +1057,7 @@ def import_project_exchange_v1(
                     if key in ScientificRecordCreate.model_fields
                 }
             )
-            science._validate_subject(project.id, item)
+            science.validate_subject(project.id, item.subject, item.pixel)
             science.response(row)
         copied_telemetry = _restore_telemetry_sidecars(
             source,

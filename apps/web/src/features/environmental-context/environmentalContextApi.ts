@@ -196,3 +196,38 @@ export function importNOAARecords(
     },
   );
 }
+
+export interface EnvironmentalMatch {
+  record: ScientificRecord;
+  distance_m: number;
+  time_delta_s: number;
+  depth_delta_m: number | null;
+  cache_fetched_at: string | null;
+  cache_expires_at: string | null;
+  cache_age_s: number | null;
+  offline_available: boolean;
+}
+export interface EnvironmentalSubjectContext {
+  status: "available" | "unavailable" | "ambiguous";
+  reason: string | null;
+  positions: ScientificRecord[];
+  position: ScientificRecord | null;
+  matches: Record<string, EnvironmentalMatch[]>;
+}
+export function getSubjectEnvironment(
+  projectId: string,
+  payload: {
+    subject: ScientificSubject;
+    position_record_id?: string;
+    max_distance_m: number;
+    max_time_delta_s: number;
+    max_depth_delta_m: number;
+  },
+  signal?: AbortSignal,
+): Promise<EnvironmentalSubjectContext> {
+  return request(`/api/v1/projects/${projectId}/environment/subject-context`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal,
+  });
+}

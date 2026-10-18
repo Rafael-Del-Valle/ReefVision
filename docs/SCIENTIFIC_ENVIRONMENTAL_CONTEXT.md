@@ -150,3 +150,24 @@ restoration, preserving identifiers. **Project exchange** transfers a selected
 project into a new independent project. Optional media/artifact inclusion still
 applies to exchange; scientific cache payloads are included as scientific data,
 not as model weights. Neither workflow includes provider credentials.
+
+## Subject-specific environmental inspection
+
+The image annotation inspector and the video/frame/track workspace include
+**Inspect environmental context**. Project scientific cards for geographic
+position references expose the same inspector. The lookup is local and works
+offline. Researchers set maximum spatial, temporal and depth separation, inspect
+original source/QC/uncertainty and see provider-cache age explicitly.
+
+A subject requires a `geographic_position` scientific record with WGS84 location
+and an explicit UTC capture timestamp. The inspector can append this documented
+reference; imported JSON can supply it too (`value: 1`, `unit: "1"` marks presence,
+not a physical measurement). The subject identifiers must match exactly, including
+frame, track and model run when provided. Multiple references require explicit
+selection. Missing/suspect references and changed calibration produce unavailable
+context. Station locations on environmental records are never subject locations.
+
+Existing drone georeferencing supplies relative video time; it does not yet
+establish UTC capture time. This milestone therefore does not automatically join
+those outputs to ocean models. Supply a documented subject position/time reference;
+no camera GPS coordinate is silently substituted for an organism's ground position.

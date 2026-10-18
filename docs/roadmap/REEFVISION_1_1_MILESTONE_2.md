@@ -73,3 +73,19 @@ release, merge, tag and hardware/scientific acceptance remain gated.
   52 passed, one upstream FastAPI/Starlette deprecation warning.
 - Ruff passed; mypy passed for 417 source files. No migration changed.
 - Task 1: complete pending whole-milestone review and CI; task 2: in progress.
+
+### Task 2 evidence
+
+- Implemented exact-subject environmental lookup with explicit position/time
+  evidence, ambiguity handling, bounded joins and cache-age metadata.
+- Shared inspector integrated into image annotations, selected video/frame/track,
+  geographic analysis workspace and project geographic-position cards. Position
+  references are append-only scientific records; nearby observations stay distinct.
+- New backend tests: 5 failed before implementation, 5 passed after. Combined
+  science/exchange/environment/subject tests: 49 passed, one upstream warning.
+- Frontend: 470 tests passed in 95 files; TypeScript and production build passed.
+  Build retains the existing large-chunk advisory. No new production dependency.
+- Ruling: require explicit UTC subject evidence instead of inferring UTC from
+  relative video time or camera/station GPS; automatic drone UTC alignment remains
+  a later prerequisite, and existing georeferencing remains unchanged.
+- Task 2: implemented and automated-tested; external scientific acceptance pending.

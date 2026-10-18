@@ -12,10 +12,13 @@ from sqlalchemy.orm import Session
 from reefvision.db.models.scientific_record import EnvironmentalCacheEntry, ScientificRecord
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.schemas.environmental_context import (
+    ENVIRONMENTAL_VARIABLES,
     EnvironmentalImportResponse,
     EnvironmentalLookup,
     EnvironmentalLookupResponse,
     EnvironmentalMatch,
+    EnvironmentalSubjectContext,
+    EnvironmentalSubjectLookup,
     NOAAImportRequest,
 )
 from reefvision.services.geographic_movement_analytics import geographic_distance_m
@@ -169,8 +172,23 @@ class EnvironmentalContextService:
                 depth_delta = record.depth_m - request.depth_m
                 if abs(depth_delta) > request.max_depth_delta_m:
                     continue
+            cache = (
+                self.session.scalar(
+                    select(EnvironmentalCacheEntry).where(
+                        EnvironmentalCacheEntry.project_id == project_id,
+                        EnvironmentalCacheEntry.cache_key == record.environmental_cache_key,
+                    )
+                )
+                if record.environmental_cache_key
+                else None
+            )
             matches.append(
                 EnvironmentalMatch(
+                    cache_fetched_at=_utc(cache.fetched_at) if cache else None,
+                    cache_expires_at=_utc(cache.expires_at) if cache else None,
+                    cache_age_s=max(0, (self.now - _utc(cache.fetched_at)).total_seconds())
+                    if cache
+                    else None,
                     record=record,
                     distance_m=distance,
                     time_delta_s=(record.observed_at - request.observed_at).total_seconds(),
@@ -181,3 +199,83 @@ class EnvironmentalContextService:
             key=lambda item: (abs(item.time_delta_s), item.distance_m, str(item.record.id))
         )
         return EnvironmentalLookupResponse(matches=matches)
+
+    def subject_context(
+        self, project_id: str, request: EnvironmentalSubjectLookup
+    ) -> EnvironmentalSubjectContext:
+        self.science.require_project(project_id)
+        self.science.validate_subject(project_id, request.subject)
+        subject = request.subject.model_dump(mode="json")
+        rows = self.session.scalars(
+            select(ScientificRecord)
+            .where(
+                ScientificRecord.project_id == project_id,
+                ScientificRecord.variable == "geographic_position",
+                ScientificRecord.image_id == subject["image_id"],
+                ScientificRecord.video_id == subject["video_id"],
+                ScientificRecord.track_id == subject["track_id"],
+            )
+            .order_by(ScientificRecord.created_at, ScientificRecord.id)
+            .limit(1001)
+        ).all()
+        if len(rows) > 1000:
+            raise ValidationError("Too many subject positions; use a narrower subject")
+        positions = []
+        for row in rows:
+            record = self.science.response(row)
+            if (
+                record.subject == request.subject
+                and record.location is not None
+                and record.qc not in ("rejected", "suspect")
+                and record.calibration_current is not False
+                and record.environmental_snapshot_current is not False
+            ):
+                positions.append(record)
+        result = EnvironmentalSubjectContext(
+            status="unavailable", subject=request.subject, positions=positions
+        )
+        if request.position_record_id is not None:
+            chosen = next(
+                (item for item in positions if item.id == request.position_record_id), None
+            )
+            if chosen is None:
+                raise ValidationError("Position record must match this exact subject and pass QC")
+        elif len(positions) > 1:
+            result.status = "ambiguous"
+            result.reason = (
+                "Multiple position/time references exist. Select the intended scientific record."
+            )
+            return result
+        elif not positions:
+            result.reason = (
+                "No valid subject position and UTC timestamp. "
+                "Station locations and video-relative times cannot establish "
+                "organism location/time."
+            )
+            return result
+        else:
+            chosen = positions[0]
+        result.position = chosen
+        assert chosen.location is not None
+        for variable in ENVIRONMENTAL_VARIABLES:
+            result.matches[variable] = self.lookup(
+                project_id,
+                EnvironmentalLookup(
+                    variable=variable,
+                    location=chosen.location,
+                    observed_at=chosen.observed_at,
+                    depth_m=chosen.depth_m,
+                    depth_reference=chosen.depth_reference,
+                    max_distance_m=request.max_distance_m,
+                    max_time_delta_s=request.max_time_delta_s,
+                    max_depth_delta_m=request.max_depth_delta_m,
+                ),
+            ).matches
+        if any(result.matches.values()):
+            result.status = "available"
+        else:
+            result.reason = (
+                "No defensible environmental observations within the selected "
+                "space, time and depth bounds."
+            )
+        return result

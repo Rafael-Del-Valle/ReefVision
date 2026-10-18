@@ -11,6 +11,8 @@ from reefvision.schemas.environmental_context import (
     EnvironmentalImportResponse,
     EnvironmentalLookup,
     EnvironmentalLookupResponse,
+    EnvironmentalSubjectContext,
+    EnvironmentalSubjectLookup,
     NOAAImportRequest,
 )
 from reefvision.services.environmental_context import EnvironmentalContextService
@@ -33,3 +35,12 @@ def lookup_environment(
     project_id: UUID, payload: EnvironmentalLookup, session: DbSession
 ) -> EnvironmentalLookupResponse:
     return EnvironmentalContextService(session).lookup(str(project_id), payload)
+
+
+@router.post(
+    "/projects/{project_id}/environment/subject-context", response_model=EnvironmentalSubjectContext
+)
+def subject_environment(
+    project_id: UUID, payload: EnvironmentalSubjectLookup, session: DbSession
+) -> EnvironmentalSubjectContext:
+    return EnvironmentalContextService(session).subject_context(str(project_id), payload)

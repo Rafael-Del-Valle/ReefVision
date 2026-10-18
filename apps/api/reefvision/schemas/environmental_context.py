@@ -1,6 +1,8 @@
 """Explicit environmental acquisition and lookup bounds."""
 
 from datetime import date, datetime
+from typing import Literal
+from uuid import UUID
 
 from pydantic import Field, field_validator, model_validator
 
@@ -59,8 +61,45 @@ class EnvironmentalMatch(ScientificModel):
     distance_m: float
     time_delta_s: float
     depth_delta_m: float | None
+    cache_fetched_at: datetime | None = None
+    cache_expires_at: datetime | None = None
+    cache_age_s: float | None = None
+    offline_available: bool = True
 
 
 class EnvironmentalLookupResponse(ScientificModel):
     matches: list[EnvironmentalMatch]
+    method: str = "bounded_observations_no_interpolation"
+
+
+ENVIRONMENTAL_VARIABLES = [
+    "water_temperature",
+    "practical_salinity",
+    "current_eastward_velocity",
+    "current_northward_velocity",
+    "current_speed",
+]
+
+
+class EnvironmentalSubjectLookup(ScientificModel):
+    subject: ScientificSubject
+    position_record_id: UUID | None = None
+    max_distance_m: float = Field(default=1000, ge=0, le=100000)
+    max_time_delta_s: float = Field(default=3600, ge=0, le=604800)
+    max_depth_delta_m: float = Field(default=0, ge=0, le=1000)
+
+    @model_validator(mode="after")
+    def requires_media(self) -> "EnvironmentalSubjectLookup":
+        if self.subject.image_id is None and self.subject.video_id is None:
+            raise ValueError("Choose an image or video/frame subject")
+        return self
+
+
+class EnvironmentalSubjectContext(ScientificModel):
+    status: Literal["available", "unavailable", "ambiguous"]
+    reason: str | None = None
+    subject: ScientificSubject
+    positions: list[ScientificRecordResponse]
+    position: ScientificRecordResponse | None = None
+    matches: dict[str, list[EnvironmentalMatch]] = Field(default_factory=dict)
     method: str = "bounded_observations_no_interpolation"

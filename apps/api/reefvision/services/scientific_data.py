@@ -25,9 +25,11 @@ from reefvision.db.models.scientific_record import EnvironmentalCacheEntry, Scie
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.domain.scientific_units import normalize_quantity
 from reefvision.schemas.scientific_data import (
+    ScientificPixel,
     ScientificRecordCreate,
     ScientificRecordPage,
     ScientificRecordResponse,
+    ScientificSubject,
     SourceKind,
 )
 
@@ -50,8 +52,9 @@ class ScientificDataService:
             raise NotFoundError("Project not found")
         return project
 
-    def _validate_subject(self, project_id: str, item: ScientificRecordCreate) -> ImageAsset | None:
-        subject = item.subject
+    def validate_subject(
+        self, project_id: str, subject: ScientificSubject, pixel: ScientificPixel | None = None
+    ) -> ImageAsset | None:
         object_run_id: str | None = None
         image = self.session.get(ImageAsset, str(subject.image_id)) if subject.image_id else None
         video = self.session.get(VideoAsset, str(subject.video_id)) if subject.video_id else None
@@ -116,9 +119,9 @@ class ScientificDataService:
                     raise ValidationError("Model run does not include the source image")
             if video is not None and job.request_json.get("video_id") != video.id:
                 raise ValidationError("Model run does not include the source video")
-        if item.pixel is not None:
-            media = image if item.pixel.frame == "image_pixels" else video
-            if media is None or item.pixel.x >= media.width_px or item.pixel.y >= media.height_px:
+        if pixel is not None:
+            media = image if pixel.frame == "image_pixels" else video
+            if media is None or pixel.x >= media.width_px or pixel.y >= media.height_px:
                 raise ValidationError(
                     "Pixel location must lie inside the original source dimensions"
                 )
@@ -135,7 +138,7 @@ class ScientificDataService:
         self.require_project(project_id)
         rows = []
         for item in items:
-            image = self._validate_subject(project_id, item)
+            image = self.validate_subject(project_id, item.subject, item.pixel)
             payload = item.model_dump(mode="json")
             try:
                 value, unit = normalize_quantity(item.value, item.unit)
