@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from collections import Counter
-from hashlib import sha256
 from math import isfinite, sqrt
-import json
 
 
 def triangle_area(a: tuple[float, float, float], b: tuple[float, float, float], c: tuple[float, float, float]) -> float:
