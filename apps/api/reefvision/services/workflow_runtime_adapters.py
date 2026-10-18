@@ -21,6 +21,7 @@ from reefvision.db.models import (
     WorkflowNodeRun,
 )
 from reefvision.domain.errors import ValidationError
+from reefvision.domain.longitudinal_monitoring import analyze_longitudinal
 from reefvision.jobs.classification_inference import process_classification_inference_job
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
@@ -42,6 +43,7 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "relative_depth_estimation",
     "mask_measurements",
     "video_tracking",
+    "ecology_longitudinal_analysis",
 }
 
 
@@ -789,6 +791,38 @@ def _video_tracking(
     ]
 
 
+
+def _ecology_longitudinal_analysis(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    from reefvision.schemas.longitudinal_monitoring import LongitudinalAnalysisRequest
+
+    del session, settings
+    project = _single_payload(inputs, "project")
+    if project.get("project_id") != project_id:
+        raise ValidationError("Longitudinal analysis requires the current project source")
+    request = LongitudinalAnalysisRequest.model_validate(
+        {"observations": parameters.get("observations")}
+    )
+    analysis = analyze_longitudinal(request)
+    return [
+        {
+            "port_id": "analysis",
+            "data_type": "longitudinal_analysis",
+            "payload": {
+                "schema_version": "longitudinal-analysis-0001",
+                "project_id": project_id,
+                "source_record_ids": [obs.source_record_id for obs in request.observations],
+                **analysis.model_dump(mode="json"),
+            },
+        }
+    ]
+
+
 _ADAPTERS = {
     "segmentation_inference": _segmentation_inference,
     "classification_inference": _classification_inference,
@@ -800,6 +834,7 @@ _ADAPTERS = {
     "relative_depth_estimation": _relative_depth_estimation,
     "mask_measurements": _mask_measurements,
     "video_tracking": _video_tracking,
+    "ecology_longitudinal_analysis": _ecology_longitudinal_analysis,
 }
 
 

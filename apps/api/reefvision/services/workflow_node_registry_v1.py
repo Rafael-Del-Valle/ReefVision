@@ -1,4 +1,4 @@
-"""ReefVision 1.0 workflow-node registry extensions."""
+"""ReefVision workflow-node registry extensions."""
 
 from __future__ import annotations
 
@@ -628,6 +628,44 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 "The generated package is immediately verified before "
                 "a workflow artifact is emitted."
             ),
+        ],
+    )
+
+
+    registry["ecology_longitudinal_analysis"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_longitudinal_analysis",
+        display_name="Exploratory Longitudinal Ecology",
+        category="Scientific analysis",
+        description=(
+            "Compare first and final organism-level observations without treating "
+            "unverified caller-supplied measurements as research truth."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="project",
+                display_name="Project",
+                accepted_types=["project_reference"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="analysis",
+                display_name="Unverified longitudinal analysis",
+                accepted_types=["longitudinal_analysis"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=["observations"],
+        optional_parameters={},
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Reuses the standalone ecological longitudinal calculation service.",
+            "Observations are caller-supplied and are not verified against project records.",
+            "Workflow artifacts persist source IDs and an explicit unverified evidence level.",
+            "Do not treat this output as verified or use it to infer significance or survival.",
+            "Verified ecological reporting requires a future review and lineage gate.",
         ],
     )
 
