@@ -74,7 +74,11 @@ def test_saved_ply_workflow_roundtrip(client: TestClient) -> None:
         "name": "Unverified ASCII PLY preview",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
-            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": MESH},
+            {
+                "node_id": "mesh",
+                "node_type": "mesh_surface_preview",
+                "parameters": MESH,
+            },
         ],
         "edges": [
             {
@@ -86,7 +90,9 @@ def test_saved_ply_workflow_roundtrip(client: TestClient) -> None:
             }
         ],
     }
-    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    plan = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
+    )
     assert plan.status_code == 200, plan.text
     assert plan.json()["executable"] is True
     saved = client.post(
@@ -113,5 +119,8 @@ def test_saved_ply_workflow_roundtrip(client: TestClient) -> None:
     )
     assert artifact["payload_json"]["surface_area_m2"] == pytest.approx(0.0003)
     assert artifact["payload_json"]["provenance"]["source_format"] == "ply_ascii"
-    assert artifact["payload_json"]["measurement_status"] == "caller_supplied_unverified"
+    assert (
+        artifact["payload_json"]["measurement_status"]
+        == "caller_supplied_unverified"
+    )
     assert len(artifact["payload_sha256"]) == 64
