@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { getRuntimeContext, openDesktopTrainingConsole } from "../../runtime";
 
 import {
   cancelTrainingRun,
@@ -38,6 +39,22 @@ function metricValue(value: number): string {
 
 export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
+  const [openingRunId, setOpeningRunId] = useState<string | null>(null);
+  const [terminalError, setTerminalError] = useState<string | null>(null);
+  const showPowerShell = getRuntimeContext().desktopMode;
+
+  async function openConsole(runId: string) {
+    setOpeningRunId(runId);
+    setTerminalError(null);
+    try {
+      await openDesktopTrainingConsole(runId);
+    } catch (error) {
+      setTerminalError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setOpeningRunId(null);
+    }
+  }
+
 
   const runsQuery = useQuery({
     queryKey: ["training_runs", projectId],
@@ -205,6 +222,17 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
                   <p className="form-error">{run.error_message}</p>
                 )}
 
+                {active && showPowerShell && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={openingRunId !== null}
+                    onClick={() => void openConsole(run.id)}
+                  >
+                    {openingRunId === run.id ? "Opening PowerShell…" : "Open PowerShell monitor"}
+                  </button>
+                )}
+
                 {canCancel && (
                   <button
                     type="button"
@@ -234,6 +262,8 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
           })}
         </div>
       )}
+
+      {terminalError && <p className="form-error" role="alert">{terminalError}</p>}
 
       {cancelMutation.error && (
         <p className="form-error" role="alert">
