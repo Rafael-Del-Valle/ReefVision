@@ -82,7 +82,7 @@ def test_desktop_staging_paths_match_tauri_version() -> None:
 
     for script_name in ("build-desktop.ps1", "build-desktop-backend.ps1"):
         script = (root / "scripts" / script_name).read_text(encoding="utf-8")
-        stages = set(re.findall(r"release-\\d+\\.\\d+\\.\\d+", script))
+        stages = set(re.findall(r"release-\d+\.\d+\.\d+", script))
         assert stages == {expected_stage}, (
             f"{script_name} stages {sorted(stages)!r}; expected {expected_stage}"
         )
