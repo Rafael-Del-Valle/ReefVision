@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import cast
+from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
@@ -98,6 +99,22 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
     response = client.get(f"/api/v1/review-queues/{result['queue_id']}")
     assert response.status_code == 200, response.text
     assert response.json()["created_by"].startswith("workflow:")
+
+    item_id = client.get(
+        f"/api/v1/review-queues/{result['queue_id']}/items"
+    ).json()["items"][0]["id"]
+    event_url = f"/api/v1/review-queues/{result['queue_id']}/items/{item_id}/events"
+    comment = client.post(
+        event_url,
+        json={
+            "client_request_id": str(uuid4()),
+            "event_type": "comment",
+            "actor": "researcher",
+            "comment": "Review this saved workflow image",
+        },
+    )
+    assert comment.status_code == 201, comment.text
+    assert client.get(event_url).json()["total"] == 1
 
     with app.state.session_factory() as session:
         source = session.scalar(

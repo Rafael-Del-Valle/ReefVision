@@ -60,6 +60,7 @@ from reefvision.db.models.quality_control_issue import QualityControlIssue
 from reefvision.db.models.quality_control_run import QualityControlRun
 from reefvision.db.models.review_queue import ReviewQueue
 from reefvision.db.models.review_queue_item import ReviewQueueItem
+from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
 from reefvision.db.models.skeleton_analysis import SkeletonAnalysisRevision
 from reefvision.db.models.training_draft import TrainingDraft
 from reefvision.db.models.training_run import TrainingRun
@@ -119,6 +120,7 @@ __all__ = [
     "QualityControlRun",
     "ReviewQueue",
     "ReviewQueueItem",
+    "ReviewQueueItemEvent",
     "SkeletonAnalysisRevision",
     "TrainingDraft",
     "TrainingRun",
