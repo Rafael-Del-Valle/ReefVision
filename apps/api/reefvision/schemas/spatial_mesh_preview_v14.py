@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, model_validator
 
 class MeshPreviewRequest(BaseModel):
     obj_text: str | None = Field(default=None, max_length=256_000)
+    ply_text: str | None = Field(default=None, max_length=256_000)
     vertices: list[list[float]] | None = Field(default=None, max_length=2_000)
     faces: list[list[int]] | None = Field(default=None, max_length=4_000)
     meters_per_unit: float = Field(gt=0, le=1_000_000)
@@ -19,9 +20,10 @@ class MeshPreviewRequest(BaseModel):
 
     @model_validator(mode="after")
     def geometry_is_unambiguous(self) -> MeshPreviewRequest:
-        if self.obj_text is not None:
-            if self.vertices is not None or self.faces is not None:
-                raise ValueError("Use either OBJ text or indexed triangles, not both")
+        supplied_text = sum(value is not None for value in (self.obj_text, self.ply_text))
+        if supplied_text:
+            if supplied_text != 1 or self.vertices is not None or self.faces is not None:
+                raise ValueError("Use OBJ, PLY, or indexed triangles, not a mixture")
         elif self.vertices is None or self.faces is None:
             raise ValueError("Indexed triangles require vertices and faces")
         return self
