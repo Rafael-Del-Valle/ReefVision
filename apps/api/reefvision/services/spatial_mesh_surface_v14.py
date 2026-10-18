@@ -55,7 +55,7 @@ def measure_mesh_preview(
             raise ValueError(
                 "Each vertex must contain three bounded finite coordinates"
             )
-        points.append(tuple(float(value) for value in vertex))
+        points.append((float(vertex[0]), float(vertex[1]), float(vertex[2])))
     edges: Counter[tuple[int, int]] = Counter()
     seen_faces: set[tuple[int, int, int]] = set()
     raw_area = 0.0
@@ -69,17 +69,18 @@ def measure_mesh_preview(
             raise ValueError(
                 "Every face must reference three distinct existing vertices"
             )
-        key = tuple(sorted(face))
+        ordered = sorted(face)
+        key = (ordered[0], ordered[1], ordered[2])
         if key in seen_faces:
             raise ValueError("Duplicate triangles would double-count surface area")
         seen_faces.add(key)
-        area = triangle_area(*(points[index] for index in face))
+        area = triangle_area(points[face[0]], points[face[1]], points[face[2]])
         if not isfinite(area):
             raise ValueError("Mesh triangle area overflowed")
         degenerate += area == 0
         raw_area += area
         for a, b in ((face[0], face[1]), (face[1], face[2]), (face[2], face[0])):
-            edges[tuple(sorted((a, b)))] += 1
+            edges[(min(a, b), max(a, b))] += 1
     area_m2 = raw_area * scale * scale
     if not isfinite(area_m2):
         raise ValueError("Calibrated area overflowed")
