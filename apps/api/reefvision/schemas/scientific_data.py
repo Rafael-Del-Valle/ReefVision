@@ -139,6 +139,8 @@ class ScientificRecordResponse(ScientificRecordCreate):
     calibration_snapshot: dict[str, JsonValue] | None = None
     calibration_sha256: str | None = None
     calibration_current: bool | None = None
+    environmental_cache_key: str | None = None
+    environmental_snapshot_current: bool | None = None
     content_sha256: str
 
 

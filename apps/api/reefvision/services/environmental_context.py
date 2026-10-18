@@ -95,7 +95,7 @@ class EnvironmentalContextService:
             entry.fetched_at = self.now
             entry.expires_at = self.now + timedelta(days=1)
         else:
-            rows = self.science.add_records(project_id, items)
+            rows = self.science.add_records(project_id, items, environmental_cache_key=key)
             payload = {
                 "provider_response": raw,
                 "record_ids": [row.id for row in rows],
@@ -144,7 +144,11 @@ class EnvironmentalContextService:
         matches = []
         for row in rows:
             record = self.science.response(row)
-            if record.location is None or record.qc in ("rejected", "suspect"):
+            if (
+                record.location is None
+                or record.qc in ("rejected", "suspect")
+                or record.environmental_snapshot_current is False
+            ):
                 continue
             distance = geographic_distance_m(
                 request.location.latitude,

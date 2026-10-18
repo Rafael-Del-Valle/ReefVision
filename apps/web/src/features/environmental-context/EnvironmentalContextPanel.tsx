@@ -95,6 +95,12 @@ function ScientificRecordCard({ record }: { record: ScientificRecord }) {
   return (
     <article className="panel-card" aria-label={record.variable}>
       <h4>{record.variable}</h4>
+      {record.environmental_snapshot_current === false && (
+        <p role="status">
+          Historical provider snapshot; excluded from current environmental
+          lookup.
+        </p>
+      )}
       <dl className="training-kv-grid">
         <div>
           <dt>Original quantity</dt>

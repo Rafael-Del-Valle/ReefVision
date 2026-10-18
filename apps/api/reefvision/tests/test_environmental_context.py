@@ -97,6 +97,59 @@ def test_noaa_expiry_refresh_preserves_unchanged_record_ids(client):
     assert refreshed.cache_status == "downloaded"
 
 
+@pytest.mark.parametrize("correction", ["value", "qc", "removed"])
+def test_lookup_uses_current_noaa_snapshot_and_retains_identifiable_history(client, correction):
+    from reefvision.schemas.environmental_context import NOAAImportRequest
+    from reefvision.services.environmental_context import EnvironmentalContextService
+
+    project = create_project(client)
+    payload = NOAAImportRequest(station_id="8665530", day="2026-04-03")
+    now = datetime(2026, 4, 4, tzinfo=UTC)
+    raw = noaa_fixture()
+    with (
+        client.app.state.session_factory() as session,
+        httpx.Client(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=raw))
+        ) as http,
+    ):
+        first = EnvironmentalContextService(session, http=http, now=now).import_noaa(
+            project["id"], payload
+        )
+        if correction == "removed":
+            raw["data"].pop(0)
+        else:
+            raw["data"][0]["v"] = "21.0"
+            if correction == "qc":
+                raw["data"][0]["f"] = "0,1,0"
+        refreshed = EnvironmentalContextService(
+            session, http=http, now=now + timedelta(days=1)
+        ).import_noaa(project["id"], payload)
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/environment/lookup",
+        json={
+            "variable": "water_temperature",
+            "location": {"latitude": 32.75, "longitude": -79.93},
+            "observed_at": "2026-04-03T13:00:00Z",
+            "max_distance_m": 1000,
+            "max_time_delta_s": 60,
+        },
+    )
+    assert response.status_code == 200, response.text
+    matches = response.json()["matches"]
+    if correction == "value":
+        assert len(matches) == 1
+        assert matches[0]["record"]["normalized_value"] == 21
+        assert matches[0]["record"]["id"] == str(refreshed.items[0].id)
+    else:
+        assert matches == []
+    history = client.get(f"/api/v1/projects/{project['id']}/scientific-records").json()["items"]
+    old = next(row for row in history if row["id"] == str(first.items[0].id))
+    assert old["value"] == 20
+    assert old["environmental_snapshot_current"] is False
+    current = next(row for row in history if row["id"] == str(refreshed.items[0].id))
+    assert current["environmental_snapshot_current"] is True
+
+
 @pytest.mark.parametrize("change", ["error", "station", "date", "nonfinite", "empty"])
 def test_noaa_unavailable_or_malformed_data_never_becomes_observations(client, change):
     from reefvision.domain.errors import ValidationError
@@ -208,3 +261,43 @@ def test_environment_lookup_uses_explicit_space_time_depth_and_qc_limits(client)
     match = response.json()["matches"][0]
     assert match["distance_m"] == 0 and match["time_delta_s"] == 0
     assert match["record"]["normalized_value"] == pytest.approx(20)
+
+
+def test_full_backup_preserves_scientific_records_and_offline_provider_cache(client, test_settings):
+    from pathlib import Path
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from reefvision.schemas.environmental_context import NOAAImportRequest
+    from reefvision.services.environmental_context import EnvironmentalContextService
+    from reefvision.services.scientific_data import ScientificDataService
+    from reefvision.tests.test_backups import create_completed_backup
+
+    project = create_project(client)
+    payload = NOAAImportRequest(station_id="8665530", day="2026-04-03")
+    with (
+        client.app.state.session_factory() as session,
+        httpx.Client(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=noaa_fixture()))
+        ) as http,
+    ):
+        original = EnvironmentalContextService(session, http=http).import_noaa(
+            project["id"], payload
+        )
+    _, backup = create_completed_backup(client, test_settings)
+    snapshot = (
+        test_settings.resolved_data_dir / Path(backup["destination_path"]) / "database" / "test.db"
+    )
+    engine = create_engine(f"sqlite:///{snapshot.as_posix()}")
+    try:
+        with Session(engine) as session:
+            restored = EnvironmentalContextService(session).import_noaa(
+                project["id"], payload.model_copy(update={"offline": True})
+            )
+            assert [row.model_dump(mode="json") for row in restored.items] == [
+                row.model_dump(mode="json") for row in original.items
+            ]
+            assert ScientificDataService(session).list_records(project["id"]).total == 2
+    finally:
+        engine.dispose()

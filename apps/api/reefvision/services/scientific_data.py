@@ -21,7 +21,7 @@ from reefvision.db.models import (
     VideoAsset,
     VideoTrack,
 )
-from reefvision.db.models.scientific_record import ScientificRecord
+from reefvision.db.models.scientific_record import EnvironmentalCacheEntry, ScientificRecord
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.domain.scientific_units import normalize_quantity
 from reefvision.schemas.scientific_data import (
@@ -52,6 +52,7 @@ class ScientificDataService:
 
     def _validate_subject(self, project_id: str, item: ScientificRecordCreate) -> ImageAsset | None:
         subject = item.subject
+        object_run_id: str | None = None
         image = self.session.get(ImageAsset, str(subject.image_id)) if subject.image_id else None
         video = self.session.get(VideoAsset, str(subject.video_id)) if subject.video_id else None
         for identifier, asset in ((subject.image_id, image), (subject.video_id, video)):
@@ -67,6 +68,7 @@ class ScientificDataService:
             track = self.session.get(VideoTrack, str(subject.track_id))
             if track is None or track.video_id != str(subject.video_id) or track.deleted_at:
                 raise ValidationError("Track must belong to the source video and be active")
+            object_run_id = track.source_job_id
         for identifier, model in (
             (subject.annotation_id, Annotation),
             (subject.mask_id, MaskAnnotation),
@@ -80,10 +82,40 @@ class ScientificDataService:
                     or getattr(obj, "deleted_at", None)
                 ):
                     raise ValidationError("Object must belong to the source image and be active")
+                if isinstance(obj, PredictionProposal):
+                    object_run_id = obj.inference_job_id
+                else:
+                    object_run_id = (obj.provenance_json or {}).get("inference_job_id")
         if subject.model_run_id:
             job = self.session.get(Job, str(subject.model_run_id))
             if job is None or job.project_id != project_id:
                 raise ValidationError("Model run must belong to this project")
+            if job.job_type not in {
+                "inference",
+                "classification_inference",
+                "sam_image_proposals",
+                "advanced_depth",
+                "video_tracking",
+                "video_metric_depth_3d",
+            }:
+                raise ValidationError(
+                    "Model run must identify a supported inference or tracking job"
+                )
+            if object_run_id is not None and object_run_id != job.id:
+                raise ValidationError("Model run must match the canonical object's source run")
+            if (
+                any((subject.track_id, subject.annotation_id, subject.mask_id))
+                and object_run_id is None
+            ):
+                raise ValidationError("The canonical object has no recorded model source run")
+            if image is not None:
+                image_ids = job.request_json.get("image_ids", [])
+                if not isinstance(image_ids, list) or (
+                    image.id not in image_ids and job.request_json.get("image_id") != image.id
+                ):
+                    raise ValidationError("Model run does not include the source image")
+            if video is not None and job.request_json.get("video_id") != video.id:
+                raise ValidationError("Model run does not include the source video")
         if item.pixel is not None:
             media = image if item.pixel.frame == "image_pixels" else video
             if media is None or item.pixel.x >= media.width_px or item.pixel.y >= media.height_px:
@@ -93,7 +125,11 @@ class ScientificDataService:
         return image
 
     def add_records(
-        self, project_id: str, items: list[ScientificRecordCreate]
+        self,
+        project_id: str,
+        items: list[ScientificRecordCreate],
+        *,
+        environmental_cache_key: str | None = None,
     ) -> list[ScientificRecord]:
         """Stage a validated batch; the caller owns the transaction/commit."""
         self.require_project(project_id)
@@ -121,6 +157,7 @@ class ScientificDataService:
                 normalized_uncertainty=uncertainty,
                 calibration_snapshot=calibration,
                 calibration_sha256=content_hash(calibration) if calibration else None,
+                environmental_cache_key=environmental_cache_key,
             )
             rows.append(
                 ScientificRecord(
@@ -147,6 +184,18 @@ class ScientificDataService:
         if content_hash(row.payload_json) != row.content_sha256:
             raise ConflictError("Scientific record checksum mismatch; do not use this record")
         current = None
+        snapshot_current = None
+        cache_key = row.payload_json.get("environmental_cache_key")
+        if cache_key is not None:
+            cache = self.session.scalar(
+                select(EnvironmentalCacheEntry).where(
+                    EnvironmentalCacheEntry.project_id == row.project_id,
+                    EnvironmentalCacheEntry.cache_key == cache_key,
+                )
+            )
+            if cache is None or content_hash(cache.payload_json) != cache.content_sha256:
+                raise ConflictError("Environmental snapshot cache is missing or corrupt")
+            snapshot_current = row.id in cache.payload_json["record_ids"]
         if row.payload_json.get("calibration_sha256"):
             image = self.session.get(ImageAsset, row.image_id) if row.image_id else None
             calibration = (
@@ -160,6 +209,7 @@ class ScientificDataService:
                 "project_id": row.project_id,
                 "content_sha256": row.content_sha256,
                 "calibration_current": current,
+                "environmental_snapshot_current": snapshot_current,
             }
         )
 

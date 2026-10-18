@@ -38,8 +38,13 @@ records. Reimporting a local file creates another set of records; local-file
 deduplication is not implemented. GET lists are paginated. A record may link
 to `subject.image_id`, or `subject.video_id` with `frame_index`/`track_id`;
 image objects may also name `annotation_id`, `mask_id` or `prediction_id`.
-`model_run_id` references the existing project job record. All IDs must
-belong to the same project and media; a reference never verifies an annotation.
+`model_run_id` references a supported inference/depth/tracking job in the
+existing project job table, with matching input media. When a canonical
+prediction, annotation, mask or track is named, its recorded source run must
+match. Human objects without a source run cannot be attributed to a model job.
+All IDs must belong to the same project and media; a reference never verifies
+an annotation. Training, export and other operational jobs are not model
+output identities in this API.
 
 Pixel positions use `pixel: {frame: "image_pixels", x: 10, y: 20}` or
 `video_pixels`, in original source pixels. Geographic positions are WGS84
@@ -76,8 +81,12 @@ Sensor depth and uncertainty remain unknown when the response omits them.
 
 The project cache is reused for 24 hours. A later online request refreshes it;
 there is no unattended daily scheduler yet. Identical refresh payloads reuse
-record IDs. Changed responses append a new acquisition snapshot, so retain
-acquisition timestamps when comparing versions. Offline mode never makes a
+record IDs. Changed responses append a new acquisition snapshot. The record
+API retains the immutable history and reports `environmental_snapshot_current`;
+the workspace labels superseded provider snapshots. Normal environmental
+lookup uses only the current snapshot, including when a correction removes a
+sample or changes its QC to suspect. This avoids reusing an obsolete value
+after a provider correction. Offline mode never makes a
 network request; it returns a matching cache with `fresh` or `stale_offline`
 status, or a missing-cache error. A failed online refresh leaves the prior
 cache intact. No authentication is required for this NOAA endpoint. Copernicus
@@ -113,8 +122,9 @@ format 1.0 cannot preserve them: enriched projects refuse exchange export
 until the format is extended. Legacy projects still export normally.
 
 Synthetic tests cover migration upgrade/downgrade, units/UTC, invalid bounds,
-identity ownership, transactional import, corruption, calibration changes,
-provider errors, cache freshness/offline and lookup exclusions. Live smoke
+identity ownership and matching source runs, transactional import, corruption,
+calibration changes, provider corrections, cache freshness/offline, full backup
+snapshot reuse and lookup exclusions. Live smoke
 acceptance on 2026-10-18 acquired 240 Charleston station 8665530 observations
 for 2026-10-16 and reopened all 240 from a disposable database offline with
 unchanged IDs. This verifies acquisition/persistence, not sensor accuracy or

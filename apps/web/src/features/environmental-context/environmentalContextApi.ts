@@ -66,6 +66,8 @@ export interface ScientificRecord extends ScientificRecordCreate {
   calibration_snapshot?: Record<string, unknown> | null;
   calibration_sha256?: string | null;
   calibration_current?: boolean | null;
+  environmental_cache_key?: string | null;
+  environmental_snapshot_current?: boolean | null;
   content_sha256: string;
 }
 

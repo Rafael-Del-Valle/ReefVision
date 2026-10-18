@@ -87,6 +87,21 @@ function chooseJson(content: string) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("EnvironmentalContextPanel", () => {
+  it("labels superseded provider observations as historical", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      json({
+        items: [{ ...storedRecord, environmental_snapshot_current: false }],
+        total: 1,
+      }),
+    );
+    renderPanel();
+    expect(
+      await screen.findByText(
+        "Historical provider snapshot; excluded from current environmental lookup.",
+      ),
+    ).toBeVisible();
+  });
+
   it("loads original and normalized quantities with UTC time, unknown depth, QC, and provenance", async () => {
     let complete!: (response: Response) => void;
     vi.spyOn(globalThis, "fetch").mockImplementation(
