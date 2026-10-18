@@ -56,6 +56,7 @@ def extend_mesh_registry(
             ],
             optional_parameters={
                 "obj_text": None,
+                "ply_text": None,
                 "vertices": None,
                 "faces": None,
                 "relative_scale_uncertainty": None,
