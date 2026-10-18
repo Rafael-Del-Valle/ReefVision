@@ -105,7 +105,9 @@ describe("TrainingRunDetail", () => {
       screen.getByRole("button", { name: "Open live training in PowerShell" }),
     );
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("open_training_console", { runId: "run-1" }),
+      expect(invoke).toHaveBeenCalledWith("open_training_console", {
+        runId: "run-1",
+      }),
     );
     vi.restoreAllMocks();
   });
