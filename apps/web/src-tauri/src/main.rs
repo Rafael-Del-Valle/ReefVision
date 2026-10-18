@@ -149,6 +149,69 @@ fn desktop_context(state: State<'_, DesktopState>) -> DesktopContext {
     state.context.clone()
 }
 
+// Only accept opaque run IDs. Never pass filesystem paths or arbitrary commands
+// from the webview to the desktop shell.
+fn valid_training_run_id(run_id: &str) -> bool {
+    !run_id.is_empty()
+        && run_id.len() <= 72
+        && run_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+}
+
+#[tauri::command]
+fn open_training_console(state: State<'_, DesktopState>, run_id: String) -> Result<(), String> {
+    if !valid_training_run_id(&run_id) {
+        return Err("Invalid training run ID".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // The source is the trusted loopback URL from desktop startup, not
+        // frontend input. PowerShell performs read-only status queries.
+        let url = format!("{}/training-runs/{}", state.context.api_base_url, run_id);
+        let script = format!("$url = '{}'; ", url)
+            + r#"
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+Write-Host 'ReefVision training monitor (read-only). Close this window to stop monitoring.'
+while ($true) {
+  try {
+    $run = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10
+    Clear-Host
+    Write-Host ('ReefVision - {0}' -f $run.run_name)
+    Write-Host ('Status: {0} | Stage: {1}' -f $run.status, $run.stage)
+    Write-Host ('Epoch: {0} / {1}' -f $run.progress_epoch, $run.progress_total_epochs)
+    if ($null -ne $run.metrics) {
+      $run.metrics.PSObject.Properties | Sort-Object Name | ForEach-Object {
+        Write-Host ('{0}: {1}' -f $_.Name, $_.Value)
+      }
+    }
+    if ($run.error_message) { Write-Host ('Error: {0}' -f $run.error_message) }
+    if ($run.status -in @('completed', 'failed', 'cancelled')) {
+      Write-Host 'Run ended. This window can now be closed.'
+      break
+    }
+  } catch {
+    Write-Host ('Waiting for ReefVision training status: {0}' -f $_.Exception.Message)
+  }
+  Start-Sleep -Seconds 2
+}
+"#;
+        Command::new("powershell.exe")
+            .args(["-NoProfile", "-NoExit", "-Command", &script])
+            .spawn()
+            .map_err(|error| format!("Could not open PowerShell training monitor: {error}"))?;
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        Err("The external PowerShell training monitor is available on Windows only".to_string())
+    }
+}
+
 #[cfg(target_os = "windows")]
 fn focus_existing_instance_window() {
     let window_title: Vec<u16> = OsStr::new("ReefVision")
@@ -515,7 +578,7 @@ fn main() {
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![desktop_context])
+        .invoke_handler(tauri::generate_handler![desktop_context, open_training_console])
         .setup(|app| {
             let data_dir = resolve_desktop_data_dir(app.handle())?;
             let handle = app.handle().clone();
