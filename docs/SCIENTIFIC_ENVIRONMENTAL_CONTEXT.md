@@ -129,3 +129,24 @@ acceptance on 2026-10-18 acquired 240 Charleston station 8665530 observations
 for 2026-10-16 and reopened all 240 from a disposable database offline with
 unchanged IDs. This verifies acquisition/persistence, not sensor accuracy or
 installed Windows behavior. No Windows/GPU/physical field acceptance is claimed.
+
+## Project exchange in 1.1
+
+Project exchange format `1.1` includes scientific records and environmental cache
+entries, including superseded snapshots, original units, QC, uncertainty,
+calibration snapshots and CRS. Projects without scientific records retain format
+`1.0`. Both versions can be imported; other versions fail inspection explicitly.
+
+An import creates a new project and fresh internal identifiers. Scientific subject
+links and cache record links are remapped, checksums are recomputed, and the source
+archive plus the identifier map remain import provenance. Literal source metadata,
+raw provider responses and calibration snapshots retain their original values.
+Import validates ownership, references and scientific integrity and commits once,
+after media and artifact restoration. A failure rolls back all imported rows and
+removes only the new import directory. Existing projects are never overwritten.
+
+**Full application backup** copies the database and managed files for exact
+restoration, preserving identifiers. **Project exchange** transfers a selected
+project into a new independent project. Optional media/artifact inclusion still
+applies to exchange; scientific cache payloads are included as scientific data,
+not as model weights. Neither workflow includes provider credentials.

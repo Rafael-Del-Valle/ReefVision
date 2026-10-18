@@ -24,6 +24,7 @@ from reefvision.db.models import (
     ClassificationPrediction,
     DatasetVersion,
     DatasetVersionItem,
+    EnvironmentalCacheEntry,
     ExperimentRecord,
     ImageAsset,
     ImageLabel,
@@ -119,19 +120,11 @@ class ProjectExchangeService:
     def get_package(self, package_id: str) -> ProjectExchangePackageResponse:
         return ProjectExchangePackageResponse.model_validate(self._package(package_id))
 
-    def _require_exchange_compatible(self, project_id: str) -> None:
-        if (
-            self.session.scalar(
-                select(ScientificRecord.id)
-                .where(ScientificRecord.project_id == project_id)
-                .limit(1)
-            )
-            is not None
-        ):
-            raise ValidationError(
-                "Project exchange 1.0 cannot preserve 1.1 scientific records. "
-                "Use a full application backup until scientific exchange is supported."
-            )
+    def _format_version(self, project_id: str) -> str:
+        enriched = self.session.scalar(
+            select(ScientificRecord.id).where(ScientificRecord.project_id == project_id).limit(1)
+        )
+        return "1.1" if enriched is not None else FORMAT_VERSION
 
     def queue_export(
         self,
@@ -139,7 +132,6 @@ class ProjectExchangeService:
         request: ProjectExchangeCreateRequest,
     ) -> ProjectExchangeCreateResponse:
         project = self._project(project_id)
-        self._require_exchange_compatible(project_id)
         package_id = str(uuid4())
         archive_relative = f"{project.storage_root}/exchanges/{package_id}.reefvision.zip"
         package = ProjectExchangePackage(
@@ -147,7 +139,7 @@ class ProjectExchangeService:
             project_id=project.id,
             direction="export",
             status="queued",
-            format_version=FORMAT_VERSION,
+            format_version=self._format_version(project_id),
             manifest_json={},
             manifest_sha256="",
             archive_path=archive_relative,
@@ -181,7 +173,6 @@ class ProjectExchangeService:
         return path
 
     def _records(self, project: Project) -> dict[str, Sequence[Base]]:
-        self._require_exchange_compatible(project.id)
         image_ids = list(
             self.session.scalars(select(ImageAsset.id).where(ImageAsset.project_id == project.id))
         )
@@ -300,6 +291,22 @@ class ProjectExchangeService:
                 )
             ),
         }
+        sections.update(
+            {
+                "scientific_records": list(
+                    self.session.scalars(
+                        select(ScientificRecord).where(ScientificRecord.project_id == project.id)
+                    )
+                ),
+                "environmental_cache_entries": list(
+                    self.session.scalars(
+                        select(EnvironmentalCacheEntry).where(
+                            EnvironmentalCacheEntry.project_id == project.id
+                        )
+                    )
+                ),
+            }
+        )
         return sections
 
     def build_export(self, package_id: str) -> ProjectExchangePackageResponse:
@@ -385,7 +392,7 @@ class ProjectExchangeService:
 
                 manifest = {
                     "format_name": FORMAT_NAME,
-                    "format_version": FORMAT_VERSION,
+                    "format_version": self._format_version(project.id),
                     "application_version": __version__,
                     "project": {
                         "id": project.id,
@@ -405,6 +412,7 @@ class ProjectExchangeService:
                 archive.writestr(MANIFEST_NAME, manifest_bytes)
             temporary.replace(archive_path)
             package.status = "complete"
+            package.format_version = str(manifest["format_version"])
             package.manifest_json = manifest
             package.manifest_sha256 = canonical_json_sha256(manifest)
             package.completed_at = datetime.now().astimezone()
@@ -455,8 +463,8 @@ class ProjectExchangeService:
                 if manifest.get("format_name") != FORMAT_NAME:
                     errors.append("Archive is not a ReefVision project exchange package")
                 version = str(manifest.get("format_version", ""))
-                if version.split(".", 1)[0] != FORMAT_VERSION.split(".", 1)[0]:
-                    errors.append("Exchange format major version is incompatible")
+                if version not in {"1.0", "1.1"}:
+                    errors.append("Unsupported exchange format version")
                 sections = manifest.get("sections", {})
                 if not isinstance(sections, dict):
                     errors.append("Manifest sections are invalid")

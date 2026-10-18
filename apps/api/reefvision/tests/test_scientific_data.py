@@ -122,13 +122,13 @@ def test_tampered_scientific_record_is_not_returned_as_valid(client: TestClient)
     assert client.get(url).status_code == 409
 
 
-def test_exchange_refuses_to_silently_drop_scientific_records(client: TestClient):
+def test_exchange_selects_scientific_format_for_enriched_project(client: TestClient):
     project = create_project(client)
     url = f"/api/v1/projects/{project['id']}/scientific-records"
     assert client.post(url, json={"records": [observation()]}).status_code == 201
     response = client.post(f"/api/v1/projects/{project['id']}/exchange-packages", json={})
-    assert response.status_code == 400, response.text
-    assert "scientific" in response.json()["detail"].lower()
+    assert response.status_code == 202, response.text
+    assert response.json()["package"]["format_version"] == "1.1"
 
 
 def test_scientific_lists_are_scoped_paginated_and_filterable(client: TestClient):

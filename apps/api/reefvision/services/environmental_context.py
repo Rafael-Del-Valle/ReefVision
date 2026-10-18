@@ -97,6 +97,10 @@ class EnvironmentalContextService:
         else:
             rows = self.science.add_records(project_id, items, environmental_cache_key=key)
             payload = {
+                "cache_identity": {
+                    "source_url": source_url,
+                    "subject": request.subject.model_dump(mode="json"),
+                },
                 "provider_response": raw,
                 "record_ids": [row.id for row in rows],
                 "skipped_missing": missing,
