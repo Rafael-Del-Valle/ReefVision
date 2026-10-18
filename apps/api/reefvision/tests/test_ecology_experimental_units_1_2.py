@@ -37,7 +37,9 @@ def test_fragments_do_not_inflate_independent_tank_count() -> None:
         _obs("frag-3", "tank-B", 1, 4),
         _obs("frag-3", "tank-B", 2, 7),
     ]
-    result = analyze_longitudinal(LongitudinalAnalysisRequest(observations=observations))
+    result = analyze_longitudinal(
+        LongitudinalAnalysisRequest(observations=observations)
+    )
     assert result.evaluated_series_count == 3
     assert result.independent_unit_count == 2
     assert result.experimental_unit_type == "tank"
@@ -54,7 +56,9 @@ def test_missing_followup_excludes_whole_tank() -> None:
         _obs("frag-1", "tank-A", 2, 12),
         _obs("frag-2", "tank-A", 1, 5),
     ]
-    result = analyze_longitudinal(LongitudinalAnalysisRequest(observations=observations))
+    result = analyze_longitudinal(
+        LongitudinalAnalysisRequest(observations=observations)
+    )
     assert result.independent_unit_count == 1
     assert result.unit_summaries == []
     assert result.excluded_units[0].reason == "missing_followup"
