@@ -38,9 +38,7 @@ def bulk_triage_review_queue(
         raise ValidationError("Reason is only accepted when skipping items")
 
     items = list(
-        session.scalars(
-            select(ReviewQueueItem).where(ReviewQueueItem.id.in_(request.item_ids))
-        )
+        session.scalars(select(ReviewQueueItem).where(ReviewQueueItem.id.in_(request.item_ids)))
     )
     by_id = {item.id: item for item in items}
     ordered: list[ReviewQueueItem] = []

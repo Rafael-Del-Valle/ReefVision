@@ -112,7 +112,6 @@ def list_review_queue_items(
     )
 
 
-
 @router.post(
     "/review-queues/{queue_id}/items/bulk",
     response_model=ReviewQueueBulkResponse,

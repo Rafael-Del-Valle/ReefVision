@@ -55,19 +55,13 @@ def test_bulk_review_triage_is_idempotent_and_does_not_verify_annotations(
     returned = client.post(url, json={"item_ids": ids, "action": "return"})
     assert returned.status_code == 200, returned.text
     assert returned.json()["changed_count"] == 2
-    assert client.post(url, json={"item_ids": ids, "action": "return"}).json()[
-        "changed_count"
-    ] == 0
+    assert client.post(url, json={"item_ids": ids, "action": "return"}).json()["changed_count"] == 0
 
     started = client.post(url, json={"item_ids": ids, "action": "start"})
     assert started.status_code == 200, started.text
     assert started.json()["changed_count"] == 2
-    assert client.post(url, json={"item_ids": ids, "action": "start"}).json()[
-        "changed_count"
-    ] == 0
-    assert {item["review_state"] for item in started.json()["items"]} == {
-        "in_progress"
-    }
+    assert client.post(url, json={"item_ids": ids, "action": "start"}).json()["changed_count"] == 0
+    assert {item["review_state"] for item in started.json()["items"]} == {"in_progress"}
     for item in started.json()["items"]:
         session = client.get(f"/api/v1/images/{item['image_id']}/annotations")
         assert session.status_code == 200
@@ -79,9 +73,12 @@ def test_bulk_review_rejects_partial_changes_and_foreign_queue_members(
 ) -> None:
     queue_id, ids = _queue_with_two_images(client)
     url = f"/api/v1/review-queues/{queue_id}/items/bulk"
-    assert client.post(
-        url, json={"item_ids": [ids[1]], "action": "skip", "reason": "Hold"}
-    ).status_code == 200
+    assert (
+        client.post(
+            url, json={"item_ids": [ids[1]], "action": "skip", "reason": "Hold"}
+        ).status_code
+        == 200
+    )
 
     # First item is valid, second cannot be started; neither may be changed.
     invalid = client.post(url, json={"item_ids": ids, "action": "start"})
@@ -98,9 +95,7 @@ def test_bulk_review_rejects_partial_changes_and_foreign_queue_members(
 
     another_queue_id, other_ids = _queue_with_two_images(client)
     assert another_queue_id != queue_id
-    foreign = client.post(
-        url, json={"item_ids": [ids[0], other_ids[0]], "action": "start"}
-    )
+    foreign = client.post(url, json={"item_ids": [ids[0], other_ids[0]], "action": "start"})
     assert foreign.status_code == 409, foreign.text
     assert client.get(f"/api/v1/review-queues/{queue_id}/items").json()["items"][0][
         "review_state"

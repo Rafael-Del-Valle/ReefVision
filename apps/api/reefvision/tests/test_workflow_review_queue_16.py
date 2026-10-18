@@ -72,11 +72,14 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
     assert queued.status_code == 202, queued.text
     run = queued.json()
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings,
-        app.state.session_factory,
-        str(run["job_id"]),
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(run["job_id"]),
+        )
+        is True
+    )
 
     detail = client.get(f"/api/v1/workflow-runs/{run['id']}")
     assert detail.status_code == 200, detail.text
