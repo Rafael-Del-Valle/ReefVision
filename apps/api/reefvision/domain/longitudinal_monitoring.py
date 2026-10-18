@@ -62,9 +62,7 @@ def _summarize_experimental_units(
 
     series_by_unit: dict[tuple[str, str], list[tuple[str, str]]] = defaultdict(list)
     for organism_id, metric_name in grouped:
-        series_by_unit[(memberships[organism_id], metric_name)].append(
-            (organism_id, metric_name)
-        )
+        series_by_unit[(memberships[organism_id], metric_name)].append((organism_id, metric_name))
     completed = {(item.organism_id, item.metric_name): item for item in changes}
     summaries: list[ExperimentalUnitSummary] = []
     excluded: list[ExcludedExperimentalUnit] = []

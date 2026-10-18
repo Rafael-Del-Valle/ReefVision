@@ -37,9 +37,7 @@ def test_fragments_do_not_inflate_independent_tank_count() -> None:
         _obs("frag-3", "tank-B", 1, 4),
         _obs("frag-3", "tank-B", 2, 7),
     ]
-    result = analyze_longitudinal(
-        LongitudinalAnalysisRequest(observations=observations)
-    )
+    result = analyze_longitudinal(LongitudinalAnalysisRequest(observations=observations))
     assert result.evaluated_series_count == 3
     assert result.independent_unit_count == 2
     assert result.experimental_unit_type == "tank"

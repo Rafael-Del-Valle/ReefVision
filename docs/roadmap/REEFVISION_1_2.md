@@ -69,3 +69,23 @@ reports the number of distinct declared independent units and remains
 `caller_supplied_unverified`. It is not a treatment-effect test and does not
 establish that caller-designated units are genuinely independent. Future
 verified design records and tank/parent-colony assignment are still required.
+
+## Exploratory paired human–model counts (1.2 development)
+
+`POST /api/v1/ecology/paired-count-comparison` compares paired caller-supplied
+human-reference counts with model counts. It reports signed model-minus-human
+bias, mean absolute error, and mean absolute percentage deviation, with
+zero-reference pairs excluded only from percentage denominators.
+
+With explicit experimental-unit IDs, it also reports descriptive tank/colony/site
+summaries without treating individual images or fragments as independent
+hypothesis-test replicates. This does not establish that declared units are
+genuinely independent.
+
+An executable Workflow Builder node, `ecology_paired_count_comparison`, persists
+a typed `paired_count_comparison` artifact with source record IDs and project
+identity. Its evidence level is strictly `caller_supplied_unverified`.
+Verification of human/model sources against immutable reviewed annotations,
+organism identity, calibration, and experimental-unit registration remains
+future work. ICC, Bland–Altman agreement limits, and inferential claims are
+outside this descriptive feature.

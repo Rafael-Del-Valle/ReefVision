@@ -78,13 +78,8 @@ class LongitudinalAnalysisRequest(BaseModel):
             raise ValueError("Observations declare conflicting experimental unit types")
         if declared:
             only = next(iter(declared))
-            if (
-                self.experimental_unit_type is not None
-                and self.experimental_unit_type != only
-            ):
-                raise ValueError(
-                    "Request and observations disagree on experimental unit type"
-                )
+            if self.experimental_unit_type is not None and self.experimental_unit_type != only:
+                raise ValueError("Request and observations disagree on experimental unit type")
             self.experimental_unit_type = only
         return self
 

@@ -656,7 +656,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             )
         ],
         required_parameters=["observations"],
-        optional_parameters={},
+        optional_parameters={"experimental_unit_type": None},
         execution_state="executable",
         executable=True,
         implementation_notes=[
@@ -665,6 +665,44 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             "Workflow artifacts persist source IDs and an explicit unverified evidence level.",
             "Do not treat this output as verified or use it to infer significance or survival.",
             "Verified ecological reporting requires a future review and lineage gate.",
+        ],
+    )
+
+
+    registry["ecology_paired_count_comparison"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_paired_count_comparison",
+        display_name="Exploratory Human–Model Count Comparison",
+        category="Scientific analysis",
+        description=(
+            "Compare paired human–model counts with explicit unverified source "
+            "provenance and descriptive experimental-unit summaries."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="project",
+                display_name="Project",
+                accepted_types=["project_reference"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="comparison",
+                display_name="Unverified paired count comparison",
+                accepted_types=["paired_count_comparison"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=["pairs", "reference_kind"],
+        optional_parameters={"experimental_unit_type": None},
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Reuses the standalone comparison domain service.",
+            "Neither the human nor model source is authenticated to project records.",
+            "No ICC, limits of agreement or statistical significance are inferred.",
+            "Experimental-unit summaries are descriptive, not independent hypothesis tests.",
+            "This unverified output cannot feed verified dataset creation directly.",
         ],
     )
 
