@@ -29,6 +29,15 @@ SUBJECT_SECTIONS = {
 def validate_exchange_records(
     project_id: str, sections: dict[str, list[dict[str, Any]]], models: dict[str, type[Any]]
 ) -> None:
+    try:
+        _validate_exchange_records(project_id, sections, models)
+    except (KeyError, TypeError, ValueError, AttributeError) as exc:
+        raise ValidationError("Invalid scientific exchange inventory structure") from exc
+
+
+def _validate_exchange_records(
+    project_id: str, sections: dict[str, list[dict[str, Any]]], models: dict[str, type[Any]]
+) -> None:
     """Reject ambiguous identifiers and references before creating an imported project."""
     seen = {project_id}
     by_section: dict[str, dict[str, dict[str, Any]]] = {}

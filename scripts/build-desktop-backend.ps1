@@ -386,6 +386,8 @@ $Arguments = @(
     "${VdaRuntimeRoot};provider-runtime/video-depth-anything",
     "--add-data",
     "${Mavic3TCalibrationPath};reefvision/data/camera_calibrations",
+    "--add-data",
+    "apps/api/reefvision/services/copernicus_worker.py;reefvision/services",
     $DesktopEntrypoint
 )
 

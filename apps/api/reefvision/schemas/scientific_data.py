@@ -120,6 +120,7 @@ class ScientificRecordCreate(ScientificModel):
             raise ValueError("Depth requires an explicit reference (for example sea_surface)")
         expected = {
             "water_temperature": "temperature",
+            "water_potential_temperature": "temperature",
             "current_eastward_velocity": "speed",
             "current_northward_velocity": "speed",
             "current_speed": "speed",

@@ -1,4 +1,8 @@
-﻿import L from "leaflet";
+import {
+  vectorColor,
+  type CurrentVector,
+} from "../environmental-context/currentVectors";
+import L from "leaflet";
 import { useEffect, useMemo, useRef } from "react";
 
 import "leaflet/dist/leaflet.css";
@@ -7,6 +11,9 @@ import type { GeoReferencedObservationSummary } from "./videoGeoreferencedObserv
 
 interface OpenStreetMapViewProps {
   observations: GeoReferencedObservationSummary[];
+  currentVectors?: CurrentVector[];
+  showBasemap?: boolean;
+  mapExtent?: [[number, number], [number, number]];
   activeObservationId?: string | null;
   selectedObservationId?: string | null;
   showTrackLines?: boolean;
@@ -15,6 +22,7 @@ interface OpenStreetMapViewProps {
   onTileFailure?: () => void;
 }
 
+const NO_CURRENTS: CurrentVector[] = [];
 const DEFAULT_CENTER: L.LatLngExpression = [0, 0];
 const DEFAULT_ZOOM = 2;
 
@@ -29,6 +37,9 @@ function observationPosition(
 
 export function OpenStreetMapView({
   observations,
+  currentVectors = NO_CURRENTS,
+  showBasemap = true,
+  mapExtent,
   activeObservationId = null,
   selectedObservationId = null,
   showTrackLines = true,
@@ -110,7 +121,7 @@ export function OpenStreetMapView({
       }
     });
 
-    tiles.addTo(map);
+    if (showBasemap) tiles.addTo(map);
 
     const scaleControl = L.control
       .scale({
@@ -145,7 +156,7 @@ export function OpenStreetMapView({
       mapRef.current = null;
       map.remove();
     };
-  }, []);
+  }, [showBasemap]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -157,7 +168,32 @@ export function OpenStreetMapView({
 
     overlays.clearLayers();
 
-    const positions = observations.map(observationPosition);
+    const drawableCurrents = currentVectors.filter(
+      (vector) => Math.abs(vector.latitude) <= 85,
+    );
+    const positions: L.LatLngTuple[] = [
+      ...observations.map(observationPosition),
+      ...drawableCurrents.map(
+        (vector) => [vector.latitude, vector.longitude] as L.LatLngTuple,
+      ),
+    ];
+    for (const vector of drawableCurrents) {
+      const arrow = document.createElement("div");
+      arrow.textContent = vector.bearing === null ? "•" : "↑";
+      arrow.style.cssText = `font-size:28px;line-height:32px;text-align:center;color:${vectorColor(vector.speed)};transform:rotate(${vector.bearing ?? 0}deg);`;
+      const tooltip = document.createElement("span");
+      tooltip.textContent = `${vector.speed.toFixed(3)} m/s; ${vector.bearing === null ? "stationary" : `${vector.bearing.toFixed(1)}° toward, true north`}; ${vector.sourceKind}; ${vector.dataset}; ${vector.observedAt}; ${vector.depthM} m; uncertainty unknown`;
+      L.marker([vector.latitude, vector.longitude], {
+        icon: L.divIcon({
+          html: arrow,
+          className: "current-vector-marker",
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+        }),
+      })
+        .bindTooltip(tooltip)
+        .addTo(overlays);
+    }
 
     if (showTrackLines) {
       for (const [trackId, trackObservations] of tracks) {
@@ -225,7 +261,9 @@ export function OpenStreetMapView({
         .addTo(overlays);
     }
 
-    if (positions.length === 1) {
+    if (mapExtent) {
+      map.fitBounds(mapExtent);
+    } else if (positions.length === 1) {
       map.setView(positions[0], 18);
     } else if (positions.length > 1) {
       map.fitBounds(L.latLngBounds(positions), {
@@ -235,6 +273,9 @@ export function OpenStreetMapView({
     }
   }, [
     activeObservationId,
+    currentVectors,
+    showBasemap,
+    mapExtent,
     observations,
     selectedObservationId,
     selectedUncertaintyRadiusM,

@@ -62,6 +62,9 @@ it("queries the selected image only on demand and shows an explicit unavailable 
   expect(
     await screen.findByText("No valid subject position and UTC timestamp."),
   ).toBeInTheDocument();
+  expect(new URL(fetch.mock.calls[0][0]).pathname).toBe(
+    "/api/v1/projects/project-1/environment/subject-context",
+  );
   const body = JSON.parse(fetch.mock.calls[0][1].body);
   expect(body.subject).toEqual(subject);
   expect(body.max_distance_m).toBe(1000);

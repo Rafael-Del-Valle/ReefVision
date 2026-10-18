@@ -180,6 +180,9 @@ def test_scientific_roundtrip_preserves_evidence_and_offline_cache_with_isolated
         "cache_reference",
         "normalized",
         "calibration_hash",
+        "cache_payload_shape",
+        "cache_record_type",
+        "cache_identity_shape",
     ],
 )
 def test_scientific_exchange_rejects_invalid_data_without_partial_import(
@@ -209,6 +212,15 @@ def test_scientific_exchange_rejects_invalid_data_without_partial_import(
         elif corruption == "cache_reference":
             cache = sections["environmental_cache_entries"][0]
             cache["payload_json"]["record_ids"] = ["missing"]
+            cache["content_sha256"] = content_hash(cache["payload_json"])
+        if corruption.startswith("cache_") and corruption != "cache_reference":
+            cache = sections["environmental_cache_entries"][0]
+            if corruption == "cache_payload_shape":
+                cache["payload_json"] = []
+            elif corruption == "cache_record_type":
+                cache["payload_json"]["record_ids"] = [{}]
+            else:
+                cache["payload_json"]["cache_identity"] = "invalid"
             cache["content_sha256"] = content_hash(cache["payload_json"])
         if corruption in ("subject_mismatch", "normalized", "calibration_hash"):
             record["content_sha256"] = content_hash(record["payload_json"])

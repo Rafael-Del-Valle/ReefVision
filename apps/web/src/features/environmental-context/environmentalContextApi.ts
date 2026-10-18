@@ -225,9 +225,65 @@ export function getSubjectEnvironment(
   },
   signal?: AbortSignal,
 ): Promise<EnvironmentalSubjectContext> {
-  return request(`/api/v1/projects/${projectId}/environment/subject-context`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-    signal,
-  });
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/environment/subject-context`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+      signal,
+    },
+  );
+}
+
+export interface CopernicusRequest {
+  dataset_id: string;
+  dataset_version: string;
+  variables: ("uo" | "vo" | "thetao" | "so")[];
+  minimum_longitude: number;
+  maximum_longitude: number;
+  minimum_latitude: number;
+  maximum_latitude: number;
+  minimum_depth: number;
+  maximum_depth: number;
+  start_datetime: string;
+  end_datetime: string;
+  offline: boolean;
+  refresh: boolean;
+}
+export interface EnvironmentalDatasetSummary {
+  cache_key: string;
+  provider: string;
+  source_url: string;
+  record_count: number;
+  fetched_at: string;
+  expires_at: string;
+}
+export function getEnvironmentalDatasets(
+  projectId: string,
+  offset: number,
+  signal?: AbortSignal,
+): Promise<{ items: EnvironmentalDatasetSummary[]; total: number }> {
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/environment/datasets?limit=100&offset=${offset}`,
+    { signal },
+  );
+}
+export function getCachedDataset(
+  projectId: string,
+  cacheKey: string,
+  signal?: AbortSignal,
+): Promise<NOAAImportResult> {
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/environment/datasets/${encodeURIComponent(cacheKey)}`,
+    { signal },
+  );
+}
+export function importCopernicus(
+  projectId: string,
+  payload: CopernicusRequest,
+): Promise<NOAAImportResult> {
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/environment/copernicus`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
 }

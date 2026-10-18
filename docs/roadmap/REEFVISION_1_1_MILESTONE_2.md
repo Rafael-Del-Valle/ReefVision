@@ -89,3 +89,28 @@ release, merge, tag and hardware/scientific acceptance remain gated.
   relative video time or camera/station GPS; automatic drone UTC alignment remains
   a later prerequisite, and existing georeferencing remains unchanged.
 - Task 2: implemented and automated-tested; external scientific acceptance pending.
+
+### Task 3 evidence
+
+- Implemented optional bounded Copernicus Toolbox worker, secure environment-only
+  configuration, modeled grid parsing, pinned versions, refresh/offline reuse and
+  shared NOAA/Copernicus persistence. Added cache inventory/open APIs.
+- Implemented current vectors in the existing Leaflet map with speed/direction,
+  exact time/depth selection, extent/visibility controls, offline geometry and
+  explicitly spatial-only fresh WGS84 organism overlays.
+- Provider tests: 17 passed; provider plus NOAA cache tests: 31 passed. UI suite:
+  480 passed in 97 files; type checking, Ruff, mypy and production build passed.
+- Added exact API route regression after detecting a duplicate URL prefix in the
+  subject inspector (1 failed / 4 passed before correction; 5 passed after).
+- Added malformed exchange-cache regressions (2 failed / 1 passed before guard);
+  invalid inventory structures now produce structured validation failures.
+- Local browser acceptance remains blocked: Chromium download returned invalid ZIP
+  data and the executable is unavailable. Expanded Playwright acceptance covers
+  subject-context routing and actual Leaflet current-marker visibility in CI.
+- Ruling: keep optional provider dependencies out of the default desktop installer;
+  a separately configured researcher runtime is required for live acquisition.
+  Cache inspection and visualization remain usable without it.
+- Ruling: preserve potential temperature and reject ambiguous salinity/current-axis
+  semantics. A narrower supported dataset set is preferable to mislabeled values.
+- Full backend regression run is in progress. Copernicus live credentials, packaged
+  runtime execution and field comparison remain external acceptance gates.

@@ -171,3 +171,53 @@ Existing drone georeferencing supplies relative video time; it does not yet
 establish UTC capture time. This milestone therefore does not automatically join
 those outputs to ocean models. Supply a documented subject position/time reference;
 no camera GPS coordinate is silently substituted for an organism's ground position.
+
+## Copernicus Marine modeled data and ocean-current map
+
+Open **Environmental Context → Open ocean current map**. Choose a cached dataset,
+UTC time and depth. Direction arrows point toward the current's direction clockwise
+from true north; speed is `hypot(eastward, northward)` in m/s. A stationary vector
+has no direction. Components must share source kind, provider, dataset/version,
+location, time and depth; duplicates, rejected/suspect values and superseded cache
+snapshots are excluded. No spatial interpolation or particle/advection model is
+applied. Arrow length is symbolic. Map extent and layer controls use the existing
+Leaflet map. Basemap tiles are opt-in; cached vectors work offline without tiles.
+WGS84 object overlays exclude stale georeferencing and are labeled spatial-only
+until explicit UTC synchronization exists. The Web Mercator map excludes polar
+vectors above 85° latitude; their exact values remain in the measurement list.
+
+**Acquire Copernicus modeled data** accepts an exact `cmems_mod_…` dataset/version,
+variables `uo`, `vo`, `thetao`, `so`, WGS84 bounds, UTC interval and sea-surface depth.
+Limits are 5° per horizontal axis, seven days, 5,000 scalar values and 90 seconds.
+Split antimeridian requests. Only regular geographic time/depth grids are supported;
+grid-relative velocities are rejected. `thetao` is stored as
+`water_potential_temperature`, never mislabeled as in-situ temperature. Salinity
+requires explicit `sea_water_practical_salinity` semantics and PSU/`1e-3` units;
+ambiguous generic salinity fields require a dataset-specific scientific adapter.
+Missing values are counted and skipped, never replaced. QC remains unassessed and
+uncertainty remains unknown when the provider does not supply validated estimates.
+
+The optional official [Copernicus Toolbox Python API](https://toolbox-docs.marine.copernicus.eu/en/stable/python-interface.html)
+is used in an isolated local worker process. For a researcher-managed Python
+runtime, the optional dependency is `reefvision[environmental]`. Configure the
+backend environment (never project JSON, Git or an exchange archive):
+
+- `REEFVISION_COPERNICUS_USERNAME` and `REEFVISION_COPERNICUS_PASSWORD`.
+- `REEFVISION_COPERNICUS_PYTHON_EXECUTABLE`: absolute path to the Python executable
+  containing the Toolbox. Required for a packaged desktop build; a source checkout
+  defaults to its running interpreter.
+
+ReefVision does not install that runtime or store those credentials. Secrets are
+excluded from serialized settings and passed only through the worker environment.
+Errors are sanitized. The small worker script is included in desktop packaging;
+the optional Toolbox/xarray stack is not added to the default installer. Previously
+cached subsets reopen without that runtime or credentials.
+
+The cache refreshes after 24 hours on acquisition requests; explicit refresh and
+cache-only controls are available. Unchanged payloads retain scientific record IDs;
+changed datasets retain immutable historical observations. Dataset identity,
+version, source URL, acquisition time, original CF unit/name, Toolbox version,
+request bounds and available coordinate resolutions are preserved. Credentials,
+provider live-data acceptance and packaged-runtime execution have not been claimed.
+Synthetic xarray fixtures validate the worker, numerical interpretation, caching
+and exchange independently of Copernicus access.

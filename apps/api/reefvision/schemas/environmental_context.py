@@ -74,6 +74,7 @@ class EnvironmentalLookupResponse(ScientificModel):
 
 ENVIRONMENTAL_VARIABLES = [
     "water_temperature",
+    "water_potential_temperature",
     "practical_salinity",
     "current_eastward_velocity",
     "current_northward_velocity",
@@ -103,3 +104,17 @@ class EnvironmentalSubjectContext(ScientificModel):
     position: ScientificRecordResponse | None = None
     matches: dict[str, list[EnvironmentalMatch]] = Field(default_factory=dict)
     method: str = "bounded_observations_no_interpolation"
+
+
+class EnvironmentalDatasetSummary(ScientificModel):
+    cache_key: str
+    provider: str
+    source_url: str
+    record_count: int
+    fetched_at: datetime
+    expires_at: datetime
+
+
+class EnvironmentalDatasetPage(ScientificModel):
+    items: list[EnvironmentalDatasetSummary]
+    total: int

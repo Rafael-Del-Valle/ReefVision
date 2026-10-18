@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -13,6 +14,8 @@ from reefvision.db.models.scientific_record import EnvironmentalCacheEntry, Scie
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.schemas.environmental_context import (
     ENVIRONMENTAL_VARIABLES,
+    EnvironmentalDatasetPage,
+    EnvironmentalDatasetSummary,
     EnvironmentalImportResponse,
     EnvironmentalLookup,
     EnvironmentalLookupResponse,
@@ -21,6 +24,7 @@ from reefvision.schemas.environmental_context import (
     EnvironmentalSubjectLookup,
     NOAAImportRequest,
 )
+from reefvision.schemas.scientific_data import ScientificRecordCreate
 from reefvision.services.geographic_movement_analytics import geographic_distance_m
 from reefvision.services.noaa_environment import fetch_noaa, noaa_request_url, parse_noaa
 from reefvision.services.scientific_data import ScientificDataService, content_hash
@@ -92,6 +96,32 @@ class EnvironmentalContextService:
         else:
             raw = fetch_noaa(self.http, source_url)
         items, missing = parse_noaa(raw, request, self.now, source_url)
+        return self.store_dataset(
+            project_id,
+            identity={"source_url": source_url, "subject": request.subject.model_dump(mode="json")},
+            source_url=source_url,
+            raw=raw,
+            items=items,
+            missing=missing,
+            entry=entry,
+        )
+
+    def store_dataset(
+        self,
+        project_id: str,
+        *,
+        identity: dict[str, Any],
+        source_url: str,
+        raw: dict[str, Any],
+        items: list[ScientificRecordCreate],
+        missing: int,
+        entry: EnvironmentalCacheEntry | None,
+    ) -> EnvironmentalImportResponse:
+        key = content_hash(identity)
+        query = select(EnvironmentalCacheEntry).where(
+            EnvironmentalCacheEntry.project_id == project_id,
+            EnvironmentalCacheEntry.cache_key == key,
+        )
         if entry is not None and content_hash(raw) == content_hash(
             entry.payload_json["provider_response"]
         ):
@@ -100,10 +130,7 @@ class EnvironmentalContextService:
         else:
             rows = self.science.add_records(project_id, items, environmental_cache_key=key)
             payload = {
-                "cache_identity": {
-                    "source_url": source_url,
-                    "subject": request.subject.model_dump(mode="json"),
-                },
+                "cache_identity": identity,
                 "provider_response": raw,
                 "record_ids": [row.id for row in rows],
                 "skipped_missing": missing,
@@ -279,3 +306,47 @@ class EnvironmentalContextService:
                 "space, time and depth bounds."
             )
         return result
+
+    def datasets(
+        self, project_id: str, limit: int = 100, offset: int = 0
+    ) -> EnvironmentalDatasetPage:
+        self.science.require_project(project_id)
+        query = select(EnvironmentalCacheEntry).where(
+            EnvironmentalCacheEntry.project_id == project_id
+        )
+        total = self.session.scalar(select(func.count()).select_from(query.subquery())) or 0
+        rows = self.session.scalars(
+            query.order_by(EnvironmentalCacheEntry.fetched_at.desc(), EnvironmentalCacheEntry.id)
+            .limit(limit)
+            .offset(offset)
+        )
+        items = []
+        for entry in rows:
+            if content_hash(entry.payload_json) != entry.content_sha256:
+                raise ConflictError("Environmental cache checksum mismatch")
+            identity = entry.payload_json.get("cache_identity", {})
+            items.append(
+                EnvironmentalDatasetSummary(
+                    cache_key=entry.cache_key,
+                    provider=identity.get("provider", "noaa_co_ops"),
+                    source_url=entry.source_url,
+                    record_count=len(entry.payload_json["record_ids"]),
+                    fetched_at=_utc(entry.fetched_at),
+                    expires_at=_utc(entry.expires_at),
+                )
+            )
+        return EnvironmentalDatasetPage(items=items, total=total)
+
+    def cached_dataset(self, project_id: str, cache_key: str) -> EnvironmentalImportResponse:
+        self.science.require_project(project_id)
+        entry = self.session.scalar(
+            select(EnvironmentalCacheEntry).where(
+                EnvironmentalCacheEntry.project_id == project_id,
+                EnvironmentalCacheEntry.cache_key == cache_key,
+            )
+        )
+        if entry is None:
+            raise NotFoundError("No matching cached dataset in this project")
+        return self._cache_response(
+            entry, "fresh" if self.now < _utc(entry.expires_at) else "stale_offline"
+        )

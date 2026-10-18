@@ -42,6 +42,37 @@ test("imports sensor JSON and displays offline NOAA provenance in Environmental 
     normalized_uncertainty: null,
     content_sha256: "a".repeat(64),
   };
+  const position = {
+    ...record,
+    id: "position-reference",
+    variable: "geographic_position",
+    value: 1,
+    unit: "1",
+    normalized_value: 1,
+    normalized_unit: "1",
+    subject: { image_id: "image-reference" },
+    location: { latitude: 32.5, longitude: -79.5 },
+    provenance: { source: "Survey GPS", acquired_at: "2026-10-18T00:00:00Z" },
+  };
+  const currents = ["eastward", "northward"].map((direction, index) => ({
+    ...record,
+    id: `current-${direction}`,
+    variable: `current_${direction}_velocity`,
+    value: index === 0 ? 3 : 4,
+    normalized_value: index === 0 ? 3 : 4,
+    unit: "m/s",
+    normalized_unit: "m/s",
+    source_kind: "modeled",
+    depth_m: 5,
+    depth_reference: "sea_surface",
+    location: { latitude: 32.5, longitude: -79.5 },
+    provenance: {
+      source: "Copernicus Marine",
+      dataset_id: "synthetic-current-fixture",
+      model_version: "202601",
+      acquired_at: "2026-10-18T00:00:00Z",
+    },
+  }));
   const records: (typeof record)[] = [];
 
   await page.route("**/api/v1/**", async (route) => {
@@ -89,7 +120,7 @@ test("imports sensor JSON and displays offline NOAA provenance in Environmental 
           acquired_at: "2026-10-17T18:00:00Z",
         },
       };
-      records.push(noaa);
+      records.push(noaa, position);
       await route.fulfill({
         json: {
           items: [noaa],
@@ -99,6 +130,61 @@ test("imports sensor JSON and displays offline NOAA provenance in Environmental 
           source_url:
             "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=8724580",
           skipped_missing: 1,
+        },
+      });
+    } else if (
+      url.pathname ===
+      `/api/v1/projects/${project.id}/environment/subject-context`
+    ) {
+      expect(request.postDataJSON().subject).toEqual({
+        image_id: "image-reference",
+      });
+      await route.fulfill({
+        json: {
+          status: "available",
+          positions: [position],
+          position,
+          matches: {
+            water_temperature: [
+              {
+                record,
+                distance_m: 1109,
+                time_delta_s: 600,
+                depth_delta_m: null,
+                cache_age_s: null,
+                offline_available: true,
+              },
+            ],
+          },
+        },
+      });
+    } else if (
+      url.pathname === `/api/v1/projects/${project.id}/environment/datasets`
+    ) {
+      await route.fulfill({
+        json: {
+          total: 1,
+          items: [
+            {
+              cache_key: "fixture",
+              provider: "copernicus_marine",
+              record_count: 2,
+              fetched_at: "2026-10-18T00:00:00Z",
+              expires_at: "2026-10-19T00:00:00Z",
+            },
+          ],
+        },
+      });
+    } else if (
+      url.pathname ===
+      `/api/v1/projects/${project.id}/environment/datasets/fixture`
+    ) {
+      await route.fulfill({
+        json: {
+          items: currents,
+          cache_status: "fresh",
+          fetched_at: "2026-10-18T00:00:00Z",
+          expires_at: "2026-10-19T00:00:00Z",
         },
       });
     } else {
@@ -176,4 +262,18 @@ test("imports sensor JSON and displays offline NOAA provenance in Environmental 
     result.getByRole("link", { name: "NOAA source" }),
   ).toHaveAttribute("href", /station=8724580/);
   await expect(page.getByText("NOAA CO-OPS", { exact: true })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Inspect environmental context" })
+    .click();
+  await expect(page.getByText(/1109.0 m away/)).toBeVisible();
+  await expect(
+    page.getByText(/Nearby context is not an exact measurement/),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Open ocean current map" }).click();
+  await page.getByLabel("Cached ocean dataset").selectOption("fixture");
+  await expect(page.getByText("5.000 m/s", { exact: true })).toBeVisible();
+  await expect(page.locator(".current-vector-marker")).toHaveCount(1);
+  await page.getByLabel("Show current vectors").uncheck();
+  await expect(page.locator(".current-vector-marker")).toHaveCount(0);
+  await expect(page.getByLabel("Online basemap tiles")).not.toBeChecked();
 });
