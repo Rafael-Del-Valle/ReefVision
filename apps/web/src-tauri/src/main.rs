@@ -182,9 +182,49 @@ while ($true) {
     Write-Host ('ReefVision - {0}' -f $run.run_name)
     Write-Host ('Status: {0} | Stage: {1}' -f $run.status, $run.stage)
     Write-Host ('Epoch: {0} / {1}' -f $run.progress_epoch, $run.progress_total_epochs)
+    # Some training providers persist losses as epoch histories, while
+    # others include the newest values in the summary metrics object.
+    # Show both without inventing unavailable fields.
+    $latestMetrics = @{}
+    if ($null -ne $run.metrics_history) {
+      foreach ($series in $run.metrics_history.PSObject.Properties) {
+        $values = @($series.Value)
+        if ($values.Count -gt 0 -and $null -ne $values[-1]) {
+          $latestMetrics[$series.Name] = $values[-1]
+        }
+      }
+    }
     if ($null -ne $run.metrics) {
-      $run.metrics.PSObject.Properties | Sort-Object Name | ForEach-Object {
-        Write-Host ('{0}: {1}' -f $_.Name, $_.Value)
+      foreach ($metric in $run.metrics.PSObject.Properties) {
+        if ($null -ne $metric.Value) {
+          $latestMetrics[$metric.Name] = $metric.Value
+        }
+      }
+    }
+    $trainingLosses = @('train/box_loss', 'train/cls_loss', 'train/dfl_loss', 'train/seg_loss', 'train/loss')
+    $validationLosses = @('val/box_loss', 'val/cls_loss', 'val/dfl_loss', 'val/seg_loss', 'val/loss')
+    if (@($trainingLosses | Where-Object { $latestMetrics.ContainsKey($_) }).Count -gt 0) {
+      Write-Host ''
+      Write-Host 'Training losses'
+      foreach ($key in $trainingLosses) {
+        if ($latestMetrics.ContainsKey($key)) { Write-Host ('  {0,-20} {1}' -f $key, $latestMetrics[$key]) }
+      }
+    }
+    if (@($validationLosses | Where-Object { $latestMetrics.ContainsKey($_) }).Count -gt 0) {
+      Write-Host ''
+      Write-Host 'Validation losses'
+      foreach ($key in $validationLosses) {
+        if ($latestMetrics.ContainsKey($key)) { Write-Host ('  {0,-20} {1}' -f $key, $latestMetrics[$key]) }
+      }
+    }
+    $otherMetrics = @($latestMetrics.Keys | Where-Object {
+      $_ -notin ($trainingLosses + $validationLosses) -and $_ -ne 'epoch' -and $_ -ne 'time'
+    } | Sort-Object)
+    if ($otherMetrics.Count -gt 0) {
+      Write-Host ''
+      Write-Host 'Other model metrics'
+      foreach ($key in $otherMetrics) {
+        Write-Host ('  {0,-30} {1}' -f $key, $latestMetrics[$key])
       }
     }
     if ($run.error_message) { Write-Host ('Error: {0}' -f $run.error_message) }
