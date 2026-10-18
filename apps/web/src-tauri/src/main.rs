@@ -634,6 +634,17 @@ mod tests {
     use super::*;
     use std::sync::atomic::AtomicUsize;
 
+    #[test]
+    fn training_console_accepts_only_opaque_run_ids() {
+        assert!(valid_training_run_id("b530769c-2a79-4d44-a36e-61d988d5fa78"));
+        assert!(valid_training_run_id("run-1"));
+        assert!(!valid_training_run_id(""));
+        assert!(!valid_training_run_id("not a run"));
+        assert!(!valid_training_run_id("foo'; Remove-Item C:"));
+        assert!(!valid_training_run_id("../escape"));
+        assert!(!valid_training_run_id(&"a".repeat(73)));
+    }
+
     #[derive(Clone)]
     struct FakeProcessState {
         graceful_requests: Arc<AtomicUsize>,
