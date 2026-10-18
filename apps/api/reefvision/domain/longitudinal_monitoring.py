@@ -83,7 +83,9 @@ def analyze_longitudinal(
         changes=changes,
         limitations=[
             "Caller-supplied observations are not verified against project data or calibration.",
-            "Changes compare the first and last sampling dates; no statistical significance is inferred.",
-            "Organisms are the reporting unit; observations are not pooled as independent replicates.",
+            "Changes compare the first and last sampling dates; "
+            "no statistical significance is inferred.",
+            "Organisms are the reporting unit; observations are not pooled "
+            "as independent replicates.",
         ],
     )
