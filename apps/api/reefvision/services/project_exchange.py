@@ -38,6 +38,7 @@ from reefvision.db.models import (
     QualityControlRun,
     ReviewQueue,
     ReviewQueueItem,
+    ScientificRecord,
     TrainingRun,
     VideoAsset,
     VideoTrack,
@@ -118,12 +119,27 @@ class ProjectExchangeService:
     def get_package(self, package_id: str) -> ProjectExchangePackageResponse:
         return ProjectExchangePackageResponse.model_validate(self._package(package_id))
 
+    def _require_exchange_compatible(self, project_id: str) -> None:
+        if (
+            self.session.scalar(
+                select(ScientificRecord.id)
+                .where(ScientificRecord.project_id == project_id)
+                .limit(1)
+            )
+            is not None
+        ):
+            raise ValidationError(
+                "Project exchange 1.0 cannot preserve 1.1 scientific records. "
+                "Use a full application backup until scientific exchange is supported."
+            )
+
     def queue_export(
         self,
         project_id: str,
         request: ProjectExchangeCreateRequest,
     ) -> ProjectExchangeCreateResponse:
         project = self._project(project_id)
+        self._require_exchange_compatible(project_id)
         package_id = str(uuid4())
         archive_relative = f"{project.storage_root}/exchanges/{package_id}.reefvision.zip"
         package = ProjectExchangePackage(
@@ -165,6 +181,7 @@ class ProjectExchangeService:
         return path
 
     def _records(self, project: Project) -> dict[str, Sequence[Base]]:
+        self._require_exchange_compatible(project.id)
         image_ids = list(
             self.session.scalars(select(ImageAsset.id).where(ImageAsset.project_id == project.id))
         )
