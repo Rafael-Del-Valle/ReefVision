@@ -275,7 +275,9 @@ def test_supported_image_formats_import(client: TestClient) -> None:
     }
     for index, (filename, (format_name, media_type)) in enumerate(expected.items()):
         stream = BytesIO()
-        Image.new("RGB", (30 + index, 20), (index * 20, 80, 120)).save(stream, format=format_name)
+        Image.new("RGB", (30 + index, 20), ((index * 17) % 256, 80, 120)).save(
+            stream, format=format_name
+        )
         report = import_one(
             client,
             project["id"],
