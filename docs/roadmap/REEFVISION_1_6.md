@@ -25,6 +25,20 @@
 - Tests cover standalone and saved graph execution, typed artifact persistence, reuse,
   foreign-project rejection, and changed-parameter rejection.
 
+## 1.6 bulk QC triage increment
+
+- A manual `POST /api/v1/review-queues/{queue_id}/items/bulk` endpoint can
+  start, skip (with reason) or return up to 100 queue items at once.
+- Preflight validates every item and its queue/project membership before changing
+  anything; the batch commits once or rejects without partial transitions.
+- Exact retries are idempotent. Bulk completion/annotation approval is intentionally
+  unsupported: this is triage, not a substitute for researcher verification.
+- The standalone batch acts on the same durable queue IDs produced by the executable
+  `qc_review_queue` Workflow Builder node. Saved runs and their typed reference
+  artifacts are unchanged. Audit-identity persistence and reviewer assignments remain pending.
+- API regressions cover state transitions, duplicate retries, cross-queue isolation,
+  atomic failure, and preservation of unverified image annotations.
+
 ## Outstanding acceptance
 
 Run Ruff, mypy, backend/frontend/E2E and migration/backwards-compatibility checks

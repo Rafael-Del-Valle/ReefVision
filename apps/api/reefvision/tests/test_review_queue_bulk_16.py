@@ -1,0 +1,107 @@
+"""Bulk QC triage: atomic validation, retry safety and non-verification."""
+
+from __future__ import annotations
+
+from fastapi.testclient import TestClient
+
+from reefvision.tests.test_annotations import create_project, import_one
+
+
+def _queue_with_two_images(client: TestClient) -> tuple[str, list[str]]:
+    project = create_project(client, "Bulk QC triage")
+    import_one(
+        client,
+        project["id"],
+        filename="frame-one.png",
+        relative_path="bulk/frame-one.png",
+        size=(80, 60),
+    )
+    import_one(
+        client,
+        project["id"],
+        filename="frame-two.png",
+        relative_path="bulk/frame-two.png",
+        size=(81, 60),
+    )
+    created = client.post(f"/api/v1/projects/{project['id']}/review-queues", json={})
+    assert created.status_code == 201, created.text
+    queue_id = created.json()["id"]
+    response = client.get(f"/api/v1/review-queues/{queue_id}/items")
+    assert response.status_code == 200, response.text
+    ids = [item["id"] for item in response.json()["items"]]
+    assert len(ids) == 2
+    return queue_id, ids
+
+
+def test_bulk_review_triage_is_idempotent_and_does_not_verify_annotations(
+    client: TestClient,
+) -> None:
+    queue_id, ids = _queue_with_two_images(client)
+    url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    skipped = client.post(
+        url, json={"item_ids": ids, "action": "skip", "reason": "Manual inspection"}
+    )
+    assert skipped.status_code == 200, skipped.text
+    assert skipped.json()["changed_count"] == 2
+    assert skipped.json()["requires_researcher_review"] is True
+    assert {item["review_state"] for item in skipped.json()["items"]} == {"skipped"}
+
+    replay = client.post(
+        url, json={"item_ids": ids, "action": "skip", "reason": "Manual inspection"}
+    )
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["changed_count"] == 0
+
+    returned = client.post(url, json={"item_ids": ids, "action": "return"})
+    assert returned.status_code == 200, returned.text
+    assert returned.json()["changed_count"] == 2
+    assert client.post(url, json={"item_ids": ids, "action": "return"}).json()[
+        "changed_count"
+    ] == 0
+
+    started = client.post(url, json={"item_ids": ids, "action": "start"})
+    assert started.status_code == 200, started.text
+    assert started.json()["changed_count"] == 2
+    assert client.post(url, json={"item_ids": ids, "action": "start"}).json()[
+        "changed_count"
+    ] == 0
+    assert {item["review_state"] for item in started.json()["items"]} == {
+        "in_progress"
+    }
+    for item in started.json()["items"]:
+        session = client.get(f"/api/v1/images/{item['image_id']}/annotations")
+        assert session.status_code == 200
+        assert session.json()["annotations"] == []
+
+
+def test_bulk_review_rejects_partial_changes_and_foreign_queue_members(
+    client: TestClient,
+) -> None:
+    queue_id, ids = _queue_with_two_images(client)
+    url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    assert client.post(
+        url, json={"item_ids": [ids[1]], "action": "skip", "reason": "Hold"}
+    ).status_code == 200
+
+    # First item is valid, second cannot be started; neither may be changed.
+    invalid = client.post(url, json={"item_ids": ids, "action": "start"})
+    assert invalid.status_code == 409, invalid.text
+    listing = client.get(f"/api/v1/review-queues/{queue_id}/items").json()["items"]
+    states = {item["id"]: item["review_state"] for item in listing}
+    assert states[ids[0]] == "pending"
+    assert states[ids[1]] == "skipped"
+
+    duplicate = client.post(url, json={"item_ids": [ids[0], ids[0]], "action": "start"})
+    assert duplicate.status_code != 200
+    missing_reason = client.post(url, json={"item_ids": ids, "action": "skip"})
+    assert missing_reason.status_code != 200
+
+    another_queue_id, other_ids = _queue_with_two_images(client)
+    assert another_queue_id != queue_id
+    foreign = client.post(
+        url, json={"item_ids": [ids[0], other_ids[0]], "action": "start"}
+    )
+    assert foreign.status_code == 409, foreign.text
+    assert client.get(f"/api/v1/review-queues/{queue_id}/items").json()["items"][0][
+        "review_state"
+    ] in {"pending", "skipped"}

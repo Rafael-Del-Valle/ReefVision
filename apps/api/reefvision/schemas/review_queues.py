@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -105,3 +105,19 @@ class ReviewQueueItemPageResponse(BaseModel):
 
 class ReviewQueueItemSkipRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
+
+
+class ReviewQueueBulkRequest(BaseModel):
+    """Explicit local-operator action; cannot verify biological observations."""
+
+    item_ids: list[str] = Field(min_length=1, max_length=100)
+    action: Literal["start", "skip", "return"]
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class ReviewQueueBulkResponse(BaseModel):
+    queue_id: str
+    action: Literal["start", "skip", "return"]
+    changed_count: int
+    items: list[ReviewQueueItemResponse]
+    requires_researcher_review: bool = True
