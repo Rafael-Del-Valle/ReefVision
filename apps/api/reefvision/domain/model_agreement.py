@@ -33,30 +33,19 @@ def compare_paired_counts(
     ):
         raise ValidationError("Paired observations and source record IDs must be unique")
 
-    unit_types = {
-        item.experimental_unit_type for item in pairs if item.experimental_unit_type
-    }
+    unit_types = {item.experimental_unit_type for item in pairs if item.experimental_unit_type}
     if len(unit_types) > 1:
         raise ValidationError("Pairs declare conflicting experimental unit types")
     unit_type = request.experimental_unit_type or next(iter(unit_types), None)
     if unit_types and unit_type not in unit_types:
         raise ValidationError("Request and pairs disagree on experimental unit type")
-    if unit_type is None and any(
-        item.experimental_unit_id is not None for item in pairs
-    ):
-        raise ValidationError(
-            "experimental_unit_type is required when unit IDs are supplied"
-        )
-    if unit_type is not None and any(
-        item.experimental_unit_id is None for item in pairs
-    ):
+    if unit_type is None and any(item.experimental_unit_id is not None for item in pairs):
+        raise ValidationError("experimental_unit_type is required when unit IDs are supplied")
+    if unit_type is not None and any(item.experimental_unit_id is None for item in pairs):
         raise ValidationError("All paired observations require experimental_unit_id")
     memberships: dict[str, str] = {}
     for item in pairs:
-        if (
-            item.experimental_unit_type is not None
-            and item.experimental_unit_type != unit_type
-        ):
+        if item.experimental_unit_type is not None and item.experimental_unit_type != unit_type:
             raise ValidationError("Pair experimental unit type conflicts with the request")
         if unit_type is not None:
             assert item.experimental_unit_id is not None
@@ -70,9 +59,7 @@ def compare_paired_counts(
     for item in sorted(pairs, key=lambda pair: pair.observation_id):
         signed = item.model_count - item.reference_count
         absolute = abs(signed)
-        percent = (
-            absolute / item.reference_count * 100 if item.reference_count > 0 else None
-        )
+        percent = absolute / item.reference_count * 100 if item.reference_count > 0 else None
         if any(not math.isfinite(value) for value in (signed, absolute)):
             raise ValidationError("Paired count difference is not finite")
         if percent is not None and not math.isfinite(percent):
