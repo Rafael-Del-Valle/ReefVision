@@ -21,4 +21,3 @@ def triangle_area(
         u[0] * v[1] - u[1] * v[0],
     ]
     return sqrt(sum(x * x for x in w)) / 2
-
