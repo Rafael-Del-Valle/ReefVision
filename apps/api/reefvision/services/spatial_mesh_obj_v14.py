@@ -19,11 +19,22 @@ def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
         if not fields or fields[0].startswith("#"):
             continue
         if fields[0] == "v":
-            if len(fields) < 4:
-                raise ValueError(f"OBJ line {line_number}: vertex requires XYZ")
+            # OBJ supports optional homogeneous W and vendor RGB vertex colors.
+            # W must be applied before scientific dimensions and area are measured.
+            if len(fields) not in {4, 5, 7, 8}:
+                raise ValueError(f"OBJ line {line_number}: unsupported vertex layout")
             try:
                 point = [float(value) for value in fields[1:4]]
-            except ValueError as exc:
+                if len(fields) in {5, 8}:
+                    weight = float(fields[4])
+                    if not isfinite(weight) or weight == 0:
+                        raise ValueError("homogeneous weight must be finite and nonzero")
+                    point = [value / weight for value in point]
+                if len(fields) in {7, 8}:
+                    colors = [float(value) for value in fields[-3:]]
+                    if not all(isfinite(value) for value in colors):
+                        raise ValueError("vertex colors must be finite")
+            except (ValueError, OverflowError) as exc:
                 raise ValueError(f"OBJ line {line_number}: invalid vertex") from exc
             if not all(isfinite(value) for value in point):
                 raise ValueError(f"OBJ line {line_number}: coordinates must be finite")
