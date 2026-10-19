@@ -42,20 +42,16 @@ def measure_mesh_preview(
     if not isinstance(calibration_evidence, str) or not calibration_evidence.strip():
         raise ValueError("Calibration evidence must be provided")
     if relative_scale_uncertainty is not None and (
-        not isfinite(float(relative_scale_uncertainty))
-        or not 0 <= relative_scale_uncertainty <= 1
+        not isfinite(float(relative_scale_uncertainty)) or not 0 <= relative_scale_uncertainty <= 1
     ):
         raise ValueError("relative_scale_uncertainty must be between 0 and 1")
 
     points: list[tuple[float, float, float]] = []
     for vertex in vertices:
         if len(vertex) != 3 or any(
-            not isfinite(float(value)) or abs(float(value)) > 1_000_000_000
-            for value in vertex
+            not isfinite(float(value)) or abs(float(value)) > 1_000_000_000 for value in vertex
         ):
-            raise ValueError(
-                "Each vertex must contain three bounded finite coordinates"
-            )
+            raise ValueError("Each vertex must contain three bounded finite coordinates")
         points.append((float(vertex[0]), float(vertex[1]), float(vertex[2])))
     edges: Counter[tuple[int, int]] = Counter()
     seen_faces: set[tuple[int, int, int]] = set()
@@ -67,9 +63,7 @@ def measure_mesh_preview(
             or any(index < 0 or index >= len(points) for index in face)
             or len(set(face)) != 3
         ):
-            raise ValueError(
-                "Every face must reference three distinct existing vertices"
-            )
+            raise ValueError("Every face must reference three distinct existing vertices")
         ordered = sorted(face)
         key = (ordered[0], ordered[1], ordered[2])
         if key in seen_faces:
@@ -86,8 +80,7 @@ def measure_mesh_preview(
     if not isfinite(area_m2):
         raise ValueError("Calibrated area overflowed")
     dimensions = [
-        (max(p[axis] for p in points) - min(p[axis] for p in points)) * scale
-        for axis in range(3)
+        (max(p[axis] for p in points) - min(p[axis] for p in points)) * scale for axis in range(3)
     ]
     boundary = sum(count == 1 for count in edges.values())
     nonmanifold = sum(count > 2 for count in edges.values())
@@ -112,7 +105,8 @@ def measure_mesh_preview(
         ),
         "area_scale_uncertainty_m2": (
             2 * relative_scale_uncertainty * area_m2
-            if relative_scale_uncertainty is not None else None
+            if relative_scale_uncertainty is not None
+            else None
         ),
         "confidence_interval": None,
         "measurement_status": "caller_supplied_unverified",

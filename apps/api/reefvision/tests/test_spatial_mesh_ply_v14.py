@@ -90,14 +90,10 @@ def test_saved_ply_workflow_roundtrip(client: TestClient) -> None:
             }
         ],
     }
-    plan = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
-    )
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["executable"] is True
-    saved = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph}
-    )
+    saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     record = saved.json()
     assert record["graph_json"]["nodes"][1]["parameters"]["ply_text"] == PLY
@@ -107,20 +103,21 @@ def test_saved_ply_workflow_roundtrip(client: TestClient) -> None:
     )
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        is True
+    )
     detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
     assert detail.status_code == 200
     assert detail.json()["run"]["status"] == "succeeded"
     artifact = next(
-        item for item in detail.json()["artifacts"]
+        item
+        for item in detail.json()["artifacts"]
         if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact["payload_json"]["surface_area_m2"] == pytest.approx(0.0003)
     assert artifact["payload_json"]["provenance"]["source_format"] == "ply_ascii"
-    assert (
-        artifact["payload_json"]["measurement_status"]
-        == "caller_supplied_unverified"
-    )
+    assert artifact["payload_json"]["measurement_status"] == "caller_supplied_unverified"
     assert len(artifact["payload_sha256"]) == 64
