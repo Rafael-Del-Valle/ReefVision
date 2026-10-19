@@ -3,7 +3,7 @@
 This first 1.4 slice does **not** import or persist full 3D assets, render a 3D viewer,
 or establish validated biological surface area. It accepts at most 256,000 bytes
 of ASCII OBJ or ASCII PLY text (triangles only), or 2,000 explicit XYZ vertices and 4,000
-triangle faces, for a **read-only preview**. Binary PLY/GLB, mesh asset storage,
+triangle faces, for a **read-only preview**. Binary PLY, mesh asset storage,
 interactive viewing, branch metrics and scientific verification are future work.
 
 Standalone endpoint:
@@ -48,3 +48,9 @@ and `pytest apps/api/reefvision/tests/test_spatial_mesh_ply_v14.py`.
 
 Windows installer, interactive UI, GPU, real coral scans, full CI and
 scientific acceptance remain release blockers.
+
+GLB 2.0 base64 (`glb_base64`) is supported for one embedded indexed triangle
+primitive without scene transforms, compression or external buffers. The same
+bounded parser is used by the standalone API and saved Workflow Builder node.
+Measurements remain provisional with `source_format=glb_2_0`; no persistent
+3D asset storage, interactive viewer or biological validation is implied.
