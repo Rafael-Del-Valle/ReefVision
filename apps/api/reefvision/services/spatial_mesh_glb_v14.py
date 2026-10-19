@@ -146,9 +146,7 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         if view_index >= len(views):
             raise ValueError("GLB bufferView index out of range")
         view = _as_object(views[view_index], "bufferView")
-        if view.get("buffer") != 0 or (
-            "byteStride" in view and view["byteStride"] != width
-        ):
+        if view.get("buffer") != 0 or ("byteStride" in view and view["byteStride"] != width):
             raise ValueError("GLB strided or external views are unsupported")
         start = _as_int(view.get("byteOffset", 0), "view offset")
         size = _as_int(view.get("byteLength"), "view length")
