@@ -54,9 +54,7 @@ def test_missing_followup_excludes_whole_tank() -> None:
         _obs("frag-1", "tank-A", 2, 12),
         _obs("frag-2", "tank-A", 1, 5),
     ]
-    result = analyze_longitudinal(
-        LongitudinalAnalysisRequest(observations=observations)
-    )
+    result = analyze_longitudinal(LongitudinalAnalysisRequest(observations=observations))
     assert result.independent_unit_count == 1
     assert result.unit_summaries == []
     assert result.excluded_units[0].reason == "missing_followup"
@@ -126,9 +124,7 @@ def test_saved_workflow_persists_declared_unit_summary(client: TestClient) -> No
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     artifacts = detail.json()["artifacts"]
-    artifact = next(
-        item for item in artifacts if item["data_type"] == "longitudinal_analysis"
-    )
+    artifact = next(item for item in artifacts if item["data_type"] == "longitudinal_analysis")
     payload = artifact["payload_json"]
     assert payload["experimental_unit_type"] == "tank"
     assert payload["independent_unit_count"] == 1
