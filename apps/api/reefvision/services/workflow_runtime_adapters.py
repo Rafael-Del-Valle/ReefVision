@@ -826,6 +826,7 @@ def _ecology_longitudinal_analysis(
         }
     ]
 
+
 def _ecology_paired_count_comparison(
     session: Session,
     settings: Settings,
