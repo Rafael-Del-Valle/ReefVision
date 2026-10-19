@@ -168,14 +168,18 @@ def compare_paired_counts(
     ]
     unit_balanced_percent = (
         finite_descriptive_mean(
-            row.mean_absolute_percent_deviation for row in percent_eligible_units
+            row.mean_absolute_percent_deviation
+            for row in percent_eligible_units
+            if row.mean_absolute_percent_deviation is not None
         )
         if percent_eligible_units
         else None
     )
     organism_and_unit_percent = (
         finite_descriptive_mean(
-            row.organism_balanced_mean_absolute_percent_deviation for row in percent_eligible_units
+            row.organism_balanced_mean_absolute_percent_deviation
+            for row in percent_eligible_units
+            if row.organism_balanced_mean_absolute_percent_deviation is not None
         )
         if percent_eligible_units
         else None
