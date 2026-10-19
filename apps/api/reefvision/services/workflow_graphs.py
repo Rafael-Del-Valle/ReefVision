@@ -127,10 +127,10 @@ _ACTIONS: dict[str, str] = {
     ),
     "project_exchange_export": "Build a Phase 9 checksummed project exchange export inline.",
     "ecology_longitudinal_analysis": (
-        "Compare caller-supplied repeated organism observations with explicit unverified provenance."
+        "Analyze repeated organism observations; label source evidence unverified."
     ),
     "ecology_paired_count_comparison": (
-        "Summarize caller-supplied human-model count pairs without asserting verified agreement."
+        "Compare human-model counts without claiming verified agreement."
     ),
 }
 
