@@ -1,4 +1,4 @@
-"""Descriptive human–model paired counts; never infer independent replication."""
+"""Descriptive human-model paired counts; never infer independent replication."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Contracts for exploratory paired human–model counts; sources are not authenticated."""
+"""Contracts for exploratory paired human-model counts; sources are not authenticated."""
 
 from __future__ import annotations
 

@@ -29,9 +29,9 @@ from reefvision.api.routes.images import router as images_router
 from reefvision.api.routes.jobs import router as jobs_router
 from reefvision.api.routes.learning_evaluation import router as learning_evaluation_router
 from reefvision.api.routes.longitudinal_monitoring import router as longitudinal_monitoring_router
-from reefvision.api.routes.model_agreement import router as model_agreement_router
 from reefvision.api.routes.mask_refinements import router as mask_refinements_router
 from reefvision.api.routes.measurements import router as measurements_router
+from reefvision.api.routes.model_agreement import router as model_agreement_router
 from reefvision.api.routes.model_catalog import router as model_catalog_router
 from reefvision.api.routes.models import router as models_router
 from reefvision.api.routes.pose_active_learning import router as pose_active_learning_router

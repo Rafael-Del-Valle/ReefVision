@@ -16,7 +16,7 @@ router = APIRouter(tags=["ecological monitoring"])
 @router.post(
     "/ecology/paired-count-comparison",
     response_model=PairedCountComparisonResponse,
-    summary="Descriptive paired human–model counts (unverified)",
+    summary="Descriptive paired human-model counts (unverified)",
 )
 def paired_count_comparison(
     request: PairedCountComparisonRequest,

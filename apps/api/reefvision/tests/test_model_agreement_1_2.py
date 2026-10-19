@@ -1,4 +1,4 @@
-"""Domain scientific checks for paired human–model comparisons."""
+"""Domain scientific checks for paired human-model comparisons."""
 
 from __future__ import annotations
 

@@ -826,8 +826,6 @@ def _ecology_longitudinal_analysis(
         }
     ]
 
-
-
 def _ecology_paired_count_comparison(
     session: Session,
     settings: Settings,
@@ -859,9 +857,7 @@ def _ecology_paired_count_comparison(
                 "reference_source_record_ids": [
                     pair.reference_source_record_id for pair in request.pairs
                 ],
-                "model_source_record_ids": [
-                    pair.model_source_record_id for pair in request.pairs
-                ],
+                "model_source_record_ids": [pair.model_source_record_id for pair in request.pairs],
                 **comparison.model_dump(mode="json"),
             },
         }
