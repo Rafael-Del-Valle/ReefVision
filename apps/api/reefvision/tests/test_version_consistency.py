@@ -71,9 +71,7 @@ def test_desktop_staging_paths_match_tauri_version() -> None:
     """Prevent Windows build scripts from staging resources for an older release."""
     root = Path(__file__).resolve().parents[4]
     tauri_config = json.loads(
-        (root / "apps" / "web" / "src-tauri" / "tauri.conf.json").read_text(
-            encoding="utf-8"
-        )
+        (root / "apps" / "web" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
     )
     expected_stage = f"release-{tauri_config['version']}"
     resources = tauri_config["bundle"]["resources"]
