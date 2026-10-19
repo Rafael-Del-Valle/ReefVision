@@ -112,3 +112,18 @@ def test_forged_verification_and_nonfinite_counts_rejected() -> None:
     data[0]["model_count"] = float("inf")
     with pytest.raises(SchemaValidationError, match="finite"):
         PairedCountComparisonRequest(reference_kind="human_consensus", pairs=data)
+
+def test_finite_large_bias_and_unit_means_do_not_overflow() -> None:
+    rows = [
+        pair("large-a", "frag-a", "tank-1", 0, 1e308),
+        pair("large-b", "frag-b", "tank-1", 0, 1e308),
+    ]
+    result = compare_paired_counts(
+        PairedCountComparisonRequest(reference_kind="human_consensus", pairs=rows)
+    )
+    assert result.mean_signed_bias == 1e308
+    assert result.mean_absolute_error == 1e308
+    assert result.unit_summaries[0].mean_signed_bias == 1e308
+    assert result.zero_reference_count == 2
+    assert result.mean_absolute_percent_deviation is None
+    assert result.evidence_level == "caller_supplied_unverified"

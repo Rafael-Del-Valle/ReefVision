@@ -41,6 +41,9 @@ def test_fragments_do_not_inflate_independent_tank_count() -> None:
     assert result.evaluated_series_count == 3
     assert result.independent_unit_count == 2
     assert result.experimental_unit_type == "tank"
+    assert len(result.population_summaries) == 1
+    assert result.population_summaries[0].independent_unit_count == 2
+    assert result.population_summaries[0].mean_unit_absolute_change == 3.0
     assert [
         (row.experimental_unit_id, row.organism_count, row.mean_absolute_change)
         for row in result.unit_summaries
@@ -129,4 +132,6 @@ def test_saved_workflow_persists_declared_unit_summary(client: TestClient) -> No
     assert payload["experimental_unit_type"] == "tank"
     assert payload["independent_unit_count"] == 1
     assert payload["unit_summaries"][0]["organism_count"] == 1
+    assert payload["population_summaries"][0]["independent_unit_count"] == 1
+    assert payload["population_summaries"][0]["mean_unit_absolute_change"] == 2.0
     assert payload["evidence_level"] == "caller_supplied_unverified"

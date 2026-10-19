@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -114,6 +114,20 @@ class ExperimentalUnitSummary(BaseModel):
     mean_change_per_day: float
 
 
+class PopulationUnitSummary(BaseModel):
+    """One vote per eligible declared experimental unit and UTC date window."""
+
+    metric_name: str
+    unit: str
+    baseline_date: date
+    final_date: date
+    independent_unit_count: int
+    contributing_organism_count: int
+    experimental_unit_ids: list[str]
+    mean_unit_absolute_change: float
+    mean_unit_change_per_day: float
+
+
 class ExcludedExperimentalUnit(BaseModel):
     experimental_unit_id: str
     metric_name: str
@@ -130,5 +144,6 @@ class LongitudinalAnalysisResponse(BaseModel):
     experimental_unit_type: str | None = None
     independent_unit_count: int | None = None
     unit_summaries: list[ExperimentalUnitSummary] = Field(default_factory=list)
+    population_summaries: list[PopulationUnitSummary] = Field(default_factory=list)
     excluded_units: list[ExcludedExperimentalUnit] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)

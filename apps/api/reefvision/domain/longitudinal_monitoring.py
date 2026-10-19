@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from statistics import fmean
 
 from reefvision.domain.errors import ValidationError
+from reefvision.domain.population_unit_summaries import summarize_population_units
+from reefvision.domain.scientific_mean import finite_descriptive_mean
 from reefvision.schemas.longitudinal_monitoring import (
     ExcludedExperimentalUnit,
     ExperimentalUnitSummary,
@@ -88,8 +89,8 @@ def _summarize_experimental_units(
             )
             continue
         baseline_at, final_at = next(iter(windows))
-        mean_change = fmean(item.absolute_change for item in series)
-        mean_rate = fmean(item.change_per_day for item in series)
+        mean_change = finite_descriptive_mean(item.absolute_change for item in series)
+        mean_rate = finite_descriptive_mean(item.change_per_day for item in series)
         if not all(math.isfinite(v) for v in (mean_change, mean_rate)):
             raise ValidationError("Experimental-unit summary is not finite")
         summaries.append(
@@ -172,6 +173,7 @@ def analyze_longitudinal(
     independent_unit_count, unit_summaries, excluded_units = _summarize_experimental_units(
         request, grouped, changes
     )
+    population_summaries = summarize_population_units(unit_summaries)
     return LongitudinalAnalysisResponse(
         observation_count=len(request.observations),
         evaluated_series_count=len(changes),
@@ -180,6 +182,7 @@ def analyze_longitudinal(
         experimental_unit_type=request.experimental_unit_type,
         independent_unit_count=independent_unit_count,
         unit_summaries=unit_summaries,
+        population_summaries=population_summaries,
         excluded_units=excluded_units,
         limitations=[
             "Caller-supplied observations are not verified against project data or calibration.",
@@ -190,5 +193,7 @@ def analyze_longitudinal(
             "Experimental-unit means are descriptive only, require an explicitly declared "
             "sampling unit and matching organism-level sampling windows, and exclude "
             "units with missing follow-up; they are not independent hypothesis tests.",
+            "Cross-unit summaries weight eligible units equally and stratify by UTC dates; "
+            "no population inference or significance is claimed.",
         ],
     )

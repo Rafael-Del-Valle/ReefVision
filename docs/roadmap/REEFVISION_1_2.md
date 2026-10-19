@@ -89,3 +89,23 @@ Verification of human/model sources against immutable reviewed annotations,
 organism identity, calibration, and experimental-unit registration remains
 future work. ICC, Bland–Altman agreement limits, and inferential claims are
 outside this descriptive feature.
+
+## Descriptive population summaries and stable scientific means (2026-10-19)
+
+The existing standalone longitudinal endpoint and executable, persisted
+`ecology_longitudinal_analysis` Workflow Builder node now include
+`population_summaries` in their typed `longitudinal_analysis` result.
+Only eligible declared experimental units contribute, with **one vote per
+unit**, not one vote per photographed fragment or image. Summaries are
+stratified by metric, physical unit and first/last **UTC sampling date**;
+different sampling windows are not pooled. The number of contributing
+organisms is reported separately from the independent-unit count.
+Incomplete or mismatched unit windows remain excluded upstream.
+
+Longitudinal unit summaries and human–model paired-count descriptive means
+now use deterministic, overflow-safe compensated averaging. Regression tests
+cover finite large values, unit weighting, and saved-workflow persistence.
+No p-values, confidence intervals, survival rates, authenticated unit
+independence or verified source/calibration status are implied.
+`caller_supplied_unverified` remains mandatory, and these analysis
+artifacts cannot enter verified-dataset ports without a separate review.

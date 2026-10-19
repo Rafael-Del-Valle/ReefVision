@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from statistics import fmean
 
 from reefvision.domain.errors import ValidationError
+from reefvision.domain.scientific_mean import finite_descriptive_mean
 from reefvision.schemas.model_agreement import (
     PairedCountComparisonRequest,
     PairedCountComparisonResponse,
@@ -91,8 +91,8 @@ def compare_paired_counts(
             experimental_unit_id=unit_id,
             paired_observation_count=len(rows),
             organism_count=len(unit_organisms[unit_id]),
-            mean_signed_bias=fmean(row.signed_difference for row in rows),
-            mean_absolute_error=fmean(row.absolute_difference for row in rows),
+            mean_signed_bias=finite_descriptive_mean(row.signed_difference for row in rows),
+            mean_absolute_error=finite_descriptive_mean(row.absolute_difference for row in rows),
         )
         for unit_id, rows in sorted(by_unit.items())
     ]
@@ -102,9 +102,9 @@ def compare_paired_counts(
         paired_observation_count=len(differences),
         nonzero_reference_count=len(valid_percent),
         zero_reference_count=len(differences) - len(valid_percent),
-        mean_signed_bias=fmean(row.signed_difference for row in differences),
-        mean_absolute_error=fmean(row.absolute_difference for row in differences),
-        mean_absolute_percent_deviation=fmean(valid_percent) if valid_percent else None,
+        mean_signed_bias=finite_descriptive_mean(row.signed_difference for row in differences),
+        mean_absolute_error=finite_descriptive_mean(row.absolute_difference for row in differences),
+        mean_absolute_percent_deviation=finite_descriptive_mean(valid_percent) if valid_percent else None,
         paired_differences=differences,
         experimental_unit_type=unit_type,
         declared_independent_unit_count=len(by_unit) if unit_type is not None else None,
