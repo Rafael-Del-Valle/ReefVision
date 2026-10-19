@@ -18,20 +18,28 @@ function newRequestId(): string {
   crypto.getRandomValues(bytes);
   bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
   bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
-  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  const hex = Array.from(bytes, (value) =>
+    value.toString(16).padStart(2, "0"),
+  ).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-export function ReviewQueueCoordinationPanel({ queueId, itemId, onClose }: Props) {
+export function ReviewQueueCoordinationPanel({
+  queueId,
+  itemId,
+  onClose,
+}: Props) {
   const queryClient = useQueryClient();
   const [actor, setActor] = useState("");
   const [assignee, setAssignee] = useState("");
   const [comment, setComment] = useState("");
   const [page, setPage] = useState(1);
-  const [failedRequest, setFailedRequest] = useState<ReviewQueueEventCreate | null>(null);
+  const [failedRequest, setFailedRequest] =
+    useState<ReviewQueueEventCreate | null>(null);
   const events = useQuery({
     queryKey: ["review_queue_events", queueId, itemId, page],
-    queryFn: ({ signal }) => getReviewQueueEvents(queueId, itemId, page, signal),
+    queryFn: ({ signal }) =>
+      getReviewQueueEvents(queueId, itemId, page, signal),
   });
   const mutation = useMutation({
     mutationFn: (payload: ReviewQueueEventCreate) =>
@@ -78,7 +86,8 @@ export function ReviewQueueCoordinationPanel({ queueId, itemId, onClose }: Props
       </div>
       <p className="annotation-helper">
         Actor labels are self-reported on this local workstation, not verified
-        accounts. Coordination does not approve or verify biological annotations.
+        accounts. Coordination does not approve or verify biological
+        annotations.
       </p>
       <label>
         Your local reviewer label
@@ -135,7 +144,10 @@ export function ReviewQueueCoordinationPanel({ queueId, itemId, onClose }: Props
       {mutation.error && <p role="alert">{mutation.error.message}</p>}
       {failedRequest && (
         <div role="group" aria-label="Failed review event">
-          <p>The outcome may be uncertain. Retry with the same request ID or discard.</p>
+          <p>
+            The outcome may be uncertain. Retry with the same request ID or
+            discard.
+          </p>
           <button
             type="button"
             disabled={mutation.isPending}
@@ -147,7 +159,10 @@ export function ReviewQueueCoordinationPanel({ queueId, itemId, onClose }: Props
             type="button"
             className="secondary"
             disabled={mutation.isPending}
-            onClick={() => { setFailedRequest(null); mutation.reset(); }}
+            onClick={() => {
+              setFailedRequest(null);
+              mutation.reset();
+            }}
           >
             Discard failed action
           </button>

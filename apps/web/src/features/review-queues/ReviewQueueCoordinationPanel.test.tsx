@@ -36,18 +36,20 @@ describe("ReviewQueueCoordinationPanel", () => {
       current_assignee: null,
       requires_researcher_review: true,
     });
-    vi.mocked(addReviewQueueEvent).mockImplementation(async (_, __, payload) => ({
-      id: "event-1",
-      review_queue_id: "queue-1",
-      review_queue_item_id: "item-1",
-      project_id: "project-1",
-      client_request_id: payload.client_request_id,
-      event_type: payload.event_type,
-      actor: payload.actor,
-      comment: payload.comment ?? null,
-      assignee: payload.assignee ?? null,
-      created_at: "2026-10-18T20:00:00Z",
-    }));
+    vi.mocked(addReviewQueueEvent).mockImplementation(
+      async (_, __, payload) => ({
+        id: "event-1",
+        review_queue_id: "queue-1",
+        review_queue_item_id: "item-1",
+        project_id: "project-1",
+        client_request_id: payload.client_request_id,
+        event_type: payload.event_type,
+        actor: payload.actor,
+        comment: payload.comment ?? null,
+        assignee: payload.assignee ?? null,
+        created_at: "2026-10-18T20:00:00Z",
+      }),
+    );
   });
 
   it("posts a comment with trimmed actor and UUID without approving data", async () => {
@@ -72,10 +74,12 @@ describe("ReviewQueueCoordinationPanel", () => {
         }),
       );
     });
-    expect(vi.mocked(addReviewQueueEvent).mock.calls[0][2].client_request_id).toMatch(
-      /^[0-9a-f-]{36}$/i,
-    );
-    expect(screen.queryByRole("button", { name: /approve|verify/i })).toBeNull();
+    expect(
+      vi.mocked(addReviewQueueEvent).mock.calls[0][2].client_request_id,
+    ).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(
+      screen.queryByRole("button", { name: /approve|verify/i }),
+    ).toBeNull();
   });
 
   it("retries an uncertain assignment with exactly the same request UUID", async () => {
