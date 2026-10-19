@@ -8,6 +8,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
+
 
 class MonitoringObservation(BaseModel):
     """A caller-supplied observation, not an authenticated scientific record."""
@@ -38,6 +40,11 @@ class MonitoringObservation(BaseModel):
             raise ValueError("Observation identifiers and units cannot be blank")
         return stripped
 
+    @field_validator("experimental_unit_type")
+    @classmethod
+    def reject_technical_units(cls, value: str | None) -> str | None:
+        return require_ecological_unit_type(value)
+
     @field_validator("observed_at")
     @classmethod
     def utc_timestamp(cls, value: datetime) -> datetime:
@@ -65,7 +72,7 @@ class LongitudinalAnalysisRequest(BaseModel):
         stripped = value.strip()
         if not stripped:
             raise ValueError("Experimental unit type cannot be blank")
-        return stripped
+        return require_ecological_unit_type(stripped)
 
     @model_validator(mode="after")
     def resolve_observation_unit_type(self) -> LongitudinalAnalysisRequest:

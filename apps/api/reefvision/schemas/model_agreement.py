@@ -7,6 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
+
 
 class PairedCountObservation(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -39,6 +41,11 @@ class PairedCountObservation(BaseModel):
             raise ValueError("Observation identifiers cannot be blank")
         return stripped
 
+    @field_validator("experimental_unit_type")
+    @classmethod
+    def reject_technical_units(cls, value: str | None) -> str | None:
+        return require_ecological_unit_type(value)
+
     @field_validator("reference_count", "model_count")
     @classmethod
     def finite_count(cls, value: float) -> float:
@@ -62,7 +69,7 @@ class PairedCountComparisonRequest(BaseModel):
         stripped = value.strip()
         if not stripped:
             raise ValueError("Experimental unit type cannot be blank")
-        return stripped
+        return require_ecological_unit_type(stripped)
 
 
 class PairedCountDifference(BaseModel):

@@ -121,3 +121,17 @@ unit denominators, with null percentages if no valid reference exists.
 Human/model source record IDs must be disjoint across the comparison.
 The caller still supplies unverified identities and experimental-unit labels:
 these results cannot establish replication, model accuracy, or significance.
+
+## Technical-replicate guard (2026-10-19)
+
+Exploratory longitudinal and paired human-model schemas now reject declared
+independent-unit types that describe technical image observations, including
+images, video frames, crops, tiles, masks, annotations, cameras and sensors.
+This applies to standalone API requests and to the same Pydantic contracts
+used by the executable Workflow Builder adapters. Saved workflows that declare
+an image/frame as the experimental unit fail without producing a successful
+ecological analysis artifact. Valid tank/colony/site designations are still
+caller-supplied and **not authenticated**; the safeguard does not prove
+independence or substitute for verified study-design records. It does not
+alter previously persisted artifacts. The full application and Windows
+acceptance gates remain mandatory.
