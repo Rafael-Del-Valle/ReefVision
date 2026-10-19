@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from math import isfinite, sqrt
+from math import hypot, isfinite
 
 
 def triangle_area(
@@ -20,4 +20,7 @@ def triangle_area(
         u[2] * v[0] - u[0] * v[2],
         u[0] * v[1] - u[1] * v[0],
     ]
-    return sqrt(sum(x * x for x in w)) / 2
+    area = hypot(*w) / 2
+    if not isfinite(area):
+        raise ValueError("3D triangle area overflowed")
+    return area
