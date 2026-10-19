@@ -29,4 +29,5 @@ def test_obj_and_ply_share_calibrated_geometry_but_not_source_type() -> None:
     assert obj["provenance"]["geometry_sha256"] == ply["provenance"]["geometry_sha256"]
     assert obj["provenance"]["source_format"] == "obj"
     assert ply["provenance"]["source_format"] == "ply_ascii"
-    assert obj["measurement_status"] == ply["measurement_status"] == "caller_supplied_unverified"
+    assert obj["measurement_status"] == "caller_supplied_unverified"
+    assert ply["measurement_status"] == "caller_supplied_unverified"
