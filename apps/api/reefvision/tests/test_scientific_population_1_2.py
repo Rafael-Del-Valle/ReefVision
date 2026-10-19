@@ -38,9 +38,7 @@ def test_each_tank_has_one_vote_regardless_of_fragment_count() -> None:
 
 
 def test_mismatched_utc_sampling_windows_are_not_pooled() -> None:
-    result = summarize_population_units(
-        [_unit("tank-A", 1, 1), _unit("tank-B", 1, 3, days=31)]
-    )
+    result = summarize_population_units([_unit("tank-A", 1, 1), _unit("tank-B", 1, 3, days=31)])
     assert len(result) == 2
     assert [row.independent_unit_count for row in result] == [1, 1]
 

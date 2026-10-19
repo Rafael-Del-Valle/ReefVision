@@ -113,6 +113,7 @@ def test_forged_verification_and_nonfinite_counts_rejected() -> None:
     with pytest.raises(SchemaValidationError, match="finite"):
         PairedCountComparisonRequest(reference_kind="human_consensus", pairs=data)
 
+
 def test_finite_large_bias_and_unit_means_do_not_overflow() -> None:
     rows = [
         pair("large-a", "frag-a", "tank-1", 0, 1e308),

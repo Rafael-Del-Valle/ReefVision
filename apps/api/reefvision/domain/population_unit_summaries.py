@@ -20,9 +20,7 @@ def summarize_population_units(
     Caller-declared independent units are not authenticated to a study design.
     No inferential statistics, population estimates or survival rates are made.
     """
-    grouped: dict[tuple[str, str, str, str], list[ExperimentalUnitSummary]] = (
-        defaultdict(list)
-    )
+    grouped: dict[tuple[str, str, str, str], list[ExperimentalUnitSummary]] = defaultdict(list)
     for row in unit_summaries:
         key = (
             row.metric_name,

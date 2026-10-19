@@ -48,12 +48,14 @@ def test_nested_balancing_reduces_technical_replication_weight() -> None:
 
 
 def test_zero_reference_excludes_only_ineligible_percentages() -> None:
-    result = compare([
-        pair("a0", "A", "tank-1", 0, 10),
-        pair("a1", "A", "tank-1", 10, 20),
-        pair("b0", "B", "tank-1", 0, 10),
-        pair("c0", "C", "tank-2", 0, 10),
-    ])
+    result = compare(
+        [
+            pair("a0", "A", "tank-1", 0, 10),
+            pair("a1", "A", "tank-1", 10, 20),
+            pair("b0", "B", "tank-1", 0, 10),
+            pair("c0", "C", "tank-2", 0, 10),
+        ]
+    )
     assert result.zero_reference_count == 3
     assert result.percent_contributing_independent_unit_count == 1
     assert result.percent_contributing_organism_count == 1
@@ -62,10 +64,12 @@ def test_zero_reference_excludes_only_ineligible_percentages() -> None:
 
 
 def test_all_zero_reference_percentages_are_null() -> None:
-    result = compare([
-        pair("a", "A", "tank-1", 0, 10),
-        pair("b", "B", "tank-2", 0, 10),
-    ])
+    result = compare(
+        [
+            pair("a", "A", "tank-1", 0, 10),
+            pair("b", "B", "tank-2", 0, 10),
+        ]
+    )
     assert result.mean_absolute_percent_deviation is None
     assert result.unit_balanced_mean_absolute_percent_deviation is None
     assert result.organism_and_unit_balanced_mean_absolute_percent_deviation is None
