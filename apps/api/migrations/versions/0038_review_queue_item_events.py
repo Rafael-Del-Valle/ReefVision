@@ -28,15 +28,11 @@ def upgrade() -> None:
         sa.Column("comment", sa.Text(), nullable=True),
         sa.Column("assignee", sa.String(length=100), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["review_queue_id"], ["review_queues.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["review_queue_id"], ["review_queues.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
             ["review_queue_item_id"], ["review_queue_items.id"], ondelete="CASCADE"
         ),
-        sa.ForeignKeyConstraint(
-            ["project_id"], ["projects.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
         sa.UniqueConstraint(
             "review_queue_item_id",
             "client_request_id",

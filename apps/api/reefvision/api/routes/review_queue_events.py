@@ -46,6 +46,4 @@ def get_review_events(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> ReviewQueueEventsPage:
-    return list_review_events(
-        session, queue_id, item_id, page=page, page_size=page_size
-    )
+    return list_review_events(session, queue_id, item_id, page=page, page_size=page_size)

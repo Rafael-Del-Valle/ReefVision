@@ -93,9 +93,9 @@ def list_review_events(
 ) -> ReviewQueueEventsPage:
     _scope(session, queue_id, item_id)
     filters = [ReviewQueueItemEvent.review_queue_item_id == item_id]
-    total = session.scalar(
-        select(func.count()).select_from(ReviewQueueItemEvent).where(*filters)
-    ) or 0
+    total = (
+        session.scalar(select(func.count()).select_from(ReviewQueueItemEvent).where(*filters)) or 0
+    )
     events = list(
         session.scalars(
             select(ReviewQueueItemEvent)
@@ -126,7 +126,8 @@ def list_review_events(
         page=page,
         page_size=page_size,
         current_assignee=(
-            assignment.assignee if assignment is not None and assignment.event_type == "assign"
+            assignment.assignee
+            if assignment is not None and assignment.event_type == "assign"
             else None
         ),
     )

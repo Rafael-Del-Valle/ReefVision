@@ -21,6 +21,7 @@ import {
   type ReviewScoreWeights,
 } from "../../api/client";
 import { QuickConfidenceReviewDialog } from "./QuickConfidenceReviewDialog";
+import { ReviewQueueCoordinationPanel } from "./ReviewQueueCoordinationPanel";
 import {
   reviewQueueItemsQueryKey,
   reviewQueuesQueryKey,
@@ -71,6 +72,9 @@ export function ReviewQueueDashboard({
   const [weights, setWeights] = useState<ReviewScoreWeights>(defaultWeights);
   const [reviewBelowConfidence, setReviewBelowConfidence] = useState("");
   const [quickReviewItemId, setQuickReviewItemId] = useState<string | null>(
+    null,
+  );
+  const [coordinationItemId, setCoordinationItemId] = useState<string | null>(
     null,
   );
   const [openQuickReviewWhenReady, setOpenQuickReviewWhenReady] =
@@ -132,6 +136,7 @@ export function ReviewQueueDashboard({
   }, [queues.data, selectedQueueId]);
 
   useEffect(() => {
+    setCoordinationItemId(null);
     onSelectedQueueChange?.(selectedQueueId || null);
   }, [onSelectedQueueChange, selectedQueueId]);
 
@@ -553,6 +558,13 @@ export function ReviewQueueDashboard({
                     >
                       Open image
                     </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => setCoordinationItemId(item.id)}
+                    >
+                      Comments &amp; assignments
+                    </button>
                     {item.review_state === "pending" && (
                       <button
                         type="button"
@@ -592,6 +604,14 @@ export function ReviewQueueDashboard({
                 </article>
               ))}
             </div>
+            {selectedQueueId && coordinationItemId && (
+              <ReviewQueueCoordinationPanel
+                key={`${selectedQueueId}:${coordinationItemId}`}
+                queueId={selectedQueueId}
+                itemId={coordinationItemId}
+                onClose={() => setCoordinationItemId(null)}
+              />
+            )}
             {items.data && items.data.pages > 1 && (
               <nav className="pagination" aria-label="Review queue item pages">
                 <button

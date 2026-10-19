@@ -34,9 +34,7 @@ class ReviewQueueItemEvent(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     review_queue_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("review_queues.id", ondelete="CASCADE"),
