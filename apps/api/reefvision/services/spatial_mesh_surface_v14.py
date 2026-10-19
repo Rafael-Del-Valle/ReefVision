@@ -8,6 +8,7 @@ from collections import Counter
 from math import isfinite
 from typing import Any
 
+from reefvision.services.spatial_mesh_glb_v14 import parse_glb_triangles
 from reefvision.services.spatial_mesh_measurements import triangle_area
 from reefvision.services.spatial_mesh_obj_v14 import (
     MAX_FACES,
@@ -134,6 +135,9 @@ def preview_from_request(payload: Any) -> dict[str, Any]:
     elif payload.ply_text is not None:
         vertices, faces = parse_ply_triangles(payload.ply_text)
         source_format = "ply_ascii"
+    elif payload.glb_base64 is not None:
+        vertices, faces = parse_glb_triangles(payload.glb_base64)
+        source_format = "glb_2_0"
     else:
         vertices, faces = payload.vertices, payload.faces
         source_format = "indexed_triangles"
