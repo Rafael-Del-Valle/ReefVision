@@ -45,7 +45,7 @@ def test_optional_rgb_and_weighted_rgb_vertices_are_accepted() -> None:
     [
         "v 0 0 0 0",
         "v 0 0 0 nan",
-        "v 0 0 0 1 0 0",
+        "v 0 0 0 1 0",
         "v 0 0 0 1 0 0 0 0",
         "v 0 0 0 1 nan 0 0",
     ],
