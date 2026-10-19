@@ -20,20 +20,32 @@ describe("dense-object viewport culling", () => {
       y_max: 210,
     });
     expect(
-      intersectsViewport({ x_min: 260, y_min: 150, x_max: 300, y_max: 170 }, bounds),
+      intersectsViewport(
+        { x_min: 260, y_min: 150, x_max: 300, y_max: 170 },
+        bounds,
+      ),
     ).toBe(true);
     expect(
-      intersectsViewport({ x_min: 261, y_min: 150, x_max: 300, y_max: 170 }, bounds),
+      intersectsViewport(
+        { x_min: 261, y_min: 150, x_max: 300, y_max: 170 },
+        bounds,
+      ),
     ).toBe(false);
   });
 
   it("retains objects when viewport or imported bounds are unreliable", () => {
     expect(viewportImageBounds(null, { width: 500, height: 500 })).toBeNull();
     expect(
-      viewportImageBounds({ scale: 0, offsetX: 0, offsetY: 0 }, { width: 500, height: 500 }),
+      viewportImageBounds(
+        { scale: 0, offsetX: 0, offsetY: 0 },
+        { width: 500, height: 500 },
+      ),
     ).toBeNull();
     expect(
-      viewportImageBounds({ scale: 1, offsetX: 0, offsetY: 0 }, { width: 0, height: 500 }),
+      viewportImageBounds(
+        { scale: 1, offsetX: 0, offsetY: 0 },
+        { width: 0, height: 500 },
+      ),
     ).toBeNull();
     const bounds = viewportImageBounds(
       { scale: 1, offsetX: 0, offsetY: 0 },
