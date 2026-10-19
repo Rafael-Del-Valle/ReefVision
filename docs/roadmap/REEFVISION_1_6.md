@@ -48,3 +48,17 @@ Windows installer/start/update validation, and installed GUI/hardware acceptance
 
 Version 1.7 monitoring and **revised** 1.8 scientific modalities remain untouched.
 Do not merge, tag, release, download pretrained weights or deploy paid hosting.
+
+## 1.6 dense-object editor viewport increment
+
+- Image-space viewport culling now limits SVG nodes for annotation boxes,
+  prediction proposals, and masks with known bounds; an inclusive 32-pixel
+  screen-space margin prevents boundary flicker. Unknown or malformed geometry
+  is retained instead of silently hidden.
+- Display-only filtering preserves the full annotation document, saved counts,
+  selection, review queues, bulk prediction actions, and Workflow Builder artifacts.
+  Panning and zooming recompute visibility; resetting the view restores objects.
+- Regression coverage includes coordinate transforms, boundary cases, invalid
+  metadata, 10,000 dense boxes, and the actual editor pan/reset flow.
+- Still requires installed-Windows GUI profiling with real dense coral images,
+  large raster masks and GPU/CPU hardware. This is not a release acceptance claim.
