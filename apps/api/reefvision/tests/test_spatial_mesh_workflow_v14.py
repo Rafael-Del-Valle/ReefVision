@@ -22,9 +22,7 @@ MESH = {
 
 def test_mesh_preview_api_is_unverified(client: TestClient) -> None:
     project = create_project(client, "Mesh preview API")
-    response = client.post(
-        f"/api/v1/projects/{project['id']}/spatial/mesh-preview", json=MESH
-    )
+    response = client.post(f"/api/v1/projects/{project['id']}/spatial/mesh-preview", json=MESH)
     assert response.status_code == 200, response.text
     result = response.json()
     assert result["surface_area_m2"] == pytest.approx(0.0003)
@@ -42,9 +40,7 @@ def test_saved_mesh_workflow_roundtrip(client: TestClient) -> None:
     project_id = str(project["id"])
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     assert registry.status_code == 200
-    node = next(
-        item for item in registry.json() if item["node_type"] == "mesh_surface_preview"
-    )
+    node = next(item for item in registry.json() if item["node_type"] == "mesh_surface_preview")
     assert node["executable"] is True
     assert node["output_ports"][0]["accepted_types"] == ["mesh_measurement_preview"]
     graph = {
@@ -64,14 +60,10 @@ def test_saved_mesh_workflow_roundtrip(client: TestClient) -> None:
             }
         ],
     }
-    plan = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
-    )
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["executable"] is True
-    saved = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph}
-    )
+    saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     record = saved.json()
     assert record["graph_json"]["nodes"][1]["parameters"]["obj_text"] == MESH["obj_text"]
@@ -81,14 +73,18 @@ def test_saved_mesh_workflow_roundtrip(client: TestClient) -> None:
     )
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        is True
+    )
     detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
     assert detail.status_code == 200
     assert detail.json()["run"]["status"] == "succeeded"
     artifact = next(
-        item for item in detail.json()["artifacts"]
+        item
+        for item in detail.json()["artifacts"]
         if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact["payload_json"]["surface_area_m2"] == pytest.approx(0.0003)
@@ -124,11 +120,6 @@ def test_unverified_mesh_artifact_cannot_feed_project_input(client: TestClient) 
             },
         ],
     }
-    response = client.post(
-        f"/api/v1/projects/{project['id']}/workflow-graphs/validate", json=graph
-    )
+    response = client.post(f"/api/v1/projects/{project['id']}/workflow-graphs/validate", json=graph)
     assert response.status_code == 200
-    assert any(
-        issue["code"] == "incompatible_port_types"
-        for issue in response.json()["issues"]
-    )
+    assert any(issue["code"] == "incompatible_port_types" for issue in response.json()["issues"])
