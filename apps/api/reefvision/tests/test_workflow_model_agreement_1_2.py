@@ -77,6 +77,8 @@ def test_standalone_paired_comparison_returns_unverified_evidence(
     assert payload["declared_independent_unit_count"] == 1
     assert payload["mean_signed_bias"] == -1
     assert payload["mean_absolute_error"] == 3
+    assert payload["organism_and_unit_balanced_mean_signed_bias"] == -1
+    assert payload["unit_balanced_mean_absolute_percent_deviation"] == 20
 
 
 def test_saved_comparison_workflow_persists_typed_unverified_artifact(
@@ -126,6 +128,9 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
     assert payload["review_status"] == "requires_source_verification"
     assert payload["mean_signed_bias"] == -1
     assert payload["declared_independent_unit_count"] == 1
+    assert payload["organism_and_unit_balanced_mean_signed_bias"] == -1
+    assert payload["unit_balanced_mean_absolute_percent_deviation"] == 20
+    assert payload["percent_contributing_independent_unit_count"] == 1
     assert payload["reference_source_record_ids"] == ["human-image-1", "human-image-2"]
     assert payload["model_source_record_ids"] == ["model-image-1", "model-image-2"]
 

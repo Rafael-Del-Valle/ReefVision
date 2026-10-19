@@ -109,3 +109,15 @@ No p-values, confidence intervals, survival rates, authenticated unit
 independence or verified source/calibration status are implied.
 `caller_supplied_unverified` remains mandatory, and these analysis
 artifacts cannot enter verified-dataset ports without a separate review.
+
+## Organism-and-experimental-unit-balanced paired counts (2026-10-19)
+
+The exploratory paired-count API and persisted Workflow Builder artifact now
+report nested descriptive means: repeated image pairs per organism, organisms
+per declared independent unit, and independent units. Pair-weighted statistics
+are retained for backwards compatibility. Zero human-reference pairs do not
+contribute to percentage deviation; the response reports eligible organism and
+unit denominators, with null percentages if no valid reference exists.
+Human/model source record IDs must be disjoint across the comparison.
+The caller still supplies unverified identities and experimental-unit labels:
+these results cannot establish replication, model accuracy, or significance.

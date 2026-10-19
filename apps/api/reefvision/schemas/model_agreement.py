@@ -83,6 +83,12 @@ class PairedCountUnitSummary(BaseModel):
     organism_count: int
     mean_signed_bias: float
     mean_absolute_error: float
+    organism_balanced_mean_signed_bias: float
+    organism_balanced_mean_absolute_error: float
+    nonzero_reference_count: int = 0
+    percent_contributing_organism_count: int = 0
+    mean_absolute_percent_deviation: float | None = None
+    organism_balanced_mean_absolute_percent_deviation: float | None = None
 
 
 class PairedCountComparisonResponse(BaseModel):
@@ -100,4 +106,12 @@ class PairedCountComparisonResponse(BaseModel):
     experimental_unit_type: str | None = None
     declared_independent_unit_count: int | None = None
     unit_summaries: list[PairedCountUnitSummary] = Field(default_factory=list)
+    unit_balanced_mean_signed_bias: float | None = None
+    unit_balanced_mean_absolute_error: float | None = None
+    organism_and_unit_balanced_mean_signed_bias: float | None = None
+    organism_and_unit_balanced_mean_absolute_error: float | None = None
+    unit_balanced_mean_absolute_percent_deviation: float | None = None
+    organism_and_unit_balanced_mean_absolute_percent_deviation: float | None = None
+    percent_contributing_independent_unit_count: int | None = None
+    percent_contributing_organism_count: int | None = None
     limitations: list[str] = Field(default_factory=list)

@@ -32,6 +32,8 @@ def compare_paired_counts(
         for values in (identifiers, reference_sources, model_sources)
     ):
         raise ValidationError("Paired observations and source record IDs must be unique")
+    if set(reference_sources).intersection(model_sources):
+        raise ValidationError("Human-reference and model source record IDs must be distinct")
 
     unit_types = {item.experimental_unit_type for item in pairs if item.experimental_unit_type}
     if len(unit_types) > 1:
@@ -56,6 +58,9 @@ def compare_paired_counts(
     differences: list[PairedCountDifference] = []
     by_unit: dict[str, list[PairedCountDifference]] = defaultdict(list)
     unit_organisms: dict[str, set[str]] = defaultdict(set)
+    by_unit_organism: dict[str, dict[str, list[PairedCountDifference]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
     for item in sorted(pairs, key=lambda pair: pair.observation_id):
         signed = item.model_count - item.reference_count
         absolute = abs(signed)
@@ -80,22 +85,102 @@ def compare_paired_counts(
             assert item.experimental_unit_id is not None
             by_unit[item.experimental_unit_id].append(row)
             unit_organisms[item.experimental_unit_id].add(item.organism_id)
+            by_unit_organism[item.experimental_unit_id][item.organism_id].append(row)
 
     valid_percent = [
         row.absolute_percent_deviation
         for row in differences
         if row.absolute_percent_deviation is not None
     ]
-    unit_summaries = [
-        PairedCountUnitSummary(
-            experimental_unit_id=unit_id,
-            paired_observation_count=len(rows),
-            organism_count=len(unit_organisms[unit_id]),
-            mean_signed_bias=finite_descriptive_mean(row.signed_difference for row in rows),
-            mean_absolute_error=finite_descriptive_mean(row.absolute_difference for row in rows),
+    unit_summaries = []
+    percent_contributing_organisms = 0
+    for unit_id, rows in sorted(by_unit.items()):
+        organism_rows = by_unit_organism[unit_id]
+        # Repeated images must not outweigh another organism in the same unit.
+        organism_biases = [
+            finite_descriptive_mean(row.signed_difference for row in organism_rows[organism])
+            for organism in sorted(organism_rows)
+        ]
+        organism_errors = [
+            finite_descriptive_mean(row.absolute_difference for row in organism_rows[organism])
+            for organism in sorted(organism_rows)
+        ]
+        valid_unit_percent = [
+            row.absolute_percent_deviation
+            for row in rows
+            if row.absolute_percent_deviation is not None
+        ]
+        organism_percents = []
+        for organism in sorted(organism_rows):
+            eligible = [
+                row.absolute_percent_deviation
+                for row in organism_rows[organism]
+                if row.absolute_percent_deviation is not None
+            ]
+            if eligible:
+                organism_percents.append(finite_descriptive_mean(eligible))
+        percent_contributing_organisms += len(organism_percents)
+        unit_summaries.append(
+            PairedCountUnitSummary(
+                experimental_unit_id=unit_id,
+                paired_observation_count=len(rows),
+                organism_count=len(unit_organisms[unit_id]),
+                mean_signed_bias=finite_descriptive_mean(row.signed_difference for row in rows),
+                mean_absolute_error=finite_descriptive_mean(
+                    row.absolute_difference for row in rows
+                ),
+                organism_balanced_mean_signed_bias=finite_descriptive_mean(organism_biases),
+                organism_balanced_mean_absolute_error=finite_descriptive_mean(organism_errors),
+                nonzero_reference_count=len(valid_unit_percent),
+                percent_contributing_organism_count=len(organism_percents),
+                mean_absolute_percent_deviation=(
+                    finite_descriptive_mean(valid_unit_percent) if valid_unit_percent else None
+                ),
+                organism_balanced_mean_absolute_percent_deviation=(
+                    finite_descriptive_mean(organism_percents) if organism_percents else None
+                ),
+            )
         )
-        for unit_id, rows in sorted(by_unit.items())
+    # Pair-weighted statistics remain available for backwards compatibility.
+    # Balanced statistics remain descriptive; caller-declared units are unverified.
+    unit_balanced_bias = (
+        finite_descriptive_mean(row.mean_signed_bias for row in unit_summaries)
+        if unit_summaries
+        else None
+    )
+    unit_balanced_error = (
+        finite_descriptive_mean(row.mean_absolute_error for row in unit_summaries)
+        if unit_summaries
+        else None
+    )
+    organism_and_unit_bias = (
+        finite_descriptive_mean(row.organism_balanced_mean_signed_bias for row in unit_summaries)
+        if unit_summaries
+        else None
+    )
+    organism_and_unit_error = (
+        finite_descriptive_mean(row.organism_balanced_mean_absolute_error for row in unit_summaries)
+        if unit_summaries
+        else None
+    )
+    percent_eligible_units = [
+        row for row in unit_summaries if row.mean_absolute_percent_deviation is not None
     ]
+    unit_balanced_percent = (
+        finite_descriptive_mean(
+            row.mean_absolute_percent_deviation for row in percent_eligible_units
+        )
+        if percent_eligible_units
+        else None
+    )
+    organism_and_unit_percent = (
+        finite_descriptive_mean(
+            row.organism_balanced_mean_absolute_percent_deviation
+            for row in percent_eligible_units
+        )
+        if percent_eligible_units
+        else None
+    )
     return PairedCountComparisonResponse(
         reference_kind=request.reference_kind,
         metric_name=next(iter(metrics)),
@@ -104,17 +189,36 @@ def compare_paired_counts(
         zero_reference_count=len(differences) - len(valid_percent),
         mean_signed_bias=finite_descriptive_mean(row.signed_difference for row in differences),
         mean_absolute_error=finite_descriptive_mean(row.absolute_difference for row in differences),
-        mean_absolute_percent_deviation=finite_descriptive_mean(valid_percent) if valid_percent else None,
+        mean_absolute_percent_deviation=(
+            finite_descriptive_mean(valid_percent) if valid_percent else None
+        ),
         paired_differences=differences,
         experimental_unit_type=unit_type,
         declared_independent_unit_count=len(by_unit) if unit_type is not None else None,
         unit_summaries=unit_summaries,
+        unit_balanced_mean_signed_bias=unit_balanced_bias,
+        unit_balanced_mean_absolute_error=unit_balanced_error,
+        organism_and_unit_balanced_mean_signed_bias=organism_and_unit_bias,
+        organism_and_unit_balanced_mean_absolute_error=organism_and_unit_error,
+        unit_balanced_mean_absolute_percent_deviation=unit_balanced_percent,
+        organism_and_unit_balanced_mean_absolute_percent_deviation=organism_and_unit_percent,
+        percent_contributing_independent_unit_count=(
+            len(percent_eligible_units) if unit_type is not None else None
+        ),
+        percent_contributing_organism_count=(
+            percent_contributing_organisms if unit_type is not None else None
+        ),
         limitations=[
             "Both human reference and model predictions are caller-supplied and unverified.",
             "Paired image, organism and source identities are not authenticated.",
             "Percent deviation excludes zero-reference pairs; its denominator is reported.",
+            "Unit-balanced percent excludes units without nonzero human references.",
+            "Nested percent excludes organisms without nonzero human references.",
             "Signed bias is model minus human reference; no ICC, limits of agreement or p-values.",
             "Images and fragments are not independent replicates; unit means are descriptive.",
+            "Pair means weight observations; unit means weight declared units equally.",
+            "Nested means average images per organism, organisms per unit, then units.",
+            "Sampling dates and technical-replicate identity are not verified.",
             "Experimental-unit identities are not validated against a registered study design.",
         ],
     )
