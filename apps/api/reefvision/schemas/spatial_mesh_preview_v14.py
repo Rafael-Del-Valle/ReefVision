@@ -20,15 +20,9 @@ class MeshPreviewRequest(BaseModel):
 
     @model_validator(mode="after")
     def geometry_is_unambiguous(self) -> MeshPreviewRequest:
-        supplied_text = sum(
-            value is not None for value in (self.obj_text, self.ply_text)
-        )
+        supplied_text = sum(value is not None for value in (self.obj_text, self.ply_text))
         if supplied_text:
-            if (
-                supplied_text != 1
-                or self.vertices is not None
-                or self.faces is not None
-            ):
+            if supplied_text != 1 or self.vertices is not None or self.faces is not None:
                 raise ValueError("Use OBJ, PLY, or indexed triangles, not a mixture")
         elif self.vertices is None or self.faces is None:
             raise ValueError("Indexed triangles require vertices and faces")
