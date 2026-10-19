@@ -106,18 +106,19 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
     )
     assert queued.status_code == 202, queued.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings,
-        app.state.session_factory,
-        str(queued.json()["job_id"]),
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
+        )
+        is True
+    )
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifact = next(
-        row
-        for row in detail.json()["artifacts"]
-        if row["data_type"] == "paired_count_comparison"
+        row for row in detail.json()["artifacts"] if row["data_type"] == "paired_count_comparison"
     )
     payload = artifact["payload_json"]
     assert payload["project_id"] == project_id
@@ -144,12 +145,7 @@ def test_unverified_comparison_cannot_enter_verified_dataset(
             "target_port_id": "reviewed",
         }
     )
-    response = client.post(
-        f"/api/v1/projects/{project['id']}/workflow-graphs/validate", json=graph
-    )
+    response = client.post(f"/api/v1/projects/{project['id']}/workflow-graphs/validate", json=graph)
     assert response.status_code == 200, response.text
     assert response.json()["valid"] is False
-    assert any(
-        issue["code"] == "incompatible_port_types"
-        for issue in response.json()["issues"]
-    )
+    assert any(issue["code"] == "incompatible_port_types" for issue in response.json()["issues"])
