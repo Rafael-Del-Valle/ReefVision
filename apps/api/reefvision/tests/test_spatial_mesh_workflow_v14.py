@@ -69,7 +69,11 @@ def test_saved_mesh_workflow_roundtrip(client: TestClient, obj_text: str) -> Non
         "name": "Calibrated triangle preview",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
-            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": {**MESH, "obj_text": obj_text}},
+            {
+                "node_id": "mesh",
+                "node_type": "mesh_surface_preview",
+                "parameters": {**MESH, "obj_text": obj_text},
+            },
         ],
         "edges": [
             {
