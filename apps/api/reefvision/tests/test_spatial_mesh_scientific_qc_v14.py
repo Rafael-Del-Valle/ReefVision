@@ -31,8 +31,6 @@ def test_area_scales_quadratically_and_uncertainty_is_not_ci() -> None:
     small = measure_mesh_preview(**kwargs, meters_per_unit=0.01)
     large = measure_mesh_preview(**kwargs, meters_per_unit=0.02)
     assert large["surface_area_m2"] == pytest.approx(4 * small["surface_area_m2"])
-    assert large["area_scale_uncertainty_m2"] == pytest.approx(
-        0.2 * large["surface_area_m2"]
-    )
+    assert large["area_scale_uncertainty_m2"] == pytest.approx(0.2 * large["surface_area_m2"])
     assert large["confidence_interval"] is None
     assert large["provenance"]["calibration_verified"] is False
