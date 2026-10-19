@@ -28,6 +28,20 @@ def test_mesh_preview_api_is_unverified(client: TestClient) -> None:
     assert result["surface_area_m2"] == pytest.approx(0.0003)
     assert result["measurement_status"] == "caller_supplied_unverified"
     assert result["provenance"]["calibration_verified"] is False
+    homogeneous = client.post(
+        f"/api/v1/projects/{project['id']}/spatial/mesh-preview",
+        json={
+            **MESH,
+            "obj_text": "v 0 0 0 2\nv 4 0 0 2\nv 0 6 0 2\nf 1 2 3\n",
+        },
+    )
+    assert homogeneous.status_code == 200, homogeneous.text
+    assert homogeneous.json()["provenance"]["geometry_sha256"] == (
+        result["provenance"]["geometry_sha256"]
+    )
+    assert homogeneous.json()["area_scale_uncertainty_m2"] == pytest.approx(
+        result["area_scale_uncertainty_m2"]
+    )
     invalid = client.post(
         f"/api/v1/projects/{project['id']}/spatial/mesh-preview",
         json={**MESH, "obj_text": "v 0 0 0\nf 1 2 3"},
