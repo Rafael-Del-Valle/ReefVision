@@ -118,6 +118,10 @@ def test_saved_mesh_workflow_roundtrip(client: TestClient, obj_text: str) -> Non
     assert artifact["payload_json"]["measurement_status"] == "caller_supplied_unverified"
     assert len(artifact["payload_sha256"]) == 64
     assert artifact["payload_json"]["area_scale_uncertainty_m2"] == pytest.approx(0.00003)
+    measured = artifact["payload_json"]
+    assert measured["axis_aligned_dimension_scale_uncertainty_m"] == pytest.approx(
+        [0.001, 0.0015, 0.0]
+    )
     assert artifact["payload_json"]["provenance"]["source_format"] == "obj"
     assert artifact["payload_json"]["provenance"]["calibration_verified"] is False
     standalone = client.post(

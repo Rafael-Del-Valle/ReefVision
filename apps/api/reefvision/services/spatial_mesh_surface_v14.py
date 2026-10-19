@@ -108,6 +108,11 @@ def measure_mesh_preview(
             if relative_scale_uncertainty is not None
             else None
         ),
+        "axis_aligned_dimension_scale_uncertainty_m": (
+            [dimension * relative_scale_uncertainty for dimension in dimensions]
+            if relative_scale_uncertainty is not None
+            else None
+        ),
         "confidence_interval": None,
         "measurement_status": "caller_supplied_unverified",
         "provenance": {

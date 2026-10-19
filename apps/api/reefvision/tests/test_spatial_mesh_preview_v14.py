@@ -27,6 +27,9 @@ def test_calibrated_area_dimensions_and_uncertainty():
     assert result["surface_area_m2"] == pytest.approx(0.0003)
     assert result["axis_aligned_dimensions_m"] == pytest.approx([0.02, 0.03, 0])
     assert result["area_scale_uncertainty_m2"] == pytest.approx(0.00003)
+    assert result["axis_aligned_dimension_scale_uncertainty_m"] == pytest.approx(
+        [0.001, 0.0015, 0.0]
+    )
     assert result["measurement_status"] == "caller_supplied_unverified"
     assert result["provenance"]["calibration_verified"] is False
     assert len(result["provenance"]["geometry_sha256"]) == 64
