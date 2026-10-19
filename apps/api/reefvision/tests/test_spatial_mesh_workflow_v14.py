@@ -35,7 +35,14 @@ def test_mesh_preview_api_is_unverified(client: TestClient) -> None:
     assert invalid.status_code == 400
 
 
-def test_saved_mesh_workflow_roundtrip(client: TestClient) -> None:
+@pytest.mark.parametrize(
+    "obj_text",
+    [
+        pytest.param(MESH["obj_text"], id="cartesian"),
+        pytest.param("v 0 0 0 2\nv 4 0 0 2\nv 0 6 0 2\nf 1 2 3\n", id="homogeneous"),
+    ],
+)
+def test_saved_mesh_workflow_roundtrip(client: TestClient, obj_text: str) -> None:
     project = create_project(client, "Mesh workflow")
     project_id = str(project["id"])
     registry = client.get("/api/v1/workflow-graphs/node-registry")
@@ -48,7 +55,7 @@ def test_saved_mesh_workflow_roundtrip(client: TestClient) -> None:
         "name": "Calibrated triangle preview",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
-            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": MESH},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": {**MESH, "obj_text": obj_text}},
         ],
         "edges": [
             {
@@ -66,7 +73,7 @@ def test_saved_mesh_workflow_roundtrip(client: TestClient) -> None:
     saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     record = saved.json()
-    assert record["graph_json"]["nodes"][1]["parameters"]["obj_text"] == MESH["obj_text"]
+    assert record["graph_json"]["nodes"][1]["parameters"]["obj_text"] == obj_text
     run = client.post(
         f"/api/v1/projects/{project_id}/workflow-runs",
         json={"graph_record_id": record["id"]},
@@ -91,6 +98,21 @@ def test_saved_mesh_workflow_roundtrip(client: TestClient) -> None:
     assert artifact["payload_json"]["project_id"] == project_id
     assert artifact["payload_json"]["measurement_status"] == "caller_supplied_unverified"
     assert len(artifact["payload_sha256"]) == 64
+    assert artifact["payload_json"]["area_scale_uncertainty_m2"] == pytest.approx(0.00003)
+    assert artifact["payload_json"]["provenance"]["source_format"] == "obj"
+    assert artifact["payload_json"]["provenance"]["calibration_verified"] is False
+    standalone = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-preview",
+        json={**MESH, "obj_text": obj_text},
+    )
+    assert standalone.status_code == 200, standalone.text
+    assert artifact["payload_json"]["surface_area_m2"] == pytest.approx(
+        standalone.json()["surface_area_m2"]
+    )
+    assert (
+        artifact["payload_json"]["provenance"]["geometry_sha256"]
+        == standalone.json()["provenance"]["geometry_sha256"]
+    )
 
 
 def test_unverified_mesh_artifact_cannot_feed_project_input(client: TestClient) -> None:

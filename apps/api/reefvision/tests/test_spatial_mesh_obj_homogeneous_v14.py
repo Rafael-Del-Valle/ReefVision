@@ -25,18 +25,8 @@ def test_homogeneous_obj_vertices_are_normalized_before_calibration() -> None:
 
 
 def test_optional_rgb_and_weighted_rgb_vertices_are_accepted() -> None:
-    plain = (
-        "v 0 0 0 0.2 0.3 0.4\n"
-        "v 1 0 0 0.2 0.3 0.4\n"
-        "v 0 1 0 0.2 0.3 0.4\n"
-        "f 1 2 3\n"
-    )
-    weighted = (
-        "v 0 0 0 2 0.2 0.3 0.4\n"
-        "v 2 0 0 2 0.2 0.3 0.4\n"
-        "v 0 2 0 2 0.2 0.3 0.4\n"
-        "f 1 2 3\n"
-    )
+    plain = "v 0 0 0 0.2 0.3 0.4\nv 1 0 0 0.2 0.3 0.4\nv 0 1 0 0.2 0.3 0.4\nf 1 2 3\n"
+    weighted = "v 0 0 0 2 0.2 0.3 0.4\nv 2 0 0 2 0.2 0.3 0.4\nv 0 2 0 2 0.2 0.3 0.4\nf 1 2 3\n"
     assert parse_obj_triangles(plain) == parse_obj_triangles(weighted)
 
 
