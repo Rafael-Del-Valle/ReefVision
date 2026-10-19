@@ -179,7 +179,8 @@ export function ReviewQueueBulkTriage({ queueId, items }: Props) {
           checked={confirmed}
           onChange={(event) => setConfirmed(event.target.checked)}
         />
-        I confirm this queue-only action; biological verification remains manual.
+        I confirm this queue-only action; biological verification remains
+        manual.
       </label>
       <button type="button" disabled={!ready || locked} onClick={submit}>
         {mutation.isPending
