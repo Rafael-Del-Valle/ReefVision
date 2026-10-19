@@ -34,9 +34,7 @@ def test_calibrated_area_dimensions_and_uncertainty():
 
 
 def test_obj_parser_supports_negative_indices_and_texture_fields():
-    vertices, faces = parse_obj_triangles(
-        "v 0 0 0\nv 2 0 0\nv 0 3 0\nf -3/1/1 -2/2/1 -1/3/1\n"
-    )
+    vertices, faces = parse_obj_triangles("v 0 0 0\nv 2 0 0\nv 0 3 0\nf -3/1/1 -2/2/1 -1/3/1\n")
     assert vertices == TRIANGLE
     assert faces == FACES
     assert preview(vertices=vertices, faces=faces)["surface_area_m2"] == pytest.approx(0.0003)
