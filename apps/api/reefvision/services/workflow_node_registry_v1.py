@@ -668,7 +668,6 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         ],
     )
 
-
     registry["ecology_paired_count_comparison"] = WorkflowNodeDefinitionResponse(
         node_type="ecology_paired_count_comparison",
         display_name="Exploratory Human-Model Count Comparison",
