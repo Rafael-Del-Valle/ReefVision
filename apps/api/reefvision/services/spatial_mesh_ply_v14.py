@@ -26,6 +26,21 @@ _SCALAR_TYPES = {
     "float64",
 }
 
+_INTEGER_BOUNDS = {
+    "char": (-128, 127),
+    "int8": (-128, 127),
+    "uchar": (0, 255),
+    "uint8": (0, 255),
+    "short": (-32768, 32767),
+    "int16": (-32768, 32767),
+    "ushort": (0, 65535),
+    "uint16": (0, 65535),
+    "int": (-2147483648, 2147483647),
+    "int32": (-2147483648, 2147483647),
+    "uint": (0, 4294967295),
+    "uint32": (0, 4294967295),
+}
+
 
 def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
     """Parse a small ASCII PLY with XYZ vertices and triangular vertex-index faces.
@@ -42,6 +57,7 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
     element: str | None = None
     counts: dict[str, int] = {}
     vertex_properties: list[str] = []
+    vertex_property_types: list[str] = []
     face_property_seen = False
     format_seen = False
     end_header: int | None = None
@@ -89,6 +105,7 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
                 if parts[2] in vertex_properties:
                     raise ValueError("Duplicate PLY vertex property")
                 vertex_properties.append(parts[2])
+                vertex_property_types.append(parts[1])
             elif element == "face":
                 if (
                     face_property_seen
@@ -124,10 +141,19 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
         values = row.split()
         if len(values) != len(vertex_properties):
             raise ValueError("PLY vertex property count mismatch")
+        numeric: list[float] = []
         try:
-            numeric = [float(value) for value in values]
-        except ValueError as exc:
-            raise ValueError("Invalid PLY vertex value") from exc
+            for value, scalar_type in zip(values, vertex_property_types, strict=True):
+                if scalar_type in _INTEGER_BOUNDS:
+                    number = int(value)
+                    low, high = _INTEGER_BOUNDS[scalar_type]
+                    if not low <= number <= high:
+                        raise ValueError("PLY integer property outside declared bounds")
+                else:
+                    number = float(value)
+                numeric.append(float(number))
+        except (ValueError, OverflowError) as exc:
+            raise ValueError("Invalid or out-of-range PLY vertex value") from exc
         if not all(isfinite(value) for value in numeric):
             raise ValueError("PLY vertex properties must be finite")
         vertices.append([numeric[index] for index in xyz])

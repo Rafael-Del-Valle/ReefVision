@@ -43,6 +43,12 @@ def test_ascii_ply_with_reordered_xyz_and_extra_scalar_property() -> None:
         PLY.replace("3 0 1 2", "3 0 1 -1"),
         PLY.replace("3 0 1 2", "3 0 1 2\n3 0 1 2"),
         PLY.replace("255 0 0 0", "255 nan 0 0"),
+        PLY.replace("255 0 0 0", "255.5 0 0 0"),
+        PLY.replace("255 0 0 0", "256 0 0 0"),
+        PLY.replace("255 0 0 0", "-1 0 0 0"),
+        PLY.replace("property float x", "property int x").replace(
+            "255 0 2 0", "255 0 2.5 0"
+        ),
         PLY.replace("property float x", "property list uchar int x"),
         PLY.replace("element face 1", "element edge 1"),
         "ply\nformat ascii 1.0\nend_header",
