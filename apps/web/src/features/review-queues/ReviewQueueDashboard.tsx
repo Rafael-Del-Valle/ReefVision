@@ -21,6 +21,7 @@ import {
   type ReviewScoreWeights,
 } from "../../api/client";
 import { QuickConfidenceReviewDialog } from "./QuickConfidenceReviewDialog";
+import { ReviewQueueBulkTriage } from "./ReviewQueueBulkTriage";
 import { ReviewQueueCoordinationPanel } from "./ReviewQueueCoordinationPanel";
 import {
   reviewQueueItemsQueryKey,
@@ -507,6 +508,21 @@ export function ReviewQueueDashboard({
             </div>
             {items.isPending && <p>Loading review queue items...</p>}
             {items.error && <p className="form-error">{items.error.message}</p>}
+            {selectedQueueId && items.data && (
+              <ReviewQueueBulkTriage
+                key={[
+                  selectedQueueId,
+                  page,
+                  labelClassId,
+                  split,
+                  qcSeverity,
+                  reviewState,
+                  modelId,
+                ].join(":")}
+                queueId={selectedQueueId}
+                items={items.data.items}
+              />
+            )}
             <div className="dashboard-list">
               {items.data?.items.map((item) => (
                 <article key={item.id} className="dashboard-row">

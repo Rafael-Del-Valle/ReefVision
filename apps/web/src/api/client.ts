@@ -1291,6 +1291,16 @@ export interface ReviewQueueItemPage {
   pages: number;
 }
 
+export type ReviewQueueBulkAction = "start" | "skip" | "return";
+
+export interface ReviewQueueBulkResponse {
+  queue_id: string;
+  action: ReviewQueueBulkAction;
+  changed_count: number;
+  items: ReviewQueueItem[];
+  requires_researcher_review: boolean;
+}
+
 export type ReviewQueueEventType = "comment" | "assign" | "unassign";
 
 export interface ReviewQueueEvent {
@@ -2842,6 +2852,20 @@ export async function getReviewQueueItems(
     {
       signal,
     },
+  );
+}
+
+export async function bulkTriageReviewQueueItems(
+  queueId: string,
+  payload: {
+    item_ids: string[];
+    action: ReviewQueueBulkAction;
+    reason?: string;
+  },
+): Promise<ReviewQueueBulkResponse> {
+  return request<ReviewQueueBulkResponse>(
+    `/review-queues/${queueId}/items/bulk`,
+    { method: "POST", body: JSON.stringify(payload) },
   );
 }
 
