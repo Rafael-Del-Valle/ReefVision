@@ -16,11 +16,7 @@ def _declarations(path: Path) -> tuple[str, tuple[str, ...]]:
     values: dict[str, object] = {}
     for statement in ast.parse(path.read_text(encoding="utf-8")).body:
         if isinstance(statement, ast.Assign):
-            names = [
-                target.id
-                for target in statement.targets
-                if isinstance(target, ast.Name)
-            ]
+            names = [target.id for target in statement.targets if isinstance(target, ast.Name)]
             value = statement.value
         elif isinstance(statement, ast.AnnAssign) and isinstance(
             statement.target, ast.Name
