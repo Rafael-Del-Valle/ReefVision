@@ -36,8 +36,9 @@ def test_mesh_preview_api_is_unverified(client: TestClient) -> None:
         },
     )
     assert homogeneous.status_code == 200, homogeneous.text
-    assert homogeneous.json()["provenance"]["geometry_sha256"] == (
-        result["provenance"]["geometry_sha256"]
+    assert (
+        homogeneous.json()["provenance"]["geometry_sha256"]
+        == (result["provenance"]["geometry_sha256"])
     )
     assert homogeneous.json()["area_scale_uncertainty_m2"] == pytest.approx(
         result["area_scale_uncertainty_m2"]
