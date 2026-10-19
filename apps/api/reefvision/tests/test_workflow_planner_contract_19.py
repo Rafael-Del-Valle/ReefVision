@@ -38,9 +38,7 @@ def test_frozen_pose_dataset_node_plans_and_saves_as_versioned_graph(
         ],
         "edges": [],
     }
-    plan = client.post(
-        f"/api/v1/projects/{project['id']}/workflow-graphs/plan", json=graph
-    )
+    plan = client.post(f"/api/v1/projects/{project['id']}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["valid"] is True
     assert plan.json()["executable"] is True
