@@ -9,6 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
+from reefvision.schemas.scientific_provenance import ScientificInputProvenance
 
 
 class MonitoringObservation(BaseModel):
@@ -145,6 +146,7 @@ class LongitudinalAnalysisResponse(BaseModel):
     analysis_level: Literal["organism"] = "organism"
     evidence_level: Literal["caller_supplied_unverified"] = "caller_supplied_unverified"
     observation_count: int
+    analysis_provenance: ScientificInputProvenance
     evaluated_series_count: int
     incomplete_series_count: int
     changes: list[LongitudinalChange]

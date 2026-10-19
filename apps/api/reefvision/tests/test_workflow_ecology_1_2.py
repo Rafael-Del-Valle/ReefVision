@@ -101,6 +101,12 @@ def test_saved_ecology_workflow_persists_unverified_artifact(client: TestClient)
     assert payload["evidence_level"] == "caller_supplied_unverified"
     assert payload["source_record_ids"] == ["day0", "day1"]
     assert payload["changes"][0]["absolute_change"] == 2
+    standalone = client.post(
+        "/api/v1/ecology/longitudinal-analysis",
+        json={"observations": _observations()},
+    )
+    assert standalone.status_code == 200, standalone.text
+    assert payload["analysis_provenance"] == standalone.json()["analysis_provenance"]
 
 
 def test_unverified_ecology_cannot_enter_verified_dataset(client: TestClient) -> None:

@@ -135,3 +135,20 @@ caller-supplied and **not authenticated**; the safeguard does not prove
 independence or substitute for verified study-design records. It does not
 alter previously persisted artifacts. The full application and Windows
 acceptance gates remain mandatory.
+
+## Reproducible exploratory input provenance (2026-10-19)
+
+Standalone longitudinal and paired-count analyses now include typed
+`analysis_provenance` in their responses and in persisted Workflow Builder
+artifacts. SHA-256 fingerprints cover normalized caller-supplied observations,
+analysis parameters and algorithm version, with records sorted so changing input
+order does not change the digest. The source record ID list is sorted for
+stable comparison. A changed measurement, source identifier, reference kind or
+algorithm version changes the fingerprint. Regression tests cover both
+standalone endpoints and saved workflow execution.
+
+This is a **reproducibility fingerprint**, not a cryptographic attestation of
+record ownership, human review, calibration, specimen identity or biological
+independence. It does not promote `caller_supplied_unverified` inputs into
+verified datasets. Verified project-owned source links, immutable calibration
+snapshots, identity histories and scientific review gates remain pending.

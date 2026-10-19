@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
+from reefvision.schemas.scientific_provenance import ScientificInputProvenance
 
 
 class PairedCountObservation(BaseModel):
@@ -102,6 +103,7 @@ class PairedCountComparisonResponse(BaseModel):
     evidence_level: Literal["caller_supplied_unverified"] = "caller_supplied_unverified"
     review_status: Literal["requires_source_verification"] = "requires_source_verification"
     reference_kind: Literal["human_observer", "human_consensus"]
+    analysis_provenance: ScientificInputProvenance
     metric_name: str
     paired_observation_count: int
     nonzero_reference_count: int

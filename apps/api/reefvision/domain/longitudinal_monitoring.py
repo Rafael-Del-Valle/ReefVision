@@ -7,6 +7,7 @@ from collections import defaultdict
 
 from reefvision.domain.errors import ValidationError
 from reefvision.domain.population_unit_summaries import summarize_population_units
+from reefvision.domain.scientific_input_provenance import scientific_input_provenance
 from reefvision.domain.scientific_mean import finite_descriptive_mean
 from reefvision.schemas.longitudinal_monitoring import (
     ExcludedExperimentalUnit,
@@ -176,6 +177,12 @@ def analyze_longitudinal(
     population_summaries = summarize_population_units(unit_summaries)
     return LongitudinalAnalysisResponse(
         observation_count=len(request.observations),
+        analysis_provenance=scientific_input_provenance(
+            algorithm_version="ecology-longitudinal-0002",
+            records=request.observations,
+            parameters={"experimental_unit_type": request.experimental_unit_type},
+            source_record_ids=(obs.source_record_id for obs in request.observations),
+        ),
         evaluated_series_count=len(changes),
         incomplete_series_count=incomplete,
         changes=changes,

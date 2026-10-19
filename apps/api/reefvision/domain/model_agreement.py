@@ -6,6 +6,7 @@ import math
 from collections import defaultdict
 
 from reefvision.domain.errors import ValidationError
+from reefvision.domain.scientific_input_provenance import scientific_input_provenance
 from reefvision.domain.scientific_mean import finite_descriptive_mean
 from reefvision.schemas.model_agreement import (
     PairedCountComparisonRequest,
@@ -186,6 +187,15 @@ def compare_paired_counts(
     )
     return PairedCountComparisonResponse(
         reference_kind=request.reference_kind,
+        analysis_provenance=scientific_input_provenance(
+            algorithm_version="ecology-paired-count-0002",
+            records=request.pairs,
+            parameters={
+                "reference_kind": request.reference_kind,
+                "experimental_unit_type": unit_type,
+            },
+            source_record_ids=(*reference_sources, *model_sources),
+        ),
         metric_name=next(iter(metrics)),
         paired_observation_count=len(differences),
         nonzero_reference_count=len(valid_percent),

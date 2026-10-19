@@ -133,6 +133,12 @@ def test_saved_comparison_workflow_persists_typed_unverified_artifact(
     assert payload["percent_contributing_independent_unit_count"] == 1
     assert payload["reference_source_record_ids"] == ["human-image-1", "human-image-2"]
     assert payload["model_source_record_ids"] == ["model-image-1", "model-image-2"]
+    standalone = client.post(
+        "/api/v1/ecology/paired-count-comparison",
+        json={"pairs": _pairs(), "reference_kind": "human_consensus"},
+    )
+    assert standalone.status_code == 200, standalone.text
+    assert payload["analysis_provenance"] == standalone.json()["analysis_provenance"]
 
 
 def test_unverified_comparison_cannot_enter_verified_dataset(
