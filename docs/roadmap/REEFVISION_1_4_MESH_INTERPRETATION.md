@@ -5,3 +5,8 @@ A connected triangle patch is a geometric component, not an identified coral col
 Unreferenced vertices must not change calibrated dimensions. Preserve the original geometry hash and report the excluded-vertex count. Calibration uncertainty reflects only scale uncertainty, not photogrammetric reconstruction, segmentation, occlusion, or tissue-boundary error.
 
 Any longitudinal growth comparison must require reviewed organism identity, comparable calibration and acquisition methods, and explicit provenance for each timepoint. Current mesh previews remain provisional, including saved Workflow Builder artifacts.
+
+Per-edge-connected-patch areas are reported in square meters, ordered by the first
+face in each patch. Their scale uncertainties assume a common relative scale error;
+these are not independent confidence intervals. Patch indices are not persistent
+organism identities and must not be used to infer biological growth or survival.

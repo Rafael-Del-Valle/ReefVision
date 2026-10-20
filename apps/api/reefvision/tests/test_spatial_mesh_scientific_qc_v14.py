@@ -97,3 +97,47 @@ def test_unreferenced_outlier_cannot_inflate_calibrated_dimensions() -> None:
     assert "unreferenced_mesh_vertices" in result["qc_warnings"]
     assert result["measurement_status"] == "caller_supplied_unverified"
     assert result["provenance"]["calibration_verified"] is False
+
+
+def test_disconnected_patch_areas_and_uncertainties_are_reported_separately() -> None:
+    result = measure_mesh_preview(
+        vertices=[
+            [0, 0, 0],
+            [2, 0, 0],
+            [0, 3, 0],
+            [10, 0, 0],
+            [14, 0, 0],
+            [10, 5, 0],
+        ],
+        faces=[[0, 1, 2], [3, 4, 5]],
+        meters_per_unit=0.01,
+        calibration_method="ruler",
+        calibration_evidence="Unreviewed field scale",
+        relative_scale_uncertainty=0.05,
+    )
+    assert result["edge_connected_patch_count"] == 2
+    assert result["edge_connected_patch_face_counts"] == [1, 1]
+    assert result["edge_connected_patch_surface_areas_m2"] == pytest.approx(
+        [0.0003, 0.001]
+    )
+    assert result["edge_connected_patch_area_scale_uncertainties_m2"] == pytest.approx(
+        [0.00003, 0.0001]
+    )
+    assert sum(result["edge_connected_patch_surface_areas_m2"]) == pytest.approx(
+        result["surface_area_m2"]
+    )
+    assert result["measurement_status"] == "caller_supplied_unverified"
+    assert result["provenance"]["calibration_verified"] is False
+
+
+def test_patch_scale_uncertainty_is_unknown_when_scale_error_is_unspecified() -> None:
+    result = measure_mesh_preview(
+        vertices=[[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+        faces=[[0, 1, 2]],
+        meters_per_unit=0.01,
+        calibration_method="ruler",
+        calibration_evidence="Unreviewed scale",
+    )
+    assert result["edge_connected_patch_surface_areas_m2"] == pytest.approx([0.00005])
+    assert result["edge_connected_patch_area_scale_uncertainties_m2"] is None
+    assert result["confidence_interval"] is None

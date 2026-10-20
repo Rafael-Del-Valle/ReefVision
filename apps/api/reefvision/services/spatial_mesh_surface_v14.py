@@ -66,6 +66,7 @@ def measure_mesh_preview(
 
     seen_faces: set[tuple[int, int, int]] = set()
     raw_area = 0.0
+    face_areas: list[float] = []
     degenerate = 0
     for face_index, face in enumerate(faces):
         if (
@@ -84,6 +85,7 @@ def measure_mesh_preview(
             raise ValueError("Mesh triangle area overflowed")
         degenerate += area == 0
         raw_area += area
+        face_areas.append(area)
         for a, b in ((face[0], face[1]), (face[1], face[2]), (face[2], face[0])):
             edge = (min(a, b), max(a, b))
             edges[edge] += 1
@@ -103,7 +105,21 @@ def measure_mesh_preview(
     ]
     boundary = sum(count == 1 for count in edges.values())
     nonmanifold = sum(count > 2 for count in edges.values())
-    edge_connected_patch_count = len({root(index) for index in range(len(faces))})
+    # Group by shared edges, never by shared vertices alone. Sort patches by
+    # their first face so that exported results are reproducible across runs.
+    patch_area_mesh_units: dict[int, float] = {}
+    patch_first_face: dict[int, int] = {}
+    patch_face_counts: dict[int, int] = {}
+    for face_index, face_area in enumerate(face_areas):
+        patch = root(face_index)
+        patch_area_mesh_units[patch] = patch_area_mesh_units.get(patch, 0.0) + face_area
+        patch_face_counts[patch] = patch_face_counts.get(patch, 0) + 1
+        patch_first_face.setdefault(patch, face_index)
+    ordered_patches = sorted(patch_area_mesh_units, key=patch_first_face.__getitem__)
+    patch_areas_m2 = [
+        patch_area_mesh_units[patch] * scale * scale for patch in ordered_patches
+    ]
+    edge_connected_patch_count = len(ordered_patches)
     inconsistent_winding_edge_count = sum(
         len(incidents) == 2 and incidents[0][1] == incidents[1][1]
         for incidents in edge_faces.values()
@@ -124,6 +140,15 @@ def measure_mesh_preview(
         "boundary_edge_count": boundary,
         "nonmanifold_edge_count": nonmanifold,
         "edge_connected_patch_count": edge_connected_patch_count,
+        "edge_connected_patch_face_counts": [
+            patch_face_counts[patch] for patch in ordered_patches
+        ],
+        "edge_connected_patch_surface_areas_m2": patch_areas_m2,
+        "edge_connected_patch_area_scale_uncertainties_m2": (
+            [2 * relative_scale_uncertainty * area for area in patch_areas_m2]
+            if relative_scale_uncertainty is not None
+            else None
+        ),
         "inconsistent_winding_edge_count": inconsistent_winding_edge_count,
         "qc_warnings": (
             (["degenerate_triangles_present"] if degenerate else [])
