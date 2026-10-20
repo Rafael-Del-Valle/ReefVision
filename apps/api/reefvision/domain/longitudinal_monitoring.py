@@ -12,6 +12,7 @@ from reefvision.domain.scientific_input_provenance import scientific_input_prove
 from reefvision.domain.scientific_mean import finite_descriptive_mean
 from reefvision.schemas.longitudinal_monitoring import (
     ExcludedExperimentalUnit,
+    ExperimentalUnitCoverage,
     ExperimentalUnitSummary,
     LongitudinalAnalysisRequest,
     LongitudinalAnalysisResponse,
@@ -176,7 +177,12 @@ def analyze_longitudinal(
         request, grouped, changes
     )
     unit_coverage = (
-        audit_unit_coverage(grouped, changes, unit_summaries, excluded_units)
+        [
+            ExperimentalUnitCoverage.model_validate(row)
+            for row in audit_unit_coverage(
+                grouped, changes, unit_summaries, excluded_units
+            )
+        ]
         if independent_unit_count is not None
         else []
     )
