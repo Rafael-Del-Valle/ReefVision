@@ -18,9 +18,7 @@ def _declarations(path: Path) -> tuple[str, tuple[str, ...]]:
         if isinstance(statement, ast.Assign):
             names = [target.id for target in statement.targets if isinstance(target, ast.Name)]
             value = statement.value
-        elif isinstance(statement, ast.AnnAssign) and isinstance(
-            statement.target, ast.Name
-        ):
+        elif isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
             names, value = [statement.target.id], statement.value
         else:
             continue
@@ -93,16 +91,12 @@ def test_cross_track_0038_collision_and_missing_parent_are_rejected(
     science.write_text('revision = "0038"\ndown_revision = "0037"\n')
     review.write_text('revision: str = "0038"\ndown_revision = "0037"\n')
     assert any(
-        "duplicate revision 0038" in error
-        for error in _graph_errors([baseline, science, review])
+        "duplicate revision 0038" in error for error in _graph_errors([baseline, science, review])
     )
     review.write_text('revision = "0039"\ndown_revision = "0038"\n')
     assert _graph_errors([baseline, science, review]) == []
     review.write_text('revision = "0039"\ndown_revision = "missing"\n')
-    assert any(
-        "missing parent" in error
-        for error in _graph_errors([baseline, science, review])
-    )
+    assert any("missing parent" in error for error in _graph_errors([baseline, science, review]))
 
 
 def test_cycle_is_rejected_without_loading_migration_code(tmp_path: Path) -> None:
