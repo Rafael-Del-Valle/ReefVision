@@ -21,12 +21,8 @@ def _unit(unit_id: str, metric: str = "polyp_count") -> SimpleNamespace:
     return SimpleNamespace(experimental_unit_id=unit_id, metric_name=metric)
 
 
-def _excluded(
-    unit_id: str, reason: str, metric: str = "polyp_count"
-) -> SimpleNamespace:
-    return SimpleNamespace(
-        experimental_unit_id=unit_id, metric_name=metric, reason=reason
-    )
+def _excluded(unit_id: str, reason: str, metric: str = "polyp_count") -> SimpleNamespace:
+    return SimpleNamespace(experimental_unit_id=unit_id, metric_name=metric, reason=reason)
 
 
 def test_excluded_tank_reports_missing_followup_without_pseudoreplication() -> None:

@@ -148,6 +148,7 @@ def test_saved_workflow_persists_declared_unit_summary(client: TestClient) -> No
     assert payload["population_summaries"][0]["mean_unit_absolute_change"] == 2.0
     assert payload["evidence_level"] == "caller_supplied_unverified"
 
+
 def test_sampling_window_exclusion_has_complete_organisms(client: TestClient) -> None:
     observations = [
         _obs("frag-1", "tank-A", 1, 10),
