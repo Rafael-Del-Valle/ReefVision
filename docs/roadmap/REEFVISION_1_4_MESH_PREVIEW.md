@@ -54,3 +54,12 @@ primitive without scene transforms, compression or external buffers. The same
 bounded parser is used by the standalone API and saved Workflow Builder node.
 Measurements remain provisional with `source_format=glb_2_0`; no persistent
 3D asset storage, interactive viewer or biological validation is implied.
+
+Mesh topology QC also reports `edge_connected_patch_count` (face patches
+connected by shared edges) and `inconsistent_winding_edge_count` (shared edges
+traversed in the same direction by exactly two faces). These add the warnings
+`disconnected_mesh_patches` and `inconsistent_face_winding`. A patch count
+above one may indicate disconnected fragments, and inconsistent winding may
+invalidate assumptions of a consistently oriented closed surface. This is
+diagnostic topology QC, not a validated tissue segmentation, watertightness
+certificate, volume estimate, or biological identity determination.

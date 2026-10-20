@@ -55,10 +55,19 @@ def measure_mesh_preview(
             raise ValueError("Each vertex must contain three bounded finite coordinates")
         points.append((float(vertex[0]), float(vertex[1]), float(vertex[2])))
     edges: Counter[tuple[int, int]] = Counter()
+    edge_faces: dict[tuple[int, int], list[tuple[int, bool]]] = {}
+    parents = list(range(len(faces)))
+
+    def root(face_index: int) -> int:
+        while parents[face_index] != face_index:
+            parents[face_index] = parents[parents[face_index]]
+            face_index = parents[face_index]
+        return face_index
+
     seen_faces: set[tuple[int, int, int]] = set()
     raw_area = 0.0
     degenerate = 0
-    for face in faces:
+    for face_index, face in enumerate(faces):
         if (
             len(face) != 3
             or any(index < 0 or index >= len(points) for index in face)
@@ -76,7 +85,12 @@ def measure_mesh_preview(
         degenerate += area == 0
         raw_area += area
         for a, b in ((face[0], face[1]), (face[1], face[2]), (face[2], face[0])):
-            edges[(min(a, b), max(a, b))] += 1
+            edge = (min(a, b), max(a, b))
+            edges[edge] += 1
+            incidents = edge_faces.setdefault(edge, [])
+            if incidents:
+                parents[root(face_index)] = root(incidents[0][0])
+            incidents.append((face_index, a < b))
     area_m2 = raw_area * scale * scale
     if not isfinite(area_m2):
         raise ValueError("Calibrated area overflowed")
@@ -85,6 +99,11 @@ def measure_mesh_preview(
     ]
     boundary = sum(count == 1 for count in edges.values())
     nonmanifold = sum(count > 2 for count in edges.values())
+    edge_connected_patch_count = len({root(index) for index in range(len(faces))})
+    inconsistent_winding_edge_count = sum(
+        len(incidents) == 2 and incidents[0][1] == incidents[1][1]
+        for incidents in edge_faces.values()
+    )
     geometry_hash = hashlib.sha256(
         json.dumps(
             {"vertices": points, "faces": faces}, sort_keys=True, separators=(",", ":")
@@ -99,10 +118,14 @@ def measure_mesh_preview(
         "degenerate_face_count": degenerate,
         "boundary_edge_count": boundary,
         "nonmanifold_edge_count": nonmanifold,
+        "edge_connected_patch_count": edge_connected_patch_count,
+        "inconsistent_winding_edge_count": inconsistent_winding_edge_count,
         "qc_warnings": (
             (["degenerate_triangles_present"] if degenerate else [])
             + (["open_mesh_surface_not_enclosed"] if boundary else [])
             + (["nonmanifold_mesh_edges"] if nonmanifold else [])
+            + (["disconnected_mesh_patches"] if edge_connected_patch_count > 1 else [])
+            + (["inconsistent_face_winding"] if inconsistent_winding_edge_count else [])
         ),
         "area_scale_uncertainty_m2": (
             2 * relative_scale_uncertainty * area_m2
