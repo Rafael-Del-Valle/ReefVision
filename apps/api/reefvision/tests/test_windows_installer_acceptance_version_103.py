@@ -51,7 +51,10 @@ def test_historical_release_notes_outside_acceptance_job_are_allowed() -> None:
         ("MSI ProductVersion must be 1.0.3.", "MSI ProductVersion must be 1.0.2."),
         ("reefvision-1-0-3-installer", "reefvision-1-0-2-installer"),
         ("uninstall 1.0.3", "uninstall 1.0.2"),
-        ("ReefVision-1.0.3-Windows-Clean-Install-Evidence", "ReefVision-1.0.2-Windows-Clean-Install-Evidence"),
+        (
+            "ReefVision-1.0.3-Windows-Clean-Install-Evidence",
+            "ReefVision-1.0.2-Windows-Clean-Install-Evidence",
+        ),
         ("reefvision-1-0-3-disposable-acceptance", "reefvision-1-0-2-disposable-acceptance"),
     ],
 )
@@ -62,17 +65,27 @@ def test_stale_version_reference_is_rejected(original: str, replacement: str) ->
 def test_default_acceptance_rejects_implicit_live_model_downloads() -> None:
     workflow = valid_workflow().replace(
         "      - name: ReefVision-1.0.3-Windows-Clean-Install-Evidence",
-        "          -LiveSam2Acceptance\n      - name: ReefVision-1.0.3-Windows-Clean-Install-Evidence",
+        "          -LiveSam2Acceptance\n"
+        "      - name: ReefVision-1.0.3-Windows-Clean-Install-Evidence",
     )
-    assert any("network model downloads" in error for error in MODULE.check_workflow(workflow, "1.0.3"))
+    assert any(
+        "network model downloads" in error
+        for error in MODULE.check_workflow(workflow, "1.0.3")
+    )
 
 
 def test_missing_clean_install_job_is_rejected() -> None:
-    assert any("exactly one" in error for error in MODULE.check_workflow("name: Build Windows Desktop", "1.0.3"))
+    assert any(
+        "exactly one" in error
+        for error in MODULE.check_workflow("name: Build Windows Desktop", "1.0.3")
+    )
 
 
 def test_invalid_release_version_is_rejected() -> None:
-    assert any("Invalid Tauri version" in error for error in MODULE.check_workflow(valid_workflow(), "1.0.3-rc1"))
+    assert any(
+        "Invalid Tauri version" in error
+        for error in MODULE.check_workflow(valid_workflow(), "1.0.3-rc1")
+    )
 
 
 def test_mixed_msi_versions_are_rejected() -> None:
