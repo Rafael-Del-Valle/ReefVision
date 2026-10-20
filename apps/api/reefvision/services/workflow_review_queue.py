@@ -45,6 +45,21 @@ def create_review_queue_workflow_artifact(
     ):
         raise ValidationError("QC Review Queue requires valid persisted workflow provenance")
 
+    # The saved node is the authoritative execution contract. An interrupted
+    # retry must not silently change its source QC run or review threshold,
+    # including explicit None versus an omitted value. Ignore only runtime
+    # identifiers injected by WorkflowExecutionService.
+    saved_parameters = dict(node.parameters_json or {})
+    supplied_parameters = {
+        key: value
+        for key, value in parameters.items()
+        if key not in {"__workflow_run_id", "__workflow_node_run_id"}
+    }
+    if supplied_parameters != saved_parameters:
+        raise ValidationError(
+            "QC review-queue retry parameters changed from saved node"
+        )
+
     request = ReviewQueueCreateRequest(
         source_quality_control_run_id=parameters.get("source_quality_control_run_id"),
         review_below_confidence=parameters.get("review_below_confidence"),
