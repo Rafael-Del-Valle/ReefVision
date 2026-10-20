@@ -252,10 +252,7 @@ def test_area_weighted_centroids_use_triangle_areas_not_vertex_average() -> None
     centroids = result["edge_connected_patch_area_weighted_surface_centroids_m"]
     assert centroids[0] == pytest.approx([0.02 / 3, 0.01, 0])
     assert centroids[1] == pytest.approx([0.34 / 3, 0.05 / 3, 0])
-    overall = [
-        (3 * centroids[0][axis] + 10 * centroids[1][axis]) / 13
-        for axis in range(3)
-    ]
+    overall = [(3 * centroids[0][axis] + 10 * centroids[1][axis]) / 13 for axis in range(3)]
     assert result["area_weighted_surface_centroid_m"] == pytest.approx(overall)
     uncertainty = result["edge_connected_patch_centroid_scale_uncertainties_m"]
     for centroid, error in zip(centroids, uncertainty, strict=True):
@@ -301,8 +298,6 @@ def test_missing_scale_uncertainty_does_not_invent_centroid_precision() -> None:
         calibration_method="ruler",
         calibration_evidence="Unreviewed source origin",
     )
-    assert result["area_weighted_surface_centroid_m"] == pytest.approx(
-        [0.02 / 3, 0.01, 0]
-    )
+    assert result["area_weighted_surface_centroid_m"] == pytest.approx([0.02 / 3, 0.01, 0])
     assert result["area_weighted_centroid_scale_uncertainty_m"] is None
     assert result["edge_connected_patch_centroid_scale_uncertainties_m"] is None
