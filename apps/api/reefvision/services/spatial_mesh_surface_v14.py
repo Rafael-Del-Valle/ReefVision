@@ -98,8 +98,7 @@ def measure_mesh_preview(
     referenced_points = [points[index] for index in sorted(referenced_indices)]
     unreferenced_vertex_count = len(points) - len(referenced_points)
     dimensions = [
-        (max(p[axis] for p in referenced_points) - min(p[axis] for p in referenced_points))
-        * scale
+        (max(p[axis] for p in referenced_points) - min(p[axis] for p in referenced_points)) * scale
         for axis in range(3)
     ]
     boundary = sum(count == 1 for count in edges.values())
