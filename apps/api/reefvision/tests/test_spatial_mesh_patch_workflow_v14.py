@@ -72,7 +72,13 @@ def test_saved_mesh_patch_areas_match_standalone_preview(client: TestClient) -> 
         "edge_connected_patch_axis_aligned_dimensions_m",
         "edge_connected_patch_dimension_scale_uncertainties_m",
     ):
-        assert artifact[key] == pytest.approx(standalone.json()[key])
+        expected = standalone.json()[key]
+        if expected is not None and expected and isinstance(expected[0], list):
+            assert len(artifact[key]) == len(expected)
+            for actual_row, expected_row in zip(artifact[key], expected, strict=True):
+                assert actual_row == pytest.approx(expected_row)
+        else:
+            assert artifact[key] == pytest.approx(expected)
     assert artifact["edge_connected_patch_surface_areas_m2"] == pytest.approx([0.0003, 0.001])
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
