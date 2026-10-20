@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
-from math import isfinite
+from math import dist, isfinite
 from typing import Any
 
 from reefvision.services.spatial_mesh_glb_v14 import parse_glb_triangles
@@ -126,10 +126,14 @@ def measure_mesh_preview(
     patch_boundary_edges: Counter[int] = Counter()
     patch_nonmanifold_edges: Counter[int] = Counter()
     patch_winding_edges: Counter[int] = Counter()
-    for incidents in edge_faces.values():
+    patch_boundary_lengths_mesh_units: dict[int, float] = {}
+    for (a, b), incidents in edge_faces.items():
         patch = root(incidents[0][0])
         if len(incidents) == 1:
             patch_boundary_edges[patch] += 1
+            patch_boundary_lengths_mesh_units[patch] = (
+                patch_boundary_lengths_mesh_units.get(patch, 0.0) + dist(points[a], points[b])
+            )
         elif len(incidents) > 2:
             patch_nonmanifold_edges[patch] += 1
         elif incidents[0][1] == incidents[1][1]:
@@ -137,6 +141,10 @@ def measure_mesh_preview(
     patch_boundary_edge_counts = [patch_boundary_edges[patch] for patch in ordered_patches]
     patch_nonmanifold_edge_counts = [patch_nonmanifold_edges[patch] for patch in ordered_patches]
     patch_winding_edge_counts = [patch_winding_edges[patch] for patch in ordered_patches]
+    patch_boundary_lengths_m = [
+        patch_boundary_lengths_mesh_units.get(patch, 0.0) * scale for patch in ordered_patches
+    ]
+    boundary_length_m = sum(patch_boundary_lengths_m)
     patch_areas_m2 = [patch_area_mesh_units[patch] * scale * scale for patch in ordered_patches]
     # Extents use only vertices belonging to each edge-connected patch.
     # These are global-axis bounds, not branch lengths or organism identities.
@@ -170,6 +178,12 @@ def measure_mesh_preview(
         "unreferenced_vertex_count": unreferenced_vertex_count,
         "degenerate_face_count": degenerate,
         "boundary_edge_count": boundary,
+        "boundary_edge_length_m": boundary_length_m,
+        "boundary_edge_length_scale_uncertainty_m": (
+            boundary_length_m * relative_scale_uncertainty
+            if relative_scale_uncertainty is not None
+            else None
+        ),
         "nonmanifold_edge_count": nonmanifold,
         "edge_connected_patch_count": edge_connected_patch_count,
         "edge_connected_patch_face_counts": [patch_face_counts[patch] for patch in ordered_patches],
@@ -177,6 +191,12 @@ def measure_mesh_preview(
             patch_degenerate_faces[patch] for patch in ordered_patches
         ],
         "edge_connected_patch_boundary_edge_counts": patch_boundary_edge_counts,
+        "edge_connected_patch_boundary_edge_lengths_m": patch_boundary_lengths_m,
+        "edge_connected_patch_boundary_length_scale_uncertainties_m": (
+            [length * relative_scale_uncertainty for length in patch_boundary_lengths_m]
+            if relative_scale_uncertainty is not None
+            else None
+        ),
         "edge_connected_patch_nonmanifold_edge_counts": patch_nonmanifold_edge_counts,
         "edge_connected_patch_inconsistent_winding_edge_counts": patch_winding_edge_counts,
         "edge_connected_patch_surface_areas_m2": patch_areas_m2,

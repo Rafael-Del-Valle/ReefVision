@@ -84,9 +84,10 @@ def test_degenerate_face_is_localized_to_one_patch() -> None:
     )
     assert result["edge_connected_patch_face_counts"] == [1, 1]
     assert result["edge_connected_patch_degenerate_face_counts"] == [0, 1]
-    assert sum(result["edge_connected_patch_degenerate_face_counts"]) == result[
-        "degenerate_face_count"
-    ]
+    assert (
+        sum(result["edge_connected_patch_degenerate_face_counts"])
+        == result["degenerate_face_count"]
+    )
     assert result["edge_connected_patch_surface_areas_m2"] == [0.00005, 0.0]
     assert "degenerate_triangles_present" in result["qc_warnings"]
     assert result["measurement_status"] == "caller_supplied_unverified"

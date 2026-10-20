@@ -19,3 +19,10 @@ comparison across timepoints requires a reviewed common coordinate frame.
 Per-patch degenerate-triangle counts localize zero-area faces without silently
 removing them from the input geometry or claiming a valid enclosed surface.
 They must be reviewed alongside topology warnings before biological interpretation.
+
+Open-boundary edge lengths are reported in meters both for the entire mesh and
+for each edge-connected patch. Shared interior edges are excluded. These lengths
+measure exposed mesh edges (which may reflect incomplete photogrammetry), **not**
+coral branch lengths, colony perimeter, or verified tissue boundaries. Scale-only
+uncertainty is a common multiplicative error; absent scale uncertainty stays
+unknown rather than being treated as zero. Human review remains required.

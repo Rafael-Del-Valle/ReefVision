@@ -69,6 +69,10 @@ def test_saved_mesh_patch_areas_match_standalone_preview(client: TestClient) -> 
         "edge_connected_patch_face_counts",
         "edge_connected_patch_degenerate_face_counts",
         "edge_connected_patch_boundary_edge_counts",
+        "boundary_edge_length_m",
+        "boundary_edge_length_scale_uncertainty_m",
+        "edge_connected_patch_boundary_edge_lengths_m",
+        "edge_connected_patch_boundary_length_scale_uncertainties_m",
         "edge_connected_patch_nonmanifold_edge_counts",
         "edge_connected_patch_inconsistent_winding_edge_counts",
         "edge_connected_patch_surface_areas_m2",
@@ -85,6 +89,9 @@ def test_saved_mesh_patch_areas_match_standalone_preview(client: TestClient) -> 
             assert artifact[key] == pytest.approx(expected)
     assert artifact["edge_connected_patch_surface_areas_m2"] == pytest.approx([0.0003, 0.001])
     assert artifact["edge_connected_patch_boundary_edge_counts"] == [3, 3]
+    assert artifact["boundary_edge_length_m"] == pytest.approx(
+        sum(artifact["edge_connected_patch_boundary_edge_lengths_m"])
+    )
     assert artifact["edge_connected_patch_degenerate_face_counts"] == [0, 0]
     assert artifact["edge_connected_patch_nonmanifold_edge_counts"] == [0, 0]
     assert artifact["edge_connected_patch_inconsistent_winding_edge_counts"] == [0, 0]
