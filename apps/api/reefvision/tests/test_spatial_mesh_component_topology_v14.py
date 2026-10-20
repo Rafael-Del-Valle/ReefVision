@@ -92,3 +92,35 @@ def test_degenerate_face_is_localized_to_one_patch() -> None:
     assert "degenerate_triangles_present" in result["qc_warnings"]
     assert result["measurement_status"] == "caller_supplied_unverified"
     assert result["provenance"]["calibration_verified"] is False
+
+
+def test_patch_fingerprints_ignore_vertex_and_face_order() -> None:
+    original = _preview(
+        vertices=[
+            [0, 0, 0],
+            [1, 0, 0],
+            [0, 1, 0],
+            [10, 0, 0],
+            [12, 0, 0],
+            [10, 2, 0],
+        ],
+        faces=[[0, 1, 2], [3, 4, 5]],
+    )
+    reordered = _preview(
+        vertices=[
+            [10, 2, 0],
+            [0, 1, 0],
+            [12, 0, 0],
+            [1, 0, 0],
+            [10, 0, 0],
+            [0, 0, 0],
+        ],
+        faces=[[4, 0, 2], [1, 3, 5]],
+    )
+    key = "edge_connected_patch_geometry_sha256"
+    assert len(original[key]) == 2
+    assert all(len(fingerprint) == 64 for fingerprint in original[key])
+    assert original[key][0] != original[key][1]
+    assert sorted(original[key]) == sorted(reordered[key])
+    assert original["measurement_status"] == "caller_supplied_unverified"
+    assert reordered["provenance"]["calibration_verified"] is False

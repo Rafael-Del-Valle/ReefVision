@@ -93,6 +93,10 @@ def test_saved_mesh_patch_areas_match_standalone_preview(client: TestClient) -> 
         sum(artifact["edge_connected_patch_boundary_edge_lengths_m"])
     )
     assert artifact["edge_connected_patch_degenerate_face_counts"] == [0, 0]
+    assert (
+        artifact["edge_connected_patch_geometry_sha256"]
+        == standalone.json()["edge_connected_patch_geometry_sha256"]
+    )
     assert artifact["edge_connected_patch_nonmanifold_edge_counts"] == [0, 0]
     assert artifact["edge_connected_patch_inconsistent_winding_edge_counts"] == [0, 0]
     assert artifact["measurement_status"] == "caller_supplied_unverified"

@@ -112,6 +112,7 @@ def measure_mesh_preview(
     patch_face_counts: dict[int, int] = {}
     patch_degenerate_faces: Counter[int] = Counter()
     patch_vertex_indices: dict[int, set[int]] = {}
+    patch_triangles: dict[int, list[list[tuple[float, float, float]]]] = {}
     for face_index, face_area in enumerate(face_areas):
         patch = root(face_index)
         patch_area_mesh_units[patch] = patch_area_mesh_units.get(patch, 0.0) + face_area
@@ -119,6 +120,9 @@ def measure_mesh_preview(
         if face_area == 0:
             patch_degenerate_faces[patch] += 1
         patch_vertex_indices.setdefault(patch, set()).update(faces[face_index])
+        patch_triangles.setdefault(patch, []).append(
+            sorted(points[index] for index in faces[face_index])
+        )
         patch_first_face.setdefault(patch, face_index)
     ordered_patches = sorted(patch_area_mesh_units, key=patch_first_face.__getitem__)
     # Edge incidents belong to one edge-connected patch. Report topology QC
@@ -131,9 +135,9 @@ def measure_mesh_preview(
         patch = root(incidents[0][0])
         if len(incidents) == 1:
             patch_boundary_edges[patch] += 1
-            patch_boundary_lengths_mesh_units[patch] = (
-                patch_boundary_lengths_mesh_units.get(patch, 0.0) + dist(points[a], points[b])
-            )
+            patch_boundary_lengths_mesh_units[patch] = patch_boundary_lengths_mesh_units.get(
+                patch, 0.0
+            ) + dist(points[a], points[b])
         elif len(incidents) > 2:
             patch_nonmanifold_edges[patch] += 1
         elif incidents[0][1] == incidents[1][1]:
@@ -157,6 +161,14 @@ def measure_mesh_preview(
             * scale
             for axis in range(3)
         ]
+        for patch in ordered_patches
+    ]
+    # Exact geometry fingerprints ignore source vertex/face numbering and winding.
+    # They are not biological identities or evidence of registration between scans.
+    patch_geometry_hashes = [
+        hashlib.sha256(
+            json.dumps(sorted(patch_triangles[patch]), separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
         for patch in ordered_patches
     ]
     edge_connected_patch_count = len(ordered_patches)
@@ -187,6 +199,7 @@ def measure_mesh_preview(
         "nonmanifold_edge_count": nonmanifold,
         "edge_connected_patch_count": edge_connected_patch_count,
         "edge_connected_patch_face_counts": [patch_face_counts[patch] for patch in ordered_patches],
+        "edge_connected_patch_geometry_sha256": patch_geometry_hashes,
         "edge_connected_patch_degenerate_face_counts": [
             patch_degenerate_faces[patch] for patch in ordered_patches
         ],

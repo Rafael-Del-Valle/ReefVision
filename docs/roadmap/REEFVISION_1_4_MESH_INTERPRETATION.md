@@ -26,3 +26,9 @@ measure exposed mesh edges (which may reflect incomplete photogrammetry), **not*
 coral branch lengths, colony perimeter, or verified tissue boundaries. Scale-only
 uncertainty is a common multiplicative error; absent scale uncertainty stays
 unknown rather than being treated as zero. Human review remains required.
+
+Exact per-patch geometry SHA-256 fingerprints are calculated from sorted triangle
+coordinates, ignoring source vertex numbering, triangle order, and winding. They
+support audit of unchanged geometry through standalone and saved Workflow Builder
+analyses. Fingerprints are **not** persistent organism identities, registration,
+or proof of biological reidentification; any coordinate change may change a hash.
