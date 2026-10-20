@@ -145,7 +145,9 @@ class ExperimentalUnitCoverage(BaseModel):
     complete_organism_count: int = Field(ge=0)
     missing_followup_organism_count: int = Field(ge=0)
     eligible_for_summary: bool
-    exclusion_reason: Literal["missing_followup", "nonmatching_sampling_window"] | None = None
+    exclusion_reason: Literal[
+        "missing_followup", "nonmatching_sampling_window"
+    ] | None = None
 
 
 class ExcludedExperimentalUnit(BaseModel):
