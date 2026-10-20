@@ -33,7 +33,10 @@ def test_winding_defect_is_localized_to_one_patch() -> None:
     assert result["edge_connected_patch_boundary_edge_counts"] == [4, 3]
     assert result["edge_connected_patch_nonmanifold_edge_counts"] == [0, 0]
     assert result["edge_connected_patch_inconsistent_winding_edge_counts"] == [1, 0]
-    assert sum(result["edge_connected_patch_boundary_edge_counts"]) == result["boundary_edge_count"]
+    assert (
+        sum(result["edge_connected_patch_boundary_edge_counts"])
+        == result["boundary_edge_count"]
+    )
     assert (
         sum(result["edge_connected_patch_inconsistent_winding_edge_counts"])
         == result["inconsistent_winding_edge_count"]
@@ -61,7 +64,10 @@ def test_nonmanifold_edge_is_localized_to_one_patch() -> None:
     assert result["edge_connected_patch_boundary_edge_counts"] == [6, 3]
     assert result["edge_connected_patch_nonmanifold_edge_counts"] == [1, 0]
     assert result["edge_connected_patch_inconsistent_winding_edge_counts"] == [0, 0]
-    assert sum(result["edge_connected_patch_nonmanifold_edge_counts"]) == result["nonmanifold_edge_count"]
+    assert (
+        sum(result["edge_connected_patch_nonmanifold_edge_counts"])
+        == result["nonmanifold_edge_count"]
+    )
     assert "nonmanifold_mesh_edges" in result["qc_warnings"]
     assert result["measurement_status"] == "caller_supplied_unverified"
     assert result["provenance"]["calibration_verified"] is False
