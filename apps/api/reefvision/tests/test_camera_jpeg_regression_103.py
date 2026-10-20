@@ -48,7 +48,8 @@ def test_progressive_camera_jpeg_keeps_original_bytes_and_exif(
 
 @pytest.mark.parametrize("extension", [".jpg", ".jpeg", ".jpe", ".jfif", ".jfi", ".jif"])
 def test_jpeg_camera_filename_aliases_preserve_original_content(
-    client: TestClient, extension: str,
+    client: TestClient,
+    extension: str,
 ) -> None:
     project = create_project(client, f"Camera JPEG alias {extension}")
     stream = BytesIO()
