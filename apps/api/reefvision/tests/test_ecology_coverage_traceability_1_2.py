@@ -46,9 +46,7 @@ def grouped() -> dict[tuple[str, str], list[Row]]:
 
 
 def test_missing_organisms_are_sorted_and_excluded_from_replication() -> None:
-    rows = audit_unit_coverage(
-        grouped(), [change("fragment-c")], [], [excluded("tank-1")]
-    )
+    rows = audit_unit_coverage(grouped(), [change("fragment-c")], [], [excluded("tank-1")])
     assert len(rows) == 1
     coverage = ExperimentalUnitCoverage.model_validate(rows[0])
     assert coverage.missing_organism_ids == ["fragment-a", "fragment-z"]
@@ -74,13 +72,9 @@ def test_duplicate_eligible_and_excluded_unit_decisions_are_rejected() -> None:
         ]
     }
     with pytest.raises(ValueError, match="Duplicate eligible"):
-        audit_unit_coverage(
-            data, [change("a")], [decision("tank-1"), decision("tank-1")], []
-        )
+        audit_unit_coverage(data, [change("a")], [decision("tank-1"), decision("tank-1")], [])
     with pytest.raises(ValueError, match="Duplicate excluded"):
-        audit_unit_coverage(
-            data, [], [], [excluded("tank-1"), excluded("tank-1")]
-        )
+        audit_unit_coverage(data, [], [], [excluded("tank-1"), excluded("tank-1")])
 
 
 def test_forged_single_observation_completion_is_rejected() -> None:
