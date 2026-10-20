@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from reefvision.db.models import WorkflowArtifact
+from reefvision.db.models import WorkflowArtifact, WorkflowNodeRun
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.workflow_runtime_adapters import execute_runtime_adapter
@@ -125,7 +125,14 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
         )
         assert source is not None
         qc_node = next(item for item in payload["nodes"] if item["node_id"] == "qc")
+        persisted_node = session.get(WorkflowNodeRun, qc_node["id"])
+        assert persisted_node is not None
+        assert persisted_node.node_type == "qc_review_queue"
+        saved_parameters = dict(persisted_node.parameters_json or {})
+        assert "source_quality_control_run_id" in saved_parameters
+        assert "review_below_confidence" in saved_parameters
         params = {
+            **saved_parameters,
             "__workflow_run_id": run["id"],
             "__workflow_node_run_id": qc_node["id"],
         }
@@ -138,6 +145,19 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
             inputs={"project": [source]},
         )
         assert retry[0]["payload"]["queue_id"] == result["queue_id"]
+        # Omitting a persisted optional parameter is a provenance change,
+        # even when its saved value was null.
+        missing_source = dict(params)
+        missing_source.pop("source_quality_control_run_id")
+        with pytest.raises(ValidationError, match="retry parameters changed"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=missing_source,
+                inputs={"project": [source]},
+            )
         with pytest.raises(ValidationError, match="retry parameters changed"):
             execute_runtime_adapter(
                 "qc_review_queue",
