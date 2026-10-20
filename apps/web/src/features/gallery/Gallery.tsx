@@ -301,6 +301,7 @@ export function Gallery({
     readGalleryPreference(window.localStorage, project.id),
   );
   const activeThumbnail = useRef<HTMLButtonElement | null>(null);
+  const filmstripRef = useRef<HTMLDivElement | null>(null);
   const [page, setPage] = useState(initialPreference.current.page);
   const [pageDraft, setPageDraft] = useState(
     String(initialPreference.current.page),
@@ -473,11 +474,16 @@ export function Gallery({
   }, [focusedImage, page, project.id, wrapNavigation]);
 
   useEffect(() => {
-    if (typeof activeThumbnail.current?.scrollIntoView === "function") {
-      activeThumbnail.current.scrollIntoView({
-        block: "nearest",
-        inline: "nearest",
-      });
+    const filmstrip = filmstripRef.current;
+    const thumbnail = activeThumbnail.current;
+    if (!filmstrip || !thumbnail) return;
+    // Only move the horizontal strip, not the surrounding image viewport.
+    const strip = filmstrip.getBoundingClientRect();
+    const active = thumbnail.getBoundingClientRect();
+    if (active.left < strip.left) {
+      filmstrip.scrollLeft += active.left - strip.left;
+    } else if (active.right > strip.right) {
+      filmstrip.scrollLeft += active.right - strip.right;
     }
   }, [focusedImage?.id]);
 
@@ -690,6 +696,7 @@ export function Gallery({
             </div>
 
             <div
+              ref={filmstripRef}
               className="rv-media-filmstrip"
               role="list"
               aria-label="Nearby images"

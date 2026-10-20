@@ -713,4 +713,56 @@ describe("Gallery", () => {
       screen.getByRole("heading", { name: "active-project.png", level: 3 }),
     ).toBeInTheDocument();
   });
+
+  it("keeps focus navigation inside the horizontal filmstrip", async () => {
+    const secondImage: ProjectImage = {
+      ...image,
+      id: "image-2",
+      original_filename: "swiftia-02.png",
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image, secondImage],
+        total: 2,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+    renderGallery();
+
+    const filmstrip = await screen.findByRole("list", {
+      name: "Nearby images",
+    });
+    const first = screen.getByRole("listitem", {
+      name: "Focus swiftia-01.png",
+    });
+    const second = screen.getByRole("listitem", {
+      name: "Focus swiftia-02.png",
+    });
+    vi.spyOn(filmstrip, "getBoundingClientRect").mockReturnValue({
+      left: 100,
+      right: 400,
+    } as DOMRect);
+    vi.spyOn(second, "getBoundingClientRect").mockReturnValue({
+      left: 450,
+      right: 550,
+    } as DOMRect);
+    vi.spyOn(first, "getBoundingClientRect").mockReturnValue({
+      left: 50,
+      right: 150,
+    } as DOMRect);
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(second, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+
+    await userEvent.click(second);
+    await waitFor(() => expect(filmstrip.scrollLeft).toBe(150));
+    expect(scrollIntoView).not.toHaveBeenCalled();
+
+    await userEvent.click(first);
+    await waitFor(() => expect(filmstrip.scrollLeft).toBe(100));
+  });
 });
