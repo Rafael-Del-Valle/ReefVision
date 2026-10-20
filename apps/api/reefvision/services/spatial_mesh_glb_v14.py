@@ -97,10 +97,14 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         raise ValueError("GLB requires one embedded binary buffer")
     node = _as_object(nodes[0], "node")
     scene = _as_object(scenes[0], "scene")
+    scene_index = _as_int(doc.get("scene"), "scene index")
+    mesh_index = _as_int(node.get("mesh"), "node mesh index")
+    scene_nodes = _as_list(scene.get("nodes"), "scene nodes")
     if (
-        doc.get("scene") != 0
-        or node.get("mesh") != 0
-        or scene.get("nodes") != [0]
+        scene_index != 0
+        or mesh_index != 0
+        or len(scene_nodes) != 1
+        or _as_int(scene_nodes[0], "scene node index") != 0
         or any(
             key in node
             for key in ("matrix", "translation", "rotation", "scale", "children", "skin")
@@ -146,7 +150,9 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         if view_index >= len(views):
             raise ValueError("GLB bufferView index out of range")
         view = _as_object(views[view_index], "bufferView")
-        if view.get("buffer") != 0 or ("byteStride" in view and view["byteStride"] != width):
+        if _as_int(view.get("buffer"), "buffer index") != 0 or (
+            "byteStride" in view and view["byteStride"] != width
+        ):
             raise ValueError("GLB strided or external views are unsupported")
         start = _as_int(view.get("byteOffset", 0), "view offset")
         size = _as_int(view.get("byteLength"), "view length")

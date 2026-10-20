@@ -11,7 +11,7 @@ import pytest
 from reefvision.services.spatial_mesh_glb_v14 import parse_glb_triangles
 
 
-def make_glb(*, translated: bool = False) -> str:
+def make_glb(*, translated: bool = False, invalid_selector: str | None = None) -> str:
     binary = struct.pack("<9f3H", 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 1, 2)
     doc = {
         "asset": {"version": "2.0"},
@@ -31,6 +31,14 @@ def make_glb(*, translated: bool = False) -> str:
     }
     if translated:
         doc["nodes"] = [{"mesh": 0, "translation": [1, 0, 0]}]
+    if invalid_selector == "scene":
+        doc["scene"] = False
+    elif invalid_selector == "mesh":
+        doc["nodes"][0]["mesh"] = False
+    elif invalid_selector == "nodes":
+        doc["scenes"][0]["nodes"] = [False]
+    elif invalid_selector == "buffer":
+        doc["bufferViews"][0]["buffer"] = False
     json_bytes = json.dumps(doc).encode()
     json_bytes += b" " * (-len(json_bytes) % 4)
     binary += b"\x00" * (-len(binary) % 4)
@@ -59,3 +67,10 @@ def test_rejects_scene_transforms() -> None:
 def test_rejects_invalid_base64() -> None:
     with pytest.raises(ValueError, match="base64"):
         parse_glb_triangles("invalid%%")
+
+
+@pytest.mark.parametrize("invalid_selector", ["scene", "mesh", "nodes", "buffer"])
+def test_rejects_boolean_glb_indices(invalid_selector: str) -> None:
+    """JSON booleans must not masquerade as zero-valued glTF indices."""
+    with pytest.raises(ValueError, match="index"):
+        parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
