@@ -35,7 +35,9 @@ def audit_unit_coverage(
         unit_id = next(iter(ids))
         prior_unit = organism_memberships.setdefault(organism_id, unit_id)
         if prior_unit != unit_id:
-            raise ValueError("An organism cannot change experimental units between metrics")
+            raise ValueError(
+                "An organism cannot change experimental units between metrics"
+            )
         by_unit_metric[(unit_id, metric_name)].append((organism_id, metric_name) in completed)
 
     eligible = {(row.experimental_unit_id, row.metric_name) for row in unit_summaries}

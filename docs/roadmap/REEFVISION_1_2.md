@@ -165,3 +165,15 @@ decisions and rejects contradictory missing-follow-up versus sampling-window
 reasons. Standalone and saved-workflow regressions cover the new fields.
 All units remain caller-declared and unverified; this does not authenticate
 biological identities, establish independent replication or add inference.
+
+## Experimental-unit coverage integrity (2026-10-20)
+
+The shared longitudinal analysis kernel now fails closed on duplicate
+organism/metric completions, completed series without matching observations,
+organisms reassigned between independent units across metrics, and eligible
+units that contain missing follow-up. The same kernel powers the standalone
+API and persisted `ecology_longitudinal_analysis` Workflow Builder node.
+Focused regression tests exercise these invalid inputs. Unit identity and
+biological independence are still caller-declared and unverified; no inference,
+p-values, or verified-dataset promotion is introduced. Full CI and installed
+Windows acceptance remain release gates.
