@@ -38,7 +38,9 @@ def audit_unit_coverage(
             raise ValueError(
                 "An organism cannot change experimental units between metrics"
             )
-        by_unit_metric[(unit_id, metric_name)].append((organism_id, metric_name) in completed)
+        by_unit_metric[(unit_id, metric_name)].append(
+            (organism_id, metric_name) in completed
+        )
 
     eligible = {(row.experimental_unit_id, row.metric_name) for row in unit_summaries}
     exclusions = {(row.experimental_unit_id, row.metric_name): row.reason for row in excluded_units}
