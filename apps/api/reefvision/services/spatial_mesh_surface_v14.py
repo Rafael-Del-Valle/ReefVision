@@ -110,13 +110,28 @@ def measure_mesh_preview(
     patch_area_mesh_units: dict[int, float] = {}
     patch_first_face: dict[int, int] = {}
     patch_face_counts: dict[int, int] = {}
+    patch_vertex_indices: dict[int, set[int]] = {}
     for face_index, face_area in enumerate(face_areas):
         patch = root(face_index)
         patch_area_mesh_units[patch] = patch_area_mesh_units.get(patch, 0.0) + face_area
         patch_face_counts[patch] = patch_face_counts.get(patch, 0) + 1
+        patch_vertex_indices.setdefault(patch, set()).update(faces[face_index])
         patch_first_face.setdefault(patch, face_index)
     ordered_patches = sorted(patch_area_mesh_units, key=patch_first_face.__getitem__)
     patch_areas_m2 = [patch_area_mesh_units[patch] * scale * scale for patch in ordered_patches]
+    # Extents use only vertices belonging to each edge-connected patch.
+    # These are global-axis bounds, not branch lengths or organism identities.
+    patch_dimensions_m = [
+        [
+            (
+                max(points[index][axis] for index in patch_vertex_indices[patch])
+                - min(points[index][axis] for index in patch_vertex_indices[patch])
+            )
+            * scale
+            for axis in range(3)
+        ]
+        for patch in ordered_patches
+    ]
     edge_connected_patch_count = len(ordered_patches)
     inconsistent_winding_edge_count = sum(
         len(incidents) == 2 and incidents[0][1] == incidents[1][1]
@@ -140,6 +155,15 @@ def measure_mesh_preview(
         "edge_connected_patch_count": edge_connected_patch_count,
         "edge_connected_patch_face_counts": [patch_face_counts[patch] for patch in ordered_patches],
         "edge_connected_patch_surface_areas_m2": patch_areas_m2,
+        "edge_connected_patch_axis_aligned_dimensions_m": patch_dimensions_m,
+        "edge_connected_patch_dimension_scale_uncertainties_m": (
+            [
+                [dimension * relative_scale_uncertainty for dimension in dimensions]
+                for dimensions in patch_dimensions_m
+            ]
+            if relative_scale_uncertainty is not None
+            else None
+        ),
         "edge_connected_patch_area_scale_uncertainties_m2": (
             [2 * relative_scale_uncertainty * area for area in patch_areas_m2]
             if relative_scale_uncertainty is not None

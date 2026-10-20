@@ -118,6 +118,14 @@ def test_disconnected_patch_areas_and_uncertainties_are_reported_separately() ->
     assert result["edge_connected_patch_count"] == 2
     assert result["edge_connected_patch_face_counts"] == [1, 1]
     assert result["edge_connected_patch_surface_areas_m2"] == pytest.approx([0.0003, 0.001])
+    assert result["edge_connected_patch_axis_aligned_dimensions_m"] == [
+        pytest.approx([0.02, 0.03, 0.0]),
+        pytest.approx([0.04, 0.05, 0.0]),
+    ]
+    assert result["edge_connected_patch_dimension_scale_uncertainties_m"] == [
+        pytest.approx([0.001, 0.0015, 0.0]),
+        pytest.approx([0.002, 0.0025, 0.0]),
+    ]
     assert result["edge_connected_patch_area_scale_uncertainties_m2"] == pytest.approx(
         [0.00003, 0.0001]
     )
@@ -138,6 +146,7 @@ def test_patch_scale_uncertainty_is_unknown_when_scale_error_is_unspecified() ->
     )
     assert result["edge_connected_patch_surface_areas_m2"] == pytest.approx([0.00005])
     assert result["edge_connected_patch_area_scale_uncertainties_m2"] is None
+    assert result["edge_connected_patch_dimension_scale_uncertainties_m"] is None
     assert result["confidence_interval"] is None
 
 

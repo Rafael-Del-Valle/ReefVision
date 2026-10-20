@@ -69,6 +69,8 @@ def test_saved_mesh_patch_areas_match_standalone_preview(client: TestClient) -> 
         "edge_connected_patch_face_counts",
         "edge_connected_patch_surface_areas_m2",
         "edge_connected_patch_area_scale_uncertainties_m2",
+        "edge_connected_patch_axis_aligned_dimensions_m",
+        "edge_connected_patch_dimension_scale_uncertainties_m",
     ):
         assert artifact[key] == pytest.approx(standalone.json()[key])
     assert artifact["edge_connected_patch_surface_areas_m2"] == pytest.approx([0.0003, 0.001])

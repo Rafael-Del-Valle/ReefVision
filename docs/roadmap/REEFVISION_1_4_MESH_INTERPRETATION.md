@@ -10,3 +10,8 @@ Per-edge-connected-patch areas are reported in square meters, ordered by the fir
 face in each patch. Their scale uncertainties assume a common relative scale error;
 these are not independent confidence intervals. Patch indices are not persistent
 organism identities and must not be used to infer biological growth or survival.
+
+Per-patch global-axis dimensions (meters) and their scale-only uncertainty are
+calculated from vertices referenced by that patch's faces. These bounding-box
+extents do not measure skeletal branch length or guarantee anatomical alignment;
+comparison across timepoints requires a reviewed common coordinate frame.
