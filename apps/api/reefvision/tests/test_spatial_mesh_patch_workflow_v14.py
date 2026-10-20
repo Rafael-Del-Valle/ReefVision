@@ -82,6 +82,10 @@ def test_saved_mesh_patch_areas_match_standalone_preview(
         "edge_connected_patch_area_scale_uncertainties_m2",
         "edge_connected_patch_axis_aligned_dimensions_m",
         "edge_connected_patch_dimension_scale_uncertainties_m",
+        "area_weighted_surface_centroid_m",
+        "area_weighted_centroid_scale_uncertainty_m",
+        "edge_connected_patch_area_weighted_surface_centroids_m",
+        "edge_connected_patch_centroid_scale_uncertainties_m",
     ):
         expected = standalone.json()[key]
         if isinstance(expected, list) and expected and isinstance(expected[0], list):
@@ -97,6 +101,8 @@ def test_saved_mesh_patch_areas_match_standalone_preview(
         assert artifact["edge_connected_patch_boundary_length_scale_uncertainties_m"] is None
         assert artifact["edge_connected_patch_area_scale_uncertainties_m2"] is None
         assert artifact["edge_connected_patch_dimension_scale_uncertainties_m"] is None
+        assert artifact["area_weighted_centroid_scale_uncertainty_m"] is None
+        assert artifact["edge_connected_patch_centroid_scale_uncertainties_m"] is None
     else:
         assert artifact["boundary_edge_length_scale_uncertainty_m"] > 0
         assert artifact["edge_connected_patch_area_scale_uncertainties_m2"][0] > 0

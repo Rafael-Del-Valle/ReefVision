@@ -231,3 +231,78 @@ def test_boundary_length_unknown_scale_uncertainty_remains_none() -> None:
     assert result["boundary_edge_length_scale_uncertainty_m"] is None
     assert result["edge_connected_patch_boundary_length_scale_uncertainties_m"] is None
     assert result["confidence_interval"] is None
+
+
+def test_area_weighted_centroids_use_triangle_areas_not_vertex_average() -> None:
+    result = measure_mesh_preview(
+        vertices=[
+            [0, 0, 0],
+            [2, 0, 0],
+            [0, 3, 0],
+            [10, 0, 0],
+            [14, 0, 0],
+            [10, 5, 0],
+        ],
+        faces=[[0, 1, 2], [3, 4, 5]],
+        meters_per_unit=0.01,
+        calibration_method="ruler",
+        calibration_evidence="Unreviewed source coordinate frame",
+        relative_scale_uncertainty=0.1,
+    )
+    centroids = result["edge_connected_patch_area_weighted_surface_centroids_m"]
+    assert centroids[0] == pytest.approx([0.02 / 3, 0.01, 0])
+    assert centroids[1] == pytest.approx([0.34 / 3, 0.05 / 3, 0])
+    overall = [
+        (3 * centroids[0][axis] + 10 * centroids[1][axis]) / 13
+        for axis in range(3)
+    ]
+    assert result["area_weighted_surface_centroid_m"] == pytest.approx(overall)
+    uncertainty = result["edge_connected_patch_centroid_scale_uncertainties_m"]
+    for centroid, error in zip(centroids, uncertainty, strict=True):
+        assert error == pytest.approx([abs(value) * 0.1 for value in centroid])
+    assert result["area_weighted_centroid_scale_uncertainty_m"] == pytest.approx(
+        [abs(value) * 0.1 for value in overall]
+    )
+    assert result["measurement_status"] == "caller_supplied_unverified"
+    assert result["provenance"]["calibration_verified"] is False
+
+
+def test_zero_area_patch_centroid_is_undefined_and_not_invented() -> None:
+    result = measure_mesh_preview(
+        vertices=[
+            [0, 0, 0],
+            [1, 0, 0],
+            [2, 0, 0],
+            [10, 0, 0],
+            [11, 0, 0],
+            [10, 1, 0],
+        ],
+        faces=[[0, 1, 2], [3, 4, 5]],
+        meters_per_unit=0.01,
+        calibration_method="ruler",
+        calibration_evidence="Unverified survey origin",
+        relative_scale_uncertainty=0.05,
+    )
+    centroids = result["edge_connected_patch_area_weighted_surface_centroids_m"]
+    assert centroids[0] is None
+    assert centroids[1] == pytest.approx([0.10333333333333333, 0.003333333333333333, 0])
+    assert result["area_weighted_surface_centroid_m"] == pytest.approx(centroids[1])
+    assert result["edge_connected_patch_centroid_scale_uncertainties_m"][0] is None
+    assert "zero_area_mesh_patch_centroid_undefined" in result["qc_warnings"]
+    assert result["confidence_interval"] is None
+    assert result["measurement_status"] == "caller_supplied_unverified"
+
+
+def test_missing_scale_uncertainty_does_not_invent_centroid_precision() -> None:
+    result = measure_mesh_preview(
+        vertices=[[0, 0, 0], [2, 0, 0], [0, 3, 0]],
+        faces=[[0, 1, 2]],
+        meters_per_unit=0.01,
+        calibration_method="ruler",
+        calibration_evidence="Unreviewed source origin",
+    )
+    assert result["area_weighted_surface_centroid_m"] == pytest.approx(
+        [0.02 / 3, 0.01, 0]
+    )
+    assert result["area_weighted_centroid_scale_uncertainty_m"] is None
+    assert result["edge_connected_patch_centroid_scale_uncertainties_m"] is None

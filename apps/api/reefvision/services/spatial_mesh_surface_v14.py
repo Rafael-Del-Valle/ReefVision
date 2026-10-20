@@ -112,6 +112,7 @@ def measure_mesh_preview(
     patch_face_counts: dict[int, int] = {}
     patch_degenerate_faces: Counter[int] = Counter()
     patch_vertex_indices: dict[int, set[int]] = {}
+    patch_centroid_moments: dict[int, list[float]] = {}
     patch_triangles: dict[int, list[list[tuple[float, float, float]]]] = {}
     for face_index, face_area in enumerate(face_areas):
         patch = root(face_index)
@@ -120,6 +121,11 @@ def measure_mesh_preview(
         if face_area == 0:
             patch_degenerate_faces[patch] += 1
         patch_vertex_indices.setdefault(patch, set()).update(faces[face_index])
+        moment = patch_centroid_moments.setdefault(patch, [0.0, 0.0, 0.0])
+        for axis in range(3):
+            moment[axis] += (
+                face_area * sum(points[index][axis] for index in faces[face_index]) / 3
+            )
         patch_triangles.setdefault(patch, []).append(
             sorted(points[index] for index in faces[face_index])
         )
@@ -163,6 +169,49 @@ def measure_mesh_preview(
         ]
         for patch in ordered_patches
     ]
+    # Triangle-area-weighted centroids are coordinates in the imported source
+    # frame, not registered positions or evidence of organism identity.
+    # A zero-area patch has no mathematically defined surface centroid.
+    patch_centroids_m = [
+        (
+            [
+                moment * scale / patch_area_mesh_units[patch]
+                for moment in patch_centroid_moments[patch]
+            ]
+            if patch_area_mesh_units[patch] > 0
+            else None
+        )
+        for patch in ordered_patches
+    ]
+    centroid_m = (
+        [
+            sum(patch_centroid_moments[patch][axis] for patch in ordered_patches)
+            * scale
+            / raw_area
+            for axis in range(3)
+        ]
+        if raw_area > 0
+        else None
+    )
+    # Only common multiplicative scale error is represented. No registration,
+    # origin, reconstruction, or positioning uncertainty is estimated.
+    patch_centroid_uncertainties_m = (
+        [
+            (
+                [abs(value) * relative_scale_uncertainty for value in centroid]
+                if centroid is not None
+                else None
+            )
+            for centroid in patch_centroids_m
+        ]
+        if relative_scale_uncertainty is not None
+        else None
+    )
+    centroid_uncertainty_m = (
+        [abs(value) * relative_scale_uncertainty for value in centroid_m]
+        if centroid_m is not None and relative_scale_uncertainty is not None
+        else None
+    )
     # Exact geometry fingerprints ignore source vertex/face numbering and winding.
     # They are not biological identities or evidence of registration between scans.
     patch_geometry_hashes = [
@@ -185,6 +234,8 @@ def measure_mesh_preview(
         "schema_version": "mesh-preview-0001",
         "surface_area_m2": area_m2,
         "axis_aligned_dimensions_m": dimensions,
+        "area_weighted_surface_centroid_m": centroid_m,
+        "area_weighted_centroid_scale_uncertainty_m": centroid_uncertainty_m,
         "face_count": len(faces),
         "vertex_count": len(points),
         "unreferenced_vertex_count": unreferenced_vertex_count,
@@ -214,6 +265,10 @@ def measure_mesh_preview(
         "edge_connected_patch_inconsistent_winding_edge_counts": patch_winding_edge_counts,
         "edge_connected_patch_surface_areas_m2": patch_areas_m2,
         "edge_connected_patch_axis_aligned_dimensions_m": patch_dimensions_m,
+        "edge_connected_patch_area_weighted_surface_centroids_m": patch_centroids_m,
+        "edge_connected_patch_centroid_scale_uncertainties_m": (
+            patch_centroid_uncertainties_m
+        ),
         "edge_connected_patch_dimension_scale_uncertainties_m": (
             [
                 [dimension * relative_scale_uncertainty for dimension in dimensions]
@@ -235,6 +290,11 @@ def measure_mesh_preview(
             + (["disconnected_mesh_patches"] if edge_connected_patch_count > 1 else [])
             + (["inconsistent_face_winding"] if inconsistent_winding_edge_count else [])
             + (["unreferenced_mesh_vertices"] if unreferenced_vertex_count else [])
+            + (
+                ["zero_area_mesh_patch_centroid_undefined"]
+                if any(patch_area_mesh_units[patch] == 0 for patch in ordered_patches)
+                else []
+            )
         ),
         "area_scale_uncertainty_m2": (
             2 * relative_scale_uncertainty * area_m2

@@ -32,3 +32,15 @@ coordinates, ignoring source vertex numbering, triangle order, and winding. They
 support audit of unchanged geometry through standalone and saved Workflow Builder
 analyses. Fingerprints are **not** persistent organism identities, registration,
 or proof of biological reidentification; any coordinate change may change a hash.
+
+Area-weighted surface centroids are calculated from triangle areas, not the
+average of all mesh vertices. They are reported in calibrated meters relative
+to the **unregistered source-coordinate origin** for each edge-connected patch
+and for the aggregate surface. A patch with zero total triangle area has an
+undefined centroid (null), accompanied by a QC warning. Reported centroid
+uncertainty includes only multiplicative scale uncertainty relative to that
+origin; unknown scale uncertainty remains null. It does **not** include
+registration, reconstruction, coordinate-origin, navigation, or biological
+localization error. Do not interpret a centroid displacement between surveys
+as growth, movement, or reidentification without reviewed registration and
+organism identity.
