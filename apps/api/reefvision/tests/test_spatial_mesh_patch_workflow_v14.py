@@ -1,4 +1,4 @@
-"""Persisted Workflow Builder parity for component-level coral mesh areas."""
+"""Persisted Workflow Builder parity for mesh measurements and missing uncertainty."""
 
 from __future__ import annotations
 
@@ -12,7 +12,10 @@ from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.tests.test_annotations import create_project
 
 
-def test_saved_mesh_patch_areas_match_standalone_preview(client: TestClient) -> None:
+@pytest.mark.parametrize("relative_scale_uncertainty", [0.05, None])
+def test_saved_mesh_patch_areas_match_standalone_preview(
+    client: TestClient, relative_scale_uncertainty: float | None
+) -> None:
     project_id = str(create_project(client, "Mesh patch areas")["id"])
     params = {
         "vertices": [
@@ -27,7 +30,7 @@ def test_saved_mesh_patch_areas_match_standalone_preview(client: TestClient) -> 
         "meters_per_unit": 0.01,
         "calibration_method": "ruler",
         "calibration_evidence": "Unreviewed field scale",
-        "relative_scale_uncertainty": 0.05,
+        "relative_scale_uncertainty": relative_scale_uncertainty,
     }
     base = f"/api/v1/projects/{project_id}"
     graph = {
@@ -81,7 +84,7 @@ def test_saved_mesh_patch_areas_match_standalone_preview(client: TestClient) -> 
         "edge_connected_patch_dimension_scale_uncertainties_m",
     ):
         expected = standalone.json()[key]
-        if expected is not None and expected and isinstance(expected[0], list):
+        if isinstance(expected, list) and expected and isinstance(expected[0], list):
             assert len(artifact[key]) == len(expected)
             for actual_row, expected_row in zip(artifact[key], expected, strict=True):
                 assert actual_row == pytest.approx(expected_row)
@@ -89,6 +92,14 @@ def test_saved_mesh_patch_areas_match_standalone_preview(client: TestClient) -> 
             assert artifact[key] == pytest.approx(expected)
     assert artifact["edge_connected_patch_surface_areas_m2"] == pytest.approx([0.0003, 0.001])
     assert artifact["edge_connected_patch_boundary_edge_counts"] == [3, 3]
+    if relative_scale_uncertainty is None:
+        assert artifact["boundary_edge_length_scale_uncertainty_m"] is None
+        assert artifact["edge_connected_patch_boundary_length_scale_uncertainties_m"] is None
+        assert artifact["edge_connected_patch_area_scale_uncertainties_m2"] is None
+        assert artifact["edge_connected_patch_dimension_scale_uncertainties_m"] is None
+    else:
+        assert artifact["boundary_edge_length_scale_uncertainty_m"] > 0
+        assert artifact["edge_connected_patch_area_scale_uncertainties_m2"][0] > 0
     assert artifact["boundary_edge_length_m"] == pytest.approx(
         sum(artifact["edge_connected_patch_boundary_edge_lengths_m"])
     )
