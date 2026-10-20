@@ -118,6 +118,22 @@ def measure_mesh_preview(
         patch_vertex_indices.setdefault(patch, set()).update(faces[face_index])
         patch_first_face.setdefault(patch, face_index)
     ordered_patches = sorted(patch_area_mesh_units, key=patch_first_face.__getitem__)
+    # Edge incidents belong to one edge-connected patch. Report topology QC
+    # per patch so a defective surface is not hidden by an aggregate count.
+    patch_boundary_edges: Counter[int] = Counter()
+    patch_nonmanifold_edges: Counter[int] = Counter()
+    patch_winding_edges: Counter[int] = Counter()
+    for incidents in edge_faces.values():
+        patch = root(incidents[0][0])
+        if len(incidents) == 1:
+            patch_boundary_edges[patch] += 1
+        elif len(incidents) > 2:
+            patch_nonmanifold_edges[patch] += 1
+        elif incidents[0][1] == incidents[1][1]:
+            patch_winding_edges[patch] += 1
+    patch_boundary_edge_counts = [patch_boundary_edges[patch] for patch in ordered_patches]
+    patch_nonmanifold_edge_counts = [patch_nonmanifold_edges[patch] for patch in ordered_patches]
+    patch_winding_edge_counts = [patch_winding_edges[patch] for patch in ordered_patches]
     patch_areas_m2 = [patch_area_mesh_units[patch] * scale * scale for patch in ordered_patches]
     # Extents use only vertices belonging to each edge-connected patch.
     # These are global-axis bounds, not branch lengths or organism identities.
@@ -154,6 +170,9 @@ def measure_mesh_preview(
         "nonmanifold_edge_count": nonmanifold,
         "edge_connected_patch_count": edge_connected_patch_count,
         "edge_connected_patch_face_counts": [patch_face_counts[patch] for patch in ordered_patches],
+        "edge_connected_patch_boundary_edge_counts": patch_boundary_edge_counts,
+        "edge_connected_patch_nonmanifold_edge_counts": patch_nonmanifold_edge_counts,
+        "edge_connected_patch_inconsistent_winding_edge_counts": patch_winding_edge_counts,
         "edge_connected_patch_surface_areas_m2": patch_areas_m2,
         "edge_connected_patch_axis_aligned_dimensions_m": patch_dimensions_m,
         "edge_connected_patch_dimension_scale_uncertainties_m": (

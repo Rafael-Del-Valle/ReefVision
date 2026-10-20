@@ -67,6 +67,9 @@ def test_saved_mesh_patch_areas_match_standalone_preview(client: TestClient) -> 
     assert standalone.status_code == 200, standalone.text
     for key in (
         "edge_connected_patch_face_counts",
+        "edge_connected_patch_boundary_edge_counts",
+        "edge_connected_patch_nonmanifold_edge_counts",
+        "edge_connected_patch_inconsistent_winding_edge_counts",
         "edge_connected_patch_surface_areas_m2",
         "edge_connected_patch_area_scale_uncertainties_m2",
         "edge_connected_patch_axis_aligned_dimensions_m",
@@ -80,6 +83,9 @@ def test_saved_mesh_patch_areas_match_standalone_preview(client: TestClient) -> 
         else:
             assert artifact[key] == pytest.approx(expected)
     assert artifact["edge_connected_patch_surface_areas_m2"] == pytest.approx([0.0003, 0.001])
+    assert artifact["edge_connected_patch_boundary_edge_counts"] == [3, 3]
+    assert artifact["edge_connected_patch_nonmanifold_edge_counts"] == [0, 0]
+    assert artifact["edge_connected_patch_inconsistent_winding_edge_counts"] == [0, 0]
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
     assert (
