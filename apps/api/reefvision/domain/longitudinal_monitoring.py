@@ -179,9 +179,7 @@ def analyze_longitudinal(
     unit_coverage = (
         [
             ExperimentalUnitCoverage.model_validate(row)
-            for row in audit_unit_coverage(
-                grouped, changes, unit_summaries, excluded_units
-            )
+            for row in audit_unit_coverage(grouped, changes, unit_summaries, excluded_units)
         ]
         if independent_unit_count is not None
         else []
