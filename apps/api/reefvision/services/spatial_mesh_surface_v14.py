@@ -123,9 +123,7 @@ def measure_mesh_preview(
         patch_vertex_indices.setdefault(patch, set()).update(faces[face_index])
         moment = patch_centroid_moments.setdefault(patch, [0.0, 0.0, 0.0])
         for axis in range(3):
-            moment[axis] += (
-                face_area * sum(points[index][axis] for index in faces[face_index]) / 3
-            )
+            moment[axis] += face_area * sum(points[index][axis] for index in faces[face_index]) / 3
         patch_triangles.setdefault(patch, []).append(
             sorted(points[index] for index in faces[face_index])
         )
@@ -185,9 +183,7 @@ def measure_mesh_preview(
     ]
     centroid_m = (
         [
-            sum(patch_centroid_moments[patch][axis] for patch in ordered_patches)
-            * scale
-            / raw_area
+            sum(patch_centroid_moments[patch][axis] for patch in ordered_patches) * scale / raw_area
             for axis in range(3)
         ]
         if raw_area > 0
@@ -266,9 +262,7 @@ def measure_mesh_preview(
         "edge_connected_patch_surface_areas_m2": patch_areas_m2,
         "edge_connected_patch_axis_aligned_dimensions_m": patch_dimensions_m,
         "edge_connected_patch_area_weighted_surface_centroids_m": patch_centroids_m,
-        "edge_connected_patch_centroid_scale_uncertainties_m": (
-            patch_centroid_uncertainties_m
-        ),
+        "edge_connected_patch_centroid_scale_uncertainties_m": (patch_centroid_uncertainties_m),
         "edge_connected_patch_dimension_scale_uncertainties_m": (
             [
                 [dimension * relative_scale_uncertainty for dimension in dimensions]
