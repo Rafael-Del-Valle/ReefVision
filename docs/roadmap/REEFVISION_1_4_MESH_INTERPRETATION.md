@@ -15,3 +15,7 @@ Per-patch global-axis dimensions (meters) and their scale-only uncertainty are
 calculated from vertices referenced by that patch's faces. These bounding-box
 extents do not measure skeletal branch length or guarantee anatomical alignment;
 comparison across timepoints requires a reviewed common coordinate frame.
+
+Per-patch degenerate-triangle counts localize zero-area faces without silently
+removing them from the input geometry or claiming a valid enclosed surface.
+They must be reviewed alongside topology warnings before biological interpretation.

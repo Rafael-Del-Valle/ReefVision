@@ -110,11 +110,14 @@ def measure_mesh_preview(
     patch_area_mesh_units: dict[int, float] = {}
     patch_first_face: dict[int, int] = {}
     patch_face_counts: dict[int, int] = {}
+    patch_degenerate_faces: Counter[int] = Counter()
     patch_vertex_indices: dict[int, set[int]] = {}
     for face_index, face_area in enumerate(face_areas):
         patch = root(face_index)
         patch_area_mesh_units[patch] = patch_area_mesh_units.get(patch, 0.0) + face_area
         patch_face_counts[patch] = patch_face_counts.get(patch, 0) + 1
+        if face_area == 0:
+            patch_degenerate_faces[patch] += 1
         patch_vertex_indices.setdefault(patch, set()).update(faces[face_index])
         patch_first_face.setdefault(patch, face_index)
     ordered_patches = sorted(patch_area_mesh_units, key=patch_first_face.__getitem__)
@@ -170,6 +173,9 @@ def measure_mesh_preview(
         "nonmanifold_edge_count": nonmanifold,
         "edge_connected_patch_count": edge_connected_patch_count,
         "edge_connected_patch_face_counts": [patch_face_counts[patch] for patch in ordered_patches],
+        "edge_connected_patch_degenerate_face_counts": [
+            patch_degenerate_faces[patch] for patch in ordered_patches
+        ],
         "edge_connected_patch_boundary_edge_counts": patch_boundary_edge_counts,
         "edge_connected_patch_nonmanifold_edge_counts": patch_nonmanifold_edge_counts,
         "edge_connected_patch_inconsistent_winding_edge_counts": patch_winding_edge_counts,
