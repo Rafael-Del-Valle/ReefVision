@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from io import BytesIO
 
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
-import pytest
 
 from reefvision.tests.test_images import create_project, import_one
 
@@ -54,7 +54,9 @@ def test_jpeg_camera_filename_aliases_preserve_original_content(
     stream = BytesIO()
     Image.new("RGB", (37, 29), (20, 90, 120)).save(stream, format="JPEG")
     payload = stream.getvalue()
-    report = import_one(client, project["id"], filename=f"DSC_001{extension.upper()}", content=payload)
+    report = import_one(
+        client, project["id"], filename=f"DSC_001{extension.upper()}", content=payload
+    )
     assert len(report["successful"]) == 1, report
     image_id = report["successful"][0]["image_id"]
     metadata = client.get(f"/api/v1/images/{image_id}").json()
