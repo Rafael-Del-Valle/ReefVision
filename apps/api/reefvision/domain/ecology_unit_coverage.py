@@ -25,19 +25,12 @@ def audit_unit_coverage(
             raise ValueError("An organism/metric series cannot be empty")
         ids = {row.experimental_unit_id for row in observations}
         if len(ids) != 1 or None in ids:
-            raise ValueError(
-                "Unit coverage requires a stable declared unit per organism"
-            )
+            raise ValueError("Unit coverage requires a stable declared unit per organism")
         unit_id = next(iter(ids))
-        by_unit_metric[(unit_id, metric_name)].append(
-            (organism_id, metric_name) in completed
-        )
+        by_unit_metric[(unit_id, metric_name)].append((organism_id, metric_name) in completed)
 
     eligible = {(row.experimental_unit_id, row.metric_name) for row in unit_summaries}
-    exclusions = {
-        (row.experimental_unit_id, row.metric_name): row.reason
-        for row in excluded_units
-    }
+    exclusions = {(row.experimental_unit_id, row.metric_name): row.reason for row in excluded_units}
     if eligible.intersection(exclusions):
         raise ValueError("A unit/metric cannot be eligible and excluded simultaneously")
     if eligible.union(exclusions) != set(by_unit_metric):
@@ -48,13 +41,9 @@ def audit_unit_coverage(
         complete = sum(flags)
         reason = exclusions.get((unit_id, metric))
         if reason == "missing_followup" and complete == len(flags):
-            raise ValueError(
-                "Missing-followup exclusion requires an incomplete organism"
-            )
+            raise ValueError("Missing-followup exclusion requires an incomplete organism")
         if reason == "nonmatching_sampling_window" and complete != len(flags):
-            raise ValueError(
-                "Sampling-window exclusion cannot conceal missing follow-up"
-            )
+            raise ValueError("Sampling-window exclusion cannot conceal missing follow-up")
         results.append(
             {
                 "experimental_unit_id": unit_id,
