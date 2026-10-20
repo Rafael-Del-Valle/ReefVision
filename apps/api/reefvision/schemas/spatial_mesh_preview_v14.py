@@ -22,8 +22,7 @@ class MeshPreviewRequest(BaseModel):
     @model_validator(mode="after")
     def geometry_is_unambiguous(self) -> MeshPreviewRequest:
         supplied_text = sum(
-            value is not None
-            for value in (self.obj_text, self.ply_text, self.glb_base64)
+            value is not None for value in (self.obj_text, self.ply_text, self.glb_base64)
         )
         if supplied_text:
             if supplied_text != 1 or self.vertices is not None or self.faces is not None:

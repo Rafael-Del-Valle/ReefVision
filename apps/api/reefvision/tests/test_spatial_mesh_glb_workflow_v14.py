@@ -25,26 +25,33 @@ def test_saved_glb(client: TestClient) -> None:
             {"node_id": "p", "node_type": "project_source"},
             {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": params},
         ],
-        "edges": [{
-            "edge_id": "e", "source_node_id": "p", "source_port_id": "project",
-            "target_node_id": "m", "target_port_id": "project",
-        }],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "m",
+                "target_port_id": "project",
+            }
+        ],
     }
     base = f"/api/v1/projects/{pid}"
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        is True
+    )
     detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
     assert detail.json()["run"]["status"] == "succeeded"
     artifacts = detail.json()["artifacts"]
     assert any(
         a["payload_json"]["provenance"]["source_format"] == "glb_2_0"
-        for a in artifacts if a["data_type"] == "mesh_measurement_preview"
+        for a in artifacts
+        if a["data_type"] == "mesh_measurement_preview"
     )
