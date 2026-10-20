@@ -117,9 +117,7 @@ def test_disconnected_patch_areas_and_uncertainties_are_reported_separately() ->
     )
     assert result["edge_connected_patch_count"] == 2
     assert result["edge_connected_patch_face_counts"] == [1, 1]
-    assert result["edge_connected_patch_surface_areas_m2"] == pytest.approx(
-        [0.0003, 0.001]
-    )
+    assert result["edge_connected_patch_surface_areas_m2"] == pytest.approx([0.0003, 0.001])
     assert result["edge_connected_patch_area_scale_uncertainties_m2"] == pytest.approx(
         [0.00003, 0.0001]
     )
@@ -141,3 +139,37 @@ def test_patch_scale_uncertainty_is_unknown_when_scale_error_is_unspecified() ->
     assert result["edge_connected_patch_surface_areas_m2"] == pytest.approx([0.00005])
     assert result["edge_connected_patch_area_scale_uncertainties_m2"] is None
     assert result["confidence_interval"] is None
+
+
+def test_multiple_faces_in_one_patch_keep_area_and_scale_uncertainty_consistent() -> None:
+    # Two faces share an edge; a third face belongs to a separate patch.
+    result = measure_mesh_preview(
+        vertices=[
+            [0, 0, 0],
+            [2, 0, 0],
+            [2, 2, 0],
+            [0, 2, 0],
+            [10, 0, 0],
+            [12, 0, 0],
+            [10, 3, 0],
+        ],
+        faces=[[0, 1, 2], [0, 2, 3], [4, 5, 6]],
+        meters_per_unit=0.01,
+        calibration_method="ruler",
+        calibration_evidence="Provisional common scale",
+        relative_scale_uncertainty=0.1,
+    )
+    assert result["edge_connected_patch_count"] == 2
+    assert result["edge_connected_patch_face_counts"] == [2, 1]
+    assert result["edge_connected_patch_surface_areas_m2"] == pytest.approx([0.0004, 0.0003])
+    assert result["edge_connected_patch_area_scale_uncertainties_m2"] == pytest.approx(
+        [0.00008, 0.00006]
+    )
+    assert sum(result["edge_connected_patch_surface_areas_m2"]) == pytest.approx(
+        result["surface_area_m2"]
+    )
+    assert sum(result["edge_connected_patch_area_scale_uncertainties_m2"]) == pytest.approx(
+        result["area_scale_uncertainty_m2"]
+    )
+    assert result["measurement_status"] == "caller_supplied_unverified"
+    assert result["provenance"]["calibration_verified"] is False

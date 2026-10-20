@@ -116,9 +116,7 @@ def measure_mesh_preview(
         patch_face_counts[patch] = patch_face_counts.get(patch, 0) + 1
         patch_first_face.setdefault(patch, face_index)
     ordered_patches = sorted(patch_area_mesh_units, key=patch_first_face.__getitem__)
-    patch_areas_m2 = [
-        patch_area_mesh_units[patch] * scale * scale for patch in ordered_patches
-    ]
+    patch_areas_m2 = [patch_area_mesh_units[patch] * scale * scale for patch in ordered_patches]
     edge_connected_patch_count = len(ordered_patches)
     inconsistent_winding_edge_count = sum(
         len(incidents) == 2 and incidents[0][1] == incidents[1][1]
@@ -140,9 +138,7 @@ def measure_mesh_preview(
         "boundary_edge_count": boundary,
         "nonmanifold_edge_count": nonmanifold,
         "edge_connected_patch_count": edge_connected_patch_count,
-        "edge_connected_patch_face_counts": [
-            patch_face_counts[patch] for patch in ordered_patches
-        ],
+        "edge_connected_patch_face_counts": [patch_face_counts[patch] for patch in ordered_patches],
         "edge_connected_patch_surface_areas_m2": patch_areas_m2,
         "edge_connected_patch_area_scale_uncertainties_m2": (
             [2 * relative_scale_uncertainty * area for area in patch_areas_m2]

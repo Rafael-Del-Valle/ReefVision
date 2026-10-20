@@ -16,8 +16,12 @@ def test_saved_mesh_patch_areas_match_standalone_preview(client: TestClient) -> 
     project_id = str(create_project(client, "Mesh patch areas")["id"])
     params = {
         "vertices": [
-            [0, 0, 0], [2, 0, 0], [0, 3, 0],
-            [10, 0, 0], [14, 0, 0], [10, 5, 0],
+            [0, 0, 0],
+            [2, 0, 0],
+            [0, 3, 0],
+            [10, 0, 0],
+            [14, 0, 0],
+            [10, 5, 0],
         ],
         "faces": [[0, 1, 2], [3, 4, 5]],
         "meters_per_unit": 0.01,
@@ -55,7 +59,8 @@ def test_saved_mesh_patch_areas_match_standalone_preview(client: TestClient) -> 
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifact = next(
-        item["payload_json"] for item in detail.json()["artifacts"]
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
         if item["data_type"] == "mesh_measurement_preview"
     )
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
@@ -66,11 +71,10 @@ def test_saved_mesh_patch_areas_match_standalone_preview(client: TestClient) -> 
         "edge_connected_patch_area_scale_uncertainties_m2",
     ):
         assert artifact[key] == pytest.approx(standalone.json()[key])
-    assert artifact["edge_connected_patch_surface_areas_m2"] == pytest.approx(
-        [0.0003, 0.001]
-    )
+    assert artifact["edge_connected_patch_surface_areas_m2"] == pytest.approx([0.0003, 0.001])
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
-    assert artifact["provenance"]["geometry_sha256"] == (
-        standalone.json()["provenance"]["geometry_sha256"]
+    assert (
+        artifact["provenance"]["geometry_sha256"]
+        == (standalone.json()["provenance"]["geometry_sha256"])
     )
