@@ -39,9 +39,12 @@ def test_matching_installer_and_acceptance_version_pass() -> None:
 
 
 def test_historical_release_notes_outside_acceptance_job_are_allowed() -> None:
-    assert MODULE.check_workflow(
-        valid_workflow().replace("RELEASE_1.0.2.md", "RELEASE_1.0.0.md"), "1.0.3"
-    ) == []
+    assert (
+        MODULE.check_workflow(
+            valid_workflow().replace("RELEASE_1.0.2.md", "RELEASE_1.0.0.md"), "1.0.3"
+        )
+        == []
+    )
 
 
 @pytest.mark.parametrize(
@@ -69,8 +72,7 @@ def test_default_acceptance_rejects_implicit_live_model_downloads() -> None:
         "      - name: ReefVision-1.0.3-Windows-Clean-Install-Evidence",
     )
     assert any(
-        "network model downloads" in error
-        for error in MODULE.check_workflow(workflow, "1.0.3")
+        "network model downloads" in error for error in MODULE.check_workflow(workflow, "1.0.3")
     )
 
 
