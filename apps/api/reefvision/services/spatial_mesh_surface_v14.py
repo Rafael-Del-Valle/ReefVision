@@ -15,6 +15,7 @@ from reefvision.services.spatial_mesh_obj_v14 import (
     MAX_VERTICES,
     parse_obj_triangles,
 )
+from reefvision.services.spatial_mesh_paths_v14 import mesh_edge_paths
 from reefvision.services.spatial_mesh_ply_v14 import parse_ply_triangles
 
 
@@ -27,6 +28,7 @@ def measure_mesh_preview(
     calibration_evidence: str,
     relative_scale_uncertainty: float | None = None,
     source_label: str | None = None,
+    surface_path_vertex_pairs: list[list[int]] | None = None,
 ) -> dict[str, Any]:
     if not 3 <= len(vertices) <= MAX_VERTICES or not 1 <= len(faces) <= MAX_FACES:
         raise ValueError("Mesh preview vertex/face count is outside supported bounds")
@@ -238,6 +240,9 @@ def measure_mesh_preview(
         "degenerate_face_count": degenerate,
         "boundary_edge_count": boundary,
         "boundary_edge_length_m": boundary_length_m,
+        "surface_edge_paths": mesh_edge_paths(
+            points, faces, surface_path_vertex_pairs, scale, relative_scale_uncertainty
+        ),
         "boundary_edge_length_scale_uncertainty_m": (
             boundary_length_m * relative_scale_uncertainty
             if relative_scale_uncertainty is not None
@@ -335,6 +340,7 @@ def preview_from_request(payload: Any) -> dict[str, Any]:
         calibration_evidence=payload.calibration_evidence,
         relative_scale_uncertainty=payload.relative_scale_uncertainty,
         source_label=payload.source_label,
+        surface_path_vertex_pairs=payload.surface_path_vertex_pairs,
     )
     result["provenance"]["source_format"] = source_format
     return result

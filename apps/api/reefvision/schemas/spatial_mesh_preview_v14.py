@@ -19,6 +19,8 @@ class MeshPreviewRequest(BaseModel):
     relative_scale_uncertainty: float | None = Field(default=None, ge=0, le=1)
     source_label: str | None = Field(default=None, max_length=200)
 
+    surface_path_vertex_pairs: list[list[int]] | None = Field(default=None, max_length=16)
+
     @model_validator(mode="after")
     def geometry_is_unambiguous(self) -> MeshPreviewRequest:
         supplied_text = sum(
@@ -29,4 +31,8 @@ class MeshPreviewRequest(BaseModel):
                 raise ValueError("Use OBJ, PLY, GLB, or indexed triangles, not a mixture")
         elif self.vertices is None or self.faces is None:
             raise ValueError("Indexed triangles require vertices and faces")
+        if self.surface_path_vertex_pairs is not None:
+            for pair in self.surface_path_vertex_pairs:
+                if len(pair) != 2 or pair[0] == pair[1] or any(index < 0 for index in pair):
+                    raise ValueError("Surface paths require two distinct nonnegative indices")
         return self
