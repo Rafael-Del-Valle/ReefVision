@@ -136,6 +136,18 @@ class PopulationUnitSummary(BaseModel):
     mean_unit_change_per_day: float
 
 
+class ExperimentalUnitCoverage(BaseModel):
+    """Per-unit, per-metric follow-up denominators; not verified replication."""
+
+    experimental_unit_id: str
+    metric_name: str
+    observed_organism_count: int = Field(ge=1)
+    complete_organism_count: int = Field(ge=0)
+    missing_followup_organism_count: int = Field(ge=0)
+    eligible_for_summary: bool
+    exclusion_reason: Literal["missing_followup", "nonmatching_sampling_window"] | None = None
+
+
 class ExcludedExperimentalUnit(BaseModel):
     experimental_unit_id: str
     metric_name: str
@@ -155,4 +167,5 @@ class LongitudinalAnalysisResponse(BaseModel):
     unit_summaries: list[ExperimentalUnitSummary] = Field(default_factory=list)
     population_summaries: list[PopulationUnitSummary] = Field(default_factory=list)
     excluded_units: list[ExcludedExperimentalUnit] = Field(default_factory=list)
+    unit_coverage: list[ExperimentalUnitCoverage] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)

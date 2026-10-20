@@ -40,6 +40,9 @@ def test_fragments_do_not_inflate_independent_tank_count() -> None:
     result = analyze_longitudinal(LongitudinalAnalysisRequest(observations=observations))
     assert result.evaluated_series_count == 3
     assert result.independent_unit_count == 2
+    assert len(result.unit_coverage) == 2
+    assert all(row.eligible_for_summary for row in result.unit_coverage)
+    assert sum(row.observed_organism_count for row in result.unit_coverage) == 3
     assert result.experimental_unit_type == "tank"
     assert len(result.population_summaries) == 1
     assert result.population_summaries[0].independent_unit_count == 2
@@ -61,6 +64,13 @@ def test_missing_followup_excludes_whole_tank() -> None:
     assert result.independent_unit_count == 1
     assert result.unit_summaries == []
     assert result.excluded_units[0].reason == "missing_followup"
+    assert len(result.unit_coverage) == 1
+    coverage = result.unit_coverage[0]
+    assert coverage.observed_organism_count == 2
+    assert coverage.complete_organism_count == 1
+    assert coverage.missing_followup_organism_count == 1
+    assert coverage.eligible_for_summary is False
+    assert coverage.exclusion_reason == "missing_followup"
 
 
 def test_reassignment_and_missing_design_are_rejected() -> None:
@@ -131,7 +141,32 @@ def test_saved_workflow_persists_declared_unit_summary(client: TestClient) -> No
     payload = artifact["payload_json"]
     assert payload["experimental_unit_type"] == "tank"
     assert payload["independent_unit_count"] == 1
+    assert payload["unit_coverage"][0]["eligible_for_summary"] is True
+    assert payload["unit_coverage"][0]["complete_organism_count"] == 1
     assert payload["unit_summaries"][0]["organism_count"] == 1
     assert payload["population_summaries"][0]["independent_unit_count"] == 1
     assert payload["population_summaries"][0]["mean_unit_absolute_change"] == 2.0
     assert payload["evidence_level"] == "caller_supplied_unverified"
+
+def test_sampling_window_exclusion_has_complete_organisms(client: TestClient) -> None:
+    observations = [
+        _obs("frag-1", "tank-A", 1, 10),
+        _obs("frag-1", "tank-A", 2, 12),
+        _obs("frag-2", "tank-A", 1, 5),
+        _obs("frag-2", "tank-A", 3, 9),
+    ]
+    request = LongitudinalAnalysisRequest(observations=observations)
+    domain = analyze_longitudinal(request)
+    assert domain.unit_summaries == []
+    assert domain.unit_coverage[0].eligible_for_summary is False
+    assert domain.unit_coverage[0].complete_organism_count == 2
+    assert domain.unit_coverage[0].missing_followup_organism_count == 0
+    assert domain.unit_coverage[0].exclusion_reason == "nonmatching_sampling_window"
+    response = client.post(
+        "/api/v1/ecology/longitudinal-analysis",
+        json={"observations": observations},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["unit_coverage"] == [
+        item.model_dump(mode="json") for item in domain.unit_coverage
+    ]

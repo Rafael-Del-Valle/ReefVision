@@ -152,3 +152,16 @@ record ownership, human review, calibration, specimen identity or biological
 independence. It does not promote `caller_supplied_unverified` inputs into
 verified datasets. Verified project-owned source links, immutable calibration
 snapshots, identity histories and scientific review gates remain pending.
+
+## Explicit experimental-unit coverage audit (2026-10-19)
+
+The exploratory longitudinal API and the executable saved Workflow Builder
+analysis artifact now include typed `unit_coverage` rows, one per declared
+experimental unit and metric. Each row reports observed organisms, complete
+follow-up organisms, missing follow-up organisms, eligibility and the exact
+exclusion reason. An excluded tank remains visible but is **not** silently
+counted as an eligible analytic replicate. The audit reconciles all unit/metric
+decisions and rejects contradictory missing-follow-up versus sampling-window
+reasons. Standalone and saved-workflow regressions cover the new fields.
+All units remain caller-declared and unverified; this does not authenticate
+biological identities, establish independent replication or add inference.

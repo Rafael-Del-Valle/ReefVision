@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 
+from reefvision.domain.ecology_unit_coverage import audit_unit_coverage
 from reefvision.domain.errors import ValidationError
 from reefvision.domain.population_unit_summaries import summarize_population_units
 from reefvision.domain.scientific_input_provenance import scientific_input_provenance
@@ -174,6 +175,11 @@ def analyze_longitudinal(
     independent_unit_count, unit_summaries, excluded_units = _summarize_experimental_units(
         request, grouped, changes
     )
+    unit_coverage = (
+        audit_unit_coverage(grouped, changes, unit_summaries, excluded_units)
+        if independent_unit_count is not None
+        else []
+    )
     population_summaries = summarize_population_units(unit_summaries)
     return LongitudinalAnalysisResponse(
         observation_count=len(request.observations),
@@ -191,6 +197,7 @@ def analyze_longitudinal(
         unit_summaries=unit_summaries,
         population_summaries=population_summaries,
         excluded_units=excluded_units,
+        unit_coverage=unit_coverage,
         limitations=[
             "Caller-supplied observations are not verified against project data or calibration.",
             "Changes compare the first and last sampling dates; "
