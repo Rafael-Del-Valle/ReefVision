@@ -3842,10 +3842,11 @@ export function AnnotationEditor({
             </div>
           )}
           <p className="annotation-helper" data-testid="viewport-render-count">
-            Viewport: {viewportAnnotations.length}/{visibleAnnotations.length} boxes,
-            {" "}{viewportPredictions.length}/{visiblePredictions.length} proposals,
-            {" "}{viewportMasks.length}/{state.document.maskAnnotations.length} masks.
-            All objects remain in the saved document and review lists.
+            Viewport: {viewportAnnotations.length}/{visibleAnnotations.length}{" "}
+            boxes, {viewportPredictions.length}/{visiblePredictions.length}{" "}
+            proposals, {viewportMasks.length}/
+            {state.document.maskAnnotations.length} masks. All objects remain in
+            the saved document and review lists.
           </p>
           <div className="annotation-canvas-frame" ref={viewportRef}>
             {learningOpen && (
