@@ -144,6 +144,7 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
         numeric: list[float] = []
         try:
             for value, scalar_type in zip(values, vertex_property_types, strict=True):
+                number: float
                 if scalar_type in _INTEGER_BOUNDS:
                     number = int(value)
                     low, high = _INTEGER_BOUNDS[scalar_type]
