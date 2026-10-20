@@ -56,9 +56,7 @@ def create_review_queue_workflow_artifact(
         if key not in {"__workflow_run_id", "__workflow_node_run_id"}
     }
     if supplied_parameters != saved_parameters:
-        raise ValidationError(
-            "QC review-queue retry parameters changed from saved node"
-        )
+        raise ValidationError("QC review-queue retry parameters changed from saved node")
 
     request = ReviewQueueCreateRequest(
         source_quality_control_run_id=parameters.get("source_quality_control_run_id"),
