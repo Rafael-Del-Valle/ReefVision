@@ -47,7 +47,7 @@ def test_excluded_tank_reports_missing_followup_without_pseudoreplication() -> N
 
 def test_nonmatching_window_cannot_hide_missing_followup() -> None:
     grouped = {
-        ("a", "area"): [_observation("tank-1")],
+        ("a", "area"): [_observation("tank-1"), _observation("tank-1")],
         ("b", "area"): [_observation("tank-1")],
     }
     with pytest.raises(ValueError, match="cannot conceal"):
@@ -60,15 +60,15 @@ def test_nonmatching_window_cannot_hide_missing_followup() -> None:
 
 
 def test_missing_unit_decision_fails_closed() -> None:
-    grouped = {("a", "count"): [_observation("tank-1")]}
+    grouped = {("a", "count"): [_observation("tank-1"), _observation("tank-1")]}
     with pytest.raises(ValueError, match="does not reconcile"):
         audit_unit_coverage(grouped, [_change("a", "count")], [], [])
 
 
 def test_coverage_sorted_independently_of_input_order() -> None:
     grouped = {
-        ("z", "count"): [_observation("tank-B")],
-        ("a", "count"): [_observation("tank-A")],
+        ("z", "count"): [_observation("tank-B"), _observation("tank-B")],
+        ("a", "count"): [_observation("tank-A"), _observation("tank-A")],
     }
     result = audit_unit_coverage(
         grouped,
