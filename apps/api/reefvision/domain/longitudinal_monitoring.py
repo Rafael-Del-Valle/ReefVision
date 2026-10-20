@@ -188,7 +188,7 @@ def analyze_longitudinal(
     return LongitudinalAnalysisResponse(
         observation_count=len(request.observations),
         analysis_provenance=scientific_input_provenance(
-            algorithm_version="ecology-longitudinal-0002",
+            algorithm_version="ecology-longitudinal-0003",
             records=request.observations,
             parameters={"experimental_unit_type": request.experimental_unit_type},
             source_record_ids=(obs.source_record_id for obs in request.observations),

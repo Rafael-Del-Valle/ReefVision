@@ -177,3 +177,23 @@ Focused regression tests exercise these invalid inputs. Unit identity and
 biological independence are still caller-declared and unverified; no inference,
 p-values, or verified-dataset promotion is introduced. Full CI and installed
 Windows acceptance remain release gates.
+
+## Traceable incomplete units and duplicate-decision guards (2026-10-20)
+
+The existing longitudinal API and executable, persisted Workflow Builder node
+now return sorted `missing_organism_ids` for each experimental-unit/metric
+coverage record, alongside complete/incomplete organism counts. Incomplete
+tanks remain excluded rather than becoming additional independent replicates.
+The shared audit rejects duplicate eligible/excluded unit decisions, inflated
+organism denominators, and forged completed series with only one observation.
+The additive response field defaults to an empty list when older artifacts are
+parsed. The longitudinal algorithm identifier advances to
+`ecology-longitudinal-0003`, distinguishing this changed analysis contract
+in reproducibility fingerprints. Regression tests cover the standalone
+scientific kernel and persisted saved-workflow equality with the API.
+
+All organism identities, unit assignments and observations remain
+`caller_supplied_unverified`. The output is descriptive and requires scientist
+review; it does not establish true experimental independence or verify
+calibration/source records. Full application CI, scientific acceptance,
+migration reconciliation and installed Windows GUI validation are outstanding.
