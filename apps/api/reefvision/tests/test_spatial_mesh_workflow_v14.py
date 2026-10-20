@@ -169,12 +169,19 @@ def test_unverified_mesh_artifact_cannot_feed_project_input(client: TestClient) 
     assert response.status_code == 200
     assert any(issue["code"] == "incompatible_port_types" for issue in response.json()["issues"])
 
+
 def test_saved_mesh_workflow_preserves_topology_qc(client: TestClient) -> None:
     project_id = str(create_project(client, "Mesh topology workflow")["id"])
     params = {
         "vertices": [
-            [0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0],
-            [10, 0, 0], [11, 0, 0], [10, 1, 0],
+            [0, 0, 0],
+            [1, 0, 0],
+            [1, 1, 0],
+            [0, 1, 0],
+            [10, 0, 0],
+            [11, 0, 0],
+            [10, 1, 0],
+            [1000, 1000, 1000],
         ],
         "faces": [[0, 1, 2], [0, 3, 2], [4, 5, 6]],
         "meters_per_unit": 0.01,
@@ -189,25 +196,28 @@ def test_saved_mesh_workflow_preserves_topology_qc(client: TestClient) -> None:
             {"node_id": "p", "node_type": "project_source"},
             {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": params},
         ],
-        "edges": [{
-            "edge_id": "e",
-            "source_node_id": "p",
-            "source_port_id": "project",
-            "target_node_id": "m",
-            "target_port_id": "project",
-        }],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "m",
+                "target_port_id": "project",
+            }
+        ],
     }
     base = f"/api/v1/projects/{project_id}"
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        is True
+    )
     detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
@@ -220,12 +230,25 @@ def test_saved_mesh_workflow_preserves_topology_qc(client: TestClient) -> None:
     assert standalone.status_code == 200, standalone.text
     assert artifact["edge_connected_patch_count"] == 2
     assert artifact["inconsistent_winding_edge_count"] == 1
+    assert artifact["unreferenced_vertex_count"] == 1
+    assert artifact["axis_aligned_dimensions_m"] == pytest.approx([0.11, 0.01, 0.0])
+    assert artifact["axis_aligned_dimension_scale_uncertainty_m"] == pytest.approx(
+        [0.0055, 0.0005, 0.0]
+    )
+    assert "unreferenced_mesh_vertices" in artifact["qc_warnings"]
     assert "disconnected_mesh_patches" in artifact["qc_warnings"]
     assert "inconsistent_face_winding" in artifact["qc_warnings"]
-    for field in ("edge_connected_patch_count", "inconsistent_winding_edge_count"):
+    for field in (
+        "edge_connected_patch_count",
+        "inconsistent_winding_edge_count",
+        "unreferenced_vertex_count",
+        "axis_aligned_dimensions_m",
+        "axis_aligned_dimension_scale_uncertainty_m",
+    ):
         assert artifact[field] == standalone.json()[field]
-    assert artifact["provenance"]["geometry_sha256"] == (
-        standalone.json()["provenance"]["geometry_sha256"]
+    assert (
+        artifact["provenance"]["geometry_sha256"]
+        == (standalone.json()["provenance"]["geometry_sha256"])
     )
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False

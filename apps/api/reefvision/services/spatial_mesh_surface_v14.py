@@ -94,8 +94,13 @@ def measure_mesh_preview(
     area_m2 = raw_area * scale * scale
     if not isfinite(area_m2):
         raise ValueError("Calibrated area overflowed")
+    referenced_indices = {index for face in faces for index in face}
+    referenced_points = [points[index] for index in sorted(referenced_indices)]
+    unreferenced_vertex_count = len(points) - len(referenced_points)
     dimensions = [
-        (max(p[axis] for p in points) - min(p[axis] for p in points)) * scale for axis in range(3)
+        (max(p[axis] for p in referenced_points) - min(p[axis] for p in referenced_points))
+        * scale
+        for axis in range(3)
     ]
     boundary = sum(count == 1 for count in edges.values())
     nonmanifold = sum(count > 2 for count in edges.values())
@@ -115,6 +120,7 @@ def measure_mesh_preview(
         "axis_aligned_dimensions_m": dimensions,
         "face_count": len(faces),
         "vertex_count": len(points),
+        "unreferenced_vertex_count": unreferenced_vertex_count,
         "degenerate_face_count": degenerate,
         "boundary_edge_count": boundary,
         "nonmanifold_edge_count": nonmanifold,
@@ -126,6 +132,7 @@ def measure_mesh_preview(
             + (["nonmanifold_mesh_edges"] if nonmanifold else [])
             + (["disconnected_mesh_patches"] if edge_connected_patch_count > 1 else [])
             + (["inconsistent_face_winding"] if inconsistent_winding_edge_count else [])
+            + (["unreferenced_mesh_vertices"] if unreferenced_vertex_count else [])
         ),
         "area_scale_uncertainty_m2": (
             2 * relative_scale_uncertainty * area_m2

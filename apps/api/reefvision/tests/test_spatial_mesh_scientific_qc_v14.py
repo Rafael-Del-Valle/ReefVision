@@ -35,6 +35,7 @@ def test_area_scales_quadratically_and_uncertainty_is_not_ci() -> None:
     assert large["confidence_interval"] is None
     assert large["provenance"]["calibration_verified"] is False
 
+
 @pytest.mark.parametrize(
     ("faces", "expected_winding"),
     [
@@ -42,9 +43,7 @@ def test_area_scales_quadratically_and_uncertainty_is_not_ci() -> None:
         ([[0, 1, 2], [0, 3, 2]], 1),
     ],
 )
-def test_shared_edge_orientation_qc(
-    faces: list[list[int]], expected_winding: int
-) -> None:
+def test_shared_edge_orientation_qc(faces: list[list[int]], expected_winding: int) -> None:
     result = measure_mesh_preview(
         vertices=[[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]],
         faces=faces,
@@ -54,17 +53,19 @@ def test_shared_edge_orientation_qc(
     )
     assert result["edge_connected_patch_count"] == 1
     assert result["inconsistent_winding_edge_count"] == expected_winding
-    assert ("inconsistent_face_winding" in result["qc_warnings"]) == bool(
-        expected_winding
-    )
+    assert ("inconsistent_face_winding" in result["qc_warnings"]) == bool(expected_winding)
     assert result["measurement_status"] == "caller_supplied_unverified"
 
 
 def test_disconnected_surface_patches_are_not_silently_combined() -> None:
     result = measure_mesh_preview(
         vertices=[
-            [0, 0, 0], [1, 0, 0], [0, 1, 0],
-            [10, 0, 0], [11, 0, 0], [10, 1, 0],
+            [0, 0, 0],
+            [1, 0, 0],
+            [0, 1, 0],
+            [10, 0, 0],
+            [11, 0, 0],
+            [10, 1, 0],
         ],
         faces=[[0, 1, 2], [3, 4, 5]],
         meters_per_unit=0.01,
@@ -74,4 +75,25 @@ def test_disconnected_surface_patches_are_not_silently_combined() -> None:
     assert result["edge_connected_patch_count"] == 2
     assert result["inconsistent_winding_edge_count"] == 0
     assert "disconnected_mesh_patches" in result["qc_warnings"]
+    assert result["provenance"]["calibration_verified"] is False
+
+
+def test_unreferenced_outlier_cannot_inflate_calibrated_dimensions() -> None:
+    result = measure_mesh_preview(
+        vertices=[[0, 0, 0], [2, 0, 0], [0, 3, 0], [1000, 1000, 1000]],
+        faces=[[0, 1, 2]],
+        meters_per_unit=0.01,
+        calibration_method="ruler",
+        calibration_evidence="Provisional control measurement",
+        relative_scale_uncertainty=0.1,
+    )
+    assert result["vertex_count"] == 4
+    assert result["unreferenced_vertex_count"] == 1
+    assert result["axis_aligned_dimensions_m"] == pytest.approx([0.02, 0.03, 0.0])
+    assert result["axis_aligned_dimension_scale_uncertainty_m"] == pytest.approx(
+        [0.002, 0.003, 0.0]
+    )
+    assert result["surface_area_m2"] == pytest.approx(0.0003)
+    assert "unreferenced_mesh_vertices" in result["qc_warnings"]
+    assert result["measurement_status"] == "caller_supplied_unverified"
     assert result["provenance"]["calibration_verified"] is False
