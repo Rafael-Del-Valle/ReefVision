@@ -24,7 +24,7 @@ def audit_unit_coverage(
         raise ValueError("Duplicate completed organism/metric series")
     if not completed.issubset(grouped):
         raise ValueError("Completed change has no corresponding observed series")
-    by_unit_metric: dict[tuple[str, str], list[bool]] = defaultdict(list)
+    by_unit_metric: dict[tuple[str, str], list[tuple[str, bool]]] = defaultdict(list)
     organism_memberships: dict[str, str] = {}
     for (organism_id, metric_name), observations in grouped.items():
         if not observations:
@@ -39,7 +39,7 @@ def audit_unit_coverage(
                 "An organism cannot change experimental units between metrics"
             )
         by_unit_metric[(unit_id, metric_name)].append(
-            (organism_id, metric_name) in completed
+            (organism_id, (organism_id, metric_name) in completed)
         )
 
     eligible = {(row.experimental_unit_id, row.metric_name) for row in unit_summaries}
@@ -51,7 +51,8 @@ def audit_unit_coverage(
 
     results: list[dict[str, Any]] = []
     for (unit_id, metric), flags in sorted(by_unit_metric.items()):
-        complete = sum(flags)
+        complete = sum(is_complete for _, is_complete in flags)
+        missing_ids = sorted(organism_id for organism_id, done in flags if not done)
         reason = exclusions.get((unit_id, metric))
         if (unit_id, metric) in eligible and complete != len(flags):
             raise ValueError("Eligible experimental unit contains missing follow-up")
@@ -65,7 +66,8 @@ def audit_unit_coverage(
                 "metric_name": metric,
                 "observed_organism_count": len(flags),
                 "complete_organism_count": complete,
-                "missing_followup_organism_count": len(flags) - complete,
+                "missing_followup_organism_count": len(missing_ids),
+                "missing_organism_ids": missing_ids,
                 "eligible_for_summary": (unit_id, metric) in eligible,
                 "exclusion_reason": reason,
             }
