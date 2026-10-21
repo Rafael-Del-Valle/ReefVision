@@ -6,8 +6,9 @@ validator deliberately leaves review states, comments and assignments alone.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from math import isfinite
-from typing import Any, Sequence
+from typing import Any
 
 from reefvision.domain.errors import ValidationError
 from reefvision.storage.datasets import canonical_json_sha256
