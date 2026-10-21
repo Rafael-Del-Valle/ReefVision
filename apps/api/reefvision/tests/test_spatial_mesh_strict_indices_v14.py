@@ -32,9 +32,7 @@ def test_noninteger_mesh_indices_rejected_by_schema_and_api(
     with pytest.raises(PydanticValidationError):
         MeshPreviewRequest.model_validate(params)
     project_id = create_project(client, "Strict mesh indices")["id"]
-    response = client.post(
-        f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params
-    )
+    response = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params)
     assert response.status_code == 422, response.text
 
 
@@ -61,9 +59,7 @@ def test_integer_mesh_indices_execute_in_persisted_workflow(client: TestClient) 
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     assert saved.json()["graph_json"]["nodes"][1]["parameters"]["faces"] == [[0, 1, 2]]
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert process_workflow_run_job(
