@@ -192,9 +192,7 @@ def test_calculation_roundtrip_remaps_input_ids_and_checksum_lineage(client, tes
     imported = import_archive(client, export_archive(client, test_settings, project["id"]))
     assert imported.status_code == 201, imported.text
     imported_project_id = imported.json()["project_id"]
-    rows = client.get(
-        f"/api/v1/projects/{imported_project_id}/scientific-records"
-    ).json()["items"]
+    rows = client.get(f"/api/v1/projects/{imported_project_id}/scientific-records").json()["items"]
     derived = next(row for row in rows if row["variable"] == "calculated_area")
     input_ids = derived["provenance"]["processing_parameters"]["input_record_ids"]
     by_id = {row["id"]: row for row in rows}
@@ -203,9 +201,9 @@ def test_calculation_roundtrip_remaps_input_ids_and_checksum_lineage(client, tes
     assert derived["provenance"]["source_metadata"]["input_content_sha256"] == [
         by_id[identifier]["content_sha256"] for identifier in input_ids
     ]
-    assert derived["provenance"]["source_metadata"][
-        "source_package_input_content_sha256"
-    ] == [row["content_sha256"] for row in records]
+    assert derived["provenance"]["source_metadata"]["source_package_input_content_sha256"] == [
+        row["content_sha256"] for row in records
+    ]
 
 
 @pytest.mark.parametrize(
@@ -221,9 +219,7 @@ def test_calculation_roundtrip_remaps_input_ids_and_checksum_lineage(client, tes
         "uncertainty",
     ],
 )
-def test_exchange_rejects_invalid_calculation_lineage(
-    client, test_settings, corruption
-):
+def test_exchange_rejects_invalid_calculation_lineage(client, test_settings, corruption):
     project = create_project(client, "Invalid calculation exchange")
     records = client.post(
         f"/api/v1/projects/{project['id']}/scientific-records",
@@ -246,9 +242,7 @@ def test_exchange_rejects_invalid_calculation_lineage(
 
     def damage(_manifest, sections):
         derived = next(
-            row
-            for row in sections["scientific_records"]
-            if row["variable"] == "calculated_area"
+            row for row in sections["scientific_records"] if row["variable"] == "calculated_area"
         )
         provenance = derived["payload_json"]["provenance"]
         if corruption == "missing_input":

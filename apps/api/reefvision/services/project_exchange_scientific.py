@@ -209,13 +209,11 @@ def _validate_exchange_records(
             or record.qc_flags != [CALCULATION_QC_FLAG]
             or record.uncertainty is not None
             or record.environmental_cache_key is not None
-            or record.provenance.method
-            != f"{request.formula_id}@{request.formula_version}"
+            or record.provenance.method != f"{request.formula_id}@{request.formula_version}"
             or record.provenance.source_url is not None
             or record.provenance.dataset_id is not None
             or record.provenance.model_version is not None
-            or set(parameters)
-            != {"formula_id", "formula_version", "input_record_ids"}
+            or set(parameters) != {"formula_id", "formula_version", "input_record_ids"}
         ):
             raise ValidationError("Scientific calculation identity or version is inconsistent")
         metadata = provenance.get("source_metadata", {})
@@ -266,8 +264,7 @@ def _validate_exchange_records(
             "calibration_sha256",
         )
         if any(
-            getattr(record, field) != getattr(input_records[0], field)
-            for field in scope_fields
+            getattr(record, field) != getattr(input_records[0], field) for field in scope_fields
         ):
             raise ValidationError("Scientific calculation output scope differs from its inputs")
         calculation_dependencies[identifier] = input_ids

@@ -177,6 +177,45 @@ test("imports sensor JSON and displays offline NOAA provenance in Environmental 
       });
     } else if (
       url.pathname ===
+      `/api/v1/projects/${project.id}/environment/datasets/fixture/current-vectors`
+    ) {
+      await route.fulfill({
+        json: {
+          items: [
+            {
+              eastward_velocity_m_s: 3,
+              northward_velocity_m_s: 4,
+              speed_m_s: 5,
+              direction_deg_true: 36.8698976458,
+              observed_at: "2026-10-17T12:30:00Z",
+              depth_m: 5,
+              depth_reference: "sea_surface",
+              location: {
+                crs: "EPSG:4326",
+                latitude: 32.5,
+                longitude: -79.5,
+                horizontal_uncertainty_m: null,
+              },
+              source_kind: "modeled",
+              source: "Copernicus Marine",
+              dataset_id: "synthetic-current-fixture",
+              dataset_version: "202601",
+              component_record_ids: ["current-eastward", "current-northward"],
+            },
+          ],
+          input_record_count: 2,
+          exclusions: {
+            unsupported_record: 0,
+            invalid_metadata_or_unit: 0,
+            qc_rejected: 0,
+            superseded_snapshot: 0,
+            incomplete_pair: 0,
+            duplicate_component: 0,
+          },
+        },
+      });
+    } else if (
+      url.pathname ===
       `/api/v1/projects/${project.id}/environment/datasets/fixture`
     ) {
       await route.fulfill({

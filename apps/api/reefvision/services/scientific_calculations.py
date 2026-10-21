@@ -51,9 +51,7 @@ def evaluate_calculation(
     if formula == "count_records":
         value, unit, variable = float(len(inputs)), "count", "calculated_count"
     elif formula == "rectangular_area":
-        if len(inputs) != 2 or any(
-            UNITS[item.normalized_unit][0] != "length" for item in inputs
-        ):
+        if len(inputs) != 2 or any(UNITS[item.normalized_unit][0] != "length" for item in inputs):
             raise ValidationError("rectangular_area requires exactly two length records")
         if any(item.normalized_value <= 0 for item in inputs):
             raise ValidationError("rectangular_area requires positive length records")
@@ -71,8 +69,7 @@ def evaluate_calculation(
             or area[0].normalized_value <= 0
         ):
             raise ValidationError(
-                "density requires one nonnegative integer count record and one positive "
-                "area record"
+                "density requires one nonnegative integer count record and one positive area record"
             )
         value = count[0].normalized_value / area[0].normalized_value
         unit, variable = "count/m2", "calculated_density"

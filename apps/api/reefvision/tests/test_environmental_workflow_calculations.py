@@ -300,9 +300,10 @@ def test_calculations_inherit_calibration_snapshot_and_reject_stale_inputs(
     project = create_project(client, "Calculation calibration")
     image_id = import_one(client, project["id"])["successful"][0]["image_id"]
     calibration_url = f"/api/v1/images/{image_id}/measurement-calibration"
-    assert client.put(
-        calibration_url, json={"distance_per_pixel": 0.1, "unit": "mm"}
-    ).status_code == 200
+    assert (
+        client.put(calibration_url, json={"distance_per_pixel": 0.1, "unit": "mm"}).status_code
+        == 200
+    )
     records = [
         {**_record("width", 2, "m"), "subject": {"image_id": image_id}},
         {**_record("length", 3, "m"), "subject": {"image_id": image_id}},
@@ -323,9 +324,10 @@ def test_calculations_inherit_calibration_snapshot_and_reject_stale_inputs(
     assert calculated.json()["calibration_snapshot"] == inputs[0]["calibration_snapshot"]
     assert calculated.json()["calibration_sha256"] == inputs[0]["calibration_sha256"]
 
-    assert client.put(
-        calibration_url, json={"distance_per_pixel": 0.2, "unit": "mm"}
-    ).status_code == 200
+    assert (
+        client.put(calibration_url, json={"distance_per_pixel": 0.2, "unit": "mm"}).status_code
+        == 200
+    )
     stale = client.post(
         f"/api/v1/projects/{project['id']}/scientific-calculations",
         json={
@@ -458,13 +460,9 @@ def test_cached_current_vector_workflow_executes_offline(client: TestClient) -> 
         json={"graph_record_id": saved["id"]},
     ).json()
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, run["job_id"]
-    )
+    assert process_workflow_run_job(app.state.settings, app.state.session_factory, run["job_id"])
     detail = client.get(f"/api/v1/workflow-runs/{run['id']}").json()
-    artifact = next(
-        item for item in detail["artifacts"] if item["data_type"] == "current_vectors"
-    )
+    artifact = next(item for item in detail["artifacts"] if item["data_type"] == "current_vectors")
     assert artifact["payload_json"]["count"] == 1
     assert artifact["payload_json"]["items"][0]["source_kind"] == "observed"
     assert artifact["payload_json"]["items"][0]["speed_m_s"] == 5
@@ -505,9 +503,7 @@ def test_workflow_validation_rejects_invalid_science_and_environment_parameters(
             }
         ],
     }
-    response = client.post(
-        f"/api/v1/projects/{project['id']}/workflow-graphs/validate", json=graph
-    )
+    response = client.post(f"/api/v1/projects/{project['id']}/workflow-graphs/validate", json=graph)
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["valid"] is False
@@ -537,9 +533,7 @@ def test_workflow_validation_rejects_foreign_scientific_records(client: TestClie
         ],
         "edges": [],
     }
-    response = client.post(
-        f"/api/v1/projects/{target['id']}/workflow-graphs/validate", json=graph
-    )
+    response = client.post(f"/api/v1/projects/{target['id']}/workflow-graphs/validate", json=graph)
     assert response.status_code == 200, response.text
     assert response.json()["valid"] is False
     assert {issue["code"] for issue in response.json()["issues"]} >= {
@@ -576,11 +570,7 @@ def test_workflow_validation_rejects_corrupt_environmental_cache(client: TestCli
         ],
         "edges": [],
     }
-    response = client.post(
-        f"/api/v1/projects/{project['id']}/workflow-graphs/validate", json=graph
-    )
+    response = client.post(f"/api/v1/projects/{project['id']}/workflow-graphs/validate", json=graph)
     assert response.status_code == 200, response.text
     assert response.json()["valid"] is False
-    assert {issue["code"] for issue in response.json()["issues"]} >= {
-        "environmental_cache_invalid"
-    }
+    assert {issue["code"] for issue in response.json()["issues"]} >= {"environmental_cache_invalid"}
