@@ -160,6 +160,18 @@ def measure_point_cloud_preview(
         if relative_scale_uncertainty is not None
         else None
     )
+    def coordinate_scale_intervals(bounds: list[float]) -> list[list[float]] | None:
+        if relative_scale_uncertainty is None:
+            return None
+        intervals: list[list[float]] = []
+        for value in bounds:
+            candidates = (
+                value * (1 - relative_scale_uncertainty),
+                value * (1 + relative_scale_uncertainty),
+            )
+            intervals.append([min(candidates), max(candidates)])
+        return intervals
+
     unique_count = len(set(vertices))
     geometry_hash = hashlib.sha256(
         json.dumps(sorted(vertices), separators=(",", ":")).encode("utf-8")
@@ -172,6 +184,8 @@ def measure_point_cloud_preview(
         "axis_aligned_dimensions_m": dimensions,
         "axis_aligned_min_in_source_frame_m": bounds_min,
         "axis_aligned_max_in_source_frame_m": bounds_max,
+        "axis_aligned_min_in_source_frame_scale_interval_m": coordinate_scale_intervals(bounds_min),
+        "axis_aligned_max_in_source_frame_scale_interval_m": coordinate_scale_intervals(bounds_max),
         "axis_aligned_bounding_box_diagonal_m": diagonal,
         "axis_aligned_bounding_box_envelope_volume_m3": envelope_volume,
         "axis_aligned_bounding_box_envelope_volume_scale_interval_m3": (envelope_scale_interval),
