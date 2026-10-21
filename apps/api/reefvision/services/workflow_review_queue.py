@@ -15,6 +15,9 @@ from reefvision.db.models import ReviewQueue, WorkflowArtifact, WorkflowNodeRun,
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.review_queues import ReviewQueueCreateRequest
 from reefvision.services.review_queues import ReviewQueueService
+from reefvision.services.workflow_review_queue_integrity import (
+    validate_saved_queue_snapshot,
+)
 
 
 def create_review_queue_workflow_artifact(
@@ -84,6 +87,7 @@ def create_review_queue_workflow_artifact(
             )
         ):
             raise ValidationError("QC review-queue retry parameters changed or queue incomplete")
+        validate_saved_queue_snapshot(existing, existing.items)
         queue = service.get_queue(existing.id)
     else:
         queue = service.create_queue_for_project(project_id, request)

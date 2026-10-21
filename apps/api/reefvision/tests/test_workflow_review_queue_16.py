@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from reefvision.db.models import WorkflowArtifact, WorkflowNodeRun
+from reefvision.db.models import ReviewQueueItem, WorkflowArtifact, WorkflowNodeRun
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.workflow_runtime_adapters import execute_runtime_adapter
@@ -145,6 +145,28 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
             inputs={"project": [source]},
         )
         assert retry[0]["payload"]["queue_id"] == result["queue_id"]
+        # Persisted snapshots must fail closed on retry, not silently reuse
+        # tampered scores even when workflow parameters are unchanged.
+        saved_item = session.scalar(
+            select(ReviewQueueItem).where(
+                ReviewQueueItem.review_queue_id == result["queue_id"]
+            )
+        )
+        assert saved_item is not None
+        original_score = saved_item.score
+        saved_item.score = original_score + 1.0
+        session.flush()
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )
+        saved_item.score = original_score
+        session.flush()
         # Omitting a persisted optional parameter is a provenance change,
         # even when its saved value was null.
         missing_source = dict(params)

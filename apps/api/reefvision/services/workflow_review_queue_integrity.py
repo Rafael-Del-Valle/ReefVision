@@ -1,0 +1,73 @@
+"""Fail-closed integrity check for an existing saved QC workflow queue.
+
+The queue's original scope checksum excludes mutable reviewer decisions. This
+validator deliberately leaves review states, comments and assignments alone.
+"""
+
+from __future__ import annotations
+
+from math import isfinite
+from typing import Any, Sequence
+
+from reefvision.domain.errors import ValidationError
+from reefvision.storage.datasets import canonical_json_sha256
+
+
+def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
+    """Reject modified snapshot scope/count/order before a workflow retry.
+
+    Validate persisted records only; never recalculate from live annotations.
+    """
+    invalid = ValidationError(
+        "Saved QC review queue snapshot failed integrity validation"
+    )
+    checksums = queue.input_checksums_json
+    if not isinstance(checksums, dict):
+        raise invalid
+    saved_count = checksums.get("item_count")
+    digest = checksums.get("queue_scope_sha256")
+    if (
+        type(saved_count) is not int
+        or saved_count < 0
+        or type(queue.item_count) is not int
+        or queue.item_count != saved_count
+        or len(items) != saved_count
+        or not isinstance(digest, str)
+        or len(digest) != 64
+        or any(char not in "0123456789abcdef" for char in digest)
+        or queue.scope_type != "project"
+        or queue.dataset_version_id is not None
+    ):
+        raise invalid
+
+    scores: dict[str, float] = {}
+    ranks: set[int] = set()
+    for item in items:
+        if (
+            not isinstance(item.image_id, str)
+            or not item.image_id
+            or item.image_id in scores
+            or item.project_id != queue.project_id
+            or item.review_queue_id != queue.id
+            or item.dataset_version_id is not None
+            or type(item.rank_position) is not int
+            or item.rank_position in ranks
+            or type(item.score) not in (int, float)
+            or not isfinite(item.score)
+            or not 0 <= item.score <= 100
+        ):
+            raise invalid
+        scores[item.image_id] = item.score
+        ranks.add(item.rank_position)
+    if ranks != set(range(1, saved_count + 1)):
+        raise invalid
+
+    actual = canonical_json_sha256(
+        {
+            "image_ids": sorted(scores),
+            "scores": scores,
+            "source_quality_control_run_id": queue.source_quality_control_run_id,
+        }
+    )
+    if actual != digest:
+        raise invalid
