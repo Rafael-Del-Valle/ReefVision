@@ -160,6 +160,7 @@ def measure_point_cloud_preview(
         if relative_scale_uncertainty is not None
         else None
     )
+
     def coordinate_scale_intervals(bounds: list[float]) -> list[list[float]] | None:
         if relative_scale_uncertainty is None:
             return None
