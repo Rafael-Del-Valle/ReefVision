@@ -16,3 +16,6 @@ def install_workflow_v1_extensions() -> None:
     workflow_graphs._ACTIONS["mesh_surface_preview"] = (
         "Calculate an unverified, bounded 3D triangle surface preview."
     )
+    workflow_graphs._ACTIONS["point_cloud_preview"] = (
+        "Calculate unverified calibrated XYZ point-cloud extents."
+    )

@@ -11,6 +11,8 @@ from reefvision.api.dependencies import get_db_session
 from reefvision.db.models import Project
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshPreviewRequest
+from reefvision.schemas.spatial_point_cloud_v14 import PointCloudPreviewRequest
+from reefvision.services.spatial_point_cloud_v14 import preview_point_cloud_from_request
 from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
 
 router = APIRouter(tags=["spatial-mesh-preview"])
@@ -25,6 +27,20 @@ def preview_mesh_surface(
         raise NotFoundError("Project not found")
     try:
         result = preview_from_request(payload)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
+    result["project_id"] = project_id
+    return result
+
+
+@router.post("/projects/{project_id}/spatial/point-cloud-preview")
+def preview_point_cloud(
+    project_id: str, payload: PointCloudPreviewRequest, session: DbSession
+) -> dict[str, Any]:
+    if session.get(Project, project_id) is None:
+        raise NotFoundError("Project not found")
+    try:
+        result = preview_point_cloud_from_request(payload)
     except ValueError as exc:
         raise ValidationError(str(exc)) from exc
     result["project_id"] = project_id

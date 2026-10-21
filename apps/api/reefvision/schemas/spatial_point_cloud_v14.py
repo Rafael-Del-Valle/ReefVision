@@ -1,0 +1,23 @@
+"""Strict request contract for unverified XYZ point-cloud measurements."""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel, Field, model_validator
+
+
+class PointCloudPreviewRequest(BaseModel):
+    ply_text: str | None = Field(default=None, max_length=256_000)
+    points: list[list[float]] | None = Field(default=None, min_length=1, max_length=2_000)
+    meters_per_unit: float = Field(gt=0, le=1_000_000)
+    calibration_method: Literal["ruler", "photogrammetry_control", "instrument", "other"]
+    calibration_evidence: str = Field(min_length=1, max_length=2_000)
+    relative_scale_uncertainty: float | None = Field(default=None, ge=0, le=1)
+    source_label: str | None = Field(default=None, max_length=200)
+
+    @model_validator(mode="after")
+    def geometry_is_unambiguous(self) -> PointCloudPreviewRequest:
+        if (self.ply_text is None) == (self.points is None):
+            raise ValueError("Provide exactly one of vertex-only ASCII PLY or XYZ points")
+        return self
