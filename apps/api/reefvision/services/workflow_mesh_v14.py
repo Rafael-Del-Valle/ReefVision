@@ -104,6 +104,7 @@ def extend_mesh_registry(
             optional_parameters={
                 "ply_text": None,
                 "points": None,
+                "point_index_pairs": None,
                 "relative_scale_uncertainty": None,
                 "source_label": None,
             },
@@ -113,6 +114,7 @@ def extend_mesh_registry(
                 "Same bounded point-cloud engine as standalone API.",
                 "Calibration and coordinate registration remain unverified.",
                 "No surface area or biological branch length is inferred.",
+                "Selected point-pair chords are not biological branch lengths.",
                 "Not a persistent asset importer or interactive viewer.",
             ],
         )

@@ -94,6 +94,7 @@ def measure_point_cloud_preview(
     calibration_evidence: str,
     relative_scale_uncertainty: float | None = None,
     source_label: str | None = None,
+    point_index_pairs: list[list[int]] | None = None,
 ) -> dict[str, Any]:
     """Report point extents, not surface area, organism size, or branch length."""
     if not 1 <= len(points) <= MAX_VERTICES:
@@ -118,6 +119,32 @@ def measure_point_cloud_preview(
         ):
             raise ValueError("Every point requires three bounded finite coordinates")
         vertices.append((float(point[0]), float(point[1]), float(point[2])))
+    # Selected point-pair chords refer to original input order, not branches.
+    selected_chords: list[dict[str, Any]] = []
+    if point_index_pairs is not None:
+        if not isinstance(point_index_pairs, list) or len(point_index_pairs) > 32:
+            raise ValueError("At most 32 point-index pairs are supported")
+        for pair in point_index_pairs:
+            if (
+                not isinstance(pair, (list, tuple))
+                or len(pair) != 2
+                or any(type(index) is not int for index in pair)
+                or any(index < 0 or index >= len(vertices) for index in pair)
+                or pair[0] == pair[1]
+            ):
+                raise ValueError("Point pair requires two distinct in-range integer indices")
+            chord_m = dist(vertices[pair[0]], vertices[pair[1]]) * scale
+            selected_chords.append(
+                {
+                    "point_indices": list(pair),
+                    "chord_distance_m": chord_m,
+                    "scale_uncertainty_m": (
+                        chord_m * relative_scale_uncertainty
+                        if relative_scale_uncertainty is not None
+                        else None
+                    ),
+                }
+            )
     dimensions = [
         (max(p[axis] for p in vertices) - min(p[axis] for p in vertices)) * scale
         for axis in range(3)
@@ -141,6 +168,7 @@ def measure_point_cloud_preview(
         "schema_version": "point-cloud-preview-0001",
         "point_count": len(vertices),
         "unique_point_count": unique_count,
+        "selected_point_chords": selected_chords,
         "axis_aligned_dimensions_m": dimensions,
         "axis_aligned_bounding_box_diagonal_m": diagonal,
         "axis_aligned_bounding_box_envelope_volume_m3": envelope_volume,
@@ -164,6 +192,9 @@ def measure_point_cloud_preview(
         "measurement_status": "caller_supplied_unverified",
         "provenance": {
             "geometry_sha256": geometry_hash,
+            "ordered_geometry_sha256": hashlib.sha256(
+                json.dumps(vertices, separators=(",", ":")).encode("utf-8")
+            ).hexdigest(),
             "source_label": source_label,
             "meters_per_mesh_unit": scale,
             "calibration_method": calibration_method,
@@ -189,6 +220,7 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         calibration_evidence=payload.calibration_evidence,
         relative_scale_uncertainty=payload.relative_scale_uncertainty,
         source_label=payload.source_label,
+        point_index_pairs=payload.point_index_pairs,
     )
     result["provenance"]["source_format"] = source_format
     return result

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, StrictInt, model_validator
 
 
 class PointCloudPreviewRequest(BaseModel):
@@ -15,6 +15,7 @@ class PointCloudPreviewRequest(BaseModel):
     calibration_evidence: str = Field(min_length=1, max_length=2_000)
     relative_scale_uncertainty: float | None = Field(default=None, ge=0, le=1)
     source_label: str | None = Field(default=None, max_length=200)
+    point_index_pairs: list[list[StrictInt]] | None = Field(default=None, max_length=32)
 
     @model_validator(mode="after")
     def geometry_is_unambiguous(self) -> PointCloudPreviewRequest:
