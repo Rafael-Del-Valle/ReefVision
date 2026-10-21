@@ -126,6 +126,11 @@ def test_standalone_and_saved_workflow_parity(client: TestClient) -> None:
     )
     for key in ("axis_aligned_min_in_source_frame_m", "axis_aligned_max_in_source_frame_m"):
         assert artifact["payload_json"][key] == expected[key]
+    for key in (
+        "axis_aligned_min_in_source_frame_scale_interval_m",
+        "axis_aligned_max_in_source_frame_scale_interval_m",
+    ):
+        assert artifact["payload_json"][key] == expected[key]
     assert artifact["payload_json"]["provenance"] == expected["provenance"]
     assert artifact["payload_json"]["surface_area_m2"] is None
     assert artifact["payload_json"]["project_id"] == project_id
