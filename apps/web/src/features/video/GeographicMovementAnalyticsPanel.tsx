@@ -29,6 +29,10 @@ function speed(value: number | null): string {
   return value === null ? "Unavailable" : `${value.toFixed(2)} m/s`;
 }
 
+function bearing(value: number | null | undefined): string {
+  return value == null ? "Unavailable" : `${value.toFixed(2)}°`;
+}
+
 function coordinate(value: GeographicCoordinate | null): string {
   if (value === null) {
     return "Unavailable";
@@ -58,7 +62,7 @@ function AnalyticsResults({
   if (data.observation_count === 0) {
     return (
       <div role="status" data-testid="geographic-analytics-empty">
-        <p>No persisted geographic observations for this track.</p>
+        <p>No fresh geographic observations for this track.</p>
         <p className="annotation-helper">
           Geographic movement metrics are not available yet.
         </p>
@@ -113,6 +117,7 @@ function AnalyticsResults({
                 <th>Elapsed</th>
                 <th>Speed</th>
                 <th>Speed status</th>
+                <th>Initial bearing</th>
                 <th>Video</th>
               </tr>
             </thead>
@@ -144,6 +149,7 @@ function AnalyticsResults({
                           ? "Non-positive elapsed time"
                           : (segment.invalid_reason ?? "Invalid")}
                     </td>
+                    <td>{bearing(segment.initial_bearing_deg)}</td>
                     <td>
                       {onFrameSelect && target ? (
                         <button
@@ -192,8 +198,10 @@ export function GeographicMovementAnalyticsPanel({
       <h3>Geographic movement analytics</h3>
 
       <p className="annotation-helper">
-        Movement metrics calculated from persisted geographic observations by
-        the ReefVision backend.
+        Movement metrics calculated from fresh persisted geographic
+        observations. Initial bearing describes displacement between sampled
+        positions on WGS84, in degrees clockwise from true north. Organism
+        orientation is not measured; coincident positions have no bearing.
       </p>
 
       <button

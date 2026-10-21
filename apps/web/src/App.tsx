@@ -29,6 +29,7 @@ import { EnhancedAnnotationEditor } from "./features/annotation-editor/EnhancedA
 import { ClassManagerPanel } from "./features/classes/ClassManagerPanel";
 import { ClassificationWorkspace } from "./features/classification/ClassificationWorkspace";
 import { DatasetVersionsPanel } from "./features/dataset-versions/DatasetVersionsPanel";
+import { EnvironmentalContextPanel } from "./features/environmental-context/EnvironmentalContextPanel";
 import { Gallery } from "./features/gallery/Gallery";
 import { InteroperabilityWorkspace } from "./features/interoperability/InteroperabilityWorkspace";
 import { ModelManager } from "./features/models/ModelManager";
@@ -85,6 +86,7 @@ type ProjectView =
   | "gallery"
   | "versions"
   | "interoperability"
+  | "environmental_context"
   | "models"
   | "training"
   | "classification"
@@ -136,6 +138,12 @@ const PROJECT_NAV_GROUPS: Array<{
         label: "Classes",
         description:
           "Manage project labels, display colors, order, and activity.",
+      },
+      {
+        id: "environmental_context",
+        label: "Environmental Context",
+        description:
+          "Import sensor and NOAA observations with units, quality flags, and provenance.",
       },
     ],
   },
@@ -907,6 +915,12 @@ function ReefVisionMainApp() {
             )}
             {activeView === "interoperability" && (
               <InteroperabilityWorkspace project={selectedProject} />
+            )}
+            {activeView === "environmental_context" && (
+              <EnvironmentalContextPanel
+                key={selectedProject.id}
+                project={selectedProject}
+              />
             )}
             {activeView === "classification" && (
               <ClassificationWorkspace

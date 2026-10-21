@@ -27,7 +27,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+environmental = ["copernicusmarine>=2.5,<3"]
 dev = [
+  "xarray>=2024.1,<2027",
   "build>=1.2,<2",
   "mypy>=1.14,<2",
   "networkx>=3.2,<4",

@@ -311,11 +311,16 @@ def geographic_movement_observation_from_persisted(
 def geographic_movement_observations_from_persisted(
     persisted_observations: Iterable[object],
 ) -> list[GeographicMovementObservation]:
-    """Map persisted rows without changing ordering or scientific values."""
+    """Map only explicitly fresh rows, preserving their ordering and values.
+
+    Stale results and records with unknown lifecycle state cannot contribute
+    geographic distance, speed, or bearing to a current analysis.
+    """
 
     return [
         geographic_movement_observation_from_persisted(persisted)
         for persisted in persisted_observations
+        if _read_optional_value(persisted, "is_stale") is False
     ]
 
 

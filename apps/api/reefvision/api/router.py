@@ -18,6 +18,7 @@ from reefvision.api.routes.class_visibility import router as class_visibility_ro
 from reefvision.api.routes.classification import router as classification_router
 from reefvision.api.routes.coral_structure import router as coral_structure_router
 from reefvision.api.routes.dataset_versions import router as dataset_versions_router
+from reefvision.api.routes.environmental_context import router as environmental_context_router
 from reefvision.api.routes.geographic_movement_analytics import (
     router as geographic_movement_analytics_router,
 )
@@ -46,6 +47,7 @@ from reefvision.api.routes.review_queues import router as review_queues_router
 from reefvision.api.routes.sam2_models import router as sam2_models_router
 from reefvision.api.routes.sam_image_proposals import router as sam_image_proposals_router
 from reefvision.api.routes.scale_label_ocr import router as scale_label_ocr_router
+from reefvision.api.routes.scientific_data import router as scientific_data_router
 from reefvision.api.routes.segmentation_deployment import router as segmentation_deployment_router
 from reefvision.api.routes.segmentation_evaluation_queue import (
     router as segmentation_evaluation_queue_router,
@@ -64,6 +66,8 @@ from reefvision.services.workflow_v1_install import install_workflow_v1_extensio
 install_workflow_v1_extensions()
 
 api_router = APIRouter(prefix="/api/v1")
+api_router.include_router(environmental_context_router)
+api_router.include_router(scientific_data_router)
 api_router.include_router(geographic_movement_analytics_router)
 api_router.include_router(health_router)
 api_router.include_router(capabilities_router)

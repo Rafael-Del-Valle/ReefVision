@@ -1074,6 +1074,9 @@ function mockApi({
       if (url.includes(`/projects/${project.id}/quality-control-runs`)) {
         return jsonResponse(qcRuns);
       }
+      if (url.includes(`/projects/${project.id}/scientific-records`)) {
+        return jsonResponse({ items: [], total: 0 });
+      }
       if (url.includes(`/projects/${project.id}/review-queues`)) {
         return jsonResponse(reviewQueues);
       }
@@ -1289,6 +1292,31 @@ describe("App", () => {
     expect(screen.getByText("Create exchange package")).toBeInTheDocument();
     expect(
       screen.getByText("Inspect or import exchange package"),
+    ).toBeInTheDocument();
+  });
+
+  it("opens Environmental Context with project scientific records", async () => {
+    mockApi({ projects: [project] });
+    renderApp();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /CPT Coral Study/ }),
+    );
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Environmental Context" }),
+    );
+
+    expect(
+      screen.getByRole("tab", { name: "Environmental Context" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      await screen.findByRole("heading", {
+        name: "Environmental Context",
+        level: 2,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("No scientific records yet"),
     ).toBeInTheDocument();
   });
 
