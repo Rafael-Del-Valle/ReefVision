@@ -47,6 +47,13 @@ class PairedCountObservation(BaseModel):
     def reject_technical_units(cls, value: str | None) -> str | None:
         return require_ecological_unit_type(value)
 
+    @field_validator("reference_count", "model_count", mode="before")
+    @classmethod
+    def reject_boolean_counts(cls, value: object) -> object:
+        if isinstance(value, bool):
+            raise ValueError("Count values must be numeric, not Boolean")
+        return value
+
     @field_validator("reference_count", "model_count")
     @classmethod
     def finite_count(cls, value: float) -> float:

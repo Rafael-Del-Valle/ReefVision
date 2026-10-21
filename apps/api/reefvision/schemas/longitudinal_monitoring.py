@@ -6,7 +6,7 @@ import math
 from datetime import UTC, date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from reefvision.domain.experimental_unit_policy import require_ecological_unit_type
 from reefvision.schemas.scientific_provenance import ScientificInputProvenance
@@ -14,6 +14,8 @@ from reefvision.schemas.scientific_provenance import ScientificInputProvenance
 
 class MonitoringObservation(BaseModel):
     """A caller-supplied observation, not an authenticated scientific record."""
+
+    model_config = ConfigDict(extra="forbid")
 
     organism_id: str = Field(min_length=1, max_length=150)
     metric_name: str = Field(min_length=1, max_length=100)
@@ -53,6 +55,13 @@ class MonitoringObservation(BaseModel):
             raise ValueError("Observation time must be timezone-aware")
         return value.astimezone(UTC)
 
+    @field_validator("value", mode="before")
+    @classmethod
+    def reject_boolean_measurements(cls, value: object) -> object:
+        if isinstance(value, bool):
+            raise ValueError("Observation measurement must be numeric, not Boolean")
+        return value
+
     @field_validator("value")
     @classmethod
     def finite_value(cls, value: float) -> float:
@@ -62,6 +71,8 @@ class MonitoringObservation(BaseModel):
 
 
 class LongitudinalAnalysisRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     observations: list[MonitoringObservation] = Field(min_length=2, max_length=10000)
     experimental_unit_type: str | None = Field(default=None, max_length=100)
 

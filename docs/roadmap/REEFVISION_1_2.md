@@ -197,3 +197,16 @@ All organism identities, unit assignments and observations remain
 review; it does not establish true experimental independence or verify
 calibration/source records. Full application CI, scientific acceptance,
 migration reconciliation and installed Windows GUI validation are outstanding.
+
+## Strict ecological input contracts (2026-10-20)
+
+Caller-supplied longitudinal observations and requests now reject unknown
+scientific-evidence fields (including forged `verified`, `review_status`,
+and `calibration_verified`) instead of silently discarding them. Both
+longitudinal measurement values and paired human/model counts reject JSON
+Booleans before Pydantic's numeric coercion. Valid zero and finite numeric
+measurements remain supported. The existing standalone APIs and executable
+Workflow Builder nodes share these schemas, so invalid inputs must fail
+without producing a successful analysis artifact. Inputs remain
+`caller_supplied_unverified` and require source and study-design review.
+This is a schema hardening increment, not verification of source records.
