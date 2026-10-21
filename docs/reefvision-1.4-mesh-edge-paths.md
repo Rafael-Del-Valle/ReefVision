@@ -12,6 +12,14 @@ A vertex not referenced by any face returns `status: unreferenced_endpoint`.
 Neither is assigned an artificial zero or straight-line distance. An omitted
 pair list yields `surface_edge_paths: null`.
 
+Connected routes expose `path_qc_warnings` (an empty list when no listed
+defect is found). Possible flags are `nonmanifold_edge_on_path`,
+`open_boundary_edge_on_path`, and `zero_length_edge_on_path`. A disconnected
+or unreferenced route has `path_qc_warnings: null` because there is no route
+to inspect. Standalone and saved Workflow Builder executions use the same
+QC engine. Warnings require human review and do not establish biological
+branch identity.
+
 These routes are **not** coral skeleton centerlines, verified branch lengths,
 biological identities, or registration between scans. Scale evidence remains
 caller-supplied and unverified. Scale uncertainty is not a confidence interval

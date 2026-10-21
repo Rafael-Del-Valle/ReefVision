@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from heapq import heappop, heappush
 from math import dist, isfinite
 from typing import Any
@@ -20,8 +21,10 @@ def mesh_edge_paths(
         raise ValueError("A maximum of 16 mesh path pairs is supported")
     referenced = {index for face in faces for index in face}
     adjacency: dict[int, dict[int, float]] = {index: {} for index in referenced}
+    edge_incidence: Counter[tuple[int, int]] = Counter()
     for a, b, c in faces:
         for first, second in ((a, b), (b, c), (c, a)):
+            edge_incidence[(min(first, second), max(first, second))] += 1
             length = dist(points[first], points[second])
             if not isfinite(length):
                 raise ValueError("Mesh edge length overflowed")
@@ -58,6 +61,7 @@ def mesh_edge_paths(
             status = "connected" if end in shortest else "disconnected"
         route: list[int] | None = None
         meters: float | None = None
+        path_qc_warnings: list[str] | None = None
         if status == "connected":
             route = [end]
             while route[-1] != start:
@@ -66,12 +70,22 @@ def mesh_edge_paths(
             meters = shortest[end] * scale
             if not isfinite(meters):
                 raise ValueError("Calibrated mesh path length overflowed")
+            # Route flags are topology evidence, not biological branch validation.
+            route_edges = [(min(a, b), max(a, b)) for a, b in zip(route, route[1:])]
+            path_qc_warnings = []
+            if any(edge_incidence[edge] > 2 for edge in route_edges):
+                path_qc_warnings.append("nonmanifold_edge_on_path")
+            if any(edge_incidence[edge] == 1 for edge in route_edges):
+                path_qc_warnings.append("open_boundary_edge_on_path")
+            if any(adjacency[a][b] == 0 for a, b in zip(route, route[1:])):
+                path_qc_warnings.append("zero_length_edge_on_path")
         results.append(
             {
                 "start_vertex_index": start,
                 "end_vertex_index": end,
                 "status": status,
                 "path_vertex_indices": route,
+                "path_qc_warnings": path_qc_warnings,
                 "edge_count": len(route) - 1 if route is not None else None,
                 "length_m": meters,
                 "scale_uncertainty_m": (
