@@ -47,11 +47,19 @@ def test_mesh_edge_paths_do_not_invent_disconnected_distances(
     assert routes[0]["path_vertex_indices"] == [0, 1]
     assert routes[0]["path_qc_warnings"] == ["open_boundary_edge_on_path"]
     assert routes[0]["length_m"] == pytest.approx(0.01)
+    assert routes[0]["endpoint_chord_length_m"] == pytest.approx(0.01)
+    assert routes[0]["geometric_detour_ratio"] == pytest.approx(1.0)
+    assert routes[0]["endpoint_chord_scale_uncertainty_m"] == (
+        pytest.approx(0.001) if uncertainty is not None else None
+    )
     assert routes[0]["scale_uncertainty_m"] == (
         pytest.approx(0.001) if uncertainty is not None else None
     )
     for route in routes[1:]:
         assert route["length_m"] is None
+        assert route["endpoint_chord_length_m"] is None
+        assert route["endpoint_chord_scale_uncertainty_m"] is None
+        assert route["geometric_detour_ratio"] is None
         assert route["scale_uncertainty_m"] is None
         assert route["path_vertex_indices"] is None
         assert route["path_qc_warnings"] is None
@@ -87,11 +95,32 @@ def test_mesh_edge_paths_flag_coincident_vertices() -> None:
     route = result["surface_edge_paths"][0]
     assert route["status"] == "connected"
     assert route["length_m"] == 0.0
+    assert route["endpoint_chord_length_m"] == 0.0
+    assert route["geometric_detour_ratio"] is None
     assert route["path_qc_warnings"] == [
         "open_boundary_edge_on_path",
         "zero_length_edge_on_path",
     ]
     assert "degenerate_triangles_present" in result["qc_warnings"]
+
+
+def test_mesh_edge_path_reports_geometric_detour_not_biological_curvature() -> None:
+    result = measure_mesh_preview(
+        vertices=[[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]],
+        faces=[[0, 1, 2], [1, 3, 2]],
+        meters_per_unit=0.1,
+        calibration_method="ruler",
+        calibration_evidence="Unverified square mesh scale",
+        relative_scale_uncertainty=0.1,
+        surface_path_vertex_pairs=[[0, 3]],
+    )
+    route = result["surface_edge_paths"][0]
+    assert route["status"] == "connected"
+    assert route["length_m"] == pytest.approx(0.2)
+    assert route["endpoint_chord_length_m"] == pytest.approx(2**0.5 * 0.1)
+    assert route["endpoint_chord_scale_uncertainty_m"] == pytest.approx(2**0.5 * 0.01)
+    assert route["geometric_detour_ratio"] == pytest.approx(2**0.5)
+    assert result["measurement_status"] == "caller_supplied_unverified"
 
 
 def test_mesh_edge_path_rejects_invalid_indices() -> None:
@@ -144,6 +173,7 @@ def test_saved_mesh_edge_paths_match_standalone(client: TestClient) -> None:
     standalone = client.post(f"{base}/spatial/mesh-preview", json=PARAMS)
     assert standalone.status_code == 200, standalone.text
     assert artifact["surface_edge_paths"] == standalone.json()["surface_edge_paths"]
+    assert artifact["surface_edge_paths"][0]["geometric_detour_ratio"] == pytest.approx(1.0)
     assert artifact["surface_edge_paths"][0]["path_qc_warnings"] == [
         "open_boundary_edge_on_path"
     ]
