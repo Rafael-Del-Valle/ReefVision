@@ -50,6 +50,7 @@ def snapshot():
         source_quality_control_run_id=None,
         item_count=2,
         input_checksums_json={"item_count": 2, "queue_scope_sha256": digest},
+        configuration_json={"source_quality_control_run_id": None},
     )
     return queue, items
 
@@ -135,3 +136,31 @@ def test_rejects_corrupted_saved_snapshot(corruption):
         items.pop()
     with pytest.raises(ValidationError, match="snapshot failed integrity"):
         validate_saved_queue_snapshot(queue, items)
+
+@pytest.mark.parametrize("corruption", ["foreign", "missing", "not_mapping"])
+def test_rejects_modified_saved_source_configuration(corruption):
+    """A saved queue's resolved QC source must match its stored config."""
+    queue, items = snapshot()
+    if corruption == "foreign":
+        queue.configuration_json["source_quality_control_run_id"] = "qc-run-other"
+    elif corruption == "missing":
+        queue.configuration_json.pop("source_quality_control_run_id")
+    else:
+        queue.configuration_json = None
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+
+
+def test_automatic_source_run_id_is_not_required_to_be_none():
+    """An omitted request source may resolve to a historical QC run."""
+    queue, items = snapshot()
+    queue.source_quality_control_run_id = "qc-run-auto"
+    queue.configuration_json["source_quality_control_run_id"] = "qc-run-auto"
+    queue.input_checksums_json["queue_scope_sha256"] = canonical_json_sha256(
+        {
+            "image_ids": ["img-a", "img-b"],
+            "scores": {"img-a": 80.0, "img-b": 20.0},
+            "source_quality_control_run_id": "qc-run-auto",
+        }
+    )
+    validate_saved_queue_snapshot(queue, items)

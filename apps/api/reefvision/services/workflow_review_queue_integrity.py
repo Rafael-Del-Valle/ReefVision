@@ -22,6 +22,18 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     invalid = ValidationError(
         "Saved QC review queue snapshot failed integrity validation"
     )
+    # The generator stores the resolved QC source in both locations. A
+    # workflow without an explicit source may select the latest historical
+    # run, so compare persisted records rather than current QC state.
+    configuration = queue.configuration_json
+    if (
+        not isinstance(configuration, dict)
+        or "source_quality_control_run_id" not in configuration
+        or configuration["source_quality_control_run_id"]
+        != queue.source_quality_control_run_id
+    ):
+        raise invalid
+
     checksums = queue.input_checksums_json
     if not isinstance(checksums, dict):
         raise invalid

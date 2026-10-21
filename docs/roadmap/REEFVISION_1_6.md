@@ -52,6 +52,19 @@
 - Approval remains researcher-controlled; saved workflow artifacts retain typed
   `review_queue_reference` output and provenance.
 
+## 1.6 saved QC source provenance integrity
+
+- Queue creation stores the resolved QC run in the queue record and its
+  configuration, including when the request omits an explicit run.
+- Executable Workflow Builder retries now require those saved identifiers to
+  agree. This rejects a changed source configuration without querying live QC
+  observations, changing reviewer decisions, or automatically approving work.
+- Isolated regression tests cover changed/missing/invalid source configuration
+  and a valid automatically resolved run. The existing saved-graph regression
+  now checks failed validation and successful retry after restoration.
+- The deterministic rank check was separately reformatted for Python CI.
+  These changes require exact-head CI and Windows acceptance.
+
 ## Outstanding acceptance
 
 Run Ruff, mypy, backend/frontend/E2E and migration/backwards-compatibility checks
