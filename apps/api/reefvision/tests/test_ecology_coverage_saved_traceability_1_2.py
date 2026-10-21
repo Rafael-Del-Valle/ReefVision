@@ -53,18 +53,19 @@ def test_saved_workflow_preserves_missing_organism_ids(
     )
     assert queued.status_code == 202, queued.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings,
-        app.state.session_factory,
-        str(queued.json()["job_id"]),
-    ) is True
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
+        )
+        is True
+    )
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifacts = [
-        item
-        for item in detail.json()["artifacts"]
-        if item["data_type"] == "longitudinal_analysis"
+        item for item in detail.json()["artifacts"] if item["data_type"] == "longitudinal_analysis"
     ]
     assert len(artifacts) == 1
     payload = artifacts[0]["payload_json"]
@@ -81,7 +82,4 @@ def test_saved_workflow_preserves_missing_organism_ids(
     assert payload["unit_summaries"] == []
     assert payload["population_summaries"] == []
     assert payload["independent_unit_count"] == 1
-    assert (
-        payload["analysis_provenance"]["algorithm_version"]
-        == "ecology-longitudinal-0003"
-    )
+    assert payload["analysis_provenance"]["algorithm_version"] == "ecology-longitudinal-0003"
