@@ -124,6 +124,15 @@ def measure_point_cloud_preview(
     ]
     centroid = [sum(p[axis] for p in vertices) / len(vertices) * scale for axis in range(3)]
     diagonal = dist((0.0, 0.0, 0.0), dimensions)
+    envelope_volume = dimensions[0] * dimensions[1] * dimensions[2]
+    envelope_scale_interval = (
+        [
+            envelope_volume * (1 - relative_scale_uncertainty) ** 3,
+            envelope_volume * (1 + relative_scale_uncertainty) ** 3,
+        ]
+        if relative_scale_uncertainty is not None
+        else None
+    )
     unique_count = len(set(vertices))
     geometry_hash = hashlib.sha256(
         json.dumps(sorted(vertices), separators=(",", ":")).encode("utf-8")
@@ -134,6 +143,10 @@ def measure_point_cloud_preview(
         "unique_point_count": unique_count,
         "axis_aligned_dimensions_m": dimensions,
         "axis_aligned_bounding_box_diagonal_m": diagonal,
+        "axis_aligned_bounding_box_envelope_volume_m3": envelope_volume,
+        "axis_aligned_bounding_box_envelope_volume_scale_interval_m3": (
+            envelope_scale_interval
+        ),
         "axis_aligned_dimension_scale_uncertainty_m": (
             [value * relative_scale_uncertainty for value in dimensions]
             if relative_scale_uncertainty is not None
