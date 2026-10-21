@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, StrictInt, model_validator
 
 
 class MeshPreviewRequest(BaseModel):
@@ -12,14 +12,14 @@ class MeshPreviewRequest(BaseModel):
     ply_text: str | None = Field(default=None, max_length=256_000)
     glb_base64: str | None = Field(default=None, max_length=350_000)
     vertices: list[list[float]] | None = Field(default=None, max_length=2_000)
-    faces: list[list[int]] | None = Field(default=None, max_length=4_000)
+    faces: list[list[StrictInt]] | None = Field(default=None, max_length=4_000)
     meters_per_unit: float = Field(gt=0, le=1_000_000)
     calibration_method: Literal["ruler", "photogrammetry_control", "instrument", "other"]
     calibration_evidence: str = Field(min_length=1, max_length=2_000)
     relative_scale_uncertainty: float | None = Field(default=None, ge=0, le=1)
     source_label: str | None = Field(default=None, max_length=200)
 
-    surface_path_vertex_pairs: list[list[int]] | None = Field(default=None, max_length=16)
+    surface_path_vertex_pairs: list[list[StrictInt]] | None = Field(default=None, max_length=16)
 
     @model_validator(mode="after")
     def geometry_is_unambiguous(self) -> MeshPreviewRequest:
