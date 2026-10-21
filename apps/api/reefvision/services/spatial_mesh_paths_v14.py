@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from heapq import heappop, heappush
+from itertools import pairwise
 from math import dist, isfinite
 from typing import Any
 
@@ -61,6 +62,8 @@ def mesh_edge_paths(
             status = "connected" if end in shortest else "disconnected"
         route: list[int] | None = None
         meters: float | None = None
+        chord_m: float | None = None
+        detour_ratio: float | None = None
         path_qc_warnings: list[str] | None = None
         if status == "connected":
             route = [end]
@@ -70,14 +73,19 @@ def mesh_edge_paths(
             meters = shortest[end] * scale
             if not isfinite(meters):
                 raise ValueError("Calibrated mesh path length overflowed")
+            chord_m = dist(points[start], points[end]) * scale
+            if not isfinite(chord_m):
+                raise ValueError("Calibrated endpoint chord length overflowed")
+            # Dimensionless geometry-only ratio; undefined for coincident endpoints.
+            detour_ratio = meters / chord_m if chord_m > 0 else None
             # Route flags are topology evidence, not biological branch validation.
-            route_edges = [(min(a, b), max(a, b)) for a, b in zip(route, route[1:])]
+            route_edges = [(min(a, b), max(a, b)) for a, b in pairwise(route)]
             path_qc_warnings = []
             if any(edge_incidence[edge] > 2 for edge in route_edges):
                 path_qc_warnings.append("nonmanifold_edge_on_path")
             if any(edge_incidence[edge] == 1 for edge in route_edges):
                 path_qc_warnings.append("open_boundary_edge_on_path")
-            if any(adjacency[a][b] == 0 for a, b in zip(route, route[1:])):
+            if any(adjacency[a][b] == 0 for a, b in pairwise(route)):
                 path_qc_warnings.append("zero_length_edge_on_path")
         results.append(
             {
@@ -88,6 +96,13 @@ def mesh_edge_paths(
                 "path_qc_warnings": path_qc_warnings,
                 "edge_count": len(route) - 1 if route is not None else None,
                 "length_m": meters,
+                "endpoint_chord_length_m": chord_m,
+                "endpoint_chord_scale_uncertainty_m": (
+                    chord_m * scale_uncertainty
+                    if chord_m is not None and scale_uncertainty is not None
+                    else None
+                ),
+                "geometric_detour_ratio": detour_ratio,
                 "scale_uncertainty_m": (
                     meters * scale_uncertainty
                     if meters is not None and scale_uncertainty is not None
