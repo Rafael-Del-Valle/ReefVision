@@ -1,6 +1,6 @@
 # ReefVision 1.1 development roadmap
 
-Status date: 2026-10-18 UTC. Development only; no release acceptance claimed.
+Status date: 2026-10-21 UTC. Development only; no release acceptance claimed.
 
 ## Baseline and audit
 
@@ -36,11 +36,44 @@ Reusable implementations inspected:
 | --- | --- | --- | --- | --- | --- |
 | 1 Scientific foundation | Validated baseline | Core records, units, UTC, WGS84/pixels, calibration snapshots, provenance, QC and cache tables | API, integrity, serialization, migration round trip and legacy exchange tests pass | No | Additional CRS transforms, scientific project exchange, broader real-project migration acceptance |
 | 2 Telemetry and geographic measurements | 1; existing georeferencing | Existing telemetry/calibration reused; stale-coordinate exclusion and WGS84 segment bearings added | 71 focused backend tests pass, including datum-change/invalidation/recomputation; frontend regression tests pass | No | Propagated geographic uncertainty, pairwise geographic motion, mask geometry, GeoPackage, absolute UTC/VFR alignment, surveyed drone references |
-| 3 Environmental context | 1 | Local JSON import, NOAA station temperature, persistent 24-hour cache/offline, bounded lookup and project workspace | Provider/API/cache tests and live NOAA smoke test pass; UI unit tests/build pass | No | Copernicus current/temperature/salinity grids, credential settings, unattended daily refresh, detection/track lookup controls, browser/desktop acceptance |
-| 4 Current visualizer | 2, 3 | Not started | No | No | Streamlines, time/depth, layers, trajectories, cache/provenance, desktop acceptance |
+| 3 Environmental context | 1 | Local JSON/scientific import, NOAA station temperature, Copernicus bounded grids, immutable local current grids, persistent cache/offline, bounded lookup and project workspace | Provider/API/cache/exchange tests and live NOAA smoke test pass; synthetic Copernicus/local-grid fixtures and UI unit tests/build pass | No | Authenticated Copernicus acceptance, unattended daily refresh, installed-desktop and broader researcher dataset acceptance |
+| 4 Current visualizer | 2, 3 | Interactive WGS84 current arrows with UTC/depth selection, speed/direction, provenance, offline cache and explicit exclusion reporting | Backend vector pairing, workflow execution and frontend interaction tests pass | No | Streamlines/advection, temporal organism joins, physical reference and installed-desktop acceptance |
 | 5 Scientific heatmaps | 1; existing pose/annotation records | Existing partial infrastructure | Not assessed for 1.1 | No | Independent reviewer/model layers and disagreement validation |
-| 6 Computed metrics | 1; calibration and verified annotations | Existing measurements only | Not assessed for 1.1 | No | Safe arithmetic/unit engine, matching run/frame identity, saved calculations/provenance |
+| 6 Computed metrics | 1; calibration and verified annotations | Versioned count, rectangular-area and density formulas with unit/scope validation, persisted checksummed outputs and Workflow Builder node | API, invalid-input, workflow roundtrip/execution and project-exchange lineage tests pass | No | Verified annotation/mask selectors, uncertainty propagation, broader formulas and researcher reference validation |
 | 7 Event/environment analysis | 2, 3, 6 | Not started | No | No | Event windows; automated tidal/lunar context for dated, georeferenced observations; reproducible analysis and exports |
+
+Incremental 2026-10-21 checkpoint: phase 3 now includes a validated offline local
+current-grid adapter alongside Copernicus; phase 4 has an executable cached vector
+API, interactive map import path, and typed Workflow Builder dataset/vector nodes;
+phase 6 has the first versioned unit-checked count/rectangular-area/density engine
+and typed workflow nodes. These are coherent foundations, not phase completion.
+Remaining phase-4 work includes streamlines/trajectories and physical reference
+acceptance. Remaining phase-6 work includes verified annotation/mask selectors,
+uncertainty propagation, broader formulas, and researcher reference validation.
+
+Implementation estimates use executable acceptance criteria, not elapsed time or
+release readiness: phase 3 environmental context is **80%** (four acquisition/import
+paths, provenance, cache, offline reuse and error states implemented; live
+Copernicus/desktop/scheduler acceptance remains); phase 4 current visualization is
+**55%** (validated vectors, map, time/depth/layers and workflow integration
+implemented; streamlines/advection, synchronized organism analysis and field
+acceptance remain); phase 6 calculations are **35%** (typed formula kernel,
+reproducible persistence and workflow execution implemented; verified-object
+selectors, uncertainty propagation and the broader formula catalog remain).
+Workflow interoperability for this slice is **75%**: four executable typed nodes,
+save/load validation and run artifacts are implemented; visual node configuration,
+larger graph acceptance and researcher-facing formula composition remain.
+
+Current-slice validation on 2026-10-21: the complete backend suite passed **1,286
+tests** with **32 explicit integration skips** and one existing FastAPI/Starlette
+TestClient deprecation warning. The focused environmental/calculation/workflow/
+exchange suite passed 41 tests; 22 Windows/desktop packaging contract tests passed.
+Ruff and strict mypy passed across 420 Python source files. The frontend passed
+481 Vitest tests in 97 files, TypeScript, Prettier and the production build. The
+build retains the existing large JavaScript chunk warning. No MSI existed in this
+worktree, so destructive installed-Windows acceptance was not run; authenticated
+Copernicus, live model, pose-interoperability and WhaleDrone acceptance remain
+separate explicit gates.
 
 Optional advection is deferred until core acceptance. Existing 1.0.x GUI,
 GPU and scientific acceptance issues do not block additive foundation work,

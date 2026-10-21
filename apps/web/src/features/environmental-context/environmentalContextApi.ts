@@ -278,12 +278,83 @@ export function getCachedDataset(
     { signal },
   );
 }
+
+export interface CurrentVectorResult {
+  eastward_velocity_m_s: number;
+  northward_velocity_m_s: number;
+  speed_m_s: number;
+  direction_deg_true: number | null;
+  observed_at: string;
+  depth_m: number;
+  depth_reference: string;
+  location: {
+    crs: "EPSG:4326";
+    latitude: number;
+    longitude: number;
+    horizontal_uncertainty_m: number | null;
+  };
+  source_kind: ScientificSourceKind;
+  source: string;
+  dataset_id: string;
+  dataset_version: string;
+  component_record_ids: [string, string];
+}
+
+export interface CurrentVectorPage {
+  items: CurrentVectorResult[];
+  input_record_count: number;
+  exclusions: {
+    unsupported_record: number;
+    invalid_metadata_or_unit: number;
+    qc_rejected: number;
+    superseded_snapshot: number;
+    incomplete_pair: number;
+    duplicate_component: number;
+  };
+}
+
+export function getCurrentVectors(
+  projectId: string,
+  cacheKey: string,
+  signal?: AbortSignal,
+): Promise<CurrentVectorPage> {
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/environment/datasets/${encodeURIComponent(cacheKey)}/current-vectors`,
+    { signal },
+  );
+}
 export function importCopernicus(
   projectId: string,
   payload: CopernicusRequest,
 ): Promise<NOAAImportResult> {
   return request(
     `/projects/${encodeURIComponent(projectId)}/environment/copernicus`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export interface LocalCurrentGridRequest {
+  dataset_id: string;
+  dataset_version: string;
+  source: string;
+  source_kind: "observed" | "remotely_sensed" | "modeled";
+  acquired_at: string;
+  samples: Array<{
+    observed_at: string;
+    latitude: number;
+    longitude: number;
+    depth_m: number;
+    eastward_velocity_m_s: number | null;
+    northward_velocity_m_s: number | null;
+  }>;
+}
+
+export function importLocalCurrentGrid(
+  projectId: string,
+  payload: LocalCurrentGridRequest,
+): Promise<NOAAImportResult> {
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/environment/local-current-grid`,
     { method: "POST", body: JSON.stringify(payload) },
   );
 }

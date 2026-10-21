@@ -11,7 +11,13 @@ from pydantic import ValidationError as SchemaError
 
 from reefvision.domain.errors import ValidationError
 from reefvision.domain.scientific_units import normalize_quantity
+from reefvision.schemas.scientific_calculations import ScientificCalculationRequest
 from reefvision.schemas.scientific_data import ScientificRecordResponse
+from reefvision.services.scientific_calculations import (
+    CALCULATION_QC_FLAG,
+    CALCULATION_SOURCE,
+    evaluate_calculation,
+)
 from reefvision.services.scientific_data import content_hash
 
 SCIENCE_SECTIONS = {"scientific_records", "environmental_cache_entries"}
@@ -24,6 +30,15 @@ SUBJECT_SECTIONS = {
     "prediction_id": "prediction_proposals",
     "model_run_id": "jobs",
 }
+
+
+def _is_engine_calculation(payload: dict[str, Any]) -> bool:
+    provenance = payload.get("provenance", {})
+    source = provenance.get("source") if isinstance(provenance, dict) else None
+    flags = payload.get("qc_flags", [])
+    return source == CALCULATION_SOURCE or (
+        isinstance(flags, list) and CALCULATION_QC_FLAG in flags
+    )
 
 
 def validate_exchange_records(
@@ -106,6 +121,7 @@ def _validate_exchange_records(
                 and scientific[identifier]["payload_json"]["subject"] != identity["subject"]
             ):
                 raise ValidationError("Environmental cache subject does not match its records")
+    validated_records: dict[str, ScientificRecordResponse] = {}
     for row in scientific.values():
         try:
             UUID(row["id"])
@@ -160,8 +176,118 @@ def _validate_exchange_records(
             key = payload.get("environmental_cache_key")
             if key is not None and key not in cache_by_key:
                 raise ValidationError("Scientific record refers to missing environmental cache")
+            validated_records[row["id"]] = record
         except (SchemaError, KeyError, TypeError, ValueError) as exc:
             raise ValidationError(f"Invalid scientific exchange record: {exc}") from exc
+    calculation_dependencies: dict[str, list[str]] = {}
+    for identifier, row in scientific.items():
+        payload = row["payload_json"]
+        if not _is_engine_calculation(payload):
+            continue
+        try:
+            record = validated_records[identifier]
+            provenance = payload["provenance"]
+            parameters = provenance["processing_parameters"]
+            request = ScientificCalculationRequest.model_validate(
+                {
+                    "formula_id": parameters["formula_id"],
+                    "formula_version": parameters["formula_version"],
+                    "input_record_ids": parameters["input_record_ids"],
+                }
+            )
+            input_ids = [str(value) for value in request.input_record_ids]
+        except (SchemaError, KeyError, TypeError) as exc:
+            raise ValidationError("Invalid scientific calculation provenance contract") from exc
+        if len(input_ids) != len(set(input_ids)):
+            raise ValidationError("Scientific calculation input record IDs must be unique")
+        if any(value not in scientific or value == identifier for value in input_ids):
+            raise ValidationError("Scientific calculation refers to a missing input record")
+        if (
+            record.source_kind != "derived"
+            or record.provenance.source != CALCULATION_SOURCE
+            or record.qc != "unassessed"
+            or record.qc_flags != [CALCULATION_QC_FLAG]
+            or record.uncertainty is not None
+            or record.environmental_cache_key is not None
+            or record.provenance.method
+            != f"{request.formula_id}@{request.formula_version}"
+            or record.provenance.source_url is not None
+            or record.provenance.dataset_id is not None
+            or record.provenance.model_version is not None
+            or set(parameters)
+            != {"formula_id", "formula_version", "input_record_ids"}
+        ):
+            raise ValidationError("Scientific calculation identity or version is inconsistent")
+        metadata = provenance.get("source_metadata", {})
+        expected_hashes = [scientific[value]["content_sha256"] for value in input_ids]
+        if (
+            not isinstance(metadata, dict)
+            or metadata.get("input_content_sha256") != expected_hashes
+        ):
+            raise ValidationError("Scientific calculation input checksum lineage mismatch")
+        input_records = [validated_records[value] for value in input_ids]
+        expected_calibrations = [value.calibration_sha256 for value in input_records]
+        if metadata.get("input_calibration_sha256") != expected_calibrations:
+            raise ValidationError("Scientific calculation calibration lineage mismatch")
+        allowed_metadata = {
+            "input_content_sha256",
+            "input_calibration_sha256",
+            "source_package_input_content_sha256",
+        }
+        if not set(metadata) <= allowed_metadata:
+            raise ValidationError("Scientific calculation source metadata is not recognized")
+        package_hashes = metadata.get("source_package_input_content_sha256")
+        if package_hashes is not None and (
+            not isinstance(package_hashes, list)
+            or len(package_hashes) != len(input_ids)
+            or not all(
+                isinstance(value, str)
+                and len(value) == 64
+                and all(character in "0123456789abcdef" for character in value)
+                for value in package_hashes
+            )
+        ):
+            raise ValidationError("Scientific calculation source-package lineage is invalid")
+        expected = evaluate_calculation(request, input_records)
+        if (
+            record.variable != expected.variable
+            or record.value != expected.value
+            or record.unit != expected.unit
+            or record.observed_at != expected.observed_at
+        ):
+            raise ValidationError("Scientific calculation result does not match its inputs")
+        scope_fields = (
+            "subject",
+            "location",
+            "pixel",
+            "depth_m",
+            "depth_reference",
+            "calibration_snapshot",
+            "calibration_sha256",
+        )
+        if any(
+            getattr(record, field) != getattr(input_records[0], field)
+            for field in scope_fields
+        ):
+            raise ValidationError("Scientific calculation output scope differs from its inputs")
+        calculation_dependencies[identifier] = input_ids
+
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(identifier: str) -> None:
+        if identifier in visiting:
+            raise ValidationError("Scientific calculation lineage contains a cycle")
+        if identifier in visited:
+            return
+        visiting.add(identifier)
+        for dependency in calculation_dependencies.get(identifier, []):
+            visit(dependency)
+        visiting.remove(identifier)
+        visited.add(identifier)
+
+    for identifier in calculation_dependencies:
+        visit(identifier)
 
 
 def remap_scientific_sections(
@@ -206,5 +332,52 @@ def remap_scientific_sections(
         }
         if payload.get("environmental_cache_key") is not None:
             payload["environmental_cache_key"] = keys[payload["environmental_cache_key"]]
+        provenance = payload.get("provenance", {})
+        parameters = provenance.get("processing_parameters", {})
+        if _is_engine_calculation(payload):
+            input_ids = parameters["input_record_ids"]
+            if isinstance(input_ids, list):
+                parameters["input_record_ids"] = [id_map[value] for value in input_ids]
+                metadata = provenance.get("source_metadata", {})
+                if isinstance(metadata, dict):
+                    metadata.setdefault(
+                        "source_package_input_content_sha256",
+                        deepcopy(metadata.get("input_content_sha256", [])),
+                    )
+
+    records_by_new_id = {id_map[row["id"]]: row for row in records}
+    visiting: set[str] = set()
+    rehashed: set[str] = set()
+
+    def rehash(identifier: str) -> None:
+        if identifier in rehashed:
+            return
+        if identifier in visiting:
+            raise ValidationError("Scientific calculation lineage contains a cycle")
+        visiting.add(identifier)
+        row = records_by_new_id[identifier]
+        payload = row["payload_json"]
+        provenance = payload.get("provenance", {})
+        parameters = provenance.get("processing_parameters", {})
+        input_ids = parameters.get("input_record_ids") if _is_engine_calculation(payload) else None
+        if isinstance(input_ids, list):
+            for dependency in input_ids:
+                if dependency not in records_by_new_id:
+                    raise ValidationError("Scientific calculation refers to a missing input record")
+                rehash(dependency)
+            metadata = provenance.get("source_metadata", {})
+            if isinstance(metadata, dict):
+                metadata["input_content_sha256"] = [
+                    records_by_new_id[dependency]["content_sha256"] for dependency in input_ids
+                ]
+                metadata["input_calibration_sha256"] = [
+                    records_by_new_id[dependency]["payload_json"].get("calibration_sha256")
+                    for dependency in input_ids
+                ]
         row["content_sha256"] = content_hash(payload)
+        visiting.remove(identifier)
+        rehashed.add(identifier)
+
+    for identifier in records_by_new_id:
+        rehash(identifier)
     return result

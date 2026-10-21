@@ -38,6 +38,10 @@ WorkflowDataType = Literal[
     "pose_training_package",
     "results_package",
     "project_exchange_package",
+    "scientific_records",
+    "scientific_calculation",
+    "environmental_dataset",
+    "current_vectors",
 ]
 
 

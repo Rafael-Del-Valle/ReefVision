@@ -89,8 +89,9 @@ sample or changes its QC to suspect. This avoids reusing an obsolete value
 after a provider correction. Offline mode never makes a
 network request; it returns a matching cache with `fresh` or `stale_offline`
 status, or a missing-cache error. A failed online refresh leaves the prior
-cache intact. No authentication is required for this NOAA endpoint. Copernicus
-credentials, currents, salinity grids and local CSV import remain future work.
+cache intact. No authentication is required for this NOAA endpoint. The later
+sections document the implemented Copernicus and local current-grid paths;
+authenticated provider acceptance and local CSV import remain future work.
 
 Protocol references:
 - https://api.tidesandcurrents.noaa.gov/api/prod/
@@ -141,6 +142,10 @@ An import creates a new project and fresh internal identifiers. Scientific subje
 links and cache record links are remapped, checksums are recomputed, and the source
 archive plus the identifier map remain import provenance. Literal source metadata,
 raw provider responses and calibration snapshots retain their original values.
+Derived-calculation input IDs are remapped too. Their current input checksums are
+recomputed in dependency order, while the source-package checksums remain explicit
+lineage evidence. Missing, cyclic or checksum-mismatched calculation dependencies
+fail import.
 Import validates ownership, references and scientific integrity and commits once,
 after media and artifact restoration. A failure rolls back all imported rows and
 removes only the new import directory. Existing projects are never overwritten.
@@ -221,3 +226,40 @@ request bounds and available coordinate resolutions are preserved. Credentials,
 provider live-data acceptance and packaged-runtime execution have not been claimed.
 Synthetic xarray fixtures validate the worker, numerical interpretation, caching
 and exchange independently of Copernicus access.
+
+## Local current grids and Workflow Builder
+
+The ocean-current workspace can import a local JSON grid without network access.
+Each import pins a researcher dataset ID and version, source name, acquisition
+category (`observed`, `remotely_sensed`, or `modeled`), acquisition time, WGS84
+position, UTC sample time, positive-down sea-surface depth, and geographic
+eastward/northward velocities in m/s. Missing components are explicit nulls and
+are counted and skipped. Reusing the same dataset identity/version is rejected;
+publish a new version instead of silently replacing cached scientific history.
+
+The backend current-vector endpoint and Workflow Builder use the same pairing
+rules as the map. They return the two components, `hypot(u, v)` speed, direction
+clockwise from true north, component record IDs, CRS, depth, UTC time, acquisition
+category, source, dataset, and version. Duplicate, incomplete, suspect, rejected,
+foreign, corrupt, or superseded pairs are excluded. No spatial or temporal
+interpolation is performed. The vector response includes the number of input
+records and structured exclusion counts for unsupported records, invalid
+metadata/units, QC rejection, superseded snapshots, incomplete pairs and duplicate
+components. The map and workflow artifact expose those counts rather than silently
+discarding data.
+
+Workflow Builder exposes executable typed nodes for cached environmental datasets,
+current vectors, scientific-record inputs, and scientific calculations. Saved graph
+revisions roundtrip these nodes and their typed ports through the existing workflow
+store. The calculation node supports formula version `1.0.0` for record count,
+rectangular area, and density. Outputs are persisted as derived scientific records
+with formula identity/version, exact input record IDs and content checksums, original
+input calibration checksums, units, UTC time, and review-required QC provenance.
+Division by zero, incompatible dimensions, duplicate/foreign inputs, unknown formula
+versions, and corrupt inputs fail without inventing an output. All formula inputs
+must share subject, location, pixel frame, timestamp, depth and calibration scope;
+lengths and areas must be positive, and density counts must be nonnegative integers.
+Suspect/rejected records, superseded environmental snapshots and stale image
+calibrations cannot create a new result. A derived record inherits the common
+immutable input calibration snapshot. Exchange import re-evaluates engine formulas
+and rejects altered formula identity, version, value, unit, scope or checksum lineage.

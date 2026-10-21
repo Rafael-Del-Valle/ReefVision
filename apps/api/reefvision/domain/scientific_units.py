@@ -25,6 +25,7 @@ UNITS: dict[str, tuple[str, str, float, float]] = {
     "PSU": ("practical_salinity", "PSU", 1, 0),
     "g/kg": ("mass_salinity", "g/kg", 1, 0),
     "count": ("count", "count", 1, 0),
+    "count/m2": ("density", "count/m2", 1, 0),
     "1": ("dimensionless", "1", 1, 0),
     "degree": ("angle", "degree", 1, 0),
     "px": ("pixel_length", "px", 1, 0),

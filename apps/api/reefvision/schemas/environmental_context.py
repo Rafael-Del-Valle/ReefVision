@@ -118,3 +118,56 @@ class EnvironmentalDatasetSummary(ScientificModel):
 class EnvironmentalDatasetPage(ScientificModel):
     items: list[EnvironmentalDatasetSummary]
     total: int
+
+
+class LocalCurrentSample(ScientificModel):
+    observed_at: datetime
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    depth_m: float = Field(ge=0, le=11000)
+    eastward_velocity_m_s: float | None
+    northward_velocity_m_s: float | None
+
+    _utc = field_validator("observed_at")(utc_timestamp)
+
+
+class LocalCurrentGridImport(ScientificModel):
+    dataset_id: str = Field(min_length=1, max_length=300)
+    dataset_version: str = Field(min_length=1, max_length=200)
+    source: str = Field(min_length=1, max_length=300)
+    source_kind: Literal["observed", "remotely_sensed", "modeled"]
+    acquired_at: datetime
+    samples: list[LocalCurrentSample] = Field(min_length=1, max_length=2500)
+
+    _utc = field_validator("acquired_at")(utc_timestamp)
+
+
+class CurrentVector(ScientificModel):
+    eastward_velocity_m_s: float
+    northward_velocity_m_s: float
+    speed_m_s: float = Field(ge=0)
+    direction_deg_true: float | None = Field(default=None, ge=0, lt=360)
+    observed_at: datetime
+    depth_m: float = Field(ge=0)
+    depth_reference: str
+    location: ScientificLocation
+    source_kind: SourceKind
+    source: str
+    dataset_id: str
+    dataset_version: str
+    component_record_ids: list[UUID] = Field(min_length=2, max_length=2)
+
+
+class CurrentVectorExclusions(ScientificModel):
+    unsupported_record: int = Field(default=0, ge=0)
+    invalid_metadata_or_unit: int = Field(default=0, ge=0)
+    qc_rejected: int = Field(default=0, ge=0)
+    superseded_snapshot: int = Field(default=0, ge=0)
+    incomplete_pair: int = Field(default=0, ge=0)
+    duplicate_component: int = Field(default=0, ge=0)
+
+
+class CurrentVectorPage(ScientificModel):
+    items: list[CurrentVector]
+    input_record_count: int = Field(ge=0)
+    exclusions: CurrentVectorExclusions = Field(default_factory=CurrentVectorExclusions)

@@ -5,7 +5,9 @@ from __future__ import annotations
 from collections import Counter, defaultdict, deque
 from collections.abc import Callable
 from typing import Any
+from uuid import UUID
 
+from pydantic import ValidationError as SchemaError
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import (
@@ -13,8 +15,11 @@ from reefvision.db.models import (
     LabelClass,
     ModelRegistration,
     Project,
+    ScientificRecord,
     VideoAsset,
 )
+from reefvision.domain.errors import NotFoundError, ReefVisionError
+from reefvision.schemas.scientific_calculations import ScientificCalculationRequest
 from reefvision.schemas.workflow_graphs import (
     WorkflowEdge,
     WorkflowGraphIssue,
@@ -25,6 +30,7 @@ from reefvision.schemas.workflow_graphs import (
     WorkflowPlanInputBinding,
     WorkflowPlanStep,
 )
+from reefvision.services.environmental_context import EnvironmentalContextService
 from reefvision.services.workflow_node_registry import workflow_node_registry
 from reefvision.services.workflow_vlm import SUPPORTED_VLM_PROVIDERS
 
@@ -126,6 +132,10 @@ _ACTIONS: dict[str, str] = {
         "Retrain an Ultralytics pose checkpoint from immutable scientist-verified pose truth."
     ),
     "project_exchange_export": "Build a Phase 9 checksummed project exchange export inline.",
+    "scientific_records_source": "Resolve checksummed scientific records from this project.",
+    "scientific_calculation": "Apply a versioned unit-checked formula and persist its output.",
+    "environmental_dataset_source": "Open one exact cached environmental dataset offline.",
+    "current_vectors": "Pair eastward and northward velocity components without interpolation.",
 }
 
 
@@ -243,6 +253,106 @@ class WorkflowGraphService:
                     "error",
                     "video_scope_mismatch",
                     "Video does not belong to this project",
+                    node_id=node_id,
+                )
+            )
+
+    def _validate_scientific_records_source(
+        self,
+        project_id: str,
+        node_id: str,
+        parameters: dict[str, Any],
+        issues: list[WorkflowGraphIssue],
+    ) -> None:
+        values = parameters.get("record_ids")
+        if not isinstance(values, list) or not values:
+            return
+        try:
+            identifiers = [UUID(str(value)) for value in values]
+        except ValueError:
+            issues.append(
+                self._issue(
+                    "error",
+                    "scientific_record_parameters_invalid",
+                    "Scientific record IDs must be UUIDs",
+                    node_id=node_id,
+                )
+            )
+            return
+        if len(set(identifiers)) != len(identifiers):
+            issues.append(
+                self._issue(
+                    "error",
+                    "scientific_record_parameters_invalid",
+                    "Scientific record IDs must be unique",
+                    node_id=node_id,
+                )
+            )
+            return
+        for identifier in identifiers:
+            record = self.session.get(ScientificRecord, str(identifier))
+            if record is None or record.project_id != project_id:
+                issues.append(
+                    self._issue(
+                        "error",
+                        "scientific_record_scope_mismatch",
+                        "Scientific record does not belong to this project",
+                        node_id=node_id,
+                    )
+                )
+                return
+
+    def _validate_scientific_calculation(
+        self,
+        node_id: str,
+        parameters: dict[str, Any],
+        issues: list[WorkflowGraphIssue],
+    ) -> None:
+        try:
+            ScientificCalculationRequest.model_validate(
+                {
+                    "formula_id": parameters.get("formula_id"),
+                    "formula_version": parameters.get("formula_version"),
+                    "input_record_ids": [UUID(int=0)],
+                }
+            )
+        except SchemaError:
+            issues.append(
+                self._issue(
+                    "error",
+                    "scientific_calculation_parameters_invalid",
+                    "Scientific calculation formula and version are not supported",
+                    node_id=node_id,
+                )
+            )
+
+    def _validate_environmental_dataset_source(
+        self,
+        project_id: str,
+        node_id: str,
+        parameters: dict[str, Any],
+        issues: list[WorkflowGraphIssue],
+    ) -> None:
+        cache_key = parameters.get("cache_key")
+        if not isinstance(cache_key, str) or not cache_key:
+            return
+        try:
+            EnvironmentalContextService(self.session).cached_dataset(project_id, cache_key)
+        except NotFoundError:
+            issues.append(
+                self._issue(
+                    "error",
+                    "environmental_cache_missing",
+                    "Environmental cache does not belong to this project",
+                    node_id=node_id,
+                )
+            )
+        except ReefVisionError as exc:
+            issues.append(
+                self._issue(
+                    "error",
+                    "environmental_cache_invalid",
+                    str(exc),
                     node_id=node_id,
                 )
             )
@@ -403,6 +513,16 @@ class WorkflowGraphService:
                 self._validate_vlm_node(project_id, node.node_id, node.parameters, issues)
             elif node.node_type == "model_training":
                 self._validate_training_node(node.node_id, node.parameters, issues)
+            elif node.node_type == "scientific_records_source":
+                self._validate_scientific_records_source(
+                    project_id, node.node_id, node.parameters, issues
+                )
+            elif node.node_type == "scientific_calculation":
+                self._validate_scientific_calculation(node.node_id, node.parameters, issues)
+            elif node.node_type == "environmental_dataset_source":
+                self._validate_environmental_dataset_source(
+                    project_id, node.node_id, node.parameters, issues
+                )
 
         edge_counts = Counter(edge.edge_id for edge in graph.edges)
         for edge_id, count in edge_counts.items():

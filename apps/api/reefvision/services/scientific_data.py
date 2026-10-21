@@ -133,6 +133,8 @@ class ScientificDataService:
         items: list[ScientificRecordCreate],
         *,
         environmental_cache_key: str | None = None,
+        calibration_snapshot: dict[str, Any] | None = None,
+        use_subject_calibration: bool = True,
     ) -> list[ScientificRecord]:
         """Stage a validated batch; the caller owns the transaction/commit."""
         self.require_project(project_id)
@@ -150,9 +152,13 @@ class ScientificDataService:
             except ValueError as exc:
                 raise ValidationError(str(exc)) from exc
             calibration = (
-                deepcopy((image.metadata_json or {}).get("measurement_calibration"))
-                if image
-                else None
+                (
+                    deepcopy((image.metadata_json or {}).get("measurement_calibration"))
+                    if image
+                    else None
+                )
+                if use_subject_calibration
+                else deepcopy(calibration_snapshot)
             )
             payload.update(
                 normalized_value=value,
