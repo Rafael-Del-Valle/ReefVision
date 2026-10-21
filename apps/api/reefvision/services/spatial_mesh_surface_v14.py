@@ -73,6 +73,7 @@ def measure_mesh_preview(
     for face_index, face in enumerate(faces):
         if (
             len(face) != 3
+            or any(type(index) is not int for index in face)
             or any(index < 0 or index >= len(points) for index in face)
             or len(set(face)) != 3
         ):
